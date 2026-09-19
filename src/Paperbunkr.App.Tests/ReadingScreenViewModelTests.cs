@@ -412,6 +412,12 @@ public class ReadingScreenViewModelTests : IDisposable
 
         row.LinkCommand.Execute(null);
         Assert.True(vm.IsLinking);
+        // Real bug found 2026-09-16: StartLink set IsLinking (showing the LinkingBannerText) but
+        // never opened the search panel itself (gated on the separate IsAddIssuesOpen flag) - the
+        // "Find & link" button did nothing observable on screen. The rest of this test drove
+        // SearchCommand/AddIssueCommand directly, which still passed since it never checked whether
+        // the panel a real user would need to click into was actually visible.
+        Assert.True(vm.IsAddIssuesOpen);
 
         vm.SearchQuery = "1 (owned copy)";
         vm.SearchCommand.Execute(null);

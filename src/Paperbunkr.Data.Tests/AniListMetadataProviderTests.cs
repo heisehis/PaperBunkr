@@ -60,6 +60,66 @@ public class AniListMetadataProviderTests
         }
         """;
 
+    private const string GetByIdRichResponseJson = """
+        {
+          "data": {
+            "Media": {
+              "id": 30013,
+              "title": { "romaji": "One Piece", "english": "One Piece" },
+              "siteUrl": "https://anilist.co/manga/30013",
+              "description": "desc",
+              "status": "RELEASING",
+              "genres": ["Action", "Adventure"],
+              "coverImage": { "large": "https://s4.anilist.co/one-piece.jpg" },
+              "staff": { "edges": [
+                { "role": "Story & Art", "node": { "name": { "full": "Eiichiro Oda" } } }
+              ] },
+              "startDate": { "year": 1997 },
+              "format": "MANGA",
+              "tags": [
+                { "name": "Pirates", "rank": 90, "isMediaSpoiler": false },
+                { "name": "Late Reveal", "rank": 50, "isMediaSpoiler": true }
+              ],
+              "relations": { "edges": [
+                { "relationType": "PREQUEL", "node": { "id": 40135, "title": { "romaji": "Prequel", "english": null }, "siteUrl": "https://anilist.co/manga/40135" } }
+              ] }
+            }
+          }
+        }
+        """;
+
+    [Fact]
+    public async Task GetAsync_ParsesRichFieldsAddedForFullExtraction()
+    {
+        var provider = CreateProvider(new StubHandler((_, _) => JsonResponse(HttpStatusCode.OK, GetByIdRichResponseJson)));
+
+        ExternalMediaMetadata? metadata = await provider.GetAsync("30013", CancellationToken.None);
+
+        Assert.NotNull(metadata);
+        Assert.Equal("https://s4.anilist.co/one-piece.jpg", metadata!.CoverImageUrl);
+        Assert.Equal("Eiichiro Oda", metadata.Creator);
+        Assert.Equal(1997, metadata.PublicationYear);
+        Assert.Equal("MANGA", metadata.PublicationFormat);
+        Assert.Equal(new[] { "Action", "Adventure" }, metadata.GenreTags);
+        Assert.NotNull(metadata.OtherTags);
+        Assert.Contains(metadata.OtherTags!, t => t.Value == "Pirates" && t.Category == "Uncategorized");
+        Assert.DoesNotContain(metadata.OtherTags!, t => t.Value == "Late Reveal"); // isMediaSpoiler: true excluded
+    }
+
+    [Fact]
+    public async Task GetRelationsAsync_ParsesRelationsAndMapsRelationType()
+    {
+        var provider = CreateProvider(new StubHandler((_, _) => JsonResponse(HttpStatusCode.OK, GetByIdRichResponseJson)));
+
+        var relations = await provider.GetRelationsAsync("30013", CancellationToken.None);
+
+        var relation = Assert.Single(relations);
+        Assert.Equal("40135", relation.TargetExternalId);
+        Assert.Equal("Prequel", relation.TargetTitle);
+        Assert.Equal("https://anilist.co/manga/40135", relation.TargetUrl);
+        Assert.Equal(RelationType.Prequel, relation.Type);
+    }
+
     private const string GraphQlErrorResponseJson = """
         {
           "data": null,

@@ -10,8 +10,54 @@ public class AppSettings
 {
     public int Id { get; set; } = 1;
 
-    /// <summary>Key of the currently active skin - "default" (the built-in theme) or an installed .crpck's key.</summary>
-    public string ActiveSkinKey { get; set; } = "default";
+    /// <summary>
+    /// Key of the currently active theme - "default" (the built-in theme) or an installed .crpck's
+    /// key. Renamed from <c>ActiveSkinKey</c> (EF <c>RenameColumn</c>, data preserved) by
+    /// docs/superpowers/specs/2026-09-16-theme-system-design.md.
+    /// </summary>
+    public string ActiveThemeKey { get; set; } = "default";
+
+    // --- Theme system extensions (docs/superpowers/specs/2026-09-16-theme-system-design.md).
+
+    /// <summary>
+    /// OLED "true black" override - when on and the active theme's <c>mode</c> is Dark, live
+    /// PbBg/PbChrome/PbSurface0-3 resources are overwritten to #000000. Default false. Auto-
+    /// suspended (live resources only, this setting untouched) while a Reader screen is active - see
+    /// <see cref="MainViewModel"/>'s <c>OnCurrentScreenChanged</c>.
+    /// </summary>
+    public bool TrueBlackDark { get; set; }
+
+    /// <summary>
+    /// Whether the Matrix theme's animated code-rain background plays. Default true. Only consulted
+    /// while the Matrix theme is active (the Appearance toggle row is hidden under every other
+    /// theme), but persisted globally so it survives switching away from Matrix and back.
+    /// </summary>
+    public bool MatrixRainEnabled { get; set; } = true;
+
+    /// <summary>Whether/how the active theme auto-switches - see <see cref="Entities.ThemeAutoMode"/>. Default Off.</summary>
+    public ThemeAutoMode ThemeAutoMode { get; set; } = ThemeAutoMode.Off;
+
+    /// <summary>The Light-mode theme Auto mode switches to - updated automatically on every manual apply of a Light theme, not just when Auto is on.</summary>
+    public string? LastLightThemeKey { get; set; }
+
+    /// <summary>See <see cref="LastLightThemeKey"/>, Dark-mode counterpart.</summary>
+    public string? LastDarkThemeKey { get; set; }
+
+    /// <summary>Local hour (0-23) <see cref="Entities.ThemeAutoMode.Scheduled"/> switches to the dark theme. Default 20 (8pm).</summary>
+    public int ThemeScheduledDarkHour { get; set; } = 20;
+
+    /// <summary>Local hour (0-23) <see cref="Entities.ThemeAutoMode.Scheduled"/> switches to the light theme. Default 7 (7am).</summary>
+    public int ThemeScheduledLightHour { get; set; } = 7;
+
+    /// <summary>Local hour (0-23) <see cref="TrueBlackDark"/> auto-enables, null = no schedule (manual toggle only). Reuses the same periodic time-check as <see cref="Entities.ThemeAutoMode.Scheduled"/>.</summary>
+    public int? TrueBlackAutoHour { get; set; }
+
+    /// <summary>
+    /// User-picked accent override hex, global (not per-theme) - null means no override, use the
+    /// active theme's own accent. When set, derived accentText/accentSoft/glow are computed
+    /// bg-luminance-aware against whichever theme is active (never a fixed darken-only rule).
+    /// </summary>
+    public string? AccentOverrideHex { get; set; }
 
     /// <summary>Selected font family name, or null for the app default (no override).</summary>
     public string? SelectedFontFamily { get; set; }
@@ -51,6 +97,31 @@ public class AppSettings
     /// on by default).
     /// </summary>
     public bool HighQualityPageDisplay { get; set; } = true;
+
+    /// <summary>
+    /// Whether the comic reader's floating chrome clusters (<c>ReaderScreenViewModel.ShowChrome</c>)
+    /// fade out after <c>OverlayAutoHideDelay</c> of pointer inactivity, or stay permanently visible.
+    /// Default true, matching the hardcoded-always-on behavior this setting replaces - real user
+    /// report 2026-09-16: the idle-fade is sensitive to any pointer movement at all (every
+    /// <c>PointerMoved</c> over the reading canvas restarts the timer unconditionally), which reads
+    /// as "never hides" for anyone whose hand naturally rests near the mouse while reading; this
+    /// gives them a way to turn it off entirely instead. No direct CE equivalent - checked
+    /// <c>ExtendedSettings.AutoHideCursorDuration</c> (a numeric OS-cursor-hide delay, not a chrome/
+    /// toolbar toggle, and not exposed as an on/off checkbox in CE's own Settings UI either) and
+    /// found it's a different feature, not a parity gap to port.
+    /// </summary>
+    public bool ReaderAutoHideChrome { get; set; } = true;
+
+    /// <summary>
+    /// Which mechanism reveals the comic reader's chrome clusters - swappable per direct user
+    /// request (2026-09-16), after the per-cluster hover reveal replaced the original ambient-
+    /// reveal-on-any-movement behavior outright and the user asked for both back as options rather
+    /// than losing the old one. Default <see cref="ReaderChromeHoverMode.PerCluster"/>, matching
+    /// today's shipped behavior; <see cref="ReaderChromeHoverMode.Ambient"/> restores the original
+    /// "any pointer movement shows everything, then idle-fades" behavior. See
+    /// <see cref="ReaderChromeHoverMode"/>'s own doc comment for what each value does.
+    /// </summary>
+    public ReaderChromeHoverMode ReaderChromeHoverMode { get; set; } = ReaderChromeHoverMode.PerCluster;
 
     /// <summary>
     /// Whether zoom resets to 1.0 on every page turn within a session, or persists across pages
@@ -554,6 +625,25 @@ public class AppSettings
     /// reader-load session.
     /// </summary>
     public bool PromptReviewOnFinish { get; set; }
+
+    // --- Tracker behavior (docs/superpowers/specs/2026-09-18-tracker-behavior-settings-design.md) ---
+
+    /// <summary>Open the tracker link panel automatically the first time a source-linked manga
+    /// series is opened while a tracker account is connected. Default on.</summary>
+    public bool TrackerAutoOpenLinkPanel { get; set; } = true;
+
+    /// <summary>Push progress to linked trackers when the comic reader finishes an issue. Default on.</summary>
+    public bool TrackerUpdateAfterReading { get; set; } = true;
+
+    /// <summary>What a manual mark-as-read does for linked trackers. Default Always.</summary>
+    public TrackerAutoUpdateMode TrackerUpdateOnMarkRead { get; set; } = TrackerAutoUpdateMode.Always;
+
+    /// <summary>Pull remote progress when a linked series' detail screen opens. Default OFF - a pull
+    /// rewrites local read state, unlike a forward-only push.</summary>
+    public bool TrackerAutoSyncFromTrackers { get; set; }
+
+    /// <summary>Pin a series' already-linked metadata source as the first tracker-link candidate. Default on.</summary>
+    public bool TrackerUseSourceMetadata { get; set; } = true;
 
     /// <summary>
     /// Whether files/folders/.cbl can be imported by dragging them onto the Library or Reading List

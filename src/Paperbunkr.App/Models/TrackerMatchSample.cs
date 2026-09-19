@@ -24,9 +24,15 @@ public sealed class TrackerMatchSample
 
     public required TwoStepConfirm LinkConfirm { get; init; }
 
+    /// <summary>True for the synthetic candidate pinned from a series' existing metadata link
+    /// (docs/superpowers/specs/2026-09-18-tracker-behavior-settings-design.md §3.5) - it's already the
+    /// tracker's own id for this series, so no search is needed to produce it. Still needs the
+    /// two-step confirm: linking is an account write.</summary>
+    public bool IsFromLinkedMetadata { get; init; }
+
     public int ConfidencePercent => (int)Math.Round(Confidence * 100);
 
-    public string TierLabel => Tier switch
+    public string TierLabel => IsFromLinkedMetadata ? "From linked metadata" : Tier switch
     {
         MatchTier.Auto => "Best match",
         MatchTier.NeedsReview => "Possible match",

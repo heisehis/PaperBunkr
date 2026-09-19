@@ -20,6 +20,11 @@ public enum ConnectionDialogKind
 
     /// <summary>Metron, MangaUpdates, Kitsu - username + password.</summary>
     Credential,
+
+    /// <summary>MangaDex - Client ID + Client Secret (its own registered "Personal Client", no
+    /// shared public client like Kitsu's) *and* username + password, confirmed live 2026-09-18.
+    /// The only provider needing both an app registration and account credentials at once.</summary>
+    CredentialWithClient,
 }
 
 /// <summary>
@@ -172,6 +177,12 @@ public partial class ConnectionProviderRow : ObservableObject
             Id = nameof(TrackingService.Kitsu), DisplayName = "Kitsu", Kind = ConnectionDialogKind.Credential,
             PrimaryActionLabel = "Connect",
             HelpText = "Sign in with your kitsu.app account. Your password is used once to connect and is never stored - only the session it returns is.",
+        },
+        new()
+        {
+            Id = nameof(TrackingService.MangaDex), DisplayName = "MangaDex", Kind = ConnectionDialogKind.CredentialWithClient,
+            PrimaryActionLabel = "Connect",
+            HelpText = "Register a Personal Client at mangadex.org - Settings - API Clients, then paste its Client ID/Secret alongside your mangadex.org username and password. Your password is used once to connect and is never stored - only the session it returns is.",
         },
     };
 }

@@ -436,6 +436,29 @@ public class LibraryFolderScannerTests : IDisposable
         Assert.Equal("Batman", series.Name);
     }
 
+    // ===================== Punctuation-variant folding (docs/superpowers/specs/2026-09-17-series-
+    // name-matching-and-empty-row-cleanup-design.md) - not TPB-gated, unlike the fold above. =====
+
+    [Fact]
+    public async Task ScanAllAsync_PunctuationVariantSeriesName_FoldsIntoExistingSeries()
+    {
+        SetPromptPolicy();
+
+        var first = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Cataclysm: The Ultimates", Number = "1" };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Cataclysm 001.cbz"), pageCount: 1, first);
+        AddWatchedFolder(_scanRoot);
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        var second = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Cataclysm - The Ultimates", Number = "2" };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Cataclysm 002.cbz"), pageCount: 1, second);
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal("Cataclysm: The Ultimates", series.Name); // first-created spelling wins, never renamed
+        Assert.Equal(2, context.Issues.Count(i => i.SeriesId == series.Id));
+    }
+
     [Fact]
     public async Task ScanAllAsync_NonTpbFormat_DoesNotFold()
     {

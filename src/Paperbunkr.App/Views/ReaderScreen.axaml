@@ -18,11 +18,18 @@
     Reader chrome (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - 4 independent
     floating "corner clusters" (Navigate/View/Page-turn/Actions) over a full-bleed canvas, plus a
     right-anchored drawer for everything else, replacing the old always-docked top-toolbar/bottom-bar
-    plus a *separate* fullscreen-only overlay pair. One chrome system now, not two: every cluster
-    fades on cursor idle in both windowed and fullscreen (ReaderScreenViewModel.ShowChrome). The
-    persistent thumbnail rail is the one exception - it shows in both states too, which retired the
-    old fullscreen-only horizontal "scrubber" filmstrip entirely (same thumbnails, same click-to-jump,
-    no reason for two separate strips once both states share one chrome system).
+    plus a *separate* fullscreen-only overlay pair. Works the same in both windowed and fullscreen.
+    The persistent thumbnail rail is the one exception - it shows in both states too, which retired
+    the old fullscreen-only horizontal "scrubber" filmstrip entirely (same thumbnails, same
+    click-to-jump, no reason for two separate strips once both states share one chrome system).
+
+    Per-cluster hover reveal (2026-09-16, direct user request - "more reactive... only when I hover
+    above each item"): each of the 4 clusters shows independently while the pointer is over its own
+    corner hotspot (IsNavigateClusterVisible/etc. on ReaderScreenViewModel), not all together on any
+    movement anywhere - that ambient-reveal-everything behavior (ReaderScreenViewModel.ShowChrome
+    used to flip true on every PointerMoved over this whole Grid) has been removed. ShowChrome still
+    exists as an explicit "show everything" override for touch/keyboard (ToggleChromeCommand), which
+    can't hover at all - see that property's own doc comment.
     -->
 
     <UserControl.Styles>
@@ -134,13 +141,13 @@
         <!-- Corner clusters - floatingPanel (Primitives.axaml) gives translucent surface + border +
              elevation shadow + an Opacity DoubleTransition on PbMotionFast/PbMotionEase already;
              .hidden layers the idle-fade on top without fighting that transition (IsVisible would
-             collapse instantly with no fade, so this uses Opacity + IsHitTestVisible instead). -->
+             collapse instantly with no fade, so this uses Opacity + IsHitTestVisible instead). The
+             actual Opacity=0/IsHitTestVisible=False setters for .hidden are declared further below,
+             AFTER the frosted-glass restyle rule that also targets these elements - see that rule's
+             own comment for why order (not a class-count "more specific selector") is what actually
+             decides which one wins in Avalonia. -->
         <Style Selector="Border.chromeCluster">
             <Setter Property="Padding" Value="8" />
-        </Style>
-        <Style Selector="Border.chromeCluster.hidden">
-            <Setter Property="Opacity" Value="0" />
-            <Setter Property="IsHitTestVisible" Value="False" />
         </Style>
 
         <!-- Thumbnail rail auto-hide (docs/superpowers/specs/2026-08-25-reader-chrome-design.md
@@ -171,7 +178,7 @@
             </Setter>
         </Style>
         <Style Selector="Border.bookmarkGlow.pulsing">
-            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
         </Style>
 
         <Style Selector="TextBlock.drawerSectionHeader">
@@ -216,6 +223,27 @@
              note. -->
         <Style Selector="Border.floatingPanel.chromeCluster, Border.floatingPanel.readerDrawer">
             <Setter Property="Opacity" Value="0.92" />
+        </Style>
+
+        <!-- Idle-fade override for the chrome clusters, deliberately declared AFTER the frosted-
+             glass rule above - both this and that rule are class-selector ("conditional") matches
+             on the same element, which in Avalonia always resolve to the exact same BindingPriority
+             tier (StyleTrigger) regardless of how many classes either selector lists - confirmed via
+             Avalonia's own docs: "Two selectors with any conditional activation will have equal
+             priority regardless of the number of activators present... Avalonia doesn't have CSS's
+             concept of Specificity." With BindingPriority and visual-tree locality tied, the ONLY
+             remaining tiebreaker is Styles-collection order: the LAST declared Setter wins. A first
+             attempt at fixing this (2026-09-16) tried to win by adding a class to make the selector
+             "more specific" (Border.floatingPanel.chromeCluster.hidden, positioned BEFORE this rule,
+             same as the original Border.chromeCluster.hidden was) - that had zero effect, since
+             Avalonia doesn't weigh class count at all; only moving the rule to a later position
+             actually works. This is why the reader chrome never visibly faded from the day the
+             frosted-glass restyle shipped (2026-09-14) until this fix, regardless of ShowChrome's
+             real value or the auto-hide-toggle setting added earlier the same session as this fix -
+             neither of those was ever the problem. -->
+        <Style Selector="Border.chromeCluster.hidden">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
         </Style>
     </UserControl.Styles>
 
@@ -398,7 +426,11 @@
             </Border>
 
             <!-- ============ Navigate cluster (top-left) ============ -->
-            <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !ShowChrome}"
+            <!-- Visibility driven purely by position math in OnReaderPointerMoved (code-behind), not
+                 per-element PointerEntered/Exited - see that handler's own doc comment for why two
+                 separate Enter/Exit-based attempts (2026-09-16) both failed to ever hide the cluster
+                 again once shown. -->
+            <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !IsNavigateClusterVisible}"
                     HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16">
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <Button Command="{Binding GoBackCommand}" Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
@@ -422,7 +454,7 @@
             </Border>
 
             <!-- ============ Actions cluster (top-right) ============ -->
-            <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !ShowChrome}"
+            <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !IsActionsClusterVisible}"
                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="16">
                 <StackPanel Orientation="Horizontal" Spacing="2">
                     <!-- Clock + battery (docs/superpowers/specs/2026-09-05-reader-polish-backlog-
@@ -453,7 +485,7 @@
             <!-- ============ View cluster (bottom-left) - fit/zoom collapse into the drawer's Page
                  section below ~720px window width (IsViewClusterCollapsed, set from code-behind's
                  SizeChanged handler). ============ -->
-            <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !ShowChrome}"
+            <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !IsViewClusterVisible}"
                     HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="16">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <Button Classes="clusterPill">
@@ -562,7 +594,7 @@
             </Border>
 
             <!-- ============ Page-turn cluster (bottom-center) ============ -->
-            <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !ShowChrome}"
+            <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !IsPageTurnClusterVisible}"
                     HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="16" MinWidth="260">
                 <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
                     <!-- Rail toggle (docs/superpowers/specs/2026-09-14-reader-chrome-redesign-design.md

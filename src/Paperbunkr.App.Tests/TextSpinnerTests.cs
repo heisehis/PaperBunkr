@@ -57,4 +57,25 @@ public class TextSpinnerTests
     {
         Assert.Equal("12", TextSpinner.Step("12", 1, min: 1, max: 12));
     }
+
+    // --- Decimal step (docs/superpowers/specs/2026-09-18-per-tracker-score-and-finish-date-
+    // design.md's Score field - 0-5 scale, 0.1 step) ---
+
+    [Theory]
+    [InlineData("3.5", "0.1", "3.6")]
+    [InlineData("3.5", "-0.1", "3.4")]
+    [InlineData("5", "0.1", "5")]   // clamped at max 5
+    [InlineData("0", "-0.1", "0")]  // clamped at min 0
+    public void Step_FractionalDelta_UsesDecimalArithmetic_NoFloatRoundingDrift(string input, string delta, string expected)
+    {
+        Assert.Equal(expected, TextSpinner.Step(input, decimal.Parse(delta), min: 0, max: 5));
+    }
+
+    [Fact]
+    public void Step_FractionalDelta_MixedText_StaysWholeNumber()
+    {
+        // "1.MU" never sets a fractional Step in practice, but the digit-run branch truncates any
+        // fractional delta to a whole number rather than throwing or misbehaving.
+        Assert.Equal("2.MU", TextSpinner.Step("1.MU", 1.0m, 0, int.MaxValue));
+    }
 }

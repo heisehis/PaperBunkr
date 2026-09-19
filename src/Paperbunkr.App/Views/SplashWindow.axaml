@@ -19,14 +19,19 @@
     <!--
         Shown first from App.axaml.cs while the heavy startup work runs (integrity check +
         migrations on a background thread; view-model + main-window construction on the UI thread).
-        Background is the literal brand dark - renders before SkinService has necessarily run.
+        Background stays the literal brand dark regardless of theme (this window has no chrome to
+        theme, just the emblem glow and the loading bar) - but the two gradient brushes below (the
+        GlowBorder radial gradient and LoadingBar's Foreground) have their stops re-colored in the
+        constructor from the persisted theme's own Accent/AccentText (best-effort, same try/catch-and-fall-back-to-these-literals pattern as
+        TryGetReducedMotion, since ApplyPersistedSettings/App.axaml.cs's real Application.Resources
+        write happens later in startup, after this window is already constructed and showing).
 
         The entrance + breathing motion is driven entirely from code-behind (Animation.RunAsync,
         kicked off from the Opened event) rather than from XAML <Style.Animations>. A style
         animation whose selector already matches at parse time can "run" against a control that
         has no live clock yet and finish before the first paint - which is exactly what happened
         across three earlier attempts here ("no animation"). Starting it from Opened guarantees a
-        realized visual with a running clock. Reduced motion (SkinService.GetReducedMotion) skips
+        realized visual with a running clock. Reduced motion (ThemeService.GetReducedMotion) skips
         it and snaps the resting values.
     -->
     <Grid RowDefinitions="*,Auto,Auto,*">
@@ -45,7 +50,7 @@
         </Panel>
 
         <StackPanel Grid.Row="2" HorizontalAlignment="Center" Spacing="14">
-            <ProgressBar Width="240" Height="3" Minimum="0" Maximum="1"
+            <ProgressBar x:Name="LoadingBar" Width="240" Height="3" Minimum="0" Maximum="1"
                          Value="{Binding Progress}"
                          Background="#25252B" CornerRadius="2" ShowProgressText="False">
                 <ProgressBar.Transitions>

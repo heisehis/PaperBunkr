@@ -1,6 +1,8 @@
+using System;
 using System.IO;
 using System.Linq;
 using cYo.Projects.ComicRack.Engine.IO.Provider;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Services;
 
@@ -72,6 +74,51 @@ public static class NavigationCliArgs
         var supportedExtensions = Providers.Readers.GetFileExtensions();
         string extension = Path.GetExtension(args[0]);
         if (!supportedExtensions.Any(e => string.Equals(e, extension, System.StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        path = args[0];
+        return true;
+    }
+
+    /// <summary>Books-side counterpart to <see cref="TryParseFilePathArg"/> (docs/superpowers/specs/
+    /// 2026-09-16-book-file-associations-design.md) - same bare-single-file-path shape, checked
+    /// against the Books (Novels) extension set instead of the comic engine's. Deliberately excludes
+    /// ".pdf" (comic-only, matches <see cref="Paperbunkr.App.Services.FileAssociationService"/>'s own
+    /// "leave PDF alone" scope decision) and ".zip"/".fb2.zip" - Windows' shell association model has
+    /// no way to key off a compound extension, so a bare ".zip" argument is indistinguishable at this
+    /// layer from an ordinary comic ZIP archive; it stays routed through
+    /// <see cref="TryParseFilePathArg"/>'s existing comic pipeline rather than guessed at here. A
+    /// genuine ".fb2.zip" file opened this way will attempt a comic import, fail (it isn't a valid
+    /// comic archive), and fall back to the existing "couldn't open file" toast rather than hang or
+    /// crash - a known, accepted limitation of associating a compound extension at all.</summary>
+    public static bool TryParseBookFilePathArg(string[] args, out string? path, out BookFormat format)
+    {
+        path = null;
+        format = default;
+
+        if (args.Length != 1 || args[0] == "--open" || !File.Exists(args[0]))
+        {
+            return false;
+        }
+
+        string extension = Path.GetExtension(args[0]);
+        if (string.Equals(extension, ".epub", StringComparison.OrdinalIgnoreCase))
+        {
+            format = BookFormat.Epub;
+        }
+        else if (string.Equals(extension, ".fb2", StringComparison.OrdinalIgnoreCase))
+        {
+            format = BookFormat.Fb2;
+        }
+        else if (string.Equals(extension, ".mobi", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".azw", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".azw3", StringComparison.OrdinalIgnoreCase))
+        {
+            format = BookFormat.Mobi;
+        }
+        else
         {
             return false;
         }

@@ -5,15 +5,16 @@ ComicRack-inspired comic/manga library and reader, Avalonia/.NET 8. Full design 
 
 ## Roadmap status — check this first in a new session
 
-- **Source of truth:** [docs/alpha-todo.md](docs/alpha-todo.md) — P0–P7 alpha checklist plus the
-  unsequenced Beta backlog, with commit refs and rationale for every status.
+- **Source of truth:** [docs/paperbunkr-todo.md](docs/paperbunkr-todo.md) — renamed 2026-09-18 from
+  `alpha-todo.md` now that Alpha is done; same file, same content, P0–P7 historical checklist plus
+  the unsequenced Beta backlog, with commit refs and rationale for every status.
 - **Live dashboard (lighter view, same data):**
-  https://claude.ai/code/artifact/0ca86894-977e-45e2-951b-476e1150a5ee
+  https://claude.ai/artifact/2Zf5nmJiCzARE4MKgKAVMF (old `/code/artifact/...` link 404s)
 - **Kept in sync by:** a scheduled cloud routine (`paperbunkr-alpha-tracker-sync`, every 6h,
   read-only) that diffs `git log` against the dashboard's own embedded `HEAD` marker and
-  republishes only verified status changes. It never edits `docs/alpha-todo.md` or commits
+  republishes only verified status changes. It never edits `docs/paperbunkr-todo.md` or commits
   anything — manage/inspect it at https://claude.ai/code/routines.
-- **If you land roadmap-relevant work in a session:** update `docs/alpha-todo.md` by hand (status,
+- **If you land roadmap-relevant work in a session:** update `docs/paperbunkr-todo.md` by hand (status,
   commit ref, what you verified — not just what the commit message claims). The dashboard's own
   6-hourly check will pick up the underlying commits regardless, but the written doc is what a
   human actually reads for the "why."
@@ -27,24 +28,11 @@ Before adding any field, default, or behavior, verify it against the original Co
 source/behavior (`_reference/ComicRackCE`) rather than assuming — this project is a from-scratch
 rewrite aiming for CE parity plus deliberate deviations, not a guess at what CE probably did.
 
-## Communication style — caveman is a prerequisite for this project
+## Communication style — no caveman
 
-The `caveman` plugin (https://github.com/JuliusBrussee/caveman, installed 2026-09-12 at user scope
-via `claude plugin marketplace add JuliusBrussee/caveman && claude plugin install caveman@caveman`)
-is required for all sessions working in this repo: prose responses should stay in its
-ultra-compressed "caveman" register — short, technically accurate, no throat-clearing — rather than
-the fuller sentences this file's other guidance might otherwise pull toward. It auto-activates via
-its own `SessionStart`/`UserPromptSubmit` hooks once installed, so no per-session invocation is
-needed; treat it as satisfied automatically rather than something to re-check each session. This
-governs prose only — it does not change code style, comments, commit messages, or any other rule
-in this file.
-
-The optional `caveman-mcp` shrink middleware (`mcp/README.md` in that repo) was **not** installed:
-registering it (`claude mcp add caveman --scope user -- npx -y caveman-mcp`) was blocked by the
-auto-mode permission classifier because its launcher auto-downloads and executes a third-party
-binary into `~/.caveman/bin` on first use. If a future session wants it, that install needs the
-user to run the command themselves (or explicitly approve it in an interactive session) — don't
-retry it silently.
+Do **not** use the `caveman` terse-prose plugin's style on this project (reversed 2026-09-19; it was
+briefly a prerequisite from 2026-09-12). Write normal prose. The plugin is installed at user scope,
+so its hooks may still inject "CAVEMAN MODE ACTIVE" text here — ignore it.
 
 ## Design workflow — grilling is the clarifying-questions step
 

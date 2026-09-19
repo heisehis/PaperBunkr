@@ -63,6 +63,19 @@ public class Series
 
     public string? Summary { get; set; }
 
+    /// <summary>Average of the series' rated <see cref="Issue.Rating"/> values (docs/superpowers/
+    /// specs/2026-09-18-per-tracker-score-and-finish-date-design.md), recomputed by
+    /// <c>SeriesRatingResolver.Recompute</c> - distinct from any single issue's own rating, and
+    /// distinct from a tracker's remote score (which is display-only unless explicitly pulled in
+    /// via that tracker's own "Use this score" action, per the same design doc).</summary>
+    public float? Rating { get; set; }
+
+    /// <summary>Provider-sourced creator credit (dedup-joined author/artist/staff names, docs/
+    /// superpowers/specs/2026-09-18-external-metadata-full-extraction-design.md §3) - new, no CE
+    /// precedent (CE has no series-level creator concept, only the per-issue ComicInfo.xml credit
+    /// fields on <see cref="Issue"/>). Not a fallback source for those per-issue fields.</summary>
+    public string? Creator { get; set; }
+
     /// <summary>Issue whose cover thumbnail represents the series (e.g. in library grid views).</summary>
     public int? CoverIssueId { get; set; }
 
@@ -72,6 +85,21 @@ public class Series
     public List<SeriesTitle> Titles { get; set; } = new();
 
     public List<Issue> Issues { get; set; } = new();
+
+    /// <summary>
+    /// True once the user has dismissed this series's "Empty Rows" listing in Library Health
+    /// (docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-row-cleanup-design.md) -
+    /// a zero-<see cref="Issue"/> series they've confirmed is fine to keep (e.g. a deliberate
+    /// placeholder). Same review-queue-only contract as <see cref="Issue.MissingAcknowledged"/>.
+    /// </summary>
+    public bool EmptyRowAcknowledged { get; set; }
+
+    /// <summary>
+    /// True once the "Open the tracker link panel automatically" behavior has fired for this series
+    /// (docs/superpowers/specs/2026-09-18-tracker-behavior-settings-design.md §3.1) - one-shot per
+    /// series ever, set only after the panel actually opened.
+    /// </summary>
+    public bool TrackerPromptShown { get; set; }
 
     /// <summary>
     /// Collections this series belongs to, reached via the polymorphic <see cref="CollectionItem"/>

@@ -9,7 +9,7 @@ namespace Paperbunkr.App.Controls;
 /// motion check outside XAML's own <c>{DynamicResource}</c> binding - <c>DetailHero</c>'s parallax
 /// scroll handler, <c>PbToastHost</c>'s post-exit removal delay, <c>AnimatedStackPanel</c>'s reflow
 /// gating. Reads directly from <see cref="Application.Resources"/>, the same dictionary
-/// <c>SkinService.ApplyReducedMotion</c> writes to - not a design-time value or a cached copy, so
+/// <c>ThemeService.ApplyReducedMotion</c> writes to - not a design-time value or a cached copy, so
 /// toggling Reduced Motion live is always reflected on the next read.
 /// </summary>
 public static class MotionTokens

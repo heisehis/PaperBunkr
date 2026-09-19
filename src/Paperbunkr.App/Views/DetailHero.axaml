@@ -129,15 +129,36 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:DetailHeroAction">
-                                <Button Classes="detailAction" Classes.primary="{Binding IsPrimary}" Classes.ghost="{Binding !IsPrimary}"
-                                        Command="{Binding Command}" IsEnabled="{Binding IsEnabled}"
-                                        AutomationProperties.AutomationId="{Binding Label}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <fi:SymbolIcon Symbol="{Binding IconGlyph}" FontSize="{StaticResource PbIconSizeSm}"
-                                                       VerticalAlignment="Center" IsVisible="{Binding HasIcon}" />
-                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
-                                    </StackPanel>
-                                </Button>
+                                <Panel>
+                                    <!-- Plain command button - Continue/Edit and any future non-picker action. -->
+                                    <Button Classes="detailAction" Classes.primary="{Binding IsPrimary}" Classes.ghost="{Binding !IsPrimary}"
+                                            Command="{Binding Command}" IsEnabled="{Binding IsEnabled}"
+                                            AutomationProperties.AutomationId="{Binding Label}"
+                                            IsVisible="{Binding !HasFlyout}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <fi:SymbolIcon Symbol="{Binding IconGlyph}" FontSize="{StaticResource PbIconSizeSm}"
+                                                           VerticalAlignment="Center" IsVisible="{Binding HasIcon}" />
+                                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <!-- Flyout-hosting button (docs/superpowers/specs/2026-09-17-reader-save-page-and-cover-
+                                         picker-design.md) - "Change Cover" opens the cover picker instead of running a command
+                                         directly. Button.Flyout, never MenuFlyout/ContextMenu (see ReadingStatusPicker.axaml). -->
+                                    <Button Classes="detailAction ghost" IsEnabled="{Binding IsEnabled}"
+                                            AutomationProperties.AutomationId="{Binding Label}"
+                                            IsVisible="{Binding HasFlyout}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <fi:SymbolIcon Symbol="{Binding IconGlyph}" FontSize="{StaticResource PbIconSizeSm}"
+                                                           VerticalAlignment="Center" IsVisible="{Binding HasIcon}" />
+                                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <Button.Flyout>
+                                            <Flyout Placement="BottomEdgeAlignedLeft">
+                                                <views:CoverPickerView DataContext="{Binding FlyoutContext}" />
+                                            </Flyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                </Panel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

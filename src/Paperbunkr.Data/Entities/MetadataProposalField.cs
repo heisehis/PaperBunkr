@@ -28,5 +28,8 @@ public enum MetadataProposalField
     Status,
 
     /// <summary>Series-scoped - writes directly to <c>Series.Genre</c>. Does not affect <c>Issue.Genre</c>, the actual source of truth for filtering/display (see <see cref="Series.Genre"/>'s own doc comment).</summary>
-    Genre
+    Genre,
+
+    /// <summary>Series-scoped - writes directly to <c>Series.Creator</c> (docs/superpowers/specs/2026-09-18-external-metadata-full-extraction-design.md §3).</summary>
+    Creator
 }

@@ -49,14 +49,14 @@ everything below — as Alpha**, effective 2026-08-07.
 Carry these into Beta polish, not blocking the Alpha declaration itself.
 
 **Manual session note (2026-09-05): 3 of 4 were already fixed, this list just never got updated.**
-Checked each against `docs/alpha-todo.md`, the doc a human actually maintains status in:
+Checked each against `docs/paperbunkr-todo.md`, the doc a human actually maintains status in:
 
 - ~~`PageCanvas` requires a click before arrow-key navigation registers in the Reader~~ — **fixed**,
-  `alpha-todo.md` line 467.
+  `paperbunkr-todo.md` line 467.
 - ~~Virtual Tags compute correctly but aren't wired into Smart Lists or any display surface yet~~ —
-  **fixed**, wired into both (`alpha-todo.md` lines 477-478).
+  **fixed**, wired into both (`paperbunkr-todo.md` lines 477-478).
 - ~~Series.Genre vs Issue.Genre display inconsistency~~ — **fixed**, full audit done
-  (`alpha-todo.md` line 486).
+  (`paperbunkr-todo.md` line 486).
 - **Content-type classification is a manual dropdown on Detail — no real §7/§9 auto-classify
   pipeline.** Still genuinely open, and it's not a small fix — see "Content-type classification &
   manga metadata scraping" below, which is the real tracking entry for this. Partially built
@@ -72,12 +72,140 @@ land in git — likely as several commits split by feature, mirroring the alread
 specs — before an actual `alpha` git tag goes on this state.
 
 A prioritized, checkbox-tracked version of this release prep plus the known gaps above (P0–P7,
-sequenced by risk and user-facing impact) lives in [`alpha-todo.md`](alpha-todo.md).
+sequenced by risk and user-facing impact) lives in [`paperbunkr-todo.md`](paperbunkr-todo.md).
 
 ## Beta backlog
 
 Pulled from `docs/ce-feature-inventory.md`'s full CE parity audit (2026-08-07), organized by area.
 Nothing here is sequenced yet — this is the full confirmed "decided: build" list, not a sprint plan.
+
+### Tracker behavior settings - implemented 2026-09-18 (on-screen verification pending)
+
+Design + plan: `docs/superpowers/specs/2026-09-18-tracker-behavior-settings-design.md` (+ `-plan.md`).
+Five global settings in Preferences -> Connections -> "Tracking behavior", modeled on Komikku's
+Settings -> Tracking (semantics verified from Komikku/Mihon source, not guessed): open the tracker
+link panel automatically (manga detail only, needs a metadata source link AND a connected account,
+one-shot per series via new `Series.TrackerPromptShown`, set only after the panel opened), update
+progress after reading (comic reader's 95% finish crossing), update progress when marked as read
+(Always / Ask / Never; five manual mark-as-read sites, one job + one toast/prompt per bulk action,
+never for mark-unread or a tracker pull), auto sync from trackers (Detail open, off by default,
+throttle persisted in the previously-unused `TrackingLink.LastSyncedAt`), and select entries using
+source metadata (pins the series' linked metadata id first in the tracker-link results; still needs
+the two-step confirm, never a silent link).
+
+- New `TrackerAutoSyncService` (behind `ITrackerAutoSyncService`, null-object default so no screen
+  VM gets `null`): serial executor with per-service pacing (in-memory only), same-series
+  coalescing, forward-only push that never sends score/finish-date, Activity Center integration
+  per the standing rule (one `TrackerFetch` job per action = status-bar indicator + history,
+  success/failure toasts, deduped `tracker-sync:{seriesId}:{service}` alerts linking to the series;
+  "nothing to do" is silent). Jobs start with toasts off because "nothing changed" is only known
+  afterwards, so the service raises its own via a new `IToastHost` that marshals to the UI thread
+  (screen VMs previously could not show an actionable toast at all).
+- Extracted the four duplicated per-service switches from `DetailTabsViewModel` into
+  `TrackerAdapterFactory` (+ `ITrackerDetailedPush` implemented by all 8 adapters, `TrackerProviderMap`);
+  the bulk Sync button now reports every tracker's real error, not just MangaBaka/MangaDex's. Fakes
+  can now be injected, closing the old "no seam to inject a fake tracker adapter" test gap.
+- Known limits: an auto-pull failure can't be told apart from "no entry" (`ITrackerAdapter.GetEntryAsync`
+  collapses both to null), so pull raises no failure alert - push does. No persisted retry queue (next entry).
+- Observed, not fixed (unverified): `MetadataWriteBackQueue` is built before `MainViewModel.Activity`
+  is assigned (its jobs may never reach the status bar) and calls `_showToast` off the UI thread.
+
+### Tracker auto-push offline/retry queue — backlog, deferred 2026-09-18
+
+Deferred by the user from the Tracking-settings pass (auto-push after reading / on mark-as-read):
+v1 has **no** queue - a failed automatic push raises an Activity Center alert with the real error
+and the manual "Sync with Trackers" button is the retry. Later work: persist failed pushes (highest
+chapter per link, coalesced), retry with backoff when the network returns, drop after N attempts,
+surface pending/failed state through the Activity Center. Reference: Komikku's `DelayedTrackingStore`
++ `DelayedTrackingUpdateJob` (WorkManager, network-CONNECTED constraint, exponential backoff from 5
+min, gives up after 3 retries, keeps only the highest chapter per track). In-repo pattern to copy:
+`Services/MetadataWriteBackQueue.cs` (debounced, coalesced, serial). `TrackingLink.LastSyncedAt`/
+`LastSyncedIssueNumber` already exist, declared but unused.
+
+### Per-tracker Score & Finish-date — implemented 2026-09-18 (on-screen verification pending)
+
+Design + plan: `docs/superpowers/specs/2026-09-18-per-tracker-score-and-finish-date-design.md`
+(+ `-plan.md`). Komikku-style per-tracker Score/Progress/Finish-date, closing the gap flagged
+alongside the MangaBaka 404 and MangaDex silent-sync bugs fixed earlier the same session ("it's also
+missing the stuff from komikku").
+
+- **Data model.** `TrackerPushPayload`/`TrackerRemoteEntry` gain `Score`/`FinishDate`.
+  `Series.Rating` (`float?`, new `AddSeriesRating` migration) is the push source of truth — the
+  average of rated `Issue.Rating` values (`SeriesRatingResolver.Recompute`, null when nothing is
+  rated, never 0). Pull direction is per-tracker display-only by default; an explicit "Use this
+  score" action overwrites `Series.Rating` directly, bypassing the resolver.
+- **All 8 tracker adapters** (AniList, MyAnimeList, MangaBaka, Kitsu, MangaDex, MangaUpdates,
+  Shikimori, Bangumi) now push/pull Score and (where the real API supports it — AniList/
+  MyAnimeList/MangaBaka/Kitsu only, confirmed live, not guessed) Finish-date, each via its own
+  `PushEntryDetailedAsync`. Per-tracker scale conversion verified against each service's real API
+  (AniList's own `scoreFormat`, MAL ×2, MangaBaka ×20, Kitsu ×4 clamped 2-20, MangaDex ×2 clamped
+  1-10, MangaUpdates ×2 to 1 decimal, Shikimori/Bangumi ×2).
+- **Critical gating bug found and fixed during implementation, before shipping**: without an
+  explicit `UpdateScore`/`UpdateFinishDate` opt-in flag on `TrackerPushPayload` (both default
+  `false`), the existing shared "Sync with Trackers" button — which only ever knows Status/
+  Progress — would have caused MangaDex/MangaUpdates (separate rating endpoints) to issue a real
+  `DELETE` on *every ordinary sync*, silently wiping a rating the user set independently on that
+  service; AniList's GraphQL mutation would likewise have sent an explicit `score: null` every
+  time. All 8 adapters now gate their score/date-touching code on these flags — the bulk sync
+  button never touches either field; only the new per-tracker panel's explicit field edit does.
+- **UI**: Detail screen's tracker chip row — click a chip to expand a details panel beneath it
+  (layout chosen via a visual-companion mockup pass over a full-card and compact-table
+  alternative). Progress/Score/Finish-date editable inline, immediate single-tracker push (no
+  queueing), "Not supported by this tracker" for FinishDate on the 4 services without it.
+- 17 new/extended tracker-adapter unit tests (one pair per adapter verifying the gating), plus
+  `SeriesRatingResolverTests`, `TrackerLinkSampleTests` (capability-flag coverage), and
+  `DetailTabsViewModelTests` additions for the panel-open/push/use-score flow — all offline (every
+  adapter's no-stored-credentials guard short-circuits before any real network call).
+- Also fixed in passing while touching this exact chip `ItemsControl`: `UnlinkTracker` was
+  synchronously clearing `TrackerLinks` from inside the "✕" button's own routing `Click` — the
+  documented "don't remove/detach a control from inside a routed event it's still raising" crash
+  shape (CLAUDE.md) that a 2026-09-12 sweep had already fixed in ~15 other spots but missed here.
+  Deferred via `Dispatcher.UIThread.Post`, same shape as the rest.
+
+Explicitly deferred, not started: the Komikku-style Tracking settings toggles (auto-open-track-menu-
+on-add, update-progress-after-reading/when-marked-as-read, auto-sync-from-trackers,
+select-entries-using-source-metadata) — flagged by the user as a follow-up, not part of this pass.
+
+**3 post-ship bugs found+fixed on-screen, same day:**
+
+- **AniList "Invalid token" 400 on the panel's "Save to tracker".** Confirmed live via curl that
+  AniList's real API returns the *exact same* generic `{"errors":[{"message":"Invalid token",
+  "status":400}]}` for a garbage/malformed token as it does for a genuinely revoked one - no way to
+  tell them apart from the response alone. AniList's implicit-grant "pin" page
+  (`https://anilist.co/api/v2/oauth/pin`) hands the user text to copy with no exchange/validation
+  call afterward (unlike every OAuth-code-based adapter here, where a bad paste fails immediately
+  and visibly), so a paste that includes more than the bare token (the full
+  `access_token=...&token_type=...&expires_in=...` fragment, a stray `Bearer ` prefix, surrounding
+  whitespace) gets stored verbatim and only surfaces as this cryptic error at push time. New
+  `TrackerCredentialSanitizer` (`src/Paperbunkr.Data/Tracking/TrackerCredentialSanitizer.cs`)
+  extracts/trims before storing - applied to `AniListTrackerAdapter.CompleteConnect` (the one
+  actually reported) and, since `BangumiTrackerAdapter`/`MangaBakaTrackerAdapter` share the exact
+  same "raw pasted secret, no exchange step" shape, both PAT `CompleteConnect`s too. Confirmed
+  AniList genuinely has no refresh-token support at all (any grant type, 1-year token lifetime,
+  verified against `docs.anilist.co`) - unlike MangaDex's earlier bug, there's no refresh mechanism
+  to add here; this was a paste-corruption bug, not a token-freshness one.
+- **Progress/Score spinner buttons too big.** The panel used a real `NumericUpDown`, whose built-in
+  spin buttons render much taller than the app's existing compact `TextSpinner` behavior
+  (`Behaviors/TextSpinner.cs`, 18x9px buttons) used elsewhere for numeric metadata fields. Switched
+  both fields to `TextBox` + `TextSpinner`; `TextSpinner` itself gained a new `Step` attached
+  property (decimal, default `1`, backward-compatible with every existing integer-only caller) so
+  its `Step` core function could support Score's `0.1` fractional increment via exact decimal
+  arithmetic (no binary-float rounding drift) alongside its existing whole-number digit-run nudging
+  for mixed text like `"1.MU"`.
+
+- **AniList "The progress must be an integer" 400, after the sanitizer fix above landed.** A
+  second, distinct 400 surfaced once the token itself was fixed: the panel's push always included a
+  `progress` GraphQL variable, sending an explicit JSON `null` whenever `TrackerPushPayload.ChapterProgress`
+  was null (e.g. the panel opened with nothing pulled from AniList yet, or the user never touched
+  Progress before clicking "Save to tracker") - the shared bulk "Sync with Trackers" button never
+  hit this, since it always computes a real integer chapter count first. Confirmed live that AniList
+  rejects explicit `null` here outright, unlike `score`/`completedAt`'s own null handling elsewhere
+  in the same mutation. Fixed the same way as those two fields already were: `progress` is now
+  omitted from the GraphQL variables entirely when `ChapterProgress` is null, not sent as null.
+
+On-screen verification of the rest of this feature (the actual push landing correctly on each real
+tracker) still pending - computer-use/UI-automation both require explicit per-session permission
+this session didn't have.
 
 ### Scheduled Tasks + cover-cache durability — implemented 2026-09-06 (GUI pass pending)
 
@@ -210,7 +338,7 @@ page spread shipped 2026-08-16**; **remappable reader keyboard shortcuts shipped
 **auto-scroll/hands-free mode shipped 2026-08-16** — all committed `2026-08-22` (`c1e91a6`) after
 sitting tested-but-uncommitted for several sessions. This doc's "still open" list above had gone
 stale; full per-item detail (design specs, bugs found+fixed, test counts) lives in
-[`alpha-todo.md`](alpha-todo.md)'s "Bonus, ahead of schedule" section rather than duplicated here.
+[`paperbunkr-todo.md`](paperbunkr-todo.md)'s "Bonus, ahead of schedule" section rather than duplicated here.
 **A Preferences → Reader tab already existed and is not open** — see the entry above this one.
 
 **Vertical paged reading mode shipped 2026-08-27** (`ReadingMode.TopToBottom`, design +
@@ -694,7 +822,7 @@ driving use case yet; revisit if one shows up). Design specs:
   aware (respects AniList's actual current 30 req/min degraded limit), licensing-verified against
   AniList's real terms (`github.com/AniList/docs`). **No longer backend-only** — a real search-and-link
   UI landed 2026-08-19 (`MetadataLinkResolver`/`TitleMatchScorer`, wired into `DetailTabsViewModel`;
-  still uncommitted as of this sync, see `alpha-todo.md`'s live-tracker section for status). Every
+  still uncommitted as of this sync, see `paperbunkr-todo.md`'s live-tracker section for status). Every
   *other* provider (MAL/MangaDex/GCD/etc.) is still deliberately deferred — MangaDex has a sketched-
   only design spec (R5, not implemented); full tracker-service *sync* (as opposed to read-only
   search/link) remains the item below, and reuses this adapter rather than rebuilding it.
@@ -1756,6 +1884,48 @@ ideas aren't lost, not because scope/approach is settled.
 7. **Plugin API v3 hook: on-continuity-complete** — extend the existing 8-hook Plugin API v2/v3 hook
    set so plugins (CBL export, notifications) can react when a continuity/event reaches completion
    state.
+
+**Cheap & local — pitched 2026-09-18** (heuristics over data already on hand, no new dependency):
+
+8. **Library gap detection** — per-series issue-number analysis: "you have #1-3, 5, 7; missing #4,
+   #6." Surface per-series and as a global "holes in your collection" view. Pure query over `Issue`/
+   `Series`, no new infra.
+9. **Reading-integrity health scan** — flag low-res pages, inconsistent page dimensions mid-issue,
+   duplicate/blank pages, page-count-vs-metadata mismatch, unreadable archives. Natural extension of
+   the existing `LibraryHealthService` (already probes `PageDecodeCore.TryOpenProvider` for
+   content-empty detection, shipped 2026-09-17) — run as an Activity Center job like Scheduled
+   Tasks' other scans, not a new subsystem.
+10. **Drop-off detection** — "you tend to stall around issue 3-4; here are 5 you're one issue from
+    that cliff." Per-issue read state (`Issue.LastReadAt`/reading progress) already exists; this is
+    a query + surfacing problem, not new tracking.
+11. **Smart "Up Next" queue** — blend mid-series progress + recency + median session length +
+    almost-finished series into one ranked rail, replacing Home's current separate Continue-Reading/
+    Almost-Done/Dive-In modules with one blended one (or sitting alongside them — a real design
+    question for the brainstorm, not decided here).
+12. **Reading-stats dashboard refinements** — pace, streaks, time-of-day heatmap, genre/publisher
+    mix over time, completion rate. Overlaps significantly with the already-shipped Insights/Stats v2
+    tab (`ReadingEvent` log + ScottPlot charts, 2026-09-06/09-08) — check what's already covered
+    there before scoping this as new work; likely an extend, not a build.
+13. **Best-scan heuristic for dedup** — when Duplicate Finder flags a pair, recommend which to keep
+    by resolution × page count × format × size. Duplicate Finder itself already ships as a real
+    installable plugin (2026-09-05); this is a ranking function inside it, not a new plugin.
+
+**Medium — optional local ML, no network — pitched 2026-09-18:**
+
+14. **Full-text dialogue search** — OCR each page once (e.g. Tesseract), cache the result, search
+    spoken lines and jump to the panel. Fully offline; biggest lift here is the OCR cache/invalidation
+    story (page changes on re-scan, archive re-decode cost) more than the OCR call itself.
+15. **Semantic search over descriptions/covers** — local embeddings so "cozy slice-of-life I haven't
+    finished" or "something like Blame! but shorter" work as queries. Reuses provider synopsis text
+    already stored (`ExternalMediaMetadata`/`Series.Summary`) — no new metadata dependency, just an
+    embedding index over what's already fetched.
+16. **Auto-tagging with confidence** — infer genre/tone/content-warnings from synopsis + provider
+    tags, present as user-confirmable suggestions. Slots directly into the existing Activity Center
+    review-queue pattern (`MetadataProposal`) already used for other proposed-metadata flows — no new
+    review UI needed, just a new proposal source.
+
+*None of items 8-16 are scoped or brainstormed yet — same caveat as items 1-7 above: needs its own
+brainstorm → design spec per this project's `CLAUDE.md` workflow before implementation starts.*
 
 ### Deferred / dropped (no action needed)
 - **News reader** (`Help > News` RSS) — deferred, live idea to repurpose the feed mechanism for

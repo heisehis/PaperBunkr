@@ -1,4 +1,4 @@
-# Builds the Paperbunkr alpha installer (P7, docs/alpha-todo.md).
+# Builds the Paperbunkr installer (P7, docs/paperbunkr-todo.md).
 #
 # Two steps: publish the App project self-contained for win-x64, then hand that output to Inno
 # Setup 6. Modeled on _reference/ComicRackCE/BuildInstaller.ps1's shape (locate ISCC.exe, derive a

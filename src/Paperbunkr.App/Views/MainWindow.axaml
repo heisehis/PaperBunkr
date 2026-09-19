@@ -781,6 +781,71 @@
                         </ItemsControl>
                         <TextBlock Text="No continuities yet" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4"
                                    IsVisible="{Binding Events.HasNoContinuities}" />
+
+                        <!-- Story-event / shared-universe auto-population suggestions (docs/superpowers/specs/
+                             2026-09-17-storyevent-continuity-autopopulate-design.md) - "propose, don't assert":
+                             each row creates nothing until Accept, and Dismiss persists so it never resurfaces. -->
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" />
+                        <Grid ColumnDefinitions="*,Auto" Margin="8,10,6,4" IsVisible="{Binding !Events.HasNoNewStoryEventCandidates}">
+                            <TextBlock Grid.Column="0" Text="New story-event suggestions" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            <Border Grid.Column="1" Classes="pbChip" Padding="5,1"><TextBlock Text="{Binding Events.NewStoryEventCandidates.Count}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Events.NewStoryEventCandidates}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:StoryEventCandidateRowViewModel">
+                                    <Border Classes="ecRow" CornerRadius="6" Margin="0,1" Padding="11,7">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="{Binding ArcName}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ArcName}" />
+                                            <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Button Classes="headerAction ghost" Content="Accept" Command="{Binding AcceptCommand}" IsEnabled="{Binding !IsAccepting}" />
+                                                <Button Classes="headerAction ghost" Content="Dismiss" Command="{Binding DismissCommand}" IsEnabled="{Binding !IsAccepting}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="8,12,6,4">
+                            <TextBlock Grid.Column="0" Text="Shared-universe suggestions" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Classes="headerAction ghost" Padding="6,2" FontSize="10"
+                                    Command="{Binding Events.CheckForWikidataSuggestionsCommand}" IsEnabled="{Binding !Events.IsCheckingWikidataSuggestions}">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="Checking…" IsVisible="{Binding Events.IsCheckingWikidataSuggestions}" />
+                                    <TextBlock Text="Check Wikidata" IsVisible="{Binding !Events.IsCheckingWikidataSuggestions}" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="{Binding Events.WikidataCheckResult}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}"
+                                   Margin="8,0,6,4" TextWrapping="Wrap"
+                                   IsVisible="{Binding Events.WikidataCheckResult, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                        <ItemsControl ItemsSource="{Binding Events.NewContinuitySuggestions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ContinuitySuggestionRowViewModel">
+                                    <Border Classes="ecRow" CornerRadius="6" Margin="0,1" Padding="11,7">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis">
+                                                <Run Text="{Binding SeriesName}" /> <Run Text="→" /> <Run Text="{Binding UniverseLabel}" />
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Button Classes="headerAction ghost" Content="Accept" Command="{Binding AcceptCommand}" />
+                                                <Button Classes="headerAction ghost" Content="Dismiss" Command="{Binding DismissCommand}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="No suggestions yet - click Check Wikidata" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4">
+                            <TextBlock.IsVisible>
+                                <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                    <Binding Path="Events.HasNoNewContinuitySuggestions" />
+                                    <Binding Path="Events.WikidataCheckResult" Converter="{x:Static conv:StringConverters.IsNullOrEmpty}" />
+                                </MultiBinding>
+                            </TextBlock.IsVisible>
+                        </TextBlock>
                     </StackPanel>
 
                 </StackPanel>
@@ -806,6 +871,17 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
+
+            <!-- Matrix theme's code-rain background layer (docs/superpowers/specs/2026-09-16-theme-
+                 system-design.md § Matrix rain effect) - mounted first (bottom of z-order) so both
+                 TransitioningContentControls below paint over it normally; IsVisible gated to the
+                 Matrix theme specifically. Screens have no root Background of their own (the window's
+                 PbBg shows through), so the rain is visible wherever a screen leaves bare space -
+                 gutters, text rows, empty areas - and hidden behind opaque cards/panels by normal
+                 z-order. Do NOT mark these two hosts IsOpaqueBackplate: they span the whole content
+                 area, so doing so clips the entire rain out (the original bug - the rain never
+                 rendered anywhere). Reserve that attached property for genuinely opaque panels. -->
+            <views:MatrixRainOverlay Grid.Row="0" Grid.RowSpan="2" IsVisible="{Binding IsMatrixRainVisible}" />
 
             <!-- The 7 rail-ordered lateral screens (docs/superpowers/specs/2026-08-24-navigation-
                  shell-motion-system-design.md) share one TransitioningContentControl - direction
@@ -1134,7 +1210,7 @@
         </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
-    <!-- ============ Unsaved-changes discard confirm (P6 follow-up, docs/alpha-todo.md) - guards
+    <!-- ============ Unsaved-changes discard confirm (P6 follow-up, docs/paperbunkr-todo.md) - guards
          the rail nav against silently abandoning an in-progress Issue Properties/Bulk Editing edit,
          see MainViewModel.TryLeaveCurrentEditor ============ -->
     <!-- Fade+scale (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-design.md item 4)
@@ -1230,6 +1306,23 @@
     <Panel IsVisible="{Binding IsWelcomeTourOverlayOpen}">
         <views:WelcomeTourOverlay DataContext="{Binding WelcomeTour}" />
     </Panel>
+
+    <!-- ============ Scheduled theme-switch crossfade (docs/superpowers/specs/2026-09-16-theme-
+         system-design.md § Extended scope, "Graceful Auto-Theme Crossfades") - a brief opacity dip
+         to the new theme's own background masking the instant resource swap underneath, not a true
+         two-layer crossfade (Avalonia resource changes are instant, nothing to interpolate between).
+         Opacity driven from MainViewModel.ThemeCrossfadeOpacity; the actual smoothing is this
+         Border's own Transition, the same safe Transition-driven pattern used throughout this file,
+         never a XAML Animation/KeyFrame. IsHitTestVisible false - a 0-600ms dip should never eat a
+         click. Sits above all real screen content and the Matrix rain, below the toast host/welcome
+         tour so those stay usable through a switch. ============ -->
+    <Border Background="{DynamicResource PbBgBrush}" Opacity="{Binding ThemeCrossfadeOpacity}" IsHitTestVisible="False">
+        <Border.Transitions>
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.3" Easing="CubicEaseOut" />
+            </Transitions>
+        </Border.Transitions>
+    </Border>
 
     <!-- ============ Toast host (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-
          design.md item 5) - app-owned replacement for WindowNotificationManager, wired up in

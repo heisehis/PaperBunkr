@@ -24,9 +24,15 @@ namespace Paperbunkr.Data.Metadata;
 /// endpoints, which is why it stays a plain <c>HttpClient</c> caller with no credential lookup of
 /// its own.
 /// </summary>
-public sealed class MangaBakaMetadataProvider : IMetadataProvider, ITrackerSearchProvider
+public sealed class MangaBakaMetadataProvider : IMetadataProvider, ITrackerSearchProvider, IMultiCoverProvider, IRelationsProvider
 {
-    private const string BaseUrl = "https://api.mangabaka.org/v2/";
+    /// <summary>Migrated from the beta <c>v2</c> family to the stable, richer <c>v1</c> family
+    /// (docs/superpowers/specs/2026-09-18-external-metadata-full-extraction-design.md §6) - <c>v2</c>
+    /// has no covers/relations/richer-tag-taxonomy endpoints at all. <c>series/search</c>/
+    /// <c>series/{id}</c> response shape is assumed unchanged between the two families per
+    /// docs/mangabaka-metadata-ui-research.md finding 14 ("v1 is also the richer family" - not a
+    /// narrower/differently-shaped one); reconfirm against a live response before shipping.</summary>
+    private const string BaseUrl = "https://api.mangabaka.org/v1/";
 
     /// <summary>
     /// MangaBaka's own documented limit for `GET /series/search` (`api.mangabaka.org/data/api`):
@@ -93,6 +99,71 @@ public sealed class MangaBakaMetadataProvider : IMetadataProvider, ITrackerSearc
 
         var response = await FetchAsync<MangaBakaGetResponse>($"series/{id}", cancellationToken).ConfigureAwait(false);
         return response?.Data is null ? null : MangaBakaNormalizer.ToMediaMetadata(response.Data);
+    }
+
+    /// <summary>
+    /// First page only (`GET /v1/series/{id}/images`) - MangaBaka's own archives run into the
+    /// hundreds of entries for a popular series (confirmed live: 931 for One Piece), and this is a
+    /// browse-and-pick UI, not a bulk export; a further "load more" page is future work if it's
+    /// ever asked for.
+    /// </summary>
+    public async Task<IReadOnlyList<CoverCandidate>> GetCoverCandidatesAsync(string externalId, CancellationToken cancellationToken)
+    {
+        var response = await FetchAsync<MangaBakaImagesResponse>($"series/{Uri.EscapeDataString(externalId)}/images?page=1", cancellationToken).ConfigureAwait(false);
+        var items = response?.Data;
+        if (items is null)
+        {
+            return Array.Empty<CoverCandidate>();
+        }
+
+        return items
+            .Where(i => i.Image?.Raw?.Url is not null)
+            .Select(i => new CoverCandidate(
+                ThumbnailUrl: i.Image!.X150?.X1 ?? i.Image.Raw!.Url!,
+                FullUrl: i.Image.Raw!.Url!,
+                Type: i.Type ?? "other",
+                Source: i.Note))
+            .ToList();
+    }
+
+    /// <summary>
+    /// <c>relationships_v2</c> is already embedded in the plain get-by-id response (confirmed live,
+    /// no separate `/v1/series/{id}/relationships` call needed) - but it only carries a bare
+    /// `to_series_id`, not a title/URL, so each relation needs a follow-up <see cref="GetAsync"/>
+    /// call to resolve a display title. Same "only on explicit Related-tab open" lazy trigger as
+    /// <see cref="AniListMetadataProvider.GetRelationsAsync"/>.
+    /// </summary>
+    public async Task<IReadOnlyList<ProviderRelation>> GetRelationsAsync(string externalId, CancellationToken cancellationToken)
+    {
+        if (!int.TryParse(externalId, out int id))
+        {
+            return Array.Empty<ProviderRelation>();
+        }
+
+        var response = await FetchAsync<MangaBakaGetResponse>($"series/{id}", cancellationToken).ConfigureAwait(false);
+        var relationships = response?.Data?.RelationshipsV2;
+        if (relationships is null)
+        {
+            return Array.Empty<ProviderRelation>();
+        }
+
+        var results = new List<ProviderRelation>();
+        foreach (var relationship in relationships)
+        {
+            var target = await GetAsync(relationship.ToSeriesId.ToString(CultureInfo.InvariantCulture), cancellationToken).ConfigureAwait(false);
+            if (target is null)
+            {
+                continue;
+            }
+
+            results.Add(new ProviderRelation(
+                TargetExternalId: target.ExternalId,
+                TargetTitle: target.Title,
+                TargetUrl: target.Url,
+                Type: ProviderRelationTypeMapper.MapMangaBaka(relationship.RelationType)));
+        }
+
+        return results;
     }
 
     private async Task<T?> FetchAsync<T>(string relativeUrl, CancellationToken cancellationToken) where T : class
@@ -166,12 +237,12 @@ internal sealed class MangaBakaGetResponse
 
 /// <summary>
 /// Covers both the search endpoint and the get-by-id endpoint's response shape - both were
-/// re-confirmed live to return only the <see cref="Titles"/> array, no flat top-level title field
-/// at all (an earlier capture that appeared to show one on the search endpoint didn't reproduce on
-/// a later live check - possibly a fetch-tooling artifact, possibly real API drift; either way,
-/// <see cref="Title"/> is kept as a tolerant first-choice fallback in case it's ever populated, and
-/// <see cref="MangaBakaNormalizer.ResolveDisplayTitle"/> falls through to <see cref="Titles"/>
-/// correctly either way, verified by a dedicated test).
+/// re-confirmed live against `v1` (2026-09-18, following the `v2`→`v1` migration) to return the
+/// *same* rich shape for both, unlike `v2`'s search/get split. `title`/`native_title`/
+/// `romanized_title` are flat strings (reliably populated, unlike `v2`'s all-`titles`-array-only
+/// shape the old fixture assumed), `total_chapters`/`final_volume` are strings (not ints - e.g.
+/// `"1193"`), and `canonical_url` is real (the old `v2` "no canonical URL field" finding no longer
+/// holds under `v1`).
 /// </summary>
 internal sealed class MangaBakaSeriesDto
 {
@@ -181,8 +252,17 @@ internal sealed class MangaBakaSeriesDto
     [JsonPropertyName("title")]
     public string? Title { get; set; }
 
+    [JsonPropertyName("native_title")]
+    public string? NativeTitle { get; set; }
+
+    [JsonPropertyName("romanized_title")]
+    public string? RomanizedTitle { get; set; }
+
     [JsonPropertyName("titles")]
     public List<MangaBakaTitleDto>? Titles { get; set; }
+
+    [JsonPropertyName("canonical_url")]
+    public string? CanonicalUrl { get; set; }
 
     [JsonPropertyName("description")]
     public string? Description { get; set; }
@@ -190,11 +270,42 @@ internal sealed class MangaBakaSeriesDto
     [JsonPropertyName("status")]
     public string? Status { get; set; }
 
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    [JsonPropertyName("year")]
+    public int? Year { get; set; }
+
     [JsonPropertyName("total_chapters")]
-    public int? TotalChapters { get; set; }
+    public string? TotalChapters { get; set; }
 
     [JsonPropertyName("final_volume")]
-    public int? FinalVolume { get; set; }
+    public string? FinalVolume { get; set; }
+
+    [JsonPropertyName("authors")]
+    public List<string>? Authors { get; set; }
+
+    [JsonPropertyName("artists")]
+    public List<string>? Artists { get; set; }
+
+    [JsonPropertyName("genres")]
+    public List<string>? Genres { get; set; }
+
+    /// <summary>The richer, categorized+weighted tag list (real per-series `weight` values
+    /// confirmed live, e.g. `"incidental"`) - <see cref="IssueTagWeight"/> import still stays
+    /// `Unset` regardless (the standing "never inferred on migration or import" rule,
+    /// `IssueTag.cs`'s own doc comment - independent of whether a provider has a live value).</summary>
+    [JsonPropertyName("tags_v2")]
+    public List<MangaBakaTagV2Dto>? TagsV2 { get; set; }
+
+    [JsonPropertyName("relationships_v2")]
+    public List<MangaBakaRelationshipV2Dto>? RelationshipsV2 { get; set; }
+
+    [JsonPropertyName("source")]
+    public MangaBakaSourceDto? Source { get; set; }
+
+    [JsonPropertyName("cover")]
+    public MangaBakaCoverDto? Cover { get; set; }
 }
 
 internal sealed class MangaBakaTitleDto
@@ -212,35 +323,224 @@ internal sealed class MangaBakaTitleDto
     public bool IsPrimary { get; set; }
 }
 
+internal sealed class MangaBakaTagV2Dto
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("name_path")]
+    public string? NamePath { get; set; }
+
+    [JsonPropertyName("is_genre")]
+    public bool IsGenre { get; set; }
+
+    [JsonPropertyName("is_spoiler")]
+    public bool IsSpoiler { get; set; }
+}
+
+internal sealed class MangaBakaRelationshipV2Dto
+{
+    [JsonPropertyName("to_series_id")]
+    public int ToSeriesId { get; set; }
+
+    [JsonPropertyName("relation_type")]
+    public string? RelationType { get; set; }
+}
+
+/// <summary>Cross-referenced external ids for the six tracked sources this codebase has an
+/// <see cref="ExternalMetadataProvider"/> value for (`anime_news_network` also exists live but has
+/// no matching enum value - skipped). Each source's `id` is a string for some providers
+/// (`manga_updates`, `anime_planet`) and a number for others - <see cref="JsonElement"/> reads
+/// either without a custom converter.</summary>
+internal sealed class MangaBakaSourceDto
+{
+    [JsonPropertyName("anilist")]
+    public MangaBakaSourceEntryDto? AniList { get; set; }
+
+    [JsonPropertyName("kitsu")]
+    public MangaBakaSourceEntryDto? Kitsu { get; set; }
+
+    [JsonPropertyName("manga_updates")]
+    public MangaBakaSourceEntryDto? MangaUpdates { get; set; }
+
+    [JsonPropertyName("my_anime_list")]
+    public MangaBakaSourceEntryDto? MyAnimeList { get; set; }
+
+    [JsonPropertyName("anime_planet")]
+    public MangaBakaSourceEntryDto? AnimePlanet { get; set; }
+
+    [JsonPropertyName("shikimori")]
+    public MangaBakaSourceEntryDto? Shikimori { get; set; }
+}
+
+internal sealed class MangaBakaSourceEntryDto
+{
+    [JsonPropertyName("id")]
+    public JsonElement Id { get; set; }
+}
+
+internal sealed class MangaBakaCoverDto
+{
+    [JsonPropertyName("raw")]
+    public MangaBakaCoverVariantDto? Raw { get; set; }
+}
+
+internal sealed class MangaBakaCoverVariantDto
+{
+    [JsonPropertyName("url")]
+    public string? Url { get; set; }
+}
+
+internal sealed class MangaBakaImagesResponse
+{
+    [JsonPropertyName("data")]
+    public List<MangaBakaImageDto>? Data { get; set; }
+}
+
+internal sealed class MangaBakaImageDto
+{
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    /// <summary>Source attribution, e.g. "Banner from Weekly Shounen Jump website" - shown as the
+    /// candidate's tooltip in the picker grid.</summary>
+    [JsonPropertyName("note")]
+    public string? Note { get; set; }
+
+    [JsonPropertyName("image")]
+    public MangaBakaImageVariantsDto? Image { get; set; }
+}
+
+internal sealed class MangaBakaImageVariantsDto
+{
+    [JsonPropertyName("raw")]
+    public MangaBakaCoverVariantDto? Raw { get; set; }
+
+    [JsonPropertyName("x150")]
+    public MangaBakaImageSizeDto? X150 { get; set; }
+}
+
+internal sealed class MangaBakaImageSizeDto
+{
+    [JsonPropertyName("x1")]
+    public string? X1 { get; set; }
+}
+
 internal static class MangaBakaNormalizer
 {
     public static MetadataSearchResult ToSearchResult(MangaBakaSeriesDto dto) =>
-        new(dto.Id.ToString(CultureInfo.InvariantCulture), ResolveDisplayTitle(dto), Url: null);
+        new(dto.Id.ToString(CultureInfo.InvariantCulture), ResolveDisplayTitle(dto), dto.CanonicalUrl);
 
     public static ExternalMediaMetadata ToMediaMetadata(MangaBakaSeriesDto dto) => new(
         dto.Id.ToString(CultureInfo.InvariantCulture),
         ResolveDisplayTitle(dto),
-        Url: null, // No canonical series-page URL field anywhere in the API response, confirmed live.
+        dto.CanonicalUrl,
         dto.Description,
         dto.Status,
-        dto.TotalChapters,
-        dto.FinalVolume,
+        ParseIntOrNull(dto.TotalChapters),
+        ParseIntOrNull(dto.FinalVolume),
         TitleEnglish: FindTitle(dto, t => t.Language == "en"),
-        TitleRomaji: FindTitle(dto, t => t.Language == "ja-Latn"),
-        TitleNative: FindTitle(dto, t => t.Language == "ja" && t.Traits?.Contains("native") == true));
+        TitleRomaji: dto.RomanizedTitle ?? FindTitle(dto, t => t.Language == "ja-Latn"),
+        TitleNative: dto.NativeTitle ?? FindTitle(dto, t => t.Language == "ja" && t.Traits?.Contains("native") == true),
+        Genre: dto.Genres is { Count: > 0 } genres ? string.Join(", ", genres) : null,
+        CoverImageUrl: dto.Cover?.Raw?.Url,
+        Creator: ResolveCreator(dto),
+        PublicationYear: dto.Year,
+        PublicationFormat: dto.Type,
+        Demographic: null, // Confirmed absent from the v1 schema entirely, not just empty for a given series.
+        CrossReferences: ResolveCrossReferences(dto.Source),
+        GenreTags: dto.Genres is { Count: > 0 } genreTags ? genreTags : null,
+        OtherTags: ResolveOtherTags(dto.TagsV2));
 
-    /// <summary>English beats the search endpoint's own flat title (already usually English) beats
-    /// the first primary-flagged localization beats whatever's first - never throws even when every
-    /// title field is somehow empty.</summary>
+    /// <summary>English beats the flat <c>title</c> field beats the first primary-flagged
+    /// localization beats whatever's first - never throws even when every title field is somehow
+    /// empty.</summary>
     private static string ResolveDisplayTitle(MangaBakaSeriesDto dto) =>
-        dto.Title
-        ?? FindTitle(dto, t => t.Language == "en")
+        FindTitle(dto, t => t.Language == "en")
+        ?? dto.Title
         ?? FindTitle(dto, t => t.IsPrimary)
         ?? dto.Titles?.FirstOrDefault()?.Title
         ?? "Untitled";
 
     private static string? FindTitle(MangaBakaSeriesDto dto, Func<MangaBakaTitleDto, bool> predicate) =>
         dto.Titles?.FirstOrDefault(predicate)?.Title;
+
+    private static int? ParseIntOrNull(string? value) =>
+        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) ? parsed : null;
+
+    private static string? ResolveCreator(MangaBakaSeriesDto dto)
+    {
+        var names = (dto.Authors ?? new List<string>())
+            .Concat(dto.Artists ?? new List<string>())
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return names.Count > 0 ? string.Join(", ", names) : null;
+    }
+
+    /// <summary>Non-genre, non-spoiler tags. <see cref="MangaBakaTagV2Dto.NamePath"/> is a
+    /// breadcrumb like <c>"Activities &gt; Competitions"</c> - the first segment is the category
+    /// (Genres/Themes/Settings/Activities/Character Traits/...), matching the taxonomy structure
+    /// docs/mangabaka-metadata-ui-research.md finding 15 described.</summary>
+    private static IReadOnlyList<(string Value, string Category)>? ResolveOtherTags(List<MangaBakaTagV2Dto>? tagsV2)
+    {
+        var values = tagsV2?
+            .Where(t => !t.IsGenre && !t.IsSpoiler && !string.IsNullOrWhiteSpace(t.Name))
+            .Select(t => (t.Name!, CategoryFromNamePath(t.NamePath)))
+            .ToList();
+
+        return values is { Count: > 0 } ? values : null;
+    }
+
+    private static string CategoryFromNamePath(string? namePath)
+    {
+        if (string.IsNullOrWhiteSpace(namePath))
+        {
+            return "Uncategorized";
+        }
+
+        int separatorIndex = namePath.IndexOf('>');
+        return separatorIndex > 0 ? namePath[..separatorIndex].Trim() : namePath.Trim();
+    }
+
+    private static IReadOnlyList<(ExternalMetadataProvider Provider, string ExternalId)>? ResolveCrossReferences(MangaBakaSourceDto? source)
+    {
+        if (source is null)
+        {
+            return null;
+        }
+
+        var result = new List<(ExternalMetadataProvider, string)>();
+        AddIfPresent(result, ExternalMetadataProvider.AniList, source.AniList);
+        AddIfPresent(result, ExternalMetadataProvider.Kitsu, source.Kitsu);
+        AddIfPresent(result, ExternalMetadataProvider.MangaUpdates, source.MangaUpdates);
+        AddIfPresent(result, ExternalMetadataProvider.MyAnimeList, source.MyAnimeList);
+        AddIfPresent(result, ExternalMetadataProvider.AnimePlanet, source.AnimePlanet);
+        AddIfPresent(result, ExternalMetadataProvider.Shikimori, source.Shikimori);
+
+        return result.Count > 0 ? result : null;
+    }
+
+    private static void AddIfPresent(List<(ExternalMetadataProvider, string)> result, ExternalMetadataProvider provider, MangaBakaSourceEntryDto? entry)
+    {
+        if (entry is null)
+        {
+            return;
+        }
+
+        string? id = entry.Id.ValueKind switch
+        {
+            JsonValueKind.String => entry.Id.GetString(),
+            JsonValueKind.Number => entry.Id.GetRawText(),
+            _ => null,
+        };
+
+        if (!string.IsNullOrWhiteSpace(id))
+        {
+            result.Add((provider, id));
+        }
+    }
 }
 
 /// <summary>Shared <see cref="HttpClient"/>, same rationale as <see cref="AniListHttpClient"/>.

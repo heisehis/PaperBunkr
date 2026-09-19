@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -77,7 +78,8 @@ public sealed class MangaDexMetadataProvider : IMetadataProvider
             return null;
         }
 
-        var response = await FetchAsync<MangaDexGetResponse>($"manga/{Uri.EscapeDataString(externalId)}", cancellationToken).ConfigureAwait(false);
+        var response = await FetchAsync<MangaDexGetResponse>(
+            $"manga/{Uri.EscapeDataString(externalId)}?includes[]=cover_art&includes[]=author&includes[]=artist", cancellationToken).ConfigureAwait(false);
         return response?.Data is null ? null : MangaDexNormalizer.ToMediaMetadata(response.Data);
     }
 
@@ -179,6 +181,34 @@ internal sealed class MangaDexMangaDto
 
     [JsonPropertyName("attributes")]
     public MangaDexAttributesDto? Attributes { get; set; }
+
+    /// <summary>Only populated when the request adds <c>?includes[]=...</c> (the get-by-id call
+    /// does; search does not). Each entry is a bare <c>{id, type}</c> stub unless its type was
+    /// included, in which case <see cref="MangaDexRelationshipDto.Attributes"/> is also present.</summary>
+    [JsonPropertyName("relationships")]
+    public List<MangaDexRelationshipDto>? Relationships { get; set; }
+}
+
+internal sealed class MangaDexRelationshipDto
+{
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    [JsonPropertyName("attributes")]
+    public MangaDexRelationshipAttributesDto? Attributes { get; set; }
+}
+
+/// <summary>Union of the two relationship-attribute shapes this provider requests -
+/// <c>cover_art</c> has <see cref="FileName"/>, <c>author</c>/<c>artist</c> have <see cref="Name"/>.
+/// Only the relevant field is populated per relationship type; JSON deserialization leaves the
+/// other null harmlessly.</summary>
+internal sealed class MangaDexRelationshipAttributesDto
+{
+    [JsonPropertyName("fileName")]
+    public string? FileName { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
 }
 
 /// <summary>MangaDex's <c>title</c>/<c>description</c> are language-code-keyed maps (<c>en</c>,
@@ -203,6 +233,18 @@ internal sealed class MangaDexAttributesDto
 
     [JsonPropertyName("tags")]
     public List<MangaDexTagDto>? Tags { get; set; }
+
+    [JsonPropertyName("year")]
+    public int? Year { get; set; }
+
+    [JsonPropertyName("publicationDemographic")]
+    public string? PublicationDemographic { get; set; }
+
+    /// <summary>Cross-referenced external ids keyed by site code ("al"/"mal"/"mu"/"kt"/...) -
+    /// only the four this codebase has an <see cref="ExternalMetadataProvider"/> value for are
+    /// mapped; the rest (raw scanlator/publisher sites) are ignored.</summary>
+    [JsonPropertyName("links")]
+    public Dictionary<string, string>? Links { get; set; }
 }
 
 internal sealed class MangaDexTagDto
@@ -236,7 +278,14 @@ internal static class MangaDexNormalizer
         TitleEnglish: FindTitle(dto, "en"),
         TitleRomaji: FindTitle(dto, "ja-ro"),
         TitleNative: FindTitle(dto, "ja"),
-        Genre: ResolveGenre(dto));
+        Genre: ResolveGenre(dto),
+        CoverImageUrl: ResolveCoverImageUrl(dto),
+        Creator: ResolveCreator(dto),
+        PublicationYear: dto.Attributes?.Year,
+        Demographic: dto.Attributes?.PublicationDemographic,
+        CrossReferences: ResolveCrossReferences(dto),
+        GenreTags: ResolveGenreTags(dto),
+        OtherTags: ResolveOtherTags(dto));
 
     /// <summary>English beats the first alt-title in any language beats "Untitled" - never throws
     /// even when every title field is somehow empty.</summary>
@@ -261,13 +310,81 @@ internal static class MangaDexNormalizer
 
     private static string? ResolveGenre(MangaDexMangaDto dto)
     {
-        var genreNames = dto.Attributes?.Tags?
+        var genreNames = GenreTagNames(dto);
+        return genreNames is { Count: > 0 } ? string.Join(", ", genreNames) : null;
+    }
+
+    private static List<string>? GenreTagNames(MangaDexMangaDto dto) =>
+        dto.Attributes?.Tags?
             .Where(t => string.Equals(t.Attributes?.Group, "genre", StringComparison.OrdinalIgnoreCase))
             .Select(t => FindLocalized(t.Attributes?.Name, "en"))
             .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
             .ToList();
 
-        return genreNames is { Count: > 0 } ? string.Join(", ", genreNames) : null;
+    private static IReadOnlyList<string>? ResolveGenreTags(MangaDexMangaDto dto)
+    {
+        var names = GenreTagNames(dto);
+        return names is { Count: > 0 } ? names : null;
+    }
+
+    /// <summary>Non-genre tag groups (theme/format/content) - previously discarded entirely
+    /// (docs/superpowers/specs/2026-09-18-external-metadata-full-extraction-design.md §4), now
+    /// flowed into <see cref="IssueTag"/> import with the group name as Category.</summary>
+    private static IReadOnlyList<(string Value, string Category)>? ResolveOtherTags(MangaDexMangaDto dto)
+    {
+        var values = dto.Attributes?.Tags?
+            .Where(t => !string.Equals(t.Attributes?.Group, "genre", StringComparison.OrdinalIgnoreCase))
+            .Select(t => (Name: FindLocalized(t.Attributes?.Name, "en"), Group: t.Attributes?.Group))
+            .Where(t => !string.IsNullOrWhiteSpace(t.Name))
+            .Select(t => (t.Name!, CultureInfo.InvariantCulture.TextInfo.ToTitleCase(t.Group ?? "uncategorized")))
+            .ToList();
+
+        return values is { Count: > 0 } ? values : null;
+    }
+
+    private static string? ResolveCoverImageUrl(MangaDexMangaDto dto)
+    {
+        string? fileName = dto.Relationships?
+            .FirstOrDefault(r => r.Type == "cover_art")?
+            .Attributes?.FileName;
+
+        return fileName is null ? null : $"https://uploads.mangadex.org/covers/{dto.Id}/{fileName}";
+    }
+
+    private static string? ResolveCreator(MangaDexMangaDto dto)
+    {
+        var names = dto.Relationships?
+            .Where(r => r.Type == "author" || r.Type == "artist")
+            .Select(r => r.Attributes?.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return names is { Count: > 0 } ? string.Join(", ", names) : null;
+    }
+
+    private static readonly Dictionary<string, ExternalMetadataProvider> CrossReferenceProviderKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["al"] = ExternalMetadataProvider.AniList,
+        ["mal"] = ExternalMetadataProvider.MyAnimeList,
+        ["mu"] = ExternalMetadataProvider.MangaUpdates,
+        ["kt"] = ExternalMetadataProvider.Kitsu,
+    };
+
+    private static IReadOnlyList<(ExternalMetadataProvider Provider, string ExternalId)>? ResolveCrossReferences(MangaDexMangaDto dto)
+    {
+        if (dto.Attributes?.Links is not { Count: > 0 } links)
+        {
+            return null;
+        }
+
+        var result = links
+            .Where(kv => CrossReferenceProviderKeys.ContainsKey(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+            .Select(kv => (CrossReferenceProviderKeys[kv.Key], kv.Value))
+            .ToList();
+
+        return result.Count > 0 ? result : null;
     }
 }
 
@@ -275,5 +392,24 @@ internal static class MangaDexNormalizer
 /// <see cref="MangaBakaHttpClient"/>.</summary>
 public static class MangaDexHttpClient
 {
-    public static readonly HttpClient Shared = new() { Timeout = TimeSpan.FromSeconds(15) };
+    /// <summary>
+    /// <c>api.mangadex.org</c> rejects every request with no User-Agent header - confirmed live
+    /// 2026-09-18 (<c>400 "You must set an appropriate User-Agent header"</c> reproduced with
+    /// <c>curl -A ""</c> against both `/manga` search and `/manga/{id}`, same as
+    /// <c>auth.mangadex.org</c>'s token endpoint - see
+    /// <see cref="Paperbunkr.Data.Tracking.Adapters.MangaDexTrackerAdapter"/>'s own doc comment for
+    /// how that side was found). .NET's <see cref="HttpClient"/> sends no
+    /// User-Agent by default, so every call through this shared client was silently failing (this
+    /// provider's own "return null/empty on non-success" handling made it look like "no matches"
+    /// rather than a real error) until this was set. Set once on <see cref="DefaultRequestHeaders"/>
+    /// rather than per-request, since every call site shares this one instance.
+    /// </summary>
+    public static readonly HttpClient Shared = CreateClient();
+
+    private static HttpClient CreateClient()
+    {
+        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Paperbunkr/1.0 (+https://github.com/paperbunkr/paperbunkr)");
+        return client;
+    }
 }

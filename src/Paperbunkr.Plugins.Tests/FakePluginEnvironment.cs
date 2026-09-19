@@ -101,7 +101,7 @@ internal sealed class FakePluginEnvironment : IPluginEnvironment
 
     private sealed class FakeThemePlugin : IThemePlugin
     {
-        public string CurrentSkinKey => "default";
+        public string CurrentThemeKey => "default";
     }
 
     public sealed class FakeApplication : IApplication

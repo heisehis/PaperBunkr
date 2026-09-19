@@ -24,7 +24,7 @@ namespace Paperbunkr.Data.Tracking.Adapters;
 /// the returned session token, via <see cref="CredentialKind.OAuthAccessToken"/> (semantically a
 /// bearer session token, same storage kind AniList/Shikimori use for their own bearer tokens).
 /// </summary>
-public sealed class MangaUpdatesTrackerAdapter : ITrackerSearchProvider, ITrackerAdapter
+public sealed class MangaUpdatesTrackerAdapter : ITrackerSearchProvider, ITrackerAdapter, ITrackerDetailedPush
 {
     private const string ApiBase = "https://api.mangaupdates.com/v1";
 
@@ -133,17 +133,26 @@ public sealed class MangaUpdatesTrackerAdapter : ITrackerSearchProvider, ITracke
     /// <c>POST /lists/series/update</c> to set list/chapter on an entry already on some list - so a
     /// not-yet-tracked series costs two requests here, matching the real API's own shape rather than
     /// guessing a combined endpoint exists.</summary>
-    public async Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
+    public async Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken) =>
+        (await PushEntryDetailedAsync(context, link, payload, cancellationToken).ConfigureAwait(false)).Success;
+
+    /// <summary>Same as <see cref="PushEntryAsync"/> but returns MangaUpdates' real error detail
+    /// instead of collapsing every failure into a bare <see langword="false"/> - extends the
+    /// detailed-error pattern already shipped this session for MangaBaka/MangaDex to this adapter
+    /// (docs/superpowers/specs/2026-09-18-per-tracker-score-and-finish-date-design.md). Score lives
+    /// on a separate resource (<c>PUT/DELETE /v1/series/{id}/rating</c>), confirmed live via the
+    /// real MangaUpdates OpenAPI spec - not the list-entry call above.</summary>
+    public async Task<(bool Success, string? ErrorDetail)> PushEntryDetailedAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
     {
         string? token = CredentialStore.Get(context, nameof(TrackingService.MangaUpdates), CredentialKind.OAuthAccessToken);
         if (string.IsNullOrEmpty(token))
         {
-            return false;
+            return (false, "Not connected - no session token saved.");
         }
 
         if (!long.TryParse(link.ExternalId, out long seriesId))
         {
-            return false;
+            return (false, $"Invalid MangaUpdates series id: {link.ExternalId}");
         }
 
         long listId = MangaUpdatesListMapper.ToListId(payload.Status);
@@ -151,22 +160,71 @@ public sealed class MangaUpdatesTrackerAdapter : ITrackerSearchProvider, ITracke
         var existingEntry = await FindListEntryAsync(token, seriesId, cancellationToken).ConfigureAwait(false);
         if (existingEntry is null)
         {
-            bool added = await SendListRequestAsync(
+            var (added, addError) = await SendListRequestDetailedAsync(
                 $"{ApiBase}/lists/series",
                 token,
                 new[] { new { series = new { id = seriesId }, list_id = listId } },
                 cancellationToken).ConfigureAwait(false);
             if (!added)
             {
-                return false;
+                return (false, addError);
             }
         }
 
-        return await SendListRequestAsync(
+        var (updated, updateError) = await SendListRequestDetailedAsync(
             $"{ApiBase}/lists/series/update",
             token,
             new[] { new { series = new { id = seriesId }, list_id = listId, status = new { chapter = payload.ChapterProgress } } },
             cancellationToken).ConfigureAwait(false);
+        if (!updated)
+        {
+            return (false, updateError);
+        }
+
+        if (!payload.UpdateScore)
+        {
+            // Rating lives on a separate resource (PUT/DELETE /v1/series/{id}/rating) - only touch
+            // it when this push explicitly means to; otherwise an ordinary status/progress-only sync
+            // (UpdateScore defaults false) would issue a real DELETE and wipe a rating the user set
+            // independently on mangaupdates.com, since payload.Score is always null for that call shape.
+            return (true, null);
+        }
+
+        var (ratingOk, ratingError) = await PushRatingAsync(seriesId, payload.Score, token, cancellationToken).ConfigureAwait(false);
+        return ratingOk ? (true, null) : (false, ratingError);
+    }
+
+    private async Task<(bool Success, string? ErrorDetail)> PushRatingAsync(long seriesId, decimal? localScore, string token, CancellationToken cancellationToken)
+    {
+        bool hasScore = localScore is decimal s and > 0;
+        var request = hasScore
+            ? new HttpRequestMessage(HttpMethod.Put, $"{ApiBase}/series/{seriesId}/rating")
+              {
+                  Content = JsonContent.Create(new { rating = Math.Round((double)localScore!.Value * 2, 1) }),
+              }
+            : new HttpRequestMessage(HttpMethod.Delete, $"{ApiBase}/series/{seriesId}/rating");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex)
+        {
+            return (false, $"Network error: {ex.Message}");
+        }
+
+        using (response)
+        {
+            if (response.IsSuccessStatusCode)
+            {
+                return (true, null);
+            }
+
+            string rawBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            return (false, $"{(int)response.StatusCode}: {rawBody}");
+        }
     }
 
     public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
@@ -183,7 +241,34 @@ public sealed class MangaUpdatesTrackerAdapter : ITrackerSearchProvider, ITracke
             return null;
         }
 
-        return new TrackerRemoteEntry(MangaUpdatesListMapper.FromListId(listId), entry.Status?.Chapter);
+        decimal? score = await FetchRatingAsync(seriesId, token, cancellationToken).ConfigureAwait(false);
+        return new TrackerRemoteEntry(MangaUpdatesListMapper.FromListId(listId), entry.Status?.Chapter, score);
+    }
+
+    private async Task<decimal?> FetchRatingAsync(long seriesId, string token, CancellationToken cancellationToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/series/{seriesId}/rating");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var parsed = await response.Content.ReadFromJsonAsync<MangaUpdatesRatingDto>(cancellationToken: cancellationToken).ConfigureAwait(false);
+            return parsed?.Rating is double rating and > 0 ? (decimal)(rating / 2) : null;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>404 (or any non-success) reads as "not on any list yet" - matches every other
@@ -216,7 +301,7 @@ public sealed class MangaUpdatesTrackerAdapter : ITrackerSearchProvider, ITracke
         }
     }
 
-    private async Task<bool> SendListRequestAsync(string url, string token, object body, CancellationToken cancellationToken)
+    private async Task<(bool Success, string? ErrorDetail)> SendListRequestDetailedAsync(string url, string token, object body, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(body) };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -226,18 +311,24 @@ public sealed class MangaUpdatesTrackerAdapter : ITrackerSearchProvider, ITracke
         {
             response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return false;
+            return (false, $"Network error: {ex.Message}");
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return false;
+            return (false, "Request timed out.");
         }
 
         using (response)
         {
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                return (true, null);
+            }
+
+            string rawBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            return (false, $"{(int)response.StatusCode}: {rawBody}");
         }
     }
 }
@@ -287,6 +378,12 @@ internal sealed class MangaUpdatesListItemStatusDto
 {
     [JsonPropertyName("chapter")]
     public int? Chapter { get; set; }
+}
+
+internal sealed class MangaUpdatesRatingDto
+{
+    [JsonPropertyName("rating")]
+    public double? Rating { get; set; }
 }
 
 internal sealed class MangaUpdatesLoginResponse

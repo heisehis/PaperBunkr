@@ -110,6 +110,14 @@ public class LibraryFolderScanner
     /// </summary>
     public async Task<LibraryFolderScanResult> ImportNewFilesAsync(IReadOnlyCollection<string> files, IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
     {
+        // ConfigureAwait(false): MainViewModel.OpenFilePath (file-association launch, docs/
+        // superpowers/specs/2026-09-13-open-file-on-launch-design.md) calls this synchronously via
+        // .GetAwaiter().GetResult() on the UI thread. Without this, the Task.Run continuation below
+        // tries to resume on the captured Avalonia UI SynchronizationContext - which is that same
+        // blocked UI thread - a permanent deadlock (repro: launch with a bare file-path arg, main
+        // window shows but "initial screen loaded" never logs; confirmed 2026-09-16). Callers that
+        // properly `await` this method (DragImportService, LiveFolderWatchService) are unaffected -
+        // their own await still resumes on their own context regardless of this one's configuration.
         return await Task.Run(
             () =>
             {
@@ -126,7 +134,7 @@ public class LibraryFolderScanner
 
                 return ImportFiles(context, candidateFiles, progress, ct);
             },
-            ct);
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -201,6 +209,26 @@ public class LibraryFolderScanner
                 string seriesName = embeddedSeriesName ?? filenameSeriesName ?? "Unknown";
 
                 bool isNewSeries = !seriesByName.TryGetValue(seriesName, out var series);
+                if (isNewSeries)
+                {
+                    // Punctuation-variant folding (docs/superpowers/specs/2026-09-17-series-name-
+                    // matching-and-empty-row-cleanup-design.md) - an exact-key miss (e.g. embedded
+                    // "X: Y" vs a filename-parsed "X - Y" for a different issue of the real same
+                    // series) retries against every existing series name via TitleNormalizer's CE-
+                    // parity cascade before falling through to create a new series. Same
+                    // "existing-series-only" contract as the TPB fold immediately below - never
+                    // uses the normalized form to name a brand-new series.
+                    foreach (var candidate in seriesByName)
+                    {
+                        if (TitleNormalizer.NamesMatch(candidate.Key, seriesName))
+                        {
+                            series = candidate.Value;
+                            isNewSeries = false;
+                            break;
+                        }
+                    }
+                }
+
                 if (isNewSeries)
                 {
                     // TPB folding (docs/superpowers/specs/2026-08-31-series-identity-scan-fixes-

@@ -97,6 +97,56 @@
                 </Grid>
             </Border>
         </DataTemplate>
+
+        <!-- Find Similar Series (docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-
+             row-cleanup-design.md) - reuses vm:SeriesConflictRowViewModel; a local template since
+             MigrationOverlay.axaml's own ConflictRowTemplate is scoped to that file. -->
+        <DataTemplate x:Key="SimilarSeriesRowTemplate" x:DataType="vm:SeriesConflictRowViewModel">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="{Binding IncomingName}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" FontSize="13" />
+                        <TextBlock Text="↔" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding MatchedName}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" FontSize="13" />
+                    </StackPanel>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Punctuation-variant match" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,3,0,0" />
+                    <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                VerticalAlignment="Center" IsVisible="{Binding !IsResolved}">
+                        <Button Classes="headerAction ghost" Content="Merge" Command="{Binding MergeCommand}" />
+                        <Button Classes="headerAction ghost" Content="Keep Separate" Command="{Binding KeepSeparateCommand}" />
+                    </StackPanel>
+                    <TextBlock Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Text="{Binding ResolutionLabel}"
+                               Foreground="{DynamicResource PbAccentTextBrush}" FontSize="12" FontWeight="SemiBold"
+                               VerticalAlignment="Center" IsVisible="{Binding IsResolved}" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Empty Rows: empty series (docs/superpowers/specs/2026-09-17-series-name-matching-and-
+             empty-row-cleanup-design.md) - Remove/Dismiss only, no Relink for a series with nothing
+             to relink to. -->
+        <DataTemplate x:Key="EmptySeriesRowTemplate" x:DataType="vm:EmptySeriesRowViewModel">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
+                               VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                        <Button Classes="headerAction ghost" Command="{Binding DismissCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                                <TextBlock Text="Dismiss" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" Command="{Binding DeleteConfirm.TriggerCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                <TextBlock Text="{Binding DeleteConfirm.Label}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
     </UserControl.Resources>
 
     <ScrollViewer>
@@ -223,6 +273,45 @@
                                        IsVisible="{Binding IsRecentlyRemovedExpanded}" />
                             <ItemsControl ItemsSource="{Binding RecentlyRemovedItems}" ItemTemplate="{StaticResource RemovedLibraryEntryRowTemplate}"
                                           IsVisible="{Binding IsRecentlyRemovedExpanded}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Find Similar Series (docs/superpowers/specs/2026-09-17-series-name-matching-
+                         and-empty-row-cleanup-design.md) - on-demand only, backward remediation for
+                         series already split by a punctuation-variant name (the Warhammer 40k/
+                         Cataclysm lesson: never auto-merge, always human-confirmed). -->
+                    <StackPanel Margin="14,0,14,14" Spacing="10" Tag="library.healthSimilarSeries">
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,0,0,10" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="Find Similar Series" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                            <Button Classes="headerAction ghost" Command="{Binding FindSimilarSeriesCommand}"
+                                    AutomationProperties.AutomationId="FindSimilarSeriesButton">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" />
+                                    <TextBlock Text="Scan for Similar Names" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Text="Checks for series that only differ by punctuation (e.g. &quot;X: Y&quot; vs &quot;X - Y&quot;) - review and merge only the ones that are genuinely the same series."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                        <ItemsControl ItemsSource="{Binding SimilarSeriesCandidates}" ItemTemplate="{StaticResource SimilarSeriesRowTemplate}"
+                                      IsVisible="{Binding HasSimilarSeriesCandidates}" />
+                    </StackPanel>
+
+                    <!-- Empty Rows (docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-
+                         row-cleanup-design.md) - general hygiene sweep, independent of Missing Files. -->
+                    <StackPanel Margin="14,0,14,14" Spacing="10" Tag="library.healthEmptyRows">
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,0,0,10" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !HasEmptyRowItems}">
+                            <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource PbSuccessSoftBrush}">
+                                <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbSuccessBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <TextBlock Text="Empty Rows · Nothing empty" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Spacing="10" IsVisible="{Binding HasEmptyRowItems}">
+                            <TextBlock Text="Empty Rows" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                            <ItemsControl ItemsSource="{Binding EmptySeriesItems}" ItemTemplate="{StaticResource EmptySeriesRowTemplate}" />
+                            <ItemsControl ItemsSource="{Binding EmptyIssueItems}" ItemTemplate="{StaticResource MissingFileRowTemplate}" />
                         </StackPanel>
                     </StackPanel>
                 </StackPanel>

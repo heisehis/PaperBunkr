@@ -62,7 +62,7 @@
             <!-- Audit fix (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-design.md
                  item 6): these were hardcoded literals, immune to Reduced Motion even though the
                  easing curve was already correctly token-based - now wired to the same
-                 PbMotionStandard/PbMotionFast tokens SkinService.ApplyReducedMotion zeroes. -->
+                 PbMotionStandard/PbMotionFast tokens ThemeService.ApplyReducedMotion zeroes. -->
             <Setter Property="Transitions">
                 <Transitions>
                     <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />

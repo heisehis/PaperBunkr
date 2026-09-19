@@ -39,17 +39,26 @@ sealed class Program
         // building a window.
         //
         // Trailing args are the specific extensions to act on (".cbz", ".pdf", ...); the installer
-        // passes one per selected task. With no extensions given, defaults to the full comic-format
-        // allow-list. Either way the set is clamped to FileAssociationService.ComicAssociationExtensions
-        // - so this path never (re)associates bare .zip/.rar/.7z, unlike the old
-        // "loop every GetAvailableFormats() entry" it replaces (2026-09-09 installer redesign, decision 5).
+        // passes one per selected task (a Book task can pass more than one, e.g. ".fb2 .zip" for the
+        // FB2 task - docs/superpowers/specs/2026-09-16-book-file-associations-design.md). With no
+        // extensions given, defaults to the full comic + Book allow-list. Either way the set is
+        // clamped to FileAssociationService.ComicAssociationExtensions/BookAssociationExtensions -
+        // so this path never (re)associates bare .zip/.rar/.7z as a side effect, unlike the old
+        // "loop every GetAvailableFormats() entry" it replaces (2026-09-09 installer redesign,
+        // decision 5). Both Set*AssociationsFor calls get the same requested set - each ignores
+        // whatever extension it doesn't own, so a comic-only or Book-only task list is a no-op on
+        // the other side.
         if (args.Length > 0 && (args[0] == "--register-file-associations" || args[0] == "--unregister-file-associations"))
         {
             bool associate = args[0] == "--register-file-associations";
             var requestedExtensions = args.Length > 1
                 ? args[1..]
-                : FileAssociationService.ComicAssociationExtensions.ToArray();
-            new FileAssociationService().SetComicAssociationsFor(requestedExtensions, associate);
+                : FileAssociationService.ComicAssociationExtensions
+                    .Concat(FileAssociationService.BookAssociationExtensions)
+                    .ToArray();
+            var fileAssociationService = new FileAssociationService();
+            fileAssociationService.SetComicAssociationsFor(requestedExtensions, associate);
+            fileAssociationService.SetBookAssociationsFor(requestedExtensions, associate);
 
             return;
         }

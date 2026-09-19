@@ -622,8 +622,8 @@ public partial class LibraryScreen : UserControl
     private (ScrollViewer ScrollViewer, double CardWidth, double CardHeight, double Margin) GetGridScrollGeometry(
         LibraryGridCoverFit coverFit, LibraryScreenViewModel vm) => coverFit switch
     {
-        LibraryGridCoverFit.Panorama => (PanoramaScrollViewer, vm.PanoramaTileWidth, vm.PanoramaGridItemHeight, 20.0),
-        LibraryGridCoverFit.Tiles => (TilesScrollViewer, vm.TilesCardWidth, vm.TilesCardHeight, 14.0),
+        LibraryGridCoverFit.Panorama => (PanoramaScrollViewer, vm.PanoramaTileWidth, vm.PanoramaGridItemHeight, 10.0),
+        LibraryGridCoverFit.Tiles => (TilesScrollViewer, vm.TilesCardWidth, vm.TilesCardHeight, 6.0),
         _ => (PosterGridScrollViewer, vm.PosterCardWidth, vm.PosterCardHeight, 20.0),
     };
 

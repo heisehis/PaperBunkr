@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
@@ -50,6 +51,7 @@ public class ReadingListPropertiesScreenViewModelTests : IDisposable
         try
         {
             if (File.Exists(_dbPath)) File.Delete(_dbPath);
+            if (Directory.Exists(_thumbDir)) Directory.Delete(_thumbDir, recursive: true);
         }
         catch (IOException)
         {
@@ -158,5 +160,55 @@ public class ReadingListPropertiesScreenViewModelTests : IDisposable
         vm.SaveCommand.Execute(null);
 
         Assert.Equal("https://example.test/new.jpg", GetList().CoverImageUrl);
+    }
+
+    // ===================== "Choose from List…" (docs/superpowers/specs/2026-09-17-reader-save-
+    // page-and-cover-picker-design.md extended to reading lists) =====================
+
+    private readonly string _thumbDir = Path.Combine(Path.GetTempPath(), $"paperbunkr_readinglistcover_thumbs_{Guid.NewGuid():N}");
+
+    private void SeedListIssueWithCover(string number)
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = new Series { Name = "Test Series" };
+        context.Series.Add(series);
+        context.SaveChanges();
+        var issue = new Issue { SeriesId = series.Id, Number = number };
+        context.Issues.Add(issue);
+        context.SaveChanges();
+        context.ReadingListItems.Add(new ReadingListItem { ReadingListId = _listId, IssueId = issue.Id });
+        context.SaveChanges();
+
+        CoverThumbnailPaths.ThumbnailDirectory = _thumbDir;
+        string path = CoverThumbnailPaths.GetCachePath(issue.Id);
+        using var bitmap = new System.Drawing.Bitmap(16, 24);
+        using var g = System.Drawing.Graphics.FromImage(bitmap);
+        g.Clear(System.Drawing.Color.SteelBlue);
+        bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Jpeg);
+    }
+
+    [Fact]
+    public void Load_PopulatesListCoverCandidates_FromThisListsIssues()
+    {
+        SeedListIssueWithCover("1");
+
+        var vm = new ReadingListPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_listId);
+
+        Assert.Single(vm.ListCoverCandidates);
+        Assert.True(vm.HasListCoverCandidates);
+    }
+
+    [Fact]
+    public void SelectListCover_StagesPath_NotWrittenUntilSave()
+    {
+        SeedListIssueWithCover("1");
+        var vm = new ReadingListPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_listId);
+        var candidate = Assert.Single(vm.ListCoverCandidates);
+
+        vm.SelectListCoverCommand.Execute(candidate);
+
+        Assert.NotNull(vm.CoverPreview);
     }
 }

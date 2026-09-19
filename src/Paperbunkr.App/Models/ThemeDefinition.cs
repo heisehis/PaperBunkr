@@ -4,12 +4,70 @@ namespace Paperbunkr.App.Models;
 
 /// <summary>
 /// Deserialized <c>theme.json</c> (docs/superpowers/specs/2026-08-07-preferences-skin-system-design.md
-/// §2) - field names map 1:1 onto the existing <c>Pb*</c> token suffixes in App.axaml (e.g.
+/// §2, renamed from <c>SkinTheme</c> by docs/superpowers/specs/2026-09-16-theme-system-design.md) -
+/// field names map 1:1 onto the existing <c>Pb*</c> token suffixes in App.axaml (e.g.
 /// <see cref="SkinColors.Bg"/> → <c>PbBgColor</c>/<c>PbBgBrush</c>).
 /// </summary>
-public class SkinTheme
+public class ThemeDefinition
 {
     public string Name { get; set; } = "Unnamed";
+
+    /// <summary>
+    /// "Light" or "Dark" (docs/superpowers/specs/2026-09-16-theme-system-design.md § Data & schema) -
+    /// drives <see cref="Avalonia.Application.RequestedThemeVariant"/> in <c>ThemeService.ApplyTheme</c>.
+    /// A plain string, not a C# enum, matching every other field in this schema (no JSON enum
+    /// converter precedent anywhere else in <c>theme.json</c>) - compared case-insensitively.
+    /// Defaults to "Dark", matching 4 of the 5 pre-existing built-in themes, so an older/third-party
+    /// theme.json that predates this field still loads with sane behavior instead of throwing.
+    /// </summary>
+    public string Mode { get; set; } = "Dark";
+
+    /// <summary>
+    /// Free-form, backend-only grouping tag (e.g. "matrix") - not read by any UI in this phase, exists
+    /// so a future pass can filter/group themes without another schema migration. Null for every
+    /// theme that doesn't need one.
+    /// </summary>
+    public string? Category { get; set; }
+
+    /// <summary>
+    /// Suggested font family for this theme (docs/superpowers/specs/2026-09-16-theme-system-design.md
+    /// § Extended scope - "Per-theme default font"), null = no suggestion. Precedence in
+    /// <c>ThemeService.ApplyFontResource</c>: <c>AppSettings.SelectedFontFamily</c> (explicit global
+    /// override) wins if set; else this; else the existing hardcoded default. Matrix is the only
+    /// built-in theme that sets it so far.
+    /// </summary>
+    public string? DefaultFontFamily { get; set; }
+
+    /// <summary>
+    /// "None"/"Mica"/"Acrylic" (docs/superpowers/specs/2026-09-16-theme-system-design.md § Extended
+    /// scope - "Mica/Acrylic backdrop for windows_11"), Windows-only, ignored elsewhere, default
+    /// "None". Drives <c>MainWindow.TransparencyLevelHint</c> via <c>ThemeService.WindowBackdropRequested</c>
+    /// - not wired to a ControlTheme/scrollbar-style mechanism like <see cref="ScrollbarWidth"/>
+    /// below, since <c>TransparencyLevelHint</c> already has real precedent in this codebase
+    /// (<c>OverlayHostWindow.cs</c>, <c>SplashWindow.axaml</c>).
+    /// </summary>
+    public string WindowBackdrop { get; set; } = "None";
+
+    /// <summary>
+    /// Optional scrollbar geometry override (§ Extended scope - "Scrollbar geometry tokens"). Schema
+    /// only in this pass - exposed as PbScrollbarWidth/PbScrollbarThumbOpacity resources by
+    /// <c>ThemeService</c>, but deliberately NOT consumed by a ControlTheme override on
+    /// FluentAvalonia's ScrollBar yet: rewriting that lookless control's template without being able
+    /// to visually verify the result carries real app-wide breakage risk for a purely cosmetic,
+    /// explicitly-optional feature - left for a follow-up pass that can actually look at the result
+    /// on screen. Null = FluentAvalonia's own default, unaffected.
+    /// </summary>
+    public double? ScrollbarWidth { get; set; }
+
+    /// <summary>See <see cref="ScrollbarWidth"/> - same "schema + resource only, no ControlTheme yet" scope cut.</summary>
+    public double? ScrollbarThumbOpacity { get; set; }
+
+    /// <summary>
+    /// Character set <c>MatrixRainOverlay</c> draws from, null/empty = fall back to the overlay's
+    /// own hardcoded default katakana set. Only meaningful for the Matrix theme, but any theme could
+    /// set it if a future novelty theme wants its own rain glyphs.
+    /// </summary>
+    public string[]? MatrixGlyphs { get; set; }
 
     public SkinColors Colors { get; set; } = new();
 

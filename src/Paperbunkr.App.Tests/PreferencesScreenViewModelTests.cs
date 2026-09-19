@@ -12,9 +12,9 @@ namespace Paperbunkr.App.Tests;
 
 /// <summary>
 /// Exercises <see cref="PreferencesScreenViewModel"/> (docs/superpowers/specs/2026-08-07-preferences-skin-system-design.md
-/// §5) against a real <see cref="SkinService"/> pointed at a temp skins folder + in-memory-database
-/// context factory, same isolation approach as <see cref="SkinServiceTests"/>. Joins
-/// <see cref="AvaloniaTestCollection"/> since skin selection touches Application resources.
+/// §5) against a real <see cref="ThemeService"/> pointed at a temp themes folder + in-memory-database
+/// context factory, same isolation approach as <see cref="ThemeServiceTests"/>. Joins
+/// <see cref="AvaloniaTestCollection"/> since theme selection touches Application resources.
 /// </summary>
 [Collection(nameof(AvaloniaTestCollection))]
 public class PreferencesScreenViewModelTests : IDisposable
@@ -34,8 +34,8 @@ public class PreferencesScreenViewModelTests : IDisposable
 
     public PreferencesScreenViewModelTests()
     {
-        _originalInstalledDirectory = SkinPaths.InstalledDirectory;
-        _originalExtractedDirectory = SkinPaths.ExtractedDirectory;
+        _originalInstalledDirectory = ThemePaths.InstalledDirectory;
+        _originalExtractedDirectory = ThemePaths.ExtractedDirectory;
         _originalThumbnailDirectory = CoverThumbnailPaths.ThumbnailDirectory;
         _originalBookThumbnailDirectory = BookCoverThumbnailPaths.ThumbnailDirectory;
         _originalCustomCoverDirectory = Paperbunkr.App.Services.Covers.CustomCoverPaths.Directory;
@@ -43,8 +43,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         _originalCoverCacheStateFile = Paperbunkr.App.Services.Covers.CoverCacheState.FilePath;
 
         string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_test_{Guid.NewGuid():N}");
-        SkinPaths.InstalledDirectory = Path.Combine(root, "skins");
-        SkinPaths.ExtractedDirectory = Path.Combine(root, "skins-extracted");
+        ThemePaths.InstalledDirectory = Path.Combine(root, "skins");
+        ThemePaths.ExtractedDirectory = Path.Combine(root, "skins-extracted");
         CoverThumbnailPaths.ThumbnailDirectory = Path.Combine(root, "thumbs");
         BookCoverThumbnailPaths.ThumbnailDirectory = Path.Combine(root, "book-thumbs");
         Paperbunkr.App.Services.Covers.CustomCoverPaths.Directory = Path.Combine(root, "custom-covers");
@@ -77,8 +77,8 @@ public class PreferencesScreenViewModelTests : IDisposable
 
     public void Dispose()
     {
-        SkinPaths.InstalledDirectory = _originalInstalledDirectory;
-        SkinPaths.ExtractedDirectory = _originalExtractedDirectory;
+        ThemePaths.InstalledDirectory = _originalInstalledDirectory;
+        ThemePaths.ExtractedDirectory = _originalExtractedDirectory;
         CoverThumbnailPaths.ThumbnailDirectory = _originalThumbnailDirectory;
         BookCoverThumbnailPaths.ThumbnailDirectory = _originalBookThumbnailDirectory;
         Paperbunkr.App.Services.Covers.CustomCoverPaths.Directory = _originalCustomCoverDirectory;
@@ -109,13 +109,13 @@ public class PreferencesScreenViewModelTests : IDisposable
         Action? reloadFolderWatch = null,
         Action<int, bool>? enqueueMetadataWriteBack = null)
     {
-        var skinService = new SkinService(() => new PaperbunkrDbContext(_dbOptions));
+        var themeService = new ThemeService(() => new PaperbunkrDbContext(_dbOptions));
         var scanner = new LibraryFolderScanner(() => new PaperbunkrDbContext(_dbOptions));
         var fileAssociationService = new FileAssociationService(shell ?? new FakeShellFileAssociation());
         var backupService = new BackupService(() => new PaperbunkrDbContext(_dbOptions));
         var keyBindingService = new KeyBindingService(() => new PaperbunkrDbContext(_dbOptions));
         return new PreferencesScreenViewModel(
-            skinService,
+            themeService,
             filePicker ?? new NoOpFilePicker(),
             scanner,
             fileAssociationService,
@@ -205,10 +205,50 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.EnsureLoaded();
 
         Assert.Equal(2, vm.SourceProviderRows.Count);
-        Assert.Equal(7, vm.TrackerProviderRows.Count);
+        Assert.Equal(8, vm.TrackerProviderRows.Count);
         Assert.Contains(vm.SourceProviderRows, r => r.Id == "ComicVine");
         Assert.Contains(vm.SourceProviderRows, r => r.Id == "Metron");
         Assert.Contains(vm.TrackerProviderRows, r => r.Id == nameof(TrackingService.AniList));
+    }
+
+    [Fact]
+    public void EnsureLoaded_MangaDexRow_IsCredentialWithClientKind_AndNotConnectedByDefault()
+    {
+        var vm = CreateViewModel();
+
+        vm.EnsureLoaded();
+
+        var mangaDex = vm.TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.MangaDex));
+        Assert.Equal(ConnectionDialogKind.CredentialWithClient, mangaDex.Kind);
+        Assert.False(mangaDex.IsConnected);
+    }
+
+    // Note: ConnectMangaDexCommand itself isn't exercised here - it hits the real
+    // TrackerHttpClients.MangaDex/auth.mangadex.org endpoint with no test seam for injection, same
+    // gap as ConnectMangaUpdatesCommand/ConnectKitsuCommand (neither has a test at this layer
+    // either). MangaDexTrackerAdapter's own logic is covered by MangaDexTrackerAdapterTests.cs
+    // against a fake HttpMessageHandler instead.
+
+    [Fact]
+    public void DisconnectMangaDex_ClearsTokensButKeepsClientIdAndSecret()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            CredentialStore.Set(context, nameof(TrackingService.MangaDex), CredentialKind.OAuthClientId, "my-client-id");
+            CredentialStore.Set(context, nameof(TrackingService.MangaDex), CredentialKind.OAuthAccessToken, "some-token");
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        Assert.True(vm.IsMangaDexConnected);
+
+        vm.DisconnectMangaDexCommand.Execute(null);
+
+        Assert.False(vm.IsMangaDexConnected);
+        Assert.False(vm.TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.MangaDex)).IsConnected);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(CredentialStore.Get(verify, nameof(TrackingService.MangaDex), CredentialKind.OAuthAccessToken));
+        Assert.Equal("my-client-id", CredentialStore.Get(verify, nameof(TrackingService.MangaDex), CredentialKind.OAuthClientId));
     }
 
     [Fact]
@@ -459,34 +499,103 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void EnsureLoaded_PopulatesSkinsAndFontsOnce()
+    public void EnsureLoaded_PopulatesThemesAndFontsOnce()
     {
         var vm = CreateViewModel();
 
         vm.EnsureLoaded();
-        int skinCountAfterFirstLoad = vm.Skins.Count;
+        int themeCountAfterFirstLoad = vm.Themes.Count;
         vm.EnsureLoaded();
 
-        // 5 built-ins now (docs/superpowers/specs/2026-09-07-preferences-tile-hub-redesign-
-        // design.md §3 - Default + Windows 11 + 3 new), not just Default - the "Once" in this
-        // test's name is about EnsureLoaded's own idempotency guard, asserted by the equality
-        // check below, not about the skin count itself.
-        Assert.Equal(5, vm.Skins.Count);
-        Assert.Equal(skinCountAfterFirstLoad, vm.Skins.Count);
+        // 10 built-ins now (docs/superpowers/specs/2026-09-16-theme-system-design.md's full catalog),
+        // not just Default - the "Once" in this test's name is about EnsureLoaded's own idempotency
+        // guard, asserted by the equality check below, not about the theme count itself.
+        Assert.Equal(10, vm.Themes.Count);
+        Assert.Equal(themeCountAfterFirstLoad, vm.Themes.Count);
         Assert.Contains("System Default", vm.FontFamilies);
         Assert.Equal("System Default", vm.SelectedFontFamily);
     }
 
     [Fact]
-    public void SelectSkin_AppliesSkin_AndRefreshesActiveFlag()
+    public void SelectTheme_AppliesTheme_AndRefreshesActiveFlag()
     {
         var vm = CreateViewModel();
         vm.EnsureLoaded();
-        var defaultSkin = vm.Skins[0];
+        var defaultTheme = vm.Themes[0];
 
-        vm.SelectSkinCommand.Execute(defaultSkin);
+        vm.SelectThemeCommand.Execute(defaultTheme);
 
-        Assert.True(vm.Skins[0].IsActive);
+        Assert.True(vm.Themes[0].IsActive);
+    }
+
+    // ===================== Theme options (docs/superpowers/specs/2026-09-16-theme-system-design.md
+    // § Extended scope) =====================
+
+    [Fact]
+    public void IsActiveThemeDarkMode_ReflectsActiveThemesMode()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var windows11 = vm.Themes.Single(t => t.Key == "windows_11");
+        var defaultTheme = vm.Themes.Single(t => t.Key == "default");
+
+        vm.SelectThemeCommand.Execute(windows11);
+        Assert.False(vm.IsActiveThemeDarkMode);
+
+        vm.SelectThemeCommand.Execute(defaultTheme);
+        Assert.True(vm.IsActiveThemeDarkMode);
+    }
+
+    [Fact]
+    public void TrueBlackDark_Toggle_PersistsAndAppliesLive()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.TrueBlackDark = true;
+
+        var resources = Avalonia.Application.Current!.Resources;
+        Assert.Equal(Avalonia.Media.Color.Parse("#000000"), resources["PbBgColor"]);
+    }
+
+    [Fact]
+    public void ThemeAutoModeText_RoundTrips_ThroughThemeService()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.ThemeAutoModeText = "Follow System";
+
+        var vm2 = CreateViewModel();
+        vm2.EnsureLoaded();
+        Assert.Equal("Follow System", vm2.ThemeAutoModeText);
+    }
+
+    [Fact]
+    public void IsThemeScheduledMode_TracksThemeAutoModeText()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.IsThemeScheduledMode);
+
+        vm.ThemeAutoModeText = "Scheduled";
+
+        Assert.True(vm.IsThemeScheduledMode);
+    }
+
+    [Fact]
+    public void AccentOverrideHexText_Empty_ClearsOverride()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.AccentOverrideHexText = "#123456";
+        vm.AccentOverrideHexText = "";
+
+        var vm2 = CreateViewModel();
+        vm2.EnsureLoaded();
+        Assert.Equal("", vm2.AccentOverrideHexText);
     }
 
     [Fact]
@@ -642,6 +751,79 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.False(settings.RestoreSessionOnStartup);
         Assert.True(settings.PromptReviewOnFinish);
         Assert.False(settings.EnableDragDropImport);
+    }
+
+    // --- Tracker behavior (docs/superpowers/specs/2026-09-18-tracker-behavior-settings-design.md) ---
+
+    [Fact]
+    public void EnsureLoaded_TrackerBehavior_DefaultsMatchTheSpec()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.True(vm.TrackerAutoOpenLinkPanel);
+        Assert.True(vm.TrackerUpdateAfterReading);
+        Assert.Equal(TrackerAutoUpdateMode.Always, vm.TrackerUpdateOnMarkRead);
+        Assert.Equal("Always", vm.TrackerUpdateOnMarkReadText);
+        Assert.False(vm.TrackerAutoSyncFromTrackers); // deliberately off (differs from Komikku)
+        Assert.True(vm.TrackerUseSourceMetadata);
+        Assert.Equal(new[] { "Always", "Ask", "Never" }, vm.TrackerUpdateModeNames);
+    }
+
+    [Fact]
+    public void EnsureLoaded_PopulatesTrackerBehaviorFromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.TrackerAutoOpenLinkPanel = false;
+            settings.TrackerUpdateAfterReading = false;
+            settings.TrackerUpdateOnMarkRead = TrackerAutoUpdateMode.Ask;
+            settings.TrackerAutoSyncFromTrackers = true;
+            settings.TrackerUseSourceMetadata = false;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.TrackerAutoOpenLinkPanel);
+        Assert.False(vm.TrackerUpdateAfterReading);
+        Assert.Equal(TrackerAutoUpdateMode.Ask, vm.TrackerUpdateOnMarkRead);
+        Assert.True(vm.TrackerAutoSyncFromTrackers);
+        Assert.False(vm.TrackerUseSourceMetadata);
+    }
+
+    [Fact]
+    public void TogglingTrackerBehavior_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.TrackerAutoOpenLinkPanel = false;
+        vm.TrackerUpdateAfterReading = false;
+        vm.TrackerUpdateOnMarkReadText = "Never";
+        vm.TrackerAutoSyncFromTrackers = true;
+        vm.TrackerUseSourceMetadata = false;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.False(settings.TrackerAutoOpenLinkPanel);
+        Assert.False(settings.TrackerUpdateAfterReading);
+        Assert.Equal(TrackerAutoUpdateMode.Never, settings.TrackerUpdateOnMarkRead);
+        Assert.True(settings.TrackerAutoSyncFromTrackers);
+        Assert.False(settings.TrackerUseSourceMetadata);
+    }
+
+    [Fact]
+    public void TrackerUpdateOnMarkReadText_IgnoresTextThatIsNotAnOption()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.TrackerUpdateOnMarkReadText = "Sometimes";
+
+        Assert.Equal(TrackerAutoUpdateMode.Always, vm.TrackerUpdateOnMarkRead);
     }
 
     /// <summary>docs/superpowers/specs/2026-09-05-nav-rail-hover-toggle-and-undo-redo-removal-design.md - same load/persist shape as the batch2 flags above.</summary>
@@ -840,6 +1022,35 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.False(context.GetOrCreateAppSettings().HighQualityPageDisplay);
+    }
+
+    /// <summary>2026-09-16 - real user request: a way to turn off the comic reader's floating chrome
+    /// idle-fade, which was previously hardcoded always-on with no toggle at all.</summary>
+    [Fact]
+    public void EnsureLoaded_PopulatesReaderAutoHideChromeFromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().ReaderAutoHideChrome = false;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.ReaderAutoHideChrome);
+    }
+
+    [Fact]
+    public void TogglingReaderAutoHideChrome_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.ReaderAutoHideChrome = false;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(context.GetOrCreateAppSettings().ReaderAutoHideChrome);
     }
 
     // Rendering group on the Advanced tab
@@ -2453,6 +2664,204 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.True(restored.FileIsMissing);
         Assert.Equal(0, restored.MissingVerificationCount);
         Assert.Equal("Ghost Series", context.Series.Single().Name);
+    }
+
+    // ===================== Find Similar Series + Empty Rows (docs/superpowers/specs/2026-09-17-
+    // series-name-matching-and-empty-row-cleanup-design.md) =====================
+
+    [Fact]
+    public void FindSimilarSeries_GroupsByStripDownKey_TargetIsMostIssues()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var fewer = new Series { Name = "Cataclysm - The Ultimates" };
+            var more = new Series { Name = "Cataclysm: The Ultimates" };
+            context.Series.AddRange(fewer, more);
+            context.SaveChanges();
+            context.Issues.Add(new Issue { SeriesId = fewer.Id, Number = "1" });
+            context.Issues.Add(new Issue { SeriesId = more.Id, Number = "1" });
+            context.Issues.Add(new Issue { SeriesId = more.Id, Number = "2" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.FindSimilarSeriesCommand.Execute(null);
+
+        var row = Assert.Single(vm.SimilarSeriesCandidates);
+        Assert.Equal("Cataclysm - The Ultimates", row.IncomingName); // fewer issues = source
+        Assert.Equal("Cataclysm: The Ultimates", row.MatchedName); // more issues = target
+    }
+
+    [Fact]
+    public void FindSimilarSeries_UnrelatedNames_NoCandidates()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.Series.AddRange(new Series { Name = "Batman" }, new Series { Name = "Superman" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.FindSimilarSeriesCommand.Execute(null);
+
+        Assert.Empty(vm.SimilarSeriesCandidates);
+    }
+
+    [Fact]
+    public void Merge_CallsSeriesMergeHelper_AndRemovesRow()
+    {
+        // Unequal issue counts, deliberately - target selection is "most issues wins", and with a
+        // tie the lowest-Id row wins instead (see FindSimilarSeries_GroupsByStripDownKey_
+        // TargetIsMostIssues), so an equal-count seed here would make which row survives ambiguous
+        // by insertion order rather than by the behavior this test means to exercise.
+        int sourceId, targetId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var source = new Series { Name = "Cataclysm - The Ultimates" };
+            var target = new Series { Name = "Cataclysm: The Ultimates" };
+            context.Series.AddRange(source, target);
+            context.SaveChanges();
+            context.Issues.Add(new Issue { SeriesId = source.Id, Number = "1" });
+            context.Issues.Add(new Issue { SeriesId = target.Id, Number = "2" });
+            context.Issues.Add(new Issue { SeriesId = target.Id, Number = "3" });
+            context.SaveChanges();
+            sourceId = source.Id;
+            targetId = target.Id;
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        vm.FindSimilarSeriesCommand.Execute(null);
+        var row = Assert.Single(vm.SimilarSeriesCandidates);
+
+        row.MergeCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(vm.SimilarSeriesCandidates);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(verify.Series.Find(sourceId));
+        var target2 = verify.Series.Include(s => s.Issues).Single(s => s.Id == targetId);
+        Assert.Equal(3, target2.Issues.Count); // source's issue folded into the target's existing 2
+    }
+
+    [Fact]
+    public void KeepSeparate_RemovesRowWithoutMerging()
+    {
+        int sourceId, targetId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var source = new Series { Name = "Cataclysm - The Ultimates" };
+            var target = new Series { Name = "Cataclysm: The Ultimates" };
+            context.Series.AddRange(source, target);
+            context.SaveChanges();
+            context.Issues.Add(new Issue { SeriesId = target.Id, Number = "1" });
+            context.SaveChanges();
+            sourceId = source.Id;
+            targetId = target.Id;
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        vm.FindSimilarSeriesCommand.Execute(null);
+        var row = Assert.Single(vm.SimilarSeriesCandidates);
+
+        row.KeepSeparateCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(vm.SimilarSeriesCandidates);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.NotNull(verify.Series.Find(sourceId));
+        Assert.NotNull(verify.Series.Find(targetId));
+    }
+
+    [Fact]
+    public void RefreshLibraryHealth_ListsZeroIssueSeries()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.Series.Add(new Series { Name = "Ghost Series" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        var row = Assert.Single(vm.EmptySeriesItems);
+        Assert.Equal("Ghost Series", row.DisplayLabel);
+        Assert.True(vm.HasEmptyRowItems);
+    }
+
+    [Fact]
+    public void RefreshLibraryHealth_ListsContentEmptyIssues_ExcludesAcknowledged()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Test Series" };
+            context.Series.Add(series);
+            context.SaveChanges();
+            context.Issues.Add(new Issue { SeriesId = series.Id, Number = "1", FilePath = Path.Combine(_scanRoot, "corrupt.cbz"), IsContentEmpty = true });
+            context.Issues.Add(new Issue { SeriesId = series.Id, Number = "2", FilePath = Path.Combine(_scanRoot, "acked.cbz"), IsContentEmpty = true, EmptyRowAcknowledged = true });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        var row = Assert.Single(vm.EmptyIssueItems);
+        Assert.Contains("#1", row.DisplayLabel);
+    }
+
+    [Fact]
+    public void RemoveEmptySeries_DeletesRow()
+    {
+        int seriesId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Ghost Series" };
+            context.Series.Add(series);
+            context.SaveChanges();
+            seriesId = series.Id;
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var row = Assert.Single(vm.EmptySeriesItems);
+
+        row.DeleteConfirm.TriggerCommand.Execute(null);
+        row.DeleteConfirm.TriggerCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(vm.EmptySeriesItems);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(verify.Series.Find(seriesId));
+    }
+
+    [Fact]
+    public void DismissEmptySeries_SetsAcknowledged()
+    {
+        int seriesId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Ghost Series" };
+            context.Series.Add(series);
+            context.SaveChanges();
+            seriesId = series.Id;
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var row = Assert.Single(vm.EmptySeriesItems);
+
+        row.DismissCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(vm.EmptySeriesItems);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.True(verify.Series.Find(seriesId)!.EmptyRowAcknowledged);
     }
 
     /// <summary>Returns a configurable file path for both open/save dialogs - used by the keyboard-shortcut import/export round-trip tests, neither existing fake above supports this.</summary>

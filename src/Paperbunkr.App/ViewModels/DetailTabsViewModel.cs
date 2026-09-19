@@ -40,6 +40,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
         new DetailIssueContextMenuBuilder(this).Build(target);
 
+    private readonly ITrackerAutoSyncService _trackerAutoSync;
     private readonly Action<int> _goToProperties;
     private readonly Action<IReadOnlyList<int>> _goToBulkProperties;
     private readonly Action? _onSelectionChanged;
@@ -53,14 +54,15 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     private int? _seriesId;
     private readonly TileSelectionController<IssueCardSample> _selection = new();
 
-    public DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null, Action<string>? goLibraryWithSearch = null)
-        : this(goToProperties, goToBulkProperties, onSelectionChanged, PaperbunkrDb.CreateContext, new AniListMetadataProvider(AniListHttpClient.Shared), onQuickRate, navigateToSeries, openInReader, navigateToCollection, goLibraryWithSearch)
+    public DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null, Action<string>? goLibraryWithSearch = null, ITrackerAutoSyncService? trackerAutoSync = null)
+        : this(goToProperties, goToBulkProperties, onSelectionChanged, PaperbunkrDb.CreateContext, new AniListMetadataProvider(AniListHttpClient.Shared), onQuickRate, navigateToSeries, openInReader, navigateToCollection, goLibraryWithSearch, trackerAutoSync)
     {
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database and a real <see cref="AniListMetadataProvider"/>).</summary>
-    internal DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged, Func<PaperbunkrDbContext> contextFactory, IMetadataProvider? metadataProvider = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null, Action<string>? goLibraryWithSearch = null)
+    internal DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged, Func<PaperbunkrDbContext> contextFactory, IMetadataProvider? metadataProvider = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null, Action<string>? goLibraryWithSearch = null, ITrackerAutoSyncService? trackerAutoSync = null)
     {
+        _trackerAutoSync = trackerAutoSync ?? NoOpTrackerAutoSyncService.Instance;
         _goToProperties = goToProperties;
         _goToBulkProperties = goToBulkProperties;
         _onSelectionChanged = onSelectionChanged;
@@ -77,6 +79,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         IssueGroups = new ObservableCollection<IssueRunGroup>();
         Specials = new ObservableCollection<IssueCardSample>();
         Related = new ObservableCollection<RelatedSeriesSample>();
+        ExternalRelationPlaceholders = new ObservableCollection<ExternalRelationPlaceholderSample>();
         SameContinuity = new ObservableCollection<RelatedGroupSeriesSample>();
         ContinuityChips = new ObservableCollection<ContinuityChip>();
         SameCollection = new ObservableCollection<RelatedGroupSeriesSample>();
@@ -108,6 +111,11 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     /// <see cref="LoadSeries"/> call, not observed for further changes.
     /// </summary>
     public bool ShowIssuesTab { get; set; } = true;
+
+    /// <summary>True only when hosted by the manga detail screen - gates the "open the tracker link
+    /// panel automatically" behavior to manga (docs/superpowers/specs/2026-09-18-tracker-behavior-
+    /// settings-design.md §3.1); never comic or Unknown.</summary>
+    public bool IsMangaDetailHost { get; set; }
 
     /// <summary>
     /// Also set to <see langword="false"/> by <c>MangaDetailScreenViewModel</c>: that screen builds
@@ -148,6 +156,15 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     public ObservableCollection<RelatedSeriesSample> Related { get; }
 
     public bool HasRelated => Related.Count > 0;
+
+    /// <summary>Provider-sourced relations whose target isn't in the library yet (docs/superpowers/
+    /// specs/2026-09-18-external-metadata-full-extraction-design.md §5) - rendered dimmed/badged
+    /// alongside <see cref="Related"/>, not a separate tab. Populated by <see cref="RefreshRelated"/>
+    /// and refreshed by <see cref="RefreshExternalRelationsAsync"/> when a linked provider exposes
+    /// relations.</summary>
+    public ObservableCollection<ExternalRelationPlaceholderSample> ExternalRelationPlaceholders { get; }
+
+    public bool HasExternalRelationPlaceholders => ExternalRelationPlaceholders.Count > 0;
 
     /// <summary>
     /// Real data as of docs/superpowers/specs/2026-08-17-metadata-model-phase4a-continuity-
@@ -311,6 +328,99 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         ActiveTab = ShowIssuesTab ? "issues" : "related";
         ActiveDetailsSubTab = "info";
         _onSelectionChanged?.Invoke();
+
+        RunAutomaticTrackerBehaviors(series.Id);
+    }
+
+    // --- Automatic tracker behaviors on open (docs/superpowers/specs/2026-09-18-tracker-behavior-
+    // settings-design.md §3.1/§3.4). Both read their own AppSettings toggle fresh. ---
+
+    private void RunAutomaticTrackerBehaviors(int seriesId)
+    {
+        _ = PullFromTrackersAsync(seriesId);
+
+        if (IsMangaDetailHost)
+        {
+            TryAutoOpenTrackerLinkPanel(seriesId);
+        }
+    }
+
+    /// <summary>"Auto sync progress from trackers": the service applies any remote-ahead progress and
+    /// returns the issues it newly marked read, whose tiles are swapped on the UI thread exactly as the
+    /// manual Sync does. Never pushes.</summary>
+    private async Task PullFromTrackersAsync(int seriesId)
+    {
+        var result = await _trackerAutoSync.PullSeriesAsync(seriesId).ConfigureAwait(false);
+        if (result.NewlyReadIssueIds.Count == 0)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_seriesId != seriesId)
+            {
+                return; // navigated to another series while the pull ran
+            }
+
+            using var context = _contextFactory();
+            foreach (var issue in context.Issues.Where(i => result.NewlyReadIssueIds.Contains(i.Id)))
+            {
+                SwapReadStateTile(Issues, issue);
+                SwapReadStateTile(Specials, issue);
+            }
+
+            _onSelectionChanged?.Invoke();
+        });
+    }
+
+    /// <summary>"Open the tracker link panel automatically": fires once per series ever, only for a
+    /// manga series that has a metadata source link whose service also has a connected tracker account
+    /// and isn't already linked. The one-shot flag is set only after the panel is opened - never on
+    /// load - so an early abort can't burn the series.</summary>
+    private void TryAutoOpenTrackerLinkPanel(int seriesId)
+    {
+        using var context = _contextFactory();
+        if (!context.GetOrCreateAppSettings().TrackerAutoOpenLinkPanel)
+        {
+            return;
+        }
+
+        var series = context.Series.Find(seriesId);
+        if (series is null || series.TrackerPromptShown)
+        {
+            return;
+        }
+
+        var sources = context.ExternalMediaIds.Where(e => e.SeriesId == seriesId).Select(e => e.Provider).ToList();
+        var linked = context.TrackingLinks.Where(t => t.SeriesId == seriesId).Select(t => t.Service).ToList();
+        TrackingService? target = null;
+        foreach (var service in TrackerAdapterFactory.SupportedServices)
+        {
+            if (TrackerProviderMap.ToMetadataProvider(service) is ExternalMetadataProvider provider
+                && sources.Contains(provider)
+                && !linked.Contains(service)
+                && TrackerAdapterFactory.IsConnected(context, service))
+            {
+                target = service;
+                break;
+            }
+        }
+
+        if (target is not TrackingService service2)
+        {
+            return;
+        }
+
+        ActiveTab = "details";
+        ActiveDetailsSubTab = "linking";
+        IsLinkingTracker = true;
+        SelectedTrackerService = service2;
+        TrackerSearchQuery = series.Name;
+        _ = SearchTrackerAsync();
+
+        series.TrackerPromptShown = true;
+        context.SaveChanges();
     }
 
     /// <summary>Series-wide, not focused-issue-aware - deliberately simpler than <c>DetailBandViewModel</c>'s
@@ -507,8 +617,43 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             });
         }
 
+        ExternalRelationPlaceholders.Clear();
+        foreach (var placeholder in context.ExternalMediaRelations.Where(r => r.SourceSeriesId == seriesId))
+        {
+            ExternalRelationPlaceholders.Add(new ExternalRelationPlaceholderSample
+            {
+                TargetTitle = placeholder.TargetTitle,
+                RelationTypeLabel = RelationTypeOption.FormatLabel(placeholder.RelationType),
+                TargetUrl = placeholder.TargetUrl,
+            });
+        }
+
         OnPropertyChanged(nameof(HasRelated));
         OnPropertyChanged(nameof(HasAnyRelatedRail));
+        OnPropertyChanged(nameof(HasExternalRelationPlaceholders));
+    }
+
+    /// <summary>
+    /// Lazy trigger for provider relations (docs/superpowers/specs/2026-09-18-external-metadata-
+    /// full-extraction-design.md §7) - called once per series per session when the Related tab is
+    /// first opened, for every linked provider that implements <see cref="IRelationsProvider"/>.
+    /// No-op for providers that don't (MangaDex).
+    /// </summary>
+    public async Task RefreshExternalRelationsAsync()
+    {
+        if (_seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        foreach (var link in ExternalMetadataResolver.GetExternalIds(context, currentSeriesId))
+        {
+            var provider = GetMetadataProviderFor(link.Provider);
+            await MetadataLinkResolver.RefreshRelationsAsync(provider, context, currentSeriesId, link.ExternalId, CancellationToken.None);
+        }
+
+        RefreshRelated(context, currentSeriesId);
     }
 
     // --- Related tab: add/remove a MediaRelation (docs/superpowers/specs/2026-08-17-metadata-
@@ -748,6 +893,51 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
         using var context = _contextFactory();
         ContinuityResolver.RemoveSeriesFromContinuity(context, currentSeriesId, chip.ContinuityId);
+        RefreshContinuity(context, currentSeriesId);
+    }
+
+    /// <summary>Inline feedback for <see cref="LookUpContinuity"/> - this VM has no toast/notify callback of its own, so the result shows next to the button instead.</summary>
+    [ObservableProperty]
+    private string? _continuityLookupResult;
+
+    /// <summary>
+    /// On-demand Phase 2 trigger (docs/superpowers/specs/2026-09-17-storyevent-continuity-
+    /// autopopulate-design.md) - scoped Wikidata check for just this series via
+    /// <see cref="ContinuityWikidataMatchResolver.GetSuggestionsAsync"/>'s <c>onlySeriesId</c>
+    /// parameter. Links immediately on a match rather than opening a review queue, since this is
+    /// already an explicit single-series action.
+    /// </summary>
+    [RelayCommand]
+    private async Task LookUpContinuity()
+    {
+        if (_seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        ContinuityLookupResult = "Checking Wikidata…";
+        using var context = _contextFactory();
+        using var httpClient = WikidataClient.CreateClient();
+        var client = new WikidataClient(httpClient);
+        var suggestions = await ContinuityWikidataMatchResolver.GetSuggestionsAsync(context, client, CancellationToken.None, onlySeriesId: currentSeriesId);
+
+        var suggestion = suggestions.FirstOrDefault();
+        if (suggestion is null)
+        {
+            ContinuityLookupResult = "No shared-universe match found on Wikidata for this series.";
+            return;
+        }
+
+        var continuity = ContinuityResolver.GetOrCreate(context, suggestion.UniverseLabel);
+        continuity.WikidataId ??= suggestion.WikidataQid;
+        continuity.FandomKey ??= suggestion.FandomKey;
+        continuity.Description ??= suggestion.UniverseDescription;
+        context.SaveChanges();
+        ContinuityResolver.AddSeriesToContinuity(context, currentSeriesId, continuity.Id);
+        continuity.Publisher ??= ContinuityResolver.InferPublisher(context, continuity.Id);
+        context.SaveChanges();
+
+        ContinuityLookupResult = $"Added to \"{continuity.Name}\".";
         RefreshContinuity(context, currentSeriesId);
     }
 
@@ -1285,16 +1475,59 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         RefreshExternalLinks(context, currentSeriesId);
     }
 
+    [ObservableProperty]
+    private string? _coverApplyStatus;
+
+    /// <summary>
+    /// Direct one-click cover apply for AniList/MangaDex (a single canonical cover each) - not
+    /// MangaBaka, which has a browsable multi-cover archive instead and is reached through the
+    /// existing "Change Cover" hero action's own picker (docs/superpowers/specs/2026-09-18-
+    /// external-metadata-full-extraction-design.md §2). Re-fetches rather than reusing whatever
+    /// <see cref="LinkMetadataAsync"/> last fetched, since that result isn't retained past the
+    /// call that applied it - an acceptable extra request for an explicit, infrequent user click.
+    /// </summary>
+    [RelayCommand]
+    private async Task ApplyCoverAsync(ExternalLinkSample? link)
+    {
+        CoverApplyStatus = null;
+        if (link is null || _seriesId is not int currentSeriesId || !Enum.TryParse<ExternalMetadataProvider>(link.ProviderLabel, out var providerKey))
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        // Same effective-cover fallback the tiles/hero use (SeriesCardSample.FromSeries) - a series
+        // never given an explicit CoverIssueId still displays its first issue's cover, so applying a
+        // provider cover must target that same issue instead of refusing.
+        var series = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == currentSeriesId);
+        int? effectiveCoverIssueId = series is null
+            ? null
+            : (series.Issues.FirstOrDefault(i => i.Id == series.CoverIssueId) ?? series.Issues.OrderByNumber().FirstOrDefault())?.Id;
+        if (effectiveCoverIssueId is not int coverIssueId)
+        {
+            CoverApplyStatus = "This series has no issues to apply a cover to.";
+            return;
+        }
+
+        var provider = GetMetadataProviderFor(providerKey);
+        var metadata = await provider.GetAsync(link.ExternalId, CancellationToken.None);
+        if (metadata?.CoverImageUrl is not string coverImageUrl)
+        {
+            CoverApplyStatus = $"No cover available from {link.ProviderLabel}.";
+            return;
+        }
+
+        byte[]? bytes = await ProviderCoverCandidateCache.DownloadBytesAsync(coverImageUrl, CancellationToken.None);
+        bool applied = bytes is not null && new CoverThumbnailService().TrySetCustomCoverFromBytes(coverIssueId, bytes);
+        CoverApplyStatus = applied ? "Cover updated." : "Couldn't download that cover. Try again later.";
+    }
+
     // --- Details tab: tracker linking + sync (docs/superpowers/specs/2026-08-23-tracker-write-
     // back-sync-design.md) - deliberately separate from the metadata linking above: TrackerLinkResolver
     // touches only TrackingLink (never ExternalMediaId/SeriesTitle/ExternalMetadataSnapshot), and
     // linking here carries real account-write consequences the metadata search above does not. ---
 
-    public static readonly TrackingService[] TrackerServiceOptions =
-    {
-        TrackingService.AniList, TrackingService.MyAnimeList, TrackingService.Shikimori, TrackingService.Bangumi, TrackingService.MangaBaka,
-        TrackingService.MangaUpdates, TrackingService.Kitsu,
-    };
+    public static readonly TrackingService[] TrackerServiceOptions = TrackerAdapterFactory.SupportedServices;
 
     public ObservableCollection<TrackerLinkSample> TrackerLinks { get; } = new();
 
@@ -1319,6 +1552,10 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             TrackerLinks.Add(new TrackerLinkSample { Service = link.Service, ExternalId = link.ExternalId, Url = null });
         }
 
+        // Every TrackerLinkSample instance is rebuilt above - a previously-selected link would
+        // otherwise be a stale reference to an object no longer in the collection.
+        SelectedTrackerLink = null;
+
         OnPropertyChanged(nameof(HasTrackerLinks));
         OnPropertyChanged(nameof(TrackerStatusLabel));
     }
@@ -1329,6 +1566,19 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedTrackerServiceText))]
     private TrackingService _selectedTrackerService = TrackingService.AniList;
+
+    partial void OnSelectedTrackerServiceChanged(TrackingService value)
+    {
+        // Switching service while the link panel is open re-pins that service's linked-metadata
+        // candidate (and drops the previous service's results, which no longer apply).
+        if (!IsLinkingTracker || _seriesId is not int seriesId)
+        {
+            return;
+        }
+
+        TrackerSearchResults.Clear();
+        AddPinnedTrackerCandidate(seriesId);
+    }
 
     /// <summary>The curated tracker subset as strings for the string-only <c>SuggestBox</c> picker
     /// (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md). Not <c>Enum.GetNames</c> -
@@ -1371,6 +1621,10 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         TrackerSearchQuery = string.Empty;
         TrackerSearchError = null;
         TrackerSearchResults.Clear();
+        if (IsLinkingTracker && _seriesId is int pinSeriesId)
+        {
+            AddPinnedTrackerCandidate(pinSeriesId);
+        }
     }
 
     /// <summary>Every tracker's search is a fresh instance per call - these are stateless HTTP
@@ -1386,19 +1640,47 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         TrackingService.MangaBaka => MangaBakaMetadataProvider.Shared,
         TrackingService.MangaUpdates => new MangaUpdatesTrackerAdapter(TrackerHttpClients.MangaUpdates),
         TrackingService.Kitsu => new KitsuTrackerAdapter(TrackerHttpClients.Kitsu, CredentialStore.Get(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken)),
+        TrackingService.MangaDex => new MangaDexTrackerAdapter(TrackerHttpClients.MangaDex),
         _ => null,
     };
 
-    private ITrackerAdapter GetTrackerAdapter(TrackingService service) => service switch
+    private static ITrackerAdapter? GetTrackerAdapter(TrackingService service) => TrackerAdapterFactory.CreateAdapter(service);
+
+    /// <summary>"Select entries using source metadata" (docs/superpowers/specs/2026-09-18-tracker-
+    /// behavior-settings-design.md §3.5): when the series already has a metadata link for the selected
+    /// tracker's provider, that id IS the tracker's id for this series - pin it first, labeled "From
+    /// linked metadata". Needs no network. Still uses the same two-step confirm as any other
+    /// candidate (linking writes to the account) - never a silent link.</summary>
+    private void AddPinnedTrackerCandidate(int seriesId)
     {
-        TrackingService.MyAnimeList => new MyAnimeListTrackerAdapter(TrackerHttpClients.MyAnimeList, clientId: null),
-        TrackingService.Shikimori => new ShikimoriTrackerAdapter(TrackerHttpClients.Shikimori),
-        TrackingService.Bangumi => new BangumiTrackerAdapter(TrackerHttpClients.Bangumi),
-        TrackingService.MangaBaka => new MangaBakaTrackerAdapter(MangaBakaHttpClient.Shared),
-        TrackingService.MangaUpdates => new MangaUpdatesTrackerAdapter(TrackerHttpClients.MangaUpdates),
-        TrackingService.Kitsu => new KitsuTrackerAdapter(TrackerHttpClients.Kitsu, accessToken: null),
-        _ => new AniListTrackerAdapter(AniListHttpClient.Shared),
-    };
+        using var context = _contextFactory();
+        if (!context.GetOrCreateAppSettings().TrackerUseSourceMetadata
+            || TrackerProviderMap.ToMetadataProvider(SelectedTrackerService) is not ExternalMetadataProvider provider)
+        {
+            return;
+        }
+
+        var source = context.ExternalMediaIds.FirstOrDefault(e => e.SeriesId == seriesId && e.Provider == provider);
+        if (source is null || context.TrackingLinks.Any(t => t.SeriesId == seriesId && t.Service == SelectedTrackerService && t.ExternalId == source.ExternalId))
+        {
+            return;
+        }
+
+        string externalId = source.ExternalId;
+        TrackerSearchResults.Add(new TrackerMatchSample
+        {
+            ExternalId = externalId,
+            Title = context.Series.Where(s => s.Id == seriesId).Select(s => s.Name).FirstOrDefault() ?? externalId,
+            Url = source.Url,
+            Confidence = 1.0,
+            Tier = MatchTier.Auto,
+            IsFromLinkedMetadata = true,
+            LinkConfirm = new TwoStepConfirm(
+                () => LinkTracker(externalId),
+                idleLabel: "Link for tracking",
+                armedLabel: "Confirm - writes to your account?"),
+        });
+    }
 
     [RelayCommand]
     private async Task SearchTrackerAsync()
@@ -1406,6 +1688,12 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         _trackerSearchCts?.Cancel();
         TrackerSearchResults.Clear();
         TrackerSearchError = null;
+
+        // Pinned first and before any network/blank-query early-out - it needs no search.
+        if (_seriesId is int pinSeriesId)
+        {
+            AddPinnedTrackerCandidate(pinSeriesId);
+        }
 
         if (string.IsNullOrWhiteSpace(TrackerSearchQuery) || _seriesId is not int currentSeriesId)
         {
@@ -1435,6 +1723,11 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             foreach (var match in matches)
             {
                 var candidate = match;
+                if (TrackerSearchResults.Any(r => r.ExternalId == candidate.Result.ExternalId))
+                {
+                    continue; // already pinned from the linked metadata source
+                }
+
                 TrackerSearchResults.Add(new TrackerMatchSample
                 {
                     ExternalId = candidate.Result.ExternalId,
@@ -1449,7 +1742,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
                 });
             }
 
-            if (matches.Count == 0)
+            if (TrackerSearchResults.Count == 0)
             {
                 TrackerSearchError = "No matches found.";
             }
@@ -1501,12 +1794,190 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using var context = _contextFactory();
-        TrackerLinkResolver.Unlink(context, currentSeriesId, link.Service);
-        SeriesActivityLog.Record(context, currentSeriesId, SeriesActivityEventKind.TrackerUnlinked, link.Service.ToString());
-        context.SaveChanges();
-        RefreshTrackerLinks(context, currentSeriesId);
+        using (var context = _contextFactory())
+        {
+            TrackerLinkResolver.Unlink(context, currentSeriesId, link.Service);
+            SeriesActivityLog.Record(context, currentSeriesId, SeriesActivityEventKind.TrackerUnlinked, link.Service.ToString());
+            context.SaveChanges();
+        }
+
+        // Deferred one dispatcher tick - RefreshTrackerLinks() clears/repopulates TrackerLinks, and
+        // this command is still synchronously routing the "✕" Button's own Click from inside a chip
+        // in that same ItemsControl. Clearing it inline would detach that Button's visual subtree
+        // mid-route (CLAUDE.md's "don't remove/detach a control from inside a routed event it's
+        // still raising" - same fix shape as this file's own LinkTracker above).
+        Dispatcher.UIThread.Post(() =>
+        {
+            using var context = _contextFactory();
+            RefreshTrackerLinks(context, currentSeriesId);
+        });
     }
+
+    // --- Expand-on-click per-tracker Score/Finish-date panel (docs/superpowers/specs/2026-09-18-
+    // per-tracker-score-and-finish-date-design.md) - layout C from the visual-companion pass:
+    // clicking a chip expands a details panel beneath the chip row instead of a full card per
+    // tracker or a compact table. ---
+
+    [ObservableProperty]
+    private TrackerLinkSample? _selectedTrackerLink;
+
+    /// <summary>Toggles the expanded panel for <paramref name="link"/> - re-clicking the already-
+    /// open chip collapses it. Opening lazily fetches that one tracker's current remote entry
+    /// (matches this session's own established lazy-fetch-on-expand precedent) so the panel starts
+    /// from real remote values, not stale local guesses. A remote score of null (tracker has nothing
+    /// set yet) falls back to the local <see cref="Series.Rating"/> aggregate as a starting point
+    /// for the push side, per the design's "push-source = average of Issue.Rating" default.</summary>
+    [RelayCommand]
+    private async Task ToggleTrackerLinkDetailsAsync(TrackerLinkSample? link)
+    {
+        if (link is null)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(SelectedTrackerLink, link))
+        {
+            SelectedTrackerLink = null;
+            return;
+        }
+
+        SelectedTrackerLink = link;
+        if (_seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        link.IsBusy = true;
+        link.PushStatus = null;
+        try
+        {
+            using var context = _contextFactory();
+            var trackingLink = context.TrackingLinks.FirstOrDefault(t => t.SeriesId == currentSeriesId && t.Service == link.Service);
+            if (trackingLink is null)
+            {
+                return;
+            }
+
+            var adapter = GetTrackerAdapter(link.Service);
+            var remote = adapter is null ? null : await adapter.GetEntryAsync(context, trackingLink, CancellationToken.None);
+            if (!ReferenceEquals(SelectedTrackerLink, link))
+            {
+                return; // panel was closed/switched while the fetch was in flight
+            }
+
+            var series = context.Series.FirstOrDefault(s => s.Id == currentSeriesId);
+            link.Status = remote?.Status ?? series?.ReadingStatus ?? ReadingStatus.Unknown;
+            link.ChapterProgress = remote?.ChapterProgress;
+            link.Score = remote?.Score ?? (series?.Rating is float rating ? (decimal)rating : null);
+            link.FinishDate = remote?.FinishDate;
+        }
+        finally
+        {
+            link.IsBusy = false;
+        }
+    }
+
+    /// <summary>Immediate single-tracker push (design's "immediate" push-timing decision, not
+    /// queued) - sends the panel's current Status/Progress/Score/FinishDate to just this one
+    /// tracker. <see cref="TrackerPushPayload.UpdateScore"/>/<see cref="TrackerPushPayload.UpdateFinishDate"/>
+    /// are set only for the fields this tracker actually supports (<see cref="TrackerLinkSample.SupportsScore"/>/
+    /// <see cref="TrackerLinkSample.SupportsFinishDate"/>) - never attempt to touch a field the
+    /// service doesn't have, matching Step 14's "not supported" rendering for the same fields.</summary>
+    [RelayCommand]
+    private async Task PushTrackerFieldAsync(TrackerLinkSample? link)
+    {
+        if (link is null || _seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        link.IsBusy = true;
+        link.PushStatus = null;
+        try
+        {
+            using var context = _contextFactory();
+            var trackingLink = context.TrackingLinks.FirstOrDefault(t => t.SeriesId == currentSeriesId && t.Service == link.Service);
+            if (trackingLink is null)
+            {
+                link.PushStatus = "Not linked.";
+                return;
+            }
+
+            var payload = new TrackerPushPayload(
+                link.Status,
+                link.ChapterProgress,
+                Score: link.Score,
+                FinishDate: link.FinishDate,
+                UpdateScore: link.SupportsScore,
+                UpdateFinishDate: link.SupportsFinishDate);
+
+            var adapter = GetTrackerAdapter(link.Service);
+            if (adapter is null)
+            {
+                link.PushStatus = "This tracker isn't supported.";
+                return;
+            }
+
+            var (success, error) = await TrackerAdapterFactory.PushDetailedAsync(adapter, context, trackingLink, payload, CancellationToken.None);
+            link.PushStatus = success ? "Saved." : $"Failed: {error}";
+        }
+        finally
+        {
+            link.IsBusy = false;
+        }
+    }
+
+    /// <summary>The explicit pull action (design's "display-only by default, explicit 'Use this
+    /// score' action to actually overwrite Series.Rating" resolution) - re-fetches this one
+    /// tracker's remote score fresh (not the panel's possibly-stale buffered value) and writes it
+    /// directly to <see cref="Series.Rating"/>, bypassing <see cref="SeriesRatingResolver"/>
+    /// entirely. This is a deliberate override, not a recompute - the next time any
+    /// <see cref="Data.Entities.Issue.Rating"/> changes, <see cref="SeriesRatingResolver"/> will
+    /// recompute over it again and this override is lost, same as any other derived-field
+    /// precedent in this codebase.</summary>
+    [RelayCommand]
+    private async Task UseTrackerScoreAsync(TrackerLinkSample? link)
+    {
+        if (link is null || _seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        link.IsBusy = true;
+        try
+        {
+            using var context = _contextFactory();
+            var trackingLink = context.TrackingLinks.FirstOrDefault(t => t.SeriesId == currentSeriesId && t.Service == link.Service);
+            if (trackingLink is null)
+            {
+                return;
+            }
+
+            var adapter = GetTrackerAdapter(link.Service);
+            var remote = adapter is null ? null : await adapter.GetEntryAsync(context, trackingLink, CancellationToken.None);
+            if (remote?.Score is not decimal remoteScore)
+            {
+                link.PushStatus = "This tracker has no score to use.";
+                return;
+            }
+
+            var series = context.Series.FirstOrDefault(s => s.Id == currentSeriesId);
+            if (series is null)
+            {
+                return;
+            }
+
+            series.Rating = (float)remoteScore;
+            context.SaveChanges();
+            link.Score = remoteScore;
+            link.PushStatus = "Series rating updated from this tracker.";
+        }
+        finally
+        {
+            link.IsBusy = false;
+        }
+    }
+
 
     /// <summary>Two-way sync (docs/superpowers/specs/2026-09-05-two-way-tracker-sync-design.md) -
     /// for every currently-connected tracker this series is linked to, reads the remote entry first
@@ -1537,23 +2008,18 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         var failed = new List<string>();
         foreach (var link in series.TrackingLinks)
         {
-            bool isConnected = link.Service switch
-            {
-                TrackingService.AniList => CredentialStore.HasCredentials(context, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken),
-                TrackingService.MyAnimeList => CredentialStore.HasCredentials(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthAccessToken),
-                TrackingService.Shikimori => CredentialStore.HasCredentials(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken),
-                TrackingService.Bangumi => CredentialStore.HasCredentials(context, nameof(TrackingService.Bangumi), CredentialKind.ApiKey),
-                TrackingService.MangaBaka => CredentialStore.HasCredentials(context, nameof(TrackingService.MangaBaka), CredentialKind.ApiKey),
-                TrackingService.MangaUpdates => CredentialStore.HasCredentials(context, nameof(TrackingService.MangaUpdates), CredentialKind.OAuthAccessToken),
-                TrackingService.Kitsu => CredentialStore.HasCredentials(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken),
-                _ => false,
-            };
+            bool isConnected = TrackerAdapterFactory.IsConnected(context, link.Service);
             if (!isConnected)
             {
                 continue;
             }
 
             var adapter = GetTrackerAdapter(link.Service);
+            if (adapter is null)
+            {
+                continue;
+            }
+
             var remote = await adapter.GetEntryAsync(context, link, CancellationToken.None);
 
             if (remote is not null && TrackerSyncResolver.RemoteWins(TrackerProgressCalculator.ComputeChapterProgress(series.Issues), series.ReadingStatus, remote))
@@ -1570,8 +2036,18 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             }
 
             var payload = new TrackerPushPayload(series.ReadingStatus, TrackerProgressCalculator.ComputeChapterProgress(series.Issues));
-            bool ok = await adapter.PushEntryAsync(context, link, payload, CancellationToken.None);
-            (ok ? pushed : failed).Add(link.Service.ToString());
+
+            // Every adapter now has a detailed-error push (TrackerAdapterFactory.PushDetailedAsync) so a
+            // failure reports the tracker's real reason, not just "sync failed".
+            var (ok, errorDetail) = await TrackerAdapterFactory.PushDetailedAsync(adapter, context, link, payload, CancellationToken.None);
+            if (ok)
+            {
+                pushed.Add(link.Service.ToString());
+            }
+            else
+            {
+                failed.Add($"{link.Service} ({errorDetail})");
+            }
         }
 
         context.SaveChanges();
@@ -1718,7 +2194,17 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         {
             _ = RefreshComicInfoPanelsAsync();
         }
+        else if (value == "related" && _seriesId != _externalRelationsRefreshedForSeriesId)
+        {
+            _externalRelationsRefreshedForSeriesId = _seriesId;
+            _ = RefreshExternalRelationsAsync();
+        }
     }
+
+    /// <summary>Which series' <see cref="IRelationsProvider"/> relations were last fetched
+    /// (docs/superpowers/specs/2026-09-18-external-metadata-full-extraction-design.md §7) - once
+    /// per series per session, not on every tab re-visit.</summary>
+    private int? _externalRelationsRefreshedForSeriesId;
 
     [RelayCommand]
     private void GoIssues() => ActiveTab = "issues";
@@ -1944,6 +2430,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
     private void MarkIssuesReadState(IssueCardSample issue, Action<Issue> apply)
     {
+        bool markingRead = apply == IssueReadStateResolver.MarkAsRead;
         var ids = (SelectedIssueIds.Count > 0 ? SelectedIssueIds.Append(issue.Id) : new[] { issue.Id })
             .Distinct()
             .ToList();
@@ -1975,6 +2462,13 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         // finish reading a comic"). Same callback every other selection/read-state change already
         // routes through.
         _onSelectionChanged?.Invoke();
+
+        // "Update progress when marked as read" (docs/superpowers/specs/2026-09-18-tracker-behavior-
+        // settings-design.md §3.3) - mark-as-read only, never unread.
+        if (markingRead)
+        {
+            _ = _trackerAutoSync.OnIssuesMarkedReadAsync(affected.Select(i => i.SeriesId).Distinct().ToList());
+        }
     }
 
     private static void SwapReadStateTile(ObservableCollection<IssueCardSample> tiles, Issue updated)

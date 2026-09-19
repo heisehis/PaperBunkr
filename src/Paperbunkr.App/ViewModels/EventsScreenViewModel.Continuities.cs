@@ -1,6 +1,8 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -8,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.ReadingLists;
 
@@ -71,6 +74,119 @@ public partial class EventsScreenViewModel
     public bool HasActiveContinuity => _activeContinuityId is not null;
 
     public bool HasNoContinuityMembers => HasActiveContinuity && ContinuityMembers.Count == 0;
+
+    // --- Wikidata shared-universe suggestions (docs/superpowers/specs/2026-09-17-storyevent-
+    // continuity-autopopulate-design.md, Phase 2). Unlike NewStoryEventCandidates, there is no
+    // free local-only tier here - every candidate needs a real Wikidata lookup per character, so
+    // this list is populated only by explicit user action (CheckForWikidataSuggestions), never on
+    // sidebar refresh/navigation, to keep opening this screen fast and free of surprise network
+    // calls. The weekly scheduled task (ScheduledTaskCatalog.ContinuityWikidataAutodetect) runs the
+    // same resolver in the background and deep-links back here. ---
+
+    public ObservableCollection<ContinuitySuggestionRowViewModel> NewContinuitySuggestions { get; } = new();
+
+    public bool HasNoNewContinuitySuggestions => NewContinuitySuggestions.Count == 0;
+
+    [ObservableProperty]
+    private bool _isCheckingWikidataSuggestions;
+
+    /// <summary>
+    /// Distinguishes "haven't checked yet" from "checked, found nothing" - without this the empty
+    /// state showed the same "click Check Wikidata" prompt both before and after a real check ran,
+    /// which read as the button doing nothing (real bug reported after this shipped).
+    /// </summary>
+    [ObservableProperty]
+    private string? _wikidataCheckResult;
+
+    [RelayCommand]
+    private async Task CheckForWikidataSuggestions()
+    {
+        IsCheckingWikidataSuggestions = true;
+        WikidataCheckResult = null;
+        NewContinuitySuggestions.Clear();
+        OnPropertyChanged(nameof(HasNoNewContinuitySuggestions));
+
+        // Registered with the Activity Center so this shows a real progress row (real feedback
+        // gap reported after this shipped: the manual button's own "Checking…" text has no visible
+        // progress, and a multi-minute scan with nothing in Activity Center reads as stuck).
+        using var job = _activity.StartJob(ActivityJobKind.SyncMetadata, "Checking Wikidata for shared universes");
+        try
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            using var httpClient = WikidataClient.CreateClient();
+            var client = new WikidataClient(httpClient);
+            var progress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} series"));
+
+            // Each suggestion is added to the visible list the moment it's found, not after the
+            // whole (uncapped) scan finishes - a real complaint after the uncap shipped: the scan
+            // itself can still take a while end-to-end, and there's no reason to make the user wait
+            // for every remaining series to be checked before seeing the first result. Resolver
+            // internals run with ConfigureAwait(false), so this callback isn't guaranteed to land on
+            // the UI thread - Dispatcher.UIThread.Post is required before touching the observable
+            // collection.
+            void OnFound(ContinuitySuggestion suggestion) => Dispatcher.UIThread.Post(() =>
+            {
+                NewContinuitySuggestions.Add(new ContinuitySuggestionRowViewModel(suggestion, AcceptContinuitySuggestion, DismissContinuitySuggestion));
+                OnPropertyChanged(nameof(HasNoNewContinuitySuggestions));
+            });
+
+            // Uncapped - this is an explicit, watched click with real Activity Center progress, not
+            // the unattended weekly scan, so there's no reason to stop at 20 and make the user
+            // re-click repeatedly to cover a large library (the re-click cadence itself was the
+            // reported bug: each click's random 20-series sample could silently drop suggestions
+            // surfaced by an earlier click that hadn't been accepted/dismissed yet).
+            var suggestions = await ContinuityWikidataMatchResolver.GetSuggestionsAsync(
+                context, client, CancellationToken.None, progress: progress, capToBoundedRun: false, onSuggestionFound: OnFound);
+
+            WikidataCheckResult = suggestions.Count == 0
+                ? "Checked - no shared-universe matches found this time."
+                : $"Checked - found {suggestions.Count} suggestion{(suggestions.Count == 1 ? "" : "s")}.";
+            job.Succeed(WikidataCheckResult);
+        }
+        finally
+        {
+            IsCheckingWikidataSuggestions = false;
+        }
+    }
+
+    private void AcceptContinuitySuggestion(ContinuitySuggestionRowViewModel row)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var continuity = ContinuityResolver.GetOrCreate(context, row.Suggestion.UniverseLabel);
+        continuity.WikidataId ??= row.Suggestion.WikidataQid;
+        continuity.FandomKey ??= row.Suggestion.FandomKey;
+        continuity.Description ??= row.Suggestion.UniverseDescription;
+        context.SaveChanges();
+
+        ContinuityResolver.AddSeriesToContinuity(context, row.Suggestion.Series.Id, continuity.Id);
+
+        // Wikidata has no publisher claim at all on shared-universe items (confirmed on Earth-616/
+        // Earth-1610/Prime Earth), so this field's "smart suggestion" comes from local data instead
+        // - the majority Publisher across the continuity's own member-series issues.
+        continuity.Publisher ??= ContinuityResolver.InferPublisher(context, continuity.Id);
+        context.SaveChanges();
+
+        NewContinuitySuggestions.Remove(row);
+        OnPropertyChanged(nameof(HasNoNewContinuitySuggestions));
+        RefreshContinuitiesSidebar();
+        _notify("Series added to continuity", $"\"{row.Suggestion.Series.Name}\" added to \"{continuity.Name}\".");
+    }
+
+    private void DismissContinuitySuggestion(ContinuitySuggestionRowViewModel row)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        if (row.Suggestion.WikidataQid is string wikidataQid)
+        {
+            ContinuityWikidataMatchResolver.Dismiss(context, row.Suggestion.Series.Id, wikidataQid);
+        }
+        else if (row.Suggestion.FandomKey is string fandomKey)
+        {
+            ContinuityWikidataMatchResolver.DismissFandom(context, row.Suggestion.Series.Id, fandomKey);
+        }
+
+        NewContinuitySuggestions.Remove(row);
+        OnPropertyChanged(nameof(HasNoNewContinuitySuggestions));
+    }
 
     public void RefreshContinuitiesSidebar()
     {

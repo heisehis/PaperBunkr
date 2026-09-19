@@ -124,4 +124,41 @@ public class CharacterResolverTests : IDisposable
 
         Assert.Empty(context.CharacterAppearances);
     }
+
+    [Fact]
+    public void GetTopCharactersForSeries_RanksByAppearanceCount()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = new Series { Name = "Avengers" };
+        context.Series.Add(series);
+        context.SaveChanges();
+
+        // Iron Man appears in all 3 issues, Thor in 2, Hulk in 1.
+        context.Issues.Add(new Issue { SeriesId = series.Id, Number = "1", Characters = "Iron Man, Thor, Hulk" });
+        context.Issues.Add(new Issue { SeriesId = series.Id, Number = "2", Characters = "Iron Man, Thor" });
+        context.Issues.Add(new Issue { SeriesId = series.Id, Number = "3", Characters = "Iron Man" });
+        context.SaveChanges();
+        CharacterResolver.RebuildAll(context);
+
+        var top = CharacterResolver.GetTopCharactersForSeries(context, series.Id, take: 2);
+
+        Assert.Equal(2, top.Count);
+        Assert.Equal("Iron Man", top[0].Name);
+        Assert.Equal("Thor", top[1].Name);
+    }
+
+    [Fact]
+    public void GetTopCharactersForSeries_RespectsTakeAndExcludesOtherSeries()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int avengersIssue = SeedIssue(context, "Avengers", "Iron Man, Thor, Hulk, Hawkeye");
+        SeedIssue(context, "Batman", "Batman");
+        CharacterResolver.RebuildAll(context);
+
+        int avengersSeriesId = context.Issues.Find(avengersIssue)!.SeriesId;
+        var top = CharacterResolver.GetTopCharactersForSeries(context, avengersSeriesId, take: 2);
+
+        Assert.Equal(2, top.Count);
+        Assert.All(top, c => Assert.NotEqual("Batman", c.Name));
+    }
 }

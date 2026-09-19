@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -22,7 +23,7 @@ namespace Paperbunkr.Data.Metadata;
 /// mass collection of data" - this adapter only ever fetches one media at a time, on an explicit
 /// caller-driven call, never a bulk crawl.
 /// </summary>
-public sealed class AniListMetadataProvider : IMetadataProvider, ITrackerSearchProvider
+public sealed class AniListMetadataProvider : IMetadataProvider, ITrackerSearchProvider, IRelationsProvider
 {
     private const string Endpoint = "https://graphql.anilist.co";
 
@@ -53,6 +54,12 @@ public sealed class AniListMetadataProvider : IMetadataProvider, ITrackerSearchP
             chapters
             volumes
             genres
+            coverImage { large }
+            staff { edges { role node { name { full } } } }
+            startDate { year }
+            format
+            tags { name rank isMediaSpoiler }
+            relations { edges { relationType node { id title { romaji english } siteUrl } } }
           }
         }
         """;
@@ -102,6 +109,34 @@ public sealed class AniListMetadataProvider : IMetadataProvider, ITrackerSearchP
         var response = await SendAsync(GetByIdQuery, new { id }, cancellationToken).ConfigureAwait(false);
         var media = response?.Data?.Media;
         return media is null ? null : AniListNormalizer.ToMediaMetadata(media);
+    }
+
+    /// <summary>Reuses <see cref="GetByIdQuery"/> (relations are already part of it, per §5's own
+    /// fetch-together decision) rather than a dedicated query - one more request than strictly
+    /// needed when called right after <see cref="GetAsync"/>, but this is only ever triggered by an
+    /// explicit, infrequent "open the Related tab" action, not the default Apply path.</summary>
+    public async Task<IReadOnlyList<ProviderRelation>> GetRelationsAsync(string externalId, CancellationToken cancellationToken)
+    {
+        if (!int.TryParse(externalId, out int id))
+        {
+            return Array.Empty<ProviderRelation>();
+        }
+
+        var response = await SendAsync(GetByIdQuery, new { id }, cancellationToken).ConfigureAwait(false);
+        var edges = response?.Data?.Media?.Relations?.Edges;
+        if (edges is null)
+        {
+            return Array.Empty<ProviderRelation>();
+        }
+
+        return edges
+            .Where(e => e.Node is not null)
+            .Select(e => new ProviderRelation(
+                TargetExternalId: e.Node!.Id.ToString(CultureInfo.InvariantCulture),
+                TargetTitle: e.Node.Title?.English ?? e.Node.Title?.Romaji ?? "Untitled",
+                TargetUrl: e.Node.SiteUrl,
+                Type: ProviderRelationTypeMapper.MapAniList(e.RelationType)))
+            .ToList();
     }
 
     private async Task<AniListGraphQlResponse?> SendAsync(string query, object variables, CancellationToken cancellationToken)
@@ -275,6 +310,106 @@ internal sealed class AniListMediaDto
     /// <summary>Only requested by <see cref="AniListMetadataProvider.GetByIdQuery"/>, not the search query - same rationale as <see cref="AniListTitleDto.Native"/> above.</summary>
     [JsonPropertyName("genres")]
     public List<string>? Genres { get; set; }
+
+    [JsonPropertyName("coverImage")]
+    public AniListCoverImageDto? CoverImage { get; set; }
+
+    [JsonPropertyName("staff")]
+    public AniListStaffConnectionDto? Staff { get; set; }
+
+    [JsonPropertyName("startDate")]
+    public AniListFuzzyDateDto? StartDate { get; set; }
+
+    [JsonPropertyName("format")]
+    public string? Format { get; set; }
+
+    [JsonPropertyName("tags")]
+    public List<AniListTagDto>? Tags { get; set; }
+
+    [JsonPropertyName("relations")]
+    public AniListRelationConnectionDto? Relations { get; set; }
+}
+
+internal sealed class AniListCoverImageDto
+{
+    [JsonPropertyName("large")]
+    public string? Large { get; set; }
+}
+
+internal sealed class AniListStaffConnectionDto
+{
+    [JsonPropertyName("edges")]
+    public List<AniListStaffEdgeDto>? Edges { get; set; }
+}
+
+/// <summary><see cref="Role"/> is freeform community-edited text ("Story &amp; Art", "Story",
+/// "Art", "Original Creator", ...), not an enum - every staff member's name is extracted
+/// regardless of the exact role string, per the design spec's explicit "no reliable story/art
+/// split" decision.</summary>
+internal sealed class AniListStaffEdgeDto
+{
+    [JsonPropertyName("role")]
+    public string? Role { get; set; }
+
+    [JsonPropertyName("node")]
+    public AniListStaffNodeDto? Node { get; set; }
+}
+
+internal sealed class AniListStaffNodeDto
+{
+    [JsonPropertyName("name")]
+    public AniListStaffNameDto? Name { get; set; }
+}
+
+internal sealed class AniListStaffNameDto
+{
+    [JsonPropertyName("full")]
+    public string? Full { get; set; }
+}
+
+internal sealed class AniListFuzzyDateDto
+{
+    [JsonPropertyName("year")]
+    public int? Year { get; set; }
+}
+
+internal sealed class AniListTagDto
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("rank")]
+    public int? Rank { get; set; }
+
+    [JsonPropertyName("isMediaSpoiler")]
+    public bool IsMediaSpoiler { get; set; }
+}
+
+internal sealed class AniListRelationConnectionDto
+{
+    [JsonPropertyName("edges")]
+    public List<AniListRelationEdgeDto>? Edges { get; set; }
+}
+
+internal sealed class AniListRelationEdgeDto
+{
+    [JsonPropertyName("relationType")]
+    public string? RelationType { get; set; }
+
+    [JsonPropertyName("node")]
+    public AniListRelationNodeDto? Node { get; set; }
+}
+
+internal sealed class AniListRelationNodeDto
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("title")]
+    public AniListTitleDto? Title { get; set; }
+
+    [JsonPropertyName("siteUrl")]
+    public string? SiteUrl { get; set; }
 }
 
 internal sealed class AniListTitleDto

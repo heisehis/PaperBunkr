@@ -7,6 +7,7 @@
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:beh="using:Paperbunkr.App.Behaviors"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="500"
@@ -32,7 +33,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
         <Style Selector="Border.issueTile.current">
-            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
         </Style>
         <Style Selector="StackPanel.posterItem.read">
             <Setter Property="Opacity" Value="0.45" />
@@ -93,6 +94,18 @@
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="CornerRadius" Value="5" />
+        </Style>
+
+        <!-- Per-tracker chip (docs/superpowers/specs/2026-09-18-per-tracker-score-and-finish-date-
+             design.md) - a Button now, not a plain Border, so the whole chip is clickable to expand
+             the Score/Finish-date panel; same look the old non-clickable Border chip had. -->
+        <Style Selector="Button.trackerChip">
+            <Setter Property="Background" Value="{DynamicResource PbSurfaceAltBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
         </Style>
     </UserControl.Styles>
 
@@ -375,7 +388,17 @@
                                 <TextBlock Text="Add to Continuity" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
+                        <!-- docs/superpowers/specs/2026-09-17-storyevent-continuity-autopopulate-design.md -
+                             per-series manual Wikidata trigger, no credentials needed. -->
+                        <Button Classes="railAdd" Command="{Binding LookUpContinuityCommand}" ToolTip.Tip="Check Wikidata for a shared-universe match via this series' recurring characters">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                <TextBlock Text="Look up on Wikidata" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
+                    <TextBlock Text="{Binding ContinuityLookupResult}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                               Margin="0,0,0,6" IsVisible="{Binding ContinuityLookupResult, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                     <Border IsVisible="{Binding IsAddingContinuity}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                             CornerRadius="6" Padding="12" Margin="0,0,0,8">
                         <StackPanel Spacing="8">
@@ -509,6 +532,29 @@
                                   RemoveCommand="{Binding RemoveRelationCommand}"
                                   ClickCommand="{Binding OpenRelatedSeriesCommand}" />
             </Border>
+
+            <!-- Provider-sourced relations not yet in the library (docs/superpowers/specs/2026-09-18-
+                 external-metadata-full-extraction-design.md §5) - merged into this same Related tab,
+                 dimmed/badged, no click-through since there's no local series to open yet. -->
+            <StackPanel Spacing="6" IsVisible="{Binding HasExternalRelationPlaceholders}">
+                <TextBlock Text="Not in your library" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                <ItemsControl ItemsSource="{Binding ExternalRelationPlaceholders}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:ExternalRelationPlaceholderSample">
+                            <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}"
+                                    Padding="10,4" Margin="0,0,6,6" Opacity="0.6">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{Binding TargetTitle}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    <TextBlock Text="{Binding RelationTypeLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
 
             <Border Classes="card" IsVisible="{Binding HasSameContinuity}">
                 <views:PosterRail Title="Same Continuity" ItemsSource="{Binding ContinuityRail}"
@@ -713,6 +759,13 @@
                                             <pbc:BrandMark Family="Service" Value="{Binding ProviderLabel}" ShowText="True"
                                                            MarkSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center"
                                                            Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            <Button Padding="0" Width="16" Height="16" CornerRadius="8"
+                                                    Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                    Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).ApplyCoverCommand}"
+                                                    CommandParameter="{Binding}" ToolTip.Tip="Apply this provider's cover"
+                                                    IsVisible="{Binding CanApplyCoverDirectly}">
+                                                <fi:SymbolIcon Symbol="Image" FontSize="{StaticResource PbIconSizeXs}" />
+                                            </Button>
                                             <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
                                                     Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
                                                     Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).UnlinkMetadataCommand}"
@@ -722,6 +775,8 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        <TextBlock Text="{Binding CoverApplyStatus}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                                   IsVisible="{Binding CoverApplyStatus, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                     </StackPanel>
                 </Border>
 
@@ -798,7 +853,14 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:TrackerLinkSample">
-                                    <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}" Padding="10,4" Margin="0,0,6,6">
+                                    <!-- Layout C (visual-companion pass, docs/superpowers/specs/2026-09-18-per-tracker-
+                                         score-and-finish-date-design.md) - click the chip to expand a details panel
+                                         beneath the whole chip row, rather than a full card per tracker or a table.
+                                         The outer chip is now a Button (was a plain Border) so it's clickable; the
+                                         nested "✕" Button still works isolated inside it (Avalonia routes Click to the
+                                         innermost handler first, which marks the event Handled). -->
+                                    <Button Classes="trackerChip" Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).ToggleTrackerLinkDetailsCommand}"
+                                            CommandParameter="{Binding}" Margin="0,0,6,6">
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <pbc:BrandMark Family="Service" Value="{Binding ServiceName}" ShowText="True"
                                                            MarkSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center"
@@ -808,10 +870,64 @@
                                                     Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).UnlinkTrackerCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Remove this tracker link" />
                                         </StackPanel>
-                                    </Border>
+                                    </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+
+                        <!-- Expand-on-click Score/Finish-date panel for whichever chip above is selected. Status is
+                             shown read-only here (the whole-series ReadingStatusPicker already owns editing it) -
+                             only Progress/Score/FinishDate are per-tracker editable, per the design's scope. -->
+                        <Border IsVisible="{Binding SelectedTrackerLink, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,4,0,0">
+                            <StackPanel Spacing="8" DataContext="{Binding SelectedTrackerLink}" x:DataType="models:TrackerLinkSample">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <pbc:BrandMark Family="Service" Value="{Binding ServiceName}" ShowText="True"
+                                                   MarkSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    <TextBlock Text="{Binding Status}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Loading…" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center"
+                                               IsVisible="{Binding IsBusy}" />
+                                </StackPanel>
+
+                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Progress" FontSize="12" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    <TextBox Grid.Row="0" Grid.Column="1" Width="140" HorizontalAlignment="Left"
+                                             Text="{Binding ChapterProgressText}" beh:TextSpinner.Enabled="True" beh:TextSpinner.Minimum="0" />
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Score" FontSize="12" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding SupportsScore}" />
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8" IsVisible="{Binding SupportsScore}">
+                                        <TextBox Width="140" HorizontalAlignment="Left" Text="{Binding ScoreText}"
+                                                 beh:TextSpinner.Enabled="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="5" beh:TextSpinner.Step="0.1" />
+                                        <Button Content="Use this score" Padding="8,3" FontSize="11" CornerRadius="5"
+                                                Background="{DynamicResource PbSurfaceAltBrush}" Foreground="{DynamicResource PbTextMutedBrush}" BorderThickness="0"
+                                                Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).UseTrackerScoreCommand}"
+                                                CommandParameter="{Binding}" ToolTip.Tip="Overwrite this series' rating with this tracker's remote score" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="Not supported by this tracker" FontSize="12"
+                                               Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !SupportsScore}" />
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Finish date" FontSize="12" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding SupportsFinishDate}" />
+                                    <DatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding FinishDateOffset}" HorizontalAlignment="Left"
+                                                IsVisible="{Binding SupportsFinishDate}" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="Not supported by this tracker" FontSize="12"
+                                               Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !SupportsFinishDate}" />
+                                </Grid>
+
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Button Content="Save to tracker" Padding="10,5" FontSize="12" CornerRadius="5"
+                                            Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0"
+                                            IsEnabled="{Binding !IsBusy}"
+                                            Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).PushTrackerFieldCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <TextBlock Text="{Binding PushStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center"
+                                               IsVisible="{Binding PushStatus, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </Border>
             </StackPanel>

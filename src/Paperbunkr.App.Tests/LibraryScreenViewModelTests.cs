@@ -2159,6 +2159,45 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.False(toasted);
     }
 
+    private sealed class RecordingTrackerSync : Paperbunkr.App.Services.ITrackerAutoSyncService
+    {
+        public readonly List<IReadOnlyCollection<int>> MarkedRead = new();
+
+        public Task OnIssueFinishedInReaderAsync(int seriesId) => Task.CompletedTask;
+
+        public Task OnIssuesMarkedReadAsync(IReadOnlyCollection<int> seriesIds) { MarkedRead.Add(seriesIds); return Task.CompletedTask; }
+
+        public Task<Paperbunkr.App.Services.TrackerPullResult> PullSeriesAsync(int seriesId) => Task.FromResult(Paperbunkr.App.Services.TrackerPullResult.None);
+    }
+
+    [Fact]
+    public void MarkSelectionRead_IsOneTrackerCall_ForAllAffectedSeries_AndUnreadNeverCalls()
+    {
+        int seriesA = CreateSeriesWithIssue("Alpha One");
+        int seriesB = CreateSeriesWithIssue("Bravo Two");
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            foreach (var issue in context.Issues)
+            {
+                issue.PageCount = 10;
+            }
+            context.SaveChanges();
+        }
+
+        var sync = new RecordingTrackerSync();
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { }, trackerAutoSync: sync);
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+        vm.ToggleIssueSelection(vm.IssueList.Rows[1], isShiftHeld: false);
+
+        vm.MarkSelectionUnreadCommand.Execute(null);
+        Assert.Empty(sync.MarkedRead);
+
+        vm.MarkSelectionReadCommand.Execute(null);
+
+        var call = Assert.Single(sync.MarkedRead); // one bulk action = one call = one job/toast/prompt downstream
+        Assert.Equal(new[] { seriesA, seriesB }.OrderBy(x => x), call.OrderBy(x => x));
+    }
+
     [Fact]
     public void MarkSelectionUnread_ZeroesLastPageReadForEveryIssueInSelection()
     {

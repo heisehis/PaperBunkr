@@ -159,6 +159,59 @@ public class MangaUpdatesTrackerAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task PushEntryAsync_UpdateScoreTrue_PostsConvertedRatingToSeparateEndpoint()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.MangaUpdates), CredentialKind.OAuthAccessToken, "session-token");
+
+        string? ratingBody = null;
+        var adapter = new MangaUpdatesTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            if (req.RequestUri!.ToString().EndsWith("/rating"))
+            {
+                Assert.Equal(HttpMethod.Put, req.Method);
+                ratingBody = req.Content!.ReadAsStringAsync().Result;
+                return JsonResponse(HttpStatusCode.OK, "{}");
+            }
+
+            return req.Method == HttpMethod.Get ? JsonResponse(HttpStatusCode.OK, "{}") : JsonResponse(HttpStatusCode.OK, "{}");
+        })));
+
+        var payload = new TrackerPushPayload(ReadingStatus.Completed, 100, Score: 4.5m, UpdateScore: true);
+        bool result = await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "15090" }, payload, CancellationToken.None);
+
+        Assert.True(result);
+        Assert.NotNull(ratingBody);
+        Assert.Contains("\"rating\":9", ratingBody); // 4.5 * 2, 0.1-10.0 scale
+    }
+
+    [Fact]
+    public async Task PushEntryAsync_UpdateScoreTrue_ZeroScore_DeletesRating()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.MangaUpdates), CredentialKind.OAuthAccessToken, "session-token");
+
+        bool sawDelete = false;
+        var adapter = new MangaUpdatesTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            if (req.RequestUri!.ToString().EndsWith("/rating"))
+            {
+                Assert.Equal(HttpMethod.Delete, req.Method);
+                sawDelete = true;
+                return JsonResponse(HttpStatusCode.OK, "{}");
+            }
+
+            return JsonResponse(HttpStatusCode.OK, "{}");
+        })));
+
+        var payload = new TrackerPushPayload(ReadingStatus.Completed, 100, Score: null, UpdateScore: true);
+        bool result = await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "15090" }, payload, CancellationToken.None);
+
+        Assert.True(result);
+        Assert.True(sawDelete);
+    }
+
+    [Fact]
     public async Task PushEntryAsync_UpdateCallFails_ReturnsFalse()
     {
         using var context = new PaperbunkrDbContext(_dbOptions);

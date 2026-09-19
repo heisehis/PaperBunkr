@@ -4,12 +4,15 @@ using System.IO;
 namespace Paperbunkr.App.Services;
 
 /// <summary>
-/// Path helper for installed/extracted skins (docs/superpowers/specs/2026-08-07-preferences-skin-system-design.md
-/// §3), mirroring the <see cref="CoverThumbnailPaths"/> convention: installed <c>.crpck</c> files at
+/// Path helper for installed/extracted themes (docs/superpowers/specs/2026-08-07-preferences-skin-system-design.md
+/// §3, renamed from <c>SkinPaths</c> by docs/superpowers/specs/2026-09-16-theme-system-design.md -
+/// the on-disk folder names stay <c>skins</c>/<c>skins-extracted</c> deliberately, so an
+/// already-installed <c>.crpck</c> isn't orphaned by this rename), mirroring the
+/// <see cref="CoverThumbnailPaths"/> convention: installed <c>.crpck</c> files at
 /// <c>%AppData%\Paperbunkr\skins\</c>, extracted once to <c>%AppData%\Paperbunkr\skins-extracted\{key}\</c>
 /// so every consumer does plain file-path lookups, no <c>ZipArchive</c> API on any hot path.
 /// </summary>
-public static class SkinPaths
+public static class ThemePaths
 {
     /// <summary>
     /// Mutable so tests can redirect reads/writes to a temp folder instead of the real cache -

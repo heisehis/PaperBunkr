@@ -12,7 +12,7 @@ using Paperbunkr.Data.Entities;
 namespace Paperbunkr.App.Services;
 
 /// <summary>Result of a completed <see cref="BookFolderScanService"/> run.</summary>
-public record BookFolderScanResult(int BooksAdded, int SeriesTouched);
+public record BookFolderScanResult(int BooksAdded, int SeriesTouched, IReadOnlyList<int> AddedBookIds);
 
 /// <summary>
 /// On-demand Novel folder scan-and-import (docs/superpowers/specs/
@@ -56,42 +56,97 @@ public class BookFolderScanService
                 continue;
             }
 
-            foreach (string file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
-            {
-                if (existingPaths.Contains(file))
-                {
-                    continue;
-                }
-
-                string extension = Path.GetExtension(file);
-                // ".fb2.zip" (a common FB2 distribution convention) has a ".zip" extension per
-                // Path.GetExtension, so it's checked against the full lowercased path, not just the
-                // last extension segment, before falling through to the single-extension cases.
-                if (file.EndsWith(".fb2.zip", StringComparison.OrdinalIgnoreCase))
-                {
-                    candidateFiles.Add((file, BookFormat.Fb2));
-                }
-                else if (string.Equals(extension, ".epub", StringComparison.OrdinalIgnoreCase))
-                {
-                    candidateFiles.Add((file, BookFormat.Epub));
-                }
-                else if (string.Equals(extension, ".pdf", StringComparison.OrdinalIgnoreCase))
-                {
-                    candidateFiles.Add((file, BookFormat.Pdf));
-                }
-                else if (string.Equals(extension, ".fb2", StringComparison.OrdinalIgnoreCase))
-                {
-                    candidateFiles.Add((file, BookFormat.Fb2));
-                }
-                else if (string.Equals(extension, ".mobi", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(extension, ".azw3", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(extension, ".azw", StringComparison.OrdinalIgnoreCase))
-                {
-                    candidateFiles.Add((file, BookFormat.Mobi));
-                }
-            }
+            candidateFiles.AddRange(
+                Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
+                    .Where(f => !existingPaths.Contains(f))
+                    .Select(f => (Path: f, Format: ClassifyFormat(f)))
+                    .Where(c => c.Format is not null)
+                    .Select(c => (c.Path, c.Format!.Value)));
         }
 
+        return ImportFiles(context, candidateFiles, progress, ct);
+    }
+
+    /// <summary>
+    /// Live open-on-launch entry point (docs/superpowers/specs/2026-09-16-book-file-associations-
+    /// design.md) - imports a specific, already-known file (the shape Windows' own file-association
+    /// launch command line produces), mirroring <see cref="LibraryFolderScanner.ImportNewFilesAsync"/>'s
+    /// role for the comic library. <c>ConfigureAwait(false)</c> for the exact same reason that method
+    /// now carries it: a synchronous <c>.GetAwaiter().GetResult()</c> caller on the UI thread would
+    /// otherwise deadlock waiting for this method's own continuation, which needs that same blocked
+    /// thread to resume (docs/paperbunkr-todo.md, 2026-09-16 open-on-launch deadlock note).
+    /// </summary>
+    public async Task<BookFolderScanResult> ImportNewFilesAsync(IReadOnlyCollection<string> files, IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
+    {
+        return await Task.Run(
+            () =>
+            {
+                using var context = _contextFactory();
+
+                var existingPaths = new HashSet<string>(
+                    context.Books.Select(b => b.FilePath),
+                    StringComparer.OrdinalIgnoreCase);
+
+                var candidateFiles = files
+                    .Where(f => !existingPaths.Contains(f))
+                    .Select(f => (Path: f, Format: ClassifyFormat(f)))
+                    .Where(c => c.Format is not null)
+                    .Select(c => (c.Path, c.Format!.Value))
+                    .ToList();
+
+                return ImportFiles(context, candidateFiles, progress, ct);
+            },
+            ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Extension-based format classification, shared by <see cref="ScanAll"/> and
+    /// <see cref="ImportNewFilesAsync"/>. Returns <see langword="null"/> for anything unrecognized.
+    /// ".fb2.zip" (a common FB2 distribution convention) has a ".zip" extension per
+    /// <see cref="Path.GetExtension(string)"/>, so it's checked against the full lowercased path, not
+    /// just the last extension segment, before falling through to the single-extension cases.
+    /// </summary>
+    private static BookFormat? ClassifyFormat(string filePath)
+    {
+        if (filePath.EndsWith(".fb2.zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return BookFormat.Fb2;
+        }
+
+        string extension = Path.GetExtension(filePath);
+        if (string.Equals(extension, ".epub", StringComparison.OrdinalIgnoreCase))
+        {
+            return BookFormat.Epub;
+        }
+
+        if (string.Equals(extension, ".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            return BookFormat.Pdf;
+        }
+
+        if (string.Equals(extension, ".fb2", StringComparison.OrdinalIgnoreCase))
+        {
+            return BookFormat.Fb2;
+        }
+
+        if (string.Equals(extension, ".mobi", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".azw3", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".azw", StringComparison.OrdinalIgnoreCase))
+        {
+            return BookFormat.Mobi;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Shared per-file import body for both <see cref="ScanAll"/> (an entire watched folder's new
+    /// files) and <see cref="ImportNewFilesAsync"/> (a single open-on-launch file) - same
+    /// text-source parse, series find-or-create, and id tracking regardless of which caller found
+    /// the files.
+    /// </summary>
+    private static BookFolderScanResult ImportFiles(PaperbunkrDbContext context, List<(string Path, BookFormat Format)> candidateFiles, IProgress<(int Done, int Total)> progress, CancellationToken ct)
+    {
         int total = candidateFiles.Count;
         int done = 0;
         progress.Report((0, total));
@@ -100,7 +155,7 @@ public class BookFolderScanService
         // rationale as LibraryFolderScanner's seriesByName dictionary.
         var seriesByName = context.BookSeries.ToList().ToDictionary(s => s.Name, s => s, StringComparer.OrdinalIgnoreCase);
         var seriesTouched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        int booksAdded = 0;
+        var addedBooks = new List<Book>();
 
         foreach (var (filePath, format) in candidateFiles)
         {
@@ -135,7 +190,7 @@ public class BookFolderScanService
                 }
 
                 context.Books.Add(book);
-                booksAdded++;
+                addedBooks.Add(book);
             }
             catch
             {
@@ -146,6 +201,6 @@ public class BookFolderScanService
         }
 
         context.SaveChanges();
-        return new BookFolderScanResult(booksAdded, seriesTouched.Count);
+        return new BookFolderScanResult(addedBooks.Count, seriesTouched.Count, addedBooks.Select(b => b.Id).ToList());
     }
 }

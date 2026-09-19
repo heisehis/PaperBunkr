@@ -75,8 +75,10 @@ Seven tabs.
 - **Reading List Sources** — configure the online arc-lookup sources for
   [Reading Lists](Reading-Lists).
 - **Trackers** — connect accounts for **AniList, MyAnimeList, Shikimori, Bangumi,
-  MangaBaka**. Most need you to register your own API app and paste a Client ID (links are
-  in the UI). Credentials go to your OS credential store.
+  MangaBaka, MangaUpdates, Kitsu, MangaDex**. Most need you to register your own API app
+  and paste a Client ID (links are in the UI). Credentials go to your OS credential store.
+- **Tracking behavior** — automatic progress updates, the mark-as-read prompt, and more.
+  Step-by-step setup for every tracker is on the [Trackers](Trackers) page.
 
 ## Plugins
 

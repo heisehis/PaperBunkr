@@ -244,6 +244,62 @@ public class CoverThumbnailServiceTests : IDisposable
         Assert.False(result);
     }
 
+    // --- TrySetCustomCoverFromBytes (docs/superpowers/specs/2026-09-18-external-metadata-full-
+    // extraction-design.md §2) - same override, sourced from downloaded provider bytes instead of
+    // a local file path. ---
+
+    private static byte[] CreateTestImageBytes(int width = 32, int height = 48)
+    {
+        using var bitmap = new SdBitmap(width, height);
+        using (var g = SdGraphics.FromImage(bitmap))
+        {
+            g.Clear(SdColor.CornflowerBlue);
+        }
+
+        using var stream = new MemoryStream();
+        bitmap.Save(stream, SdImageFormat.Png);
+        return stream.ToArray();
+    }
+
+    [Fact]
+    public void TrySetCustomCoverFromBytes_WritesToTheCustomDirectory()
+    {
+        int issueId = AddIssue(filePath: null);
+
+        bool result = Service().TrySetCustomCoverFromBytes(issueId, CreateTestImageBytes());
+
+        Assert.True(result);
+        Assert.True(CustomCoverPaths.Exists(issueId));
+        using var bitmap = new Bitmap(CustomCoverPaths.GetCachePath(issueId));
+        Assert.True(bitmap.PixelSize.Width > 0 && bitmap.PixelSize.Height > 0);
+    }
+
+    [Fact]
+    public void TrySetCustomCoverFromBytes_RemovesTheGeneratedCover_SoTheDownloadedArtWins()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        int issueId = AddIssue(_cbzPath, fileSize: 4242);
+        var service = Service();
+        service.TryGenerateThumbnail(issueId, _cbzPath, fileSize: 4242);
+        Assert.True(File.Exists(CachePath(issueId)));
+
+        Assert.True(service.TrySetCustomCoverFromBytes(issueId, CreateTestImageBytes()));
+
+        Assert.True(CustomCoverPaths.Exists(issueId));
+        Assert.False(File.Exists(CachePath(issueId)));
+    }
+
+    [Fact]
+    public void TrySetCustomCoverFromBytes_ReturnsFalse_ForGarbageBytes_AndLeavesNoPartialFile()
+    {
+        int issueId = AddIssue(filePath: null);
+
+        bool result = Service().TrySetCustomCoverFromBytes(issueId, new byte[] { 1, 2, 3, 4, 5 });
+
+        Assert.False(result);
+        Assert.False(CustomCoverPaths.Exists(issueId));
+    }
+
     [Fact]
     public void ResetCover_WithLinkedFile_RegeneratesFromTheRealPage()
     {

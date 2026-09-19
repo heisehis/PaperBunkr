@@ -654,5 +654,5 @@ public sealed class PluginScreenViewModelTests : IDisposable
         public void GoToPage(int index) { }
     }
 
-    private sealed class StubThemePlugin : IThemePlugin { public string CurrentSkinKey => "default"; }
+    private sealed class StubThemePlugin : IThemePlugin { public string CurrentThemeKey => "default"; }
 }

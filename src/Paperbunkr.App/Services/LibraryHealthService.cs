@@ -10,7 +10,7 @@ using Paperbunkr.Data.Entities;
 namespace Paperbunkr.App.Services;
 
 /// <summary>Result of a completed <see cref="LibraryHealthService"/> Verify pass.</summary>
-public record LibraryHealthVerifyResult(int Checked, int MissingNow, int ConfirmedMissingCount);
+public record LibraryHealthVerifyResult(int Checked, int MissingNow, int ConfirmedMissingCount, int ContentEmptyNow);
 
 /// <summary>
 /// Preferences → Library Health's Verify pass (docs/superpowers/specs/2026-09-06-missing-files-
@@ -71,6 +71,7 @@ public class LibraryHealthService
 
         int missingNow = 0;
         int confirmedMissing = 0;
+        int contentEmptyNow = 0;
 
         foreach (var issue in issues)
         {
@@ -87,13 +88,32 @@ public class LibraryHealthService
                 {
                     confirmedMissing++;
                 }
+
+                // Empty Rows (docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-row-
+                // cleanup-design.md) is a distinct concept from "missing" - a missing file has
+                // nothing to probe, so IsContentEmpty stays false and the row surfaces in Missing
+                // Files, not Empty Rows.
+                issue.IsContentEmpty = false;
+            }
+            else
+            {
+                // Cheap probe: PageDecodeCore.TryOpenProvider already returns null for an unopenable
+                // file or one that opens with zero pages - a corrupt/empty archive. Only opens the
+                // archive header, doesn't decode any image bytes.
+                var provider = PageDecodeCore.TryOpenProvider(issue.FilePath!);
+                provider?.Dispose();
+                issue.IsContentEmpty = provider is null;
+                if (issue.IsContentEmpty)
+                {
+                    contentEmptyNow++;
+                }
             }
 
             progress.Report((++done, total));
         }
 
         context.SaveChanges();
-        return new LibraryHealthVerifyResult(total, missingNow, confirmedMissing);
+        return new LibraryHealthVerifyResult(total, missingNow, confirmedMissing, contentEmptyNow);
     }
 
     /// <summary>

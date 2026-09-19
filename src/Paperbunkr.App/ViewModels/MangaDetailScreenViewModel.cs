@@ -39,15 +39,16 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
         new MangaDetailContextMenuBuilder(this).Build(target);
 
-    public MangaDetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? goLibraryWithCollection = null, Action<int>? enqueueMetadataWriteBack = null)
+    public MangaDetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? goLibraryWithCollection = null, Action<int>? enqueueMetadataWriteBack = null, ITrackerAutoSyncService? trackerAutoSync = null)
     {
+        _trackerAutoSync = trackerAutoSync ?? NoOpTrackerAutoSyncService.Instance;
         _goBack = goBack;
         _goToReader = goToReader;
         _goToProperties = goToProperties;
         _goToBulkProperties = goToBulkProperties;
         _goDetailForSeries = goDetailForSeries ?? (_ => { });
         _enqueueMetadataWriteBack = enqueueMetadataWriteBack;
-        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, navigateToSeries: _goDetailForSeries, openInReader: goToReader, navigateToCollection: goLibraryWithCollection, goLibraryWithSearch: goLibraryWithSearch) { ShowIssuesTab = false, ShowTabStrip = false };
+        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, navigateToSeries: _goDetailForSeries, openInReader: goToReader, navigateToCollection: goLibraryWithCollection, goLibraryWithSearch: goLibraryWithSearch, trackerAutoSync: trackerAutoSync) { ShowIssuesTab = false, ShowTabStrip = false, IsMangaDetailHost = true };
         // No reweight callback - LoadSeries below is always the series-aggregated view (chapter-list
         // screen, no single-issue pill focus like the Western DetailScreenViewModel has), so every
         // chip's CanReweight is naturally false here regardless.
@@ -67,6 +68,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     private int? _seriesId;
     private int? _continueIssueId;
     private int? _coverIssueId;
+    private readonly ITrackerAutoSyncService _trackerAutoSync;
     private bool _isLoadingSeries;
     private List<ChapterRowSample> _allChapters = new();
 
@@ -117,8 +119,27 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     {
         new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true, IsEnabled: _continueIssueId is not null, Icon: Symbol.Play),
         new DetailHeroAction("Edit", EditCommand, IsEnabled: CanEdit, Icon: Symbol.Edit),
-        new DetailHeroAction("Change Cover", ChangeSeriesCoverCommand, Icon: Symbol.Image),
+        new DetailHeroAction("Change Cover", Command: null, Icon: Symbol.Image, FlyoutContext: BuildCoverPickerViewModel()),
     };
+
+    /// <summary>Same shape as <see cref="DetailScreenViewModel.BuildCoverPickerViewModel"/> - see its doc comment.</summary>
+    private CoverPickerViewModel? BuildCoverPickerViewModel() =>
+        _coverIssueId is int issueId ? new CoverPickerViewModel(issueId, _seriesId, ReloadCurrentSeries, FindMangaBakaCoverContext()) : null;
+
+    /// <summary>Same shape as <see cref="DetailScreenViewModel.FindMangaBakaCoverContext"/> - see its doc comment.</summary>
+    private (ExternalMetadataProvider Provider, string ExternalId)? FindMangaBakaCoverContext()
+    {
+        if (_seriesId is not int seriesId)
+        {
+            return null;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var link = ExternalMetadataResolver.GetExternalIds(context, seriesId)
+            .FirstOrDefault(e => e.Provider == ExternalMetadataProvider.MangaBaka);
+
+        return link is null ? null : (link.Provider, link.ExternalId);
+    }
 
     /// <summary>Header chip row (docs/superpowers/specs/2026-08-23-apply-from-provider-design.md) -
     /// same data <c>DetailTabsViewModel.ExternalLinks</c> already shows in the Details tab, promoted
@@ -609,6 +630,12 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         apply(issue);
         context.SaveChanges();
         ReloadCurrentSeries();
+
+        // "Update progress when marked as read" - mark-as-read only (design §3.3).
+        if (apply == IssueReadStateResolver.MarkAsRead)
+        {
+            _ = _trackerAutoSync.OnIssuesMarkedReadAsync(new[] { issue.SeriesId });
+        }
     }
 
     // --- Cover art override (docs/superpowers/specs/2026-08-23-cover-art-override-design.md) -

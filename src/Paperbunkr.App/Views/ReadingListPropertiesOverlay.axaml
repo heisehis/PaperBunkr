@@ -2,11 +2,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:pbc="using:Paperbunkr.App.Controls"
+             xmlns:views="using:Paperbunkr.App.Views"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="700"
              x:Class="Paperbunkr.App.Views.ReadingListPropertiesOverlay"
-             x:DataType="vm:ReadingListPropertiesScreenViewModel">
+             x:DataType="vm:ReadingListPropertiesScreenViewModel"
+             x:Name="Root">
 
     <!-- Cancel/Save/Change-Cover now use the shared Button.ghost/Button.primary primitives
          (Styles/Primitives.axaml) in place of this file's former local "headerAction" styles - see
@@ -78,7 +80,37 @@
                                     <Image Source="{Binding CoverPreview}" Stretch="UniformToFill" />
                                 </Border>
                                 <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Top">
-                                    <Button Classes="ghost" FontSize="12.5" Content="Change Cover…" Command="{Binding ChangeCoverCommand}" Margin="0,0,0,12" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
+                                        <Button Classes="ghost" FontSize="12.5" Content="Change Cover…" Command="{Binding ChangeCoverCommand}" />
+                                        <!-- Use an existing cover from one of this list's own issues (docs/superpowers/specs/
+                                             2026-09-17-reader-save-page-and-cover-picker-design.md extended to reading lists) -
+                                             Button.Flyout, never MenuFlyout/ContextMenu (see ReadingStatusPicker.axaml). -->
+                                        <Button Classes="ghost" FontSize="12.5" Content="Choose from List…" IsVisible="{Binding HasListCoverCandidates}">
+                                            <Button.Flyout>
+                                                <Flyout Placement="BottomEdgeAlignedLeft">
+                                                    <Border Width="220" Padding="8">
+                                                        <ScrollViewer MaxHeight="240">
+                                                            <ItemsControl ItemsSource="{Binding ListCoverCandidates}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:DataType="vm:CoverPickerCandidate">
+                                                                        <Button Width="64" Height="94" Margin="3" Padding="0" Background="Transparent"
+                                                                                BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}" CornerRadius="6"
+                                                                                Command="{Binding #Root.((vm:ReadingListPropertiesScreenViewModel)DataContext).SelectListCoverCommand}"
+                                                                                CommandParameter="{Binding}" ToolTip.Tip="{Binding Label}">
+                                                                            <Image views:AsyncCoverImage.SourceId="{Binding SourceKey}" Stretch="UniformToFill" />
+                                                                        </Button>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </ScrollViewer>
+                                                    </Border>
+                                                </Flyout>
+                                            </Button.Flyout>
+                                        </Button>
+                                    </StackPanel>
                                     <TextBlock Classes="fieldLabel" Text="COVER IMAGE URL" />
                                     <TextBox Text="{Binding CoverImageUrl}" Watermark="https://…" />
                                 </StackPanel>

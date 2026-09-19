@@ -1,0 +1,32 @@
+{
+  "name": "Maximum Contrast",
+  "mode": "Dark",
+  "colors": {
+    "bg": "#000000",
+    "chrome": "#0D0D0D",
+    "border": "#4D4D4D",
+    "text": "#FFFFFF",
+    "textMuted": "#C4C4C4",
+    "textFaint": "#8A8A8A",
+    "accent": "#FFD24D",
+    "accentText": "#FFD24D",
+    "accentSoft": "#29FFD24D",
+    "badge": "#FFFFFF",
+    "badgeText": "#000000",
+    "success": "#5CE39A",
+    "chartBlue": "#FFD24D",
+    "chartViolet": "#5CE39A",
+    "surface0": "#000000",
+    "surface1": "#000000",
+    "surface2": "#0D0D0D",
+    "surface3": "#1A1A1A",
+    "glow": "#66FFD24D",
+    "heroGradientStart": "#00000000",
+    "heroGradientEnd": "#FF000000"
+  },
+  "spacingUnit": 4,
+  "radius": 7,
+  "radiusSm": 5,
+  "radiusLg": 14,
+  "icons": {}
+}

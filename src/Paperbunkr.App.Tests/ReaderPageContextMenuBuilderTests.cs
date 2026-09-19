@@ -94,13 +94,25 @@ public class ReaderPageContextMenuBuilderTests
         Assert.Same(vm.SetPageRotation90Command, rotate.Children[1].Command);
     }
 
+    /// <summary>
+    /// docs/superpowers/specs/2026-09-17-reader-save-page-and-cover-picker-design.md - the "not a
+    /// thumbnail" fallback is the main displayed page (right-click anywhere else in the reader), so
+    /// it now returns the Save Page As entries instead of null.
+    /// </summary>
     [Fact]
-    public void Build_UnrecognizedTarget_ReturnsNull()
+    public void Build_UnrecognizedTarget_ReturnsSavePageAsEntries()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         var builder = new ReaderPageContextMenuBuilder(vm);
 
-        Assert.Null(builder.Build(new object()));
-        Assert.Null(builder.Build(null));
+        foreach (var entries in new[] { builder.Build(new object()), builder.Build(null) })
+        {
+            Assert.NotNull(entries);
+            Assert.Equal(2, entries!.Count);
+            Assert.Equal("Save Page as PNG…", entries[0].Header);
+            Assert.Same(vm.SavePageAsPngCommand, entries[0].Command);
+            Assert.Equal("Save Page as JPEG…", entries[1].Header);
+            Assert.Same(vm.SavePageAsJpegCommand, entries[1].Command);
+        }
     }
 }

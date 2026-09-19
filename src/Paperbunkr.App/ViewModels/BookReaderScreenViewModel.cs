@@ -251,19 +251,29 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     [ObservableProperty]
     private bool _autoHideChromeToggle = true;
 
+    // NotifyPropertyChangedFor(IsAnyDrawerOpen) on all 5: IsAnyDrawerOpen (below) is a computed
+    // getter, not its own [ObservableProperty] - without this, nothing bound to IsAnyDrawerOpen
+    // (ReaderWebView's IsVisible, docs/superpowers/specs/2026-09-16-webview-drawer-airspace-fix-
+    // design.md) ever gets a change notification when one of these 5 flip, and would just freeze at
+    // whatever value it read once at binding time.
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnyDrawerOpen))]
     private bool _isTocOpen;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnyDrawerOpen))]
     private bool _isFontSheetOpen;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnyDrawerOpen))]
     private bool _isBookmarksOpen;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnyDrawerOpen))]
     private bool _isHighlightsOpen;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnyDrawerOpen))]
     private bool _isSearchOpen;
 
     // --- Highlight color/note popup (docs/superpowers/specs/2026-09-01-books-reader-ergonomics-and-

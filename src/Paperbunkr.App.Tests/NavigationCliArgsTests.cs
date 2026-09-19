@@ -176,3 +176,95 @@ public class NavigationCliArgsFilePathTests : IDisposable
         Assert.Null(path);
     }
 }
+
+/// <summary>
+/// Exercises <see cref="NavigationCliArgs.TryParseBookFilePathArg"/> (docs/superpowers/specs/
+/// 2026-09-16-book-file-associations-design.md) - the Books-side counterpart to
+/// <see cref="NavigationCliArgsFilePathTests"/>, against the independent Books extension set.
+/// </summary>
+public class NavigationCliArgsBookFilePathTests : IDisposable
+{
+    private readonly string _root;
+
+    public NavigationCliArgsBookFilePathTests()
+    {
+        _root = Path.Combine(Path.GetTempPath(), $"paperbunkr_clibookfilepath_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_root);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_root, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    [Theory]
+    [InlineData("book.epub", Paperbunkr.Data.Entities.BookFormat.Epub)]
+    [InlineData("book.fb2", Paperbunkr.Data.Entities.BookFormat.Fb2)]
+    [InlineData("book.mobi", Paperbunkr.Data.Entities.BookFormat.Mobi)]
+    [InlineData("book.azw", Paperbunkr.Data.Entities.BookFormat.Mobi)]
+    [InlineData("book.azw3", Paperbunkr.Data.Entities.BookFormat.Mobi)]
+    public void TryParseBookFilePathArg_ExistingSupportedFile_SucceedsWithFormat(string fileName, Paperbunkr.Data.Entities.BookFormat expectedFormat)
+    {
+        string file = Path.Combine(_root, fileName);
+        File.WriteAllText(file, "fixture");
+
+        bool result = NavigationCliArgs.TryParseBookFilePathArg(new[] { file }, out var path, out var format);
+
+        Assert.True(result);
+        Assert.Equal(file, path);
+        Assert.Equal(expectedFormat, format);
+    }
+
+    // ".zip"/".fb2.zip" deliberately stay unrecognized here - Windows has no way to key an
+    // association off a compound extension, so a bare ".zip" argument is indistinguishable from an
+    // ordinary comic archive at this layer and stays routed through TryParseFilePathArg instead
+    // (see the method's own doc comment).
+    [Fact]
+    public void TryParseBookFilePathArg_ZipExtension_Fails()
+    {
+        string file = Path.Combine(_root, "book.fb2.zip");
+        File.WriteAllText(file, "fixture");
+
+        bool result = NavigationCliArgs.TryParseBookFilePathArg(new[] { file }, out var path, out _);
+
+        Assert.False(result);
+        Assert.Null(path);
+    }
+
+    // ".pdf" deliberately stays comic-only (FileAssociationService.BookFormats' own doc comment).
+    [Fact]
+    public void TryParseBookFilePathArg_PdfExtension_Fails()
+    {
+        string file = Path.Combine(_root, "book.pdf");
+        File.WriteAllText(file, "fixture");
+
+        bool result = NavigationCliArgs.TryParseBookFilePathArg(new[] { file }, out var path, out _);
+
+        Assert.False(result);
+        Assert.Null(path);
+    }
+
+    [Fact]
+    public void TryParseBookFilePathArg_NonexistentPath_Fails()
+    {
+        bool result = NavigationCliArgs.TryParseBookFilePathArg(new[] { Path.Combine(_root, "missing.epub") }, out var path, out _);
+
+        Assert.False(result);
+        Assert.Null(path);
+    }
+
+    [Fact]
+    public void TryParseBookFilePathArg_OpenFlagWithKindId_Fails()
+    {
+        bool result = NavigationCliArgs.TryParseBookFilePathArg(new[] { "--open", "book:42" }, out var path, out _);
+
+        Assert.False(result);
+        Assert.Null(path);
+    }
+}

@@ -17,9 +17,38 @@ namespace Paperbunkr.App.Views;
 /// </summary>
 public partial class ReaderListDrawer : UserControl
 {
+    private readonly OverlayWindowController _overlayController;
+
     public ReaderListDrawer()
     {
         InitializeComponent();
+
+        // OverlayRoot (the scrim+panel Grid declared in XAML) is only nominally this control's own
+        // Content - detach it immediately so it never renders inline, then let the controller
+        // re-parent it into/out of a real owned Window as IsOpen changes (see OverlayHostWindow's
+        // own doc comment for why a real Window instead of a Popup).
+        _overlayController = new OverlayWindowController(OverlayRoot, () => OverlayReference);
+        Content = null;
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == IsOpenProperty)
+        {
+            _overlayController.SetOpen(change.GetNewValue<bool>());
+        }
+    }
+
+    /// <summary>Belt-and-braces: if this control is ever torn out of the visual tree (screen
+    /// navigated away from, reader closed) while its drawer is open, close the floating overlay
+    /// window too - it's a real separate OS window now, not anchored inside BookReaderScreen's own
+    /// visual tree, so it would otherwise keep floating on top of whatever screen comes next.</summary>
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _overlayController.SetOpen(false);
     }
 
     /// <summary>The host screen's own real, content-bearing root Grid (e.g. <c>{Binding #RootGrid}</c>) - used only to size the scrim/panel correctly (see ReaderListDrawer.axaml's own comment on why this control's own Bounds isn't a reliable source).</summary>

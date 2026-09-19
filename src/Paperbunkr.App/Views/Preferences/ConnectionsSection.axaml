@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:pbc="using:Paperbunkr.App.Controls"
+             xmlns:pref="using:Paperbunkr.App.Views.Preferences"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:fi="using:FluentIcons.Avalonia"
@@ -62,6 +63,55 @@
                             <TextBlock Text="Trackers" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                         </Border>
                         <ItemsControl ItemsSource="{Binding TrackerProviderRows}" ItemTemplate="{StaticResource ProviderRowTemplate}" Margin="6" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Tracking behavior (docs/superpowers/specs/2026-09-18-tracker-behavior-settings-design.md)
+                     - global toggles modeled on Komikku's Settings -> Tracking. Each is read fresh at the
+                     moment it applies, so a change takes effect without a restart. -->
+                <Border Classes="groupBox" Tag="connections.trackingBehavior">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Tracking behavior" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="6">
+                            <pref:SettingsRow Icon="Link" Title="Open the tracker link panel automatically"
+                                               Description="The first time you open a manga that has a metadata source link and a connected tracker account, jump to its tracker link panel. Once per series.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <ToggleSwitch IsChecked="{Binding TrackerAutoOpenLinkPanel}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                  AutomationProperties.AutomationId="TrackerAutoOpenLinkPanel" AutomationProperties.Name="Open the tracker link panel automatically" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="Book" Title="Update progress after reading"
+                                               Description="When you finish an issue in the reader, push your progress to linked trackers. Only ever moves a tracker forward, and never touches score or dates.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <ToggleSwitch IsChecked="{Binding TrackerUpdateAfterReading}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                  AutomationProperties.AutomationId="TrackerUpdateAfterReading" AutomationProperties.Name="Update progress after reading" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="Checkmark" Title="Update progress when marked as read"
+                                               Description="When you mark issues as read yourself: Always updates trackers, Ask shows a prompt first, Never leaves them alone.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <pbc:SuggestBox IsStrict="True" Text="{Binding TrackerUpdateOnMarkReadText}"
+                                                    Suggestions="{Binding TrackerUpdateModeNames}" MinWidth="150"
+                                                    AutomationProperties.AutomationId="TrackerUpdateOnMarkRead" AutomationProperties.Name="Update progress when marked as read" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="ArrowSync" Title="Auto sync progress from trackers"
+                                               Description="When you open a linked series, pull any further-along progress from its trackers and mark those issues read here. Off by default because it changes your local read state.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <ToggleSwitch IsChecked="{Binding TrackerAutoSyncFromTrackers}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                  AutomationProperties.AutomationId="TrackerAutoSyncFromTrackers" AutomationProperties.Name="Auto sync progress from trackers" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="Search" Title="Select entries using source metadata"
+                                               Description="When linking a tracker, show the series' already-linked metadata source at the top of the results. You still confirm before anything is written to your account.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <ToggleSwitch IsChecked="{Binding TrackerUseSourceMetadata}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                  AutomationProperties.AutomationId="TrackerUseSourceMetadata" AutomationProperties.Name="Select entries using source metadata" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -134,6 +184,24 @@
 
                     <!-- Credential shape: Metron, MangaUpdates, Kitsu -->
                     <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.Credential}}">
+                        <TextBox Text="{Binding Username}" Watermark="Username" />
+                        <TextBox Text="{Binding Password}" Watermark="Password" PasswordChar="•" />
+                        <Button Classes="headerAction primary" Content="{Binding PrimaryActionLabel}"
+                                Command="{Binding PrimaryCommand}" HorizontalAlignment="Left" />
+                        <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" BorderBrush="{DynamicResource PbDangerSoftBrush}"
+                                HorizontalAlignment="Left" IsVisible="{Binding IsConnected}" Command="{Binding DisconnectCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="PlugDisconnected" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                <TextBlock Text="Disconnect" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Credential + own app registration shape: MangaDex only - Client ID/Secret
+                         (its own Personal Client, no shared public client) plus username/password. -->
+                    <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.CredentialWithClient}}">
+                        <TextBox Text="{Binding ClientId}" Watermark="Client ID" />
+                        <TextBox Text="{Binding ClientSecret}" Watermark="Client Secret" PasswordChar="•" />
                         <TextBox Text="{Binding Username}" Watermark="Username" />
                         <TextBox Text="{Binding Password}" Watermark="Password" PasswordChar="•" />
                         <Button Classes="headerAction primary" Content="{Binding PrimaryActionLabel}"

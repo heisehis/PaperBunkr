@@ -88,6 +88,35 @@ public class ReadingListTests : IDisposable
         Assert.Null(ReadingListMatcher.FindExisting(_context, "Nonexistent Series", "1"));
     }
 
+    /// <summary>docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-row-cleanup-design.md - a CBL/CSV entry naming a punctuation variant of an already-owned series still resolves to the real issue, not a new placeholder.</summary>
+    [Fact]
+    public void FindExisting_PunctuationVariantSeriesName_StillMatches()
+    {
+        var seriesB = new Series { Name = "Cataclysm: The Ultimates" };
+        _context.Series.Add(seriesB);
+        var issue = new Issue { Series = seriesB, Number = "1" };
+        _context.Issues.Add(issue);
+        _context.SaveChanges();
+
+        var match = ReadingListMatcher.FindExisting(_context, "Cataclysm - The Ultimates", "1");
+        Assert.NotNull(match);
+        Assert.Equal(issue.Id, match!.Id);
+    }
+
+    /// <summary>Series exists but the requested issue number doesn't yet - exercises the second exact-match site in <see cref="ReadingListMatcher.ResolveOrCreatePlaceholder(PaperbunkrDbContext,string,string,string?,int?,string?)"/>, not just <see cref="ReadingListMatcher.FindExisting"/>.</summary>
+    [Fact]
+    public void ResolveOrCreatePlaceholder_PunctuationVariantSeriesName_AttachesToExistingSeries_DoesNotDuplicate()
+    {
+        var seriesB = new Series { Name = "Cataclysm: The Ultimates" };
+        _context.Series.Add(seriesB);
+        _context.SaveChanges();
+
+        var issue = ReadingListMatcher.ResolveOrCreatePlaceholder(_context, "Cataclysm - The Ultimates", "5");
+
+        Assert.Equal(seriesB.Id, issue.SeriesId);
+        Assert.Equal(2, _context.Series.Count()); // Kilo Station + Cataclysm - no duplicate spawned
+    }
+
     [Fact]
     public void ResolveOrCreatePlaceholder_ReusesExistingIssue()
     {

@@ -58,8 +58,8 @@ From a series **detail page**:
 - Once linked, you can **apply** fields from the provider — title, summary, genres,
   status, cover — as a **proposal** you accept or reject per field ("via AniList" /
   "via MangaBaka" is shown as the source).
-- **Trackers → + Link for Tracking** links for progress sync; **Sync to Trackers** pushes
-  your read state out. Some providers need credentials (entered in your OS credential
+- **Trackers → + Link for Tracking** links for progress sync; **Sync with Trackers** pushes
+  your read state out. See [Trackers](Trackers) for connecting each service. Some providers need credentials (entered in your OS credential
   store, not stored by PaperBunkr in plain text).
 
 Manga series with a provider match get the richer **manga detail** view — chapter list

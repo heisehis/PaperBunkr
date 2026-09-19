@@ -26,6 +26,9 @@ public enum ActivityLinkKind
     /// <summary>Open Smart Lists and the Grouped Review overlay for a specific plugin command (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-scan-alerts-design.md §4) - payload = <c>"pluginKey|commandKey"</c>.</summary>
     PluginGroupedReview,
 
+    /// <summary>Open the Story Events screen (docs/superpowers/specs/2026-09-17-storyevent-continuity-autopopulate-design.md) - the sidebar shows both Events and Continuities suggestions together, so no payload/mode is needed.</summary>
+    StoryEventsScreen,
+
     /// <summary>Opens payload (a URL) in the OS default browser, not an in-app navigation like every
     /// other entry here - e.g. the update-available alert's "View release" link to the GitHub
     /// releases page.</summary>

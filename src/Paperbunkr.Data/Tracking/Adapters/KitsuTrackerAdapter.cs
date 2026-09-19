@@ -30,7 +30,7 @@ namespace Paperbunkr.Data.Tracking.Adapters;
 /// understanding that these aren't Paperbunkr's own credentials and Kitsu could revoke or rate-limit
 /// them without notice, unlike every other tracker adapter in this file.</para>
 /// </summary>
-public sealed class KitsuTrackerAdapter : ITrackerSearchProvider, ITrackerAdapter
+public sealed class KitsuTrackerAdapter : ITrackerSearchProvider, ITrackerAdapter, ITrackerDetailedPush
 {
     private const string GraphQlEndpoint = "https://kitsu.app/api/graphql";
     private const string LoginEndpoint = "https://kitsu.app/api/oauth/token";
@@ -136,22 +136,59 @@ public sealed class KitsuTrackerAdapter : ITrackerSearchProvider, ITrackerAdapte
         return nodes.Select(KitsuNormalizer.ToSearchResult).ToList();
     }
 
-    public async Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
+    public async Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken) =>
+        (await PushEntryDetailedAsync(context, link, payload, cancellationToken).ConfigureAwait(false)).Success;
+
+    /// <summary>Same as <see cref="PushEntryAsync"/> but returns Kitsu's real error body instead of
+    /// collapsing every failure into a bare <see langword="false"/> - extends the detailed-error
+    /// pattern already shipped this session for MangaBaka/MangaDex to this adapter
+    /// (docs/superpowers/specs/2026-09-18-per-tracker-score-and-finish-date-design.md).
+    /// <see cref="Score"/>/<see cref="TrackerPushPayload.FinishDate"/> are only accepted by Kitsu's
+    /// **update** mutation, not create (confirmed against real Mihon/kitsu-server source) - a
+    /// series with no existing library entry yet always creates first (bare status/progress), then
+    /// immediately updates with the full payload including score/date.</summary>
+    public async Task<(bool Success, string? ErrorDetail)> PushEntryDetailedAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
     {
         string? token = CredentialStore.Get(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken);
         if (string.IsNullOrEmpty(token))
         {
-            return false;
+            return (false, "Not connected - no access token saved.");
         }
 
         string status = KitsuStatusMapper.ToStatus(payload.Status);
         int progress = payload.ChapterProgress ?? 0;
+        bool touchesScoreOrDate = payload.UpdateScore || payload.UpdateFinishDate;
 
         var existingEntry = await FindExistingLibraryEntryAsync(token, link.ExternalId, cancellationToken).ConfigureAwait(false);
 
-        return existingEntry?.Id is not string libraryEntryId
-            ? await CreateLibraryEntryAsync(token, link.ExternalId, status, progress, cancellationToken).ConfigureAwait(false)
-            : await UpdateLibraryEntryAsync(token, libraryEntryId, status, progress, cancellationToken).ConfigureAwait(false);
+        string? libraryEntryId = existingEntry?.Id;
+        if (libraryEntryId is null)
+        {
+            var (created, createError) = await CreateLibraryEntryAsync(token, link.ExternalId, status, progress, cancellationToken).ConfigureAwait(false);
+            if (!created)
+            {
+                return (false, createError);
+            }
+
+            // Kitsu's create mutation doesn't accept rating/finishedAt at all - only chase the
+            // refetch-then-update round trip when this push actually means to touch one of those
+            // fields. An ordinary status/progress-only sync (both flags default false) is done here.
+            if (!touchesScoreOrDate)
+            {
+                return (true, null);
+            }
+
+            var refetched = await FindExistingLibraryEntryAsync(token, link.ExternalId, cancellationToken).ConfigureAwait(false);
+            libraryEntryId = refetched?.Id;
+            if (libraryEntryId is null)
+            {
+                return (true, null); // created successfully but score/date can't be applied without its id - not a failure, just incomplete this round
+            }
+        }
+
+        int? rating = payload.Score is decimal localScore and > 0 ? Math.Clamp((int)Math.Round((double)localScore * 4), 2, 20) : null;
+        string? finishedAt = payload.FinishDate?.ToString("yyyy-MM-dd");
+        return await UpdateLibraryEntryAsync(token, libraryEntryId, status, progress, rating, payload.UpdateScore, finishedAt, payload.UpdateFinishDate, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
@@ -163,20 +200,27 @@ public sealed class KitsuTrackerAdapter : ITrackerSearchProvider, ITrackerAdapte
         }
 
         var entry = await FindExistingLibraryEntryAsync(token, link.ExternalId, cancellationToken).ConfigureAwait(false);
-        return entry is null ? null : new TrackerRemoteEntry(KitsuStatusMapper.FromStatus(entry.Status), (int?)entry.Progress);
+        if (entry is null)
+        {
+            return null;
+        }
+
+        decimal? score = entry.Rating is long rating and > 0 ? rating / 4m : null;
+        DateOnly? finishDate = DateOnly.TryParse(entry.FinishedAt, out var parsedDate) ? parsedDate : null;
+        return new TrackerRemoteEntry(KitsuStatusMapper.FromStatus(entry.Status), (int?)entry.Progress, score, finishDate);
     }
 
-    /// <summary>Looks up this series' existing Kitsu library entry, if any - <see cref="PushEntryAsync"/>
+    /// <summary>Looks up this series' existing Kitsu library entry, if any - <see cref="PushEntryDetailedAsync"/>
     /// uses just its id (to decide create vs. update), <see cref="GetEntryAsync"/> uses its status/
-    /// progress too. One shared query serves both, same "one lookup, not two round trips" precedent
-    /// as <see cref="ShikimoriTrackerAdapter.FindExistingRateAsync"/>. Returns null (treat as "create"/
-    /// "nothing to compare") on any failure, not just a genuine "no entry yet".</summary>
+    /// progress/rating/date too. One shared query serves both, same "one lookup, not two round trips"
+    /// precedent as <see cref="ShikimoriTrackerAdapter.FindExistingRateAsync"/>. Returns null (treat
+    /// as "create"/"nothing to compare") on any failure, not just a genuine "no entry yet".</summary>
     private async Task<KitsuLibraryEntryRefDto?> FindExistingLibraryEntryAsync(string token, string mangaId, CancellationToken cancellationToken)
     {
         const string query = """
             query Query($id: ID!) {
               findMangaById(id: $id) {
-                myLibraryEntry { id status progress }
+                myLibraryEntry { id status progress rating finishedAt }
               }
             }
             """;
@@ -190,7 +234,7 @@ public sealed class KitsuTrackerAdapter : ITrackerSearchProvider, ITrackerAdapte
         return envelope.Data?.FindMangaById?.MyLibraryEntry;
     }
 
-    private async Task<bool> CreateLibraryEntryAsync(string token, string mangaId, string status, int progress, CancellationToken cancellationToken)
+    private async Task<(bool Success, string? ErrorDetail)> CreateLibraryEntryAsync(string token, string mangaId, string status, int progress, CancellationToken cancellationToken)
     {
         const string mutation = """
             mutation AddManga($media_id: ID!, $status: LibraryEntryStatusEnum!, $progress: Int!) {
@@ -206,15 +250,22 @@ public sealed class KitsuTrackerAdapter : ITrackerSearchProvider, ITrackerAdapte
         var envelope = await SendGraphQlAsync<KitsuMutationData>(
             mutation, new { media_id = mangaId, status, progress }, token, cancellationToken).ConfigureAwait(false);
 
-        return MutationSucceeded(envelope, envelope?.Data?.LibraryEntry?.Create);
+        return DetailedMutationResult(envelope, envelope?.Data?.LibraryEntry?.Create);
     }
 
-    private async Task<bool> UpdateLibraryEntryAsync(string token, string libraryEntryId, string status, int progress, CancellationToken cancellationToken)
+    /// <summary><paramref name="includeRating"/>/<paramref name="includeFinishedAt"/> control whether
+    /// the <c>rating</c>/<c>finishedAt</c> keys are present in the GraphQL variables at all - a
+    /// variable that's genuinely absent (not sent as JSON <c>null</c>) leaves the corresponding
+    /// <c>input</c> object field out of the completed mutation input per the GraphQL spec's variable-
+    /// coercion rules, so Kitsu's own resolver sees "field not provided" and leaves that field
+    /// untouched, same intent as the Dictionary-based omission already used in
+    /// <see cref="AniListTrackerAdapter"/>/<see cref="MangaBakaTrackerAdapter"/> for this same bug.</summary>
+    private async Task<(bool Success, string? ErrorDetail)> UpdateLibraryEntryAsync(string token, string libraryEntryId, string status, int progress, int? rating, bool includeRating, string? finishedAt, bool includeFinishedAt, CancellationToken cancellationToken)
     {
         const string mutation = """
-            mutation UpdateManga($library_id: ID!, $status: LibraryEntryStatusEnum!, $progress: Int!) {
+            mutation UpdateManga($library_id: ID!, $status: LibraryEntryStatusEnum!, $progress: Int!, $rating: Int, $finishedAt: ISO8601DateTime) {
               libraryEntry {
-                update(input: { id: $library_id, status: $status, progress: $progress, private: false }) {
+                update(input: { id: $library_id, status: $status, progress: $progress, rating: $rating, finishedAt: $finishedAt, private: false }) {
                   errors { message }
                   libraryEntry { id }
                 }
@@ -222,10 +273,35 @@ public sealed class KitsuTrackerAdapter : ITrackerSearchProvider, ITrackerAdapte
             }
             """;
 
-        var envelope = await SendGraphQlAsync<KitsuMutationData>(
-            mutation, new { library_id = libraryEntryId, status, progress }, token, cancellationToken).ConfigureAwait(false);
+        var variables = new Dictionary<string, object?> { ["library_id"] = libraryEntryId, ["status"] = status, ["progress"] = progress };
+        if (includeRating)
+        {
+            variables["rating"] = rating;
+        }
 
-        return MutationSucceeded(envelope, envelope?.Data?.LibraryEntry?.Update);
+        if (includeFinishedAt)
+        {
+            variables["finishedAt"] = finishedAt;
+        }
+
+        var envelope = await SendGraphQlAsync<KitsuMutationData>(mutation, variables, token, cancellationToken).ConfigureAwait(false);
+
+        return DetailedMutationResult(envelope, envelope?.Data?.LibraryEntry?.Update);
+    }
+
+    private static (bool Success, string? ErrorDetail) DetailedMutationResult(KitsuGraphQlEnvelope<KitsuMutationData>? envelope, KitsuLibraryEntryMutationResult? result)
+    {
+        bool ok = MutationSucceeded(envelope, result);
+        if (ok)
+        {
+            return (true, null);
+        }
+
+        string? detail = envelope?.Error?.Message
+            ?? envelope?.Errors?.FirstOrDefault()?.Message
+            ?? result?.Errors?.FirstOrDefault()?.Message
+            ?? "Unknown error";
+        return (false, detail);
     }
 
     private static bool MutationSucceeded(KitsuGraphQlEnvelope<KitsuMutationData>? envelope, KitsuLibraryEntryMutationResult? result)
@@ -409,6 +485,12 @@ internal sealed class KitsuLibraryEntryRefDto
 
     [JsonPropertyName("progress")]
     public long? Progress { get; set; }
+
+    [JsonPropertyName("rating")]
+    public long? Rating { get; set; }
+
+    [JsonPropertyName("finishedAt")]
+    public string? FinishedAt { get; set; }
 }
 
 internal sealed class KitsuMutationData

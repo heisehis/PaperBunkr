@@ -15,5 +15,6 @@ public enum TrackingService
     ComicVine,
     Shikimori,
     Bangumi,
-    MangaBaka
+    MangaBaka,
+    MangaDex
 }

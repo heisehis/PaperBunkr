@@ -61,6 +61,46 @@ public static class IssueTagExtensions
         }
     }
 
+    /// <summary>
+    /// Same diff-not-replace shape as <see cref="MergeFrom"/>, but each newly-added value takes its
+    /// own <c>Category</c> from <paramref name="incoming"/> instead of one blanket default -
+    /// external-metadata tag import needs a provider's own grouping (docs/superpowers/specs/
+    /// 2026-09-18-external-metadata-full-extraction-design.md §4), e.g. MangaDex's Theme/Format/
+    /// Content groups or MangaBaka's tag-tree category. A value that survives from a prior import
+    /// keeps whatever Category/Weight it already has - only newly-added values get the incoming
+    /// category, matching <see cref="MergeFrom"/>'s own "never touch survivors" rule.
+    /// </summary>
+    public static void MergeFromCategorized(this Issue issue, IssueTagField field, IEnumerable<(string Value, string Category)> incoming)
+    {
+        var incomingList = incoming.ToList();
+        var incomingValues = new HashSet<string>(incomingList.Select(t => t.Value), StringComparer.OrdinalIgnoreCase);
+        var existing = issue.Tags.Where(t => t.Field == field).ToList();
+
+        foreach (var tag in existing)
+        {
+            if (!incomingValues.Contains(tag.Value))
+            {
+                issue.Tags.Remove(tag);
+            }
+        }
+
+        var existingValues = new HashSet<string>(existing.Select(t => t.Value), StringComparer.OrdinalIgnoreCase);
+        foreach (var (value, category) in incomingList)
+        {
+            if (!existingValues.Contains(value))
+            {
+                issue.Tags.Add(new IssueTag
+                {
+                    IssueId = issue.Id,
+                    Field = field,
+                    Value = value,
+                    Category = category,
+                    Weight = IssueTagWeight.Unset,
+                });
+            }
+        }
+    }
+
     private static string? Joined(Issue issue, IssueTagField field)
     {
         var values = issue.Tags.Where(t => t.Field == field).Select(t => t.Value).ToList();

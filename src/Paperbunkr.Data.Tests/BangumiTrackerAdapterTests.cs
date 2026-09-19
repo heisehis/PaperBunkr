@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Credentials;
 using Paperbunkr.Data.Entities;
@@ -87,6 +88,46 @@ public class BangumiTrackerAdapterTests : IDisposable
 
         Assert.True(result);
         Assert.Equal(1, callCount);
+    }
+
+    [Fact]
+    public async Task PushEntryAsync_UpdateScoreFalse_OmitsRateFromBody()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        BangumiTrackerAdapter.CompleteConnect(context, "pat-123");
+
+        string? capturedBody = null;
+        var adapter = new BangumiTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            capturedBody = req.Content!.ReadAsStringAsync().Result;
+            return JsonResponse(HttpStatusCode.OK, "{}");
+        })));
+
+        var payload = new TrackerPushPayload(ReadingStatus.Reading, 5, Score: 4.5m);
+        await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "12" }, payload, CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(capturedBody!);
+        Assert.False(doc.RootElement.TryGetProperty("rate", out _));
+    }
+
+    [Fact]
+    public async Task PushEntryAsync_UpdateScoreTrue_SendsConvertedRate()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        BangumiTrackerAdapter.CompleteConnect(context, "pat-123");
+
+        string? capturedBody = null;
+        var adapter = new BangumiTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            capturedBody = req.Content!.ReadAsStringAsync().Result;
+            return JsonResponse(HttpStatusCode.OK, "{}");
+        })));
+
+        var payload = new TrackerPushPayload(ReadingStatus.Reading, 5, Score: 4.5m, UpdateScore: true);
+        await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "12" }, payload, CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(capturedBody!);
+        Assert.Equal(9, doc.RootElement.GetProperty("rate").GetInt32()); // 4.5 * 2
     }
 
     [Fact]

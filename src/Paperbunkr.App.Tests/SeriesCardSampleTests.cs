@@ -38,6 +38,22 @@ public class SeriesCardSampleTests
         Assert.True(width < SeriesCardSample.PanoramaHeight);
     }
 
+    /// <summary>Regression: PanoramaMinWidth used to be 110, wider than a standard 2:3 cover's own
+    /// natural width (~97), so every ordinary portrait card was inflated and its cover letterboxed
+    /// with empty bands. Ordinary portrait covers (2:3 comic, ~0.70 manga tankobon) must keep their
+    /// exact natural width, unclamped.</summary>
+    [Theory]
+    [InlineData(2.0 / 3.0)]
+    [InlineData(0.65)]
+    [InlineData(0.70)]
+    public void ComputePanoramaWidth_OrdinaryPortraitCover_IsNotClampedUp(double aspectRatio)
+    {
+        double width = SeriesCardSample.ComputePanoramaWidth(aspectRatio);
+
+        Assert.Equal(aspectRatio * SeriesCardSample.PanoramaHeight, width, precision: 6);
+        Assert.True(width > SeriesCardSample.PanoramaMinWidth);
+    }
+
     [Fact]
     public void ComputePanoramaWidth_ExtremeWideCover_ClampsToMaxWidth()
     {

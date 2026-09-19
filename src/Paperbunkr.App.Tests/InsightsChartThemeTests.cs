@@ -10,7 +10,7 @@ namespace Paperbunkr.App.Tests;
 /// <summary>
 /// Exercises <see cref="InsightsChartTheme"/>'s categorical palette (docs/superpowers/specs/
 /// 2026-09-08-stats-v2-mangabaka-design.md §8). Joins <see cref="AvaloniaTestCollection"/> since
-/// color resolution reads <c>Application.Current.Resources</c>, same seam <see cref="SkinServiceTests"/>
+/// color resolution reads <c>Application.Current.Resources</c>, same seam <see cref="ThemeServiceTests"/>
 /// already uses.
 /// </summary>
 [Collection(nameof(AvaloniaTestCollection))]
@@ -26,7 +26,7 @@ public class InsightsChartThemeTests
     }
 
     [Fact]
-    public void CategoricalPalette_ReflectsTheAppliedSkinsChartColors()
+    public void CategoricalPalette_ReflectsTheAppliedThemesChartColors()
     {
         string dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_charttheme_test_{Guid.NewGuid():N}.db");
         var dbOptions = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={dbPath}").Options;
@@ -37,8 +37,8 @@ public class InsightsChartThemeTests
 
         try
         {
-            var service = new SkinService(() => new PaperbunkrDbContext(dbOptions));
-            service.ApplySkin(SkinService.DefaultSkinKey);
+            var service = new ThemeService(() => new PaperbunkrDbContext(dbOptions));
+            service.ApplyTheme(ThemeService.DefaultThemeKey);
 
             Assert.Equal(ScottPlot.Color.FromHex("#5B8DBE"), InsightsChartTheme.Blue);
             Assert.Equal(ScottPlot.Color.FromHex("#9B7EBD"), InsightsChartTheme.Violet);

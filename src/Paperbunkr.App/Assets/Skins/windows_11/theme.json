@@ -1,5 +1,7 @@
 {
   "name": "Windows 11",
+  "mode": "Light",
+  "windowBackdrop": "Mica",
   "colors": {
     "bg": "#F3F3F3",
     "chrome": "#FFFFFF",

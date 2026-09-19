@@ -3,17 +3,21 @@ using Avalonia.Media;
 namespace Paperbunkr.App.Models;
 
 /// <summary>
-/// One row in the Preferences Appearance tab's skin grid — key, display name, whether it's the
-/// currently active skin, and a handful of the skin's real theme.json colors (docs/superpowers/
+/// One row in the Preferences Appearance tab's theme grid — key, display name, whether it's the
+/// currently active theme, and a handful of the theme's real theme.json colors (docs/superpowers/
 /// specs/2026-09-07-appearance-redesign-design.md) driving its mini UI-mockup preview card.
+/// Renamed from <c>SkinSummary</c> by docs/superpowers/specs/2026-09-16-theme-system-design.md.
 /// </summary>
-public class SkinSummary
+public class ThemeSummary
 {
     public string Key { get; init; } = string.Empty;
 
     public string Name { get; init; } = string.Empty;
 
     public bool IsActive { get; init; }
+
+    /// <summary>"Light" or "Dark" - <see cref="Models.ThemeDefinition.Mode"/> passed straight through, so the Appearance screen can gate the true-black toggle's visibility without a second service call.</summary>
+    public string Mode { get; init; } = "Dark";
 
     /// <summary>Preview card background — the skin's Bg color.</summary>
     public required IBrush BackgroundBrush { get; init; }

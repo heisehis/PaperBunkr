@@ -11,41 +11,47 @@
              x:Name="Root">
 
     <!-- Font & Theme sheet, redesigned into grouped mini-cards rather than 8 flat stacked sections
-         (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md). Right-side drawer -
-         the approved design's original "controls stay a bottom sheet" call didn't hold up once seen
-         on-screen (real user feedback after the first on-screen pass); deliberately opposite side from
-         ReaderListDrawer's left (TOC/Bookmarks/Highlights/Search/Captures) so settings reads as a
-         distinct kind of panel from the list drawers, not just another one of them. -->
-    <UserControl.Styles>
-        <Style Selector="Border.miniCard">
-            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-            <Setter Property="Padding" Value="16" />
-        </Style>
-        <Style Selector="TextBlock.cardTitle">
-            <Setter Property="FontSize" Value="11.5" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-            <Setter Property="Margin" Value="0,0,0,12" />
-        </Style>
-        <Style Selector="TextBlock.fieldLabel">
-            <Setter Property="FontSize" Value="10.5" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="LetterSpacing" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-        </Style>
-    </UserControl.Styles>
+         (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md). The approved
+         design's original "controls stay a bottom sheet" call didn't hold up once seen on-screen
+         (real user feedback after the first on-screen pass), so it became a drawer - originally on
+         the right, deliberately opposite ReaderListDrawer's left (TOC/Bookmarks/Highlights/Search),
+         but commit fbaa4de (2026-09-05) later flipped it to the left too, "matching every other
+         reader drawer's now-consistent side" - this comment previously went stale on that point,
+         fixed 2026-09-16.
 
-    <Popup IsOpen="{Binding #Root.IsOpen}" PlacementTarget="{Binding #Root}"
-           Placement="AnchorAndGravity" PlacementAnchor="TopLeft" PlacementGravity="BottomRight"
-           ShouldUseOverlayLayer="False" IsLightDismissEnabled="False">
-        <!-- Sized from OverlayReference (the host screen's own real root Grid), not this control's own
-             Bounds - same fix and same reason as ReaderListDrawer.axaml's identical comment: #Root's
-             only content is this Popup, which doesn't participate in normal layout sizing, so
-             #Root.Bounds wasn't a reliable window-size source (real bug found on-screen: the sheet
-             rendered oversized whenever the window wasn't maximized). -->
-        <Grid Width="{Binding #Root.OverlayReference.Bounds.Width}" Height="{Binding #Root.OverlayReference.Bounds.Height}">
-            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
+         Hosted in a real, separately-owned Window (OverlayWindowController, wired from
+         ReaderSettingsSheet.axaml.cs) rather than a Popup - Popup + ShouldUseOverlayLayer="False"
+         alone does NOT reliably keep this sheet above the reading pane's native WebView in this
+         app: Program.cs's Win32PlatformOptions.OverlayPopups = true overrides it app-wide (see the
+         detailed airspace-problem note above BookReaderScreen.axaml's own NativeWebView element). A
+         real Window isn't subject to OverlayPopups at all. This Grid is UserControl.Content only
+         nominally - the code-behind detaches it immediately in the constructor and re-parents it
+         into/out of a real Window as IsOpen changes, so it never actually renders inline here. -->
+    <Grid x:Name="OverlayRoot" Width="{Binding #Root.OverlayReference.Bounds.Width}" Height="{Binding #Root.OverlayReference.Bounds.Height}">
+        <!-- Local styles declared here (not UserControl.Styles) so they travel with this Grid when
+             it's reparented into the overlay Window - Avalonia resolves Styles by walking up from
+             the styled element's own current logical parent, and once this Grid is re-parented, the
+             UserControl above stops being an ancestor. -->
+        <Grid.Styles>
+            <Style Selector="Border.miniCard">
+                <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+                <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+                <Setter Property="Padding" Value="16" />
+            </Style>
+            <Style Selector="TextBlock.cardTitle">
+                <Setter Property="FontSize" Value="11.5" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+                <Setter Property="Margin" Value="0,0,0,12" />
+            </Style>
+            <Style Selector="TextBlock.fieldLabel">
+                <Setter Property="FontSize" Value="10.5" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="LetterSpacing" Value="1" />
+                <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            </Style>
+        </Grid.Styles>
+        <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
             <Border HorizontalAlignment="Left" Width="340" Background="{Binding #Root.SheetBackground}"
                     BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
                     Padding="16,18">
@@ -155,6 +161,5 @@
                 </StackPanel>
                 </ScrollViewer>
             </Border>
-        </Grid>
-    </Popup>
+    </Grid>
 </UserControl>

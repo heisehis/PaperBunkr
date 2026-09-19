@@ -8,36 +8,39 @@
              x:Name="Root">
 
     <!-- Shared left-drawer scaffold (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-
-         design.md). Popup + ShouldUseOverlayLayer="False", same airspace-safe pattern
-         BookReaderScreen.axaml's own overlays already established: a native embedded WebView always
-         composites above ordinary Avalonia content regardless of z-order, so a plain in-tree overlay
-         would render beneath it. Scrim/panel sized from OverlayReference (each host screen passes its
-         own real, always-correctly-sized root Grid in) - a real bug found on-screen: sizing from this
-         control's own Bounds instead (#Root.Bounds) rendered the scrim oversized whenever the window
-         wasn't maximized, visibly extending past the window's own edges into the desktop. #Root's only
-         content is this Popup, which doesn't participate in normal layout sizing the way a Border/Grid
-         does, so #Root.Bounds wasn't a reliable window-size source - OverlayReference reuses the exact
-         binding path (a real, content-bearing Grid's own Bounds) that already worked correctly before
-         this control existed. -->
-    <Popup IsOpen="{Binding #Root.IsOpen}" PlacementTarget="{Binding #Root}"
-           Placement="AnchorAndGravity" PlacementAnchor="TopLeft" PlacementGravity="BottomRight"
-           ShouldUseOverlayLayer="False" IsLightDismissEnabled="False">
-        <Grid Width="{Binding #Root.OverlayReference.Bounds.Width}" Height="{Binding #Root.OverlayReference.Bounds.Height}">
-            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
-            <Border Width="{Binding #Root.DrawerWidth}" HorizontalAlignment="Left" Background="{DynamicResource PbChromeBrush}"
-                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="{Binding #Root.HeaderText}" FontSize="15" FontWeight="Bold"
-                               Foreground="{DynamicResource PbTextBrush}" Margin="16,18,16,10"
-                               IsVisible="{Binding #Root.HasSearchBox, Converter={x:Static conv:BoolConverters.Not}}" />
-                    <TextBox DockPanel.Dock="Top" Watermark="{Binding #Root.SearchBoxWatermark}"
-                             Text="{Binding #Root.SearchBoxText, Mode=TwoWay}" Margin="16,16,16,10"
-                             AutomationProperties.Name="{Binding #Root.SearchBoxWatermark}"
-                             IsVisible="{Binding #Root.HasSearchBox}" />
-                    <ContentPresenter Content="{Binding #Root.DrawerContent}"
-                                      AutomationProperties.Name="{Binding #Root.HeaderText}" />
-                </DockPanel>
-            </Border>
-        </Grid>
-    </Popup>
+         design.md). Hosted in a real, separately-owned Window (OverlayWindowController, wired from
+         ReaderListDrawer.axaml.cs) rather than a Popup - Popup + ShouldUseOverlayLayer="False" alone
+         does NOT solve the airspace problem in this app: Program.cs's
+         Win32PlatformOptions.OverlayPopups = true (added 2026-09-10 for an unrelated ComboBox-
+         dropdown freeze fix) makes Avalonia embed EVERY popup into the window's own surface
+         regardless of a given Popup's own ShouldUseOverlayLayer value (confirmed via Avalonia's own
+         docs: "OverlayPopups: Embeds popups to the window when set to true" - a platform-wide
+         override, no per-popup opt-out), which loses to NativeWebView's native child HWND the same
+         as a plain in-tree overlay would - confirmed 2026-09-16 by a real user report (every drawer
+         rendered with only its header visible). A real Window isn't subject to OverlayPopups at
+         all, so it reliably renders above the WebView the way the drawers did right when the reader
+         was first built. This Grid is UserControl.Content only nominally - the code-behind detaches
+         it immediately in the constructor and re-parents it into/out of a real Window as IsOpen
+         changes, so it never actually renders inline here. Scrim/panel sized from OverlayReference
+         (each host screen passes its own real, always-correctly-sized root Grid in) - a real bug
+         found on-screen: sizing from this control's own Bounds instead (#Root.Bounds) rendered the
+         scrim oversized whenever the window wasn't maximized, visibly extending past the window's
+         own edges into the desktop. -->
+    <Grid x:Name="OverlayRoot" Width="{Binding #Root.OverlayReference.Bounds.Width}" Height="{Binding #Root.OverlayReference.Bounds.Height}">
+        <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
+        <Border Width="{Binding #Root.DrawerWidth}" HorizontalAlignment="Left" Background="{DynamicResource PbChromeBrush}"
+                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="{Binding #Root.HeaderText}" FontSize="15" FontWeight="Bold"
+                           Foreground="{DynamicResource PbTextBrush}" Margin="16,18,16,10"
+                           IsVisible="{Binding #Root.HasSearchBox, Converter={x:Static conv:BoolConverters.Not}}" />
+                <TextBox DockPanel.Dock="Top" Watermark="{Binding #Root.SearchBoxWatermark}"
+                         Text="{Binding #Root.SearchBoxText, Mode=TwoWay}" Margin="16,16,16,10"
+                         AutomationProperties.Name="{Binding #Root.SearchBoxWatermark}"
+                         IsVisible="{Binding #Root.HasSearchBox}" />
+                <ContentPresenter Content="{Binding #Root.DrawerContent}"
+                                  AutomationProperties.Name="{Binding #Root.HeaderText}" />
+            </DockPanel>
+        </Border>
+    </Grid>
 </UserControl>

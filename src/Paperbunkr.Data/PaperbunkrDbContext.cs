@@ -68,11 +68,23 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<EventSuggestionDismissal> EventSuggestionDismissals => Set<EventSuggestionDismissal>();
 
+    public DbSet<StoryEventCandidateDismissal> StoryEventCandidateDismissals => Set<StoryEventCandidateDismissal>();
+
+    public DbSet<StoryEventVerificationNegativeCache> StoryEventVerificationNegativeCaches => Set<StoryEventVerificationNegativeCache>();
+
+    public DbSet<ContinuitySuggestionDismissal> ContinuitySuggestionDismissals => Set<ContinuitySuggestionDismissal>();
+
+    public DbSet<ContinuityFandomSuggestionDismissal> ContinuityFandomSuggestionDismissals => Set<ContinuityFandomSuggestionDismissal>();
+
+    public DbSet<ContinuityCharacterLookupNegativeCache> ContinuityCharacterLookupNegativeCaches => Set<ContinuityCharacterLookupNegativeCache>();
+
     public DbSet<Character> Characters => Set<Character>();
 
     public DbSet<CharacterAppearance> CharacterAppearances => Set<CharacterAppearance>();
 
     public DbSet<ExternalMediaId> ExternalMediaIds => Set<ExternalMediaId>();
+
+    public DbSet<ExternalMediaRelation> ExternalMediaRelations => Set<ExternalMediaRelation>();
 
     public DbSet<ExternalMetadataSnapshot> ExternalMetadataSnapshots => Set<ExternalMetadataSnapshot>();
 
@@ -748,6 +760,22 @@ public class PaperbunkrDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Brand-new tables (docs/superpowers/specs/2026-09-17-storyevent-continuity-autopopulate-
+        // design.md). No FK to StoryEvent/Issue on either: a dismissal/negative-cache row exists for
+        // an (ArcName, Publisher) pair that may not have become a real StoryEvent yet.
+        modelBuilder.Entity<StoryEventCandidateDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => new { d.ArcName, d.Publisher }).IsUnique();
+        });
+
+        modelBuilder.Entity<StoryEventVerificationNegativeCache>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.Source).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(c => new { c.ArcName, c.Publisher, c.Source }).IsUnique();
+        });
+
         modelBuilder.Entity<Character>(builder =>
         {
             builder.HasKey(c => c.Id);
@@ -772,6 +800,44 @@ public class PaperbunkrDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Brand-new tables (docs/superpowers/specs/2026-09-17-storyevent-continuity-autopopulate-
+        // design.md), same nag-suppression-flag reasoning as EventSuggestionDismissal above.
+        modelBuilder.Entity<ContinuitySuggestionDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => new { d.SeriesId, d.WikidataQid }).IsUnique();
+
+            builder.HasOne(d => d.Series)
+                .WithMany()
+                .HasForeignKey(d => d.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Genuinely separate table from ContinuitySuggestionDismissal above (not a shared column) -
+        // see Continuity.FandomKey's own doc comment for why WikidataQid never holds a non-Wikidata
+        // value.
+        modelBuilder.Entity<ContinuityFandomSuggestionDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => new { d.SeriesId, d.FandomKey }).IsUnique();
+
+            builder.HasOne(d => d.Series)
+                .WithMany()
+                .HasForeignKey(d => d.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContinuityCharacterLookupNegativeCache>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.HasIndex(c => c.CharacterId).IsUnique();
+
+            builder.HasOne(c => c.Character)
+                .WithMany()
+                .HasForeignKey(c => c.CharacterId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // Brand-new tables (like StoryEvent above) - no existing rows to backfill. Cascade on the
         // Series FK for all three, same reasoning as MediaRelation/SeriesContinuity: every existing
         // Series-deletion path is automatic empty-series cleanup with no interactive moment to
@@ -787,6 +853,23 @@ public class PaperbunkrDbContext : DbContext
             builder.HasOne(e => e.Series)
                 .WithMany()
                 .HasForeignKey(e => e.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Brand-new table (like MediaRelation above) - no existing rows to backfill.
+        modelBuilder.Entity<ExternalMediaRelation>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.Provider).HasConversion<string>().HasMaxLength(32);
+            builder.Property(e => e.RelationType).HasConversion<string>().HasMaxLength(32);
+            builder.Property(e => e.TargetExternalId).IsRequired();
+            builder.Property(e => e.TargetTitle).IsRequired();
+            builder.HasIndex(e => e.SourceSeriesId);
+            builder.HasIndex(e => new { e.Provider, e.TargetExternalId }); // the auto-upgrade lookup key
+
+            builder.HasOne(e => e.SourceSeries)
+                .WithMany()
+                .HasForeignKey(e => e.SourceSeriesId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -820,7 +903,16 @@ public class PaperbunkrDbContext : DbContext
         modelBuilder.Entity<AppSettings>(builder =>
         {
             builder.HasKey(a => a.Id);
-            builder.Property(a => a.ActiveSkinKey).IsRequired().HasDefaultValue("default");
+            builder.Property(a => a.ActiveThemeKey).IsRequired().HasDefaultValue("default");
+            builder.Property(a => a.TrueBlackDark).HasDefaultValue(false);
+            // Same enum-as-string HasSentinel treatment as PageTransitionStyle - Off is both the CLR
+            // default and the desired default here, but every enum-as-string AppSettings column gets
+            // configured identically rather than special-casing the coincidence.
+            builder.Property(a => a.ThemeAutoMode).HasConversion<string>().HasMaxLength(16)
+                .HasDefaultValue(ThemeAutoMode.Off)
+                .HasSentinel(ThemeAutoMode.Off);
+            builder.Property(a => a.ThemeScheduledDarkHour).HasDefaultValue(20);
+            builder.Property(a => a.ThemeScheduledLightHour).HasDefaultValue(7);
             builder.Property(a => a.OpenLastPage).HasDefaultValue(true);
             builder.Property(a => a.AutoNavigateComics).HasDefaultValue(true);
             builder.Property(a => a.BackupsToKeep).HasDefaultValue(5);
@@ -1006,6 +1098,15 @@ public class PaperbunkrDbContext : DbContext
             // here too so the whole block stays uniform.
             builder.Property(a => a.RestoreSessionOnStartup).HasDefaultValue(true);
             builder.Property(a => a.PromptReviewOnFinish).HasDefaultValue(false);
+            builder.Property(a => a.TrackerAutoOpenLinkPanel).HasDefaultValue(true);
+            builder.Property(a => a.TrackerUpdateAfterReading).HasDefaultValue(true);
+            builder.Property(a => a.TrackerAutoSyncFromTrackers).HasDefaultValue(false);
+            builder.Property(a => a.TrackerUseSourceMetadata).HasDefaultValue(true);
+            // Enum-as-string, same HasSentinel treatment as PageTransitionStyle/DefaultPageLayoutMode
+            // above (Always is both the CLR default and the desired default).
+            builder.Property(a => a.TrackerUpdateOnMarkRead).HasConversion<string>().HasMaxLength(16)
+                .HasDefaultValue(TrackerAutoUpdateMode.Always)
+                .HasSentinel(TrackerAutoUpdateMode.Always);
             builder.Property(a => a.EnableDragDropImport).HasDefaultValue(true);
             builder.Property(a => a.NavRailHoverExpandEnabled).HasDefaultValue(true);
 
@@ -1237,7 +1338,7 @@ public class PaperbunkrDbContext : DbContext
     /// <summary>
     /// Test-only redirect for <see cref="GetDefaultDatabasePath"/> - mutable so tests can point
     /// every <c>PaperbunkrDb.CreateContext()</c> call (App-side ViewModels have no injected
-    /// context-factory seam, unlike <c>SkinService</c>/<c>CoverThumbnailService</c>) at a temp
+    /// context-factory seam, unlike <c>ThemeService</c>/<c>CoverThumbnailService</c>) at a temp
     /// SQLite file instead of the real per-user database. Never set this outside a test's own
     /// constructor/teardown.
     /// </summary>

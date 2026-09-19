@@ -14,7 +14,7 @@ namespace Paperbunkr.App.Services;
 /// anywhere else in this codebase had import/export before this. No CE precedent to port (unlike
 /// <c>CblReadingListIO</c>'s XML container) - a plain JSON list of command id/gesture pairs is the
 /// simplest format that round-trips cleanly, matching this codebase's existing JSON usage elsewhere
-/// (<see cref="SkinService"/>'s theme.json).
+/// (<see cref="ThemeService"/>'s theme.json).
 /// </summary>
 public static class KeyBindingIO
 {

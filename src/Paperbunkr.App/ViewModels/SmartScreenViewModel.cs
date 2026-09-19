@@ -366,7 +366,7 @@ public partial class SmartScreenViewModel : ViewModelBase
     private bool _isReadOnly;
 
     /// <summary>
-    /// Sidebar "Maintenance" group expand/collapse (P6 follow-up, docs/alpha-todo.md) - the "▾"
+    /// Sidebar "Maintenance" group expand/collapse (P6 follow-up, docs/paperbunkr-todo.md) - the "▾"
     /// caret next to that heading in MainWindow.axaml used to be a plain unbound TextBlock: it
     /// looked like a working collapse toggle but did nothing at all, so the group was always shown
     /// regardless. Real toggle now, matching the collapse affordance it always visually implied.

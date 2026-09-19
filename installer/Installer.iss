@@ -1,4 +1,4 @@
-; Inno Setup script for Paperbunkr (P7, docs/alpha-todo.md).
+; Inno Setup script for Paperbunkr (P7, docs/paperbunkr-todo.md).
 ;
 ; Packaging approach follows ComicRackCE's own precedent (_reference/ComicRackCE/Installer.iss),
 ; but with deliberate deviations, decided with the user before writing this file (or added in the
@@ -209,6 +209,16 @@ Name: "associatecb7";  Description: ".cb7  (comic book 7z archive)";   GroupDesc
 Name: "associatecbt";  Description: ".cbt  (comic book TAR archive)";  GroupDescription: "Associate comic file types with {#MyAppName}:"; Flags: unchecked
 Name: "associatecbw";  Description: ".cbw  (WebComic)";                GroupDescription: "Associate comic file types with {#MyAppName}:"; Flags: unchecked
 Name: "associatedjvu"; Description: ".djvu  (DjVu documents)";         GroupDescription: "Associate comic file types with {#MyAppName}:"; Flags: unchecked
+; Books (Novels) per-format tasks (docs/superpowers/specs/2026-09-16-book-file-associations-
+; design.md), same opt-in-off-by-default shape as the comic tasks above. ".pdf" stays comic-only
+; (no separate Book PDF task - see FileAssociationService.BookFormats' own doc comment on why a
+; second row for the same extension would fight the comic one). "FB2" covers both ".fb2" and bare
+; ".zip" (".fb2.zip" is a common FB2 distribution convention, and Windows has no way to key an
+; association off a compound extension) - checking this box means Paperbunkr becomes the default
+; handler for plain .zip files too, not just .fb2.zip ones; the checkbox description says so.
+Name: "associateepub"; Description: ".epub  (EPUB e-books)";                          GroupDescription: "Associate Book file types with {#MyAppName}:"; Flags: unchecked
+Name: "associatefb2";  Description: ".fb2, .zip  (FictionBook 2 - also claims plain .zip)"; GroupDescription: "Associate Book file types with {#MyAppName}:"; Flags: unchecked
+Name: "associatemobi"; Description: ".mobi, .azw, .azw3  (Kindle / MOBI)";            GroupDescription: "Associate Book file types with {#MyAppName}:"; Flags: unchecked
 
 [Files]
 ; The entire self-contained publish output (see installer\BuildInstaller.ps1) - exe, every
@@ -244,6 +254,9 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .cb
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .cbt";  Tasks: associatecbt;  Flags: runhidden waituntilterminated; StatusMsg: "Registering .cbt association..."
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .cbw";  Tasks: associatecbw;  Flags: runhidden waituntilterminated; StatusMsg: "Registering .cbw association..."
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .djvu"; Tasks: associatedjvu; Flags: runhidden waituntilterminated; StatusMsg: "Registering .djvu association..."
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .epub";     Tasks: associateepub; Flags: runhidden waituntilterminated; StatusMsg: "Registering .epub association..."
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .fb2 .zip"; Tasks: associatefb2;  Flags: runhidden waituntilterminated; StatusMsg: "Registering .fb2/.zip association..."
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .mobi .azw .azw3"; Tasks: associatemobi; Flags: runhidden waituntilterminated; StatusMsg: "Registering .mobi/.azw/.azw3 association..."
 ; Finished-page checkboxes (postinstall = rendered as a checkbox on the Finished page;
 ; skipifsilent = hidden for silent/auto-update runs). "Open Paperbunkr now" stays checked by
 ; default; "Browse the wiki" is opt-in (unchecked). The wiki entry is a URL opened via the shell
@@ -252,13 +265,14 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Open {#MyAppName} now"; Flags: 
 Filename: "{#MyAppURL}/wiki"; Description: "Browse the {#MyAppName} wiki"; Flags: postinstall shellexec runasoriginaluser skipifsilent unchecked
 
 [UninstallRun]
-; Unregister ALL comic file associations on uninstall, unconditionally - not gated on the
+; Unregister ALL comic + Book file associations on uninstall, unconditionally - not gated on the
 ; original per-format [Tasks] selection. Bare "--unregister-file-associations" (no extension
-; args) clears the whole FileAssociationService.ComicAssociationExtensions set; each per-format
-; unregister is idempotent, so this is a no-op for formats that were never associated. Doing it
-; unconditionally avoids orphaned ProgID keys when task state drifts across an
-; upgrade/repair (e.g. a format associated by an older build whose task the user later unchecked).
-; Runs before files are removed (Inno's UninstallRun ordering) so the exe still exists to call.
+; args) clears the whole FileAssociationService.ComicAssociationExtensions +
+; BookAssociationExtensions set; each per-format unregister is idempotent, so this is a no-op for
+; formats that were never associated. Doing it unconditionally avoids orphaned ProgID keys when
+; task state drifts across an upgrade/repair (e.g. a format associated by an older build whose
+; task the user later unchecked). Runs before files are removed (Inno's UninstallRun ordering) so
+; the exe still exists to call.
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-file-associations"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterFileAssociations"
 
 [Code]

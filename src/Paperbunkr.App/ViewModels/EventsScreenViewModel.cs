@@ -27,18 +27,21 @@ public partial class EventsScreenViewModel : ViewModelBase
     private readonly Action<int> _goToReader;
     private readonly Action<int> _goToReadingList;
     private readonly Action<string, string> _notify;
+    private readonly IActivityService _activity;
 
     public EventsScreenViewModel(
         Action<int>? goToSeriesDetail = null,
         Action<int>? goToReader = null,
         Action<int>? goToReadingList = null,
         Action<string, string>? notify = null,
+        IActivityService? activity = null,
         bool loadOnConstruction = true)
     {
         _goToSeriesDetail = goToSeriesDetail ?? (_ => { });
         _goToReader = goToReader ?? (_ => { });
         _goToReadingList = goToReadingList ?? (_ => { });
         _notify = notify ?? ((_, _) => { });
+        _activity = activity ?? new ActivityService();
         Events = new ObservableCollection<StoryEventSummary>();
         Members = new ObservableCollection<EventMemberRowViewModel>();
         SearchResults = new ObservableCollection<IssueSearchResult>();
@@ -58,6 +61,12 @@ public partial class EventsScreenViewModel : ViewModelBase
         DismissedSuggestions = new ObservableCollection<DismissedSuggestionCard>();
         // Production passes false; GoEvents() calls both refreshes on navigation. Same rationale
         // as SmartScreenViewModel - two eager sidebar loads on the UI thread at startup.
+        // RefreshStoryEventCandidates is deliberately not called here, matching this constructor's
+        // own established split: production passes loadOnConstruction: false and GoEvents() (which
+        // already calls it) does the real startup load; the eager calls below exist for test
+        // convenience only. Calling it here too would run an extra synchronous query on every test
+        // construction for no test actually exercises via this path, and it doesn't belong in the
+        // paired "two eager sidebar loads" rationale this block already documents.
         if (loadOnConstruction)
         {
             RefreshSidebar();

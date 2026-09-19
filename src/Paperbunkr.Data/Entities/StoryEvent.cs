@@ -23,5 +23,15 @@ public class StoryEvent
 
     public DateTime UpdatedAt { get; set; }
 
+    /// <summary>
+    /// ComicVine's story-arc resource id, set when a <see cref="Metadata.StoryArcGroupingResolver"/>
+    /// candidate was verified against ComicVine (docs/superpowers/specs/2026-09-17-storyevent-
+    /// continuity-autopopulate-design.md). Null when never verified or verified only against Metron.
+    /// </summary>
+    public string? ComicVineArcId { get; set; }
+
+    /// <summary>Metron's arc resource id, same posture as <see cref="ComicVineArcId"/>.</summary>
+    public string? MetronArcId { get; set; }
+
     public List<EventMembership> Members { get; set; } = new();
 }

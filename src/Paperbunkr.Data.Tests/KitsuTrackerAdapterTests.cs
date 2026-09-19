@@ -182,6 +182,102 @@ public class KitsuTrackerAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task PushEntryAsync_ExistingLibraryEntry_UpdateScoreFalse_OmitsRatingVariable()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken, "token-abc");
+
+        string? updateBody = null;
+        var adapter = new KitsuTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            string body = req.Content!.ReadAsStringAsync().Result;
+
+            if (body.Contains("findMangaById"))
+            {
+                return JsonResponse(HttpStatusCode.OK, """{ "data": { "findMangaById": { "myLibraryEntry": { "id": "777" } } } }""");
+            }
+
+            updateBody = body;
+            return JsonResponse(HttpStatusCode.OK, """{ "data": { "libraryEntry": { "update": { "errors": null, "libraryEntry": { "id": "777" } } } } }""");
+        })), accessToken: null);
+
+        var payload = new TrackerPushPayload(ReadingStatus.Completed, 100, Score: 4.5m, FinishDate: new DateOnly(2026, 9, 18));
+        await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "42" }, payload, CancellationToken.None);
+
+        using var doc = System.Text.Json.JsonDocument.Parse(updateBody!);
+        var variables = doc.RootElement.GetProperty("variables");
+        Assert.False(variables.TryGetProperty("rating", out _));
+        Assert.False(variables.TryGetProperty("finishedAt", out _));
+    }
+
+    [Fact]
+    public async Task PushEntryAsync_ExistingLibraryEntry_UpdateScoreTrue_SendsConvertedRatingAndDate()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken, "token-abc");
+
+        string? updateBody = null;
+        var adapter = new KitsuTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            string body = req.Content!.ReadAsStringAsync().Result;
+
+            if (body.Contains("findMangaById"))
+            {
+                return JsonResponse(HttpStatusCode.OK, """{ "data": { "findMangaById": { "myLibraryEntry": { "id": "777" } } } }""");
+            }
+
+            updateBody = body;
+            return JsonResponse(HttpStatusCode.OK, """{ "data": { "libraryEntry": { "update": { "errors": null, "libraryEntry": { "id": "777" } } } } }""");
+        })), accessToken: null);
+
+        var payload = new TrackerPushPayload(ReadingStatus.Completed, 100, Score: 4.5m, FinishDate: new DateOnly(2026, 9, 18), UpdateScore: true, UpdateFinishDate: true);
+        bool result = await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "42" }, payload, CancellationToken.None);
+
+        Assert.True(result);
+        using var doc = System.Text.Json.JsonDocument.Parse(updateBody!);
+        var variables = doc.RootElement.GetProperty("variables");
+        Assert.Equal(18, variables.GetProperty("rating").GetInt32()); // 4.5 * 4, clamped [2,20]
+        Assert.Equal("2026-09-18", variables.GetProperty("finishedAt").GetString());
+    }
+
+    [Fact]
+    public async Task PushEntryAsync_NoExistingLibraryEntry_UpdateScoreTrue_CreatesThenRefetchesThenUpdates()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken, "token-abc");
+
+        int findCalls = 0;
+        var calls = new List<string>();
+        var adapter = new KitsuTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            string body = req.Content!.ReadAsStringAsync().Result;
+            calls.Add(body);
+
+            if (body.Contains("findMangaById"))
+            {
+                findCalls++;
+                return findCalls == 1
+                    ? JsonResponse(HttpStatusCode.OK, """{ "data": { "findMangaById": { "myLibraryEntry": null } } }""")
+                    : JsonResponse(HttpStatusCode.OK, """{ "data": { "findMangaById": { "myLibraryEntry": { "id": "999" } } } }""");
+            }
+
+            if (body.Contains("AddManga"))
+            {
+                return JsonResponse(HttpStatusCode.OK, """{ "data": { "libraryEntry": { "create": { "errors": null, "libraryEntry": { "id": "999" } } } } }""");
+            }
+
+            Assert.Contains("UpdateManga", body);
+            return JsonResponse(HttpStatusCode.OK, """{ "data": { "libraryEntry": { "update": { "errors": null, "libraryEntry": { "id": "999" } } } } }""");
+        })), accessToken: null);
+
+        var payload = new TrackerPushPayload(ReadingStatus.Reading, 5, Score: 4.5m, UpdateScore: true);
+        bool result = await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "42" }, payload, CancellationToken.None);
+
+        Assert.True(result);
+        Assert.Equal(4, calls.Count); // find, create, refetch, update
+    }
+
+    [Fact]
     public async Task PushEntryAsync_MutationLevelErrors_ReturnsFalse()
     {
         using var context = new PaperbunkrDbContext(_dbOptions);

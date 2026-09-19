@@ -21,7 +21,7 @@ namespace Paperbunkr.Data.Tracking.Adapters;
 /// access to shikimori.one/.io failed repeatedly) - flagged in the design spec as worth re-verifying;
 /// implemented here from the best-available secondary-source consensus.
 /// </summary>
-public sealed class ShikimoriTrackerAdapter : ITrackerSearchProvider, ITrackerAdapter
+public sealed class ShikimoriTrackerAdapter : ITrackerSearchProvider, ITrackerAdapter, ITrackerDetailedPush
 {
     private const string ApiBase = "https://shikimori.one/api";
     private const string AuthorizeEndpoint = "https://shikimori.one/oauth/authorize";
@@ -142,27 +142,44 @@ public sealed class ShikimoriTrackerAdapter : ITrackerSearchProvider, ITrackerAd
         }
     }
 
-    public async Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
+    public async Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken) =>
+        (await PushEntryDetailedAsync(context, link, payload, cancellationToken).ConfigureAwait(false)).Success;
+
+    /// <summary>Same as <see cref="PushEntryAsync"/> but returns Shikimori's real error body
+    /// instead of collapsing every failure into a bare <see langword="false"/> - extends the
+    /// detailed-error pattern already shipped this session for MangaBaka/MangaDex to this adapter.
+    /// <c>score</c> rides the same <c>user_rates</c> call as status/progress - confirmed live via
+    /// the real fetched Shikimori API doc (docs/superpowers/specs/2026-09-18-per-tracker-score-and-
+    /// finish-date-design.md); no finish-date field exists on this service at all, confirmed
+    /// absent from that same doc.</summary>
+    public async Task<(bool Success, string? ErrorDetail)> PushEntryDetailedAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
     {
         string? accessToken = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken);
         if (string.IsNullOrEmpty(accessToken))
         {
-            return false;
+            return (false, "Not connected - no access token saved.");
         }
 
         var existingRate = await FindExistingRateAsync(accessToken, link.ExternalId, cancellationToken).ConfigureAwait(false);
         int? existingRateId = existingRate?.Id;
 
-        var body = new
+        // Dictionary, not an anonymous object, so a null/unset local rating omits `score` entirely
+        // rather than forcing it to 0 - a user's independently-set Shikimori score shouldn't get
+        // silently cleared just because Paperbunkr hasn't rated this series yet. Same restraint as
+        // MyAnimeList's own "never send an unscored 0" choice (Step 5, this same design doc).
+        var userRate = new Dictionary<string, object?>
         {
-            user_rate = new
-            {
-                target_id = int.TryParse(link.ExternalId, out int targetId) ? targetId : 0,
-                target_type = "Manga",
-                status = ShikimoriStatusMapper.ToUserRateStatus(payload.Status),
-                chapters = payload.ChapterProgress,
-            },
+            ["target_id"] = int.TryParse(link.ExternalId, out int targetId) ? targetId : 0,
+            ["target_type"] = "Manga",
+            ["status"] = ShikimoriStatusMapper.ToUserRateStatus(payload.Status),
+            ["chapters"] = payload.ChapterProgress,
         };
+        if (payload.UpdateScore)
+        {
+            userRate["score"] = payload.Score is decimal localScore and > 0 ? (int)Math.Round((double)localScore * 2) : 0;
+        }
+
+        var body = new { user_rate = userRate };
 
         var request = existingRateId is int id
             ? new HttpRequestMessage(HttpMethod.Put, $"{ApiBase}/v2/user_rates/{id}") { Content = JsonContent.Create(body) }
@@ -174,18 +191,24 @@ public sealed class ShikimoriTrackerAdapter : ITrackerSearchProvider, ITrackerAd
         {
             response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return false;
+            return (false, $"Network error: {ex.Message}");
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return false;
+            return (false, "Request timed out.");
         }
 
         using (response)
         {
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                return (true, null);
+            }
+
+            string rawBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            return (false, $"{(int)response.StatusCode}: {rawBody}");
         }
     }
 
@@ -198,7 +221,13 @@ public sealed class ShikimoriTrackerAdapter : ITrackerSearchProvider, ITrackerAd
         }
 
         var rate = await FindExistingRateAsync(accessToken, link.ExternalId, cancellationToken).ConfigureAwait(false);
-        return rate is null ? null : new TrackerRemoteEntry(ShikimoriStatusMapper.FromUserRateStatus(rate.Status), rate.Chapters);
+        if (rate is null)
+        {
+            return null;
+        }
+
+        decimal? score = rate.Score is int s and > 0 ? s / 2m : null;
+        return new TrackerRemoteEntry(ShikimoriStatusMapper.FromUserRateStatus(rate.Status), rate.Chapters, score);
     }
 
     /// <summary>Looks up the existing <c>user_rate</c> for this manga, if any - <see cref="PushEntryAsync"/>
@@ -331,4 +360,7 @@ internal sealed class ShikimoriUserRateDto
 
     [JsonPropertyName("chapters")]
     public int? Chapters { get; set; }
+
+    [JsonPropertyName("score")]
+    public int? Score { get; set; }
 }

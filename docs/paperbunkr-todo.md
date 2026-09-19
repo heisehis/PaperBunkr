@@ -1,4 +1,7 @@
-# Paperbunkr Alpha Release To-Do
+# Paperbunkr To-Do
+
+*Renamed from `alpha-todo.md` 2026-09-18 — Alpha is done, project is past that stage now (see the
+P0-P7 section below for the historical record). Content and format unchanged, just the name.*
 
 *Scope: git/release prep + known gaps only, per `Paperbunkr-Roadmap.md` (2026-08-07). Beta backlog is
 tracked separately in that document and not repeated here.*
@@ -10,7 +13,8 @@ user-facing impact.
 
 This file is the authoritative, human-written record — commit refs, rationale, sub-item detail.
 A companion dashboard renders a lighter view of the same P0–P7 status for quick scanning:
-**https://claude.ai/code/artifact/0ca86894-977e-45e2-951b-476e1150a5ee**
+**https://claude.ai/artifact/2Zf5nmJiCzARE4MKgKAVMF** (old `/code/artifact/...` link now 404s —
+same artifact, new short-link form; re-check this stays live before trusting either).
 
 A scheduled cloud agent (`paperbunkr-alpha-tracker-sync`, routine
 `trig_018nELx6EohKVCqFrdP9bX3T`, every 6h, read-only against the repo) checks `git log` against
@@ -21,6 +25,61 @@ the tracker just keeps a lightweight view from silently going stale between thos
 this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
+
+> **Manual session note (2026-09-18, 16 smart-feature + 7 cosmetic-feature pitch items recorded):**
+> Not scoped, not brainstormed, not started — pure idea capture so they aren't lost. Full detail and
+> rationale lives in `Paperbunkr-Roadmap.md`'s "Smart features pitch" and "Cosmetics pitch" sections
+> (search those headings); one-line index here since this is the doc a human opens first.
+> **Cosmetic pitch (7, from 2026-09-14):** series binding spine texture; read-progress ring on
+> poster hover; skin-aware accent glow tiers (subtle/normal/vivid); Continuity/Event timeline
+> connector art (deliberate CE deviation); Library Health traffic-light chip reskin; splash/startup
+> ambient motion; Reading-list CBL 4-cover mosaic thumbnail.
+> **Smart-feature pitch (16 total — 7 from 2026-09-14, 9 added 2026-09-18):** Smart Lists v2 preset
+> gallery; Continuity auto-suggest via shared-character MediaRelation data; Reading-order conflict
+> detector (CBL order vs. StoryEvent chronology); auto-match missing files against series-identity
+> scan; scheduled cover-refresh on tracker-status change; Insights-driven auto smart-lists; Plugin
+> API on-continuity-complete hook; **cheap/local —** library gap detection (missing-issue-number
+> analysis), reading-integrity health scan (low-res/duplicate/blank pages, extends
+> `LibraryHealthService`), drop-off detection, smart "Up Next" blended queue, reading-stats
+> dashboard refinements (check against shipped Insights/Stats v2 first), best-scan dedup heuristic
+> (extends Duplicate Finder); **medium/local-ML —** full-text dialogue OCR search, semantic
+> search over descriptions/covers (local embeddings), auto-tagging with confidence (feeds the
+> existing `MetadataProposal` review queue).
+> Every one of these needs its own brainstorm → design spec per this project's `CLAUDE.md`
+> workflow before any code gets written — none are scheduled.
+
+> **Manual session note (2026-09-18, series/event name matching, empty-row cleanup, Reader
+> Save-Page-As + Cover Picker, external-metadata extraction spec):** Beta-backlog work, P0–P7
+> unchanged. None of this is on `paperbunkr-todo.md`/`Paperbunkr-Roadmap.md` until this note — it shipped
+> across the prior few days without the hand-update this file's own standing rule requires.
+> - **Series/event name matching + empty rows:** design+plan
+>   `docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-row-cleanup-{design,plan}.md`.
+>   New `TitleNormalizer` (CE `StripDown`/`NamesMatch` cascade) wired into `LibraryFolderScanner`,
+>   `ReadingListMatcher`, `StoryArcGroupingResolver`, `StoryEventResolver`, `ContinuityResolver` —
+>   punctuation/volume-variant series names now resolve to the same `Series` instead of spawning a
+>   duplicate. New `Issue.IsContentEmpty`/`EmptyRowAcknowledged` columns + `LibraryHealthService`
+>   corrupt-file/0-page detection. New "Find Similar Series" (extracted `SeriesMergeHelper`) and
+>   "Empty Rows" sections added to Library Health. Own bug found and fixed same day: the cascade fix's
+>   own collision case crashed `ArcReadingListBuilder` on a duplicate key
+>   (`src/Paperbunkr.Data/ReadingLists/ArcReadingListBuilder.cs`). Verified: `Paperbunkr.Data.Tests`
+>   name-matching/cascade subset 54/54 green. `Paperbunkr.App.Tests` subset not run this session —
+>   the app was open locally and held `bin/` locked; on-screen verification also still outstanding.
+> - **Reader "Save Page As" + Cover Picker:** design+plan
+>   `docs/superpowers/specs/2026-09-17-reader-save-page-and-cover-picker-{design,plan}.md`. New
+>   `PageExportService` (PNG/JPEG export via the reader's right-click menu — comic/manga reader only;
+>   Books/PDF has no context-menu-provider infra yet, deliberately out of v1 scope, a fast-follow).
+>   New 3-tab `CoverPickerViewModel`/`CoverPickerView` (Series / Reading List / Browse File
+>   candidates) now backs all 3 existing "change cover" entry points (Detail, Manga Detail,
+>   DetailTabs), replacing the old direct-file-picker-only path. Not GUI-verified this session.
+> - **External Metadata Full Extraction — design + plan only, zero implementation:**
+>   `docs/superpowers/specs/2026-09-18-external-metadata-full-extraction-{design,plan}.md`. Expands
+>   the AniList/MangaBaka/MangaDex providers past today's thin title/description/status fields: cover
+>   images (priority ask), creator/staff, publication year/format, demographic, cross-references, and
+>   weighted/categorized tags feeding real `IssueTag` import (not a flat CSV). MangaBaka provider
+>   switches its beta `v2` API to the stable `v1` family (`v2` lacks covers/relations/tag taxonomy
+>   entirely). 6 phases, foundation then cover pipeline first; not started.
+> **Not committed as of this note** — all three items above sit staged/uncommitted in the working
+> tree (confirm via `git status` before assuming any of it is on `origin/master`).
 
 > **Manual session note (2026-09-17, IsFinalIssue migration-rollback bug actually fixed):**
 > Closes the task spawned 2026-09-12 (`Fix migration rollback: IsFinalIssue NOT NULL bug`, noted
@@ -99,6 +158,392 @@ this file itself already did once (see the note below).
 > plus the full 66-case `MainViewModelTests` suite re-run clean (no regressions). **Not done:**
 > on-screen verification of an actual file-association double-click launch, both cold-start and
 > while already running (standing no-computer-use caveat this session).
+
+> **Manual session note (2026-09-16, open-on-launch deadlock fixed):** User-reported bug: launching
+> via file association only opened the app, never the file. Root cause confirmed by repro, not
+> guessed — launched a Debug build directly with a bare file-path arg (same shape Windows' own
+> association command line produces) and watched `startup.log`: the process reached
+> `MainWindow.Show() returned` and then hung forever, never logging `initial screen loaded`.
+> `MainViewModel.OpenFilePath` (`src/Paperbunkr.App/ViewModels/MainViewModel.cs`) calls
+> `LibraryFolderScanner.ImportNewFilesAsync(...).GetAwaiter().GetResult()` synchronously on the UI
+> thread; `ImportNewFilesAsync` (`src/Paperbunkr.App/Services/LibraryFolderScanner.cs`) awaits
+> `Task.Run(...)` without `ConfigureAwait(false)`, so its continuation tries to resume on the
+> captured Avalonia UI `SynchronizationContext` — the same thread already blocked on
+> `.GetResult()`. Classic sync-over-async deadlock, 100% reproducible, not timing-dependent. Fixed
+> by adding `.ConfigureAwait(false)` to that one `await`; every other caller of
+> `ImportNewFilesAsync` (`DragImportService`, `LiveFolderWatchService`) already uses a real `await`
+> and is unaffected. Verified: re-ran the exact repro against the rebuilt exe — reaches
+> `initial screen loaded` in ~5s instead of hanging; `Paperbunkr.App.Tests` `LibraryFolderScanner*`
+> suite (51 cases) still green. **Not done:** on-screen verification of the actual reader screen
+> opening (confirmed via log timing only, not a visual check) and the real Explorer double-click /
+> registry path (registry-registration code itself wasn't touched and wasn't re-audited this
+> session) — standing no-computer-use caveat.
+
+> **Manual session note (2026-09-16, Books added to file association):** Beta-backlog work, P0–P7
+> unchanged. User asked to add EPUB "and the other formats" to Preferences > Advanced's file-
+> association list, which only ever covered comic-engine formats (`Providers.Readers`) - Books
+> (epub/fb2/mobi/azw/azw3) live in a fully separate schema/scanner
+> (`src/Paperbunkr.App/Services/BookFolderScanService.cs`) with no prior association surface at
+> all. Grilled first (real design decisions, not a pure UI tweak): user chose to include the
+> `.fb2.zip` case (accepting that it means claiming bare `.zip` too - Windows can't key an
+> association off a compound extension, so this necessarily contends with the comic engine's own
+> pre-existing "ZIP Archive" row for the same extension if both are ever toggled on - documented in
+> `FileAssociationService.BookFormats`' doc comment and the installer checkbox description rather
+> than silently hidden), to leave `.pdf` comic-only (no second row fighting the existing PDF
+> association), to wire real open-on-launch support for the new formats in this same pass (not just
+> a cosmetic toggle - required so enabling them doesn't reproduce the deadlock above for epub/fb2/
+> mobi), and to add matching installer per-format checkboxes.
+> Added: `FileAssociationService.BookFormats`/`BookAssociationExtensions` (EPUB / FB2 (+.zip) /
+> Kindle-MOBI groups) alongside the existing comic list, `GetAvailableFormats()` now returns both,
+> `SetAssociated` resolves either; `SetBookAssociationsFor` mirrors `SetComicAssociationsFor` for
+> the installer/CLI path (`Program.cs` now calls both Set*AssociationsFor with the same requested
+> extension set - each ignores what it doesn't own). `BookFolderScanService` gained a public
+> `ImportNewFilesAsync` (refactored `ScanAll`'s inline classification+import into shared
+> `ClassifyFormat`/`ImportFiles` helpers, `BookFolderScanResult` now also carries `AddedBookIds`) -
+> written with `.ConfigureAwait(false)` from the start, learning directly from the deadlock note
+> above rather than repeating it. `MainViewModel.OpenBookFilePath` mirrors `OpenFilePath` against
+> the Book schema; `NavigationCliArgs.TryParseBookFilePathArg` mirrors `TryParseFilePathArg` against
+> the Books extension set (deliberately excludes `.zip`/`.pdf` - a bare `.zip` argument stays routed
+> through the existing comic pipeline; there's no way to tell at that layer whether it's really an
+> `.fb2.zip` file, a known, accepted limitation of associating a compound extension at all).
+> `App.axaml.cs`'s open-on-launch dispatch now checks the Book path between the comic path and
+> `--open`. `installer/Installer.iss` gained matching `associateepub`/`associatefb2`/`associatemobi`
+> tasks + `[Run]`/`[UninstallRun]` wiring (not yet build/run - Inno Setup script, no dotnet build to
+> verify it against).
+> Verified: `Paperbunkr.App` builds clean; new/extended tests (`FileAssociationServiceTests` Book-
+> scoping cases, `NavigationCliArgsBookFilePathTests`, `MainViewModelTests` `OpenBookFilePath_*`) all
+> pass, full targeted re-run (`FileAssociationServiceTests`+`NavigationCliArgs*`+`MainViewModelTests`
+> +`BookFolderScannerTests`+`LibraryFolderScannerTests`, 174 cases) green, no regressions. Repro'd
+> the exact deadlock-avoidance end-to-end, not just at the unit level (the XUnit test harness does
+> not reproduce the UI-thread deadlock class - the pre-fix comic version of this same call shape
+> passed its own unit tests despite the real bug, which is why yesterday's bug shipped at all):
+> built a real minimal EPUB by hand (PowerShell + `System.IO.Compression`, same shape as
+> `EpubFixture`), launched the rebuilt Debug exe with it as a bare CLI arg, confirmed `startup.log`
+> reaches `initial screen loaded` in ~4s with no hang. **Not done:** on-screen verification of the
+> Preferences list actually rendering the 3 new rows and their toggles actually writing/reading the
+> registry correctly, the real Explorer double-click path, and building/running the updated
+> installer script — standing no-computer-use caveat, and Inno Setup wasn't invoked this session.
+
+> **Manual session note (2026-09-16, Book reader drawer-vs-WebView airspace bug fixed):** User
+> reported every Book reader drawer/sheet (TOC/Bookmarks/Highlights/Search/Font+Theme) renders with
+> only its header sliver visible on v0.6.0-beta, real content covered by the page — confirmed by
+> user as reproducing every time, for every drawer, regardless of which one, and that it did NOT
+> happen right after the reader was first rebuilt (2026-09-02) — a real regression, not an inherent
+> limitation. Root cause, confirmed via Avalonia's own docs (not guessed): the drawers' `Popup
+> ShouldUseOverlayLayer="False"` (meant to force a real separate top-level OS window able to beat
+> the already-documented WebView "airspace" problem) is silently overridden app-wide by
+> `Program.cs`'s `Win32PlatformOptions.OverlayPopups = true` (added 2026-09-10 for an unrelated
+> ComboBox-dropdown freeze fix) — Avalonia's own docs: "OverlayPopups: Embeds popups to the window
+> when set to true," a platform-wide override with no per-popup opt-out. So every book-reader
+> overlay has actually been in-process/overlay-layer-rendered since 2026-09-10 regardless of its own
+> `ShouldUseOverlayLayer` value, which loses to `NativeWebView`'s native child HWND (Chromium host)
+> the same as any plain in-tree overlay would. Exactly matches the timeline the user described. Only
+> the reader's top/bottom chrome bars were ever safe from this, since they use a reserved `Margin`
+> instead (no overlap, nothing to lose). Fix applies that same "don't overlap" principle to the
+> WebView itself: `ReaderWebView.IsVisible` now binds to `!IsAnyDrawerOpen`
+> (`src/Paperbunkr.App/Views/BookReaderScreen.axaml`), hiding the native control entirely while any
+> drawer/sheet is open instead of trying to out-z-order it. Also fixed a second, separate bug found
+> while wiring this: `IsAnyDrawerOpen` is a computed property, not its own `[ObservableProperty]`,
+> and none of the 5 `[ObservableProperty]` flags it reads (`IsTocOpen`/`IsFontSheetOpen`/
+> `IsBookmarksOpen`/`IsHighlightsOpen`/`IsSearchOpen`) had
+> `[NotifyPropertyChangedFor(nameof(IsAnyDrawerOpen))]` — so nothing bound to `IsAnyDrawerOpen`
+> (this new binding included) would ever have reacted to a drawer opening/closing without also
+> adding that attribute to all 5 (`src/Paperbunkr.App/ViewModels/BookReaderScreenViewModel.cs`).
+> Corrected 4 now-stale/misleading doc comments claiming `ShouldUseOverlayLayer="False"` alone
+> solves the airspace problem in this app (`ReaderListDrawer.axaml`, `ReaderSettingsSheet.axaml`,
+> and two spots in `BookReaderScreen.axaml`), and flagged the highlight color/note popup
+> (`IsHighlightPopupOpen`) as a very likely same-class latent bug, deliberately NOT fixed the same
+> way (hiding the whole WebView would hide the very selection it's anchored next to — needs its own
+> design call, not a copy-paste of the drawer fix). Diagnosis note: an attempted live repro via the
+> project's own FlaUI/UIA3 UI-automation harness (`Paperbunkr.App.UiTests`) was abandoned mid-
+> session at the user's explicit objection — automation wasn't reproducing the real interaction
+> reliably and was burning time without permission to do so (memory saved:
+> `feedback_no_unauthorized_ui_automation.md`); the fix itself was reached from the user's
+> screenshot + description + static code reading alone, and the scratch test file was deleted.
+> **Verified:** `Paperbunkr.App` builds clean; the 5 pre-existing `BookReaderScreenViewModelTests`
+> failures in this area were confirmed pre-existing on unmodified master (stashed this change,
+> re-ran, same 5 failures) — not caused by this fix; **user confirmed on-screen** the TOC drawer now
+> renders correctly (clean styled list, no longer blocked) and that the reading text reappears
+> immediately once the drawer closes (no regression) — the only follow-up (page fully hidden rather
+> than dimmed while a drawer is open) was confirmed as acceptable, not a bug. **Not done:** the
+> highlight popup fix (deliberately out of scope this pass, see above).
+
+> **Manual session note (2026-09-16, Book reader drawers rebuilt on real Windows, replacing the
+> WebView-hide workaround above):** User rejected the WebView-hide fix immediately above once they
+> saw it - it stopped the drawer from being blocked, but lost the original UX (text dimly visible
+> *behind* the drawer, not fully blanked), which the reader genuinely had right after being first
+> built. Root cause (from the prior note) stands: `Win32PlatformOptions.OverlayPopups = true`
+> collapses every `Popup` into the in-window overlay layer, so no `Popup`-hosted drawer can ever
+> render above `NativeWebView`'s native child HWND while both exist - there is no `ShouldUseOverlayLayer`-only
+> fix available. The only way to restore the original look is for the drawer to stop being a
+> `Popup` at all: `Window` creation is NOT subject to `OverlayPopups` (that option only affects
+> Popups per Avalonia's own docs), and Windows guarantees an *owned* window renders above its owner
+> - including the owner's native child HWNDs.
+> Rebuilt `ReaderListDrawer` (TOC/Bookmarks/Highlights/Search) and `ReaderSettingsSheet` (Font
+> sheet) to host their scrim+panel content in a real, separately-owned `OverlayHostWindow`
+> (`src/Paperbunkr.App/Views/OverlayHostWindow.cs`, new - borderless, transparent, `WindowDecorations.None`,
+> `ShowInTaskbar=False`) managed by a new shared `OverlayWindowController`
+> (`src/Paperbunkr.App/Views/OverlayWindowController.cs`) instead of a `Popup`. The controller:
+> creates/shows the window (`Show(owner)`) when `IsOpen` flips true, closes it when false; tracks
+> the host screen's own root Grid (`OverlayReference`) via `PointToScreen`/`Bounds` and re-syncs the
+> window's `Position`/`Width`/`Height` on the reference's own `LayoutUpdated` and the owner window's
+> `PositionChanged`, so it stays aligned across resize/maximize/move while open. Both `.axaml` files
+> lost their `<Popup>` wrapper (the scrim+panel Grid is now the file's real content, given `x:Name="OverlayRoot"`);
+> both `.axaml.cs` files detach that Grid from their own `Content` in the constructor (so it never
+> renders inline) and forward `IsOpenProperty` changes to the controller. `ReaderSettingsSheet.axaml`'s
+> local `Border.miniCard`/`TextBlock.cardTitle`/`TextBlock.fieldLabel` styles moved from
+> `UserControl.Styles` to `Grid.Styles` on `OverlayRoot` itself, since Avalonia resolves local
+> styles by walking up from an element's *current* logical parent - once reparented into the new
+> Window, the original UserControl stops being an ancestor and would no longer supply them.
+> `BookReaderScreen.axaml`'s `ReaderWebView.IsVisible` binding from the superseded fix was reverted
+> (WebView stays visible throughout - the whole point of this rebuild). Added
+> `OnDetachedFromVisualTree` overrides on both controls that force-close any open overlay window -
+> belt-and-braces against orphaned floating windows if the reader screen itself is torn down
+> (navigated away from) while a drawer is left open, since these windows are no longer anchored
+> inside `BookReaderScreen`'s own visual tree the way a `Popup` was.
+> **Verified:** full solution builds clean (0 errors). Re-ran the same targeted test suites as the
+> superseded note plus `PdfPageReaderScreenViewModelTests` - the same 5 pre-existing
+> `BookReaderScreenViewModelTests` failures plus one more pre-existing failure
+> (`PdfPageReaderScreenViewModelTests.DeleteCapture_RemovesTheFileAndTheRow`, confirmed via the same
+> stash/re-run comparison to fail identically on unmodified master - a real file leftover under
+> `%AppData%\Paperbunkr`, unrelated to this change) - no new failures. **Not verified:** this is a
+> materially bigger change than the superseded fix (real window creation/positioning/lifecycle, not
+> a single binding), and it has NOT been checked on-screen at all. Specifically unverified: the
+> drawer actually renders above the WebView with text visible behind it (the whole point); position/
+> size tracking holds when the main window is moved, resized, or maximized/restored while a drawer
+> is open; closing via scrim-click still works when hosted in a real window; no orphaned floating
+> windows after closing the reader or navigating away with a drawer left open; the Font sheet's
+> `Grid.Styles` move didn't break its mini-card visuals. User needs to check all of this for real
+> before this is considered done.
+
+> **Manual session note (2026-09-16, Reading Lists "Find & link" fixed):** User reported "find and
+> link" in reading lists don't work, with a screenshot: clicking "Find & link" on a missing item
+> shows the `LinkingBannerText` ("Linking X #Y — pick a result below, or Cancel") but no search box
+> or results appear under it - nothing to click, the feature does nothing observable. Root cause:
+> `ReadingScreenViewModel.StartLink` (`src/Paperbunkr.App/ViewModels/ReadingScreenViewModel.cs`)
+> sets `LinkingRow` (which drives the banner via `IsLinking`) but never sets `IsAddIssuesOpen` -
+> the actual search TextBox/results/Add-or-Link-button panel in `ReadingScreen.axaml` is gated on
+> that separate flag, normally only flipped by the unrelated "+ Add issues" button. One-line fix:
+> `StartLink` now also sets `IsAddIssuesOpen = true`. **Verified:** `Paperbunkr.App` builds clean;
+> added a missed assertion (`Assert.True(vm.IsAddIssuesOpen)`) to the existing
+> `StartLinkThenAddIssue_RelinksTheTargetedRow_InsteadOfAppending` test right after
+> `row.LinkCommand.Execute(null)` - that test already drove the relink logic end-to-end via direct
+> command calls but never checked whether the panel a real user would need to click into was
+> actually open, which is exactly why this shipped unnoticed; full `ReadingScreenViewModelTests`
+> suite re-run (44 cases) shows only the same 2 pre-existing `Delete_*` failures, confirmed
+> pre-existing via stash/re-run against unmodified master, unrelated to this fix. **Not done:**
+> on-screen click-through (diagnosed from the user's own screenshot + code reading, not re-verified
+> visually after the fix).
+
+> **Manual session note (2026-09-16, comic reader chrome auto-hide toggle added):** User reported
+> the comic reader's floating chrome (Navigate/View/Page-turn/Actions clusters,
+> `ReaderScreenViewModel.ShowChrome`) doesn't fade while reading - distracting - and asked for a
+> toggleable auto-hide option in reader settings. Confirmed by reading the code: the idle-fade was
+> already there (`docs/superpowers/specs/2026-08-25-reader-chrome-design.md`) but hardcoded always-on
+> with no way to disable it, and it's genuinely sensitive to ANY pointer movement over the reading
+> canvas restarting its 3s countdown (`OnReaderPointerMoved` → `NotifyCursorActivity` →
+> `RestartOverlayAutoHideTimer`, unconditional, no throttling) - plausible real-world "never hides"
+> for anyone whose hand rests near the mouse. Checked CE parity per standing rule before adding a
+> field: no real precedent - CE's `ExtendedSettings.AutoHideCursorDuration` is a different, narrower
+> feature (OS cursor hiding, not the chrome toolbar) and isn't exposed as an on/off checkbox in CE's
+> own Settings UI either, so this is a clean Paperbunkr-original addition, not a parity gap.
+> Added `AppSettings.ReaderAutoHideChrome` (bool, default true - matches the previous hardcoded
+> behavior), a new EF migration (`AddReaderAutoHideChrome`), a "Auto-hide toolbar when idle" toggle
+> in Preferences > Reader (mirrors `HighQualityPageDisplay`'s exact row/binding/persist shape), and
+> gated `ReaderScreenViewModel.RestartOverlayAutoHideTimer` behind it (loaded once in `Load()`,
+> same read-once-at-load pattern as `HighQualityPageDisplay`/`MouseWheelSpeed` - not a live in-reader
+> toggle). Real bug caught and fixed while scaffolding the migration: EF's own tool defaulted the
+> new column's SQL-level `DEFAULT` to `false`, contradicting the C# property's `true` default - an
+> existing user's AppSettings row upgrading through this migration would have silently gotten
+> auto-hide OFF instead of the "on" behavior they already had. Fixed by hand
+> (`defaultValue: true` in the migration's `Up()`); a dedicated test
+> (`AddReaderAutoHideChromeMigrationTests.Migration_ColumnDefault_IsTrue_NotFalse`) checks the raw
+> `pragma_table_info` column default directly, since a fresh-row test can't catch this class of bug
+> (`GetOrCreateAppSettings()` always writes the C# default explicitly regardless of the SQL default).
+> **Verified:** full solution builds clean (0 errors/warnings); new tests pass in isolation
+> (`AddReaderAutoHideChromeMigrationTests` ×2, `PreferencesScreenViewModelTests`
+> `*ReaderAutoHideChrome*` ×2) - `Paperbunkr.Data.Tests` full suite (953 cases) shows 8 pre-existing
+> failures, none touching this migration (migration-rollback-chain issues + one unrelated Insights
+> test, matching this project's known pre-existing migration-chain flake); `Paperbunkr.App.Tests`
+> full suite showed additional failures but all in an unrelated cover-cache/verify-covers area, and
+> re-confirmed passing in isolation (matching the documented "full-suite-only" headless flake).
+> **Not verified:** on-screen - never actually watched the chrome fade/stay-visible in the running
+> app (standing no-computer-use caveat); no timer-elapse test exists for this mechanism at all (not
+> even for the pre-existing Book reader equivalent), consistent with this codebase's established
+> practice of not unit-testing real `DispatcherTimer` elapsing, but means the actual fade-or-not
+> behavior itself is unverified beyond code reading.
+
+> **Manual session note (2026-09-16, real cause of the comic reader chrome never fading found and
+> fixed - the toggle above was necessary but not sufficient):** User reported the new toggle from
+> the note above still didn't fade chrome, on multiple fresh comics, ruling out the "setting only
+> re-reads on `Load()`" explanation. Found the actual root cause on a closer read of
+> `ReaderScreen.axaml`'s own styles, entirely unrelated to anything built this session: a later
+> style rule silently overrides the idle-fade's opacity regardless of the `.hidden` pseudo-class.
+> `Border.chromeCluster.hidden` (line ~141, ships 2026-08-25 with the chrome system itself) sets
+> `Opacity="0"`; `Border.floatingPanel.chromeCluster, Border.floatingPanel.readerDrawer` (line ~217,
+> the 2026-09-14 "frosted glass" translucent restyle) sets `Opacity="0.92"` on the SAME element (every
+> chrome cluster carries both `floatingPanel` and `chromeCluster` classes). Both selectors match 2
+> classes each - equal specificity in Avalonia's cascade, which breaks ties by source order, and the
+> frosted-glass rule comes later - so it always won, permanently pinning every cluster's opacity to
+> 0.92 regardless of `ShowChrome`/`.hidden`. The idle-fade has been silently dead since the frosted-
+> glass restyle shipped (2026-09-14), roughly 2 days after the chrome system itself - the toggle
+> added earlier this session was real and correctly wired, but had nothing to actually gate: the
+> visual effect it was supposed to enable/disable couldn't render either way. Fix: widened
+> `.chromeCluster.hidden`'s selector to `Border.floatingPanel.chromeCluster.hidden` (3 classes),
+> making it strictly more specific than the frosted-glass rule so it wins outright rather than
+> depending on file order - narrows nothing, every real usage already carries all three classes.
+> Checked the thumbnail rail's own separate hide mechanism (`Border.railOverlay`/`.railOverlay.hidden`)
+> and the drawer's (`IsVisible` binding, not opacity) for the same class of bug - neither is affected
+> (rail never combines with `.floatingPanel`; the drawer's visibility mechanism is unrelated to
+> Opacity entirely). **Verified:** `Paperbunkr.App` builds clean. **Not verified:** on-screen - same
+> standing no-computer-use caveat; this is a plausible, well-evidenced fix (a real, provable
+> Avalonia-cascade tie explaining the exact symptom across multiple comics) but genuinely unconfirmed
+> visually. User needs to check the actual fade this time, not just the toggle's own persistence.
+
+> **Manual session note (2026-09-16, the fix immediately above was itself wrong - corrected):** User
+> confirmed still no fade after a genuine rebuilt-and-restarted dev-build test (ruled out both a
+> stale setting and a stale/wrong exe - asked directly). The previous fix's diagnosis of the
+> conflict was right (two class-selector rules on the same element, one setting Opacity 0, one
+> 0.92) but the ASSUMED resolution mechanism was wrong: it widened `.chromeCluster.hidden` to 3
+> classes assuming "more classes = more specific = wins," modeling Avalonia's cascade on CSS. Pulled
+> Avalonia's own docs directly rather than continuing to guess: "Two selectors with any conditional
+> activation will have equal priority regardless of the number of activators present... Avalonia
+> doesn't have CSS's concept of Specificity" (style classes count as conditional selectors) - so
+> both rules sit at the identical `StyleTrigger` `BindingPriority` tier no matter how many classes
+> either lists, both live in the same `UserControl.Styles` collection (identical visual-tree
+> locality too), leaving exactly one tiebreaker: `Styles` collection order, last-declared wins. The
+> widened selector was still positioned BEFORE the frosted-glass rule in the file, so it kept
+> losing regardless of its extra class - the fix needed to be a reorder, not a widen. Reverted the
+> selector back to plain `Border.chromeCluster.hidden` and moved its declaration to AFTER the
+> frosted-glass rule (`ReaderScreen.axaml`, end of `UserControl.Styles`) instead - the only thing
+> that actually decides the tie per Avalonia's own stated rules. Also checked for a LocalValue
+> override that would trump both regardless of ordering (an inline `Opacity=` on the Border itself)
+> - none of the 4 real chrome-cluster `Border` declarations set one. **Verified:** `Paperbunkr.App`
+> builds clean. **Not verified:** on-screen, same standing caveat - but this time the mechanism is
+> confirmed from Avalonia's own documented precedence rules (quoted directly, not inferred from
+> CSS-adjacent assumptions), not just "plausible." If this still doesn't fade, the next place to
+> look is whether `ShowChrome` itself is really flipping to `false` at all (i.e. whether
+> `RestartOverlayAutoHideTimer`'s `DispatcherTimer` genuinely ticks) rather than another styling
+> conflict - that mechanism has never been directly verified end-to-end, in this session or before.
+
+> **Manual session note (2026-09-16, comic reader chrome made per-cluster hover-reveal):** The idle-
+> fade fix above worked - user confirmed - then asked for it to be "more reactive... only when I try
+> to hover above each item." Grilled 3 quick questions before touching code (scope: all 4 corner
+> clusters vs. finer-grained; trigger zone: each cluster's own corner vs. a full edge strip; whether
+> the old "any movement reveals everything" behavior should stay alongside the new per-corner hover
+> or be replaced) - user chose the narrowest, cleanest option each time: 4 clusters, each cluster's
+> own corner region, full replacement of the ambient reveal.
+> Added 4 new `ReaderScreenViewModel` bools (`IsNavigateClusterHovered`/`IsActionsClusterHovered`/
+> `IsViewClusterHovered`/`IsPageTurnClusterHovered`) and 4 composed read-only properties
+> (`IsNavigateClusterVisible` etc. = `ShowChrome || <that cluster's own hover flag>`) - each of the 4
+> cluster `Border`s in `ReaderScreen.axaml` now binds `Classes.hidden` to its own composed property
+> instead of the shared `!ShowChrome`. `ShowChrome` itself stays as an explicit "show everything"
+> override reachable via `ToggleChromeCommand` (center-tap/keyboard) - deliberately NOT removed,
+> since touch input has no hover state at all and would otherwise lose any way to reveal chrome.
+> The real wiring problem solved: a HIDDEN cluster has `IsHitTestVisible=False` (needed so clicks
+> pass through to the page underneath when it's not shown), so it can never receive its own
+> `PointerEntered` to un-hide itself - added 4 separate, always-hit-testable, invisible
+> (`Background="Transparent"`) hotspot `Border`s, one in each cluster's own corner, each declared
+> immediately BEFORE its real cluster in the Grid so the real cluster (once visible) still sits on
+> top for its own clicks, with the hotspot only "showing through" in the gap for hover detection.
+> Removed the old ambient reveal entirely: `ReaderScreen.axaml.cs`'s root-canvas `PointerMoved`
+> (`OnReaderPointerMoved`) no longer calls `NotifyCursorActivity()` (which used to flip `ShowChrome`
+> true on ANY movement anywhere) - it now only calls the newly-public `RefreshShortcutHints()`, an
+> unrelated pre-existing side effect (keeps keyboard-shortcut tooltips fresh after a Preferences
+> remap) that had piggybacked on the same event purely as a convenient "something happened" trigger
+> and needed to keep working independently of the chrome-reveal behavior being removed.
+> **Verified:** `Paperbunkr.App` builds clean; full `ReaderScreenViewModelTests` suite (197 cases,
+> comic + PDF readers) shows the exact same 6 pre-existing failures already logged earlier this
+> session (5 unrelated `BookReaderScreenViewModelTests` + 1 `PdfPageReaderScreenViewModelTests` file-
+> leftover flake) - zero new failures, every existing `ShowChrome`/`ToggleChrome`/
+> `NotifyCursorActivity` test (which the underlying mechanism is unchanged for) still passes.
+> **Not done:** no new automated test added for the hover-reveal mechanism itself (would need UI-
+> level PointerEntered/Exited simulation, not just VM-level property assertions - the 4 new bools
+> are trivial `[ObservableProperty]`s with no logic of their own worth a dedicated test, matching
+> this codebase's existing bar for similar simple hover/toggle flags elsewhere). **Not verified:**
+> on-screen - standing caveat, though the underlying idle-fade styling fix (what "hidden" visually
+> does) was just independently confirmed working by the user immediately before this change, so the
+> remaining risk is narrower: mainly the 4 hotspots' size/position actually covering each cluster's
+> real footprint well, and z-order not blocking real cluster clicks once shown.
+
+> **Manual session note (2026-09-16, per-cluster hover fix above had a real bug - fixed the same
+> day):** User's first on-screen try of the hover-reveal feature: a cluster would show on hover but
+> then never hide again, stuck visible permanently. Root cause: `PointerEntered`/`PointerExited` were
+> only wired on each corner's invisible hotspot `Border`, not on the real cluster `Border` itself.
+> Once a cluster becomes visible it sits on top of (occludes) its own hotspot underneath in the same
+> corner - Avalonia then stops routing pointer events to the now-occluded hotspot entirely rather
+> than firing a final `PointerExited` for it, so the moment the cursor crossed from the hotspot onto
+> the cluster's own surface, `IsNavigateClusterHovered` (etc.) got set `true` and nothing ever set it
+> back to `false` again, regardless of where the cursor went afterward. Fixed by wiring the exact
+> same `PointerEntered`/`PointerExited` handlers on each real cluster `Border` too (reusing the same
+> 8 code-behind methods, not new ones) - now whichever of the hotspot/cluster pair the cursor is
+> actually over keeps reporting hover correctly, and the real cluster's own `PointerExited` fires
+> normally once the cursor truly leaves the corner. **Verified:** `Paperbunkr.App` builds clean;
+> re-ran the directly relevant `ShowChrome`/`ToggleChrome`/`NotifyCursorActivity` VM-level tests (3
+> cases, unaffected by this - the bug was purely in XAML event wiring, no VM logic changed). **Not
+> verified:** on-screen - same standing caveat as every fix in this area; this is the third
+> iteration of the chrome-visibility feature in one day, each based on real user-reported on-screen
+> symptoms rather than guesses, so treat this as genuinely unconfirmed until checked again for real.
+
+> **Manual session note (2026-09-16, per-cluster hover mechanism replaced entirely - Enter/Exit
+> events abandoned after two straight failures):** The occlusion-based fix above (wiring
+> PointerEntered/Exited on the real cluster too) was re-tested on-screen and made literally zero
+> observable difference - same "shows once, then stuck visible forever" symptom as the original
+> hotspot-only version. Rather than guess at a third Enter/Exit-based theory (occlusion, hit-test-
+> visibility-flip timing, or something else in that family - genuinely couldn't tell which without
+> live inspection, and user declined a UIA-harness check), abandoned per-element hover events
+> entirely. Replaced with direct position math: removed all 4 hotspot `Border`s and every
+> `PointerEntered`/`PointerExited` handler, and rewrote `ReaderScreen.axaml.cs`'s
+> `OnReaderPointerMoved` (the SAME root-Grid handler already proven reliable all session - it's the
+> handler whose ambient reveal was the ORIGINAL "HUD never hides" bug report, meaning it demonstrably
+> already fires correctly across the full reading canvas, not just the margins) to compute each
+> cluster's hover state directly from the pointer's position against the Grid's own live `Bounds` on
+> every real move - `IsNavigateClusterHovered = pos.X < 300 && pos.Y < 60`, and the mirror image for
+> the other 3 corners. No Entered/Exited semantics, no hit-test-visibility timing, no occlusion -
+> just arithmetic on an event that was never in doubt. Zone sizes are the same rough numbers the
+> retired hotspots used (not pixel-exact to each cluster's real content) - a legitimate tuning knob
+> if a corner feels off, distinct from "not working at all." **Verified:** `Paperbunkr.App` builds
+> clean; full `ReaderScreenViewModelTests` suite (197 cases) shows the exact same 6 pre-existing
+> failures as every run earlier today, zero new ones. **Not verified:** on-screen, same standing
+> caveat - this is the third attempt at this specific "hide again" behavior; the underlying idle-fade
+> CSS-cascade fix (the actual show/hide mechanics) was independently confirmed working by the user
+> before any of the hover-specific attempts, so what's actually unverified now is narrower: whether
+> position math correctly drives `IsXClusterHovered` in practice, and whether the 4 zone sizes are
+> reasonable.
+
+> **Manual session note (2026-09-16, actual root cause of all 4 "still doesn't hide" reports found -
+> the hover mechanism was never the bug):** User's 4th on-screen retest of the per-cluster hover
+> feature: "nothing, it doesn't hide" - and, on being asked precisely, confirmed hovering doesn't
+> even SHOW anything differently at all (chrome is just permanently visible regardless of hover).
+> That single fact ruled out every hover-detection theory tried so far (all 3 previous fixes only
+> ever touched HOW hover is detected, which was moot if visibility never responded to it in the
+> first place) and pointed at `ShowChrome` itself: `IsNavigateClusterVisible` (and the 3 siblings)
+> compose as `ShowChrome || IsXClusterHovered` - if `ShowChrome` is stuck `true`, the whole OR
+> short-circuits permanently regardless of hover. Confirmed by code reading: `ShowChrome` defaults
+> `true` at construction, and the ONLY thing that ever reset it to `false` was the ambient
+> `OnReaderPointerMoved -> NotifyCursorActivity()` call - which was deliberately REMOVED earlier the
+> same session, the moment the per-cluster hover reveal replaced the old ambient-reveal-everything
+> behavior, and nothing was added to replace that reset. Nothing else in a normal reading session
+> (only `ToggleFullscreen`/`ToggleChrome`/the idle timer's own `Tick` touch `ShowChrome`, none of
+> which fire from ordinary reading) ever set it false again - so `ShowChrome` has been permanently
+> `true` since construction for the ENTIRE per-cluster-hover arc today, meaning all 3 earlier hover-
+> mechanism fixes (hotspot Enter/Exit, cluster Enter/Exit, position math) were correctly built but
+> could never have produced a visible effect either way, because the composed visibility property
+> they all fed into was already unconditionally `true` from a completely different, unrelated cause.
+> Fix: `ReaderScreenViewModel`'s shared `Load()` (used by `LoadIssue`/`EnsureIssueLoaded`/adjacent-
+> issue navigation) now explicitly sets `ShowChrome = false` right after reading the per-issue
+> AppSettings - matching `BookReaderScreenViewModel.LoadBook`'s own identical `IsChromeVisible =
+> false` reset, which makes the same "fresh reading session starts with chrome hidden" assumption
+> that had always held for the Book reader but was only ever implicit (via the now-removed ambient
+> reveal) for the comic reader. Also fixed 2 existing tests whose premise the old always-true default
+> had baked in (`ToggleChromeCommand_WhenChromeShown_HidesIt`/`_WhenChromeHidden_ShowsItAgain`) -
+> not just made them compile, restructured them to actually reflect and exercise the new correct
+> default. **Verified:** `Paperbunkr.App` builds clean; full `ReaderScreenViewModelTests` suite (197
+> cases) - same 6 pre-existing failures as every run today, the 2 restructured tests pass under the
+> new default. **Not verified:** on-screen - 4th attempt at this exact "hide" behavior in one day;
+> this is a structurally different, much more confidently-diagnosed root cause than the previous 3
+> (found from the user's own precise "doesn't even show differently" answer, not a fresh guess), but
+> genuinely still needs a real check before treating this thread as closed.
 
 > **Manual session note (2026-09-12, grid type-ahead/Shift+arrow range-select/Ctrl+Q shipped):**
 > Beta-backlog work, P0–P7 unchanged. Design + plan: `docs/superpowers/specs/2026-09-12-grid-

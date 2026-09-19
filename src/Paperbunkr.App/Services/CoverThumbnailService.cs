@@ -131,10 +131,41 @@ public class CoverThumbnailService
     /// </summary>
     public bool TrySetCustomCover(int issueId, string sourceImagePath)
     {
-        string destPath = CustomCoverPaths.GetCachePath(issueId);
         try
         {
             using var source = new Bitmap(sourceImagePath);
+            return TrySetCustomCoverCore(issueId, source);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Same override as <see cref="TrySetCustomCover"/>, sourced from an in-memory image (a
+    /// downloaded external-provider cover, docs/superpowers/specs/2026-09-18-external-metadata-
+    /// full-extraction-design.md §2) instead of a local file path.
+    /// </summary>
+    public bool TrySetCustomCoverFromBytes(int issueId, byte[] imageBytes)
+    {
+        try
+        {
+            using var stream = new MemoryStream(imageBytes);
+            using var source = new Bitmap(stream);
+            return TrySetCustomCoverCore(issueId, source);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TrySetCustomCoverCore(int issueId, Bitmap source)
+    {
+        string destPath = CustomCoverPaths.GetCachePath(issueId);
+        try
+        {
             var size = source.PixelSize;
             int longest = Math.Max(size.Width, size.Height);
             if (longest <= 0)
@@ -159,6 +190,24 @@ public class CoverThumbnailService
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// The cover file currently representing <paramref name="issueId"/>, custom-wins-over-generated
+    /// (docs/superpowers/specs/2026-09-17-reader-save-page-and-cover-picker-design.md) - the source
+    /// resolution the cover picker's "From Series"/"From Reading List" tabs need to both render a
+    /// candidate's thumbnail and copy it into another issue's custom-cover slot. Null when the issue
+    /// has no cover at all yet.
+    /// </summary>
+    public static string? GetEffectiveCoverPath(int issueId)
+    {
+        if (CustomCoverPaths.Exists(issueId))
+        {
+            return CustomCoverPaths.GetCachePath(issueId);
+        }
+
+        string generated = CoverThumbnailPaths.GetCachePath(issueId);
+        return File.Exists(generated) ? generated : null;
     }
 
     /// <summary>

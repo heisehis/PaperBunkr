@@ -51,8 +51,11 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>All lists from the last <see cref="RefreshSidebar"/> query, before any tag filter - <see cref="Lists"/> is the filtered view actually shown.</summary>
     private List<ReadingListSummary> _allListSummaries = new();
 
-    public ReadingScreenViewModel(IFilePickerService filePicker, Action<int, int> goReaderForIssueInReadingList, Action<int>? openProperties = null, IActivityService? activity = null, bool loadOnConstruction = true)
+    private readonly ITrackerAutoSyncService _trackerAutoSync;
+
+    public ReadingScreenViewModel(IFilePickerService filePicker, Action<int, int> goReaderForIssueInReadingList, Action<int>? openProperties = null, IActivityService? activity = null, bool loadOnConstruction = true, ITrackerAutoSyncService? trackerAutoSync = null)
     {
+        _trackerAutoSync = trackerAutoSync ?? NoOpTrackerAutoSyncService.Instance;
         _filePicker = filePicker;
         _goReaderForIssueInReadingList = goReaderForIssueInReadingList;
         _openProperties = openProperties ?? (_ => { });
@@ -509,6 +512,12 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
             }
 
             context.SaveChanges();
+
+            if (read)
+            {
+                // "Update progress when marked as read" - one call for the whole bulk action (design §3.3).
+                _ = _trackerAutoSync.OnIssuesMarkedReadAsync(context.Issues.Where(i => issueIds.Contains(i.Id)).Select(i => i.SeriesId).Distinct().ToList());
+            }
         }
 
         MemberSelection.Clear();
@@ -528,7 +537,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
 
     partial void OnStatusMessageChanged(string? value) => OnPropertyChanged(nameof(HasStatusMessage));
 
-    /// <summary>Real empty states (P6, docs/alpha-todo.md) - previously a fresh install or a database with no reading lists just rendered a blank header, with nothing telling the user what to do.</summary>
+    /// <summary>Real empty states (P6, docs/paperbunkr-todo.md) - previously a fresh install or a database with no reading lists just rendered a blank header, with nothing telling the user what to do.</summary>
     public bool HasNoReadingLists => Lists.Count == 0;
 
     public bool HasNoItems => !HasNoReadingLists && Groups.Count == 0;
@@ -892,6 +901,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
                 return;
             }
 
+            bool markingRead = !row.IsRead;
             if (row.IsRead)
             {
                 IssueReadStateResolver.MarkAsUnread(issue);
@@ -902,6 +912,11 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
             }
 
             context.SaveChanges();
+
+            if (markingRead)
+            {
+                _ = _trackerAutoSync.OnIssuesMarkedReadAsync(new[] { issue.SeriesId });
+            }
         }
 
         if (_activeReadingListId is int listId)
@@ -1135,6 +1150,12 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     private void StartLink(ReadingListItemRowViewModel row)
     {
         LinkingRow = row;
+        // Real bug found 2026-09-16: without this, "Find & link" showed the LinkingBannerText
+        // ("Linking X — pick a result below, or Cancel") but the actual search box/results panel
+        // stayed hidden, since that panel is gated on the separate IsAddIssuesOpen flag - normally
+        // only flipped by the unrelated "+ Add issues" button - which StartLink never touched. The
+        // button did nothing observable, exactly matching the user report.
+        IsAddIssuesOpen = true;
         SearchResults.Clear();
         SearchQuery = string.Empty;
     }

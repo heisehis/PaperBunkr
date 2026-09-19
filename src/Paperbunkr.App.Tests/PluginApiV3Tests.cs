@@ -485,5 +485,5 @@ public sealed class PluginApiV3Tests : IDisposable
         public void PreviousPage() { }
         public void GoToPage(int index) { }
     }
-    private sealed class StubThemePlugin : IThemePlugin { public string CurrentSkinKey => "default"; }
+    private sealed class StubThemePlugin : IThemePlugin { public string CurrentThemeKey => "default"; }
 }

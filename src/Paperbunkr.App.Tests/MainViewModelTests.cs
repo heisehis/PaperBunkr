@@ -159,7 +159,7 @@ public class MainViewModelTests : IDisposable
     }
 
     /// <summary>
-    /// P6 follow-up (docs/alpha-todo.md): unlike CE's <c>ComicBookDialog</c> (a true modal that
+    /// P6 follow-up (docs/paperbunkr-todo.md): unlike CE's <c>ComicBookDialog</c> (a true modal that
     /// blocks all other interaction by construction), Issue Properties/Bulk Editing here are just
     /// an overlay within one window, so the rail nav stayed fully clickable mid-edit with no
     /// warning until <see cref="MainViewModel.TryLeaveCurrentEditor"/> was added.
@@ -681,6 +681,99 @@ public class MainViewModelTests : IDisposable
         }
     }
 
+    /// <summary>docs/superpowers/specs/2026-09-16-book-file-associations-design.md - Books-side
+    /// counterpart to <see cref="OpenFilePath_AlreadyInLibrary_OpensExistingIssue_WithoutImporting"/>:
+    /// a path already in the library just opens the existing Book, no import runs.</summary>
+    [Fact]
+    public void OpenBookFilePath_AlreadyInLibrary_OpensExistingBook_WithoutImporting()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_openbookfilepath_existing_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string filePath = Path.Combine(root, "novel.epub");
+        // A real, readable epub - GoBookReaderForBook -> BookReaderScreenViewModel.LoadBook opens the
+        // file for real content (unlike the comic reader path, which doesn't need real page bytes
+        // for this same "already in library" shape), so a bare seeded FilePath with no matching file
+        // on disk would throw here.
+        EpubFixture.Create(filePath, title: "Open Book File Existing");
+        SeedBook("Open Book File Existing", filePath, Paperbunkr.Data.Entities.BookFormat.Epub);
+        var vm = new MainViewModel();
+
+        try
+        {
+            vm.OpenBookFilePath(filePath, Paperbunkr.Data.Entities.BookFormat.Epub);
+
+            Assert.True(vm.IsBookReader);
+
+            var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+            using var context = new PaperbunkrDbContext(options);
+            Assert.Equal(1, context.Books.Count());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    /// <summary>A path not already in the library is always imported first, then opened - mirrors
+    /// <see cref="OpenFilePath_NewSupportedFile_ImportsAndOpens"/> for the Books schema.</summary>
+    [Fact]
+    public void OpenBookFilePath_NewSupportedFile_ImportsAndOpens()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_openbookfilepath_new_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string file = Path.Combine(root, "novel.epub");
+        EpubFixture.Create(file, title: "Open On Launch Novel");
+        var vm = new MainViewModel();
+
+        try
+        {
+            vm.OpenBookFilePath(file, Paperbunkr.Data.Entities.BookFormat.Epub);
+
+            Assert.True(vm.IsBookReader);
+
+            var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+            using var context = new PaperbunkrDbContext(options);
+            Assert.True(context.Books.Any(b => b.FilePath == file));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    /// <summary>A file the importer can't actually parse (corrupt/not a real book despite the right
+    /// extension) falls back to <see cref="MainViewModel.RestoreLastScreen"/> rather than crashing -
+    /// mirrors <see cref="OpenFilePath_UnsupportedExtension_FallsBackWithoutCrashing"/>.</summary>
+    [Fact]
+    public void OpenBookFilePath_UnparsableFile_FallsBackWithoutCrashing()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_openbookfilepath_bad_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string file = Path.Combine(root, "notes.epub");
+        File.WriteAllText(file, "not a real epub");
+        var vm = new MainViewModel();
+
+        try
+        {
+            var exception = Record.Exception(() => vm.OpenBookFilePath(file, Paperbunkr.Data.Entities.BookFormat.Epub));
+
+            Assert.Null(exception);
+            Assert.True(vm.IsHome, $"CurrentScreen={vm.CurrentScreen}");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    private void SeedBook(string title, string filePath, Paperbunkr.Data.Entities.BookFormat format)
+    {
+        var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        using var context = new PaperbunkrDbContext(options);
+        context.Books.Add(new Paperbunkr.Data.Entities.Book { Title = title, FilePath = filePath, Format = format, AddedTime = DateTime.UtcNow });
+        context.SaveChanges();
+    }
+
     [Fact]
     public void RestoreLastScreen_NoPriorSession_DefaultsToHome()
     {
@@ -1087,5 +1180,68 @@ public class MainViewModelTests : IDisposable
 
         Assert.True(vm.IsPreferences);
         Assert.True(vm.Preferences.IsAdvancedSection);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-09-16-theme-system-design.md § Reader auto-suspend -
+    /// exercises the real ThemeService.SetTrueBlackReaderSuspend call this navigation hook makes
+    /// (against the temp DB this test class already redirects to), not a mock - the meaningful
+    /// regression guard is that navigating into/out of each of the 3 reader screens never throws.</summary>
+    [Theory]
+    [InlineData("reader")]
+    [InlineData("bookReader")]
+    [InlineData("pdfReader")]
+    public void CurrentScreenChanged_IntoAndOutOfReaderScreens_DoesNotThrow(string readerScreenKey)
+    {
+        var vm = new MainViewModel();
+
+        vm.CurrentScreen = readerScreenKey;
+        Assert.True(vm.IsInReader);
+
+        vm.CurrentScreen = "home";
+        Assert.False(vm.IsInReader);
+    }
+
+    /// <summary>§ Matrix rain effect - false by default (no test in this class applies the Matrix
+    /// theme), and specifically false while in a reader screen even if it somehow were true, per
+    /// IsMatrixRainVisible's own AND-with-!IsInReader formula.</summary>
+    [Fact]
+    public void IsMatrixRainVisible_FalseByDefault_AndWhileInReader()
+    {
+        var vm = new MainViewModel();
+
+        Assert.False(vm.IsMatrixRainVisible);
+
+        vm.CurrentScreen = "reader";
+
+        Assert.False(vm.IsMatrixRainVisible);
+    }
+
+    /// <summary>The user's "Matrix rain" preference gates the overlay: theme active + preference off
+    /// must not show it, and flipping the preference back on shows it again live.</summary>
+    [Fact]
+    public void IsMatrixRainVisible_FollowsMatrixRainEnabledPreference_WhileMatrixThemeActive()
+    {
+        var themeService = new Paperbunkr.App.Services.ThemeService();
+        string previousTheme = themeService.GetActiveThemeKey();
+        bool previousRain = themeService.GetMatrixRainEnabled();
+        try
+        {
+            themeService.ApplyTheme("matrix");
+            themeService.SetMatrixRainEnabled(true);
+            var vm = new MainViewModel();
+            Assert.True(vm.IsMatrixThemeActive);
+            Assert.True(vm.IsMatrixRainVisible);
+
+            vm.Preferences.MatrixRainEnabled = false;
+            Assert.False(vm.IsMatrixRainVisible);
+
+            vm.Preferences.MatrixRainEnabled = true;
+            Assert.True(vm.IsMatrixRainVisible);
+        }
+        finally
+        {
+            themeService.SetMatrixRainEnabled(previousRain);
+            themeService.ApplyTheme(previousTheme);
+        }
     }
 }

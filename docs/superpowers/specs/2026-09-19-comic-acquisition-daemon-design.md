@@ -223,7 +223,7 @@ All changes happen on a copy.
   Failed torrent → `Failed` (retry only if configured). ComicVine ban/429 → all ComicVine calls pause.
 - Tests: unit tests for query variants, scoring, status machine, owned-matching; fake Prowlarr and
   qBittorrent HTTP servers for client tests; in-memory SQLite for data tests; UI tests use
-  `TestDispatcher.Drain()`.
+  a per-class `PumpDispatcher()` (`Dispatcher.UIThread.RunJobs()`).
 - Safety: no bundled indexers/trackers; manual approve by default; secrets follow `CredentialStore`.
 
 ## 11. Open items to verify during planning

@@ -55,7 +55,7 @@ public class SmartListEngineV2MigrationTests : IDisposable
             // SmartLists/SmartListConditions already do because their shape changes in v2
             // (SmartListConditions carries SmartListId directly pre-v2).
             context.Database.ExecuteSqlRaw(
-                "INSERT INTO Series (Id, Name, ContentType, Status) VALUES (1, 'Alpha', 'Comic', 'Completed');");
+                "INSERT INTO Series (Id, Name, ContentType, ReadingMode, Status) VALUES (1, 'Alpha', 'Comic', 'LeftToRight', 'Completed');");
 
             context.Database.ExecuteSqlRaw(
                 "INSERT INTO Issues (Id, SeriesId, Number, Publisher, ColorMode, FileIsMissing, Checked, IsPlaceholder, MissingAcknowledged, OpenCount, IsFinalIssue) " +

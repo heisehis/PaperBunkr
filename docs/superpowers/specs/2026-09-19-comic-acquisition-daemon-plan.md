@@ -142,7 +142,7 @@ destination library folder, connection tests (Prowlarr only in slice 1; qBittorr
 **Depends on:** Steps 1, 4
 **Verify:** view-model tests; build twice per the AVLN2000 recipe; avalonia-pro-max review checklist.
 
-## Step 10: Wanted screen (Layout A)
+## Step 10: Wanted screen (Layout A)  — DONE (no cover thumbnails yet: remote cover URLs need the arc-cover cache plumbing, deferred; rows are text-only. Lists are not virtualized - fine for tens of rows, revisit if bulk requests make them long)
 **Files:** `ViewModels/WantedScreenViewModel.cs`, `Views/WantedScreen.axaml` + `.axaml.cs` (new),
 `MainViewModel.cs` and `Views/MainWindow.axaml` (edit: rail entry, DataTemplate, all string-key
 touchpoints listed in the survey), tests in `App.Tests`

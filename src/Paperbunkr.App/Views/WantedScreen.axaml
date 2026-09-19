@@ -1,0 +1,269 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.WantedScreen"
+             x:Name="Root"
+             x:DataType="vm:WantedScreenViewModel">
+
+    <!-- The Wanted screen (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 7, layout A): stage tabs in a top bar,
+         one list per tab. Shared chrome only - Button.tab/Border.card/pbChip from Styles, Pb* tokens, no hardcoded colors. -->
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <!-- Top bar: title, stage tabs, Search now -->
+        <Border Grid.Row="0" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="24,10,24,0">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0" Classes="pbTextHeading" Text="Wanted" VerticalAlignment="Center" Margin="0,0,24,10" />
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Bottom">
+                    <Button Classes="tab" Classes.active="{Binding IsWantedTab}" Command="{Binding GoWantedCommand}"
+                            AutomationProperties.AutomationId="WantedTabWanted">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Wanted" VerticalAlignment="Center" />
+                            <TextBlock Classes="tabCount" Text="{Binding WantedRows.Count}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="tab" Classes.active="{Binding IsUpcomingTab}" Command="{Binding GoUpcomingCommand}"
+                            AutomationProperties.AutomationId="WantedTabUpcoming">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Upcoming" VerticalAlignment="Center" />
+                            <TextBlock Classes="tabCount" Text="{Binding UpcomingRows.Count}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="tab" Classes.active="{Binding IsCandidatesTab}" Command="{Binding GoCandidatesCommand}"
+                            AutomationProperties.AutomationId="WantedTabCandidates">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Candidates" VerticalAlignment="Center" />
+                            <TextBlock Classes="tabCount" Text="{Binding CandidateCount}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="tab" Classes.active="{Binding IsSeriesTab}" Command="{Binding GoSeriesCommand}"
+                            AutomationProperties.AutomationId="WantedTabSeries">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Series" VerticalAlignment="Center" />
+                            <TextBlock Classes="tabCount" Text="{Binding SeriesRows.Count}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <Button Grid.Column="2" Classes="headerAction primary" Command="{Binding SearchNowCommand}" VerticalAlignment="Center" Margin="0,0,0,10"
+                        AutomationProperties.AutomationId="WantedSearchNowButton">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" />
+                        <TextBlock Text="Search now" IsVisible="{Binding !IsSearching}" />
+                        <TextBlock Text="Searching…" IsVisible="{Binding IsSearching}" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Status line (live region) -->
+        <Border Grid.Row="1" Padding="24,10,24,0" IsVisible="{Binding HasStatus}">
+            <StackPanel>
+                <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasErrorStatus}" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
+                <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasInfoStatus}" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
+            </StackPanel>
+        </Border>
+
+        <!-- One scroll region per tab (single vertical scroll per view) -->
+        <Panel Grid.Row="2">
+
+            <!-- WANTED -->
+            <ScrollViewer IsVisible="{Binding IsWantedTab}">
+                <StackPanel Margin="24,16,24,32" Spacing="8" MaxWidth="960" HorizontalAlignment="Left">
+                    <ItemsControl ItemsSource="{Binding WantedRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:WantedRowViewModel">
+                                <Border Classes="card" Margin="0,0,0,8" Padding="14,10">
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                        <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis"
+                                                       IsVisible="{Binding Subtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Classes="pbChip" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{DynamicResource PbAccentBrush}" />
+                                        </Border>
+                                        <TextBlock Grid.Column="2" Text="{Binding CandidateText}" IsVisible="{Binding HasCandidates}" Margin="12,0,0,0" VerticalAlignment="Center"
+                                                   FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <Button Classes="headerAction ghost" Content="I have this"
+                                                    AutomationProperties.Name="{Binding Title, StringFormat='I already have {0}'}"
+                                                    Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).IgnoreCommand}" CommandParameter="{Binding}" />
+                                            <Button Classes="headerAction ghost" Content="Remove"
+                                                    AutomationProperties.Name="{Binding Title, StringFormat='Stop wanting {0}'}"
+                                                    Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RemoveCommand}" CommandParameter="{Binding}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Empty state: icon + headline + description + action -->
+                    <StackPanel IsVisible="{Binding HasNoWanted}" Spacing="8" HorizontalAlignment="Center" Margin="0,56,0,0" MaxWidth="440">
+                        <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXl}" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="Nothing wanted right now" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="Request missing issues from a series' page or a reading list, or track a series on the Series tab."
+                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" TextAlignment="Center" />
+                        <Button Classes="headerAction primary" Content="Track a series" Command="{Binding GoSeriesCommand}" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                        <TextBlock Text="Automatic searching is off. Turn it on in Acquisition settings." IsVisible="{Binding !IsEnabled}"
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextAlignment="Center" Margin="0,12,0,0" />
+                        <Button Classes="headerAction ghost" Content="Open Acquisition settings" IsVisible="{Binding !IsEnabled}"
+                                Command="{Binding OpenAcquisitionSettingsCommand}" HorizontalAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- UPCOMING -->
+            <ScrollViewer IsVisible="{Binding IsUpcomingTab}">
+                <StackPanel Margin="24,16,24,32" Spacing="8" MaxWidth="960" HorizontalAlignment="Left">
+                    <ItemsControl ItemsSource="{Binding UpcomingRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:WantedRowViewModel">
+                                <Border Classes="card" Margin="0,0,0,8" Padding="14,10">
+                                    <Grid ColumnDefinitions="*,Auto,Auto">
+                                        <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Classes="pbChip" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{DynamicResource PbAccentBrush}" />
+                                        </Border>
+                                        <Button Grid.Column="2" Classes="headerAction ghost" Content="Remove" Margin="12,0,0,0" VerticalAlignment="Center"
+                                                AutomationProperties.Name="{Binding Title, StringFormat='Stop wanting {0}'}"
+                                                Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RemoveCommand}" CommandParameter="{Binding}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <StackPanel IsVisible="{Binding HasNoUpcoming}" Spacing="8" HorizontalAlignment="Center" Margin="0,56,0,0" MaxWidth="440">
+                        <fi:SymbolIcon Symbol="Clock" FontSize="{StaticResource PbIconSizeXl}" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="No upcoming releases" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="Follow a series on the Series tab and its future issues appear here until their release date, then move to Wanted automatically."
+                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" TextAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- CANDIDATES -->
+            <ScrollViewer IsVisible="{Binding IsCandidatesTab}">
+                <StackPanel Margin="24,16,24,32" Spacing="8" MaxWidth="960" HorizontalAlignment="Left">
+                    <TextBlock IsVisible="{Binding !HasNoCandidates}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
+                               Text="Best match first. Downloading straight from Paperbunkr arrives in a later update — for now, copy a link and paste it into your download client." />
+                    <ItemsControl ItemsSource="{Binding CandidateGroups}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:CandidateGroupViewModel">
+                                <Border Classes="card" Margin="0,0,0,10">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                        <ItemsControl ItemsSource="{Binding Candidates}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:CandidateRowViewModel">
+                                                    <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,6">
+                                                        <StackPanel Grid.Column="0" Spacing="1" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Title}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                        <Border Grid.Column="1" Classes="pbChip" Padding="8,2" Margin="10,0,0,0" VerticalAlignment="Center" IsVisible="{Binding IsPack}">
+                                                            <TextBlock Text="Pack" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                        </Border>
+                                                        <Button Grid.Column="2" Classes="headerAction ghost" Content="Copy link" Margin="10,0,0,0" VerticalAlignment="Center"
+                                                                AutomationProperties.Name="{Binding Title, StringFormat='Copy download link for {0}'}"
+                                                                Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).CopyLinkCommand}" CommandParameter="{Binding}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <StackPanel IsVisible="{Binding HasNoCandidates}" Spacing="8" HorizontalAlignment="Center" Margin="0,56,0,0" MaxWidth="440">
+                        <fi:SymbolIcon Symbol="Link" FontSize="{StaticResource PbIconSizeXl}" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="No candidates yet" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="Releases Prowlarr finds for your wanted issues show up here. Press Search now, or wait for the next automatic check."
+                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" TextAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- SERIES -->
+            <ScrollViewer IsVisible="{Binding IsSeriesTab}">
+                <StackPanel Margin="24,16,24,32" Spacing="12" MaxWidth="960" HorizontalAlignment="Left">
+                    <Border Classes="card">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Track a series" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBox Grid.Column="0" Text="{Binding SeriesSearchText}" Watermark="Search ComicVine, e.g. Spawn"
+                                         AutomationProperties.Name="Search ComicVine for a series" AutomationProperties.AutomationId="WantedSeriesSearchBox" />
+                                <Button Grid.Column="1" Classes="headerAction primary" Content="Search" Command="{Binding SearchSeriesCommand}" />
+                            </Grid>
+                            <TextBlock IsVisible="{Binding !HasComicVineKey}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
+                                       Text="Searching needs your ComicVine API key (Preferences → Connections)." />
+
+                            <ItemsControl ItemsSource="{Binding SearchResults}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:VolumeResultViewModel">
+                                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                                            <StackPanel Grid.Column="0" Spacing="1" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Classes="headerAction ghost" Content="Track" IsVisible="{Binding !IsTracked}" Margin="10,0,0,0"
+                                                    AutomationProperties.Name="{Binding Title, StringFormat='Track {0}'}"
+                                                    Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).TrackVolumeCommand}" CommandParameter="{Binding}" />
+                                            <TextBlock Grid.Column="1" Text="Tracked" IsVisible="{Binding IsTracked}" Margin="10,0,0,0" VerticalAlignment="Center"
+                                                       FontSize="11.5" Foreground="{DynamicResource PbSuccessBrush}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <ItemsControl ItemsSource="{Binding SeriesRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:WatchedSeriesRowViewModel">
+                                <Border Classes="card" Margin="0,0,0,8" Padding="14,10">
+                                    <Grid ColumnDefinitions="*,Auto,Auto">
+                                        <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}">
+                                                <Run Text="{Binding Subtitle}" /><Run Text="  ·  " /><Run Text="{Binding CountsText}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="Follow" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                            <ToggleSwitch IsChecked="{Binding WatchFutureReleases}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                          AutomationProperties.Name="Follow this series and request its new issues automatically" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Classes="headerAction ghost" Content="Open" IsVisible="{Binding CanOpen}" Margin="12,0,0,0" VerticalAlignment="Center"
+                                                AutomationProperties.Name="{Binding Name, StringFormat='Open {0}'}"
+                                                Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).OpenSeriesCommand}" CommandParameter="{Binding}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <StackPanel IsVisible="{Binding HasNoSeries}" Spacing="8" HorizontalAlignment="Center" Margin="0,24,0,0" MaxWidth="440">
+                        <fi:SymbolIcon Symbol="Folder" FontSize="{StaticResource PbIconSizeXl}" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="No series tracked yet" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="Search above to track a series. Its missing issues will then show on its page, and following it requests new issues as they're released."
+                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" TextAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Panel>
+    </Grid>
+</UserControl>

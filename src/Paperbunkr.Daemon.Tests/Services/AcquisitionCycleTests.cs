@@ -80,6 +80,8 @@ public abstract class CycleTestBase : IDisposable
     protected sealed class FakeIndexer : IIndexerClient
     {
         public Func<string, IReadOnlyList<IndexerRelease>> Respond { get; set; } = _ => Array.Empty<IndexerRelease>();
+        /// <summary>When set, used instead of <see cref="Respond"/> - lets a test hold a search open.</summary>
+        public Func<string, Task<IReadOnlyList<IndexerRelease>>>? RespondAsync { get; set; }
         public Exception? Throw { get; set; }
         public List<string> Queries { get; } = new();
 
@@ -87,7 +89,7 @@ public abstract class CycleTestBase : IDisposable
         {
             Queries.Add(queryText);
             if (Throw is not null) throw Throw;
-            return Task.FromResult(Respond(queryText));
+            return RespondAsync is not null ? RespondAsync(queryText) : Task.FromResult(Respond(queryText));
         }
 
         public Task<ConnectionTestResult> TestConnectionAsync(CancellationToken cancellationToken) => Task.FromResult(ConnectionTestResult.Ok("ok"));
@@ -429,6 +431,51 @@ public class AcquisitionServiceTickTests : CycleTestBase
         _clock = _clock.AddMinutes(60);                            // now past 2x
         await service.TickAsync(CancellationToken.None);
         Assert.NotEmpty(Indexer.Queries);
+    }
+
+
+    [Fact]
+    public async Task RunNowAsync_RunsImmediately_EvenWhenTheIntervalHasNotElapsed()
+    {
+        Configure();
+        AddWanted((DateTime?)null);
+        var service = NewService(out _);
+        await service.TickAsync(CancellationToken.None);   // first scheduled run
+        Indexer.Queries.Clear();
+
+        await service.RunNowAsync(CancellationToken.None); // same instant: interval has not elapsed
+
+        Assert.NotEmpty(Indexer.Queries);
+    }
+
+    [Fact]
+    public async Task ATickThatLandsDuringARunningCycle_IsSkipped_AndRunNowWaitsItsTurn()
+    {
+        Configure();
+        AddWanted((DateTime?)null);
+        var release = new TaskCompletionSource();
+        var started = new TaskCompletionSource();
+        int concurrent = 0, maxConcurrent = 0;
+        Indexer.RespondAsync = async _ =>
+        {
+            int now = Interlocked.Increment(ref concurrent);
+            maxConcurrent = Math.Max(maxConcurrent, now);
+            started.TrySetResult();
+            await release.Task;
+            Interlocked.Decrement(ref concurrent);
+            return Array.Empty<IndexerRelease>();
+        };
+        var service = NewService(out _);
+
+        var first = service.RunNowAsync(CancellationToken.None);
+        await started.Task;                                       // the first cycle is now inside the indexer call
+
+        await service.TickAsync(CancellationToken.None);          // must return promptly without starting a second cycle
+        var second = service.RunNowAsync(CancellationToken.None); // must wait for the first
+        release.SetResult();
+        await Task.WhenAll(first, second);
+
+        Assert.Equal(1, maxConcurrent);
     }
 
     [Fact]

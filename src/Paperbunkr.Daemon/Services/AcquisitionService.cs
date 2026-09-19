@@ -14,11 +14,31 @@ public sealed class AcquisitionService(AcquisitionCycle cycle, Func<PaperbunkrDb
 {
     private static readonly TimeSpan Tick = TimeSpan.FromMinutes(1);
     private readonly Func<DateTime> _now = now ?? (() => DateTime.UtcNow);
+    private readonly SemaphoreSlim _gate = new(1, 1);
     private int _runRequested;
     private DateTime _lastRun = DateTime.MinValue;
 
-    /// <summary>"Search now": runs a cycle at the next tick (within a minute) regardless of the poll interval.</summary>
+    /// <summary>"Search now", deferred: the next timer tick runs a manual cycle regardless of the poll interval.</summary>
     public void RunNow() => Interlocked.Exchange(ref _runRequested, 1);
+
+    /// <summary>
+    /// "Search now", immediate: runs a manual cycle right away. If a cycle is already running this waits for it to finish first, so two
+    /// cycles never overlap (they would both search and rewrite the same candidates).
+    /// </summary>
+    public async Task RunNowAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            Interlocked.Exchange(ref _runRequested, 0);
+            _lastRun = _now();
+            await cycle.RunAsync(manual: true, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -40,15 +60,28 @@ public sealed class AcquisitionService(AcquisitionCycle cycle, Func<PaperbunkrDb
     /// <summary>One timer tick. Public so tests (and "Search now" callers that don't want to wait) can drive it directly.</summary>
     public async Task TickAsync(CancellationToken cancellationToken)
     {
-        bool manual = Interlocked.Exchange(ref _runRequested, 0) == 1;
-
-        if (!manual && !IntervalElapsed())
+        // A tick that lands while a cycle (scheduled or "Search now") is still running is simply skipped.
+        if (!await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
         {
             return;
         }
 
-        _lastRun = _now();
-        await cycle.RunAsync(manual, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            bool manual = Interlocked.Exchange(ref _runRequested, 0) == 1;
+
+            if (!manual && !IntervalElapsed())
+            {
+                return;
+            }
+
+            _lastRun = _now();
+            await cycle.RunAsync(manual, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     private bool IntervalElapsed()

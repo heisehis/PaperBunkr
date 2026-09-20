@@ -161,6 +161,25 @@ shown"; "Request missing" on arc-linked reading lists, per-item Request on other
 **Depends on:** Step 7
 **Verify:** view-model tests; build; review checklist; on-screen check by the user.
 
+## Slices 2-4 (built after slice 1; same branch)
+Per-step detail lives in the commit messages; the shape:
+- **Slice 2, grab / progress / blocklist:** category-locked `QBittorrentClient` (only ever touches torrents in Paperbunkr's own category),
+  info-hash helpers, `GrabService` (Grab, Reject, Retry, Cancel), `DownloadTracker` (10 s poll, coalesced progress events),
+  `BlocklistService`, schema `AddAcquisitionDownloads`. The Wanted screen gains a Downloads section with progress and Retry/Cancel.
+- **Slice 3, import:** `ImportProcessor` works on a **copy** (the seeding file is untouched unless the user opts into moving),
+  CE-syntax `NameTemplate` (`{token}`, `{token:fmt}`, `[optional group]`, `\` escape), ComicInfo.xml write-back, path-traversal guard,
+  never overwrites, placeholder relink, drop-in close-out (an owned issue closes its want). Config problems (no destination, bad template,
+  disk error) are **Deferred**, not Failed, and never blocklist a release.
+- **Slice 4, auto-grab and Follow arc:** `AutoGrab` + minimum score (off by default; manual approval stays the default);
+  `ArcFollowService` + a "Follow story arcs" scheduled task (daily, **off by default**, Low ComicVine priority, a no-op unless Acquisition is
+  on) and a per-list "Follow this arc" toggle on arc-linked reading lists (`ReadingList.FollowArc`).
+- **Covers and virtualization:** `RemoteCoverCache` (disk cache keyed by URL hash, 120 px decode off the UI thread, bounded LRU, 4 concurrent
+  downloads, http/https only) behind `RemoteCoverSource`, which loads only when a row binds it. Wanted, Upcoming and Candidates use a virtualizing
+  list that owns its scroller (a headless test proves 3000 rows realize under 100). The series **Missing Issues** cards show covers but are *not*
+  virtualized: that section sits inside the Detail screen's own scroller, so virtualizing it would mean restructuring that screen; a series has
+  tens to a few hundred issues, and covers load lazily and throttled.
+- **Not done:** owned-trade coverage, a library right-click "Repack & Inject Metadata" action (backlog), and the Series tab is not virtualized.
+
 ## Step 12: Docs
 **Files:** `docs/paperbunkr-todo.md` (update by hand: status, commits, what was verified),
 `CHANGELOG.md`, spec (fix `TestDispatcher.Drain()` mention and the host/`ComicVineClient` location

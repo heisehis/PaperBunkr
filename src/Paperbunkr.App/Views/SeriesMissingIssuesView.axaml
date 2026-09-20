@@ -85,11 +85,14 @@
                     <DataTemplate x:DataType="vm:MissingIssueRowViewModel">
                         <Border Classes="card" Width="300" Margin="0,0,12,12" Padding="12">
                             <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
-                                <!-- No cover art for an issue we don't have: a quiet placeholder carrying the number -->
-                                <Border Grid.Column="0" Grid.RowSpan="2" Width="44" Height="62" CornerRadius="{StaticResource PbRadiusSm}"
+                                <!-- ComicVine's cover once it has loaded; until then (or when there isn't one) a quiet placeholder carrying the number -->
+                                <Border Grid.Column="0" Grid.RowSpan="2" Width="44" Height="62" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True"
                                         Background="{DynamicResource PbSurface2Brush}" Margin="0,0,12,0" VerticalAlignment="Top">
-                                    <TextBlock Text="{Binding Number, StringFormat='#{0}'}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Panel>
+                                        <TextBlock Text="{Binding Number, StringFormat='#{0}'}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
+                                    </Panel>
                                 </Border>
                                 <StackPanel Grid.Column="1" Grid.Row="0" Spacing="1">
                                     <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />

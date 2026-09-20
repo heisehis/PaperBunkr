@@ -1,6 +1,6 @@
 # Comic Acquisition Daemon (Mylar-style want-list + acquisition) — Design
 
-Date: 2026-09-19 · Status: approved; **slice 1 implemented on branch `feat/comic-acquisition-daemon`** (see the plan for per-step status and baselines)
+Date: 2026-09-19 · Status: approved; **slices 1-4 implemented on branch `feat/comic-acquisition-daemon`** (qBittorrent grab/progress/blocklist, import, auto-grab, "Follow arc", cover thumbnails, virtualized lists; see the plan for per-step status and baselines). Nothing has been run against a real Prowlarr, qBittorrent or ComicVine, or checked on screen.
 
 ## 1. Goal and scope
 
@@ -150,7 +150,8 @@ All changes happen on a copy.
   sets the issue `Failed` and adds the release to `ReleaseBlocklist`; the loop then searches again
   and skips it.
 - **Rename template:** CE-style `{token}` with `[optional group]`, default
-  `{publisher}/{series} ({year})/{series} #{number}.cbz`.
+  `{publisher}/{series} ({volumeyear})/{series} #{number:000}.cbz`
+  (`{volumeyear}` is the series' start year, so one series is never split across folders by each issue's own year; `{year}` stays available).
   **CE parity note (verified in `_reference/ComicRackCE`):** CE's `ComicBook.FormatTitle` supports
   series, title, volume, number, year, month, day, format and filename, applies **no zero-padding**,
   and has **no publisher token**. `{publisher}` and a zero-pad option are therefore deliberate

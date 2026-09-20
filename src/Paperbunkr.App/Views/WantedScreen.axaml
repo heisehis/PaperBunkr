@@ -9,6 +9,23 @@
              x:Name="Root"
              x:DataType="vm:WantedScreenViewModel">
 
+    <UserControl.Styles>
+        <!-- A virtualizing list that owns its scroller: rows are only realized while visible, so thousands of wants stay cheap.
+             (An ItemsControl inside a plain ScrollViewer is measured with infinite height and never virtualizes.) -->
+        <Style Selector="ItemsControl.vlist">
+            <Setter Property="ItemsPanel">
+                <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+            </Setter>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <ItemsPresenter Margin="24,8,24,32" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                    </ScrollViewer>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+    </UserControl.Styles>
+
     <!-- The Wanted screen (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 7, layout A): stage tabs in a top bar,
          one list per tab. Shared chrome only - Button.tab/Border.card/pbChip from Styles, Pb* tokens, no hardcoded colors. -->
     <Grid RowDefinitions="Auto,Auto,*">
@@ -74,16 +91,20 @@
         <Panel Grid.Row="2">
 
             <!-- WANTED -->
-            <ScrollViewer IsVisible="{Binding IsWantedTab}">
-                <StackPanel Margin="24,16,24,32" Spacing="8" MaxWidth="960" HorizontalAlignment="Left">
+            <Grid IsVisible="{Binding IsWantedTab}" RowDefinitions="Auto,*">
                     <!-- Grabbed issues: on their way (progress) or failed (retry) -->
-                    <StackPanel IsVisible="{Binding !HasNoDownloads}" Spacing="8" Margin="0,0,0,8">
+                    <StackPanel Grid.Row="0" IsVisible="{Binding !HasNoDownloads}" Spacing="8" Margin="24,16,24,4" MaxWidth="960" HorizontalAlignment="Left">
                         <TextBlock Classes="settingsGroupCaption" Text="DOWNLOADS" />
                         <ItemsControl ItemsSource="{Binding DownloadRows}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:DownloadRowViewModel">
                                     <Border Classes="card" Margin="0,0,0,8" Padding="14,10">
-                                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <Border Grid.Column="0" Width="40" Height="58" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" Margin="0,0,12,0" VerticalAlignment="Center"
+                                                 Background="{DynamicResource PbSurface2Brush}">
+                                                <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
+                                            </Border>
+                                            <Grid Grid.Column="1" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
                                             <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="10">
                                                 <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                                                 <Border Classes="pbChip" Padding="8,2" VerticalAlignment="Center">
@@ -107,17 +128,23 @@
                                                        Foreground="{DynamicResource PbTextFaintBrush}"
                                                        IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                                         </Grid>
+                                        </Grid>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </StackPanel>
 
-                    <ItemsControl ItemsSource="{Binding WantedRows}">
+                    <ItemsControl Grid.Row="1" Classes="vlist" ItemsSource="{Binding WantedRows}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:WantedRowViewModel">
-                                <Border Classes="card" Margin="0,0,0,8" Padding="14,10">
-                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                <Border Classes="card" Margin="0,0,0,8" Padding="14,10" MaxWidth="960" HorizontalAlignment="Left">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Border Grid.Column="0" Width="40" Height="58" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" Margin="0,0,12,0" VerticalAlignment="Center"
+                                             Background="{DynamicResource PbSurface2Brush}">
+                                            <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <Grid Grid.Column="1" ColumnDefinitions="*,Auto,Auto,Auto">
                                         <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis"
@@ -137,13 +164,14 @@
                                                     Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RemoveCommand}" CommandParameter="{Binding}" />
                                         </StackPanel>
                                     </Grid>
+                                        </Grid>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
                     <!-- Empty state: icon + headline + description + action -->
-                    <StackPanel IsVisible="{Binding HasNoWanted}" Spacing="8" HorizontalAlignment="Center" Margin="0,56,0,0" MaxWidth="440">
+                    <StackPanel Grid.Row="1" IsVisible="{Binding HasNoWanted}" Spacing="8" HorizontalAlignment="Center" Margin="0,56,0,0" MaxWidth="440">
                         <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXl}" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
                         <TextBlock Text="Nothing wanted right now" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Center" />
                         <TextBlock Text="Request missing issues from a series' page or a reading list, or track a series on the Series tab."
@@ -154,17 +182,20 @@
                         <Button Classes="headerAction ghost" Content="Open Acquisition settings" IsVisible="{Binding !IsEnabled}"
                                 Command="{Binding OpenAcquisitionSettingsCommand}" HorizontalAlignment="Center" />
                     </StackPanel>
-                </StackPanel>
-            </ScrollViewer>
+            </Grid>
 
             <!-- UPCOMING -->
-            <ScrollViewer IsVisible="{Binding IsUpcomingTab}">
-                <StackPanel Margin="24,16,24,32" Spacing="8" MaxWidth="960" HorizontalAlignment="Left">
-                    <ItemsControl ItemsSource="{Binding UpcomingRows}">
+            <Grid IsVisible="{Binding IsUpcomingTab}">
+                    <ItemsControl Classes="vlist" ItemsSource="{Binding UpcomingRows}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:WantedRowViewModel">
-                                <Border Classes="card" Margin="0,0,0,8" Padding="14,10">
-                                    <Grid ColumnDefinitions="*,Auto,Auto">
+                                <Border Classes="card" Margin="0,0,0,8" Padding="14,10" MaxWidth="960" HorizontalAlignment="Left">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Border Grid.Column="0" Width="40" Height="58" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" Margin="0,0,12,0" VerticalAlignment="Center"
+                                             Background="{DynamicResource PbSurface2Brush}">
+                                            <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <Grid Grid.Column="1" ColumnDefinitions="*,Auto,Auto">
                                         <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
@@ -176,6 +207,7 @@
                                                 AutomationProperties.Name="{Binding Title, StringFormat='Stop wanting {0}'}"
                                                 Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RemoveCommand}" CommandParameter="{Binding}" />
                                     </Grid>
+                                        </Grid>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -187,18 +219,16 @@
                         <TextBlock Text="Follow a series on the Series tab and its future issues appear here until their release date, then move to Wanted automatically."
                                    FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" TextAlignment="Center" />
                     </StackPanel>
-                </StackPanel>
-            </ScrollViewer>
+            </Grid>
 
             <!-- CANDIDATES -->
-            <ScrollViewer IsVisible="{Binding IsCandidatesTab}">
-                <StackPanel Margin="24,16,24,32" Spacing="8" MaxWidth="960" HorizontalAlignment="Left">
-                    <TextBlock IsVisible="{Binding !HasNoCandidates}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
+            <Grid IsVisible="{Binding IsCandidatesTab}" RowDefinitions="Auto,*">
+                    <TextBlock Grid.Row="0" Margin="24,16,24,0" MaxWidth="960" HorizontalAlignment="Left" IsVisible="{Binding !HasNoCandidates}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
                                Text="Best match first. Grab sends a release to qBittorrent (set it up in Acquisition settings); Copy link works with any download client. Reject blocks a release for good." />
-                    <ItemsControl ItemsSource="{Binding CandidateGroups}">
+                    <ItemsControl Grid.Row="1" Classes="vlist" ItemsSource="{Binding CandidateGroups}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:CandidateGroupViewModel">
-                                <Border Classes="card" Margin="0,0,0,10">
+                                <Border Classes="card" Margin="0,0,0,10" MaxWidth="960" HorizontalAlignment="Left">
                                     <StackPanel Spacing="8">
                                         <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
                                         <ItemsControl ItemsSource="{Binding Candidates}">
@@ -234,14 +264,13 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <StackPanel IsVisible="{Binding HasNoCandidates}" Spacing="8" HorizontalAlignment="Center" Margin="0,56,0,0" MaxWidth="440">
+                    <StackPanel Grid.Row="1" IsVisible="{Binding HasNoCandidates}" Spacing="8" HorizontalAlignment="Center" Margin="0,56,0,0" MaxWidth="440">
                         <fi:SymbolIcon Symbol="Link" FontSize="{StaticResource PbIconSizeXl}" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
                         <TextBlock Text="No candidates yet" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Center" />
                         <TextBlock Text="Releases Prowlarr finds for your wanted issues show up here. Press Search now, or wait for the next automatic check."
                                    FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" TextAlignment="Center" />
                     </StackPanel>
-                </StackPanel>
-            </ScrollViewer>
+            </Grid>
 
             <!-- SERIES -->
             <ScrollViewer IsVisible="{Binding IsSeriesTab}">

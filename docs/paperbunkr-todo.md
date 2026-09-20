@@ -26,28 +26,23 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
-> **Manual session note (2026-09-19, comic acquisition — Mylar-style want-list, slice 1 built on branch `feat/comic-acquisition-daemon`, NOT merged or released):**
+> **Manual session note (2026-09-19/20, comic acquisition — Mylar-style want-list, slices 1-4 built on branch `feat/comic-acquisition-daemon`, NOT merged or released):**
 > Design: `docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md`; plan and per-step status:
 > `...-plan.md`. Built and unit-tested: DPAPI-encrypted `CredentialStore`; a shared, prioritized ComicVine
-> rate-limit handler (foreground/background split, 420/107 pause); the UI-free `Paperbunkr.Daemon` project
-> (search-only polling loop, Prowlarr client via its native JSON search, strict-then-sanitized query cascade,
-> scoring/pack detection); watch-list/want-list entities + additive migration; the Acquisition Preferences
-> section; the **Wanted** screen (Wanted/Upcoming/Candidates/Series); a "Missing Issues (n)" section on the
-> series Detail screen; and "Request missing" on reading lists. **Nothing downloads yet** — slice 1 stops at a
-> candidates review list (copy a link into any client).
-> **Verified:** `Data.Tests`, `Daemon.Tests` (72) and the new `App.Tests` pass, and the headless tests construct
-> each new view, which proves the compiled XAML was woven. **Not verified:** nothing has been run against a real
-> Prowlarr, a real ComicVine key, or on screen — ComicVine/Prowlarr behavior is fixture-tested against their
-> published API shapes only, and the UI has had no on-screen check (the review checklist was applied by reading,
-> not by looking at it). **The full `App.Tests` suite cannot complete on `master` or on this branch**: the test host
-> crashes ("different thread owns this object", an Avalonia dispatcher-affinity problem) after ~1000 tests, so a
-> full-suite pass/fail count is not available for either. Before the crash, `master` and the branch fail the identical
-> 16 tests (none new). The new App tests were verified by running their classes (and the classes they touch) on
-> their own; they were not part of the truncated full run.
-> **Still to do:** slice 2 (qBittorrent grab + progress, blocklist), slice 3 (import: copy-modify-move, per-file
-> mapping of multi-issue packs, placeholder relink), slice 4 (auto-grab toggle, "Follow arc"), owned-trade
-> coverage, cover thumbnails on the Wanted screen, virtualization of long lists, and a library
-> right-click "Repack & Inject Metadata" action (backlog). Merging note: this file and `Paperbunkr-Roadmap.md` also
+> rate-limit handler; the UI-free `Paperbunkr.Daemon` project (search loop, Prowlarr native JSON search,
+> strict-then-sanitized query cascade, scoring/pack detection, category-locked qBittorrent client, grab/reject/retry/cancel,
+> blocklist, download tracker, copy-then-import with CE-syntax rename template + ComicInfo.xml, drop-in close-out, opt-in
+> auto-grab); watch-list/want-list entities + two additive migrations; the Acquisition Preferences section; the **Wanted**
+> screen (Wanted with Downloads, Upcoming, Candidates, Series; virtualized, with cover thumbnails); "Missing Issues (n)" with covers on the
+> series Detail screen; "Request missing" + "Follow this arc" on reading lists; a daily "Follow story arcs" scheduled task (off by default).
+> **Verified:** `Daemon.Tests` (188) pass; `Data.Tests` 1168 pass / the same 6 pre-existing migration failures as untouched `master`;
+> each new/touched `App.Tests` class passes when run on its own, and the headless tests construct each new view (proves the XAML
+> weave) and prove 3000 rows realize under 100. **Not verified:** nothing has been run against a real Prowlarr, qBittorrent or
+> ComicVine key, and nothing has been looked at on screen (review checklist applied by reading). **The full `App.Tests` suite
+> cannot complete on `master` or this branch** (dispatcher thread-affinity crash), and running two headless classes in one
+> filtered run can trip the same problem, so App evidence is per-class.
+> **Still to do:** owned-trade coverage; a library right-click "Repack & Inject Metadata" action (backlog); virtualizing the series
+> Missing Issues cards and the Series tab; an on-screen pass. Merging note: this file and `Paperbunkr-Roadmap.md` also
 > have uncommitted edits from another session in the main working tree — expect a trivial merge.
 
 > **Manual session note (2026-09-18, 16 smart-feature + 7 cosmetic-feature pitch items recorded):**

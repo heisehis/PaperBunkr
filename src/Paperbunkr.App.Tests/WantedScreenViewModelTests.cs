@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.VisualTree;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ViewModels;
@@ -19,6 +21,7 @@ using Xunit;
 
 namespace Paperbunkr.App.Tests;
 
+[Collection(nameof(AvaloniaTestCollection))]
 public class WantedScreenViewModelTests : IDisposable
 {
     private static readonly DateTime Today = new(2026, 9, 19);
@@ -385,5 +388,33 @@ public class WantedScreenViewModelTests : IDisposable
         var view = new WantedScreen { DataContext = vm };
 
         Assert.NotNull(view.Content);
+    }
+
+    /// <summary>A big backfill (an arc, a long-running series) can produce thousands of wants; only the visible rows may be realized.</summary>
+    [Fact]
+    public void TheWantedAndUpcomingLists_VirtualizeLongLists()
+    {
+        TestAppBuilder.EnsureInitialized();
+        var vm = Create();
+        for (int i = 0; i < 3000; i++)
+        {
+            var row = new WantedRowViewModel { Id = i, Title = $"Series #{i}", StatusText = "Wanted" };
+            vm.WantedRows.Add(row);
+            vm.UpcomingRows.Add(row);
+        }
+
+        var view = new WantedScreen { DataContext = vm };
+        var window = new Avalonia.Controls.Window { Content = view, Width = 1000, Height = 700 };
+        window.Show();
+        window.GetLayoutManager()?.ExecuteLayoutPass();
+
+        int RealizedRows() => Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view)
+            .OfType<Avalonia.Controls.TextBlock>().Count(t => t.IsEffectivelyVisible && t.Text is { } x && x.StartsWith("Series #", StringComparison.Ordinal));
+
+        Assert.InRange(RealizedRows(), 1, 100);        // 3000 wants, one screenful realized
+
+        vm.GoUpcomingCommand.Execute(null);
+        window.GetLayoutManager()?.ExecuteLayoutPass();
+        Assert.InRange(RealizedRows(), 1, 100);
     }
 }

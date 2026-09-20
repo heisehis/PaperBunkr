@@ -24,6 +24,7 @@ public sealed class MissingIssueRowViewModel
     public required string Title { get; init; }
     public string? Subtitle { get; init; }
     public bool IsUpcoming { get; init; }
+    public RemoteCoverSource Cover { get; init; } = new(null);
 }
 
 /// <summary>
@@ -120,6 +121,7 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
                         Title = string.IsNullOrWhiteSpace(issue.Name) ? $"{SeriesName} #{issue.IssueNumber}" : $"#{issue.IssueNumber} · {issue.Name}",
                         Subtitle = issue.StoreDate is DateTime date ? date.ToString("MMM d, yyyy", CultureInfo.CurrentCulture) : null,
                         IsUpcoming = issue.StoreDate is DateTime d && d.Date > today,
+                        Cover = new RemoteCoverSource(issue.CoverImageUrl),
                     });
                 }
             }

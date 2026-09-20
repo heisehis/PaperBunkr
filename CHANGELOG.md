@@ -7,14 +7,17 @@ All notable changes to Paperbunkr are documented here. Format follows
 
 ### Added
 
-- **Comic acquisition (early, search-only).** A Mylar-style want-list built on your own Prowlarr.
-  Preferences → **Acquisition** connects Prowlarr (the API key is stored encrypted) and sets how often
-  to check and how to rank results. The new **Wanted** screen tracks ComicVine series, lists what you're
-  missing and what's coming, follows a series so new issues are requested automatically, and shows the
-  releases Prowlarr found so you can copy a link into your download client. A series' page gains a
-  **Missing Issues** section with per-issue Request, and reading lists built from a story arc gain
-  **Request missing issues**. Automatic checking is off until you turn it on, and nothing is
-  downloaded by Paperbunkr itself yet.
+- **Comic acquisition.** A Mylar-style want-list built on your own Prowlarr and qBittorrent.
+  Preferences → **Acquisition** connects Prowlarr and qBittorrent (keys and passwords are stored
+  encrypted), sets how often to check, how to rank results, where finished comics go, and how they are
+  named (a live preview shows the result). The new **Wanted** screen tracks ComicVine series, lists what
+  you're missing and what's coming, follows a series so new issues are requested automatically, and shows
+  the releases Prowlarr found: **Grab** one to send it to qBittorrent, watch its progress, and Paperbunkr
+  imports the finished file into your library (the original keeps seeding), or **Reject** it to never see it
+  again. A series' page gains a **Missing Issues** section with covers and per-issue Request, and reading
+  lists built from a story arc gain **Request missing issues** and **Follow this arc** (a daily task, off
+  until you turn it on under Automation, keeps followed arcs up to date and requests what's new).
+  Downloading is manual approval by default; **Download automatically** is a separate opt-in.
 
 ### Changed
 

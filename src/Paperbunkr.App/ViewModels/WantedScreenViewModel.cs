@@ -33,6 +33,7 @@ public sealed class WantedRowViewModel
     public required string Title { get; init; }
     public string? Subtitle { get; init; }
     public required string StatusText { get; init; }
+    public RemoteCoverSource Cover { get; init; } = new(null);
     public int CandidateCount { get; init; }
     public bool HasCandidates => CandidateCount > 0;
     public string CandidateText => CandidateCount == 1 ? "1 candidate" : $"{CandidateCount} candidates";
@@ -54,6 +55,7 @@ public sealed class CandidateRowViewModel
 public sealed class DownloadRowViewModel
 {
     public required int Id { get; init; }
+    public RemoteCoverSource Cover { get; init; } = new(null);
     public required string Title { get; init; }
     public required string StatusText { get; init; }
     public string? Detail { get; init; }
@@ -464,11 +466,15 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
             : string.Join(" · ", new[] { wanted.WatchedSeries?.Publisher, wanted.Name }.Where(s => !string.IsNullOrEmpty(s))),
         StatusText = upcoming ? "Upcoming" : wanted.LastSearchedAt is null ? "Not searched yet" : "Wanted",
         CandidateCount = candidateCounts.TryGetValue(wanted.Id, out int count) ? count : 0,
+        Cover = CoverFor(wanted),
     };
+
+    private static RemoteCoverSource CoverFor(WantedIssue wanted) => new(wanted.CoverImageUrl ?? wanted.WatchedSeries?.CoverImageUrl);
 
     private static DownloadRowViewModel ToDownloadRow(WantedIssue wanted) => new()
     {
         Id = wanted.Id,
+        Cover = CoverFor(wanted),
         Title = $"{wanted.WatchedSeries?.Name} #{wanted.IssueNumber}",
         IsFailed = wanted.Status == WantedIssueStatus.Failed,
         StatusText = wanted.Status switch

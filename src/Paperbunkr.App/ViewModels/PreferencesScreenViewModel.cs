@@ -151,6 +151,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         // per-Kind template binds to these instead of a hardcoded per-provider command name. Command
         // bodies are unchanged.
         Acquisition = new AcquisitionSettingsViewModel(_contextFactory, () => ActiveSection = PreferencesSection.Connections);
+        OrganizeScrape = new OrganizeScrapeSettingsViewModel(_contextFactory, () => ActiveSection = PreferencesSection.Connections);
         Acquisition.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(AcquisitionSettingsViewModel.IsProwlarrConnected) or nameof(AcquisitionSettingsViewModel.IsQBittorrentConnected))
@@ -390,6 +391,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     /// <summary>Preferences → Acquisition (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md §7); its own view model so this class doesn't grow further.</summary>
     public bool IsAcquisitionSection => ActiveSection == PreferencesSection.Acquisition;
+
+    public bool IsOrganizeScrapeSection => ActiveSection == PreferencesSection.OrganizeScrape;
+
+    /// <summary>Preferences → Organize &amp; Scrape (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8); its own view model, like <see cref="Acquisition"/>.</summary>
+    public OrganizeScrapeSettingsViewModel OrganizeScrape { get; }
 
     public AcquisitionSettingsViewModel Acquisition { get; }
     public bool IsPluginsSection => ActiveSection == PreferencesSection.Plugins;
@@ -756,6 +762,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsKeyboardShortcutsSection));
         OnPropertyChanged(nameof(IsConnectionsSection));
         OnPropertyChanged(nameof(IsAcquisitionSection));
+        OnPropertyChanged(nameof(IsOrganizeScrapeSection));
         OnPropertyChanged(nameof(IsPluginsSection));
         OnPropertyChanged(nameof(IsAdvancedSection));
         OnPropertyChanged(nameof(IsAboutSection));
@@ -772,6 +779,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void GoAutomation() => ActiveSection = PreferencesSection.Automation;
+
+    [RelayCommand]
+    private void GoOrganizeScrape()
+    {
+        OrganizeScrape.Load();   // pick up a ComicVine key added under Connections since this section was last shown
+        ActiveSection = PreferencesSection.OrganizeScrape;
+    }
 
     [RelayCommand]
     private void GoAcquisition()

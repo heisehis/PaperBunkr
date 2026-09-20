@@ -2639,6 +2639,47 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
     }
 
+    /// <summary>
+    /// Host hook for "Scrape with ComicVine…" (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8): runs the scrape over the given issue ids and
+    /// returns a one-line result. Set by the shell; null means the feature isn't available (no host), which hides nothing but does nothing.
+    /// </summary>
+    public Func<IReadOnlyList<int>, Task<string>>? ScrapeIssues { get; set; }
+
+    /// <summary>"Scrape with ComicVine…" on the right-clicked issue, expanded to the whole selection when it is part of one.</summary>
+    [RelayCommand]
+    private async Task ScrapeWithComicVine(int issueId)
+    {
+        if (ScrapeIssues is null)
+        {
+            return;
+        }
+
+        await ScrapeIssues(Selection.UnionForAction(issueId).ToList());
+        RefreshAfterScrape();
+    }
+
+    /// <summary>Series-card equivalent: every issue of the (selection-expanded) series.</summary>
+    [RelayCommand]
+    private async Task ScrapeSeriesWithComicVine(int seriesId)
+    {
+        if (ScrapeIssues is null)
+        {
+            return;
+        }
+
+        var seriesIds = SeriesSelection.UnionForAction(seriesId).ToList();
+        List<int> ids;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            ids = context.Issues.Where(i => seriesIds.Contains(i.SeriesId)).Select(i => i.Id).ToList();
+        }
+
+        await ScrapeIssues(ids);
+        RefreshAfterScrape();
+    }
+
+    private void RefreshAfterScrape() => Avalonia.Threading.Dispatcher.UIThread.Post(() => LoadFromDatabase());
+
     /// <summary>Series-card equivalent - fans out to every member issue of the (selection-expanded) series.</summary>
     [RelayCommand]
     private void WriteSeriesMetadataToFiles(int seriesId)

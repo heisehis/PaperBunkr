@@ -158,6 +158,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             Activity, AcquisitionEvents.Reader,
             resultLink: () => new ActivityLink(ActivityLinkKind.WantedScreen),
             onWantedChanged: () => { if (IsWanted) Wanted.Refresh(); });
+        Scraper = new Scraper.ScrapeCoordinator(NativePluginModalHost, Services.PaperbunkrDb.CreateContext, Activity, issueId => MetadataWriteBack.Enqueue(issueId));
         Wanted = new WantedScreenViewModel(
             Services.PaperbunkrDb.CreateContext,
             Acquisition.RunNowAsync,
@@ -207,6 +208,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         PdfReader = new PdfPageReaderScreenViewModel(NavigateBack, ReadingEvents);
         Detail = new DetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
         MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
+        Library.ScrapeIssues = ids => Scraper.ScrapeIssuesAsync(ids);
+        Detail.Tabs.ScraperPanelFactory = Scraper.CreateSeriesPanel;
         var keyBindingService = new KeyBindingService();
         Reader = new ReaderScreenViewModel(NavigateBack, keyBindingService, ReadingEvents, TrackerAutoSync);
         // "Ask me to rate a comic when I finish it" (docs/superpowers/specs/2026-09-04-behavior-
@@ -542,6 +545,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// as a plain callback, threaded the same way <see cref="ShowToast"/> is.
     /// </summary>
     public MetadataWriteBackQueue MetadataWriteBack { get; }
+
+    /// <summary>"Scrape with ComicVine…": review dialogs, batch header and Activity Center job (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8).</summary>
+    public Scraper.ScrapeCoordinator Scraper { get; }
 
     /// <summary>
     /// The ComicVine issue-details client for scrape-on-import, at Low priority so background work can never starve interactive lookups (the shared rate limiter

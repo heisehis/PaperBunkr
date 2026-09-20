@@ -18,6 +18,9 @@ public enum PreferencesSection
     KeyboardShortcuts,
     Connections,
     Acquisition,
+
+    /// <summary>Scrape behavior (and, later, organizer profiles) for the built-in ComicVine scraper and library organizer.</summary>
+    OrganizeScrape,
     Plugins,
     Advanced,
     About,

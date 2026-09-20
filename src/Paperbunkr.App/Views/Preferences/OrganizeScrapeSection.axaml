@@ -1,0 +1,147 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:pref="using:Paperbunkr.App.Views.Preferences"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="680" d:DesignHeight="720"
+             x:Class="Paperbunkr.App.Views.Preferences.OrganizeScrapeSection"
+             x:DataType="vm:OrganizeScrapeSettingsViewModel">
+
+    <!-- Preferences -> Organize & Scrape (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8). Same section shell as
+         Acquisition/Automation: one ScrollViewer, SettingsRow rows, Pb* tokens only. No secrets here: the ComicVine key is under Connections. -->
+    <ScrollViewer>
+        <StackPanel Margin="28,20,28,40" Spacing="20">
+            <TextBlock Classes="pbTextHeading" Text="Organize &amp; Scrape" />
+
+            <TextBlock Text="Right-click comics or a series and choose Scrape with ComicVine to match them and fill in their details. These options control how a scrape behaves."
+                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+
+            <StackPanel Tag="organizeScrape.key">
+                <TextBlock Classes="settingsGroupCaption" Text="COMICVINE" />
+                <pref:SettingsRow Icon="Link" Title="ComicVine API key"
+                                   Description="Scraping needs your ComicVine key. It is managed under Connections, with every other key.">
+                    <pref:SettingsRow.SettingsContent>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="Connected" VerticalAlignment="Center" FontSize="12" IsVisible="{Binding HasComicVineKey}" Foreground="{DynamicResource PbSuccessBrush}" />
+                            <TextBlock Text="Not set" VerticalAlignment="Center" FontSize="12" IsVisible="{Binding !HasComicVineKey}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <Button Classes="headerAction ghost" Content="Open Connections" Command="{Binding OpenConnectionsCommand}"
+                                    AutomationProperties.AutomationId="ScrapeOpenConnectionsButton" />
+                        </StackPanel>
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+            </StackPanel>
+
+            <StackPanel Tag="organizeScrape.matching">
+                <TextBlock Classes="settingsGroupCaption" Text="MATCHING" />
+
+                <pref:SettingsRow Icon="Checkmark" Title="Choose the best match automatically"
+                                   Description="Apply the top-scored series without showing the review dialog. Off means you confirm each series. Scheduled scrapes never ask, so they skip anything that isn't clear-cut unless this is on.">
+                    <pref:SettingsRow.SettingsContent>
+                        <ToggleSwitch IsChecked="{Binding AutoChooseTopMatch}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.Name="Choose the best match automatically" />
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+
+                <pref:SettingsRow Icon="Search" Title="Confirm the issue too"
+                                   Description="After the series is chosen, show which ComicVine issue was matched so you can correct it. Off applies whatever the issue number matches.">
+                    <pref:SettingsRow.SettingsContent>
+                        <ToggleSwitch IsChecked="{Binding ConfirmIssueMatch}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.Name="Confirm the ComicVine issue" />
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+
+                <pref:SettingsRow Icon="Filter" Title="Results considered per comic"
+                                   Description="How many ComicVine results are scored for each comic. Blank means all.">
+                    <pref:SettingsRow.SettingsContent>
+                        <TextBox Text="{Binding MaxSearchResults}" Width="120" AutomationProperties.Name="Maximum search results" />
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+            </StackPanel>
+
+            <StackPanel Tag="organizeScrape.writing">
+                <TextBlock Classes="settingsGroupCaption" Text="WRITING" />
+
+                <pref:SettingsRow Icon="Edit" Title="Overwrite existing values"
+                                   Description="Replace a field that already has a value with ComicVine's. Off only fills in what is empty.">
+                    <pref:SettingsRow.SettingsContent>
+                        <ToggleSwitch IsChecked="{Binding OverwriteExisting}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.Name="Overwrite existing values" />
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+
+                <pref:SettingsRow Icon="Delete" Title="Never blank a field"
+                                   Description="Don't replace an existing value with an empty one when ComicVine has nothing for that field.">
+                    <pref:SettingsRow.SettingsContent>
+                        <ToggleSwitch IsChecked="{Binding IgnoreBlankValues}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.Name="Never blank a field" />
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+
+                <StackPanel Spacing="8" Margin="0,8,0,0">
+                    <TextBlock Text="Fields to fill in" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="headerAction ghost" Content="All" Command="{Binding EnableAllFieldsCommand}" />
+                        <Button Classes="headerAction ghost" Content="None" Command="{Binding DisableAllFieldsCommand}" />
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding FieldToggles}" MaxWidth="640" HorizontalAlignment="Left">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ScrapeFieldToggle">
+                                <CheckBox Content="{Binding Name}" IsChecked="{Binding IsEnabled}" Width="200" Margin="0,0,8,2" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Tag="organizeScrape.filters" Spacing="10">
+                <TextBlock Classes="settingsGroupCaption" Text="FILTERS" />
+                <TextBlock Text="Drop unlikely ComicVine results before they are scored (CE's advanced scraper settings)."
+                           FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Ignore volumes before year" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                        <TextBox Text="{Binding IgnoreBeforeYear}" Width="150" AutomationProperties.Name="Ignore volumes before year" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Ignore volumes after year" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                        <TextBox Text="{Binding IgnoreAfterYear}" Width="150" AutomationProperties.Name="Ignore volumes after year" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Never ignore at this many issues" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                        <TextBox Text="{Binding NeverIgnoreThreshold}" Width="150" AutomationProperties.Name="Never ignore volumes with at least this many issues" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Ignored publishers (one per line)" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBox Text="{Binding IgnoredPublishers}" AcceptsReturn="True" Height="80" Width="520" HorizontalAlignment="Left" AutomationProperties.Name="Ignored publishers" />
+                </StackPanel>
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Words to leave out of searches (one per line)" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBox Text="{Binding IgnoredSearchTerms}" AcceptsReturn="True" Height="80" Width="520" HorizontalAlignment="Left" AutomationProperties.Name="Ignored search words" />
+                </StackPanel>
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Imprint to parent publisher (Imprint --> Publisher, one per line)" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBox Text="{Binding ImprintOverrides}" AcceptsReturn="True" Height="80" Width="520" HorizontalAlignment="Left" AutomationProperties.Name="Imprint overrides" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <Button Classes="headerAction primary" Command="{Binding SaveCommand}" HorizontalAlignment="Left" AutomationProperties.AutomationId="ScrapeSaveButton">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <fi:SymbolIcon Symbol="Save" FontSize="{StaticResource PbIconSizeXs}" />
+                        <TextBlock Text="Save" />
+                    </StackPanel>
+                </Button>
+                <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasErrorStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"
+                           Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
+                <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasInfoStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"
+                           Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

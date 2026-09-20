@@ -75,6 +75,7 @@ public sealed class LibraryContextMenuBuilder
                 },
                 Symbol.Library),
             ContextMenuEntry.Separator,
+            ContextMenuEntry.Item(multi ? $"Scrape {n} with ComicVine…" : "Scrape with ComicVine…", _vm.ScrapeWithComicVineCommand, row.Id, Symbol.ArrowDownload),
             ContextMenuEntry.Item("Show in Explorer", _vm.RevealIssueCommand, row.Id, Symbol.FolderOpen, isEnabled: row.HasFile),
             _vm.CanWriteMetadataToFiles
                 ? ContextMenuEntry.Item(multi ? $"Write metadata to {n} files" : "Write metadata to file", _vm.WriteIssueMetadataToFilesCommand, row.Id, Symbol.Save, isEnabled: row.HasFile)
@@ -109,6 +110,7 @@ public sealed class LibraryContextMenuBuilder
         var entries = new List<ContextMenuEntry?>
         {
             ContextMenuEntry.Item("Open Series", _vm.SelectCardCommand, card, Symbol.Open),
+            ContextMenuEntry.Item(multi ? $"Scrape {n} series with ComicVine…" : "Scrape with ComicVine…", _vm.ScrapeSeriesWithComicVineCommand, card.SeriesId, Symbol.ArrowDownload),
             ContextMenuEntry.SubMenu(
                 multi ? $"Add {n} to Collection" : "Add to Collection",
                 CollectionChildren(card.SeriesId, _vm.AddSeriesToCollectionCommand, _vm.CreateCollectionAndAddSeriesCommand),

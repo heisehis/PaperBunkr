@@ -29,6 +29,7 @@ public class PreferenceIndexTests
             [PreferencesSection.KeyboardShortcuts] = "KeyboardShortcutsSection.axaml",
             [PreferencesSection.Connections] = "ConnectionsSection.axaml",
             [PreferencesSection.Acquisition] = "AcquisitionSection.axaml",
+            [PreferencesSection.OrganizeScrape] = "OrganizeScrapeSection.axaml",
             [PreferencesSection.Plugins] = "PluginsSection.axaml",
             [PreferencesSection.Advanced] = "AdvancedSection.axaml",
             [PreferencesSection.About] = "AboutSection.axaml",

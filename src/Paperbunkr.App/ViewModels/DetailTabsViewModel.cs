@@ -258,6 +258,9 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     /// </summary>
     public object? ComicScraperDetailView { get; private set; }
 
+    /// <summary>The built-in ComicVine scrape panel for a series (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8). Set by the shell; a series it declines (manga) falls through to any plugin panel.</summary>
+    public Func<Series, Avalonia.Controls.Control?>? ScraperPanelFactory { get; set; }
+
     public bool HasComicScraperDetailView => ComicScraperDetailView is not null;
 
     public void LoadSeries(Series series)
@@ -302,7 +305,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         RefreshCreditRoles(series.Issues);
         RefreshAdditionalDetails(series.Issues);
 
-        ComicScraperDetailView = _pluginHost?.GetSeriesDetailExtension(series);
+        ComicScraperDetailView = ScraperPanelFactory?.Invoke(series) ?? _pluginHost?.GetSeriesDetailExtension(series);
         OnPropertyChanged(nameof(ComicScraperDetailView));
         OnPropertyChanged(nameof(HasComicScraperDetailView));
         OnPropertyChanged(nameof(ShowDefaultSeriesDetailUi));

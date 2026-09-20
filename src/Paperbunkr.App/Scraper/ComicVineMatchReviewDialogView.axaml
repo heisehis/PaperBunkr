@@ -1,0 +1,171 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Paperbunkr.App.Scraper"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="420"
+             x:Class="Paperbunkr.App.Scraper.ComicVineMatchReviewDialogView"
+             x:DataType="vm:ComicVineMatchReviewDialogViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Border.selected">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <!-- Unified button language (grilling follow-up, 2026-09-13) - one per emphasis level, shared
+             hex palette with the search row above. Duplicated (not a shared resource) in every
+             scraper dialog view in this plugin, matching how Border.selected is already duplicated -
+             each dialog view is self-contained, no ResourceInclude infra wired up for this plugin. -->
+        <Style Selector="Button.primary">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="20,0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+            <Setter Property="FontWeight" Value="Medium" />
+        </Style>
+        <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+            <Setter Property="Opacity" Value="0.9" />
+        </Style>
+        <Style Selector="Button.secondary">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+        <Style Selector="Button.secondary:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+        <Style Selector="Button.ghost">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- docs/superpowers/specs/2026-09-13-cluster-scraper-ui-redesign-design.md §2: list + cover-
+         preview-pane (ComicRack CE's own "Choose a Comic Book Series" shape) plus Omnibus's toolbar
+         dropdowns. Select-then-confirm, not click-to-resolve - see the ViewModel's own doc comment.
+         No card chrome here - the host's NativePluginModalHost Border (MainWindow.axaml) owns it. -->
+    <Grid Width="640">
+    <!-- IssuePeek swaps in as an embedded panel (ViewModel's own ShowIssues doc comment explains why
+         this isn't a second modal) rather than a sibling view swap via DataTemplates, since the two
+         states share this same Grid cell and root Width. IsVisible lives on each wrapper (which keeps
+         this dialog's own DataContext) so it isn't shadowed by the inner view's own re-pointed
+         DataContext. -->
+    <Border IsVisible="{Binding IssuePeek, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+        <vm:ComicVineIssueReviewDialogView DataContext="{Binding IssuePeek}" />
+    </Border>
+    <StackPanel Spacing="14" IsVisible="{Binding IssuePeek, Converter={x:Static conv:ObjectConverters.IsNull}}">
+        <TextBlock Text="Which ComicVine series is this?" FontSize="16" FontWeight="Bold"
+                   Foreground="{DynamicResource PbTextBrush}" />
+        <TextBlock Text="{Binding BookLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+
+        <!-- Unified pill row (grilling follow-up, 2026-09-13): every element shares the same 38px
+             height, 8px radius, 1px #35302a border and #1e1912 fill, so the row reads as one
+             connected control group instead of three mismatched heights/radii. -->
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+            <!-- Plain, non-interactive labels, not ComboBox - this app has a confirmed standing
+                 ComboBox/Popup bug (docs/superpowers/specs' own project memory: opening a ComboBox
+                 inside this app's overlay/scrim chrome has previously frozen the UI thread and, per
+                 live testing this session, can also mis-route its opening click to the scrim and
+                 close the whole dialog). The host's own fix was to stop using ComboBox
+                 (Controls/SuggestBox), but that control is host-only and this plugin ships standalone.
+                 Since "ComicVine"/"Best match" are the only options today anyway (design doc §2 - room
+                 for more later, nothing to actually pick from yet), a real dropdown has nothing to
+                 gain and a known crash class to lose - these become real pickers only once a second
+                 source/sort mode exists to choose between. -->
+            <Border Grid.Column="0" Height="38" CornerRadius="8" Padding="14,0" Margin="0,0,8,0"
+                    Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+                <TextBlock Text="ComicVine" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+            </Border>
+            <TextBox Grid.Column="1" Height="38" CornerRadius="8" Padding="14,0"
+                     Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                     VerticalContentAlignment="Center" Foreground="{DynamicResource PbTextBrush}"
+                     Text="{Binding SearchQuery}" Watermark="Series name" />
+            <Border Grid.Column="2" Height="38" CornerRadius="8" Padding="14,0" Margin="8,0"
+                    Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+                <TextBlock Text="Best match" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+            </Border>
+            <Button Grid.Column="3" Height="38" CornerRadius="8" Padding="18,0"
+                    Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" FontWeight="Medium"
+                    Content="Search" Command="{Binding SearchCommand}" IsEnabled="{Binding !IsSearching}" />
+        </Grid>
+        <TextBlock Text="{Binding SearchStatus}" IsVisible="{Binding SearchStatus, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
+                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+
+        <Grid ColumnDefinitions="*,160">
+            <!-- Padding (not just the outer Margin below) so the scrollbar has its own lane instead
+                 of sitting flush against row text - grilling follow-up, 2026-09-13: with zero
+                 padding the default ScrollBar rendered as a bare unstyled sliver touching the text,
+                 reading as a stray misaligned line rather than a scrollbar. -->
+            <ScrollViewer Grid.Column="0" MaxHeight="260" Margin="0,0,16,0" Padding="0,0,10,0">
+                <ItemsControl ItemsSource="{Binding Candidates}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ComicVineMatchCandidateViewModel">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Best match" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                                           IsVisible="{Binding IsTopMatch}" Margin="0,0,0,2" />
+                                <TextBlock Text="Other results" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                                           IsVisible="{Binding IsFirstOtherResult}" Margin="0,8,0,2" />
+                                <Border CornerRadius="6" Padding="10,8" Classes.selected="{Binding IsSelected}">
+                                    <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                            Background="Transparent" BorderThickness="0" Padding="0"
+                                            Command="{Binding SelectCommand}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <!-- Explicit right margin, not just relying on the `*`
+                                                 column's own leftover space - a long title fills
+                                                 nearly the whole row, leaving the score with no
+                                                 breathing room before it otherwise (found live: title
+                                                 and "score N" rendered touching, no gap). -->
+                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                                <TextBlock Text="{Binding DisplayLabel}" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}" />
+                                                <TextBlock Text="{Binding IssueCountLabel}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                           IsVisible="{Binding IssueCountLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{Binding Score, StringFormat='score {0:0}'}"
+                                                       FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Top" />
+                                        </Grid>
+                                    </Button>
+                                </Border>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <StackPanel Grid.Column="1" Spacing="8" HorizontalAlignment="Center">
+                <Border Width="140" Height="210" CornerRadius="6" Background="{DynamicResource PbSurface2Brush}">
+                    <Image Stretch="Uniform" vm:RemoteCoverImage.SourceUrl="{Binding SelectedCandidate.CoverImageUrl}" />
+                </Border>
+                <TextBlock Text="{Binding SelectedCandidate.Volume.Name}" FontSize="12" Foreground="{DynamicResource PbTextBrush}"
+                           TextAlignment="Center" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                    <TextBlock Text="{Binding SelectedCandidate.Volume.Publisher}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock Text="·" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                               IsVisible="{Binding SelectedCandidate.Volume.Publisher, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                    <TextBlock Text="{Binding SelectedCandidate.Volume.StartYear}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                </StackPanel>
+                <Button Content="Show issues" Classes="ghost" HorizontalAlignment="Center" Command="{Binding ShowIssuesCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <Grid ColumnDefinitions="*,Auto,Auto">
+            <Button Grid.Column="1" Content="Skip this book" Classes="secondary" Command="{Binding SkipCommand}" Margin="0,0,8,0" />
+            <Button Grid.Column="2" Content="OK" Classes="primary" Command="{Binding ConfirmCommand}" />
+        </Grid>
+    </StackPanel>
+    </Grid>
+</UserControl>

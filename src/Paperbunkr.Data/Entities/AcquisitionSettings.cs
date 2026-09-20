@@ -36,4 +36,27 @@ public class AcquisitionSettings
 
     /// <summary>Small bonus for .cbz and small penalty for .cbr (Paperbunkr reads both and repacks to .cbz on import).</summary>
     public bool PreferCbz { get; set; } = true;
+
+    /// <summary>
+    /// Grab the best candidate without asking. Off by default: manual approval is the safe default. Packs are never auto-grabbed and a
+    /// candidate must reach <see cref="AutoGrabMinScore"/>.
+    /// </summary>
+    public bool AutoGrab { get; set; }
+
+    public int AutoGrabMinScore { get; set; } = 20;
+
+    /// <summary>
+    /// Import file layout, relative to <see cref="DestinationFolderPath"/>: CE-style <c>{token}</c> with <c>[optional groups]</c>. Beyond CE's own
+    /// tokens it knows <c>{publisher}</c> and zero-padded numbers (<c>{number:000}</c>).
+    /// </summary>
+    public string RenameTemplate { get; set; } = "{publisher}/{series} ({year})/{series} #{number:000}";
+
+    /// <summary>Write a <c>ComicInfo.xml</c> into imported archives (from ComicVine's data for the issue).</summary>
+    public bool WriteComicInfo { get; set; } = true;
+
+    /// <summary>
+    /// Move the original out of the client's folder instead of copying. Off by default: the download stays put so it keeps seeding
+    /// (imports always work on a copy, since repacking or tagging changes the file's bytes).
+    /// </summary>
+    public bool MoveOriginalOnImport { get; set; }
 }

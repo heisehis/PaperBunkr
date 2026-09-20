@@ -34,6 +34,17 @@ public class WantedIssue
 
     public Issue? Issue { get; set; }
 
+    /// <summary>Title of the release that was grabbed (kept so a failure can blocklist it by name).</summary>
+    public string? GrabbedTitle { get; set; }
+
+    /// <summary>0..1 while a download is running, refreshed by the download tracker; <c>null</c> when nothing is downloading.</summary>
+    public double? DownloadProgress { get; set; }
+
+    /// <summary>Why the last attempt failed, shown next to the Retry button.</summary>
+    public string? FailureReason { get; set; }
+
+    public DateTime? ImportedAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? LastSearchedAt { get; set; }

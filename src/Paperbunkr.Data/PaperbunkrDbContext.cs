@@ -98,6 +98,7 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<WantedIssue> WantedIssues => Set<WantedIssue>();
     public DbSet<ReleaseCandidate> ReleaseCandidates => Set<ReleaseCandidate>();
     public DbSet<AcquisitionSettings> AcquisitionSettings => Set<AcquisitionSettings>();
+    public DbSet<ReleaseBlocklist> ReleaseBlocklist => Set<ReleaseBlocklist>();
 
     public DbSet<VirtualTagDefinition> VirtualTagDefinitions => Set<VirtualTagDefinition>();
 
@@ -264,6 +265,19 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(a => a.Id);
             builder.Property(a => a.Id).ValueGeneratedNever();
+            // Added after the table first shipped, so existing rows need a DB-level default to backfill.
+            builder.Property(a => a.RenameTemplate).HasDefaultValue("{publisher}/{series} ({year})/{series} #{number:000}");
+            builder.Property(a => a.AutoGrabMinScore).HasDefaultValue(20);
+            builder.Property(a => a.WriteComicInfo).HasDefaultValue(true);
+        });
+
+        modelBuilder.Entity<ReleaseBlocklist>(builder =>
+        {
+            builder.HasKey(b => b.Id);
+            builder.Property(b => b.ReleaseName).IsRequired();
+            builder.Property(b => b.TorrentHash).HasMaxLength(64);
+            builder.Property(b => b.Reason).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(b => b.TorrentHash);
         });
 
         modelBuilder.Entity<Series>(builder =>

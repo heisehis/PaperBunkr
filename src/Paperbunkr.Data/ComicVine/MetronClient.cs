@@ -37,7 +37,7 @@ public static class MetronHttp
 /// <c>series/?name=</c> (paged, 100 per page), <c>series/{id}/</c>, <c>series/{id}/issue_list/</c>, <c>issue/{id}/</c>; HTTP Basic auth.
 /// A Metron series has no cover image; its issues do.
 /// </summary>
-public sealed class MetronClient : IComicProvider
+public sealed class MetronClient : IComicProvider, IPullListSource
 {
     private const string BaseUrl = "https://metron.cloud/api";
     private const int MaxPages = 30;
@@ -138,6 +138,60 @@ public sealed class MetronClient : IComicProvider
         }
 
         return issues;
+    }
+
+    public async Task<IReadOnlyList<PullListEntry>> GetReleasesAsync(DateTime from, DateTime to, CancellationToken cancellationToken)
+    {
+        var entries = new List<PullListEntry>();
+        string? url = $"{BaseUrl}/issue/?store_date_range_after={from:yyyy-MM-dd}&store_date_range_before={to:yyyy-MM-dd}";
+
+        for (int page = 0; page < MaxPages && url is not null; page++)
+        {
+            var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+            foreach (var node in (root["results"] as JsonArray) ?? new JsonArray())
+            {
+                if (node is not JsonObject o || o["id"] is null || o["series"] is not JsonObject series || series["id"] is null
+                    || ParseDate(o["store_date"]?.GetValue<string>()) is not DateTime storeDate)
+                {
+                    continue;
+                }
+
+                entries.Add(new PullListEntry(
+                    o["id"]!.GetValue<int>(),
+                    series["id"]!.GetValue<int>(),
+                    (series["name"]?.GetValue<string>() ?? string.Empty).Trim(),
+                    o["number"]?.GetValue<string>() ?? string.Empty,
+                    storeDate,
+                    ParseDate(o["cover_date"]?.GetValue<string>()),
+                    o["image"]?.GetValue<string>()));
+            }
+
+            url = root["next"]?.GetValue<string?>();
+        }
+
+        return entries;
+    }
+
+    public async Task<PullListSeriesInfo?> GetSeriesInfoAsync(int seriesId, CancellationToken cancellationToken)
+    {
+        JsonNode root;
+        try
+        {
+            root = await GetAsync($"{BaseUrl}/series/{seriesId}/", cancellationToken).ConfigureAwait(false);
+        }
+        catch (ComicVineException ex) when (ex.ApiStatusCode == 101)
+        {
+            return null;
+        }
+
+        if (root is not JsonObject o)
+        {
+            return null;
+        }
+
+        int? year = o["year_began"] is { } y && int.TryParse(y.ToString(), out int parsedYear) ? parsedYear : null;
+        int? cvId = o["cv_id"] is { } c && int.TryParse(c.ToString(), out int parsedCv) && parsedCv > 0 ? parsedCv : null;
+        return new PullListSeriesInfo(seriesId, CleanName(o["name"]?.GetValue<string>() ?? string.Empty, year), (o["publisher"] as JsonObject)?["name"]?.GetValue<string>(), year, cvId);
     }
 
     public async Task<ComicVineIssueDetails?> GetIssueDetailsAsync(int issueId, CancellationToken cancellationToken)

@@ -95,6 +95,8 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<ProviderCredential> ProviderCredentials => Set<ProviderCredential>();
     public DbSet<WatchedSeries> WatchedSeries => Set<WatchedSeries>();
     public DbSet<CatalogIssue> CatalogIssues => Set<CatalogIssue>();
+    public DbSet<PullListRelease> PullListReleases => Set<PullListRelease>();
+    public DbSet<MetronSeriesInfo> MetronSeries => Set<MetronSeriesInfo>();
     public DbSet<WantedIssue> WantedIssues => Set<WantedIssue>();
     public DbSet<ReleaseCandidate> ReleaseCandidates => Set<ReleaseCandidate>();
     public DbSet<AcquisitionSettings> AcquisitionSettings => Set<AcquisitionSettings>();
@@ -291,6 +293,22 @@ public class PaperbunkrDbContext : DbContext
             builder.HasIndex(c => new { c.Provider, c.ExternalIssueId }).IsUnique();
             builder.Property(c => c.Provider).HasConversion<int>().HasDefaultValue(ComicProvider.ComicVine);
             builder.HasIndex(c => c.WatchedSeriesId);
+        });
+
+        modelBuilder.Entity<PullListRelease>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.IssueNumber).IsRequired().HasMaxLength(64);
+            builder.Property(r => r.SeriesName).IsRequired().HasMaxLength(300);
+            builder.HasIndex(r => r.ExternalIssueId).IsUnique();
+            builder.HasIndex(r => r.StoreDate);
+        });
+
+        modelBuilder.Entity<MetronSeriesInfo>(builder =>
+        {
+            builder.HasKey(m => m.SeriesId);
+            builder.Property(m => m.SeriesId).ValueGeneratedNever();
+            builder.Property(m => m.Name).IsRequired().HasMaxLength(300);
         });
 
         modelBuilder.Entity<WantedIssue>(builder =>

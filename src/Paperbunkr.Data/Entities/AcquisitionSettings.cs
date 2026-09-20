@@ -24,6 +24,9 @@ public class AcquisitionSettings
 
     public int PollIntervalMinutes { get; set; } = 60;
 
+    /// <summary>When the weekly pull list was last fetched (UTC); the daemon refetches it about twice a day.</summary>
+    public DateTime? PullListRefreshedAt { get; set; }
+
     public int MinSizeMb { get; set; }
 
     public int MaxSizeMb { get; set; } = 500;

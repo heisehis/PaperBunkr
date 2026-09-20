@@ -85,10 +85,17 @@ public static class WantedService
             .Select(w => w.ExternalIssueId)
             .ToHashSet();
 
+        // A want that came from the weekly pull list belongs to the other provider (a ComicVine series' release listed by Metron): its id can't match a catalog
+        // row, so it is recognised by issue number instead.
+        var takenElsewhere = context.WantedIssues
+            .Where(w => w.WatchedSeriesId == watched.Id && w.Provider != watched.Provider)
+            .Select(w => w.IssueNumber)
+            .ToList();
+
         return context.CatalogIssues
             .Where(c => c.WatchedSeriesId == watched.Id)
             .AsEnumerable()
-            .Where(c => !taken.Contains(c.ExternalIssueId) && !owned.Any(n => IssueNumbers.Equal(n, c.IssueNumber)))
+            .Where(c => !taken.Contains(c.ExternalIssueId) && !owned.Any(n => IssueNumbers.Equal(n, c.IssueNumber)) && !takenElsewhere.Any(n => IssueNumbers.Equal(n, c.IssueNumber)))
             .OrderBy(c => c.StoreDate ?? c.CoverDate ?? DateTime.MaxValue)
             .ThenBy(c => c.IssueNumber, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -125,6 +132,40 @@ public static class WantedService
 
     public static WantedIssue Request(PaperbunkrDbContext context, WatchedSeries watched, CatalogIssue issue) =>
         Request(context, watched, new ComicVineIssue(issue.ExternalIssueId, issue.IssueNumber, issue.Name, issue.StoreDate, issue.CoverDate, issue.CoverImageUrl, watched.ExternalVolumeId));
+
+    /// <summary>
+    /// Marks a weekly-pull-list release wanted for a tracked series, unless the library already owns that number or the series already has a want for it (from either
+    /// source). The want carries Metron's own ids, so the import-time details lookup asks Metron even when the series was tracked on ComicVine. Returns the new want,
+    /// or <c>null</c> when there was nothing to add.
+    /// </summary>
+    public static WantedIssue? RequestFromRelease(PaperbunkrDbContext context, WatchedSeries watched, PullListRelease release)
+    {
+        if (OwnedNumbers(context, watched).Any(n => IssueNumbers.Equal(n, release.IssueNumber)))
+        {
+            return null;
+        }
+
+        var sameNumber = context.WantedIssues.Where(w => w.WatchedSeriesId == watched.Id).AsEnumerable().Any(w => IssueNumbers.Equal(w.IssueNumber, release.IssueNumber));
+        var sameId = context.WantedIssues.Any(w => w.Provider == ComicProvider.Metron && w.ExternalIssueId == release.ExternalIssueId);
+        if (sameNumber || sameId)
+        {
+            return null;
+        }
+
+        var wanted = new WantedIssue
+        {
+            WatchedSeriesId = watched.Id,
+            Provider = ComicProvider.Metron,
+            ExternalIssueId = release.ExternalIssueId,
+            IssueNumber = release.IssueNumber,
+            StoreDate = release.StoreDate,
+            CoverImageUrl = release.CoverImageUrl,
+            CreatedAt = DateTime.UtcNow,
+        };
+        context.WantedIssues.Add(wanted);
+        context.SaveChanges();
+        return wanted;
+    }
 
     /// <summary>"Request all shown": every currently missing issue. Returns how many were newly requested.</summary>
     public static int RequestAllMissing(PaperbunkrDbContext context, WatchedSeries watched)

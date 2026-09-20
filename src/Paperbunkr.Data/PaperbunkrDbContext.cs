@@ -99,6 +99,8 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<ReleaseCandidate> ReleaseCandidates => Set<ReleaseCandidate>();
     public DbSet<AcquisitionSettings> AcquisitionSettings => Set<AcquisitionSettings>();
     public DbSet<ReleaseBlocklist> ReleaseBlocklist => Set<ReleaseBlocklist>();
+    public DbSet<Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow> ScrapeSettingsRows => Set<Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow>();
+    public DbSet<Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry> ComicVineMatchMemories => Set<Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry>();
 
     public DbSet<VirtualTagDefinition> VirtualTagDefinitions => Set<VirtualTagDefinition>();
 
@@ -259,6 +261,18 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(c => c.Title).IsRequired();
             builder.Property(c => c.DownloadUrl).IsRequired();
             builder.HasIndex(c => c.WantedIssueId);
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.HasIndex(e => new { e.SearchKey, e.ChosenVolumeId }).IsUnique();
         });
 
         modelBuilder.Entity<AcquisitionSettings>(builder =>

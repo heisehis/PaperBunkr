@@ -272,4 +272,33 @@ public class AcquisitionSettingsImportTests : IDisposable
 
         Assert.False(Create().HasTemplateUpgradeNotice);
     }
+
+    [Fact]
+    public void SaveConnections_SavesOnlyTheConnectionFields_SoAnUnrelatedBadValueCannotBlockIt()
+    {
+        var vm = Create();
+        vm.ProwlarrUrl = " http://prowlarr:9696 ";
+        vm.ProwlarrApiKey = "KEY";
+        vm.QBittorrentUrl = "http://qbit:8080";
+        vm.QBittorrentUsername = "admin";
+        vm.QBittorrentPassword = "hunter2";
+        vm.RenameTemplate = "{<colour>}";                        // invalid, and a full Save would refuse it
+        vm.MinSizeMb = 900;
+        vm.MaxSizeMb = 10;                                       // also invalid
+
+        vm.SaveConnectionsCommand.Execute(null);
+
+        Assert.True(vm.HasInfoStatus);
+        using var context = NewContext();
+        var saved = context.GetOrCreateAcquisitionSettings();
+        Assert.Equal("http://prowlarr:9696", saved.ProwlarrUrl);
+        Assert.Equal("http://qbit:8080", saved.QBittorrentUrl);
+        Assert.Equal(AcquisitionSettings.DefaultRenameTemplate, saved.RenameTemplate);     // untouched
+        Assert.Equal(0, saved.MinSizeMb);
+        Assert.Equal("KEY", CredentialStore.Get(context, "Prowlarr", CredentialKind.ApiKey));
+        Assert.Equal("admin", CredentialStore.Get(context, "qBittorrent", CredentialKind.Username));
+        Assert.True(CredentialStore.IsEncrypted(context.ProviderCredentials.Single(c => c.Provider == "qBittorrent" && c.Kind == CredentialKind.Password).Value));
+        Assert.True(vm.IsProwlarrConnected);
+        Assert.True(vm.IsQBittorrentConnected);
+    }
 }

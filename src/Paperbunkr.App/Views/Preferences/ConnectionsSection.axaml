@@ -56,6 +56,16 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Download automation (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 7) -->
+                <Border Classes="groupBox" Tag="connections.downloadAutomation">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Download automation" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding DownloadProviderRows}" ItemTemplate="{StaticResource ProviderRowTemplate}" Margin="6" />
+                    </StackPanel>
+                </Border>
+
                 <!-- Trackers -->
                 <Border Classes="groupBox" Tag="connections.trackers">
                     <StackPanel>
@@ -180,6 +190,56 @@
                                 <TextBlock Text="Disconnect" />
                             </StackPanel>
                         </Button>
+                    </StackPanel>
+
+                    <!-- Prowlarr: address + API key. Fields live on the acquisition view-model (one source of truth), reached through the section's DataContext. -->
+                    <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.Prowlarr}}">
+                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.ProwlarrUrl}" Watermark="http://localhost:9696"
+                                 AutomationProperties.Name="Prowlarr address" AutomationProperties.AutomationId="ConnectionProwlarrUrl" />
+                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.ProwlarrApiKey}" PasswordChar="•"
+                                 Watermark="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.ApiKeyWatermark}"
+                                 AutomationProperties.Name="Prowlarr API key" AutomationProperties.AutomationId="ConnectionProwlarrKey" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Classes="headerAction primary" Content="Save"
+                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.SaveConnectionsCommand}"
+                                    AutomationProperties.AutomationId="ConnectionProwlarrSave" />
+                            <Button Classes="headerAction ghost" Content="Test connection"
+                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.TestProwlarrCommand}"
+                                    AutomationProperties.AutomationId="ConnectionProwlarrTest" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.StatusMessage}"
+                                   IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.HasErrorStatus}"
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
+                        <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.StatusMessage}"
+                                   IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.HasInfoStatus}"
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
+
+                    <!-- qBittorrent: web UI address, username, password, category. -->
+                    <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.QBittorrent}}">
+                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentUrl}" Watermark="http://localhost:8080"
+                                 AutomationProperties.Name="qBittorrent web UI address" AutomationProperties.AutomationId="ConnectionQBittorrentUrl" />
+                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentUsername}" Watermark="Username"
+                                 AutomationProperties.Name="qBittorrent username" />
+                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentPassword}" PasswordChar="•"
+                                 Watermark="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentPasswordWatermark}"
+                                 AutomationProperties.Name="qBittorrent password" />
+                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentCategory}" Watermark="paperbunkr-comics"
+                                 AutomationProperties.Name="qBittorrent category" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Classes="headerAction primary" Content="Save"
+                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.SaveConnectionsCommand}"
+                                    AutomationProperties.AutomationId="ConnectionQBittorrentSave" />
+                            <Button Classes="headerAction ghost" Content="Test connection"
+                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.TestQBittorrentCommand}"
+                                    AutomationProperties.AutomationId="ConnectionQBittorrentTest" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.StatusMessage}"
+                                   IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.HasErrorStatus}"
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
+                        <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.StatusMessage}"
+                                   IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.HasInfoStatus}"
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
                     </StackPanel>
 
                     <!-- Credential shape: Metron, MangaUpdates, Kitsu -->

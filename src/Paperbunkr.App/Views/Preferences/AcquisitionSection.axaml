@@ -29,62 +29,17 @@
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
 
-            <StackPanel Tag="acquisition.prowlarr" Spacing="10">
-                <TextBlock Classes="settingsGroupCaption" Text="PROWLARR" />
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Address" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
-                    <TextBox Text="{Binding ProwlarrUrl}" Watermark="http://localhost:9696" MaxWidth="520" HorizontalAlignment="Left" Width="520"
-                             AutomationProperties.Name="Prowlarr address" AutomationProperties.AutomationId="AcquisitionProwlarrUrl" />
-                </StackPanel>
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="API key" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
-                    <TextBox Text="{Binding ProwlarrApiKey}" Watermark="{Binding ApiKeyWatermark}" PasswordChar="•" MaxWidth="520" HorizontalAlignment="Left" Width="520"
-                             AutomationProperties.Name="Prowlarr API key" AutomationProperties.AutomationId="AcquisitionProwlarrKey" />
-                    <TextBlock Text="Find it in Prowlarr under Settings → General. It is stored encrypted and never shown again."
-                               FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left" />
-                </StackPanel>
-
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <Button Classes="headerAction primary" Command="{Binding SaveCommand}"
-                            AutomationProperties.AutomationId="AcquisitionSaveButton">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <fi:SymbolIcon Symbol="Save" FontSize="{StaticResource PbIconSizeXs}" />
-                            <TextBlock Text="Save" />
-                        </StackPanel>
-                    </Button>
-                    <Button Classes="headerAction ghost" Command="{Binding TestProwlarrCommand}"
-                            AutomationProperties.AutomationId="AcquisitionTestButton">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <fi:SymbolIcon Symbol="Link" FontSize="{StaticResource PbIconSizeXs}" />
-                            <TextBlock Text="Test connection" />
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-
-                <!-- Live region so a screen reader announces the result of Save / Test. -->
-                <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasErrorStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"
-                           Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
-                <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasInfoStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"
-                           Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
-            </StackPanel>
-
-            <StackPanel Tag="acquisition.comicvine">
-                <TextBlock Classes="settingsGroupCaption" Text="COMICVINE" />
-                <pref:SettingsRow Icon="Link" Title="ComicVine API key"
-                                   Description="Tracking a series and finding its missing issues use ComicVine. The key is managed under Connections.">
+            <StackPanel Tag="acquisition.connections">
+                <TextBlock Classes="settingsGroupCaption" Text="CONNECTIONS" />
+                <pref:SettingsRow Icon="Link" Title="Prowlarr, qBittorrent and ComicVine"
+                                   Description="Their addresses, keys and passwords are all managed under Connections, with everything else you connect to.">
                     <pref:SettingsRow.SettingsContent>
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <TextBlock Text="Connected" VerticalAlignment="Center" FontSize="12" IsVisible="{Binding HasComicVineKey}"
-                                       Foreground="{DynamicResource PbSuccessBrush}" />
-                            <TextBlock Text="Not set" VerticalAlignment="Center" FontSize="12" IsVisible="{Binding !HasComicVineKey}"
-                                       Foreground="{DynamicResource PbTextMutedBrush}" />
-                            <Button Classes="headerAction ghost" Content="Open Connections" Command="{Binding OpenConnectionsCommand}"
-                                    AutomationProperties.AutomationId="AcquisitionOpenConnectionsButton" />
-                        </StackPanel>
+                        <Button Classes="headerAction ghost" Content="Open Connections" Command="{Binding OpenConnectionsCommand}"
+                                AutomationProperties.AutomationId="AcquisitionOpenConnectionsButton" />
                     </pref:SettingsRow.SettingsContent>
                 </pref:SettingsRow>
+                <TextBlock Text="{Binding ConnectionsSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                           MaxWidth="640" HorizontalAlignment="Left" Margin="0,4,0,0" AutomationProperties.LiveSetting="Polite" />
             </StackPanel>
 
             <StackPanel Tag="acquisition.search">
@@ -137,44 +92,6 @@
             </StackPanel>
 
             <!-- QBITTORRENT (slice 2) -->
-            <StackPanel Tag="acquisition.qbittorrent" Spacing="10">
-                <TextBlock Classes="settingsGroupCaption" Text="QBITTORRENT" />
-                <TextBlock Text="Approved releases are sent here. Paperbunkr puts them in its own category and only ever reads, follows or removes torrents in that category — never the rest of your client."
-                           FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left" />
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Web UI address" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
-                    <TextBox Text="{Binding QBittorrentUrl}" Watermark="http://localhost:8080" Width="520" MaxWidth="520" HorizontalAlignment="Left"
-                             AutomationProperties.Name="qBittorrent web UI address" AutomationProperties.AutomationId="AcquisitionQBitUrl" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Username" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
-                        <TextBox Text="{Binding QBittorrentUsername}" Width="250" AutomationProperties.Name="qBittorrent username" />
-                    </StackPanel>
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Password" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
-                        <TextBox Text="{Binding QBittorrentPassword}" Watermark="{Binding QBittorrentPasswordWatermark}" PasswordChar="•" Width="250"
-                                 AutomationProperties.Name="qBittorrent password" />
-                    </StackPanel>
-                </StackPanel>
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Category" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
-                    <TextBox Text="{Binding QBittorrentCategory}" Width="250" HorizontalAlignment="Left" AutomationProperties.Name="qBittorrent category" />
-                </StackPanel>
-                <Button Classes="headerAction ghost" Command="{Binding TestQBittorrentCommand}" HorizontalAlignment="Left"
-                        AutomationProperties.AutomationId="AcquisitionTestQBitButton">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <fi:SymbolIcon Symbol="Link" FontSize="{StaticResource PbIconSizeXs}" />
-                        <TextBlock Text="Test qBittorrent" />
-                    </StackPanel>
-                </Button>
-                <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasErrorStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"
-                           Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
-                <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasInfoStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"
-                           Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
-            </StackPanel>
-
             <!-- IMPORT (slice 3) -->
             <StackPanel Tag="acquisition.import" Spacing="10">
                 <TextBlock Classes="settingsGroupCaption" Text="IMPORT" />

@@ -150,7 +150,26 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
     /// <summary>The API-key field's placeholder: tells the user whether one is already stored.</summary>
     public string ApiKeyWatermark => HasSavedApiKey ? "Saved — leave blank to keep it" : "Prowlarr API key";
 
-    partial void OnHasSavedApiKeyChanged(bool value) => OnPropertyChanged(nameof(ApiKeyWatermark));
+    partial void OnHasSavedApiKeyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ApiKeyWatermark));
+        OnPropertyChanged(nameof(IsProwlarrConnected));
+    }
+
+    partial void OnProwlarrUrlChanged(string value) => OnPropertyChanged(nameof(IsProwlarrConnected));
+
+    partial void OnQBittorrentUrlChanged(string value) => OnPropertyChanged(nameof(IsQBittorrentConnected));
+
+    /// <summary>Prowlarr counts as connected once it has an address and a stored key (a real handshake is the Test button's job, not something to run on every screen open).</summary>
+    public bool IsProwlarrConnected => HasSavedApiKey && !string.IsNullOrWhiteSpace(ProwlarrUrl);
+
+    public bool IsQBittorrentConnected => !string.IsNullOrWhiteSpace(QBittorrentUrl);
+
+    /// <summary>One line for the Acquisition section, which no longer edits these (they live under Connections).</summary>
+    public string ConnectionsSummary =>
+        $"Prowlarr: {(IsProwlarrConnected ? "connected" : "not set up")}  ·  qBittorrent: {(IsQBittorrentConnected ? "set up" : "not set up")}  ·  ComicVine: {(HasComicVineKey ? "connected" : "not set")}";
+
+    partial void OnHasComicVineKeyChanged(bool value) => OnPropertyChanged(nameof(ConnectionsSummary));
 
     public void Load()
     {
@@ -190,6 +209,40 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         HasSavedApiKey = !string.IsNullOrEmpty(CredentialStore.Get(context, "Prowlarr", CredentialKind.ApiKey));
         HasComicVineKey = !string.IsNullOrEmpty(CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey));
         ProwlarrApiKey = string.Empty;
+    }
+
+    /// <summary>
+    /// Saves only the Prowlarr and qBittorrent connection fields (what the Connections dialogs edit), leaving every behavior setting as it is stored.
+    /// Never touches the naming template, destination or filters, so an unrelated invalid value there can't block saving a connection.
+    /// </summary>
+    [RelayCommand]
+    private void SaveConnections()
+    {
+        using var context = _createContext();
+        var settings = context.GetOrCreateAcquisitionSettings();
+        settings.ProwlarrUrl = ProwlarrUrl.Trim();
+        settings.QBittorrentUrl = QBittorrentUrl.Trim();
+        // Paperbunkr only ever touches torrents in its own category, so an empty one is never allowed.
+        settings.QBittorrentCategory = string.IsNullOrWhiteSpace(QBittorrentCategory) ? "paperbunkr-comics" : QBittorrentCategory.Trim();
+        context.SaveChanges();
+        QBittorrentCategory = settings.QBittorrentCategory;
+
+        CredentialStore.Set(context, DownloadClientFactory.CredentialProvider, CredentialKind.Username, QBittorrentUsername.Trim());
+        if (!string.IsNullOrWhiteSpace(QBittorrentPassword))
+        {
+            CredentialStore.Set(context, DownloadClientFactory.CredentialProvider, CredentialKind.Password, QBittorrentPassword);
+            HasSavedQBittorrentPassword = true;
+            QBittorrentPassword = string.Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(ProwlarrApiKey))
+        {
+            CredentialStore.Set(context, "Prowlarr", CredentialKind.ApiKey, ProwlarrApiKey.Trim());
+            HasSavedApiKey = true;
+            ProwlarrApiKey = string.Empty;
+        }
+
+        SetStatus("Saved.", isError: false);
     }
 
     [RelayCommand]

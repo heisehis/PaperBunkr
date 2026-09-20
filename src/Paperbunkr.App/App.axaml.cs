@@ -205,7 +205,7 @@ public partial class App : Application
             flightDuration: () => (TimeSpan)(Application.Current!.Resources["PbMotionLarge"] ?? TimeSpan.FromMilliseconds(320)),
             easing: new CubicEaseOut());
         DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] transition coordinator ready; constructing MainViewModel...");
-        var mainViewModel = new MainViewModel(transitionCoordinator.RunAsync);
+        var mainViewModel = new MainViewModel(transitionCoordinator.RunAsync, themeService);
         DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] MainViewModel ready; constructing MainWindow...");
         var mainWindow = new MainWindow
         {

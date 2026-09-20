@@ -71,15 +71,25 @@ this file itself already did once (see the note below).
 >   New 3-tab `CoverPickerViewModel`/`CoverPickerView` (Series / Reading List / Browse File
 >   candidates) now backs all 3 existing "change cover" entry points (Detail, Manga Detail,
 >   DetailTabs), replacing the old direct-file-picker-only path. Not GUI-verified this session.
-> - **External Metadata Full Extraction — design + plan only, zero implementation:**
+> - **External Metadata Full Extraction — IMPLEMENTED (status corrected 2026-09-19; this note
+>   originally said "design + plan only, not started", which went stale):**
 >   `docs/superpowers/specs/2026-09-18-external-metadata-full-extraction-{design,plan}.md`. Expands
->   the AniList/MangaBaka/MangaDex providers past today's thin title/description/status fields: cover
->   images (priority ask), creator/staff, publication year/format, demographic, cross-references, and
->   weighted/categorized tags feeding real `IssueTag` import (not a flat CSV). MangaBaka provider
->   switches its beta `v2` API to the stable `v1` family (`v2` lacks covers/relations/tag taxonomy
->   entirely). 6 phases, foundation then cover pipeline first; not started.
-> **Not committed as of this note** — all three items above sit staged/uncommitted in the working
-> tree (confirm via `git status` before assuming any of it is on `origin/master`).
+>   the AniList/MangaBaka/MangaDex providers past title/description/status: cover images, creator/
+>   staff, publication year/format, demographic, cross-references, and categorized tags feeding real
+>   `IssueTag` import. MangaBaka moved from beta `v2` to stable `v1`. Landed in `fbe7295` (merged
+>   via PR #89). Verified 2026-09-19 by reading the code (grep, not built/run): A1–A4 (schema,
+>   AniList/MangaDex/MangaBaka v1), B (cover pipeline: `TrySetCustomCoverFromBytes`,
+>   `IMultiCoverProvider`, `ProviderCoverCandidateCache`, picker provider tab), C (`Series.Creator`
+>   + resolver wiring), D (`MergeFromCategorized`, `ExternalTagImportResolver`), E1–E3
+>   (`ExternalMediaRelation`, `IRelationsProvider` on AniList + MangaBaka, placeholder→
+>   `MediaRelation` auto-upgrade), E4 view-model side (lazy fetch + `ExternalRelationPlaceholders`),
+>   F1 (`UpsertCrossReferences`). User confirmed on screen that the Linking tab auto-links
+>   cross-referenced providers and shows per-provider cover actions. **Open:** (1) no "Not in
+>   library" badge string found in the Related-tab view — check on screen; (2) no dedicated tests
+>   found for the AniList/MangaDex normalizer fields or `ExternalTagImportResolver` (plan asked
+>   for them); (3) stale `v2` doc comment at `MangaBakaMetadataProvider.cs:23`.
+> **Not committed as of this note** — all three items above sat staged/uncommitted in the working
+> tree when written. *(Update 2026-09-19: since landed in `fbe7295`, merged via PR #89.)*
 
 > **Manual session note (2026-09-17, IsFinalIssue migration-rollback bug actually fixed):**
 > Closes the task spawned 2026-09-12 (`Fix migration rollback: IsFinalIssue NOT NULL bug`, noted
@@ -1118,8 +1128,10 @@ below directly (verified by re-grepping the source, not by trusting commit messa
 - `MainWindow.axaml` — Collections row now bound to `Library.Collections` with a real
   `"No collections yet."` empty state ✅; Duplicate Finder's hardcoded `"7"` badge and fake demo
   content removed, rail icon retitled to "Plugins" ✅
-- `Assets/avalonia-logo.ico` — **still open.** Still the default Avalonia project-template icon,
-  still wired as the actual window icon (`MainWindow.axaml` line 11). Needs a real Paperbunkr icon.
+- ~~`Assets/avalonia-logo.ico` — **still open.** Still the default Avalonia project-template icon,
+  still wired as the actual window icon (`MainWindow.axaml` line 11). Needs a real Paperbunkr icon.~~
+  **Done** (see P4 section below) — replaced by `Assets/paperbunkr.ico`; re-confirmed present
+  2026-09-19.
 
 **P6 has substantial real progress**, not just the demo-data fix that was previously (wrongly)
 credited to it. Since the doc was last written: `18d7ad8` (Reading Lists empty states), `8ace219`

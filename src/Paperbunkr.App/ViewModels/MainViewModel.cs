@@ -87,7 +87,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// <see cref="NavigateBack"/> already being plain constructor-supplied callbacks.</summary>
     private readonly Func<string?, Action, Task> _runDrillTransition;
 
-    public MainViewModel(Func<string?, Action, Task>? runDrillTransition = null)
+    public MainViewModel(Func<string?, Action, Task>? runDrillTransition = null, ThemeService? sharedThemeService = null)
     {
         _runDrillTransition = runDrillTransition ?? ((_, swap) => { swap(); return Task.CompletedTask; });
 
@@ -143,7 +143,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // this specific instance's ThemeApplied to know when to re-render the cover-wall on a live
         // theme switch; a second ThemeService instance would never fire into that subscription since
         // the event isn't static/process-wide.
-        var themeService = new ThemeService();
+        var themeService = sharedThemeService ?? new ThemeService();
         _themeService = themeService;
         _themeService.ThemeApplied += OnThemeAppliedForMatrixRain;
         _themeService.ScheduledThemeCrossfadeRequested += OnScheduledThemeCrossfadeRequested;

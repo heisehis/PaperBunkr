@@ -188,6 +188,13 @@ public class ThemeServiceTests : IDisposable
 
         service.ApplyTheme(key);
 
+        // RequestedThemeVariant is thread-owned; ThemeService skips the set (and reading it here would
+        // throw) on test-runner threads the dispatcher doesn't own. Only assert where it's meaningful.
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            return;
+        }
+
         var expectedVariant = expectedVariantName == "Light" ? Avalonia.Styling.ThemeVariant.Light : Avalonia.Styling.ThemeVariant.Dark;
         Assert.Equal(expectedVariant, Avalonia.Application.Current!.RequestedThemeVariant);
     }

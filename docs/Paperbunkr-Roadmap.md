@@ -62,7 +62,8 @@ Checked each against `docs/paperbunkr-todo.md`, the doc a human actually maintai
   manga metadata scraping" below, which is the real tracking entry for this. Partially built
   already (publisher-based heuristic classifier, tracker sync stages 1-4, manga detail screen,
   MangaBaka + MangaUpdates + Kitsu adapters, Apply-from-Provider, MangaDex metadata scraping,
-  two-way tracker sync all shipped); only the Stage 5 stats dashboard remains unbuilt.
+  two-way tracker sync, and the Stage 5 stats dashboard as Stats v2 on 2026-09-08 all shipped);
+  the auto-classify pipeline itself is what remains open.
 
 ## Before tagging a release
 
@@ -162,9 +163,11 @@ missing the stuff from komikku").
   shape (CLAUDE.md) that a 2026-09-12 sweep had already fixed in ~15 other spots but missed here.
   Deferred via `Dispatcher.UIThread.Post`, same shape as the rest.
 
-Explicitly deferred, not started: the Komikku-style Tracking settings toggles (auto-open-track-menu-
+~~Explicitly deferred, not started: the Komikku-style Tracking settings toggles (auto-open-track-menu-
 on-add, update-progress-after-reading/when-marked-as-read, auto-sync-from-trackers,
-select-entries-using-source-metadata) — flagged by the user as a follow-up, not part of this pass.
+select-entries-using-source-metadata) — flagged by the user as a follow-up, not part of this pass.~~
+**Superseded 2026-09-18:** implemented — see "Tracker behavior settings" above (on-screen
+verification still pending).
 
 **3 post-ship bugs found+fixed on-screen, same day:**
 
@@ -822,10 +825,12 @@ driving use case yet; revisit if one shows up). Design specs:
   aware (respects AniList's actual current 30 req/min degraded limit), licensing-verified against
   AniList's real terms (`github.com/AniList/docs`). **No longer backend-only** — a real search-and-link
   UI landed 2026-08-19 (`MetadataLinkResolver`/`TitleMatchScorer`, wired into `DetailTabsViewModel`;
-  still uncommitted as of this sync, see `paperbunkr-todo.md`'s live-tracker section for status). Every
-  *other* provider (MAL/MangaDex/GCD/etc.) is still deliberately deferred — MangaDex has a sketched-
-  only design spec (R5, not implemented); full tracker-service *sync* (as opposed to read-only
-  search/link) remains the item below, and reuses this adapter rather than rebuilding it.
+  since committed). **Superseded:** MangaDex and MangaBaka metadata providers shipped (2026-09-05 /
+  2026-08-23), as did tracker sync for all 8 adapters and two-way sync (2026-09-05); see the
+  Content-type classification section below. Still unbuilt: GCD as a provider. The fuller
+  external-metadata extraction (covers, staff, tags, relations, cross-reference auto-link) is
+  **implemented** (`fbe7295`, verified 2026-09-19; see `paperbunkr-todo.md` for open items) —
+  `2026-09-18-external-metadata-full-extraction-{design,plan}.md`.
 - **Phase 6a — Recommendation engine**: `RecommendationResolver`, a relationally-anchored (not
   whole-library-similarity) 7-signal explainable scoring engine reusing the Phase 3/4a/4b resolvers.
   Live-computed, not a persisted table. **No longer backend-only — a real Home screen shipped

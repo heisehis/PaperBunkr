@@ -139,17 +139,17 @@ public class AcquisitionSettingsImportTests : IDisposable
         Assert.True(vm.RenameTemplateIsValid);
         Assert.Equal("e.g. Image/Spawn (1992)/Spawn #263.cbz", vm.RenameTemplatePreview);
 
-        vm.RenameTemplate = "{series} #{number:00}";
+        vm.RenameTemplate = "{<series>} #{<number2>}";
         Assert.Equal("e.g. Spawn #263.cbz", vm.RenameTemplatePreview);
 
-        vm.RenameTemplate = "{colour}";
+        vm.RenameTemplate = "{<colour>}";
         Assert.False(vm.RenameTemplateIsValid);
-        Assert.Contains("Unknown token", vm.RenameTemplatePreview);
+        Assert.Contains("not supported", vm.RenameTemplatePreview);
         vm.SaveCommand.Execute(null);
 
         Assert.True(vm.HasErrorStatus);
         using var context = NewContext();
-        Assert.Equal("{publisher}/{series} ({volumeyear})/{series} #{number:000}", context.GetOrCreateAcquisitionSettings().RenameTemplate);   // nothing was written
+        Assert.Equal(AcquisitionSettings.DefaultRenameTemplate, context.GetOrCreateAcquisitionSettings().RenameTemplate);   // nothing was written
     }
 
     [Fact]
@@ -218,5 +218,44 @@ public class AcquisitionSettingsImportTests : IDisposable
         Assert.False(vm.MoveOriginalOnImport);
         Assert.True(vm.WriteComicInfo);
         Assert.Equal("paperbunkr-comics", vm.QBittorrentCategory);
+    }
+
+    [Fact]
+    public void AFailedTemplateUpgrade_ShowsWhatTheUserHad_UntilTheySaveANewTemplate()
+    {
+        using (var context = NewContext())
+        {
+            var settings = context.GetOrCreateAcquisitionSettings();
+            settings.RenameTemplateOriginal = "{series}[ {volumeyear} {title}]";
+            settings.RenameTemplateUpgradeFailed = true;
+            context.SaveChanges();
+        }
+
+        var vm = Create();
+        Assert.True(vm.HasTemplateUpgradeNotice);
+        Assert.Contains("{series}[ {volumeyear} {title}]", vm.TemplateUpgradeNotice);
+
+        vm.RenameTemplate = "{<series>} #{<number3>}";
+        vm.SaveCommand.Execute(null);
+
+        Assert.False(vm.HasTemplateUpgradeNotice);           // saving is the explicit act that retires the original
+        using var check = NewContext();
+        var saved = check.GetOrCreateAcquisitionSettings();
+        Assert.Null(saved.RenameTemplateOriginal);
+        Assert.False(saved.RenameTemplateUpgradeFailed);
+        Assert.Equal("{<series>} #{<number3>}", saved.RenameTemplate);
+    }
+
+    [Fact]
+    public void ASuccessfulUpgrade_ShowsNoNotice_EvenThoughTheOriginalIsKept()
+    {
+        using (var context = NewContext())
+        {
+            var settings = context.GetOrCreateAcquisitionSettings();
+            settings.RenameTemplateOriginal = "{series} #{number:00}";
+            context.SaveChanges();
+        }
+
+        Assert.False(Create().HasTemplateUpgradeNotice);
     }
 }

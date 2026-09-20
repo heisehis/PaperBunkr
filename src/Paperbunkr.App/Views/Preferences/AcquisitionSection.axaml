@@ -196,7 +196,9 @@
                     <TextBlock Text="{Binding RenameTemplatePreview}" FontSize="11.5" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left"
                                Foreground="{DynamicResource PbTextMutedBrush}" AutomationProperties.LiveSetting="Polite" />
                     <TextBlock FontSize="11.5" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left" Foreground="{DynamicResource PbTextFaintBrush}"
-                               Text="ComicRack syntax: {series} {title} {volume} {volumeyear} {number} {year} {month} {day} {publisher}. {number:000} zero-pads, [ ... ] is dropped when a token in it is empty, / makes folders. {volumeyear} is the series' start year, so a series stays in one folder." />
+                               Text="Tokens go inside braces and angle brackets, like {&lt;series&gt;}. Any text next to a token inside the same braces goes with it and disappears when the value is empty: {(&lt;volumeyear&gt;)}. A digit after a name zero-pads it: {&lt;number3&gt;} gives 007. Common tokens: series, title, volume, volumeyear, number, year, month#, Day, publisher, format, filename. / or \ starts a folder."/>
+                    <TextBlock IsVisible="{Binding HasTemplateUpgradeNotice}" Text="{Binding TemplateUpgradeNotice}" FontSize="11.5" TextWrapping="Wrap" MaxWidth="560"
+                               HorizontalAlignment="Left" Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
                 </StackPanel>
 
                 <pref:SettingsRow Icon="Document" Title="Write ComicInfo.xml"

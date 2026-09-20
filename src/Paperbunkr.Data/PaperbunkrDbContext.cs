@@ -266,7 +266,8 @@ public class PaperbunkrDbContext : DbContext
             builder.HasKey(a => a.Id);
             builder.Property(a => a.Id).ValueGeneratedNever();
             // Added after the table first shipped, so existing rows need a DB-level default to backfill.
-            builder.Property(a => a.RenameTemplate).HasDefaultValue("{publisher}/{series} ({volumeyear})/{series} #{number:000}");
+            builder.Property(a => a.RenameTemplate).HasDefaultValue(Entities.AcquisitionSettings.LegacyDefaultRenameTemplate);
+            builder.Property(a => a.RenameTemplateGrammar).HasConversion<int>().HasDefaultValue(TemplateGrammar.Import);
             builder.Property(a => a.AutoGrabMinScore).HasDefaultValue(20);
             builder.Property(a => a.WriteComicInfo).HasDefaultValue(true);
         });

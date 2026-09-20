@@ -73,7 +73,12 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RenameTemplatePreview), nameof(RenameTemplateIsValid))]
-    private string _renameTemplate = "{publisher}/{series} ({volumeyear})/{series} #{number:000}";
+    private string _renameTemplate = AcquisitionSettings.DefaultRenameTemplate;
+
+    /// <summary>The template as it was before the one-time upgrade to the shared grammar, shown only when it could not be converted.</summary>
+    [ObservableProperty] private string? _renameTemplateOriginal;
+
+    [ObservableProperty] private bool _renameTemplateUpgradeFailed;
 
     [ObservableProperty] private bool _writeComicInfo = true;
     [ObservableProperty] private bool _moveOriginalOnImport;
@@ -85,25 +90,35 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
     /// <summary>The user's library folders, offered as destinations.</summary>
     public ObservableCollection<string> DestinationChoices { get; } = new();
 
-    public bool RenameTemplateIsValid => NameTemplate.Validate(RenameTemplate) is null;
+    public bool RenameTemplateIsValid => ImportNaming.Validate(RenameTemplate) is null;
+
+    /// <summary>Shown when the upgrade could not convert the user's old template exactly, so they know why the default is in use and what they had.</summary>
+    public bool HasTemplateUpgradeNotice => RenameTemplateUpgradeFailed && !string.IsNullOrWhiteSpace(RenameTemplateOriginal);
+
+    public string TemplateUpgradeNotice => $"Your previous template couldn't be converted exactly, so the default is in use. It was: {RenameTemplateOriginal}";
+
+    partial void OnRenameTemplateUpgradeFailedChanged(bool value) => NotifyTemplateNotice();
+
+    partial void OnRenameTemplateOriginalChanged(string? value) => NotifyTemplateNotice();
+
+    private void NotifyTemplateNotice()
+    {
+        OnPropertyChanged(nameof(HasTemplateUpgradeNotice));
+        OnPropertyChanged(nameof(TemplateUpgradeNotice));
+    }
 
     /// <summary>A live example of what the template produces (or why it is invalid), so mistakes show before anything is imported.</summary>
     public string RenameTemplatePreview
     {
         get
         {
-            var error = NameTemplate.Validate(RenameTemplate);
+            var error = ImportNaming.Validate(RenameTemplate);
             if (error is not null)
             {
                 return error;
             }
 
-            string? Sample(string token) => token switch
-            {
-                "series" => "Spawn", "number" => "263", "year" => "2026", "volumeyear" => "1992", "publisher" => "Image",
-                "title" => "Origins", "month" => "09", "day" => "16", _ => null,
-            };
-            return "e.g. " + NameTemplate.FormatPath(RenameTemplate, Sample, ".cbz");
+            return "e.g. " + ImportNaming.Preview(RenameTemplate);
         }
     }
 
@@ -151,6 +166,8 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         QBittorrentCategory = settings.QBittorrentCategory;
         DestinationFolderPath = settings.DestinationFolderPath;
         RenameTemplate = settings.RenameTemplate;
+        RenameTemplateOriginal = settings.RenameTemplateOriginal;
+        RenameTemplateUpgradeFailed = settings.RenameTemplateUpgradeFailed;
         WriteComicInfo = settings.WriteComicInfo;
         MoveOriginalOnImport = settings.MoveOriginalOnImport;
         AutoGrab = settings.AutoGrab;
@@ -180,7 +197,7 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
             return;
         }
 
-        var templateError = NameTemplate.Validate(RenameTemplate);
+        var templateError = ImportNaming.Validate(RenameTemplate);
         if (templateError is not null)
         {
             SetStatus($"The naming template is invalid: {templateError}", isError: true);
@@ -210,6 +227,10 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         settings.QBittorrentCategory = string.IsNullOrWhiteSpace(QBittorrentCategory) ? "paperbunkr-comics" : QBittorrentCategory.Trim();
         settings.DestinationFolderPath = destination;
         settings.RenameTemplate = RenameTemplate.Trim();
+        // Saving a template is the explicit act that retires the pre-upgrade original (see TemplateUpgrade): from here it is the user's own.
+        settings.RenameTemplateGrammar = TemplateGrammar.Organizer;
+        settings.RenameTemplateOriginal = null;
+        settings.RenameTemplateUpgradeFailed = false;
         settings.WriteComicInfo = WriteComicInfo;
         settings.MoveOriginalOnImport = MoveOriginalOnImport;
         settings.AutoGrab = AutoGrab;
@@ -218,6 +239,8 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
 
         QBittorrentCategory = settings.QBittorrentCategory;
         AutoGrabMinScore = settings.AutoGrabMinScore;
+        RenameTemplateOriginal = null;
+        RenameTemplateUpgradeFailed = false;
         CredentialStore.Set(context, DownloadClientFactory.CredentialProvider, CredentialKind.Username, QBittorrentUsername.Trim());
         if (!string.IsNullOrWhiteSpace(QBittorrentPassword))
         {

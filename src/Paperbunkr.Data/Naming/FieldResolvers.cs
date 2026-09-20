@@ -123,7 +123,7 @@ public static class FieldResolvers
             ["filename"] = (_, _, context) => ExtraValue(context, "filename"),
             ["number"] = (issue, args, _) => PadNumeric(issue.EffectiveNumber(), args),
             ["count"] = (issue, args, _) => PadNumeric(issue.EffectiveCount()?.ToString(CultureInfo.InvariantCulture), args),
-            ["year"] = (issue, _, _) => issue.EffectiveYear()?.ToString(CultureInfo.InvariantCulture),
+            ["year"] = (issue, args, _) => PadNumeric(issue.EffectiveYear()?.ToString(CultureInfo.InvariantCulture), args),
 
             // CE's real split (`lobookmover.py:1521`, verified): the UNPADDED "month" token is actually
             // the LOCALIZED MONTH NAME (`insert_month_as_name`, via the profile's own Months table), not
@@ -132,7 +132,7 @@ public static class FieldResolvers
             ["month"] = (issue, _, context) => MonthName(issue.Month, context),
             ["month#"] = (issue, args, _) => PadNumeric(issue.Month?.ToString(CultureInfo.InvariantCulture), args),
 
-            ["Day"] = (issue, _, _) => issue.Day?.ToString(CultureInfo.InvariantCulture),
+            ["Day"] = (issue, args, _) => PadNumeric(issue.Day?.ToString(CultureInfo.InvariantCulture), args),
             ["volume"] = (issue, _, _) => issue.EffectiveVolume(),
             ["title"] = (issue, _, _) => issue.EffectiveTitle(),
             ["format"] = (issue, _, _) => issue.EffectiveFormat(),

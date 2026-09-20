@@ -1932,6 +1932,73 @@ ideas aren't lost, not because scope/approach is settled.
 *None of items 8-16 are scoped or brainstormed yet — same caveat as items 1-7 above: needs its own
 brainstorm → design spec per this project's `CLAUDE.md` workflow before implementation starts.*
 
+### Plugin API pitches — deferred (pitched 2026-09-20)
+Not started — each needs its own brainstorm → design spec before implementation. Captured so the
+ideas aren't lost, not because scope/approach is settled. These are everything the 2026-09-20 pitch
+list proposed that was **not** taken into `docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md`
+(versioning, Activity reporter, `BookRead`/`LibraryScanCompleted`/`MissingFileDetected`/
+`ReadingListChanged`, settings schema — that spec's §9 is the authoritative non-goals list).
+
+1. **Plugin-registered metadata provider** — plugins register as a scraper alongside ComicVine /
+   AniList / MangaBaka and propose through the existing `MetadataProposals` path so the user
+   approves and nothing writes silently. Needs `IMetadataProvider` (today in `Paperbunkr.Data`,
+   not plugin-facing) exposed or wrapped.
+2. **Plugin cover provider** — alternate cover source feeding the cover picker and
+   `ArcCoverImageCache` (a separate system from the reader's cover pipeline).
+3. **Extensible arc/CBL lookup source** — make the CBL Manager port's 6 built-in sources a list a
+   plugin can add to.
+4. **Native UI surfaces** — issue-detail panel and Library toolbar action (next to
+   `INativeSeriesDetailUi`), context-menu contributions via a registrar on the shared `MenuFlyout`
+   mechanism, and a custom Insights widget.
+5. **Smart-list custom fields/operators** — plugin-defined virtual fields (e.g. "days since last
+   read") usable in `IRulesEngine` and the SmartList editor; pairs with the Virtual Tags dynamic
+   sort/group axis.
+6. **Network permission manifest** — declare allowed hosts (`network="api.example.com"`), shown in
+   the plugin-install prompt. Same "accidental overreach, not adversarial isolation" model as the
+   existing sandbox.
+7. **Scoped `IFileSystem` facade** — limit plugins to declared folders instead of raw `System.IO`.
+   Only worth doing if it can actually be enforced.
+8. **`IMetadataWriter` batch/transaction API with dry-run diff** — reuse the `confirmWrites`
+   machinery for "show me what will change", then apply or roll back.
+9. **Plugin dev mode** — hot-reload of `.csx` scripts and a live log pane in the Plugin screen.
+   Pitched as the highest-leverage item for getting third-party plugins written at all.
+10. **Scaffolding command + typed `.d.cs` reference stub** — IntelliSense for `.csx`.
+11. **`Paperbunkr.Plugins.Testing` package** — publish the Data-Manager fixture-plugin pattern
+    (`Paperbunkr.Plugins.Tests`) as a reusable test harness.
+12. **Plugin-to-plugin service registry** — `environment.Publish<T>()` / `Get<T>()`. Recommended
+    cut unless a real plugin needs it (invites dependency-ordering problems).
+13. **Further domain hooks** — `SeriesStatusChanged` (tracker sync has many write paths, so emit
+    points need surveying first), `ContinuityCompleted` / `EventCompleted` (wait for their own
+    feature to settle), `ScheduledTaskRan`.
+14. **Native UI surfaces for Python plugins** — the `.py` path (IronPython, `PythonCommand`) has no
+    equivalent of `INativeSeriesDetailUi` / `INativePluginSettingsUi`.
+
+*From an external review of the 4.1 spec (2026-09-20) — new ideas not already covered above:*
+
+15. **Hook performance telemetry** — a developer-settings view of average execution time per hook
+    per plugin, so users can tell which plugin is causing stutter or background lag. Natural
+    follow-on to the 4.1 bounded per-command queue, which already has to track in-flight/hung state.
+16. **Plugin settings export/import** — serialize a plugin's configured settings to portable JSON so
+    they can be backed up alongside library data. **Must account for DPAPI:** 4.1 encrypts `secret`
+    settings per Windows user/machine, so exported secrets cannot simply be copied across.
+17. **Locked settings** — `<Setting … locked="true"/>`, read-only after initial setup, to stop
+    accidental changes to critical values such as root paths. Needs a decision on how a user
+    unlocks one (and whether the plugin or only the user can).
+18. **Default-settings file** — a `.json`/`.xml` of defaults the host re-imports if the user clears
+    a plugin's configuration, instead of relying only on the inline `default=` attributes.
+19. **`IPluginLogger`** — routes plugin-specific logs into isolated per-plugin files (e.g.
+    `logs/plugins/<key>.log`) instead of the main app log. Would also feed the item 9 dev-mode log
+    pane.
+
+*Reviewed and not added:* capability manifests and dry-run (already items 6–8), `AppStarted`/
+`AppClosing` hooks (`Startup`/`Shutdown` already exist), inter-plugin event bus (same as item 12;
+recommended cut), and "AppDomain sandboxing" (`AppDomain`s don't exist in .NET; an
+`AssemblyLoadContext` doesn't stop a plugin crash from taking down the host, and native plugins are
+full-trust by the v4 decision).
+
+*None of these are scoped or brainstormed — same caveat as the pitch lists above: needs its own
+brainstorm → design spec per this project's `CLAUDE.md` workflow before implementation starts.*
+
 ### Deferred / dropped (no action needed)
 - **News reader** (`Help > News` RSS) — deferred, live idea to repurpose the feed mechanism for
   something Paperbunkr-relevant; needs its own brainstorm before scoping

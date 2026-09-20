@@ -56,3 +56,12 @@ public sealed record IssueImportedEvent(int WantedIssueId, string Label, string 
 
 /// <summary>An attempt failed (download or import); the issue is back to needing the user's decision.</summary>
 public sealed record IssueFailedEvent(int WantedIssueId, string Label, string Reason) : DaemonEvent;
+
+/// <summary>ComicVine's details were added to an imported issue.</summary>
+public sealed record IssueScrapedEvent(int WantedIssueId, string Label, int FieldsChanged) : DaemonEvent;
+
+/// <summary>
+/// Adding ComicVine's details to an imported issue failed. The issue itself is fine and stays in the library; the failure is recorded on its want
+/// (<c>ScrapeStatus.Failed</c>), so this event only announces it. <paramref name="WillRetry"/> is true when the sweep will try again on its own.
+/// </summary>
+public sealed record IssueScrapeFailedEvent(int WantedIssueId, string Label, string Reason, bool WillRetry) : DaemonEvent;

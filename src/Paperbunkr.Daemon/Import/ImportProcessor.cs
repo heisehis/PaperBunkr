@@ -188,7 +188,7 @@ public sealed class ImportProcessor(
             File.Move(cbz, destination);
 
             var issueId = await ingester.IngestAsync(destination, cancellationToken).ConfigureAwait(false);
-            Record(wanted.Id, watched, wanted.IssueNumber, issueId);
+            Record(wanted.Id, watched, wanted.IssueNumber, issueId, settings.ScrapeOnImport);
             return destination;
         }
         finally
@@ -197,13 +197,23 @@ public sealed class ImportProcessor(
         }
     }
 
-    private void Record(int wantedId, WatchedSeries watched, string number, int? issueId)
+    private void Record(int wantedId, WatchedSeries watched, string number, int? issueId, bool scrapeOnImport)
     {
         using var context = createContext();
         var wanted = context.WantedIssues.First(w => w.Id == wantedId);
         wanted.Status = WantedIssueStatus.Imported;
         wanted.IssueId = issueId;
         wanted.ImportedAt = _now();
+
+        // Pending is written in the same save that marks the issue imported: if the app dies right after, the retry sweep still finds this row.
+        if (issueId is not null && scrapeOnImport)
+        {
+            wanted.ScrapeStatus = ScrapeStatus.Pending;
+            wanted.ScrapeAttempts = 0;
+            wanted.ScrapeError = null;
+            wanted.ScrapeFailureIsTerminal = false;
+        }
+
         wanted.DownloadProgress = null;
         wanted.FailureReason = null;
         context.SaveChanges();

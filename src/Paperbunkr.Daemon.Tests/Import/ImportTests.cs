@@ -244,6 +244,8 @@ public class ImportProcessorTests : CycleTestBase
         Assert.Equal(WantedIssueStatus.Imported, wanted.Status);
         Assert.Equal(scannedId, wanted.IssueId);
         Assert.NotNull(wanted.ImportedAt);
+        Assert.Equal(ScrapeStatus.Pending, wanted.ScrapeStatus);          // saved in the same step as Imported, so a crash can't leave a silent gap
+        Assert.Equal(0, wanted.ScrapeAttempts);
         Assert.Null(wanted.DownloadProgress);
         Assert.Equal(expected, Assert.IsType<IssueImportedEvent>(Drain().Single(e => e is IssueImportedEvent)).Path);
         Assert.False(outcome.RemoveTorrent);
@@ -282,6 +284,20 @@ public class ImportProcessorTests : CycleTestBase
         Assert.Equal(newIssueId, relinked.IssueId);
         Assert.Equal(3, relinked.SortOrder);                                       // same position in the list
         Assert.DoesNotContain(check.Issues, i => i.Id == placeholderId);           // the placeholder is gone
+    }
+
+    [Fact]
+    public async Task WithScrapeOnImportOff_TheImportedIssueIsNotQueuedForComicVineDetails()
+    {
+        Settings(x => x.ScrapeOnImport = false);
+        var ids = AddWanted((DateTime?)new DateTime(2026, 9, 16));
+        MakeCbz("Spawn 261 (1992).cbz");
+
+        var outcome = await Processor(_ => SeedIssue()).ImportAsync(ids[0], Download("Spawn 261 (1992)"), new[] { F("Spawn 261 (1992).cbz") }, CancellationToken.None);
+
+        Assert.True(outcome.Success);
+        using var context = NewContext();
+        Assert.Equal(ScrapeStatus.NotApplicable, context.WantedIssues.Single().ScrapeStatus);
     }
 
     [Fact]

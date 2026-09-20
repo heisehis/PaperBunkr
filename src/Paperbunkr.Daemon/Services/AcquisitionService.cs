@@ -10,7 +10,7 @@ namespace Paperbunkr.Daemon.Services;
 /// backs off exponentially (interval x 2, x 4, ... capped at 8x), so a down Prowlarr isn't hammered.
 /// <para>A plain <see cref="BackgroundService"/>: the app has no generic host, so it calls <c>StartAsync</c>/<c>StopAsync</c> itself, as it does for the scheduler.</para>
 /// </summary>
-public sealed class AcquisitionService(AcquisitionCycle cycle, Func<PaperbunkrDbContext> createContext, Func<DateTime>? now = null, DownloadTracker? downloads = null) : BackgroundService
+public sealed class AcquisitionService(AcquisitionCycle cycle, Func<PaperbunkrDbContext> createContext, Func<DateTime>? now = null, DownloadTracker? downloads = null, ScrapeSweeper? scrapes = null) : BackgroundService
 {
     private static readonly TimeSpan Tick = TimeSpan.FromMinutes(1);
 
@@ -68,7 +68,7 @@ public sealed class AcquisitionService(AcquisitionCycle cycle, Func<PaperbunkrDb
 
     private async Task DownloadLoopAsync(CancellationToken stoppingToken)
     {
-        if (downloads is null)
+        if (downloads is null && scrapes is null)
         {
             return;
         }
@@ -91,15 +91,16 @@ public sealed class AcquisitionService(AcquisitionCycle cycle, Func<PaperbunkrDb
     /// <summary>One download-follower tick; public so tests can drive it. Runs only when a grab is in flight.</summary>
     public async Task DownloadTickAsync(CancellationToken cancellationToken)
     {
-        if (downloads is null)
-        {
-            return;
-        }
-
         // The tracker tells the host when the last download settles, so it must run one more time after the final one finishes.
-        if (downloads.HasActiveDownloads() || downloads.HasPendingReport)
+        if (downloads is not null && (downloads.HasActiveDownloads() || downloads.HasPendingReport))
         {
             await downloads.TickAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        // Imported issues that still need their ComicVine details (each pass is small and retries back off, so this stays cheap).
+        if (scrapes is not null && scrapes.HasWork())
+        {
+            await scrapes.SweepAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 

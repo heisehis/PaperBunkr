@@ -12,6 +12,10 @@ public abstract class AcquisitionTestBase : IDisposable
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_acq_svc_{Guid.NewGuid():N}.db");
     protected readonly PaperbunkrDbContext Context;
 
+    /// <summary>A second, independent context on the same database (what a service under test gets from its context factory).</summary>
+    protected PaperbunkrDbContext NewContext() =>
+        new(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath};Foreign Keys=True").Options);
+
     protected AcquisitionTestBase()
     {
         Context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath};Foreign Keys=True").Options);

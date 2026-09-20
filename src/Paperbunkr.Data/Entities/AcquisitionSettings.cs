@@ -81,6 +81,12 @@ public class AcquisitionSettings
     /// (imports always work on a copy, since repacking or tagging changes the file's bytes).
     /// </summary>
     public bool MoveOriginalOnImport { get; set; }
+
+    /// <summary>
+    /// After an issue is imported, fetch its ComicVine details by the id the want already carries (no search, no review) and add them to the issue.
+    /// On by default: the match is known, so there is nothing to confirm.
+    /// </summary>
+    public bool ScrapeOnImport { get; set; } = true;
 }
 
 /// <summary>The syntax a stored naming template is written in.</summary>

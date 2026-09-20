@@ -268,4 +268,31 @@ public class ReadingListRequestMissingTests : IDisposable
         Assert.DoesNotContain("D #4", text);
         Assert.Contains("…and 2 more.", text);
     }
+
+    [Fact]
+    public void FollowArc_PersistsOnArcLists_AndReloadsWithTheList_ButNeverOnPlainOnes()
+    {
+        int arcId = SeedList(arcLinked: true, ("Spawn", "263"));
+        var vm = Create();
+        vm.LoadReadingList(arcId);
+        Assert.False(vm.FollowArc);
+
+        vm.FollowArc = true;
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Assert.True(context.ReadingLists.Single(l => l.Id == arcId).FollowArc);
+        }
+
+        var reopened = Create();
+        reopened.LoadReadingList(arcId);
+        Assert.True(reopened.FollowArc);                       // loading the list must not write it back or reset it
+
+        int plainId = SeedList(arcLinked: false, ("Spawn", "263"));
+        reopened.LoadReadingList(plainId);
+        Assert.False(reopened.FollowArc);
+        reopened.FollowArc = true;                              // the menu item is hidden for these; the guard is belt-and-braces
+        using var check = PaperbunkrDb.CreateContext();
+        Assert.False(check.ReadingLists.Single(l => l.Id == plainId).FollowArc);
+    }
 }

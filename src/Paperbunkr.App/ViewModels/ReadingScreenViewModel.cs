@@ -629,6 +629,9 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         LinkedStoryEventName = list.StoryEvent?.Name;
         CreatedAtLabel = $"Created {list.CreatedAt:MMM d, yyyy}";
         IsArcLinked = !string.IsNullOrEmpty(list.Source);
+        _loadingFollowArc = true;
+        FollowArc = IsArcLinked && list.FollowArc;
+        _loadingFollowArc = false;
         ArcSourceLabel = IsArcLinked ? $"via {ReadingListSourceRegistry.GetDisplayName(list.Source!)}" : null;
 
         ArcCoverImage = ArcCoverImageCache.Get(list.Id);
@@ -1404,6 +1407,36 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         {
             StatusMessage = ex.Message;
         }
+    }
+
+    private bool _loadingFollowArc;
+
+    /// <summary>
+    /// "Follow this arc": a scheduled task keeps the list in step with its source and requests newly listed issues you don't have
+    /// (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 8). Only meaningful on arc-linked lists.
+    /// </summary>
+    [ObservableProperty]
+    private bool _followArc;
+
+    partial void OnFollowArcChanged(bool value)
+    {
+        if (_loadingFollowArc || _activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var list = context.ReadingLists.FirstOrDefault(l => l.Id == listId);
+        if (list is null || string.IsNullOrEmpty(list.Source))
+        {
+            return;
+        }
+
+        list.FollowArc = value;
+        context.SaveChanges();
+        StatusMessage = value
+            ? "Following this arc: new issues are checked for daily (turn on \"Follow story arcs\" under Preferences → Automation)."
+            : "No longer following this arc.";
     }
 
     /// <summary>Test seam: the ComicVine client used for "Request missing". Production uses the shared, rate-limited one at foreground priority.</summary>

@@ -187,6 +187,7 @@
                             <MenuItem Header="Build from a story arc…" Command="{Binding ToggleArcSearchCommand}" />
                             <MenuItem Header="Refresh from source" Command="{Binding RefreshArcListCommand}" IsVisible="{Binding IsArcLinked}" />
                             <MenuItem Header="Request missing issues" Command="{Binding RequestMissingFromArcCommand}" IsVisible="{Binding IsArcLinked}" />
+                            <MenuItem Header="Follow this arc" ToggleType="CheckBox" IsChecked="{Binding FollowArc, Mode=TwoWay}" IsVisible="{Binding IsArcLinked}" />
                             <Separator />
                             <MenuItem Header="Edit details…" Command="{Binding OpenPropertiesCommand}" />
                         </MenuFlyout>

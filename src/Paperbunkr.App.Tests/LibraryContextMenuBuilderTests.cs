@@ -100,7 +100,7 @@ public class LibraryContextMenuBuilderTests : IDisposable
         Assert.Equal(new[]
         {
             "Open", "Edit Properties…", "Quick Rate…", "Mark as", "Add to Reading List", "Add to Collection",
-            "Go to Series", "Series", "Show in Explorer", "Select All", "Clear Selection", "Delete…",
+            "Go to Series", "Series", "Scrape with ComicVine…", "Organize…", "Show in Explorer", "Select All", "Clear Selection", "Delete…",
         }, headers);
     }
 
@@ -260,7 +260,7 @@ public class LibraryContextMenuBuilderTests : IDisposable
 
         Assert.Equal(new[]
         {
-            "Open Series", "Add to Collection", "Content Type", "Publication Status", "Reading Status",
+            "Open Series", "Scrape with ComicVine…", "Organize…", "Add to Collection", "Content Type", "Publication Status", "Reading Status",
             "Show in Explorer", "Delete Series…",
         }, headers);
     }

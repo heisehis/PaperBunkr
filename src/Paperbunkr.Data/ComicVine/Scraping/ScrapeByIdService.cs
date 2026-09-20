@@ -51,7 +51,7 @@ public sealed class ScrapeByIdService(Func<PaperbunkrDbContext> createContext, F
             }
 
             issueId = wanted.IssueId;
-            comicVineIssueId = wanted.ComicVineIssueId;
+            comicVineIssueId = wanted.ExternalIssueId;
         }
 
         if (issueId is null)

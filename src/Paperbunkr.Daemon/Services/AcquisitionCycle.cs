@@ -179,7 +179,7 @@ public sealed class AcquisitionCycle(
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                var issues = await comicVine.GetVolumeIssuesAsync(watched.ComicVineVolumeId, cancellationToken).ConfigureAwait(false);
+                var issues = await comicVine.GetVolumeIssuesAsync(watched.ExternalVolumeId, cancellationToken).ConfigureAwait(false);
                 WantedService.RefreshCatalog(context, watched, issues);
             }
             catch (ComicVineException ex) when (ex.ApiStatusCode == 100)

@@ -37,7 +37,7 @@ public interface IComicVineClient
 /// the UI; interactive lookups use <see cref="ComicVineRequestPriority.High"/>.
 /// </para>
 /// </summary>
-public sealed class ComicVineClient : IComicVineClient, IComicVineIssueDetailsSource, IComicVineVolumeSearch
+public sealed class ComicVineClient : IComicProvider
 {
     private const string BaseUrl = "https://comicvine.gamespot.com/api";
     private const int PageSize = 100;
@@ -252,6 +252,8 @@ public sealed class ComicVineClient : IComicVineClient, IComicVineIssueDetailsSo
         var decoded = System.Net.WebUtility.HtmlDecode(noTags);
         return System.Text.RegularExpressions.Regex.Replace(decoded, @"\s+", " ").Trim();
     }
+
+    public Paperbunkr.Data.Entities.ComicProvider Kind => Paperbunkr.Data.Entities.ComicProvider.ComicVine;
 
     private string Url(string path, string query) => $"{BaseUrl}/{path}/?api_key={Uri.EscapeDataString(_apiKey)}&format=json&{query}";
 

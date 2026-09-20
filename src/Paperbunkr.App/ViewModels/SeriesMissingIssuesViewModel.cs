@@ -271,7 +271,7 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
             int volumeId;
             using (var context = _createContext())
             {
-                volumeId = context.WatchedSeries.First(w => w.Id == _watchedSeriesId).ComicVineVolumeId;
+                volumeId = context.WatchedSeries.First(w => w.Id == _watchedSeriesId).ExternalVolumeId;
             }
 
             var issues = await _createComicVine(key).GetVolumeIssuesAsync(volumeId, cancellationToken);

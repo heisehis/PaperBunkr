@@ -90,7 +90,7 @@ public static class ArcRequestService
                     continue;
                 }
 
-                var existing = context.WantedIssues.FirstOrDefault(w => w.ComicVineIssueId == entry.ComicVineIssueId);
+                var existing = context.WantedIssues.FirstOrDefault(w => w.ExternalIssueId == entry.ExternalIssueId);
                 if (existing is not null && existing.Status is not (WantedIssueStatus.Failed or WantedIssueStatus.Ignored))
                 {
                     already++;
@@ -182,7 +182,7 @@ public static class ArcRequestService
 
     private static async Task<List<CatalogIssue>> RefreshAsync(PaperbunkrDbContext context, WatchedSeries watched, IComicVineClient comicVine, CancellationToken cancellationToken)
     {
-        var issues = await comicVine.GetVolumeIssuesAsync(watched.ComicVineVolumeId, cancellationToken).ConfigureAwait(false);
+        var issues = await comicVine.GetVolumeIssuesAsync(watched.ExternalVolumeId, cancellationToken).ConfigureAwait(false);
         WantedService.RefreshCatalog(context, watched, issues);
         return context.CatalogIssues.Where(c => c.WatchedSeriesId == watched.Id).ToList();
     }

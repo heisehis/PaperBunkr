@@ -282,7 +282,7 @@ public class AcquisitionCycleTests : CycleTestBase
 
         using var check = NewContext();
         Assert.Equal(new[] { 100 }, ComicVine.IssueCalls);
-        Assert.Equal(new[] { 2, 3 }, check.WantedIssues.OrderBy(w => w.ComicVineIssueId).Select(w => w.ComicVineIssueId));
+        Assert.Equal(new[] { 2, 3 }, check.WantedIssues.OrderBy(w => w.ExternalIssueId).Select(w => w.ExternalIssueId));
         Assert.Contains(Indexer.Queries, q => q == "Spawn 300");
         Assert.DoesNotContain(Indexer.Queries, q => q.StartsWith("Spawn 301"));
         Assert.NotEmpty(check.ReleaseCandidates);

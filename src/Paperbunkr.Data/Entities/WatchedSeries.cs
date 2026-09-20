@@ -11,7 +11,10 @@ public class WatchedSeries
     public int Id { get; set; }
 
     /// <summary>ComicVine volume id (the number after <c>4050-</c>). Unique.</summary>
-    public int ComicVineVolumeId { get; set; }
+    public int ExternalVolumeId { get; set; }
+
+    /// <summary>Which provider <see cref="ExternalVolumeId"/> belongs to. Existing rows predate Metron and are ComicVine.</summary>
+    public ComicProvider Provider { get; set; } = ComicProvider.ComicVine;
 
     public string Name { get; set; } = string.Empty;
 

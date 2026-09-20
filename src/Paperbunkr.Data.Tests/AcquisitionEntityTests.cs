@@ -35,7 +35,7 @@ public class AcquisitionEntityTests : IDisposable
 
     private WatchedSeries AddWatched(int volumeId = 4050, int? seriesId = null)
     {
-        var watched = new WatchedSeries { ComicVineVolumeId = volumeId, Name = "Spawn", SeriesId = seriesId, AddedAt = DateTime.UtcNow };
+        var watched = new WatchedSeries { ExternalVolumeId = volumeId, Name = "Spawn", SeriesId = seriesId, AddedAt = DateTime.UtcNow };
         _context.WatchedSeries.Add(watched);
         _context.SaveChanges();
         return watched;
@@ -47,7 +47,7 @@ public class AcquisitionEntityTests : IDisposable
         var watched = AddWatched();
         _context.WantedIssues.Add(new WantedIssue
         {
-            WatchedSeriesId = watched.Id, ComicVineIssueId = 1, IssueNumber = "263",
+            WatchedSeriesId = watched.Id, ExternalIssueId = 1, IssueNumber = "263",
             Status = WantedIssueStatus.Snatched, CreatedAt = DateTime.UtcNow,
         });
         _context.SaveChanges();
@@ -72,7 +72,7 @@ public class AcquisitionEntityTests : IDisposable
     public void ComicVineVolumeId_IsUnique()
     {
         AddWatched(volumeId: 7);
-        _context.WatchedSeries.Add(new WatchedSeries { ComicVineVolumeId = 7, Name = "Dup", AddedAt = DateTime.UtcNow });
+        _context.WatchedSeries.Add(new WatchedSeries { ExternalVolumeId = 7, Name = "Dup", AddedAt = DateTime.UtcNow });
 
         Assert.Throws<DbUpdateException>(() => _context.SaveChanges());
     }
@@ -81,9 +81,9 @@ public class AcquisitionEntityTests : IDisposable
     public void ComicVineIssueId_IsUnique_ForWantedIssues()
     {
         var watched = AddWatched();
-        _context.WantedIssues.Add(new WantedIssue { WatchedSeriesId = watched.Id, ComicVineIssueId = 9, IssueNumber = "1", CreatedAt = DateTime.UtcNow });
+        _context.WantedIssues.Add(new WantedIssue { WatchedSeriesId = watched.Id, ExternalIssueId = 9, IssueNumber = "1", CreatedAt = DateTime.UtcNow });
         _context.SaveChanges();
-        _context.WantedIssues.Add(new WantedIssue { WatchedSeriesId = watched.Id, ComicVineIssueId = 9, IssueNumber = "1", CreatedAt = DateTime.UtcNow });
+        _context.WantedIssues.Add(new WantedIssue { WatchedSeriesId = watched.Id, ExternalIssueId = 9, IssueNumber = "1", CreatedAt = DateTime.UtcNow });
 
         Assert.Throws<DbUpdateException>(() => _context.SaveChanges());
     }
@@ -92,10 +92,10 @@ public class AcquisitionEntityTests : IDisposable
     public void DeletingAWatchedSeries_CascadesCatalogWantedAndCandidates()
     {
         var watched = AddWatched();
-        var wanted = new WantedIssue { WatchedSeriesId = watched.Id, ComicVineIssueId = 1, IssueNumber = "1", CreatedAt = DateTime.UtcNow };
+        var wanted = new WantedIssue { WatchedSeriesId = watched.Id, ExternalIssueId = 1, IssueNumber = "1", CreatedAt = DateTime.UtcNow };
         wanted.Candidates.Add(new ReleaseCandidate { Title = "Spawn 001", DownloadUrl = "magnet:?xt=urn:btih:abc", FoundAt = DateTime.UtcNow });
         _context.WantedIssues.Add(wanted);
-        _context.CatalogIssues.Add(new CatalogIssue { WatchedSeriesId = watched.Id, ComicVineIssueId = 2, IssueNumber = "2" });
+        _context.CatalogIssues.Add(new CatalogIssue { WatchedSeriesId = watched.Id, ExternalIssueId = 2, IssueNumber = "2" });
         _context.SaveChanges();
 
         _context.WatchedSeries.Remove(watched);
@@ -132,7 +132,7 @@ public class AcquisitionEntityTests : IDisposable
         var watched = AddWatched(seriesId: series.Id);
         _context.WantedIssues.Add(new WantedIssue
         {
-            WatchedSeriesId = watched.Id, ComicVineIssueId = 1, IssueNumber = "1", IssueId = issue.Id,
+            WatchedSeriesId = watched.Id, ExternalIssueId = 1, IssueNumber = "1", IssueId = issue.Id,
             Status = WantedIssueStatus.Imported, CreatedAt = DateTime.UtcNow,
         });
         _context.SaveChanges();

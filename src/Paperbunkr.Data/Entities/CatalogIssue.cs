@@ -13,7 +13,10 @@ public class CatalogIssue
 
     public WatchedSeries? WatchedSeries { get; set; }
 
-    public int ComicVineIssueId { get; set; }
+    public int ExternalIssueId { get; set; }
+
+    /// <summary>Which provider <see cref="ExternalIssueId"/> belongs to. Existing rows predate Metron and are ComicVine.</summary>
+    public ComicProvider Provider { get; set; } = ComicProvider.ComicVine;
 
     /// <summary>Issue number as text ("5", "0", "1.5", "Annual 1") - never assumed numeric.</summary>
     public string IssueNumber { get; set; } = string.Empty;

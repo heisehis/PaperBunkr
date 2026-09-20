@@ -485,7 +485,7 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
         using (var context = _createContext())
         {
             key = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey);
-            tracked = context.WatchedSeries.Select(w => w.ComicVineVolumeId).ToHashSet();
+            tracked = context.WatchedSeries.Select(w => w.ExternalVolumeId).ToHashSet();
         }
 
         if (string.IsNullOrEmpty(key))

@@ -103,7 +103,7 @@ public class WantedServiceTests : AcquisitionTestBase
         WantedService.RefreshCatalog(Context, watched, new[] { CvIssue(1, "1"), CvIssue(2, "2b"), CvIssue(3, "3") });
 
         Assert.Equal(3, Context.CatalogIssues.Count());
-        Assert.Equal("2b", Context.CatalogIssues.Single(c => c.ComicVineIssueId == 2).IssueNumber);
+        Assert.Equal("2b", Context.CatalogIssues.Single(c => c.ExternalIssueId == 2).IssueNumber);
         Assert.NotNull(watched.LastRefreshedAt);
     }
 
@@ -132,8 +132,8 @@ public class WantedServiceTests : AcquisitionTestBase
     public void GetMissing_ExcludesAnythingAlreadyWantedOrIgnored()
     {
         var (watched, _) = Tracked(CvIssue(1, "1"), CvIssue(2, "2"), CvIssue(3, "3"));
-        WantedService.Request(Context, watched, Context.CatalogIssues.Single(c => c.ComicVineIssueId == 1));
-        WantedService.Ignore(Context, watched, Context.CatalogIssues.Single(c => c.ComicVineIssueId == 2));
+        WantedService.Request(Context, watched, Context.CatalogIssues.Single(c => c.ExternalIssueId == 1));
+        WantedService.Ignore(Context, watched, Context.CatalogIssues.Single(c => c.ExternalIssueId == 2));
 
         Assert.Equal(new[] { "3" }, WantedService.GetMissing(Context, watched).Select(m => m.IssueNumber));
     }
@@ -184,8 +184,8 @@ public class WantedServiceTests : AcquisitionTestBase
         int requested = WantedService.PromoteFollowedUpcoming(Context, today);
 
         Assert.Equal(2, requested);                                                     // today's and next fortnight's, not the old gap
-        Assert.DoesNotContain(Context.WantedIssues, w => w.ComicVineIssueId == 1);      // past gaps stay the user's "Request missing"
-        Assert.DoesNotContain(Context.WantedIssues, w => w.ComicVineIssueId == 10);     // not followed
+        Assert.DoesNotContain(Context.WantedIssues, w => w.ExternalIssueId == 1);      // past gaps stay the user's "Request missing"
+        Assert.DoesNotContain(Context.WantedIssues, w => w.ExternalIssueId == 10);     // not followed
     }
 
     [Fact]

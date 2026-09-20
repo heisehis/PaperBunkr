@@ -11,7 +11,7 @@ using Paperbunkr.Data;
 namespace Paperbunkr.Data.Migrations
 {
     [DbContext(typeof(PaperbunkrDbContext))]
-    [Migration("20260920052632_AddOrganizer")]
+    [Migration("20260920053837_AddOrganizer")]
     partial class AddOrganizer
     {
         /// <inheritdoc />
@@ -3300,6 +3300,9 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("RemoveEmptyFolders")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("UseForScheduledRun")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");

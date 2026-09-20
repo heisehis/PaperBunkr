@@ -142,6 +142,7 @@
                         <TextBlock Text="When run automatically and a file already exists" Classes="fieldLabel" Margin="0,4,0,0" />
                         <controls:SuggestBox IsStrict="True" Text="{Binding Selected.CollisionPolicyText}" Suggestions="{x:Static vm:OrganizerProfileRowViewModel.CollisionPolicyNames}" HorizontalAlignment="Stretch" />
                         <CheckBox Content="Remove empty folders left behind after organizing" IsChecked="{Binding Selected.RemoveEmptyFolders}" Margin="0,4,0,0" />
+                        <CheckBox Content="Use for the scheduled Organize library task (Preferences → Automation)" IsChecked="{Binding Selected.UseForScheduledRun}" />
                     </StackPanel>
                 </Border>
 

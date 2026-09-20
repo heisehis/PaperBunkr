@@ -3299,6 +3299,9 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<bool>("RemoveEmptyFolders")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("UseForScheduledRun")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("Id");
 
                     b.ToTable("OrganizerProfiles");

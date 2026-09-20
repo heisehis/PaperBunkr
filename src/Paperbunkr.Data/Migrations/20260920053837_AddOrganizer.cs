@@ -37,6 +37,7 @@ namespace Paperbunkr.Data.Migrations
                     Mode = table.Column<int>(type: "INTEGER", nullable: false),
                     AutomationCollisionPolicy = table.Column<int>(type: "INTEGER", nullable: false),
                     RemoveEmptyFolders = table.Column<bool>(type: "INTEGER", nullable: false),
+                    UseForScheduledRun = table.Column<bool>(type: "INTEGER", nullable: false),
                     BaseFolder = table.Column<string>(type: "TEXT", nullable: false),
                     ExcludeRuleJson = table.Column<string>(type: "TEXT", nullable: true),
                     MonthNamesJson = table.Column<string>(type: "TEXT", nullable: false)

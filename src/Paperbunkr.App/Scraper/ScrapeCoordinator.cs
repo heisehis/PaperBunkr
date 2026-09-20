@@ -51,7 +51,7 @@ public sealed class ScrapeCoordinator(
 
     public const string NoKeyMessage = "Add your ComicVine API key under Preferences → Connections first.";
 
-    public async Task<string> ScrapeIssuesAsync(IReadOnlyList<int> issueIds, bool isInteractive = true, CancellationToken cancellationToken = default)
+    public async Task<string> ScrapeIssuesAsync(IReadOnlyList<int> issueIds, bool isInteractive = true, CancellationToken cancellationToken = default, IActivityJobHandle? existingJob = null)
     {
         var comicVine = _createComicVine(isInteractive ? ComicVineRequestPriority.High : ComicVineRequestPriority.Low);
         if (comicVine is null)
@@ -73,8 +73,12 @@ public sealed class ScrapeCoordinator(
         }
 
         var orchestrator = new ScrapeOrchestrator(comicVine, new ComicVineMatchMemory(createContext), settings);
-        using var job = activity.StartJob(ActivityJobKind.Scrape, books.Count == 1 ? $"Scraping {BookLabel(books[0])}" : $"Scraping {books.Count} comics with ComicVine",
-            cancellable: true, trigger: isInteractive ? ActivityTrigger.Manual : ActivityTrigger.Scheduled);
+        // A scheduled task already has its own Activity Center job; it lends it here so one run is one job, and settles it itself.
+        using var owned = existingJob is null
+            ? activity.StartJob(ActivityJobKind.Scrape, books.Count == 1 ? $"Scraping {BookLabel(books[0])}" : $"Scraping {books.Count} comics with ComicVine",
+                cancellable: true, trigger: isInteractive ? ActivityTrigger.Manual : ActivityTrigger.Scheduled)
+            : null;
+        var job = existingJob ?? owned!;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, job.CancellationToken);
 
         int applied;
@@ -105,7 +109,7 @@ public sealed class ScrapeCoordinator(
         }
         catch (OperationCanceledException)
         {
-            job.Fail("Scrape cancelled.");
+            owned?.Fail("Scrape cancelled.");
             return "Scrape cancelled.";
         }
 
@@ -115,7 +119,7 @@ public sealed class ScrapeCoordinator(
         }
 
         var summary = $"Applied a ComicVine match to {applied} of {books.Count} comic{(books.Count == 1 ? string.Empty : "s")}.";
-        job.Succeed(summary, itemsProcessed: applied, itemsFailed: books.Count - applied);
+        owned?.Succeed(summary, itemsProcessed: applied, itemsFailed: books.Count - applied);
         return summary;
     }
 
@@ -132,7 +136,7 @@ public sealed class ScrapeCoordinator(
     }
 
     /// <summary>The scheduled task: every comic with no ComicVine volume link yet, never asking anything.</summary>
-    public Task<string> ScrapeUnscrapedAsync(CancellationToken cancellationToken)
+    public Task<string> ScrapeUnscrapedAsync(CancellationToken cancellationToken, IActivityJobHandle? existingJob = null)
     {
         List<int> ids;
         using (var context = createContext())
@@ -140,7 +144,7 @@ public sealed class ScrapeCoordinator(
             ids = context.Issues.Where(i => string.IsNullOrEmpty(i.Volume) && i.FilePath != null).Select(i => i.Id).ToList();
         }
 
-        return ids.Count == 0 ? Task.FromResult("Nothing left to scrape.") : ScrapeIssuesAsync(ids, isInteractive: false, cancellationToken);
+        return ids.Count == 0 ? Task.FromResult("Nothing left to scrape.") : ScrapeIssuesAsync(ids, isInteractive: false, cancellationToken, existingJob);
     }
 
     /// <summary>Shown when a series' Detail page asks for the scrape panel: not for the manga family, whose sources are different.</summary>

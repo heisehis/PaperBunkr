@@ -24,6 +24,9 @@ public class OrganizerProfile
 
     public bool RemoveEmptyFolders { get; set; } = true;
 
+    /// <summary>The scheduled "Organize library" task (off by default) uses the first profile with this set; it never asks anything, so collisions follow <see cref="AutomationCollisionPolicy"/>.</summary>
+    public bool UseForScheduledRun { get; set; }
+
     public string BaseFolder { get; set; } = string.Empty;
 
     /// <summary>Serialized plugin-API condition group evaluated by the app's rules engine; null means "no exclude rule - organize everything" (CE's zero-rules default).</summary>

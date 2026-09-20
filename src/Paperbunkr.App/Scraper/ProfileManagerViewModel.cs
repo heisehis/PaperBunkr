@@ -153,6 +153,9 @@ public sealed partial class OrganizerProfileRowViewModel : ObservableObject
     [ObservableProperty]
     private bool _removeEmptyFolders;
 
+    [ObservableProperty]
+    private bool _useForScheduledRun;
+
     public ObservableCollection<ExcludeConditionRowViewModel> ExcludeConditions { get; } = new();
 
     public OrganizerProfileRowViewModel(OrganizerProfile profile)
@@ -165,6 +168,7 @@ public sealed partial class OrganizerProfileRowViewModel : ObservableObject
         _mode = profile.Mode;
         _automationCollisionPolicy = profile.AutomationCollisionPolicy;
         _removeEmptyFolders = profile.RemoveEmptyFolders;
+        _useForScheduledRun = profile.UseForScheduledRun;
 
         if (!string.IsNullOrEmpty(profile.ExcludeRuleJson))
         {
@@ -204,6 +208,7 @@ public sealed partial class OrganizerProfileRowViewModel : ObservableObject
         Mode = Mode,
         AutomationCollisionPolicy = AutomationCollisionPolicy,
         RemoveEmptyFolders = RemoveEmptyFolders,
+        UseForScheduledRun = UseForScheduledRun,
         ExcludeRuleJson = ExcludeConditions.Count == 0
             ? null
             : JsonSerializer.Serialize(PluginConditionGroup.And(ExcludeConditions.Select(c => c.ToCondition()).ToArray())),

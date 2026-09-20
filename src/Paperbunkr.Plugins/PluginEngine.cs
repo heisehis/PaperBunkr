@@ -40,6 +40,16 @@ public sealed class PluginEngine
     /// </summary>
     public IReadOnlyDictionary<string, NativePluginLoadResult> NativeLoadResults => _nativeLoadResults;
 
+    /// <summary>
+    /// Plugins that have been absorbed into the app, and what to tell the user. Cluster Library Manager (ComicVine scraping and library organizing) became built-in
+    /// (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md section 9); an installed copy is left on disk for the user to remove but is not run.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> RetiredPluginKeys { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["cluster-library-manager"] = "Now built in: ComicVine scraping and library organizing are part of Paperbunkr itself " +
+            "(right-click comics → Scrape with ComicVine / Organize; settings under Preferences → Organize & Scrape). This plugin is no longer needed and is not loaded; you can remove it.",
+    };
+
     /// <summary>Walks <paramref name="pluginsRoot"/> for <c>plugin.xml</c> manifests, initializing and precompiling every command found. Never throws - a broken plugin is flagged via <see cref="Command.IsBroken"/>, not skipped from discovery, and never aborts loading the rest (docs §2).</summary>
     public void Discover(string pluginsRoot, IPluginEnvironment baseEnvironment)
     {
@@ -166,6 +176,14 @@ public sealed class PluginEngine
         }
 
         string pluginKey = string.IsNullOrWhiteSpace(manifest.Key) ? Path.GetFileName(pluginDir) : manifest.Key;
+
+        // A plugin whose feature is now built into the app is never loaded: running both would scrape or reorganize the same library twice.
+        // Recorded as a load result so the Plugins screen shows why, instead of the package silently vanishing.
+        if (RetiredPluginKeys.TryGetValue(pluginKey, out string? retiredMessage))
+        {
+            _nativeLoadResults[pluginKey] = new NativePluginLoadResult(null, retiredMessage);
+            return;
+        }
 
         // Both packages share this exact key, so there is only ever one dictionary slot for it -
         // "the first package keeps its own healthy result untouched" isn't achievable once a second

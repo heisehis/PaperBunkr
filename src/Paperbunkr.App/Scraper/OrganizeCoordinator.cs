@@ -71,7 +71,7 @@ public sealed class OrganizeCoordinator(
     }
 
     /// <summary>The scheduled task: every comic with a file, the chosen profile, never asking anything.</summary>
-    public async Task<string> OrganizeLibraryAsync(int profileId, CancellationToken cancellationToken)
+    public async Task<string> OrganizeLibraryAsync(int profileId, CancellationToken cancellationToken, IActivityJobHandle? existingJob = null)
     {
         var profile = Profiles.Get(profileId);
         if (profile is null)
@@ -85,10 +85,10 @@ public sealed class OrganizeCoordinator(
             ids = context.Issues.Where(i => i.FilePath != null).Select(i => i.Id).ToList();
         }
 
-        return await RunAsync(ids, profile, isInteractive: false, cancellationToken);
+        return await RunAsync(ids, profile, isInteractive: false, cancellationToken, existingJob);
     }
 
-    private async Task<string> RunAsync(IReadOnlyList<int> issueIds, OrganizerProfile profile, bool isInteractive, CancellationToken cancellationToken)
+    private async Task<string> RunAsync(IReadOnlyList<int> issueIds, OrganizerProfile profile, bool isInteractive, CancellationToken cancellationToken, IActivityJobHandle? existingJob = null)
     {
         if (string.IsNullOrWhiteSpace(profile.BaseFolder))
         {
@@ -106,8 +106,11 @@ public sealed class OrganizeCoordinator(
             return "Nothing to organize.";
         }
 
-        using var job = activity.StartJob(ActivityJobKind.Import, $"Organizing {books.Count} comic{(books.Count == 1 ? string.Empty : "s")} ({profile.Name})",
-            cancellable: true, trigger: isInteractive ? ActivityTrigger.Manual : ActivityTrigger.Scheduled);
+        using var owned = existingJob is null
+            ? activity.StartJob(ActivityJobKind.Import, $"Organizing {books.Count} comic{(books.Count == 1 ? string.Empty : "s")} ({profile.Name})",
+                cancellable: true, trigger: isInteractive ? ActivityTrigger.Manual : ActivityTrigger.Scheduled)
+            : null;
+        var job = existingJob ?? owned!;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, job.CancellationToken);
 
         try
@@ -129,12 +132,12 @@ public sealed class OrganizeCoordinator(
             }
 
             var summary = $"Organized {result.Succeeded.Count} comic{(result.Succeeded.Count == 1 ? string.Empty : "s")}; {result.Skipped.Count} skipped; {result.Failed.Count} failed.";
-            job.Succeed(summary, itemsProcessed: result.Succeeded.Count, itemsFailed: result.Failed.Count);
+            owned?.Succeed(summary, itemsProcessed: result.Succeeded.Count, itemsFailed: result.Failed.Count);
             return summary;
         }
         catch (OperationCanceledException)
         {
-            job.Fail("Organize cancelled.");
+            owned?.Fail("Organize cancelled.");
             return "Organize cancelled.";
         }
     }

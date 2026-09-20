@@ -209,6 +209,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         PdfReader = new PdfPageReaderScreenViewModel(NavigateBack, ReadingEvents);
         Detail = new DetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
         MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
+        Paperbunkr.App.Scraper.ScheduledCoordinators.Scraper = Scraper;
+        Paperbunkr.App.Scraper.ScheduledCoordinators.Organizer = Organizer;
         Library.ScrapeIssues = ids => Scraper.ScrapeIssuesAsync(ids);
         Library.OrganizeIssues = ids => Organizer.OrganizeIssuesAsync(ids);
         Detail.Tabs.ScraperPanelFactory = Scraper.CreateSeriesPanel;

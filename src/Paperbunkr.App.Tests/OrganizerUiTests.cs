@@ -8,6 +8,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Scraper;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Scheduling;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
@@ -167,5 +168,29 @@ public class OrganizerUiTests : IDisposable
             DataContext = new OrganizeScrapeSettingsViewModel(NewContext, () => { }, manager),
         };
         Assert.NotNull(section.Content);
+    }
+}
+
+/// <summary>The two scheduled tasks the built-in scraper and organizer add to Preferences → Automation.</summary>
+public class ScrapeOrganizeScheduledTaskTests
+{
+    [Theory]
+    [InlineData(ScheduledTaskCatalog.ComicVineScrape)]
+    [InlineData(ScheduledTaskCatalog.LibraryOrganize)]
+    public void TheTasksExist_AreOffByDefault_AndCannotRunBeforeTheShellIsReady(string id)
+    {
+        var task = Assert.Single(ScheduledTaskCatalog.All, t => t.Id == id);
+
+        Assert.False(task.DefaultEnabled);                                  // scraping and reorganizing a library are never on until asked for
+        Assert.Equal(1, ScheduledTaskCatalog.All.Count(t => t.Id == id));
+        Assert.Equal(ScheduledTaskCatalog.All.Count, ScheduledTaskCatalog.All.Select(t => t.Id).Distinct().Count());
+    }
+
+    [Fact]
+    public void TheOrganizeTask_NamesTheProfileFlagItNeeds()
+    {
+        var task = Assert.Single(ScheduledTaskCatalog.All, t => t.Id == ScheduledTaskCatalog.LibraryOrganize);
+
+        Assert.Contains("marked for scheduled runs", task.Description);
     }
 }

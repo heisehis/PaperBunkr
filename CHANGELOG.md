@@ -19,6 +19,11 @@ All notable changes to Paperbunkr are documented here. Format follows
   until you turn it on under Automation, keeps followed arcs up to date and requests what's new).
   Downloading is manual approval by default; **Download automatically** is a separate opt-in.
 
+- **ComicVine details on downloads.** When an acquired issue is imported, Paperbunkr now fetches its credits, summary, characters and dates from ComicVine by the issue you
+  asked for (no searching, nothing to confirm) and writes them into the file. If it can't, the issue stays in your library as it is, the attempt is recorded, and it is retried
+  on its own; anything that needs you (no ComicVine key, an issue ComicVine no longer has) appears under **Wanted → Needs attention** with Retry and Dismiss, one at a time or all at once.
+  It can be turned off in Preferences → Acquisition.
+
 ### Changed
 
 - API keys and passwords saved in Preferences → Connections are now encrypted on disk (Windows DPAPI).

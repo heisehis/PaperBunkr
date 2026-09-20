@@ -6,6 +6,18 @@ Branch `feat/clm-into-core` (worktree `.claude/worktrees/clm-into-core`). Plugin
 `dotnet ef database update` from the worktree (shared per-user DB). Baselines (untouched `master` 8295bed): `Data.Tests` 6 pre-existing migration failures,
 `App.Tests` classes run per class (full suite cannot complete), `Daemon.Tests` 188 pass.
 
+## Status (2026-09-20, end of the first implementation session)
+
+| Phase | State |
+|-------|-------|
+| 1 Unify | **Done.** Shared template engine (`Paperbunkr.Data.Naming`), `NameTemplateTranslator`, one-time `TemplateUpgrade` (keeps the original), `AddTemplateGrammar` migration, importer + settings on the shared engine, rate-limit reserve pinned by tests. Deferred by design: the plugin's DTO/client merge (done incrementally with the phase that needs each part). |
+| 2 Scrape-on-import | **Done except one item.** `AddScrapeState` migration; `ComicVineClient.GetIssueDetailsAsync`; `IssueDetailsApplier`; `ScrapeByIdService`; `ScrapeSweeper` (durable `ScrapeStatus`, backoff, terminal vs retryable, batch of 5, `Low` priority) wired into the acquisition loop; write-back through `MetadataWriteBackQueue`; Activity Center alerts derived from the durable rows; Wanted → "Needs attention" list with single + bulk Retry/Dismiss; Preferences toggle. **Not done: moving the Prowlarr and qBittorrent credentials into Preferences → Connections** (needs a new `ConnectionDialogKind`, dialog panel with code-behind, a "Download automation" group, and trimming the Acquisition section to a status line + link). Deliberately left rather than rushed into the 3,000-line `PreferencesScreenViewModel`. |
+| 3 Scraper in core | Not started. |
+| 4 Organizer | Not started. |
+| 5 Automation + retirement | Not started. |
+
+Verification on the branch: `Daemon.Tests` 190 pass; `Data.Tests` 1257 pass with 7 failures, the 6 pre-existing migration failures plus `ReworkBookPositionAnchorMigrationTests`, which passes when run alone (load-related flake in the same `Migrate()` family, not caused by this work); each touched `App.Tests` class passes on its own. Nothing has been run against a real ComicVine key or on screen.
+
 ## Phase 1 — Unify (no visible change)
 
 ### Step 1: Shared template engine in `Paperbunkr.Data`

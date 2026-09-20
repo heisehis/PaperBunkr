@@ -38,4 +38,14 @@ Automatic cross-provider merging; using `cv_id` to translate a tracked ComicVine
 
 ## 5. Status
 
-Recorded at the end of the implementation session.
+| Step | State |
+|------|-------|
+| Schema: `Provider` on `WatchedSeries`, `CatalogIssue`, `WantedIssue`, `ComicVineMatchMemoryEntry`; id columns renamed `ExternalVolumeId`/`ExternalIssueId`; `(Provider, id)` unique indexes; migration `AddComicProvider` | Done |
+| `MetronClient` (series search paged, series, issue list, issue details) behind `IComicProvider`; rate limiter reuses `ComicVineRateLimitHandler` with a 1-minute window (18/min, 14 for background) instead of a separate handler | Done, 16 fixture tests |
+| `ComicProviderFactory`; acquisition cycle, `WantedService`, `ScrapeByIdService`, arc requests (always ComicVine) provider-aware | Done |
+| Step 1 UI: source selector in the Missing Issues panel and Wanted "Track a series"; Metron chips on series, wants and the tracked heading | Done |
+| Step 2: `ScrapeSettings.DefaultProvider` (Preferences → Organize & Scrape → Source), `ScrapeCoordinator` builds the run's provider, match dialog switch (`ScrapeOrchestrator.TrySwitchProvider`, provider-specific match memory), scheduled scrapes use the default only | Done |
+
+Deviations from section 3: no separate daily counter (Metron's 5,000/day is far above what a personal library uses; the 429 cool-off covers a burst), and `Issue.Volume` still just records the chosen external volume id (which provider it came from is not stored on the issue).
+
+Not merged: lives on branch `feat/metron-provider`. The main tree holds uncommitted copies of the ranker / sort work that the branch already contains, so commit or check those files out before merging. Back up the database before the first launch (new migration). Live check against real Metron is outstanding: the client is verified against fixture JSON modelled on Metron's serializers, not the live API.

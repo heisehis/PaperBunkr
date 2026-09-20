@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:Paperbunkr.App.Scraper"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:conv="using:Avalonia.Data.Converters"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="420"
              x:Class="Paperbunkr.App.Scraper.ComicVineMatchReviewDialogView"
@@ -87,10 +88,9 @@
                  for more later, nothing to actually pick from yet), a real dropdown has nothing to
                  gain and a known crash class to lose - these become real pickers only once a second
                  source/sort mode exists to choose between. -->
-            <Border Grid.Column="0" Height="38" CornerRadius="8" Padding="14,0" Margin="0,0,8,0"
-                    Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
-                <TextBlock Text="ComicVine" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-            </Border>
+            <controls:SuggestBox Grid.Column="0" Height="38" Width="120" Margin="0,0,8,0" IsStrict="True" Text="{Binding ProviderText}"
+                                 Suggestions="{x:Static vm:ComicVineMatchReviewDialogViewModel.ProviderNames}" IsEnabled="{Binding CanSwitchProvider}"
+                                 AutomationProperties.Name="Search source" AutomationProperties.AutomationId="ScrapeMatchProviderSelect" />
             <TextBox Grid.Column="1" Height="38" CornerRadius="8" Padding="14,0"
                      Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                      VerticalContentAlignment="Center" Foreground="{DynamicResource PbTextBrush}"

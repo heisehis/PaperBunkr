@@ -96,6 +96,28 @@ public class WantedServiceTests : AcquisitionTestBase
     }
 
     [Fact]
+    public void TheSameNumericIdsUnderTwoProviders_AreTwoIndependentSeriesWithTheirOwnCatalogAndWants()
+    {
+        var series = new Series { Name = "Spawn" };
+        Context.Series.Add(series);
+        Context.SaveChanges();
+
+        var cv = WantedService.TrackVolume(Context, Volume(100, "Spawn"), series.Id, watchFutureReleases: false);
+        var metron = WantedService.TrackVolume(Context, Volume(100, "Spawn"), seriesId: null, watchFutureReleases: false, ComicProvider.Metron);
+        Assert.NotEqual(cv.Id, metron.Id);
+        Assert.Equal(ComicProvider.Metron, metron.Provider);
+        Assert.Null(metron.SeriesId);                                              // the link belongs to the ComicVine entry
+
+        WantedService.RefreshCatalog(Context, cv, new[] { new ComicVineIssue(7, "1", null, null, null, null, 100) });
+        WantedService.RefreshCatalog(Context, metron, new[] { new ComicVineIssue(7, "1", null, null, null, null, 100) });   // same issue id, other provider
+        Assert.Equal(2, Context.CatalogIssues.Count());
+
+        var wanted = WantedService.Request(Context, metron, Context.CatalogIssues.Single(c => c.WatchedSeriesId == metron.Id));
+        Assert.Equal(ComicProvider.Metron, wanted.Provider);
+        Assert.Single(WantedService.GetMissing(Context, cv));                      // the ComicVine copy is still missing: the want was Metron's
+    }
+
+    [Fact]
     public void RefreshCatalog_InsertsThenUpdates_WithoutDuplicating()
     {
         var (watched, _) = Tracked(CvIssue(1, "1"), CvIssue(2, "2"));

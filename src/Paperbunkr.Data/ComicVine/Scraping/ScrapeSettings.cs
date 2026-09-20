@@ -22,6 +22,9 @@ public sealed class ScrapeSettings
     /// <summary>CE's <c>confirm_issue_b</c>: after the series is chosen, show the issue-match dialog instead of silently applying whatever number matching finds.</summary>
     public bool ConfirmIssueMatch { get; set; } = true;
 
+    /// <summary>Which source scrapes use unless the match dialog switches one run to the other. Scheduled (unattended) scrapes always use this one.</summary>
+    public ComicProvider DefaultProvider { get; set; } = ComicProvider.ComicVine;
+
     public HashSet<ScrapeField> EnabledScrapeFields { get; set; } = new(Enum.GetValues<ScrapeField>());
 
     /// <summary>Checked before the static imprint table, so a user's own mapping always wins (CE's <c>IMPRINT=X--&gt;Y</c> lines).</summary>

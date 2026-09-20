@@ -76,6 +76,12 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
     [ObservableProperty] private string _imprintOverrides = string.Empty;
 
     [ObservableProperty] private bool _hasComicVineKey;
+    [ObservableProperty] private bool _hasMetronLogin;
+
+    public static System.Collections.Generic.IReadOnlyList<string> ProviderNames => SeriesMissingIssuesViewModel.ProviderNames;
+
+    /// <summary>The source scrapes start on ("ComicVine" or "Metron"); the match dialog can switch one run.</summary>
+    [ObservableProperty] private string _defaultProviderText = "ComicVine";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasErrorStatus), nameof(HasInfoStatus))]
@@ -111,6 +117,8 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
         }
 
         HasComicVineKey = !string.IsNullOrEmpty(CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey));
+        HasMetronLogin = Paperbunkr.Data.ComicVine.ComicProviderFactory.IsAvailable(context, ComicProvider.Metron);
+        DefaultProviderText = Paperbunkr.Data.ComicVine.ComicProviderFactory.DisplayName(settings.DefaultProvider);
         Profiles?.Reload();
     }
 
@@ -145,6 +153,7 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
             ConfirmIssueMatch = ConfirmIssueMatch,
             OverwriteExisting = OverwriteExisting,
             IgnoreBlankValues = IgnoreBlankValues,
+            DefaultProvider = Paperbunkr.Data.ComicVine.ComicProviderFactory.Parse(DefaultProviderText),
             MaxSearchResults = max,
             IgnoreVolumesBeforeYear = before,
             IgnoreVolumesAfterYear = after,

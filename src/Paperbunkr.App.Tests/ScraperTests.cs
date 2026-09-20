@@ -132,7 +132,7 @@ public class ScraperTests : IDisposable
         NewContext,
         new ActivityService(dispatch: a => a(), recordRun: _runs.Add),
         _writeBacks.Add,
-        _ => comicVine is null ? null : (IScrapeComicVine)comicVine);
+        (_, _) => comicVine is null ? null : (IScrapeComicVine)comicVine);
 
     private int SeedIssue()
     {

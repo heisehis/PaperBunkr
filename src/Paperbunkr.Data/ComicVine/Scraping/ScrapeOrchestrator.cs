@@ -28,15 +28,44 @@ namespace Paperbunkr.Data.ComicVine.Scraping;
 /// </summary>
 public sealed class ScrapeOrchestrator
 {
-    private readonly IScrapeComicVine _comicVine;
-    private readonly ComicVineMatchMemory _matchMemory;
+    private IScrapeComicVine _comicVine;
+    private ComicVineMatchMemory _matchMemory;
     private readonly ScrapeSettings _settings;
+    private readonly Func<ComicProvider, (IScrapeComicVine Source, ComicVineMatchMemory Memory)?>? _providerSwitcher;
 
-    public ScrapeOrchestrator(IScrapeComicVine comicVine, ComicVineMatchMemory matchMemory, ScrapeSettings settings)
+    public ScrapeOrchestrator(IScrapeComicVine comicVine, ComicVineMatchMemory matchMemory, ScrapeSettings settings,
+        ComicProvider provider = ComicProvider.ComicVine, Func<ComicProvider, (IScrapeComicVine Source, ComicVineMatchMemory Memory)?>? providerSwitcher = null)
     {
         _comicVine = comicVine;
         _matchMemory = matchMemory;
         _settings = settings;
+        Provider = provider;
+        _providerSwitcher = providerSwitcher;
+    }
+
+    /// <summary>The source this run is currently searching and reading details from. Changes only through <see cref="TrySwitchProvider"/> (the review dialog's source switch).</summary>
+    public ComicProvider Provider { get; private set; }
+
+    /// <summary>
+    /// Points the rest of the run at another source (the match dialog's per-run switch): searches, issue lists, details and the match memory all follow it. Returns
+    /// false, leaving the run as it was, when that source can't be built (its login isn't saved) or this orchestrator wasn't given a way to build one.
+    /// </summary>
+    public bool TrySwitchProvider(ComicProvider provider)
+    {
+        if (provider == Provider)
+        {
+            return true;
+        }
+
+        var next = _providerSwitcher?.Invoke(provider);
+        if (next is null)
+        {
+            return false;
+        }
+
+        (_comicVine, _matchMemory) = next.Value;
+        Provider = provider;
+        return true;
     }
 
     /// <summary>

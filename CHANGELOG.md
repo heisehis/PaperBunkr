@@ -7,6 +7,7 @@ All notable changes to Paperbunkr are documented here. Format follows
 
 ### Added
 
+- **Metron as an alternative to ComicVine.** Save your Metron login under Preferences → **Connections** and every place that used ComicVine can use Metron instead, per series: a series' **Missing Issues** search and the Wanted **Track a series** search gain a source selector, tracked series and wants from Metron carry a small **Metron** chip, and the daily refresh, release search and import-time details each go to the series' own source. **Scrape** starts on the source chosen under Preferences → Organize & Scrape (scheduled scrapes always use it) and the match dialog can switch a single run. Nothing is merged between the two: a series belongs to one source. Existing series stay on ComicVine; this adds a migration, so back up your database first.
 - **Comic acquisition.** A Mylar-style want-list built on your own Prowlarr and qBittorrent.
   Preferences → **Acquisition** connects Prowlarr and qBittorrent (keys and passwords are stored
   encrypted), sets how often to check, how to rank results, where finished comics go, and how they are

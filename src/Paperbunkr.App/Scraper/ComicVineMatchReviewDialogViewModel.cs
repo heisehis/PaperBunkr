@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Paperbunkr.Data.ComicVine;
 using Paperbunkr.Data.ComicVine.Scraping;
+using Paperbunkr.Data.Entities;
 using System.Collections.ObjectModel;
 using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -76,6 +78,40 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
     private readonly Action<ComicVineVolumeSearchResult?> _resolve;
     private readonly ScrapeOrchestrator.SearchAndRankDelegate _search;
     private readonly Func<int, Task<IReadOnlyList<ComicVineIssueSummary>>>? _loadIssues;
+    private readonly Func<ComicProvider, bool>? _switchProvider;
+    private bool _revertingProvider;
+
+    public static IReadOnlyList<string> ProviderNames { get; } = ComicProviderFactory.All.Select(ComicProviderFactory.DisplayName).ToList();
+
+    /// <summary>The source being searched ("ComicVine" or "Metron"). Changing it moves the rest of the run to that source and searches it again; it stays put when that source has no login saved.</summary>
+    [ObservableProperty]
+    private string _providerText = "ComicVine";
+
+    /// <summary>False when the caller gave no way to switch (the choice is then just a label).</summary>
+    public bool CanSwitchProvider => _switchProvider is not null;
+
+    partial void OnProviderTextChanged(string oldValue, string newValue)
+    {
+        if (_revertingProvider || _switchProvider is null)
+        {
+            return;
+        }
+
+        var provider = ComicProviderFactory.Parse(newValue);
+        if (!_switchProvider(provider))
+        {
+            _revertingProvider = true;
+            ProviderText = oldValue;
+            _revertingProvider = false;
+            SearchStatus = ComicProviderFactory.MissingCredentialsMessage(provider);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchQuery))
+        {
+            _ = SearchCommand.ExecuteAsync(null);
+        }
+    }
 
     public string BookLabel { get; }
 
@@ -109,9 +145,13 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
         IReadOnlyList<(ComicVineVolumeSearchResult Volume, double Score)> initialCandidates,
         ScrapeOrchestrator.SearchAndRankDelegate search,
         Action<ComicVineVolumeSearchResult?> resolve,
-        Func<int, Task<IReadOnlyList<ComicVineIssueSummary>>>? loadIssues = null)
+        Func<int, Task<IReadOnlyList<ComicVineIssueSummary>>>? loadIssues = null,
+        ComicProvider provider = ComicProvider.ComicVine,
+        Func<ComicProvider, bool>? switchProvider = null)
     {
         BookLabel = bookLabel;
+        _providerText = ComicProviderFactory.DisplayName(provider);
+        _switchProvider = switchProvider;
         _searchQuery = initialQuery;
         _search = search;
         _resolve = resolve;

@@ -117,6 +117,14 @@ public sealed class VolumeResultViewModel
     public string Title => Volume.StartYear is int year ? $"{Volume.Name} ({year})" : Volume.Name;
     public string Subtitle => $"{Volume.Publisher ?? "Unknown publisher"} · {Volume.CountOfIssues} issues";
     public bool IsTracked { get; init; }
+
+    /// <summary>The top-ranked result, worth a nudge when the list is long.</summary>
+    public bool IsBestMatch { get; init; }
+
+    public RemoteCoverSource Cover { get; init; } = new(null);
+
+    /// <summary>How many ranked results a picker shows at first.</summary>
+    public const int PageSize = 15;
 }
 
 /// <summary>
@@ -488,8 +496,9 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
 
         try
         {
-            var volumes = await _createComicVine(key).SearchVolumesAsync(query, cancellationToken);
-            Fill(SearchResults, volumes.Select(v => new VolumeResultViewModel { Volume = v, IsTracked = tracked.Contains(v.Id) }));
+            // Ranked by name match (there is no local series to compare with here), and more than ComicVine's first 25 by issue count.
+            var volumes = await VolumeSearchService.SearchAndRankAsync(_createComicVine(key), query, new LocalSeriesHints(query), cancellationToken);
+            Fill(SearchResults, volumes.Take(VolumeResultViewModel.PageSize).Select((r, i) => new VolumeResultViewModel { Volume = r.Volume, IsTracked = tracked.Contains(r.Volume.Id), IsBestMatch = i == 0 && volumes.Count > 1, Cover = new RemoteCoverSource(r.Volume.ImageUrl) }));
             OnPropertyChanged(nameof(HasSearchResults));
             SetStatus(volumes.Count == 0 ? $"No ComicVine series found for \"{query}\"." : string.Empty, isError: false);
         }

@@ -32,6 +32,7 @@ internal sealed class FakeNativePluginEnvironment : INativePluginEnvironment
     public Automation.IRulesEngine Rules => _inner.Rules;
     public Automation.IMetadataWriter Writer => _inner.Writer;
     public Theme.IThemePlugin ThemePlugin => _inner.ThemePlugin;
+    public IPluginActivity Activity => _inner.Activity;
     public IEnumerable<string> LibraryPaths => _inner.LibraryPaths;
 
     public string CommandPath

@@ -40,7 +40,8 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
         string? loadError,
         bool hasConfigure,
         Action onRemoved,
-        Action onRefreshRequested)
+        Action onRefreshRequested,
+        string? requiresApi = null)
     {
         _package = package;
         _host = host;
@@ -61,7 +62,16 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
 
         LoadError = loadError;
         HasConfigure = hasConfigure;
+        RequiresApiText = string.IsNullOrWhiteSpace(requiresApi) ? null : $"Requires API {requiresApi.Trim()}";
     }
+
+    /// <summary>The plugin's declared <c>requiresApi</c> as plain information (docs/superpowers/specs/
+    /// 2026-09-20-plugin-api-4-1-design.md §3.4), or null when the manifest declares none. Deliberately
+    /// never a warning: a plugin declaring a higher minor than this app provides is left alone while it
+    /// runs fine, and a blocked one already surfaces its reason through <see cref="LoadError"/>.</summary>
+    public string? RequiresApiText { get; }
+
+    public bool HasRequiresApi => RequiresApiText is not null;
 
     /// <summary>The correlation key this detail pane was built for - lets <see cref="PluginScreenViewModel.Refresh"/> re-select the same package across a rebuild (e.g. after Reload/master-toggle) without holding a reference to a stale <see cref="PackageManager.Package"/> instance.</summary>
     public string PackageKey => _package.Key;

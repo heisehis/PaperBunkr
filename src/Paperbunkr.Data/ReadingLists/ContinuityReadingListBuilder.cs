@@ -57,6 +57,7 @@ public static class ContinuityReadingListBuilder
         }
 
         context.ReadingLists.Add(list);
+        ReadingListManager.RecordCreatedWithItems(context, list);
         context.SaveChanges();
         return list;
     }

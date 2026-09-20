@@ -12,6 +12,7 @@ using Paperbunkr.App.Plugins;
 using Paperbunkr.Data;
 using Paperbunkr.Data.CeMigration;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Events;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Plugins.Hooks;
 
@@ -63,11 +64,14 @@ public class LibraryFolderScanner
     {
     }
 
-    /// <summary>Test-only seam - production always uses the default ctor (the real per-user database).</summary>
-    internal LibraryFolderScanner(Func<PaperbunkrDbContext> contextFactory)
+    /// <summary>Test-only seam - production always uses the default ctor (the real per-user database). <paramref name="events"/> defaults to <see cref="LibraryEvents.Default"/>; tests pass their own so they never see each other's scans.</summary>
+    internal LibraryFolderScanner(Func<PaperbunkrDbContext> contextFactory, LibraryEvents? events = null)
     {
         _contextFactory = contextFactory;
+        _events = events ?? LibraryEvents.Default;
     }
+
+    private readonly LibraryEvents _events;
 
     public async Task<LibraryFolderScanResult> ScanAllAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
     {
@@ -77,6 +81,7 @@ public class LibraryFolderScanner
     private LibraryFolderScanResult ScanAll(IProgress<(int Done, int Total)> progress, CancellationToken ct)
     {
         using var context = _contextFactory();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var supportedExtensions = new HashSet<string>(Providers.Readers.GetFileExtensions(), StringComparer.OrdinalIgnoreCase);
         var existingPaths = new HashSet<string>(
@@ -84,6 +89,7 @@ public class LibraryFolderScanner
             StringComparer.OrdinalIgnoreCase);
 
         var candidateFiles = new List<string>();
+        var scannedFolders = new List<string>();
         foreach (string folder in context.WatchedFolders.Select(w => w.Path).ToList())
         {
             if (!Directory.Exists(folder))
@@ -91,12 +97,30 @@ public class LibraryFolderScanner
                 continue;
             }
 
+            scannedFolders.Add(folder);
             candidateFiles.AddRange(
                 Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
                     .Where(f => supportedExtensions.Contains(Path.GetExtension(f)) && !existingPaths.Contains(f)));
         }
 
-        return ImportFiles(context, candidateFiles, progress, ct);
+        var result = ImportFiles(context, candidateFiles, progress, ct);
+
+        // LibraryScanCompleted plugin hook (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md
+        // §5): raised here, at the one chokepoint every full scan shares (Scan Now, the scheduled task,
+        // the plugin API's ScanFolders), not from any caller. Only a full scan - a live-watch or drag
+        // import goes through ImportNewFilesAsync and is not a "scan". This scanner doesn't track
+        // updates to existing issues, so UpdatedCount is 0 and UpdatedItemIds is an empty reserved
+        // collection rather than a guess. A cancelled or failed scan throws before this line.
+        _events.Raise(new LibraryScanCompletedEvent(
+            scannedFolders,
+            result.IssuesAdded,
+            UpdatedCount: 0,
+            result.SeriesTouched,
+            stopwatch.Elapsed,
+            result.AddedIssueIds,
+            Array.Empty<int>()));
+
+        return result;
     }
 
     /// <summary>

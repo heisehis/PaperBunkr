@@ -46,6 +46,22 @@ public abstract class Command
 
     public bool IsBroken => CompileError is not null;
 
+    /// <summary>
+    /// The API version this command's plugin declared via <c>requiresApi</c> (docs/superpowers/specs/
+    /// 2026-09-20-plugin-api-4-1-design.md §3), or null when the attribute was absent (the 4.0
+    /// baseline). Set by <see cref="PluginEngine"/> at discovery; used only to explain a failure.
+    /// </summary>
+    public Version? DeclaredApi { get; set; }
+
+    /// <summary>Appends a version hint to an already-recorded <see cref="CompileError"/> (its setter is protected). No-op when there's no error or no hint.</summary>
+    internal void AppendVersionHint(string? hint)
+    {
+        if (CompileError is not null && hint is not null)
+        {
+            CompileError = $"{CompileError} ({hint})";
+        }
+    }
+
     public bool IsHook(params string[] hooks) => hooks.Contains(Hook);
 
     /// <summary>Clones <paramref name="env"/>, points the clone's <see cref="IPluginEnvironment.CommandPath"/> at <paramref name="pluginPath"/>, and runs any subclass-specific precompilation. Returns false (never throws) if the command couldn't be prepared.</summary>

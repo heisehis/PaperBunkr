@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 using Paperbunkr.Data.Entities;
 
@@ -19,7 +18,6 @@ namespace Paperbunkr.Data.Credentials;
 /// </summary>
 public static class CredentialStore
 {
-    private const string EncryptedPrefix = "dpapi1:";
     private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("Paperbunkr.CredentialStore.v1");
 
     public static string? Get(PaperbunkrDbContext context, string provider, CredentialKind kind)
@@ -49,27 +47,13 @@ public static class CredentialStore
     }
 
     /// <summary>True when <paramref name="storedValue"/> is in the encrypted-at-rest format (used by tests and callers that must not treat ciphertext as a secret).</summary>
-    public static bool IsEncrypted(string storedValue) =>
-        storedValue.StartsWith(EncryptedPrefix, StringComparison.Ordinal);
+    public static bool IsEncrypted(string storedValue) => DpapiSecrets.IsProtected(storedValue);
 
-    private static string Protect(string plain)
-    {
-        var cipher = ProtectedData.Protect(Encoding.UTF8.GetBytes(plain), Entropy, DataProtectionScope.CurrentUser);
-        return EncryptedPrefix + Convert.ToBase64String(cipher);
-    }
+    // The crypto itself lives in DpapiSecrets, shared with plugin secret settings; only this store's
+    // own entropy is specified here, so the two stores' ciphertext is not interchangeable.
+    private static string Protect(string plain) => DpapiSecrets.Protect(plain, Entropy);
 
-    private static string? TryUnprotect(string stored)
-    {
-        try
-        {
-            var cipher = Convert.FromBase64String(stored[EncryptedPrefix.Length..]);
-            return Encoding.UTF8.GetString(ProtectedData.Unprotect(cipher, Entropy, DataProtectionScope.CurrentUser));
-        }
-        catch (Exception ex) when (ex is CryptographicException or FormatException)
-        {
-            return null;
-        }
-    }
+    private static string? TryUnprotect(string stored) => DpapiSecrets.TryUnprotect(stored, Entropy);
 
     public static void Set(PaperbunkrDbContext context, string provider, CredentialKind kind, string value)
     {

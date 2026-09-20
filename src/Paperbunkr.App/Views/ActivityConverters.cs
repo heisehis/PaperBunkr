@@ -78,6 +78,7 @@ public sealed class ActivityKindIconConverter : IValueConverter
         ActivityJobKind.Migration => Symbol.Layer,
         ActivityJobKind.Upkeep => Symbol.Settings,
         ActivityJobKind.Acquisition => Symbol.Search,
+        ActivityJobKind.Plugin => Symbol.PuzzlePiece,
         _ => Symbol.Info,
     };
 

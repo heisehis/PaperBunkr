@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Events;
 
 namespace Paperbunkr.App.Services;
 
@@ -32,10 +33,13 @@ public class LibraryHealthService
     public int ConfirmedMissingThreshold { get; set; } = 2;
 
     private readonly Func<PaperbunkrDbContext> _contextFactory;
+    private readonly LibraryEvents _events;
 
-    public LibraryHealthService(Func<PaperbunkrDbContext>? contextFactory = null)
+    /// <param name="events">Where a newly-confirmed-missing file is announced (the <c>MissingFileDetected</c> plugin hook); defaults to <see cref="LibraryEvents.Default"/>, tests pass their own.</param>
+    public LibraryHealthService(Func<PaperbunkrDbContext>? contextFactory = null, LibraryEvents? events = null)
     {
         _contextFactory = contextFactory ?? PaperbunkrDb.CreateContext;
+        _events = events ?? LibraryEvents.Default;
     }
 
     /// <summary>Full-library sweep - every non-placeholder issue with a FilePath, regardless of source folder or <c>WatchedFolder.Watch</c>.</summary>
@@ -72,11 +76,13 @@ public class LibraryHealthService
         int missingNow = 0;
         int confirmedMissing = 0;
         int contentEmptyNow = 0;
+        var newlyConfirmed = new List<MissingFileConfirmedEvent>();
 
         foreach (var issue in issues)
         {
             ct.ThrowIfCancellationRequested();
 
+            int previousCount = issue.MissingVerificationCount;
             bool exists = File.Exists(issue.FilePath);
             issue.FileIsMissing = !exists;
             issue.MissingVerificationCount = exists ? 0 : issue.MissingVerificationCount + 1;
@@ -87,6 +93,20 @@ public class LibraryHealthService
                 if (issue.MissingVerificationCount >= ConfirmedMissingThreshold && !issue.MissingAcknowledged)
                 {
                     confirmedMissing++;
+
+                    // MissingFileDetected plugin hook (docs/superpowers/specs/2026-09-20-plugin-api-4-1-
+                    // design.md §5.3): announced only on the pass where the count CROSSES the threshold,
+                    // not on every later pass while the file stays missing (confirmedMissing above counts
+                    // every eligible item each pass, which is right for the summary but would spam a
+                    // plugin). A single failed check never announces - a disconnected drive would be noisy.
+                    if (previousCount < ConfirmedMissingThreshold)
+                    {
+                        newlyConfirmed.Add(new MissingFileConfirmedEvent(
+                            ReadingItemType.Comic,
+                            issue.Id,
+                            issue.FilePath!,
+                            issue.Title ?? Path.GetFileNameWithoutExtension(issue.FilePath!)));
+                    }
                 }
 
                 // Empty Rows (docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-row-
@@ -113,6 +133,13 @@ public class LibraryHealthService
         }
 
         context.SaveChanges();
+
+        // Only after the counts are durably saved - a failed save must not announce anything.
+        foreach (var confirmed in newlyConfirmed)
+        {
+            _events.Raise(confirmed);
+        }
+
         return new LibraryHealthVerifyResult(total, missingNow, confirmedMissing, contentEmptyNow);
     }
 

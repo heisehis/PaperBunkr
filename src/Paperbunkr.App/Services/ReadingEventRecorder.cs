@@ -34,8 +34,11 @@ public sealed class ReadingEventRecorder : IReadingEventRecorder
             PrimaryGenre = primaryGenre,
         });
 
+    public event Action<ReadingEvent>? ReadingFinished;
+
     public void RecordFinished(ReadingItemType itemType, int itemId, int? seriesId, string? publisher, string? primaryGenre, int? pagesRead)
-        => Insert(new ReadingEvent
+    {
+        var finished = new ReadingEvent
         {
             ItemType = itemType,
             ItemId = itemId,
@@ -45,7 +48,20 @@ public sealed class ReadingEventRecorder : IReadingEventRecorder
             SeriesId = seriesId,
             Publisher = publisher,
             PrimaryGenre = primaryGenre,
-        });
+        };
+
+        Insert(finished);
+
+        // After the row is durably saved. A throwing handler never reaches the reader that recorded
+        // the finish - the plugin host isolates its own failures, this is just belt and braces.
+        try
+        {
+            ReadingFinished?.Invoke(finished);
+        }
+        catch (Exception)
+        {
+        }
+    }
 
     public void UpdateSessionPages(ReadingItemType itemType, int itemId, int pagesRead)
     {

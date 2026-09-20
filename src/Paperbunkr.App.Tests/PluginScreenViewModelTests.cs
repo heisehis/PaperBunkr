@@ -107,6 +107,96 @@ public sealed class PluginScreenViewModelTests : IDisposable
         }
     }
 
+    /// <summary>Writes one script plugin under <paramref name="root"/> and returns a screen VM attached to a host that has discovered it.</summary>
+    private static PluginScreenViewModel ScreenFor(string root, string key, string? requiresApi)
+    {
+        string dir = Path.Combine(root, key);
+        Directory.CreateDirectory(dir);
+        string attribute = requiresApi is null ? string.Empty : $" requiresApi=\"{requiresApi}\"";
+        File.WriteAllText(Path.Combine(dir, "plugin.xml"), $"""
+            <Plugin key="{key}" name="{key}"{attribute}>
+              <Command hook="Startup" key="{key}.startup" name="{key} Startup" script="s.csx" />
+            </Plugin>
+            """);
+        File.WriteAllText(Path.Combine(dir, "s.csx"), "return 1;");
+
+        var host = new PluginHostService();
+        host.Engine.Discover(root, MakeEnvironment());
+
+        var vm = new PluginScreenViewModel(new NoOpFilePicker(), new FakeDialogService(), new PluginPackageService(root, MakeTempDir()));
+        vm.AttachHost(host);
+        return vm;
+    }
+
+    [Fact]
+    public void A_script_package_blocked_by_requiresApi_is_flagged_broken_and_shows_why()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            PluginScreenViewModel vm = ScreenFor(root, "future", "5.0");
+
+            var row = Assert.Single(vm.Packages);
+            // It registers zero commands, which the existing rule never flags broken - so this only
+            // passes because IsPackageBroken checks the engine's blocked reason.
+            Assert.True(row.IsBroken);
+
+            row.SelectCommand.Execute(null);
+            var detail = vm.SelectedPackageDetail!;
+            Assert.Empty(detail.Commands);
+            Assert.True(detail.HasLoadError);
+            Assert.Contains("major version mismatch", detail.LoadError);
+            Assert.Equal("Requires API 5.0", detail.RequiresApiText);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_plugin_declaring_a_higher_minor_that_runs_fine_is_only_informational()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            PluginScreenViewModel vm = ScreenFor(root, "newer", "4.9");
+
+            var row = Assert.Single(vm.Packages);
+            Assert.False(row.IsBroken);
+
+            row.SelectCommand.Execute(null);
+            var detail = vm.SelectedPackageDetail!;
+            Assert.False(detail.HasLoadError);
+            Assert.True(detail.HasRequiresApi);
+            Assert.Equal("Requires API 4.9", detail.RequiresApiText);
+            Assert.Single(detail.Commands);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_plugin_with_no_requiresApi_shows_no_requirement_line()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            PluginScreenViewModel vm = ScreenFor(root, "legacy", null);
+
+            Assert.Single(vm.Packages).SelectCommand.Execute(null);
+
+            Assert.False(vm.SelectedPackageDetail!.HasRequiresApi);
+            Assert.Null(vm.SelectedPackageDetail.RequiresApiText);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void Refresh_WithNoHost_LeavesPackagesEmpty()
     {
@@ -564,6 +654,7 @@ public sealed class PluginScreenViewModelTests : IDisposable
         Rules = new PaperbunkrRulesEngine(),
         Writer = new PaperbunkrMetadataWriter(),
         ThemePlugin = new StubThemePlugin(),
+        ActivityService = new ActivityService(dispatch: a => a(), recordRun: _ => { }),
     };
 
     private sealed class NoOpFilePicker : IFilePickerService

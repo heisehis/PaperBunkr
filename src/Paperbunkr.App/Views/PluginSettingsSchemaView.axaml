@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:beh="using:Paperbunkr.App.Behaviors"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:pref="using:Paperbunkr.App.Views.Preferences"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="420"
+             x:Class="Paperbunkr.App.Views.PluginSettingsSchemaView"
+             x:DataType="vm:PluginSettingsSchemaViewModel">
+
+    <!--
+        Overlay for a plugin's declared settings (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md
+        §6.4). Hosted in the shared OverlayShell exactly like ConfirmDialogView, so it takes the same card
+        shape (PbChromeBrush + PbBorderBrush). Every setting is a SettingsRow, the row the Preferences screens
+        use. Choice fields use SuggestBox, never ComboBox (the app-wide dropdown-freeze migration); number
+        fields reuse the TextSpinner behaviour; a secret is a masked TextBox. Colours are theme resources only.
+    -->
+    <Border Width="560" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+            BorderThickness="1" CornerRadius="8" Padding="20">
+        <StackPanel Spacing="12">
+            <TextBlock Classes="pbTextHeading" Text="{Binding Title}" />
+
+            <Border IsVisible="{Binding HasSecretsUnavailableNote}" Background="{DynamicResource PbAccentSoftBrush}"
+                    CornerRadius="6" Padding="10">
+                <TextBlock Text="{Binding SecretsUnavailableNote}" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource PbTextBrush}" />
+            </Border>
+
+            <ScrollViewer MaxHeight="480" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Rows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:PluginSettingRowViewModel">
+                            <pref:SettingsRow Icon="Settings" Title="{Binding Label}" Description="{Binding Description}">
+                                <pref:SettingsRow.SettingsContent>
+                                    <StackPanel Spacing="4" MinWidth="220" MaxWidth="280">
+                                        <ToggleSwitch IsVisible="{Binding IsToggle}" IsChecked="{Binding IsOn}"
+                                                      OnContent="{x:Null}" OffContent="{x:Null}" HorizontalAlignment="Right"
+                                                      AutomationProperties.Name="{Binding Label}" />
+
+                                        <TextBox IsVisible="{Binding IsText}" Text="{Binding Text}"
+                                                 AutomationProperties.Name="{Binding Label}" />
+
+                                        <TextBox IsVisible="{Binding IsSecret}" Text="{Binding Text}" PasswordChar="●"
+                                                 IsEnabled="{Binding IsEnabled}"
+                                                 AutomationProperties.Name="{Binding Label}" />
+
+                                        <TextBox IsVisible="{Binding IsNumber}" Text="{Binding Text}" Width="120" HorizontalAlignment="Right"
+                                                 beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True"
+                                                 beh:TextSpinner.Minimum="{Binding SpinnerMinimum}"
+                                                 beh:TextSpinner.Maximum="{Binding SpinnerMaximum}"
+                                                 AutomationProperties.Name="{Binding Label}" />
+
+                                        <controls:SuggestBox IsVisible="{Binding IsChoice}" IsStrict="True" Text="{Binding Text}"
+                                                             Suggestions="{Binding ChoiceLabels}"
+                                                             AutomationProperties.Name="{Binding Label}" />
+
+                                        <TextBlock IsVisible="{Binding HasError}" Text="{Binding Error}" FontSize="11.5"
+                                                   TextWrapping="Wrap" Foreground="{DynamicResource PbDangerBrush}"
+                                                   AutomationProperties.LiveSetting="Polite" />
+                                    </StackPanel>
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
+    </Border>
+</UserControl>

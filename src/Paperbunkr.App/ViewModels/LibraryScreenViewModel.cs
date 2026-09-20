@@ -3094,30 +3094,11 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     private void AddIssuesToReadingList(PaperbunkrDbContext context, ReadingList list, IReadOnlyList<int> issueIds)
     {
-        var existingIssueIds = context.ReadingListItems
-            .Where(i => i.ReadingListId == list.Id)
-            .Select(i => i.IssueId)
-            .ToHashSet();
-
-        int nextOrder = context.ReadingListItems.Count(i => i.ReadingListId == list.Id);
-        int added = 0;
-        int skipped = 0;
-        foreach (int issueId in issueIds)
-        {
-            if (existingIssueIds.Contains(issueId))
-            {
-                skipped++;
-                continue;
-            }
-
-            context.ReadingListItems.Add(new ReadingListItem
-            {
-                ReadingListId = list.Id,
-                IssueId = issueId,
-                SortOrder = nextOrder++,
-            });
-            added++;
-        }
+        // Through ReadingListManager (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §5.4)
+        // so the ReadingListChanged plugin hook hears about it; the caller still owns SaveChanges.
+        var result = ReadingListManager.AddIssues(context, list.Id, issueIds);
+        int added = result.Added;
+        int skipped = result.Skipped;
 
         string message = (added, skipped) switch
         {

@@ -460,6 +460,7 @@ public enum ActivityHistoryKindOption
     Import = ActivityJobKind.Import,
     Update = ActivityJobKind.Update,
     Migration = ActivityJobKind.Migration,
+    Plugin = ActivityJobKind.Plugin,
 }
 
 public enum ActivityHistoryAgeOption

@@ -39,3 +39,20 @@ public sealed record DaemonAlertEvent(string Key, DaemonAlertSeverity Severity, 
 
 /// <summary>The condition behind an earlier alert with this key has cleared.</summary>
 public sealed record DaemonAlertClearedEvent(string Key) : DaemonEvent;
+
+/// <summary>A release was handed to the download client (manually approved or auto-grabbed).</summary>
+public sealed record IssueSnatchedEvent(int WantedIssueId, string Label, string ReleaseTitle, bool Automatic) : DaemonEvent;
+
+/// <summary>Live progress of one download; <paramref name="Progress"/> is 0..1.</summary>
+public sealed record DownloadProgressEvent(int WantedIssueId, string Label, double Progress, long BytesPerSecond, TimeSpan? Eta) : DaemonEvent;
+
+/// <summary>
+/// The set of running downloads changed or advanced. <paramref name="Active"/> is how many are running now; the host shows one aggregate job.
+/// </summary>
+public sealed record DownloadsChangedEvent(int Active, double AverageProgress, string? Detail) : DaemonEvent;
+
+/// <summary>A downloaded release was imported into the library.</summary>
+public sealed record IssueImportedEvent(int WantedIssueId, string Label, string Path) : DaemonEvent;
+
+/// <summary>An attempt failed (download or import); the issue is back to needing the user's decision.</summary>
+public sealed record IssueFailedEvent(int WantedIssueId, string Label, string Reason) : DaemonEvent;

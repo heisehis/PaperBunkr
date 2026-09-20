@@ -46,10 +46,11 @@ public class AcquisitionSettings
     public int AutoGrabMinScore { get; set; } = 20;
 
     /// <summary>
-    /// Import file layout, relative to <see cref="DestinationFolderPath"/>: CE-style <c>{token}</c> with <c>[optional groups]</c>. Beyond CE's own
-    /// tokens it knows <c>{publisher}</c> and zero-padded numbers (<c>{number:000}</c>).
+    /// Import file layout, relative to <see cref="DestinationFolderPath"/>, in ComicRack CE's template syntax (<c>{token}</c>, <c>{number:000}</c>,
+    /// <c>[optional groups]</c>, <c>\</c> escapes - ported from CE's <c>ExtendedStringFormater</c>). Beyond CE's tokens it adds <c>{publisher}</c> and
+    /// <c>{volumeyear}</c> (the series' start year, so a series stays in one folder; <c>{year}</c> is the issue's own year, as in CE).
     /// </summary>
-    public string RenameTemplate { get; set; } = "{publisher}/{series} ({year})/{series} #{number:000}";
+    public string RenameTemplate { get; set; } = "{publisher}/{series} ({volumeyear})/{series} #{number:000}";
 
     /// <summary>Write a <c>ComicInfo.xml</c> into imported archives (from ComicVine's data for the issue).</summary>
     public bool WriteComicInfo { get; set; } = true;

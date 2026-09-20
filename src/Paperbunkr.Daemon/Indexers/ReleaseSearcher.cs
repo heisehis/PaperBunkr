@@ -5,7 +5,7 @@ namespace Paperbunkr.Daemon.Indexers;
 /// design.md §5): the strict pass first, and only when it yields <b>zero accepted</b> releases does it fall back
 /// to the sanitized alias pass. The first pass that produces an accepted hit stops the search.
 /// </summary>
-public sealed class ReleaseSearcher(IIndexerClient client, ScoringOptions options)
+public sealed class ReleaseSearcher(IIndexerClient client, ScoringOptions options, Services.BlocklistSnapshot? blocklist = null)
 {
     public async Task<IReadOnlyList<ScoredRelease>> SearchAsync(IndexerQuery query, CancellationToken cancellationToken)
     {
@@ -19,6 +19,12 @@ public sealed class ReleaseSearcher(IIndexerClient client, ScoringOptions option
 
                 foreach (var release in raw)
                 {
+                    // A release that failed or was rejected before is never offered again.
+                    if (blocklist?.IsBlocked(release) == true)
+                    {
+                        continue;
+                    }
+
                     var scored = ReleaseEvaluator.Evaluate(release, query, options);
                     if (scored is null)
                     {

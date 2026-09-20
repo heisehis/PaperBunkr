@@ -10,9 +10,12 @@ namespace Paperbunkr.Daemon.Services;
 /// backs off exponentially (interval x 2, x 4, ... capped at 8x), so a down Prowlarr isn't hammered.
 /// <para>A plain <see cref="BackgroundService"/>: the app has no generic host, so it calls <c>StartAsync</c>/<c>StopAsync</c> itself, as it does for the scheduler.</para>
 /// </summary>
-public sealed class AcquisitionService(AcquisitionCycle cycle, Func<PaperbunkrDbContext> createContext, Func<DateTime>? now = null) : BackgroundService
+public sealed class AcquisitionService(AcquisitionCycle cycle, Func<PaperbunkrDbContext> createContext, Func<DateTime>? now = null, DownloadTracker? downloads = null) : BackgroundService
 {
     private static readonly TimeSpan Tick = TimeSpan.FromMinutes(1);
+
+    /// <summary>How often running downloads are checked. Cheap (one local API call), and only while something is downloading.</summary>
+    private static readonly TimeSpan DownloadTick = TimeSpan.FromSeconds(10);
     private readonly Func<DateTime> _now = now ?? (() => DateTime.UtcNow);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private int _runRequested;
@@ -42,6 +45,12 @@ public sealed class AcquisitionService(AcquisitionCycle cycle, Func<PaperbunkrDb
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Two independent loops: the slow search cycle, and the fast download follower (which does nothing when nothing is downloading).
+        await Task.WhenAll(SearchLoopAsync(stoppingToken), DownloadLoopAsync(stoppingToken)).ConfigureAwait(false);
+    }
+
+    private async Task SearchLoopAsync(CancellationToken stoppingToken)
+    {
         using var timer = new PeriodicTimer(Tick);
         try
         {
@@ -54,6 +63,43 @@ public sealed class AcquisitionService(AcquisitionCycle cycle, Func<PaperbunkrDb
         catch (OperationCanceledException)
         {
             // shutting down
+        }
+    }
+
+    private async Task DownloadLoopAsync(CancellationToken stoppingToken)
+    {
+        if (downloads is null)
+        {
+            return;
+        }
+
+        using var timer = new PeriodicTimer(DownloadTick);
+        try
+        {
+            do
+            {
+                await DownloadTickAsync(stoppingToken).ConfigureAwait(false);
+            }
+            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
+        }
+        catch (OperationCanceledException)
+        {
+            // shutting down
+        }
+    }
+
+    /// <summary>One download-follower tick; public so tests can drive it. Runs only when a grab is in flight.</summary>
+    public async Task DownloadTickAsync(CancellationToken cancellationToken)
+    {
+        if (downloads is null)
+        {
+            return;
+        }
+
+        // The tracker tells the host when the last download settles, so it must run one more time after the final one finishes.
+        if (downloads.HasActiveDownloads() || downloads.HasPendingReport)
+        {
+            await downloads.TickAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 

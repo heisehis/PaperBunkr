@@ -21,7 +21,8 @@ public sealed class AcquisitionCycle(
     Func<string, string, IIndexerClient> createIndexer,
     Func<string, IComicVineClient> createComicVine,
     IEventPublisher events,
-    Func<DateTime>? now = null)
+    Func<DateTime>? now = null,
+    GrabService? grabService = null)
 {
     public const string NotConfiguredAlert = "acquisition-not-configured";
     public const string IndexerAlert = "acquisition-indexer";
@@ -98,7 +99,7 @@ public sealed class AcquisitionCycle(
             PreferredGroups = ScoringOptions.SplitList(settings.PreferredReleaseGroups),
             IgnoredWords = ScoringOptions.SplitList(settings.IgnoredWords),
             PreferCbz = settings.PreferCbz,
-        });
+        }, BlocklistService.Load(context));
 
         // A scheduled cycle skips issues searched within the poll interval; "Search now" (manual) searches everything that is due.
         var recheckBefore = manual ? _now().AddMinutes(1) : _now() - TimeSpan.FromMinutes(Math.Max(15, settings.PollIntervalMinutes));
@@ -119,13 +120,19 @@ public sealed class AcquisitionCycle(
             var query = new IndexerQuery(wanted.WatchedSeries?.Name ?? string.Empty, wanted.IssueNumber, wanted.StoreDate?.Year);
             var results = await searcher.SearchAsync(query, cancellationToken).ConfigureAwait(false);
 
-            StoreCandidates(context, wanted, results);
+            var stored = StoreCandidates(context, wanted, results);
             searched++;
-            found += Math.Min(results.Count, MaxCandidatesPerIssue);
 
-            if (results.Count > 0)
+            // Auto-grab (off by default): the best non-pack candidate, if it clears the user's score bar. Otherwise the user decides.
+            if (settings.AutoGrab && grabService is not null && await TryAutoGrabAsync(stored, settings.AutoGrabMinScore, cancellationToken).ConfigureAwait(false))
             {
-                events.Publish(new CandidatesFoundEvent(wanted.Id, $"{wanted.WatchedSeries?.Name} #{wanted.IssueNumber}", Math.Min(results.Count, MaxCandidatesPerIssue)));
+                continue;
+            }
+
+            found += stored.Count;
+            if (stored.Count > 0)
+            {
+                events.Publish(new CandidatesFoundEvent(wanted.Id, $"{wanted.WatchedSeries?.Name} #{wanted.IssueNumber}", stored.Count));
             }
         }
 
@@ -182,15 +189,28 @@ public sealed class AcquisitionCycle(
         events.Publish(new DaemonAlertClearedEvent(ComicVineAlert));
     }
 
-    private void StoreCandidates(PaperbunkrDbContext context, WantedIssue wanted, IReadOnlyList<ScoredRelease> results)
+    private async Task<bool> TryAutoGrabAsync(IReadOnlyList<ReleaseCandidate> candidates, int minScore, CancellationToken cancellationToken)
+    {
+        var best = candidates.Where(c => !c.IsPack && c.Score >= minScore).OrderByDescending(c => c.Score).FirstOrDefault();
+        if (best is null)
+        {
+            return false;
+        }
+
+        var result = await grabService!.GrabAsync(best.Id, automatic: true, cancellationToken).ConfigureAwait(false);
+        return result.Success;   // a failed grab (client down...) just leaves the candidates for the user
+    }
+
+    private List<ReleaseCandidate> StoreCandidates(PaperbunkrDbContext context, WantedIssue wanted, IReadOnlyList<ScoredRelease> results)
     {
         // Replace, not append: the latest search is the truth, and stale candidates would be offered for grabbing.
         var old = context.ReleaseCandidates.Where(c => c.WantedIssueId == wanted.Id).ToList();
         context.ReleaseCandidates.RemoveRange(old);
 
+        var stored = new List<ReleaseCandidate>();
         foreach (var scored in results.Take(MaxCandidatesPerIssue))
         {
-            context.ReleaseCandidates.Add(new ReleaseCandidate
+            var candidate = new ReleaseCandidate
             {
                 WantedIssueId = wanted.Id,
                 Title = scored.Release.Title,
@@ -202,10 +222,13 @@ public sealed class AcquisitionCycle(
                 Score = scored.Score,
                 IsPack = scored.IsPack,
                 FoundAt = _now(),
-            });
+            };
+            context.ReleaseCandidates.Add(candidate);
+            stored.Add(candidate);
         }
 
         wanted.LastSearchedAt = _now();
         context.SaveChanges();
+        return stored;
     }
 }

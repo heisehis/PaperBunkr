@@ -79,7 +79,7 @@ namespace Paperbunkr.Data.Migrations
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
-                        .HasDefaultValue("{publisher}/{series} ({year})/{series} #{number:000}");
+                        .HasDefaultValue("{publisher}/{series} ({volumeyear})/{series} #{number:000}");
 
                     b.Property<bool>("WriteComicInfo")
                         .ValueGeneratedOnAdd()

@@ -78,7 +78,7 @@ namespace Paperbunkr.Data.Migrations
                 table: "AcquisitionSettings",
                 type: "TEXT",
                 nullable: false,
-                defaultValue: "{publisher}/{series} ({year})/{series} #{number:000}");
+                defaultValue: "{publisher}/{series} ({volumeyear})/{series} #{number:000}");
 
             migrationBuilder.AddColumn<bool>(
                 name: "WriteComicInfo",

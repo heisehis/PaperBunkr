@@ -208,6 +208,13 @@
                     </pref:SettingsRow.SettingsContent>
                 </pref:SettingsRow>
 
+                <pref:SettingsRow Icon="Tag" Title="Add ComicVine details to downloads"
+                                   Description="After an issue is imported, fetch its credits, summary, characters and dates from ComicVine by the issue you asked for, and write them into the file. If it can't be done it is retried, and anything left over appears under Wanted → Needs attention. Needs your ComicVine key (Preferences → Connections).">
+                    <pref:SettingsRow.SettingsContent>
+                        <ToggleSwitch IsChecked="{Binding ScrapeOnImport}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.Name="Add ComicVine details to downloaded issues" />
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+
                 <pref:SettingsRow Icon="Delete" Title="Remove the download after importing"
                                    Description="Off keeps the original in qBittorrent so it keeps seeding. On removes the torrent and its files once everything was imported (this ends seeding).">
                     <pref:SettingsRow.SettingsContent>

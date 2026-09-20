@@ -210,6 +210,20 @@ public class AcquisitionSettingsImportTests : IDisposable
     }
 
     [Fact]
+    public void ScrapeOnImport_IsOnByDefault_AndPersists()
+    {
+        var vm = Create();
+        Assert.True(vm.ScrapeOnImport);
+
+        vm.ScrapeOnImport = false;
+        vm.SaveCommand.Execute(null);
+
+        using var context = NewContext();
+        Assert.False(context.GetOrCreateAcquisitionSettings().ScrapeOnImport);
+        Assert.False(Create().ScrapeOnImport);
+    }
+
+    [Fact]
     public void Defaults_KeepAutomaticDownloadsOff_AndSeedingOn()
     {
         var vm = Create();

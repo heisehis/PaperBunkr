@@ -81,6 +81,9 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
     [ObservableProperty] private bool _renameTemplateUpgradeFailed;
 
     [ObservableProperty] private bool _writeComicInfo = true;
+
+    /// <summary>After an import, add ComicVine's details to the issue by the id the want already carries (no search, no review).</summary>
+    [ObservableProperty] private bool _scrapeOnImport = true;
     [ObservableProperty] private bool _moveOriginalOnImport;
 
     // Auto-grab (slice 4)
@@ -169,6 +172,7 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         RenameTemplateOriginal = settings.RenameTemplateOriginal;
         RenameTemplateUpgradeFailed = settings.RenameTemplateUpgradeFailed;
         WriteComicInfo = settings.WriteComicInfo;
+        ScrapeOnImport = settings.ScrapeOnImport;
         MoveOriginalOnImport = settings.MoveOriginalOnImport;
         AutoGrab = settings.AutoGrab;
         AutoGrabMinScore = settings.AutoGrabMinScore;
@@ -232,6 +236,7 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         settings.RenameTemplateOriginal = null;
         settings.RenameTemplateUpgradeFailed = false;
         settings.WriteComicInfo = WriteComicInfo;
+        settings.ScrapeOnImport = ScrapeOnImport;
         settings.MoveOriginalOnImport = MoveOriginalOnImport;
         settings.AutoGrab = AutoGrab;
         settings.AutoGrabMinScore = Math.Clamp(AutoGrabMinScore, 0, 500);

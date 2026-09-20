@@ -376,6 +376,83 @@ public class WantedScreenViewModelTests : IDisposable
         Assert.True(_settingsOpened);
     }
 
+    private int SeedFailedScrape(string number, string error, bool terminal)
+    {
+        using var context = NewContext();
+        var watched = context.WatchedSeries.FirstOrDefault() ?? throw new InvalidOperationException("Seed() first.");
+        var wanted = new WantedIssue
+        {
+            WatchedSeriesId = watched.Id, ComicVineIssueId = 9000 + int.Parse(number), IssueNumber = number, CreatedAt = Today, Status = WantedIssueStatus.Imported,
+            ScrapeStatus = ScrapeStatus.Failed, ScrapeError = error, ScrapeFailureIsTerminal = terminal, ScrapeAttempts = 2, ScrapeLastAttemptAt = Today,
+        };
+        context.WantedIssues.Add(wanted);
+        context.SaveChanges();
+        return wanted.Id;
+    }
+
+    [Fact]
+    public void FailedScrapes_AppearInTheNeedsAttentionList_WithWhetherTheyNeedTheUser()
+    {
+        Seed();
+        SeedFailedScrape("50", "ComicVine has no issue with this id.", terminal: true);
+        SeedFailedScrape("51", "ComicVine request failed", terminal: false);
+        var vm = Create();
+
+        vm.Refresh();
+
+        Assert.True(vm.HasScrapeReview);
+        Assert.Equal(2, vm.ScrapeReviewRows.Count);
+        Assert.Contains("2 issues", vm.ScrapeReviewHeading);
+        Assert.True(vm.ScrapeReviewRows.Single(r => r.Title.EndsWith("#50")).NeedsYourAction);
+        Assert.Equal("Paperbunkr will retry on its own", vm.ScrapeReviewRows.Single(r => r.Title.EndsWith("#51")).Hint);
+    }
+
+    [Fact]
+    public void RetryAndDismiss_WorkOneAtATime_AndInBulk_AndLeaveTheIssueItself()
+    {
+        Seed();
+        var one = SeedFailedScrape("50", "x", terminal: true);
+        SeedFailedScrape("51", "y", terminal: false);
+        SeedFailedScrape("52", "z", terminal: false);
+        var vm = Create();
+        vm.Refresh();
+
+        vm.RetryScrapeCommand.Execute(vm.ScrapeReviewRows.Single(r => r.Id == one));
+        using (var context = NewContext())
+        {
+            var retried = context.WantedIssues.Single(w => w.Id == one);
+            Assert.Equal(ScrapeStatus.Pending, retried.ScrapeStatus);          // back in the sweep's queue right now
+            Assert.False(retried.ScrapeFailureIsTerminal);
+            Assert.Equal(WantedIssueStatus.Imported, retried.Status);          // the imported issue is untouched
+        }
+
+        Assert.Equal(2, vm.ScrapeReviewRows.Count);
+
+        vm.DismissScrapeCommand.Execute(vm.ScrapeReviewRows[0]);
+        Assert.Single(vm.ScrapeReviewRows);
+
+        vm.RetryAllScrapesCommand.Execute(null);
+        Assert.False(vm.HasScrapeReview);
+        using var check = NewContext();
+        Assert.Equal(0, check.WantedIssues.Count(w => w.ScrapeStatus == ScrapeStatus.Failed));
+    }
+
+    [Fact]
+    public void DismissAll_ClearsTheListWithoutQueueingAnything()
+    {
+        Seed();
+        SeedFailedScrape("50", "x", terminal: true);
+        SeedFailedScrape("51", "y", terminal: false);
+        var vm = Create();
+        vm.Refresh();
+
+        vm.DismissAllScrapesCommand.Execute(null);
+
+        Assert.False(vm.HasScrapeReview);
+        using var context = NewContext();
+        Assert.Equal(0, context.WantedIssues.Count(w => w.ScrapeStatus == ScrapeStatus.Pending));
+    }
+
     /// <summary>Proves the screen's compiled XAML was woven (see CLAUDE.md, "adding a new Avalonia View").</summary>
     [Fact]
     public void TheScreenView_Constructs_AndBindsToTheViewModel()

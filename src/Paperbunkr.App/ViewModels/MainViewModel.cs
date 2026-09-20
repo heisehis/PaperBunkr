@@ -148,7 +148,12 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 AcquisitionEvents,
                 grabService: Grab),
             Services.PaperbunkrDb.CreateContext,
-            downloads: downloadTracker);
+            downloads: downloadTracker,
+            scrapes: new Paperbunkr.Daemon.Services.ScrapeSweeper(
+                Services.PaperbunkrDb.CreateContext,
+                new Paperbunkr.Data.ComicVine.Scraping.ScrapeByIdService(Services.PaperbunkrDb.CreateContext, CreateComicVineDetailsSource),
+                AcquisitionEvents,
+                onScraped: issueId => MetadataWriteBack.Enqueue(issueId)));
         AcquisitionBridge = new Services.AcquisitionActivityBridge(
             Activity, AcquisitionEvents.Reader,
             resultLink: () => new ActivityLink(ActivityLinkKind.WantedScreen),
@@ -537,6 +542,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// as a plain callback, threaded the same way <see cref="ShowToast"/> is.
     /// </summary>
     public MetadataWriteBackQueue MetadataWriteBack { get; }
+
+    /// <summary>
+    /// The ComicVine issue-details client for scrape-on-import, at Low priority so background work can never starve interactive lookups (the shared rate limiter
+    /// reserves the rest of the hourly budget for High). <c>null</c> when no key is saved, which the scraper reports as a terminal, fixable-by-the-user failure.
+    /// </summary>
+    private static Paperbunkr.Data.ComicVine.IComicVineIssueDetailsSource? CreateComicVineDetailsSource()
+    {
+        using var context = Services.PaperbunkrDb.CreateContext();
+        var key = Paperbunkr.Data.Credentials.CredentialStore.Get(context, "ComicVine", Paperbunkr.Data.Entities.CredentialKind.ApiKey);
+        return string.IsNullOrWhiteSpace(key)
+            ? null
+            : new Paperbunkr.Data.ComicVine.ComicVineClient(key, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low);
+    }
 
     private void EnqueueMetadataWriteBack(int issueId, bool manual = false) => MetadataWriteBack.Enqueue(issueId, manual);
 

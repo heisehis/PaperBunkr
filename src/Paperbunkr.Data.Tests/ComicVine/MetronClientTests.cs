@@ -136,6 +136,48 @@ public class MetronClientTests
     }
 
     [Fact]
+    public async Task GetReleases_QueriesTheStoreDateWindow_FollowsPages_AndSkipsRowsWithoutADate()
+    {
+        var (client, handler) = Make(request =>
+        {
+            bool second = request.RequestUri!.OriginalString.Contains("page=2");
+            return (HttpStatusCode.OK, second
+                ? Page("""[{"id":903,"series":{"id":20,"name":"Batman","volume":3,"year_began":2016},"number":"1","issue":"Batman #1","cover_date":"2026-11-01","store_date":"2026-10-07","image":null,"cover_hash":null,"modified":"x"}]""")
+                : Page("""
+                    [{"id":901,"series":{"id":10,"name":"Spawn","volume":1,"year_began":1992},"number":"350","issue":"Spawn #350","cover_date":"2026-10-01","store_date":"2026-09-30","image":"https://x/s.jpg","cover_hash":"a","modified":"x"},
+                     {"id":902,"series":{"id":10,"name":"Spawn","volume":1,"year_began":1992},"number":"351","issue":"Spawn #351","cover_date":"2026-10-01","store_date":null,"image":null,"cover_hash":null,"modified":"x"}]
+                    """, "https://metron.cloud/api/issue/?page=2"));
+        });
+
+        var releases = await ((IPullListSource)client).GetReleasesAsync(new DateTime(2026, 9, 23), new DateTime(2026, 10, 21), CancellationToken.None);
+
+        Assert.Equal(new[] { 901, 903 }, releases.Select(r => r.IssueId));          // 902 has no store date: not a dated release
+        Assert.Equal(new PullListEntry(901, 10, "Spawn", "350", new DateTime(2026, 9, 30), new DateTime(2026, 10, 1), "https://x/s.jpg"), releases[0]);
+        var first = handler.Requests[0].RequestUri!.OriginalString;
+        Assert.Contains("/issue/?", first);
+        Assert.Contains("store_date_range_after=2026-09-23", first);
+        Assert.Contains("store_date_range_before=2026-10-21", first);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task GetSeriesInfo_ReadsPublisherYearAndTheComicVineId()
+    {
+        var (client, handler) = Make(_ => (HttpStatusCode.OK, """{"id":10,"name":"Spawn","sort_name":"Spawn","volume":1,"year_began":1992,"publisher":{"id":3,"name":"Image"},"cv_id":4321,"gcd_id":null}"""));
+        var info = await ((IPullListSource)client).GetSeriesInfoAsync(10, CancellationToken.None);
+        Assert.Equal(new PullListSeriesInfo(10, "Spawn", "Image", 1992, 4321), info);
+        Assert.Contains("/series/10/", handler.Requests[0].RequestUri!.OriginalString);
+
+        var (noCv, _) = Make(_ => (HttpStatusCode.OK, """{"id":11,"name":"Batman (2016)","year_began":2016,"publisher":{"id":1,"name":"DC Comics"},"cv_id":null}"""));
+        var plain = await ((IPullListSource)noCv).GetSeriesInfoAsync(11, CancellationToken.None);
+        Assert.Null(plain!.ComicVineId);
+        Assert.Equal("Batman", plain.Name);
+
+        var (missing, _) = Make(_ => (HttpStatusCode.NotFound, "{}"));
+        Assert.Null(await ((IPullListSource)missing).GetSeriesInfoAsync(1, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Errors_ReuseComicVinesNumbering_SoCallersTreatBothProvidersAlike()
     {
         static async Task<ComicVineException> Failure(HttpStatusCode status)

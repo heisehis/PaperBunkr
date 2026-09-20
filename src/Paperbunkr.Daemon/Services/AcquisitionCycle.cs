@@ -23,7 +23,8 @@ public sealed class AcquisitionCycle(
     IEventPublisher events,
     Func<DateTime>? now = null,
     GrabService? grabService = null,
-    Func<string, string, IComicVineClient>? createMetron = null)
+    Func<string, string, IComicVineClient>? createMetron = null,
+    Func<string, string, IPullListSource>? createPullListSource = null)
 {
     public const string NotConfiguredAlert = "acquisition-not-configured";
     public const string IndexerAlert = "acquisition-indexer";
@@ -101,7 +102,9 @@ public sealed class AcquisitionCycle(
         }
 
         await RefreshFollowedVolumesAsync(context, cancellationToken).ConfigureAwait(false);
+        await RefreshPullListAsync(context, manual, cancellationToken).ConfigureAwait(false);
         WantedService.PromoteFollowedUpcoming(context, today);
+        PullListService.PromoteFollowedReleases(context, today);
 
         var searcher = new ReleaseSearcher(indexer, new ScoringOptions
         {
@@ -219,6 +222,40 @@ public sealed class AcquisitionCycle(
         foreach (var provider in touched.Where(p => !stopped.Contains(p)))
         {
             events.Publish(new DaemonAlertClearedEvent(provider == ComicProvider.Metron ? MetronAlert : ComicVineAlert));
+        }
+    }
+
+    /// <summary>
+    /// The weekly pull list: refetched about twice a day (an hour apart at the soonest for "Search now"), and only with a Metron login saved. A failure never stops the cycle - the
+    /// wants already made and the cached list stay as they are.
+    /// </summary>
+    private async Task RefreshPullListAsync(PaperbunkrDbContext context, bool manual, CancellationToken cancellationToken)
+    {
+        if (!PullListService.IsDue(context, _now(), manual))
+        {
+            return;
+        }
+
+        var user = CredentialStore.Get(context, "Metron", CredentialKind.Username);
+        var password = CredentialStore.Get(context, "Metron", CredentialKind.Password);
+        if (string.IsNullOrWhiteSpace(user) || string.IsNullOrEmpty(password))
+        {
+            return;
+        }
+
+        var source = (createPullListSource ?? ((u, p) => new MetronClient(u, p, ComicVineRequestPriority.Low)))(user, password);
+        try
+        {
+            await PullListService.RefreshAsync(context, source, _now().Date, cancellationToken).ConfigureAwait(false);
+            events.Publish(new DaemonAlertClearedEvent(MetronAlert));
+        }
+        catch (ComicVineException ex) when (ex.ApiStatusCode == 100)
+        {
+            events.Publish(new DaemonAlertEvent(MetronAlert, DaemonAlertSeverity.Warning, "Metron rejected your login", "Update it in Preferences → Connections."));
+        }
+        catch (ComicVineException ex)
+        {
+            events.Publish(new DaemonAlertEvent(MetronAlert, DaemonAlertSeverity.Info, "The weekly pull list is paused", ex.Message));
         }
     }
 

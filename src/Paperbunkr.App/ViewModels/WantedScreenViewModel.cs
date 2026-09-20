@@ -24,6 +24,7 @@ public enum WantedTab
     Upcoming,
     Candidates,
     Series,
+    Releases,
 }
 
 /// <summary>One wanted or upcoming issue.</summary>
@@ -187,13 +188,14 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
     public ObservableCollection<VolumeResultViewModel> SearchResults { get; } = new();
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsWantedTab), nameof(IsUpcomingTab), nameof(IsCandidatesTab), nameof(IsSeriesTab))]
+    [NotifyPropertyChangedFor(nameof(IsWantedTab), nameof(IsUpcomingTab), nameof(IsCandidatesTab), nameof(IsSeriesTab), nameof(IsReleasesTab))]
     private WantedTab _activeTab = WantedTab.Wanted;
 
     public bool IsWantedTab => ActiveTab == WantedTab.Wanted;
     public bool IsUpcomingTab => ActiveTab == WantedTab.Upcoming;
     public bool IsCandidatesTab => ActiveTab == WantedTab.Candidates;
     public bool IsSeriesTab => ActiveTab == WantedTab.Series;
+    public bool IsReleasesTab => ActiveTab == WantedTab.Releases;
 
     public bool HasNoWanted => WantedRows.Count == 0 && DownloadRows.Count == 0;
     public bool HasNoDownloads => DownloadRows.Count == 0;
@@ -325,6 +327,8 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
         }
 
         Fill(SeriesRows, rows);
+        LoadReleases(context, today);
+        OnPropertyChanged(nameof(HasNoReleases));
 
         OnPropertyChanged(nameof(HasNoWanted));
         OnPropertyChanged(nameof(HasNoDownloads));

@@ -1,6 +1,6 @@
 # Cluster Library Manager into core — Design Spec
 
-*Date: 2026-09-20. Status: draft, revised after external review (section 13); grilling round 1 answered "all recommended"; no code yet.
+*Date: 2026-09-20. Status: implemented on `feat/clm-into-core` (see the plan for per-phase status and the deliberate deviations); revised after external review (section 13). Unmerged and untested against real services.
 Scope: move the Cluster Library Manager (CLM) — ComicVine scraping + library organizing, today the native-tier
 plugin `github.com/heisehis/ClusterLibraryManager` v1.7.0 — into the Paperbunkr core app, unify it with the
 comic-acquisition daemon (`2026-09-19-comic-acquisition-daemon-design.md`, merged as `8295bed`), and make

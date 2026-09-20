@@ -26,11 +26,10 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
-> **Manual session note (2026-09-20, Cluster Library Manager into core — branch `feat/clm-into-core`, NOT merged):**
-> Design: `docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md`; plan + per-phase status: `...-plan.md`. Decision: CLM stops being a plugin and becomes core
-> (owner-confirmed 2026-09-20). Done: Phase 1 (shared template engine, translator, one-time template upgrade, importer/settings moved onto it) and Phase 2 minus the Connections move
-> (durable `WantedIssue.ScrapeStatus`, by-id ComicVine scrape after import, retry sweep, Needs-attention list). **Still to do:** Prowlarr/qBittorrent credentials into Preferences → Connections; Phase 3
-> (scraper, match memory, review dialogs, right-click scrape), Phase 4 (organizer, profiles, undo), Phase 5 (scheduled tasks, plugin retirement notice). Not verified against a real ComicVine key or on screen.
+> **Manual session note (2026-09-20, Cluster Library Manager into core — branch `feat/clm-into-core`, NOT merged):** all five phases implemented (shared template engine + one-time
+> template upgrade, durable scrape-on-import with retry and a Needs-attention list, Prowlarr/qBittorrent moved to Connections, the ComicVine scraper and review dialogs in core, the organizer with
+> profiles and undo, two off-by-default scheduled tasks, and the plugin refused at load with a "now built in" message). Design + plan: `docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-{design,plan}.md`.
+> **Not verified** against a real ComicVine key, Prowlarr, qBittorrent, or on screen. Merge note: the main tree has an uncommitted spinner change touching the same Preferences views.
 
 > **Manual session note (2026-09-19/20, comic acquisition — Mylar-style want-list, slices 1-4 built on branch `feat/comic-acquisition-daemon`, NOT merged or released):**
 > Design: `docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md`; plan and per-step status:

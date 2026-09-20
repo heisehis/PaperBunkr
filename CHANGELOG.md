@@ -24,8 +24,15 @@ All notable changes to Paperbunkr are documented here. Format follows
   on its own; anything that needs you (no ComicVine key, an issue ComicVine no longer has) appears under **Wanted → Needs attention** with Retry and Dismiss, one at a time or all at once.
   It can be turned off in Preferences → Acquisition.
 
+- **ComicVine scraping and library organizing are built in** (they were the Cluster Library Manager plugin). Right-click comics or a series and choose **Scrape with ComicVine…** to match
+  them (series, then issue, with a progress header and one Activity Center job), or **Organize…** to move or copy files by an organizer profile's templates, with collision handling and
+  **Undo last organize**. A series' page gains a ComicVine panel. Settings and profiles are under **Preferences → Organize & Scrape**; two new tasks under Automation (scrape unscraped comics,
+  organize library) are off until you turn them on. An installed Cluster Library Manager plugin is no longer loaded.
+- Prowlarr and qBittorrent settings now live under **Preferences → Connections** with every other key and password; Acquisition keeps its behavior settings.
+
 ### Changed
 
+- Naming templates for downloaded issues now use the same `{<token>}` syntax as the organizer. Your saved template is converted once and the original is kept; if it can't be converted exactly, the default is used and Preferences shows what you had. A colon in a name becomes " - " (as in ComicRack) instead of a dash.
 - API keys and passwords saved in Preferences → Connections are now encrypted on disk (Windows DPAPI).
   Existing keys are upgraded the first time they are read. A database copied to another Windows account
   or machine will ask for them again.

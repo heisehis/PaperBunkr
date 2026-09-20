@@ -6,17 +6,21 @@ Branch `feat/clm-into-core` (worktree `.claude/worktrees/clm-into-core`). Plugin
 `dotnet ef database update` from the worktree (shared per-user DB). Baselines (untouched `master` 8295bed): `Data.Tests` 6 pre-existing migration failures,
 `App.Tests` classes run per class (full suite cannot complete), `Daemon.Tests` 188 pass.
 
-## Status (2026-09-20, end of the first implementation session)
+## Status (2026-09-20, end of the implementation session)
+
+**All five phases are implemented on `feat/clm-into-core`; not merged, not released, and not tried against a real ComicVine key, Prowlarr, qBittorrent or on screen.**
 
 | Phase | State |
 |-------|-------|
-| 1 Unify | **Done.** Shared template engine (`Paperbunkr.Data.Naming`), `NameTemplateTranslator`, one-time `TemplateUpgrade` (keeps the original), `AddTemplateGrammar` migration, importer + settings on the shared engine, rate-limit reserve pinned by tests. Deferred by design: the plugin's DTO/client merge (done incrementally with the phase that needs each part). |
-| 2 Scrape-on-import | **Done except one item.** `AddScrapeState` migration; `ComicVineClient.GetIssueDetailsAsync`; `IssueDetailsApplier`; `ScrapeByIdService`; `ScrapeSweeper` (durable `ScrapeStatus`, backoff, terminal vs retryable, batch of 5, `Low` priority) wired into the acquisition loop; write-back through `MetadataWriteBackQueue`; Activity Center alerts derived from the durable rows; Wanted → "Needs attention" list with single + bulk Retry/Dismiss; Preferences toggle. **Not done: moving the Prowlarr and qBittorrent credentials into Preferences → Connections** (needs a new `ConnectionDialogKind`, dialog panel with code-behind, a "Download automation" group, and trimming the Acquisition section to a status line + link). Deliberately left rather than rushed into the 3,000-line `PreferencesScreenViewModel`. |
-| 3 Scraper in core | Not started. |
-| 4 Organizer | Not started. |
-| 5 Automation + retirement | Not started. |
+| 1 Unify | **Done.** Shared template engine (`Paperbunkr.Data.Naming`), `NameTemplateTranslator`, one-time `TemplateUpgrade` (keeps the original), `AddTemplateGrammar`, importer and settings on the shared engine, rate-limit reserve pinned by tests. |
+| 2 Scrape-on-import + credentials | **Done.** `AddScrapeState`; `ComicVineClient.GetIssueDetailsAsync`; `IssueDetailsApplier`; `ScrapeByIdService`; `ScrapeSweeper` (durable `ScrapeStatus`, backoff, terminal vs retryable); Needs-attention list with bulk actions; Prowlarr and qBittorrent moved into Preferences → Connections ("Download automation"); Acquisition keeps behavior settings and a status line. |
+| 3 Scraper in core | **Done.** `AddScraperState`; scoring, imprints, orchestrator, match memory and settings ported into `Paperbunkr.Data.ComicVine.Scraping` on the shared rate-limited client (adapter `ScrapeComicVineAdapter`); series-match, issue-match and batch-header dialogs, `ScrapeCoordinator`, Library right-click, series Detail panel, Preferences → Organize & Scrape. The plugin's own ComicVine HTTP/retry code and its `RemoteCoverImageLoader` were dropped in favor of core's client and `RemoteCoverCache`. |
+| 4 Organizer | **Done.** `AddOrganizer`; `LibraryOrganizerService` with EF profiles and a soft-delete undo log (`IsReverted`); profile manager (ComboBoxes replaced by `SuggestBox`, hardcoded colors by Pb tokens), collision and profile-select dialogs, `OrganizeCoordinator`, Library right-click "Organize…", Undo. |
+| 5 Automation + retirement | **Done.** Two tasks in the real `ScheduledTaskCatalog` (off by default, never ask); `UseForScheduledRun` on profiles; `PluginEngine.RetiredPluginKeys` refuses to load `cluster-library-manager` and surfaces "Now built in"; wiki page, changelog, todo. |
 
-Verification on the branch: `Daemon.Tests` 190 pass; `Data.Tests` 1257 pass with 7 failures, the 6 pre-existing migration failures plus `ReworkBookPositionAnchorMigrationTests`, which passes when run alone (load-related flake in the same `Migrate()` family, not caused by this work); each touched `App.Tests` class passes on its own. Nothing has been run against a real ComicVine key or on screen.
+Deviations from the spec, all deliberate: the ComicVine DTO merge happened per consumer instead of up front (spec 3); the exclude-rule resolver is injected (`Func<string, IReadOnlyCollection<int>>`) because the rules engine lives in the App project; `ScrapeSettings` is one JSON row rather than columns; the scheduled organize picks its profile through a per-profile flag; the plugin's LiteDB data is not imported (decided, spec 4.3). Not built, on purpose (spec 13): `IMetadataProvider`, headless CLI, `VACUUM`, connection auto-ping, JSON dry-run dump.
+
+Verification on the branch: `Daemon.Tests` 190 pass; `Plugins.Tests` 56 pass; `Data.Tests` per-class runs of every new/ported class pass (scoring 48, organizer 22 + 3, scraper state 4, by-id 8, translator/upgrade); each touched `App.Tests` class passes on its own (the full suite cannot complete on `master` or this branch). `PreferencesScreenViewModelTests` still has its 8 pre-existing failures, and `Data.Tests` its 6 pre-existing migration failures. The branch also needs a merge with the uncommitted spinner change in the main tree (it touches `AcquisitionSection.axaml` and other Preferences views).
 
 ## Phase 1 — Unify (no visible change)
 

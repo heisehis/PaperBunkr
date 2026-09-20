@@ -277,7 +277,8 @@ public class PaperbunkrDbContext : DbContext
             builder.HasKey(w => w.Id);
             builder.Property(w => w.Name).IsRequired().HasMaxLength(256);
             builder.Property(w => w.Publisher).HasMaxLength(256);
-            builder.HasIndex(w => w.ComicVineVolumeId).IsUnique();
+            builder.HasIndex(w => new { w.Provider, w.ExternalVolumeId }).IsUnique();
+            builder.Property(w => w.Provider).HasConversion<int>().HasDefaultValue(ComicProvider.ComicVine);
             builder.HasOne(w => w.Series).WithMany().HasForeignKey(w => w.SeriesId).OnDelete(DeleteBehavior.SetNull);
             builder.HasMany(w => w.Catalog).WithOne(c => c.WatchedSeries).HasForeignKey(c => c.WatchedSeriesId).OnDelete(DeleteBehavior.Cascade);
             builder.HasMany(w => w.WantedIssues).WithOne(i => i.WatchedSeries).HasForeignKey(i => i.WatchedSeriesId).OnDelete(DeleteBehavior.Cascade);
@@ -287,7 +288,8 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(c => c.Id);
             builder.Property(c => c.IssueNumber).IsRequired().HasMaxLength(64);
-            builder.HasIndex(c => c.ComicVineIssueId).IsUnique();
+            builder.HasIndex(c => new { c.Provider, c.ExternalIssueId }).IsUnique();
+            builder.Property(c => c.Provider).HasConversion<int>().HasDefaultValue(ComicProvider.ComicVine);
             builder.HasIndex(c => c.WatchedSeriesId);
         });
 
@@ -297,7 +299,8 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(i => i.IssueNumber).IsRequired().HasMaxLength(64);
             builder.Property(i => i.Status).HasConversion<string>().HasMaxLength(32);
             builder.Property(i => i.TorrentHash).HasMaxLength(64);
-            builder.HasIndex(i => i.ComicVineIssueId).IsUnique();
+            builder.HasIndex(i => new { i.Provider, i.ExternalIssueId }).IsUnique();
+            builder.Property(i => i.Provider).HasConversion<int>().HasDefaultValue(ComicProvider.ComicVine);
             builder.HasIndex(i => i.Status);
             builder.HasOne(i => i.Issue).WithMany().HasForeignKey(i => i.IssueId).OnDelete(DeleteBehavior.SetNull);
             builder.HasMany(i => i.Candidates).WithOne(c => c.WantedIssue).HasForeignKey(c => c.WantedIssueId).OnDelete(DeleteBehavior.Cascade);
@@ -340,7 +343,8 @@ public class PaperbunkrDbContext : DbContext
         modelBuilder.Entity<Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry>(builder =>
         {
             builder.HasKey(e => e.Id);
-            builder.HasIndex(e => new { e.SearchKey, e.ChosenVolumeId }).IsUnique();
+            builder.HasIndex(e => new { e.Provider, e.SearchKey, e.ChosenVolumeId }).IsUnique();
+            builder.Property(e => e.Provider).HasConversion<int>().HasDefaultValue(ComicProvider.ComicVine);
         });
 
         modelBuilder.Entity<AcquisitionSettings>(builder =>

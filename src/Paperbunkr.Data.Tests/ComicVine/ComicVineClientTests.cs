@@ -189,4 +189,35 @@ public class ComicVineClientTests
         var (badKey, _) = Make(_ => (HttpStatusCode.OK, """{"status_code":100,"error":"Invalid API Key","results":[]}"""));
         await Assert.ThrowsAsync<ComicVineException>(() => ((IComicVineIssueDetailsSource)badKey).GetIssueDetailsAsync(1, CancellationToken.None));
     }
+
+    [Fact]
+    public async Task SearchVolumes_Paged_WalksPastTheFirst25_UntilTheTotalOrTheCap()
+    {
+        static string Page(int from, int count) =>
+            "[" + string.Join(",", Enumerable.Range(from, count).Select(i =>
+                "{\"id\":" + i + ",\"name\":\"Captain America " + i + "\",\"publisher\":{\"name\":\"Marvel\"},\"start_year\":\"2018\",\"count_of_issues\":" + (300 - i) + ",\"image\":null}")) + "]";
+
+        var (client, handler) = Make(request =>
+        {
+            var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query);
+            int offset = int.Parse(query["offset"]!);
+            int limit = int.Parse(query["limit"]!);
+            return (HttpStatusCode.OK, Ok(Page(offset, Math.Min(limit, 250 - offset)), total: 250, offset: offset));
+        });
+
+        var all = await ((IComicVineVolumeSearch)client).SearchVolumesAsync("Captain America", 300, CancellationToken.None);
+        Assert.Equal(250, all.Count);                                            // stops at ComicVine's own total
+        Assert.Equal(3, handler.Requests.Count);                                 // 100 + 100 + 50
+        Assert.All(handler.Requests, r => Assert.Contains("limit=", r.RequestUri!.OriginalString));
+
+        var (capped, cappedHandler) = Make(request =>
+        {
+            var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query);
+            int offset = int.Parse(query["offset"]!);
+            return (HttpStatusCode.OK, Ok(Page(offset, int.Parse(query["limit"]!)), total: 1000, offset: offset));
+        });
+        var some = await ((IComicVineVolumeSearch)capped).SearchVolumesAsync("x", 150, CancellationToken.None);
+        Assert.Equal(150, some.Count);                                           // the cap is honoured even when ComicVine has more
+        Assert.Equal(2, cappedHandler.Requests.Count);
+    }
 }

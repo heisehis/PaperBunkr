@@ -100,16 +100,16 @@ public class ScrapeByIdServiceTests : AcquisitionTestBase
     {
         var issue = new Issue { Series = new Series { Name = "Spawn" }, Number = "263", FilePath = "C:/x/Spawn 263.cbz" };
         Context.Issues.Add(issue);
-        var watched = new WatchedSeries { Name = "Spawn", ComicVineVolumeId = 1 };
+        var watched = new WatchedSeries { Name = "Spawn", ExternalVolumeId = 1 };
         Context.WatchedSeries.Add(watched);
         Context.SaveChanges();
-        var wanted = new WantedIssue { WatchedSeriesId = watched.Id, ComicVineIssueId = 4321, IssueNumber = "263", IssueId = withIssue ? issue.Id : null, CreatedAt = DateTime.UtcNow };
+        var wanted = new WantedIssue { WatchedSeriesId = watched.Id, ExternalIssueId = 4321, IssueNumber = "263", IssueId = withIssue ? issue.Id : null, CreatedAt = DateTime.UtcNow };
         Context.WantedIssues.Add(wanted);
         Context.SaveChanges();
         return (wanted.Id, issue.Id);
     }
 
-    private ScrapeByIdService Service(IComicVineIssueDetailsSource? source) => new(NewContext, () => source);
+    private ScrapeByIdService Service(IComicVineIssueDetailsSource? source) => new(NewContext, _ => source);
 
     [Fact]
     public async Task Scrapes_ByTheKnownComicVineId_WithoutSearching()

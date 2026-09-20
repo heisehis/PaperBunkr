@@ -53,19 +53,19 @@ public class ScrapeSweeperTests : IDisposable
         Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), new[] { new ComicVineCredit("Todd", "Writer") });
 
     private ScrapeSweeper Sweeper() =>
-        new(NewContext, new ScrapeByIdService(NewContext, () => new Source(this)), new Recorder(_events), _writeBacks.Add, () => _now);
+        new(NewContext, new ScrapeByIdService(NewContext, _ => new Source(this)), new Recorder(_events), _writeBacks.Add, () => _now);
 
     private int SeedImported(ScrapeStatus status, int attempts = 0, DateTime? lastAttempt = null, bool terminal = false, int comicVineIssueId = 1)
     {
         using var context = NewContext();
         var issue = new Issue { Series = new Series { Name = "Spawn" }, Number = "263", FilePath = $"C:/x/{Guid.NewGuid():N}.cbz" };
-        var watched = new WatchedSeries { Name = "Spawn", ComicVineVolumeId = 1 + comicVineIssueId };
+        var watched = new WatchedSeries { Name = "Spawn", ExternalVolumeId = 1 + comicVineIssueId };
         context.Issues.Add(issue);
         context.WatchedSeries.Add(watched);
         context.SaveChanges();
         var wanted = new WantedIssue
         {
-            WatchedSeriesId = watched.Id, ComicVineIssueId = comicVineIssueId, IssueNumber = "263", IssueId = issue.Id, CreatedAt = T0, ImportedAt = T0,
+            WatchedSeriesId = watched.Id, ExternalIssueId = comicVineIssueId, IssueNumber = "263", IssueId = issue.Id, CreatedAt = T0, ImportedAt = T0,
             Status = WantedIssueStatus.Imported, ScrapeStatus = status, ScrapeAttempts = attempts, ScrapeLastAttemptAt = lastAttempt, ScrapeFailureIsTerminal = terminal,
         };
         context.WantedIssues.Add(wanted);

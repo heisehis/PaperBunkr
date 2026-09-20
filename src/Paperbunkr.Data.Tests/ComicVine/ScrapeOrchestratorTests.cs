@@ -106,6 +106,74 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         Assert.Equal("DC Comics", context.Issues.Single(i => i.Id == 1).Publisher);
     }
 
+    private sealed class FakeMetron : IScrapeComicVine
+    {
+        public int Searches { get; private set; }
+
+        public Task<IReadOnlyList<ComicVineVolumeSearchResult>> SearchVolumesAsync(string query, int page = 1, CancellationToken cancellationToken = default)
+        {
+            Searches++;
+            return Task.FromResult<IReadOnlyList<ComicVineVolumeSearchResult>>(page > 1 ? Array.Empty<ComicVineVolumeSearchResult>()
+                : new[] { new ComicVineVolumeSearchResult(900, "Batman", "1990", "Metron House", 50, null) });
+        }
+
+        public Task<ComicVineVolumeDetails?> GetVolumeDetailsAsync(int volumeId, CancellationToken cancellationToken = default) => Task.FromResult<ComicVineVolumeDetails?>(null);
+
+        public Task<IReadOnlyList<ComicVineIssueSummary>> SearchIssuesAsync(int volumeId, int page = 1, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ComicVineIssueSummary>>(Array.Empty<ComicVineIssueSummary>());
+
+        public Task<ComicVineIssueDetails?> GetIssueDetailsAsync(int issueId, CancellationToken cancellationToken = default) => Task.FromResult<ComicVineIssueDetails?>(null);
+    }
+
+    [Fact]
+    public async Task SwitchingProviderInTheReviewDialog_MovesTheRestOfTheRunToThatSource_WithItsOwnMatchMemory()
+    {
+        var first = MakeIssue();
+        var second = new Issue { Id = 2, SeriesId = 1, Number = "4", FilePath = "book2.cbz" };
+        Seed(first);
+        Seed(second);
+        second.Series = first.Series;
+        var metron = new FakeMetron();
+        var orchestrator = new ScrapeOrchestrator(
+            Cv(new FakeHttpMessageHandler(VolumeSearchJson, EmptyIssueSearchJson)),
+            new ComicVineMatchMemory(CreateDbContext), new ScrapeSettings(), ComicProvider.ComicVine,
+            p => p == ComicProvider.Metron ? (metron, new ComicVineMatchMemory(CreateDbContext, ComicProvider.Metron)) : null);
+        var providersSeenByReview = new List<ComicProvider>();
+
+        int applied = await orchestrator.ScrapeAsync(
+            new[] { first, second }, isInteractive: true,
+            async (_, _, _, search, ct) =>
+            {
+                if (orchestrator.Provider == ComicProvider.ComicVine)
+                {
+                    Assert.True(orchestrator.TrySwitchProvider(ComicProvider.Metron));      // the dialog's source switch
+                }
+
+                providersSeenByReview.Add(orchestrator.Provider);
+                var results = await search("Batman", ct);
+                return results[0].Volume;
+            },
+            CreateDbContext);
+
+        Assert.Equal(2, applied);
+        Assert.Equal(new[] { ComicProvider.Metron, ComicProvider.Metron }, providersSeenByReview);   // the second book stays on Metron
+        Assert.Equal(3, metron.Searches);                                   // the dialog search for book 1, then the automatic and dialog searches for book 2
+        using PaperbunkrDbContext context = CreateDbContext();
+        Assert.Equal("Metron House", context.Issues.Single(i => i.Id == 2).Publisher);
+        Assert.Equal(0, context.ComicVineMatchMemories.Count(m => m.Provider == ComicProvider.ComicVine));
+        Assert.Equal(1, context.ComicVineMatchMemories.Count(m => m.Provider == ComicProvider.Metron));
+    }
+
+    [Fact]
+    public void SwitchingToASourceThatCannotBeBuilt_LeavesTheRunWhereItWas()
+    {
+        var orchestrator = new ScrapeOrchestrator(new FakeMetron(), new ComicVineMatchMemory(CreateDbContext), new ScrapeSettings(), ComicProvider.ComicVine, _ => null);
+        Assert.False(orchestrator.TrySwitchProvider(ComicProvider.Metron));
+        Assert.Equal(ComicProvider.ComicVine, orchestrator.Provider);
+        Assert.True(orchestrator.TrySwitchProvider(ComicProvider.ComicVine));     // already there: nothing to build
+        Assert.False(new ScrapeOrchestrator(new FakeMetron(), new ComicVineMatchMemory(CreateDbContext), new ScrapeSettings()).TrySwitchProvider(ComicProvider.Metron));
+    }
+
     [Fact]
     public async Task Interactive_review_applies_whatever_the_user_chose()
     {

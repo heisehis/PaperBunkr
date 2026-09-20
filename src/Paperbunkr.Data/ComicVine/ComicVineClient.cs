@@ -37,7 +37,7 @@ public interface IComicVineClient
 /// the UI; interactive lookups use <see cref="ComicVineRequestPriority.High"/>.
 /// </para>
 /// </summary>
-public sealed class ComicVineClient : IComicVineClient, IComicVineIssueDetailsSource
+public sealed class ComicVineClient : IComicProvider
 {
     private const string BaseUrl = "https://comicvine.gamespot.com/api";
     private const int PageSize = 100;
@@ -68,6 +68,37 @@ public sealed class ComicVineClient : IComicVineClient, IComicVineIssueDetailsSo
         var url = Url("volumes", $"filter=name:{Uri.EscapeDataString(query)}&field_list={VolumeFields}&limit=25&sort=count_of_issues:desc");
         var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
         return (root["results"] as JsonArray)?.Select(ParseVolume).OfType<ComicVineVolume>().ToList() ?? new List<ComicVineVolume>();
+    }
+
+    public async Task<IReadOnlyList<ComicVineVolume>> SearchVolumesAsync(string query, int maxResults, CancellationToken cancellationToken)
+    {
+        // The single-page overload above stops at 25 by issue count, which surfaces only the longest old runs that share a word with the name. This walks
+        // further (ComicVine's page limit is 100) so a short or recent series is in the set at all; callers rank the whole set themselves.
+        var volumes = new List<ComicVineVolume>();
+        int offset = 0;
+
+        for (int page = 0; page < 10 && volumes.Count < maxResults; page++)
+        {
+            int limit = Math.Min(PageSize, maxResults - volumes.Count);
+            var url = Url("volumes", $"filter=name:{Uri.EscapeDataString(query)}&field_list={VolumeFields}&limit={limit}&offset={offset}&sort=count_of_issues:desc");
+            var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+
+            var results = root["results"] as JsonArray;
+            if (results is null || results.Count == 0)
+            {
+                break;
+            }
+
+            volumes.AddRange(results.Select(ParseVolume).OfType<ComicVineVolume>());
+            offset += results.Count;
+            int total = root["number_of_total_results"]?.GetValue<int>() ?? 0;
+            if (offset >= total)
+            {
+                break;
+            }
+        }
+
+        return volumes;
     }
 
     public async Task<ComicVineVolume?> GetVolumeAsync(int volumeId, CancellationToken cancellationToken)
@@ -221,6 +252,8 @@ public sealed class ComicVineClient : IComicVineClient, IComicVineIssueDetailsSo
         var decoded = System.Net.WebUtility.HtmlDecode(noTags);
         return System.Text.RegularExpressions.Regex.Replace(decoded, @"\s+", " ").Trim();
     }
+
+    public Paperbunkr.Data.Entities.ComicProvider Kind => Paperbunkr.Data.Entities.ComicProvider.ComicVine;
 
     private string Url(string path, string query) => $"{BaseUrl}/{path}/?api_key={Uri.EscapeDataString(_apiKey)}&format=json&{query}";
 

@@ -94,9 +94,9 @@ public class WantedScreenViewModelTests : IDisposable
             new ComicVineIssue(3, "263", null, Today.AddDays(9), null, null, 100),
             new ComicVineIssue(4, "264", null, Today.AddDays(30), null, null, 100),
         });
-        var due = WantedService.Request(context, watched, context.CatalogIssues.Single(c => c.ComicVineIssueId == 1));
-        WantedService.Request(context, watched, context.CatalogIssues.Single(c => c.ComicVineIssueId == 2));
-        WantedService.Request(context, watched, context.CatalogIssues.Single(c => c.ComicVineIssueId == 3));
+        var due = WantedService.Request(context, watched, context.CatalogIssues.Single(c => c.ExternalIssueId == 1));
+        WantedService.Request(context, watched, context.CatalogIssues.Single(c => c.ExternalIssueId == 2));
+        WantedService.Request(context, watched, context.CatalogIssues.Single(c => c.ExternalIssueId == 3));
         context.ReleaseCandidates.AddRange(
             new ReleaseCandidate { WantedIssueId = due.Id, Title = "Spawn 261 (1992) cbr", DownloadUrl = "magnet:low", SizeBytes = 40L * 1024 * 1024, Seeders = 3, Indexer = "IdxA", Score = 5, FoundAt = Today },
             new ReleaseCandidate { WantedIssueId = due.Id, Title = "Spawn 261 (1992) cbz", DownloadUrl = "magnet:high", SizeBytes = 45L * 1024 * 1024, Seeders = 20, Indexer = "IdxB", Score = 45, FoundAt = Today },
@@ -199,7 +199,7 @@ public class WantedScreenViewModelTests : IDisposable
 
         Assert.Equal(new[] { "Spawn #262" }, vm.WantedRows.Select(r => r.Title));
         using var context = NewContext();
-        Assert.Equal(WantedIssueStatus.Ignored, context.WantedIssues.Single(w => w.ComicVineIssueId == 1).Status);
+        Assert.Equal(WantedIssueStatus.Ignored, context.WantedIssues.Single(w => w.ExternalIssueId == 1).Status);
     }
 
     [Fact]
@@ -213,9 +213,9 @@ public class WantedScreenViewModelTests : IDisposable
 
         Assert.Empty(vm.UpcomingRows);
         using var context = NewContext();
-        Assert.DoesNotContain(context.WantedIssues, w => w.ComicVineIssueId == 3);
+        Assert.DoesNotContain(context.WantedIssues, w => w.ExternalIssueId == 3);
         var watched = context.WatchedSeries.Single();
-        Assert.Contains(WantedService.GetMissing(context, watched), m => m.ComicVineIssueId == 3);
+        Assert.Contains(WantedService.GetMissing(context, watched), m => m.ExternalIssueId == 3);
     }
 
     [Fact]
@@ -382,7 +382,7 @@ public class WantedScreenViewModelTests : IDisposable
         var watched = context.WatchedSeries.FirstOrDefault() ?? throw new InvalidOperationException("Seed() first.");
         var wanted = new WantedIssue
         {
-            WatchedSeriesId = watched.Id, ComicVineIssueId = 9000 + int.Parse(number), IssueNumber = number, CreatedAt = Today, Status = WantedIssueStatus.Imported,
+            WatchedSeriesId = watched.Id, ExternalIssueId = 9000 + int.Parse(number), IssueNumber = number, CreatedAt = Today, Status = WantedIssueStatus.Imported,
             ScrapeStatus = ScrapeStatus.Failed, ScrapeError = error, ScrapeFailureIsTerminal = terminal, ScrapeAttempts = 2, ScrapeLastAttemptAt = Today,
         };
         context.WantedIssues.Add(wanted);

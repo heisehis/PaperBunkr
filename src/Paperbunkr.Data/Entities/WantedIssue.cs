@@ -13,7 +13,10 @@ public class WantedIssue
     public WatchedSeries? WatchedSeries { get; set; }
 
     /// <summary>ComicVine issue id. Unique: an issue is wanted at most once.</summary>
-    public int ComicVineIssueId { get; set; }
+    public int ExternalIssueId { get; set; }
+
+    /// <summary>Which provider <see cref="ExternalIssueId"/> belongs to. Existing rows predate Metron and are ComicVine.</summary>
+    public ComicProvider Provider { get; set; } = ComicProvider.ComicVine;
 
     public string IssueNumber { get; set; } = string.Empty;
 

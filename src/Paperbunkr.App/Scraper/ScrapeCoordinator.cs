@@ -31,34 +31,22 @@ public sealed class ScrapeCoordinator(
     Func<PaperbunkrDbContext> createContext,
     IActivityService activity,
     Action<int> enqueueWriteBack,
-    Func<ComicVineRequestPriority, IScrapeComicVine?>? createComicVine = null)
+    Func<ComicProvider, ComicVineRequestPriority, IScrapeComicVine?>? createComicVine = null)
 {
-    private readonly Func<ComicVineRequestPriority, IScrapeComicVine?> _createComicVine = createComicVine ?? CreateDefaultComicVine(createContext);
+    private readonly Func<ComicProvider, ComicVineRequestPriority, IScrapeComicVine?> _createComicVine = createComicVine ?? CreateDefaultComicVine(createContext);
 
-    /// <summary>The real ComicVine client (shared rate-limited HTTP) using the key saved under Connections, or <c>null</c> when there is none.</summary>
-    public static Func<ComicVineRequestPriority, IScrapeComicVine?> CreateDefaultComicVine(Func<PaperbunkrDbContext> createContext) => priority =>
+    /// <summary>The real client for a source (shared rate-limited HTTP) using the login saved under Connections, or <c>null</c> when there is none.</summary>
+    public static Func<ComicProvider, ComicVineRequestPriority, IScrapeComicVine?> CreateDefaultComicVine(Func<PaperbunkrDbContext> createContext) => (provider, priority) =>
     {
         using var context = createContext();
-        var key = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey);
-        if (string.IsNullOrWhiteSpace(key))
-        {
-            return null;
-        }
-
-        var client = new ComicVineClient(key, priority);
-        return new ScrapeComicVineAdapter(client, client);
+        var client = ComicProviderFactory.Create(context, provider, priority);
+        return client is null ? null : new ScrapeComicVineAdapter(client, client);
     };
 
     public const string NoKeyMessage = "Add your ComicVine API key under Preferences → Connections first.";
 
     public async Task<string> ScrapeIssuesAsync(IReadOnlyList<int> issueIds, bool isInteractive = true, CancellationToken cancellationToken = default, IActivityJobHandle? existingJob = null)
     {
-        var comicVine = _createComicVine(isInteractive ? ComicVineRequestPriority.High : ComicVineRequestPriority.Low);
-        if (comicVine is null)
-        {
-            return NoKeyMessage;
-        }
-
         List<Issue> books;
         ScrapeSettings settings;
         using (var context = createContext())
@@ -67,15 +55,25 @@ public sealed class ScrapeCoordinator(
             settings = ScrapeSettings.Load(context);
         }
 
+        // Starts on the default source from Preferences → Organize & Scrape; an interactive run can switch inside the match dialog.
+        var provider = settings.DefaultProvider;
+        var priority = isInteractive ? ComicVineRequestPriority.High : ComicVineRequestPriority.Low;
+        var comicVine = _createComicVine(provider, priority);
+        if (comicVine is null)
+        {
+            return provider == ComicProvider.ComicVine ? NoKeyMessage : ComicProviderFactory.MissingCredentialsMessage(provider);
+        }
+
         if (books.Count == 0)
         {
             return "Nothing to scrape.";
         }
 
-        var orchestrator = new ScrapeOrchestrator(comicVine, new ComicVineMatchMemory(createContext), settings);
+        var orchestrator = new ScrapeOrchestrator(comicVine, new ComicVineMatchMemory(createContext, provider), settings, provider,
+            switchTo => _createComicVine(switchTo, priority) is { } source ? (source, new ComicVineMatchMemory(createContext, switchTo)) : null);
         // A scheduled task already has its own Activity Center job; it lends it here so one run is one job, and settles it itself.
         using var owned = existingJob is null
-            ? activity.StartJob(ActivityJobKind.Scrape, books.Count == 1 ? $"Scraping {BookLabel(books[0])}" : $"Scraping {books.Count} comics with ComicVine",
+            ? activity.StartJob(ActivityJobKind.Scrape, books.Count == 1 ? $"Scraping {BookLabel(books[0])}" : $"Scraping {books.Count} comics",
                 cancellable: true, trigger: isInteractive ? ActivityTrigger.Manual : ActivityTrigger.Scheduled)
             : null;
         var job = existingJob ?? owned!;
@@ -118,7 +116,7 @@ public sealed class ScrapeCoordinator(
             enqueueWriteBack(id);
         }
 
-        var summary = $"Applied a ComicVine match to {applied} of {books.Count} comic{(books.Count == 1 ? string.Empty : "s")}.";
+        var summary = $"Applied a {ComicProviderFactory.DisplayName(orchestrator.Provider)} match to {applied} of {books.Count} comic{(books.Count == 1 ? string.Empty : "s")}.";
         owned?.Succeed(summary, itemsProcessed: applied, itemsFailed: books.Count - applied);
         return summary;
     }
@@ -167,7 +165,8 @@ public sealed class ScrapeCoordinator(
         ScrapeOrchestrator.SearchAndRankDelegate search) =>
         modalHost.ShowAsync<ComicVineVolumeSearchResult?>(resolve => new ComicVineMatchReviewDialogView
         {
-            DataContext = new ComicVineMatchReviewDialogViewModel(bookLabel, initialQuery, initialCandidates, search, resolve, loadIssues: volumeId => orchestrator.LoadIssuesAsync(volumeId)),
+            DataContext = new ComicVineMatchReviewDialogViewModel(bookLabel, initialQuery, initialCandidates, search, resolve, loadIssues: volumeId => orchestrator.LoadIssuesAsync(volumeId),
+                provider: orchestrator.Provider, switchProvider: orchestrator.TrySwitchProvider),
         });
 
     private Task<ComicVineIssueReviewResult> ShowIssueReviewAsync(string bookLabel, IReadOnlyList<ComicVineIssueSummary> issues, ComicVineIssueSummary? autoMatched) =>

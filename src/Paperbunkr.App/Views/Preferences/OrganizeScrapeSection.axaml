@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
              xmlns:scraper="using:Paperbunkr.App.Scraper"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -16,7 +17,7 @@
         <StackPanel Margin="28,20,28,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="Organize &amp; Scrape" />
 
-            <TextBlock Text="Right-click comics or a series and choose Scrape with ComicVine to match them and fill in their details. These options control how a scrape behaves."
+            <TextBlock Text="Right-click comics or a series and choose Scrape to match them and fill in their details. These options control how a scrape behaves."
                        FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
 
             <StackPanel Tag="organizeScrape.key">
@@ -29,6 +30,20 @@
                             <TextBlock Text="Not set" VerticalAlignment="Center" FontSize="12" IsVisible="{Binding !HasComicVineKey}" Foreground="{DynamicResource PbTextMutedBrush}" />
                             <Button Classes="headerAction ghost" Content="Open Connections" Command="{Binding OpenConnectionsCommand}"
                                     AutomationProperties.AutomationId="ScrapeOpenConnectionsButton" />
+                        </StackPanel>
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+            </StackPanel>
+
+            <StackPanel Tag="organizeScrape.source">
+                <TextBlock Classes="settingsGroupCaption" Text="SOURCE" />
+                <pref:SettingsRow Icon="Link" Title="Scrape from"
+                                   Description="Where scrapes look comics up. Metron is an alternative to ComicVine; its login is managed under Connections. You can switch a single scrape inside the match dialog, and scheduled scrapes always use this one.">
+                    <pref:SettingsRow.SettingsContent>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="Metron login not set" VerticalAlignment="Center" FontSize="12" IsVisible="{Binding !HasMetronLogin}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <controls:SuggestBox IsStrict="True" Width="140" Text="{Binding DefaultProviderText}" Suggestions="{x:Static vm:OrganizeScrapeSettingsViewModel.ProviderNames}"
+                                                 AutomationProperties.Name="Scrape from" AutomationProperties.AutomationId="ScrapeDefaultProvider" />
                         </StackPanel>
                     </pref:SettingsRow.SettingsContent>
                 </pref:SettingsRow>

@@ -386,4 +386,179 @@ public class SeriesMissingIssuesViewModelTests : IDisposable
 
         Assert.NotNull(view.Content);
     }
+
+    /// <summary>A fake that also does paged searching, like the real client, so the picker takes the "more than 25 results" path.</summary>
+    private sealed class PagedFake : IComicVineClient, IComicVineVolumeSearch
+    {
+        public List<ComicVineVolume> Volumes { get; } = new();
+        public int PagedCalls;
+        public int LastMax;
+
+        public Task<IReadOnlyList<ComicVineVolume>> SearchVolumesAsync(string query, CancellationToken cancellationToken) => throw new InvalidOperationException("the picker must use the paged search");
+
+        public Task<IReadOnlyList<ComicVineVolume>> SearchVolumesAsync(string query, int maxResults, CancellationToken cancellationToken)
+        {
+            PagedCalls++;
+            LastMax = maxResults;
+            return Task.FromResult<IReadOnlyList<ComicVineVolume>>(Volumes.ToList());
+        }
+
+        public Task<ComicVineVolume?> GetVolumeAsync(int volumeId, CancellationToken cancellationToken) => Task.FromResult(Volumes.FirstOrDefault(v => v.Id == volumeId));
+
+        public Task<IReadOnlyList<ComicVineIssue>> GetVolumeIssuesAsync(int volumeId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ComicVineIssue>>(new List<ComicVineIssue>());
+    }
+
+    [Fact]
+    public async Task FindOnComicVine_RanksAgainstWhatTheLibraryHas_NotJustByIssueCount_AndPagesTheResults()
+    {
+        SetKey();
+        int captainId;
+        using (var context = NewContext())
+        {
+            var series = new Series { Name = "Captain America" };
+            context.Series.Add(series);
+            context.Issues.AddRange(
+                new Issue { Series = series, Number = "3", Year = 2018, Publisher = "Marvel", FilePath = "C:/x/ca3.cbz" },
+                new Issue { Series = series, Number = "12", Year = 2018, Publisher = "Marvel", FilePath = "C:/x/ca12.cbz" });
+            context.SaveChanges();
+            captainId = series.Id;
+        }
+
+        var paged = new PagedFake();
+        // The long old runs ComicVine's own order puts first...
+        paged.Volumes.Add(new ComicVineVolume(1, "Captain America", "Marvel", 1968, 355, null));
+        paged.Volumes.Add(new ComicVineVolume(2, "Captain America Comics", "Marvel", 1941, 73, null));
+        // ...a same-named series from another publisher, and the short recent Marvel one the library actually has.
+        paged.Volumes.Add(new ComicVineVolume(3, "Captain America", "Panini", 2018, 40, null));
+        paged.Volumes.Add(new ComicVineVolume(4, "Captain America", "Marvel", 2018, 30, null));
+        for (int i = 0; i < 40; i++)
+        {
+            paged.Volumes.Add(new ComicVineVolume(100 + i, $"Captain America Special {i}", "Marvel", 1990 + i % 20, 1 + i, null));
+        }
+
+        var vm = new SeriesMissingIssuesViewModel(NewContext, _ => paged, post: a => a());
+        vm.Load(captainId, "Captain America");
+        Assert.Equal("Captain America", vm.SearchText);
+
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, paged.PagedCalls);
+        Assert.Equal(VolumeSearchService.MaxVolumesConsidered, paged.LastMax);       // asks for far more than ComicVine's first 25
+        Assert.Equal(VolumeResultViewModel.PageSize, vm.SearchResults.Count);
+        Assert.Equal(4, vm.SearchResults[0].Volume.Id);                              // the 2018 Marvel series wins, not the 355-issue 1968 run
+        Assert.True(vm.SearchResults[0].IsBestMatch);
+        Assert.False(vm.SearchResults[1].IsBestMatch);
+        Assert.Contains("Best of 44", vm.SearchSummary);
+        Assert.True(vm.CanShowMore);
+
+        vm.ShowMoreCommand.Execute(null);
+        Assert.True(vm.SearchResults.Count > VolumeResultViewModel.PageSize);
+        vm.ShowMoreCommand.Execute(null);
+        Assert.Equal(44, vm.SearchResults.Count);
+        Assert.False(vm.CanShowMore);                                                // nothing left, and no new request was made
+        Assert.Equal(1, paged.PagedCalls);
+    }
+
+    private void SetMetronLogin()
+    {
+        using var context = NewContext();
+        CredentialStore.Set(context, "Metron", CredentialKind.Username, "reader");
+        CredentialStore.Set(context, "Metron", CredentialKind.Password, "pw");
+    }
+
+    [Fact]
+    public async Task Metron_CanBeChosenAsTheSource_AndTheSeriesIsTrackedWithIt()
+    {
+        SetMetronLogin();                                   // no ComicVine key at all
+        var requested = new List<ComicProvider>();
+        var metron = new FakeComicVine();
+        metron.Volumes.Add(new ComicVineVolume(77, "Spawn", "Image", 1992, 300, null));
+        metron.Issues.Add(new ComicVineIssue(5, "262", "Past", Today.AddDays(-7), null, null, 77));
+        var vm = new SeriesMissingIssuesViewModel(NewContext, provider => { requested.Add(provider); return metron; }, a => a());
+        vm.Load(_seriesId, "Spawn");
+
+        vm.ProviderText = "Metron";
+        Assert.True(vm.HasProviderCredentials);
+        Assert.Equal("Series name on Metron", vm.SearchWatermark);
+
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+        Assert.Contains("Metron", vm.SearchSummary);
+        await vm.TrackCommand.ExecuteAsync(vm.SearchResults[0]);
+
+        Assert.All(requested, p => Assert.Equal(ComicProvider.Metron, p));
+        Assert.True(vm.IsTracked);
+        Assert.True(vm.IsMetronTracked);
+        using var context = NewContext();
+        var watched = context.WatchedSeries.Single();
+        Assert.Equal(ComicProvider.Metron, watched.Provider);
+        Assert.Equal(77, watched.ExternalVolumeId);
+
+        vm.ProviderText = "ComicVine";                        // a tracked series keeps its own source
+        await vm.RefreshFromComicVineCommand.ExecuteAsync(null);
+        Assert.Equal(ComicProvider.Metron, requested[^1]);
+    }
+
+    [Fact]
+    public async Task ChoosingASourceWithoutItsLogin_SaysWhatToAdd_AndMakesNoRequest()
+    {
+        SetKey();                                           // ComicVine only
+        var requested = 0;
+        var vm = new SeriesMissingIssuesViewModel(NewContext, _ => { requested++; return new FakeComicVine(); }, a => a());
+        vm.Load(_seriesId, "Spawn");
+
+        vm.ProviderText = "Metron";
+        Assert.False(vm.HasProviderCredentials);
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, requested);
+        Assert.True(vm.HasErrorStatus);
+        Assert.Contains("Metron login", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task FindOnComicVine_UsesTheEditedSearchText()
+    {
+        SetKey();
+        var paged = new PagedFake();
+        paged.Volumes.Add(new ComicVineVolume(9, "Spawn: Origins", "Image", 1992, 10, null));
+        var vm = new SeriesMissingIssuesViewModel(NewContext, _ => paged, post: a => a());
+        vm.Load(_seriesId, "Spawn");
+
+        vm.SearchText = "  Spawn: Origins ";
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+
+        Assert.Single(vm.SearchResults);
+        Assert.False(vm.SearchResults[0].IsBestMatch);                               // a lone result isn't "best" of anything
+    }
+
+    [Fact]
+    public async Task TheSort_ReordersTheFetchedResults_WithoutANewRequest_AndOnlyBestMatchGetsTheChip()
+    {
+        SetKey();
+        var paged = new PagedFake();
+        paged.Volumes.Add(new ComicVineVolume(1, "Spawn", "Image", 1992, 300, null));
+        paged.Volumes.Add(new ComicVineVolume(2, "Spawn", "Image", 2016, 20, null));
+        paged.Volumes.Add(new ComicVineVolume(3, "Spawn Zero", "Image", 1999, 5, null));
+        var vm = new SeriesMissingIssuesViewModel(NewContext, _ => paged, post: a => a());
+        vm.Load(_seriesId, "Spawn");
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+        Assert.Equal("Best match", vm.SortText);
+        Assert.True(vm.SearchResults[0].IsBestMatch);
+
+        vm.SortText = "Most issues";
+        Assert.Equal(new[] { 1, 2, 3 }, vm.SearchResults.Select(r => r.Volume.Id).OrderBy(i => i));   // the same three results, just reordered
+        Assert.Equal(1, vm.SearchResults[0].Volume.Id);
+        Assert.DoesNotContain(vm.SearchResults, r => r.IsBestMatch);
+
+        vm.SortText = "Newest";
+        Assert.Equal(new[] { 2, 3, 1 }, vm.SearchResults.Select(r => r.Volume.Id));
+        vm.SortText = "Oldest";
+        Assert.Equal(new[] { 1, 3, 2 }, vm.SearchResults.Select(r => r.Volume.Id));
+        vm.SortText = "Name A–Z";
+        Assert.Equal("Spawn Zero", vm.SearchResults[^1].Volume.Name);
+
+        Assert.Equal(1, paged.PagedCalls);                                        // sorting never went back to ComicVine
+        vm.SortText = "Best match";
+        Assert.True(vm.SearchResults[0].IsBestMatch);
+    }
 }

@@ -16,12 +16,12 @@ public static class WantedService
     /// series (kept if already set and none is passed). <paramref name="watchFutureReleases"/> is only ever turned <b>on</b>
     /// by this call, never silently off, so re-tracking can't undo a user's choice.
     /// </summary>
-    public static WatchedSeries TrackVolume(PaperbunkrDbContext context, ComicVineVolume volume, int? seriesId, bool watchFutureReleases)
+    public static WatchedSeries TrackVolume(PaperbunkrDbContext context, ComicVineVolume volume, int? seriesId, bool watchFutureReleases, ComicProvider provider = ComicProvider.ComicVine)
     {
-        var watched = context.WatchedSeries.FirstOrDefault(w => w.ComicVineVolumeId == volume.Id);
+        var watched = context.WatchedSeries.FirstOrDefault(w => w.Provider == provider && w.ExternalVolumeId == volume.Id);
         if (watched is null)
         {
-            watched = new WatchedSeries { ComicVineVolumeId = volume.Id, AddedAt = DateTime.UtcNow };
+            watched = new WatchedSeries { Provider = provider, ExternalVolumeId = volume.Id, AddedAt = DateTime.UtcNow };
             context.WatchedSeries.Add(watched);
         }
 
@@ -46,19 +46,19 @@ public static class WantedService
     /// <summary>Replaces the cached ComicVine issue list for a volume (insert new, update changed, keep the rest).</summary>
     public static void RefreshCatalog(PaperbunkrDbContext context, WatchedSeries watched, IReadOnlyList<ComicVineIssue> issues)
     {
-        var existing = context.CatalogIssues.Where(c => c.WatchedSeriesId == watched.Id).ToDictionary(c => c.ComicVineIssueId);
+        var existing = context.CatalogIssues.Where(c => c.WatchedSeriesId == watched.Id).ToDictionary(c => c.ExternalIssueId);
 
         foreach (var issue in issues)
         {
             if (!existing.TryGetValue(issue.Id, out var row))
             {
-                // ComicVineIssueId is unique across volumes; a row that already lives under another volume is left alone.
-                if (context.CatalogIssues.Any(c => c.ComicVineIssueId == issue.Id))
+                // ExternalIssueId is unique across volumes; a row that already lives under another volume is left alone.
+                if (context.CatalogIssues.Any(c => c.Provider == watched.Provider && c.ExternalIssueId == issue.Id))
                 {
                     continue;
                 }
 
-                row = new CatalogIssue { WatchedSeriesId = watched.Id, ComicVineIssueId = issue.Id };
+                row = new CatalogIssue { WatchedSeriesId = watched.Id, Provider = watched.Provider, ExternalIssueId = issue.Id };
                 context.CatalogIssues.Add(row);
             }
 
@@ -82,13 +82,13 @@ public static class WantedService
         var owned = OwnedNumbers(context, watched);
         var taken = context.WantedIssues
             .Where(w => w.WatchedSeriesId == watched.Id)
-            .Select(w => w.ComicVineIssueId)
+            .Select(w => w.ExternalIssueId)
             .ToHashSet();
 
         return context.CatalogIssues
             .Where(c => c.WatchedSeriesId == watched.Id)
             .AsEnumerable()
-            .Where(c => !taken.Contains(c.ComicVineIssueId) && !owned.Any(n => IssueNumbers.Equal(n, c.IssueNumber)))
+            .Where(c => !taken.Contains(c.ExternalIssueId) && !owned.Any(n => IssueNumbers.Equal(n, c.IssueNumber)))
             .OrderBy(c => c.StoreDate ?? c.CoverDate ?? DateTime.MaxValue)
             .ThenBy(c => c.IssueNumber, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -97,13 +97,14 @@ public static class WantedService
     /// <summary>Marks an issue wanted. Already wanted/snatched/downloading/imported rows are left as they are; a failed or ignored one is put back to Wanted.</summary>
     public static WantedIssue Request(PaperbunkrDbContext context, WatchedSeries watched, ComicVineIssue issue)
     {
-        var wanted = context.WantedIssues.FirstOrDefault(w => w.ComicVineIssueId == issue.Id);
+        var wanted = context.WantedIssues.FirstOrDefault(w => w.Provider == watched.Provider && w.ExternalIssueId == issue.Id);
         if (wanted is null)
         {
             wanted = new WantedIssue
             {
                 WatchedSeriesId = watched.Id,
-                ComicVineIssueId = issue.Id,
+                Provider = watched.Provider,
+                ExternalIssueId = issue.Id,
                 CreatedAt = DateTime.UtcNow,
             };
             context.WantedIssues.Add(wanted);
@@ -123,7 +124,7 @@ public static class WantedService
     }
 
     public static WantedIssue Request(PaperbunkrDbContext context, WatchedSeries watched, CatalogIssue issue) =>
-        Request(context, watched, new ComicVineIssue(issue.ComicVineIssueId, issue.IssueNumber, issue.Name, issue.StoreDate, issue.CoverDate, issue.CoverImageUrl, watched.ComicVineVolumeId));
+        Request(context, watched, new ComicVineIssue(issue.ExternalIssueId, issue.IssueNumber, issue.Name, issue.StoreDate, issue.CoverDate, issue.CoverImageUrl, watched.ExternalVolumeId));
 
     /// <summary>"Request all shown": every currently missing issue. Returns how many were newly requested.</summary>
     public static int RequestAllMissing(PaperbunkrDbContext context, WatchedSeries watched)
@@ -140,13 +141,14 @@ public static class WantedService
     /// <summary>"I have this / ignore": removes an issue from Missing without ever searching for it.</summary>
     public static WantedIssue Ignore(PaperbunkrDbContext context, WatchedSeries watched, CatalogIssue issue)
     {
-        var wanted = context.WantedIssues.FirstOrDefault(w => w.ComicVineIssueId == issue.ComicVineIssueId);
+        var wanted = context.WantedIssues.FirstOrDefault(w => w.Provider == watched.Provider && w.ExternalIssueId == issue.ExternalIssueId);
         if (wanted is null)
         {
             wanted = new WantedIssue
             {
                 WatchedSeriesId = watched.Id,
-                ComicVineIssueId = issue.ComicVineIssueId,
+                Provider = watched.Provider,
+                ExternalIssueId = issue.ExternalIssueId,
                 IssueNumber = issue.IssueNumber,
                 Name = issue.Name,
                 StoreDate = issue.StoreDate,

@@ -29,6 +29,7 @@ public sealed class MarkResolver
     private static readonly HashSet<string> MonochromeAssets = new(StringComparer.OrdinalIgnoreCase)
     {
         "anilist", "myanimelist", "kitsu", "mangaupdates",         // Services (Simple Icons, single path)
+        "prowlarr", "qbittorrent",                                 // Services (our own single-path glyphs, below)
         "boom", "dynamite", "oni", "seven-seas", "dark-horse", "idw", "square-enix", // Publishers (potrace / wordmark)
     };
 
@@ -41,7 +42,7 @@ public sealed class MarkResolver
         ["League of Comic Geeks"] = "LOCG", ["ComicVine"] = "CV", ["Metron"] = "MT",
         ["ComicBookReadingOrders"] = "CBRO", ["Comic Book Reading Orders"] = "CBRO",
         ["ComicArc"] = "ARC", ["ReadingOrders.net"] = "RON", ["ReadingOrdersNet"] = "RON",
-        ["ReadThingsRight"] = "RTR",
+        ["ReadThingsRight"] = "RTR", ["Prowlarr"] = "PR", ["qBittorrent"] = "QB",
     };
 
     private readonly AliasTable _publishers;

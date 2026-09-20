@@ -19,6 +19,8 @@ public class MarkResolverTests
     [InlineData("AniList")]       // has a bundled SVG
     [InlineData("MyAnimeList")]
     [InlineData("ComicVine")]
+    [InlineData("Prowlarr")]      // the Connections "Download automation" rows
+    [InlineData("qBittorrent")]
     public void ResolveService_KnownWithAsset_IsSvg(string id)
     {
         var spec = _r.ResolveService(id);

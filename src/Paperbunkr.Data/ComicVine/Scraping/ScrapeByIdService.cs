@@ -34,7 +34,7 @@ public sealed record ScrapeOutcome(ScrapeResultKind Kind, string? Message, int? 
 /// (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md section 6). It never throws for an expected failure - the caller gets an
 /// <see cref="ScrapeOutcome"/> that says whether trying again could help. The caller owns the status bookkeeping and the file write-back.
 /// </summary>
-public sealed class ScrapeByIdService(Func<PaperbunkrDbContext> createContext, Func<IComicVineIssueDetailsSource?> createSource, ScrapeFieldPolicy? policy = null)
+public sealed class ScrapeByIdService(Func<PaperbunkrDbContext> createContext, Func<ComicProvider, IComicVineIssueDetailsSource?> createSource, ScrapeFieldPolicy? policy = null)
 {
     private readonly ScrapeFieldPolicy _policy = policy ?? ScrapeFieldPolicy.Default;
 
@@ -42,6 +42,7 @@ public sealed class ScrapeByIdService(Func<PaperbunkrDbContext> createContext, F
     {
         int? issueId;
         int comicVineIssueId;
+        ComicProvider provider;
         using (var context = createContext())
         {
             var wanted = await context.WantedIssues.AsNoTracking().FirstOrDefaultAsync(w => w.Id == wantedIssueId, cancellationToken).ConfigureAwait(false);
@@ -51,7 +52,8 @@ public sealed class ScrapeByIdService(Func<PaperbunkrDbContext> createContext, F
             }
 
             issueId = wanted.IssueId;
-            comicVineIssueId = wanted.ComicVineIssueId;
+            comicVineIssueId = wanted.ExternalIssueId;
+            provider = wanted.Provider;
         }
 
         if (issueId is null)
@@ -59,10 +61,10 @@ public sealed class ScrapeByIdService(Func<PaperbunkrDbContext> createContext, F
             return ScrapeOutcome.Terminal("The imported file isn't in your library, so there is nothing to add details to.");
         }
 
-        var source = createSource();
+        var source = createSource(provider);
         if (source is null)
         {
-            return ScrapeOutcome.Terminal("Add your ComicVine API key under Preferences → Connections to add details to downloaded issues.");
+            return ScrapeOutcome.Terminal(ComicProviderFactory.MissingCredentialsMessage(provider).Replace(" first.", " to add details to downloaded issues."));
         }
 
         ComicVineIssueDetails? details;
@@ -72,7 +74,7 @@ public sealed class ScrapeByIdService(Func<PaperbunkrDbContext> createContext, F
         }
         catch (ComicVineException ex) when (ex.ApiStatusCode == 100)
         {
-            return ScrapeOutcome.Terminal("ComicVine rejected your API key. Check it under Preferences → Connections.");
+            return ScrapeOutcome.Terminal(provider == ComicProvider.Metron ? "Metron rejected your login. Check it under Preferences → Connections." : "ComicVine rejected your API key. Check it under Preferences → Connections.");
         }
         catch (ComicVineException ex)
         {
@@ -81,7 +83,7 @@ public sealed class ScrapeByIdService(Func<PaperbunkrDbContext> createContext, F
 
         if (details is null)
         {
-            return ScrapeOutcome.Terminal("ComicVine has no issue with this id (it may have been merged or removed).");
+            return ScrapeOutcome.Terminal($"{ComicProviderFactory.DisplayName(provider)} has no issue with this id (it may have been merged or removed).");
         }
 
         using var write = createContext();

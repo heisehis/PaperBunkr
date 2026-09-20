@@ -96,6 +96,28 @@ public class WantedServiceTests : AcquisitionTestBase
     }
 
     [Fact]
+    public void TheSameNumericIdsUnderTwoProviders_AreTwoIndependentSeriesWithTheirOwnCatalogAndWants()
+    {
+        var series = new Series { Name = "Spawn" };
+        Context.Series.Add(series);
+        Context.SaveChanges();
+
+        var cv = WantedService.TrackVolume(Context, Volume(100, "Spawn"), series.Id, watchFutureReleases: false);
+        var metron = WantedService.TrackVolume(Context, Volume(100, "Spawn"), seriesId: null, watchFutureReleases: false, ComicProvider.Metron);
+        Assert.NotEqual(cv.Id, metron.Id);
+        Assert.Equal(ComicProvider.Metron, metron.Provider);
+        Assert.Null(metron.SeriesId);                                              // the link belongs to the ComicVine entry
+
+        WantedService.RefreshCatalog(Context, cv, new[] { new ComicVineIssue(7, "1", null, null, null, null, 100) });
+        WantedService.RefreshCatalog(Context, metron, new[] { new ComicVineIssue(7, "1", null, null, null, null, 100) });   // same issue id, other provider
+        Assert.Equal(2, Context.CatalogIssues.Count());
+
+        var wanted = WantedService.Request(Context, metron, Context.CatalogIssues.Single(c => c.WatchedSeriesId == metron.Id));
+        Assert.Equal(ComicProvider.Metron, wanted.Provider);
+        Assert.Single(WantedService.GetMissing(Context, cv));                      // the ComicVine copy is still missing: the want was Metron's
+    }
+
+    [Fact]
     public void RefreshCatalog_InsertsThenUpdates_WithoutDuplicating()
     {
         var (watched, _) = Tracked(CvIssue(1, "1"), CvIssue(2, "2"));
@@ -103,7 +125,7 @@ public class WantedServiceTests : AcquisitionTestBase
         WantedService.RefreshCatalog(Context, watched, new[] { CvIssue(1, "1"), CvIssue(2, "2b"), CvIssue(3, "3") });
 
         Assert.Equal(3, Context.CatalogIssues.Count());
-        Assert.Equal("2b", Context.CatalogIssues.Single(c => c.ComicVineIssueId == 2).IssueNumber);
+        Assert.Equal("2b", Context.CatalogIssues.Single(c => c.ExternalIssueId == 2).IssueNumber);
         Assert.NotNull(watched.LastRefreshedAt);
     }
 
@@ -132,8 +154,8 @@ public class WantedServiceTests : AcquisitionTestBase
     public void GetMissing_ExcludesAnythingAlreadyWantedOrIgnored()
     {
         var (watched, _) = Tracked(CvIssue(1, "1"), CvIssue(2, "2"), CvIssue(3, "3"));
-        WantedService.Request(Context, watched, Context.CatalogIssues.Single(c => c.ComicVineIssueId == 1));
-        WantedService.Ignore(Context, watched, Context.CatalogIssues.Single(c => c.ComicVineIssueId == 2));
+        WantedService.Request(Context, watched, Context.CatalogIssues.Single(c => c.ExternalIssueId == 1));
+        WantedService.Ignore(Context, watched, Context.CatalogIssues.Single(c => c.ExternalIssueId == 2));
 
         Assert.Equal(new[] { "3" }, WantedService.GetMissing(Context, watched).Select(m => m.IssueNumber));
     }
@@ -184,8 +206,8 @@ public class WantedServiceTests : AcquisitionTestBase
         int requested = WantedService.PromoteFollowedUpcoming(Context, today);
 
         Assert.Equal(2, requested);                                                     // today's and next fortnight's, not the old gap
-        Assert.DoesNotContain(Context.WantedIssues, w => w.ComicVineIssueId == 1);      // past gaps stay the user's "Request missing"
-        Assert.DoesNotContain(Context.WantedIssues, w => w.ComicVineIssueId == 10);     // not followed
+        Assert.DoesNotContain(Context.WantedIssues, w => w.ExternalIssueId == 1);      // past gaps stay the user's "Request missing"
+        Assert.DoesNotContain(Context.WantedIssues, w => w.ExternalIssueId == 10);     // not followed
     }
 
     [Fact]

@@ -89,6 +89,15 @@ public sealed class AcquisitionCycle(
     {
         var today = _now().Date;
 
+        // Anything the library already owns (added by hand, by a scan, by another download) is closed first; an unfinished duplicate torrent is dropped.
+        foreach (var closed in WantedService.CloseOwned(context))
+        {
+            if (grabService is not null)
+            {
+                await grabService.DiscardIfIncompleteAsync(closed.TorrentHash!, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
         await RefreshFollowedVolumesAsync(context, cancellationToken).ConfigureAwait(false);
         WantedService.PromoteFollowedUpcoming(context, today);
 

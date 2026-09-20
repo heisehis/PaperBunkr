@@ -86,6 +86,33 @@ public sealed class GrabService(
         context.SaveChanges();
     }
 
+    /// <summary>
+    /// Removes a torrent that is still downloading (and its partial files) because its issue turned up in the library by other means. A torrent that has
+    /// finished is left alone - it is a good, seeding file - and one outside the Paperbunkr category is never touched.
+    /// </summary>
+    public async Task DiscardIfIncompleteAsync(string hash, CancellationToken cancellationToken)
+    {
+        using var context = createContext();
+        var client = createClient(context);
+        if (client is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var status = (await client.GetStatusAsync(new[] { hash }, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+            if (status is not null && status.State != DownloadState.Completed)
+            {
+                await client.RemoveAsync(hash, deleteFiles: true, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (DownloadClientException)
+        {
+            // best effort: a leftover torrent is harmless and will be noticed on the next pass
+        }
+    }
+
     /// <summary>Puts a failed issue back to <c>Wanted</c> so the next search (or "Search now") looks for a different release.</summary>
     public void Retry(int wantedIssueId)
     {

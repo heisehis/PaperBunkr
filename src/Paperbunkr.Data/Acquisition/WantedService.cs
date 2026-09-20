@@ -183,6 +183,48 @@ public static class WantedService
         return requested;
     }
 
+    /// <summary>
+    /// Closes every open want the library now owns (a file added by hand, a scan, another download): status <c>Imported</c>, linked to the owned issue,
+    /// candidates dropped. Rows whose download is still in flight are returned so the caller can cancel an unfinished torrent that would otherwise
+    /// finish and map to nothing. A completed download is left to import normally.
+    /// </summary>
+    public static IReadOnlyList<WantedIssue> CloseOwned(PaperbunkrDbContext context)
+    {
+        var open = context.WantedIssues.Include(w => w.WatchedSeries)
+            .Where(w => w.Status == WantedIssueStatus.Wanted || w.Status == WantedIssueStatus.Snatched
+                || w.Status == WantedIssueStatus.Downloading || w.Status == WantedIssueStatus.Failed)
+            .ToList();
+
+        var inFlight = new List<WantedIssue>();
+        foreach (var group in open.Where(w => w.WatchedSeries?.SeriesId != null).GroupBy(w => w.WatchedSeries!.SeriesId!.Value))
+        {
+            var owned = context.Issues.Where(i => i.SeriesId == group.Key && !i.IsPlaceholder && !i.FileIsMissing).ToList();
+            foreach (var wanted in group)
+            {
+                var match = owned.FirstOrDefault(i => IssueNumbers.Equal(i.Number, wanted.IssueNumber));
+                if (match is null)
+                {
+                    continue;
+                }
+
+                bool wasInFlight = wanted.Status is WantedIssueStatus.Snatched or WantedIssueStatus.Downloading;
+                wanted.Status = WantedIssueStatus.Imported;
+                wanted.IssueId = match.Id;
+                wanted.ImportedAt ??= DateTime.UtcNow;
+                wanted.DownloadProgress = null;
+                wanted.FailureReason = null;
+                context.ReleaseCandidates.RemoveRange(context.ReleaseCandidates.Where(c => c.WantedIssueId == wanted.Id));
+                if (wasInFlight && wanted.TorrentHash is not null)
+                {
+                    inFlight.Add(wanted);
+                }
+            }
+        }
+
+        context.SaveChanges();
+        return inFlight;
+    }
+
     /// <summary>Wanted rows still due in the future - the "Upcoming" list. (A due one is simply Wanted; there is no separate status.)</summary>
     public static IQueryable<WantedIssue> Upcoming(PaperbunkrDbContext context, DateTime today) =>
         context.WantedIssues.Where(w => w.Status == WantedIssueStatus.Wanted && w.StoreDate != null && w.StoreDate > today.Date);

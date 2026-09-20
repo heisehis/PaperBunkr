@@ -99,6 +99,9 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<ReleaseCandidate> ReleaseCandidates => Set<ReleaseCandidate>();
     public DbSet<AcquisitionSettings> AcquisitionSettings => Set<AcquisitionSettings>();
     public DbSet<ReleaseBlocklist> ReleaseBlocklist => Set<ReleaseBlocklist>();
+    public DbSet<Paperbunkr.Data.Organizing.OrganizerProfile> OrganizerProfiles => Set<Paperbunkr.Data.Organizing.OrganizerProfile>();
+    public DbSet<Paperbunkr.Data.Organizing.OrganizeBatch> OrganizeBatches => Set<Paperbunkr.Data.Organizing.OrganizeBatch>();
+    public DbSet<Paperbunkr.Data.Organizing.OrganizeMove> OrganizeMoves => Set<Paperbunkr.Data.Organizing.OrganizeMove>();
     public DbSet<Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow> ScrapeSettingsRows => Set<Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow>();
     public DbSet<Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry> ComicVineMatchMemories => Set<Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry>();
 
@@ -261,6 +264,26 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(c => c.Title).IsRequired();
             builder.Property(c => c.DownloadUrl).IsRequired();
             builder.HasIndex(c => c.WantedIssueId);
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.Organizing.OrganizerProfile>(builder =>
+        {
+            builder.HasKey(p => p.Id);
+            builder.Property(p => p.Mode).HasConversion<int>();
+            builder.Property(p => p.AutomationCollisionPolicy).HasConversion<int>();
+            builder.Ignore(p => p.MonthNames);
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.Organizing.OrganizeBatch>(builder =>
+        {
+            builder.HasKey(b => b.Id);
+            builder.HasMany(b => b.Moves).WithOne(m => m.Batch).HasForeignKey(m => m.BatchId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.Organizing.OrganizeMove>(builder =>
+        {
+            builder.HasKey(m => m.Id);
+            builder.HasIndex(m => m.BatchId);
         });
 
         modelBuilder.Entity<Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow>(builder =>

@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Paperbunkr.App.Scraper"
+             mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="90"
+             x:Class="Paperbunkr.App.Scraper.SeriesScraperPanelView"
+             x:DataType="vm:SeriesScraperPanelViewModel">
+
+    <!--
+        Stands in for the host's own External Metadata/Trackers block on this "Details" tab for a
+        Comic-typed series (design note: those target manga metadata sources with little to no real
+        comic coverage). Deliberately styled with the host's own DynamicResource keys, not
+        self-contained hex fallbacks the way the plugin's modal-hosted dialogs are - this view is
+        inline content on the host's own screen, not a separate dialog, so it should read as part
+        of that screen.
+    -->
+    <StackPanel Spacing="8">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+            <TextBlock Text="ComicVine" FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+            <Button Classes="railAdd" Command="{Binding ScrapeCommand}" IsEnabled="{Binding !IsBusy}">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <TextBlock Text="Scrape with ComicVine" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </StackPanel>
+        <TextBlock Text="{Binding StatusMessage, TargetNullValue='Not scraped yet - Cluster Library Manager handles comic metadata here instead of the generic external-metadata search.'}"
+                   Foreground="{DynamicResource PbTextFaintBrush}" FontSize="12" TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

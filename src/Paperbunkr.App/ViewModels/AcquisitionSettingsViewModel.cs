@@ -73,9 +73,17 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RenameTemplatePreview), nameof(RenameTemplateIsValid))]
-    private string _renameTemplate = "{publisher}/{series} ({volumeyear})/{series} #{number:000}";
+    private string _renameTemplate = AcquisitionSettings.DefaultRenameTemplate;
+
+    /// <summary>The template as it was before the one-time upgrade to the shared grammar, shown only when it could not be converted.</summary>
+    [ObservableProperty] private string? _renameTemplateOriginal;
+
+    [ObservableProperty] private bool _renameTemplateUpgradeFailed;
 
     [ObservableProperty] private bool _writeComicInfo = true;
+
+    /// <summary>After an import, add ComicVine's details to the issue by the id the want already carries (no search, no review).</summary>
+    [ObservableProperty] private bool _scrapeOnImport = true;
     [ObservableProperty] private bool _moveOriginalOnImport;
 
     // Auto-grab (slice 4)
@@ -85,25 +93,35 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
     /// <summary>The user's library folders, offered as destinations.</summary>
     public ObservableCollection<string> DestinationChoices { get; } = new();
 
-    public bool RenameTemplateIsValid => NameTemplate.Validate(RenameTemplate) is null;
+    public bool RenameTemplateIsValid => ImportNaming.Validate(RenameTemplate) is null;
+
+    /// <summary>Shown when the upgrade could not convert the user's old template exactly, so they know why the default is in use and what they had.</summary>
+    public bool HasTemplateUpgradeNotice => RenameTemplateUpgradeFailed && !string.IsNullOrWhiteSpace(RenameTemplateOriginal);
+
+    public string TemplateUpgradeNotice => $"Your previous template couldn't be converted exactly, so the default is in use. It was: {RenameTemplateOriginal}";
+
+    partial void OnRenameTemplateUpgradeFailedChanged(bool value) => NotifyTemplateNotice();
+
+    partial void OnRenameTemplateOriginalChanged(string? value) => NotifyTemplateNotice();
+
+    private void NotifyTemplateNotice()
+    {
+        OnPropertyChanged(nameof(HasTemplateUpgradeNotice));
+        OnPropertyChanged(nameof(TemplateUpgradeNotice));
+    }
 
     /// <summary>A live example of what the template produces (or why it is invalid), so mistakes show before anything is imported.</summary>
     public string RenameTemplatePreview
     {
         get
         {
-            var error = NameTemplate.Validate(RenameTemplate);
+            var error = ImportNaming.Validate(RenameTemplate);
             if (error is not null)
             {
                 return error;
             }
 
-            string? Sample(string token) => token switch
-            {
-                "series" => "Spawn", "number" => "263", "year" => "2026", "volumeyear" => "1992", "publisher" => "Image",
-                "title" => "Origins", "month" => "09", "day" => "16", _ => null,
-            };
-            return "e.g. " + NameTemplate.FormatPath(RenameTemplate, Sample, ".cbz");
+            return "e.g. " + ImportNaming.Preview(RenameTemplate);
         }
     }
 
@@ -132,7 +150,26 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
     /// <summary>The API-key field's placeholder: tells the user whether one is already stored.</summary>
     public string ApiKeyWatermark => HasSavedApiKey ? "Saved — leave blank to keep it" : "Prowlarr API key";
 
-    partial void OnHasSavedApiKeyChanged(bool value) => OnPropertyChanged(nameof(ApiKeyWatermark));
+    partial void OnHasSavedApiKeyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ApiKeyWatermark));
+        OnPropertyChanged(nameof(IsProwlarrConnected));
+    }
+
+    partial void OnProwlarrUrlChanged(string value) => OnPropertyChanged(nameof(IsProwlarrConnected));
+
+    partial void OnQBittorrentUrlChanged(string value) => OnPropertyChanged(nameof(IsQBittorrentConnected));
+
+    /// <summary>Prowlarr counts as connected once it has an address and a stored key (a real handshake is the Test button's job, not something to run on every screen open).</summary>
+    public bool IsProwlarrConnected => HasSavedApiKey && !string.IsNullOrWhiteSpace(ProwlarrUrl);
+
+    public bool IsQBittorrentConnected => !string.IsNullOrWhiteSpace(QBittorrentUrl);
+
+    /// <summary>One line for the Acquisition section, which no longer edits these (they live under Connections).</summary>
+    public string ConnectionsSummary =>
+        $"Prowlarr: {(IsProwlarrConnected ? "connected" : "not set up")}  ·  qBittorrent: {(IsQBittorrentConnected ? "set up" : "not set up")}  ·  ComicVine: {(HasComicVineKey ? "connected" : "not set")}";
+
+    partial void OnHasComicVineKeyChanged(bool value) => OnPropertyChanged(nameof(ConnectionsSummary));
 
     public void Load()
     {
@@ -151,7 +188,10 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         QBittorrentCategory = settings.QBittorrentCategory;
         DestinationFolderPath = settings.DestinationFolderPath;
         RenameTemplate = settings.RenameTemplate;
+        RenameTemplateOriginal = settings.RenameTemplateOriginal;
+        RenameTemplateUpgradeFailed = settings.RenameTemplateUpgradeFailed;
         WriteComicInfo = settings.WriteComicInfo;
+        ScrapeOnImport = settings.ScrapeOnImport;
         MoveOriginalOnImport = settings.MoveOriginalOnImport;
         AutoGrab = settings.AutoGrab;
         AutoGrabMinScore = settings.AutoGrabMinScore;
@@ -171,6 +211,40 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         ProwlarrApiKey = string.Empty;
     }
 
+    /// <summary>
+    /// Saves only the Prowlarr and qBittorrent connection fields (what the Connections dialogs edit), leaving every behavior setting as it is stored.
+    /// Never touches the naming template, destination or filters, so an unrelated invalid value there can't block saving a connection.
+    /// </summary>
+    [RelayCommand]
+    private void SaveConnections()
+    {
+        using var context = _createContext();
+        var settings = context.GetOrCreateAcquisitionSettings();
+        settings.ProwlarrUrl = ProwlarrUrl.Trim();
+        settings.QBittorrentUrl = QBittorrentUrl.Trim();
+        // Paperbunkr only ever touches torrents in its own category, so an empty one is never allowed.
+        settings.QBittorrentCategory = string.IsNullOrWhiteSpace(QBittorrentCategory) ? "paperbunkr-comics" : QBittorrentCategory.Trim();
+        context.SaveChanges();
+        QBittorrentCategory = settings.QBittorrentCategory;
+
+        CredentialStore.Set(context, DownloadClientFactory.CredentialProvider, CredentialKind.Username, QBittorrentUsername.Trim());
+        if (!string.IsNullOrWhiteSpace(QBittorrentPassword))
+        {
+            CredentialStore.Set(context, DownloadClientFactory.CredentialProvider, CredentialKind.Password, QBittorrentPassword);
+            HasSavedQBittorrentPassword = true;
+            QBittorrentPassword = string.Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(ProwlarrApiKey))
+        {
+            CredentialStore.Set(context, "Prowlarr", CredentialKind.ApiKey, ProwlarrApiKey.Trim());
+            HasSavedApiKey = true;
+            ProwlarrApiKey = string.Empty;
+        }
+
+        SetStatus("Saved.", isError: false);
+    }
+
     [RelayCommand]
     private void Save()
     {
@@ -180,7 +254,7 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
             return;
         }
 
-        var templateError = NameTemplate.Validate(RenameTemplate);
+        var templateError = ImportNaming.Validate(RenameTemplate);
         if (templateError is not null)
         {
             SetStatus($"The naming template is invalid: {templateError}", isError: true);
@@ -210,7 +284,12 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         settings.QBittorrentCategory = string.IsNullOrWhiteSpace(QBittorrentCategory) ? "paperbunkr-comics" : QBittorrentCategory.Trim();
         settings.DestinationFolderPath = destination;
         settings.RenameTemplate = RenameTemplate.Trim();
+        // Saving a template is the explicit act that retires the pre-upgrade original (see TemplateUpgrade): from here it is the user's own.
+        settings.RenameTemplateGrammar = TemplateGrammar.Organizer;
+        settings.RenameTemplateOriginal = null;
+        settings.RenameTemplateUpgradeFailed = false;
         settings.WriteComicInfo = WriteComicInfo;
+        settings.ScrapeOnImport = ScrapeOnImport;
         settings.MoveOriginalOnImport = MoveOriginalOnImport;
         settings.AutoGrab = AutoGrab;
         settings.AutoGrabMinScore = Math.Clamp(AutoGrabMinScore, 0, 500);
@@ -218,6 +297,8 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
 
         QBittorrentCategory = settings.QBittorrentCategory;
         AutoGrabMinScore = settings.AutoGrabMinScore;
+        RenameTemplateOriginal = null;
+        RenameTemplateUpgradeFailed = false;
         CredentialStore.Set(context, DownloadClientFactory.CredentialProvider, CredentialKind.Username, QBittorrentUsername.Trim());
         if (!string.IsNullOrWhiteSpace(QBittorrentPassword))
         {

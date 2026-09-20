@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -28,6 +29,8 @@ public static class ScheduledTaskCatalog
     public const string StoryEventAutodetect = "story-event-autodetect";
     public const string ContinuityWikidataAutodetect = "continuity-wikidata-autodetect";
     public const string FollowArcs = "follow-arcs";
+    public const string ComicVineScrape = "comicvine-scrape";
+    public const string LibraryOrganize = "library-organize";
 
     public static IReadOnlyList<ScheduledTaskDescriptor> All { get; } = Build();
 
@@ -213,6 +216,62 @@ public static class ScheduledTaskCatalog
 
                 string summary = string.Join(", ", parts) + ".";
                 handle.Succeed(summary, result.Requested > 0 ? new ActivityLink(ActivityLinkKind.WantedScreen) : null);
+                return summary;
+            }),
+
+        // "Scrape with ComicVine" on a schedule (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8): off by default, never opens a dialog.
+        // Every comic with no ComicVine volume link is matched; with "choose the best match automatically" off it skips whatever would have needed a question.
+        new ScheduledTaskDescriptor(
+            ComicVineScrape, "Scrape unscraped comics with ComicVine",
+            "Matches comics that have no ComicVine details yet, without asking. Comics that need a choice are skipped unless \"Choose the best match automatically\" is on " +
+            "(Preferences → Organize & Scrape). Needs your ComicVine key.",
+            ActivityJobKind.Scrape, Priority: 11, SchedulerResourceClass.Network,
+            TimeSpan.FromDays(1), DefaultEnabled: false, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                var scraper = Paperbunkr.App.Scraper.ScheduledCoordinators.Scraper;
+                if (scraper is null)
+                {
+                    const string notReady = "The scraper isn't ready yet.";
+                    handle.Succeed(notReady);
+                    return notReady;
+                }
+
+                handle.Report("Scraping unscraped comics…");
+                string summary = await scraper.ScrapeUnscrapedAsync(ct, handle);
+                handle.Succeed(summary);
+                return summary;
+            }),
+
+        // "Organize library" on a schedule: off by default; uses the first organizer profile marked for scheduled runs, and never opens a dialog
+        // (collisions follow that profile's automatic-collision setting).
+        new ScheduledTaskDescriptor(
+            LibraryOrganize, "Organize library",
+            "Moves or copies files into the folders an organizer profile's templates describe. Uses the profile marked for scheduled runs " +
+            "(Preferences → Organize & Scrape); nothing happens until one is. Every move can be undone.",
+            ActivityJobKind.Import, Priority: 12, SchedulerResourceClass.Db,
+            TimeSpan.FromDays(1), DefaultEnabled: false, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                var organizer = Paperbunkr.App.Scraper.ScheduledCoordinators.Organizer;
+                if (organizer is null)
+                {
+                    const string notReady = "The organizer isn't ready yet.";
+                    handle.Succeed(notReady);
+                    return notReady;
+                }
+
+                var profile = organizer.Profiles.GetAll().FirstOrDefault(p => p.UseForScheduledRun);
+                if (profile is null)
+                {
+                    const string none = "No organizer profile is marked for scheduled runs, so nothing was organized.";
+                    handle.Succeed(none);
+                    return none;
+                }
+
+                handle.Report($"Organizing with \"{profile.Name}\"…");
+                string summary = await organizer.OrganizeLibraryAsync(profile.Id, ct, handle);
+                handle.Succeed(summary);
                 return summary;
             }),
     };

@@ -37,7 +37,7 @@ public interface IComicVineClient
 /// the UI; interactive lookups use <see cref="ComicVineRequestPriority.High"/>.
 /// </para>
 /// </summary>
-public sealed class ComicVineClient : IComicVineClient
+public sealed class ComicVineClient : IComicVineClient, IComicVineIssueDetailsSource
 {
     private const string BaseUrl = "https://comicvine.gamespot.com/api";
     private const int PageSize = 100;
@@ -110,6 +110,116 @@ public sealed class ComicVineClient : IComicVineClient
         }
 
         return issues;
+    }
+
+    /// <summary>ComicVine's own person-role -> Paperbunkr credit field mapping (CE's <c>cvdb.py</c> person_credits handling, as verified in the plugin this was ported from).</summary>
+    private static readonly IReadOnlyDictionary<string, string> PersonRoleMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["writer"] = "Writer",
+        ["penciler"] = "Penciller",
+        ["penciller"] = "Penciller",
+        ["artist"] = "Penciller",
+        ["inker"] = "Inker",
+        ["cover"] = "CoverArtist",
+        ["editor"] = "Editor",
+        ["colorer"] = "Colorist",
+        ["colorist"] = "Colorist",
+        ["letterer"] = "Letterer",
+    };
+
+    private const string IssueDetailFields = "id,name,issue_number,site_detail_url,cover_date,store_date,description,volume,story_arc_credits,character_credits,team_credits,location_credits,person_credits";
+
+    public async Task<ComicVineIssueDetails?> GetIssueDetailsAsync(int issueId, CancellationToken cancellationToken)
+    {
+        JsonNode root;
+        try
+        {
+            // 4000- is ComicVine's issue resource-type prefix.
+            root = await GetAsync(Url($"issue/4000-{issueId}", $"field_list={IssueDetailFields}"), cancellationToken).ConfigureAwait(false);
+        }
+        catch (ComicVineException ex) when (ex.ApiStatusCode == 101)
+        {
+            return null;
+        }
+
+        return root["results"] is JsonObject results ? ParseIssueDetails(results) : null;
+    }
+
+    private static ComicVineIssueDetails ParseIssueDetails(JsonObject o)
+    {
+        var credits = new List<ComicVineCredit>();
+        if (o["person_credits"] is JsonArray people)
+        {
+            foreach (var person in people.OfType<JsonObject>())
+            {
+                var name = person["name"]?.GetValue<string>();
+                if (string.IsNullOrEmpty(name))
+                {
+                    continue;
+                }
+
+                string? field = null;
+                foreach (var token in (person["role"]?.GetValue<string>() ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (PersonRoleMap.TryGetValue(token, out var mapped))
+                    {
+                        field = mapped;
+                        break;
+                    }
+                }
+
+                credits.Add(new ComicVineCredit(name, field));
+            }
+        }
+
+        var volume = o["volume"] as JsonObject;
+        return new ComicVineIssueDetails(
+            o["id"]?.GetValue<int>() ?? 0,
+            volume?["id"]?.GetValue<int>() ?? 0,
+            volume?["name"]?.GetValue<string>(),
+            o["issue_number"]?.GetValue<string>(),
+            o["name"]?.GetValue<string>(),
+            o["site_detail_url"]?.GetValue<string>(),
+            ParseDatePart(o["cover_date"]?.GetValue<string>()),
+            ParseDatePart(o["store_date"]?.GetValue<string>()),
+            StripHtml(o["description"]?.GetValue<string>()),
+            NamesOf(o["story_arc_credits"]),
+            NamesOf(o["character_credits"]),
+            NamesOf(o["team_credits"]),
+            NamesOf(o["location_credits"]),
+            credits);
+    }
+
+    private static IReadOnlyList<string> NamesOf(JsonNode? array) =>
+        array is JsonArray items
+            ? items.OfType<JsonObject>().Select(i => i["name"]?.GetValue<string>()).Where(n => !string.IsNullOrEmpty(n)).Select(n => n!).ToList()
+            : new List<string>();
+
+    /// <summary>ComicVine dates arrive as <c>yyyy-MM-dd HH:mm:ss</c> (or just <c>yyyy-MM-dd</c>); any part can be missing, so this is not a single DateTime.</summary>
+    private static ComicVineDatePart ParseDatePart(string? date)
+    {
+        if (string.IsNullOrWhiteSpace(date))
+        {
+            return new ComicVineDatePart(null, null, null);
+        }
+
+        var segments = date.Split('-', StringSplitOptions.TrimEntries);
+        int? year = segments.Length > 0 && int.TryParse(segments[0], out int y) ? y : null;
+        int? month = segments.Length > 1 && int.TryParse(segments[1], out int m) ? m : null;
+        int? day = segments.Length > 2 && int.TryParse(segments[2].Split(' ')[0], out int d) ? d : null;
+        return new ComicVineDatePart(year, month, day);
+    }
+
+    private static string? StripHtml(string? html)
+    {
+        if (string.IsNullOrEmpty(html))
+        {
+            return html;
+        }
+
+        var noTags = System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", " ");
+        var decoded = System.Net.WebUtility.HtmlDecode(noTags);
+        return System.Text.RegularExpressions.Regex.Replace(decoded, @"\s+", " ").Trim();
     }
 
     private string Url(string path, string query) => $"{BaseUrl}/{path}/?api_key={Uri.EscapeDataString(_apiKey)}&format=json&{query}";

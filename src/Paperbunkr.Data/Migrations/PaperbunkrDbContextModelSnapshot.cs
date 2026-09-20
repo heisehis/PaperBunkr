@@ -17,6 +17,41 @@ namespace Paperbunkr.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
 
+            modelBuilder.Entity("Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ChosenVolumeId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SearchKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SearchKey", "ChosenVolumeId")
+                        .IsUnique();
+
+                    b.ToTable("ComicVineMatchMemories");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ScrapeSettingsRows");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.AcquisitionSettings", b =>
                 {
                     b.Property<int>("Id")
@@ -77,6 +112,22 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
                         .HasDefaultValue("{publisher}/{series} ({volumeyear})/{series} #{number:000}");
+
+                    b.Property<int>("RenameTemplateGrammar")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("RenameTemplateOriginal")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("RenameTemplateUpgradeFailed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ScrapeOnImport")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("WriteComicInfo")
                         .ValueGeneratedOnAdd()
@@ -3016,6 +3067,21 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("Name")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("ScrapeAttempts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ScrapeError")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("ScrapeFailureIsTerminal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ScrapeLastAttemptAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ScrapeStatus")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -3145,6 +3211,100 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("Screen", "SortOrder");
 
                     b.ToTable("Workspaces");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Organizing.OrganizeBatch", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ProfileName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("OrganizeBatches");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Organizing.OrganizeMove", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BatchId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsReverted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("MovedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NewPath")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OldPath")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId");
+
+                    b.ToTable("OrganizeMoves");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Organizing.OrganizerProfile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AutomationCollisionPolicy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("BaseFolder")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExcludeRuleJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileTemplate")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FolderTemplate")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("MonthNamesJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("RemoveEmptyFolders")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("UseForScheduledRun")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("OrganizerProfiles");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.Book", b =>
@@ -3736,6 +3896,17 @@ namespace Paperbunkr.Data.Migrations
                     b.Navigation("Series");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Organizing.OrganizeMove", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Organizing.OrganizeBatch", "Batch")
+                        .WithMany("Moves")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Batch");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.Book", b =>
                 {
                     b.Navigation("AnnotationImages");
@@ -3840,6 +4011,11 @@ namespace Paperbunkr.Data.Migrations
                     b.Navigation("Catalog");
 
                     b.Navigation("WantedIssues");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Organizing.OrganizeBatch", b =>
+                {
+                    b.Navigation("Moves");
                 });
 #pragma warning restore 612, 618
         }

@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace Paperbunkr.Daemon.Import;
+namespace Paperbunkr.Daemon.Tests.Import;
 
 /// <summary>
 /// File/folder naming for imports, in ComicRack CE's template syntax - a port of CE's <c>ExtendedStringFormater</c>
@@ -16,7 +16,7 @@ namespace Paperbunkr.Daemon.Import;
 /// the value is a whole number, so an issue "1.5" is never rounded to "002"; CE's <c>$function&lt;...&gt;</c> calls are not supported; and because the
 /// result is a path, <c>/</c> separates folders and every segment is made filesystem-safe.
 /// </summary>
-public static class NameTemplate
+internal static class LegacyNameTemplate
 {
     public static readonly string[] KnownTokens =
     {

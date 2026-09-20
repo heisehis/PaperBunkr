@@ -147,4 +147,46 @@ public class ComicVineClientTests
         Assert.True(highHandler.Requests[0].Options.TryGetValue(ComicVineRateLimitHandler.PriorityKey, out var highPriority));
         Assert.Equal(ComicVineRequestPriority.High, highPriority);
     }
+
+    [Fact]
+    public async Task GetIssueDetails_MapsCreditsPeopleAndDates_AndStripsTheHtmlSummary()
+    {
+        var (client, handler) = Make(_ => (HttpStatusCode.OK, Ok("""
+            {"id":4321,"name":"Endgame","issue_number":"263","site_detail_url":"https://cv/263","cover_date":"2016-05-01","store_date":"2016-05-04 00:00:00",
+             "description":"<p>Al &amp; Jim <b>fight</b>.</p>","volume":{"id":91273,"name":"Spawn"},
+             "story_arc_credits":[{"name":"Endgame Arc"}],"character_credits":[{"name":"Spawn"},{"name":"Sam"}],
+             "team_credits":[],"location_credits":[{"name":"Rat City"}],
+             "person_credits":[{"name":"Todd","role":"writer, artist"},{"name":"Greg","role":"colorer"},{"name":"Nobody","role":"tea boy"}]}
+            """, 1)));
+
+        var details = await ((IComicVineIssueDetailsSource)client).GetIssueDetailsAsync(4321, CancellationToken.None);
+
+        Assert.NotNull(details);
+        Assert.Equal(4321, details!.Id);
+        Assert.Equal(91273, details.VolumeId);
+        Assert.Equal("Spawn", details.VolumeName);
+        Assert.Equal("263", details.IssueNumber);
+        Assert.Equal("Endgame", details.Title);
+        Assert.Equal(new ComicVineDatePart(2016, 5, 1), details.PublishedDate);
+        Assert.Equal(new ComicVineDatePart(2016, 5, 4), details.ReleasedDate);
+        Assert.Equal("Al & Jim fight .", details.Summary);
+        Assert.Equal(new[] { "Endgame Arc" }, details.StoryArcs);
+        Assert.Equal(new[] { "Spawn", "Sam" }, details.Characters);
+        Assert.Empty(details.Teams);
+        Assert.Equal(new[] { "Rat City" }, details.Locations);
+        Assert.Equal(new ComicVineCredit("Todd", "Writer"), details.Credits[0]);
+        Assert.Equal(new ComicVineCredit("Greg", "Colorist"), details.Credits[1]);
+        Assert.Null(details.Credits[2].Field);                                    // a role with no Paperbunkr equivalent is kept, unmapped
+        Assert.Contains("/issue/4000-4321/", handler.Requests[0].RequestUri!.OriginalString);
+    }
+
+    [Fact]
+    public async Task GetIssueDetails_AnObjectNotFoundStatus_IsNull_ButOtherErrorsStillThrow()
+    {
+        var (missing, _) = Make(_ => (HttpStatusCode.OK, """{"status_code":101,"error":"Object Not Found","results":[]}"""));
+        Assert.Null(await ((IComicVineIssueDetailsSource)missing).GetIssueDetailsAsync(1, CancellationToken.None));
+
+        var (badKey, _) = Make(_ => (HttpStatusCode.OK, """{"status_code":100,"error":"Invalid API Key","results":[]}"""));
+        await Assert.ThrowsAsync<ComicVineException>(() => ((IComicVineIssueDetailsSource)badKey).GetIssueDetailsAsync(1, CancellationToken.None));
+    }
 }

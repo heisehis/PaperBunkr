@@ -18,9 +18,9 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public static class RemoteCoverCache
 {
-    /// <summary>Wide enough for the largest place these are shown (a 2x display of a 60px card cover).</summary>
-    public const int DecodeWidth = 120;
-    private const int MaxMemoryEntries = 400;
+    /// <summary>Wide enough for the largest place these are shown (the scraper review dialogs' 140 px preview at 1.5x).</summary>
+    public const int DecodeWidth = 240;
+    private const int MaxMemoryEntries = 300;
     private const int MaxConcurrentDownloads = 4;
 
     private static readonly LruCache<string, Bitmap> Memory = new(MaxMemoryEntries);

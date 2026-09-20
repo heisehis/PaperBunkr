@@ -144,12 +144,26 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         // (see ConnectionProviderRow's own doc comment on why).
         SourceProviderRows = new ObservableCollection<ConnectionProviderRow>(ConnectionProviderRow.CreateSourceProviders());
         TrackerProviderRows = new ObservableCollection<ConnectionProviderRow>(ConnectionProviderRow.CreateTrackerProviders());
+        DownloadProviderRows = new ObservableCollection<ConnectionProviderRow>(ConnectionProviderRow.CreateDownloadProviders());
 
         // Wire each row's command references to the matching [RelayCommand]-generated command
         // (docs/superpowers/specs/2026-09-07-connections-redesign-design.md) - the dialog's generic
         // per-Kind template binds to these instead of a hardcoded per-provider command name. Command
         // bodies are unchanged.
         Acquisition = new AcquisitionSettingsViewModel(_contextFactory, () => ActiveSection = PreferencesSection.Connections);
+        OrganizeScrape = new OrganizeScrapeSettingsViewModel(
+            _contextFactory, () => ActiveSection = PreferencesSection.Connections,
+            new Scraper.ProfileManagerViewModel(
+                new Paperbunkr.Data.Organizing.OrganizerProfileStore(_contextFactory),
+                organizerService: Scraper.OrganizeCoordinator.CreateService(_contextFactory),
+                createDbContext: _contextFactory));
+        Acquisition.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(AcquisitionSettingsViewModel.IsProwlarrConnected) or nameof(AcquisitionSettingsViewModel.IsQBittorrentConnected))
+            {
+                SyncDownloadRowsFromViewModel();
+            }
+        };
 
         ComicVineRow.SaveCommand = SaveComicVineCredentialsCommand;
         ComicVineRow.DisconnectCommand = DisconnectComicVineCommand;
@@ -382,6 +396,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     /// <summary>Preferences → Acquisition (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md §7); its own view model so this class doesn't grow further.</summary>
     public bool IsAcquisitionSection => ActiveSection == PreferencesSection.Acquisition;
+
+    public bool IsOrganizeScrapeSection => ActiveSection == PreferencesSection.OrganizeScrape;
+
+    /// <summary>Preferences → Organize &amp; Scrape (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8); its own view model, like <see cref="Acquisition"/>.</summary>
+    public OrganizeScrapeSettingsViewModel OrganizeScrape { get; }
 
     public AcquisitionSettingsViewModel Acquisition { get; }
     public bool IsPluginsSection => ActiveSection == PreferencesSection.Plugins;
@@ -748,6 +767,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsKeyboardShortcutsSection));
         OnPropertyChanged(nameof(IsConnectionsSection));
         OnPropertyChanged(nameof(IsAcquisitionSection));
+        OnPropertyChanged(nameof(IsOrganizeScrapeSection));
         OnPropertyChanged(nameof(IsPluginsSection));
         OnPropertyChanged(nameof(IsAdvancedSection));
         OnPropertyChanged(nameof(IsAboutSection));
@@ -764,6 +784,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void GoAutomation() => ActiveSection = PreferencesSection.Automation;
+
+    [RelayCommand]
+    private void GoOrganizeScrape()
+    {
+        OrganizeScrape.Load();   // pick up a ComicVine key added under Connections since this section was last shown
+        ActiveSection = PreferencesSection.OrganizeScrape;
+    }
 
     [RelayCommand]
     private void GoAcquisition()
@@ -2578,6 +2605,15 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// <summary>Row list backing the Connections screen's "Reading List Sources" section (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-redesign-design.md).</summary>
     public ObservableCollection<ConnectionProviderRow> SourceProviderRows { get; }
 
+    /// <summary>Prowlarr and qBittorrent (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 7): their fields live in <see cref="Acquisition"/>, the rows only carry the connected state.</summary>
+    public ObservableCollection<ConnectionProviderRow> DownloadProviderRows { get; }
+
+    private void SyncDownloadRowsFromViewModel()
+    {
+        SyncProviderRowConnectedState(DownloadProviderRows, "Prowlarr", Acquisition.IsProwlarrConnected);
+        SyncProviderRowConnectedState(DownloadProviderRows, "qBittorrent", Acquisition.IsQBittorrentConnected);
+    }
+
     private ConnectionProviderRow ComicVineRow => SourceProviderRows.Single(r => r.Id == "ComicVine");
     private ConnectionProviderRow MetronRow => SourceProviderRows.Single(r => r.Id == "Metron");
 
@@ -2595,6 +2631,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         SyncProviderRowConnectedState(SourceProviderRows, "ComicVine", IsComicVineConnected);
         SyncProviderRowConnectedState(SourceProviderRows, "Metron", IsMetronConnected);
+
+        // Prowlarr / qBittorrent share the acquisition view-model's fields; load them so the rows and dialogs are current.
+        Acquisition.Load();
+        SyncDownloadRowsFromViewModel();
     }
 
     [RelayCommand]

@@ -10,86 +10,6 @@ using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.Daemon.Tests.Import;
 
-public class NameTemplateTests
-{
-    private static string? Values(string t) => t switch
-    {
-        "series" => "Spawn", "number" => "5", "year" => "2026", "volumeyear" => "1992", "publisher" => "Image", "title" => "Origins",
-        _ => null,
-    };
-
-    [Theory]
-    [InlineData("{series} #{number}", "Spawn #5")]
-    [InlineData("{series} #{number:000}", "Spawn #005")]
-    [InlineData("{series} #{number:00}", "Spawn #05")]
-    [InlineData("[{title} - ]{series}", "Origins - Spawn")]
-    [InlineData("{series}[ {volume}]", "Spawn")]                      // {volume} is empty: the whole group, space included, vanishes
-    [InlineData("{series}[ ({year}/{month})]", "Spawn")]              // ...and one empty token drops a group even when another has a value
-    [InlineData("{series} ({year})", "Spawn (2026)")]
-    [InlineData(@"{series} \[draft\]", "Spawn [draft]")]              // backslash escapes
-    [InlineData("{nonsense}{series}", "Spawn")]                       // unknown tokens are empty
-    [InlineData("  {series}  ", "Spawn")]                             // the result is trimmed, as in CE
-    public void Format_FollowsCeSemantics(string template, string expected) => Assert.Equal(expected, NameTemplate.Format(template, Values));
-
-    [Fact]
-    public void NumericFormat_OnlyAppliesToWholeNumbers_SoADecimalIssueIsNeverRounded()
-    {
-        string? Get(string t) => t == "number" ? "1.5" : null;
-        Assert.Equal("#1.5", NameTemplate.Format("#{number:000}", Get));
-
-        string? Annual(string t) => t == "number" ? "Annual 1" : null;
-        Assert.Equal("#Annual 1", NameTemplate.Format("#{number:000}", Annual));
-    }
-
-    [Theory]
-    [InlineData("{series} #{number:000}", null)]
-    [InlineData("{publisher}/{series} ({volumeyear})/{series} #{number:000}", null)]
-    [InlineData("[{title} - ]{series}", null)]
-    [InlineData("", "empty")]
-    [InlineData("{series", "never closed")]
-    [InlineData("{series}}", "no matching {")]
-    [InlineData("[{series}", "never closed")]
-    [InlineData("{series}]", "no matching [")]
-    [InlineData("{colour}", "Unknown token {colour}")]
-    [InlineData("{{series}}", "nested")]
-    public void Validate_ReportsProblemsBeforeAnythingIsImported(string template, string? errorFragment)
-    {
-        var error = NameTemplate.Validate(template);
-
-        if (errorFragment is null) Assert.Null(error);
-        else Assert.Contains(errorFragment, error, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void FormatPath_MakesFolders_SanitizesEverySegment_AndAddsTheExtension()
-    {
-        string? Get(string t) => t switch { "publisher" => "DC: Comics?", "series" => "Batman.", "number" => "5", "volumeyear" => "2016", _ => null };
-
-        var path = NameTemplate.FormatPath("{publisher}/{series} ({volumeyear})/{series} #{number:000}", Get, ".cbz");
-
-        Assert.Equal("DC- Comics_/Batman. (2016)/Batman. #005.cbz", path);
-    }
-
-    [Fact]
-    public void FormatPath_DropsEmptyFolders_AndNeverProducesAnEmptyName()
-    {
-        string? NoPublisher(string t) => t == "series" ? "Spawn" : null;
-        Assert.Equal("Spawn/Spawn.cbz", NameTemplate.FormatPath("{publisher}/{series}/{series}", NoPublisher, "cbz"));
-        Assert.Equal("Unnamed.cbz", NameTemplate.FormatPath("{publisher}", NoPublisher, ".cbz"));
-    }
-
-    [Theory]
-    [InlineData("CON", "_CON")]
-    [InlineData("nul.txt", "_nul.txt")]
-    [InlineData("Trailing dots...", "Trailing dots")]
-    [InlineData("a\\b*c", "a_b_c")]
-    [InlineData("..", "")]
-    public void SanitizeSegment_KeepsNamesLegalOnWindows(string input, string expected) => Assert.Equal(expected, NameTemplate.SanitizeSegment(input));
-
-    [Fact]
-    public void SanitizeSegment_BoundsLength() => Assert.True(NameTemplate.SanitizeSegment(new string('x', 500)).Length <= 120);
-}
-
 public abstract class ArchiveTestBase : IDisposable
 {
     protected readonly string Root = Path.Combine(Path.GetTempPath(), $"paperbunkr_import_test_{Guid.NewGuid():N}");
@@ -324,6 +244,8 @@ public class ImportProcessorTests : CycleTestBase
         Assert.Equal(WantedIssueStatus.Imported, wanted.Status);
         Assert.Equal(scannedId, wanted.IssueId);
         Assert.NotNull(wanted.ImportedAt);
+        Assert.Equal(ScrapeStatus.Pending, wanted.ScrapeStatus);          // saved in the same step as Imported, so a crash can't leave a silent gap
+        Assert.Equal(0, wanted.ScrapeAttempts);
         Assert.Null(wanted.DownloadProgress);
         Assert.Equal(expected, Assert.IsType<IssueImportedEvent>(Drain().Single(e => e is IssueImportedEvent)).Path);
         Assert.False(outcome.RemoveTorrent);
@@ -362,6 +284,20 @@ public class ImportProcessorTests : CycleTestBase
         Assert.Equal(newIssueId, relinked.IssueId);
         Assert.Equal(3, relinked.SortOrder);                                       // same position in the list
         Assert.DoesNotContain(check.Issues, i => i.Id == placeholderId);           // the placeholder is gone
+    }
+
+    [Fact]
+    public async Task WithScrapeOnImportOff_TheImportedIssueIsNotQueuedForComicVineDetails()
+    {
+        Settings(x => x.ScrapeOnImport = false);
+        var ids = AddWanted((DateTime?)new DateTime(2026, 9, 16));
+        MakeCbz("Spawn 261 (1992).cbz");
+
+        var outcome = await Processor(_ => SeedIssue()).ImportAsync(ids[0], Download("Spawn 261 (1992)"), new[] { F("Spawn 261 (1992).cbz") }, CancellationToken.None);
+
+        Assert.True(outcome.Success);
+        using var context = NewContext();
+        Assert.Equal(ScrapeStatus.NotApplicable, context.WantedIssues.Single().ScrapeStatus);
     }
 
     [Fact]

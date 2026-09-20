@@ -26,6 +26,11 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-20, Cluster Library Manager into core — branch `feat/clm-into-core`, NOT merged):** all five phases implemented (shared template engine + one-time
+> template upgrade, durable scrape-on-import with retry and a Needs-attention list, Prowlarr/qBittorrent moved to Connections, the ComicVine scraper and review dialogs in core, the organizer with
+> profiles and undo, two off-by-default scheduled tasks, and the plugin refused at load with a "now built in" message). Design + plan: `docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-{design,plan}.md`.
+> **Not verified** against a real ComicVine key, Prowlarr, qBittorrent, or on screen. Merge note: the main tree has an uncommitted spinner change touching the same Preferences views.
+
 > **Manual session note (2026-09-19/20, comic acquisition — Mylar-style want-list, slices 1-4 built on branch `feat/comic-acquisition-daemon`, NOT merged or released):**
 > Design: `docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md`; plan and per-step status:
 > `...-plan.md`. Built and unit-tested: DPAPI-encrypted `CredentialStore`; a shared, prioritized ComicVine

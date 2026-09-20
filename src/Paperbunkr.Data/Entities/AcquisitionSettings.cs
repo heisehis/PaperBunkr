@@ -50,7 +50,28 @@ public class AcquisitionSettings
     /// <c>[optional groups]</c>, <c>\</c> escapes - ported from CE's <c>ExtendedStringFormater</c>). Beyond CE's tokens it adds <c>{publisher}</c> and
     /// <c>{volumeyear}</c> (the series' start year, so a series stays in one folder; <c>{year}</c> is the issue's own year, as in CE).
     /// </summary>
-    public string RenameTemplate { get; set; } = "{publisher}/{series} ({volumeyear})/{series} #{number:000}";
+    public string RenameTemplate { get; set; } = DefaultRenameTemplate;
+
+    /// <summary>The default naming template, in the Organizer grammar the shared engine reads (<see cref="TemplateGrammar.Organizer"/>).</summary>
+    public const string DefaultRenameTemplate = "{<publisher>}/{<series>} ({<volumeyear>})/{<series>} #{<number3>}";
+
+    /// <summary>The default before templates moved to the Organizer grammar; also the column default that existing rows were created with.</summary>
+    public const string LegacyDefaultRenameTemplate = "{publisher}/{series} ({volumeyear})/{series} #{number:000}";
+
+    /// <summary>
+    /// Which grammar <see cref="RenameTemplate"/> is written in. Rows that predate the shared template engine are <see cref="TemplateGrammar.Import"/>
+    /// until the one-time upgrade translates them (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md section 5).
+    /// </summary>
+    public TemplateGrammar RenameTemplateGrammar { get; set; } = TemplateGrammar.Organizer;
+
+    /// <summary>
+    /// The template exactly as the user last saved it before the upgrade, kept until they explicitly save a new one. When the upgrade could not
+    /// translate it, this is what Preferences shows next to the note that the default is in use.
+    /// </summary>
+    public string? RenameTemplateOriginal { get; set; }
+
+    /// <summary>True when the upgrade couldn't translate the original template and fell back to the default.</summary>
+    public bool RenameTemplateUpgradeFailed { get; set; }
 
     /// <summary>Write a <c>ComicInfo.xml</c> into imported archives (from ComicVine's data for the issue).</summary>
     public bool WriteComicInfo { get; set; } = true;
@@ -60,4 +81,20 @@ public class AcquisitionSettings
     /// (imports always work on a copy, since repacking or tagging changes the file's bytes).
     /// </summary>
     public bool MoveOriginalOnImport { get; set; }
+
+    /// <summary>
+    /// After an issue is imported, fetch its ComicVine details by the id the want already carries (no search, no review) and add them to the issue.
+    /// On by default: the match is known, so there is nothing to confirm.
+    /// </summary>
+    public bool ScrapeOnImport { get; set; } = true;
+}
+
+/// <summary>The syntax a stored naming template is written in.</summary>
+public enum TemplateGrammar
+{
+    /// <summary>The acquisition importer's original CE <c>ExtendedStringFormater</c> syntax: <c>{token}</c>, <c>{token:000}</c>, <c>[optional group]</c>.</summary>
+    Import = 0,
+
+    /// <summary>The shared engine's <c>{prefix&lt;name(args)&gt;postfix}</c> syntax.</summary>
+    Organizer = 1,
 }

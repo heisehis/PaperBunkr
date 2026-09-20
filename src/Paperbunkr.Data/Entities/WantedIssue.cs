@@ -45,9 +45,41 @@ public class WantedIssue
 
     public DateTime? ImportedAt { get; set; }
 
+    /// <summary>
+    /// Whether ComicVine's details have been added to the imported issue (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 6.2).
+    /// Durable on purpose: it is set <see cref="ScrapeStatus.Pending"/> in the same save that marks the issue imported, so a crash between the two can't leave a silent gap.
+    /// </summary>
+    public ScrapeStatus ScrapeStatus { get; set; } = ScrapeStatus.NotApplicable;
+
+    /// <summary>How many times the scrape has been tried; drives the retry backoff.</summary>
+    public int ScrapeAttempts { get; set; }
+
+    public DateTime? ScrapeLastAttemptAt { get; set; }
+
+    /// <summary>Why the last scrape failed, shown in the needs-review list.</summary>
+    public string? ScrapeError { get; set; }
+
+    /// <summary>A failure that retrying can't fix (ComicVine has no such issue, no API key): the sweep leaves it alone until the user acts.</summary>
+    public bool ScrapeFailureIsTerminal { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? LastSearchedAt { get; set; }
 
     public List<ReleaseCandidate> Candidates { get; set; } = new();
+}
+
+/// <summary>Where an imported issue is in getting its ComicVine details.</summary>
+public enum ScrapeStatus
+{
+    /// <summary>Not an acquired issue, or adding ComicVine details to downloads is switched off.</summary>
+    NotApplicable = 0,
+
+    /// <summary>Imported and waiting for its details (also the state after a retryable failure is queued again).</summary>
+    Pending = 1,
+
+    Scraped = 2,
+
+    /// <summary>The last attempt failed; see <see cref="WantedIssue.ScrapeError"/>.</summary>
+    Failed = 3,
 }

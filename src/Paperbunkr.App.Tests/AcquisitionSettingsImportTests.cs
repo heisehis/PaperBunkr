@@ -139,17 +139,17 @@ public class AcquisitionSettingsImportTests : IDisposable
         Assert.True(vm.RenameTemplateIsValid);
         Assert.Equal("e.g. Image/Spawn (1992)/Spawn #263.cbz", vm.RenameTemplatePreview);
 
-        vm.RenameTemplate = "{series} #{number:00}";
+        vm.RenameTemplate = "{<series>} #{<number2>}";
         Assert.Equal("e.g. Spawn #263.cbz", vm.RenameTemplatePreview);
 
-        vm.RenameTemplate = "{colour}";
+        vm.RenameTemplate = "{<colour>}";
         Assert.False(vm.RenameTemplateIsValid);
-        Assert.Contains("Unknown token", vm.RenameTemplatePreview);
+        Assert.Contains("not supported", vm.RenameTemplatePreview);
         vm.SaveCommand.Execute(null);
 
         Assert.True(vm.HasErrorStatus);
         using var context = NewContext();
-        Assert.Equal("{publisher}/{series} ({volumeyear})/{series} #{number:000}", context.GetOrCreateAcquisitionSettings().RenameTemplate);   // nothing was written
+        Assert.Equal(AcquisitionSettings.DefaultRenameTemplate, context.GetOrCreateAcquisitionSettings().RenameTemplate);   // nothing was written
     }
 
     [Fact]
@@ -210,6 +210,20 @@ public class AcquisitionSettingsImportTests : IDisposable
     }
 
     [Fact]
+    public void ScrapeOnImport_IsOnByDefault_AndPersists()
+    {
+        var vm = Create();
+        Assert.True(vm.ScrapeOnImport);
+
+        vm.ScrapeOnImport = false;
+        vm.SaveCommand.Execute(null);
+
+        using var context = NewContext();
+        Assert.False(context.GetOrCreateAcquisitionSettings().ScrapeOnImport);
+        Assert.False(Create().ScrapeOnImport);
+    }
+
+    [Fact]
     public void Defaults_KeepAutomaticDownloadsOff_AndSeedingOn()
     {
         var vm = Create();
@@ -218,5 +232,73 @@ public class AcquisitionSettingsImportTests : IDisposable
         Assert.False(vm.MoveOriginalOnImport);
         Assert.True(vm.WriteComicInfo);
         Assert.Equal("paperbunkr-comics", vm.QBittorrentCategory);
+    }
+
+    [Fact]
+    public void AFailedTemplateUpgrade_ShowsWhatTheUserHad_UntilTheySaveANewTemplate()
+    {
+        using (var context = NewContext())
+        {
+            var settings = context.GetOrCreateAcquisitionSettings();
+            settings.RenameTemplateOriginal = "{series}[ {volumeyear} {title}]";
+            settings.RenameTemplateUpgradeFailed = true;
+            context.SaveChanges();
+        }
+
+        var vm = Create();
+        Assert.True(vm.HasTemplateUpgradeNotice);
+        Assert.Contains("{series}[ {volumeyear} {title}]", vm.TemplateUpgradeNotice);
+
+        vm.RenameTemplate = "{<series>} #{<number3>}";
+        vm.SaveCommand.Execute(null);
+
+        Assert.False(vm.HasTemplateUpgradeNotice);           // saving is the explicit act that retires the original
+        using var check = NewContext();
+        var saved = check.GetOrCreateAcquisitionSettings();
+        Assert.Null(saved.RenameTemplateOriginal);
+        Assert.False(saved.RenameTemplateUpgradeFailed);
+        Assert.Equal("{<series>} #{<number3>}", saved.RenameTemplate);
+    }
+
+    [Fact]
+    public void ASuccessfulUpgrade_ShowsNoNotice_EvenThoughTheOriginalIsKept()
+    {
+        using (var context = NewContext())
+        {
+            var settings = context.GetOrCreateAcquisitionSettings();
+            settings.RenameTemplateOriginal = "{series} #{number:00}";
+            context.SaveChanges();
+        }
+
+        Assert.False(Create().HasTemplateUpgradeNotice);
+    }
+
+    [Fact]
+    public void SaveConnections_SavesOnlyTheConnectionFields_SoAnUnrelatedBadValueCannotBlockIt()
+    {
+        var vm = Create();
+        vm.ProwlarrUrl = " http://prowlarr:9696 ";
+        vm.ProwlarrApiKey = "KEY";
+        vm.QBittorrentUrl = "http://qbit:8080";
+        vm.QBittorrentUsername = "admin";
+        vm.QBittorrentPassword = "hunter2";
+        vm.RenameTemplate = "{<colour>}";                        // invalid, and a full Save would refuse it
+        vm.MinSizeMb = 900;
+        vm.MaxSizeMb = 10;                                       // also invalid
+
+        vm.SaveConnectionsCommand.Execute(null);
+
+        Assert.True(vm.HasInfoStatus);
+        using var context = NewContext();
+        var saved = context.GetOrCreateAcquisitionSettings();
+        Assert.Equal("http://prowlarr:9696", saved.ProwlarrUrl);
+        Assert.Equal("http://qbit:8080", saved.QBittorrentUrl);
+        Assert.Equal(AcquisitionSettings.DefaultRenameTemplate, saved.RenameTemplate);     // untouched
+        Assert.Equal(0, saved.MinSizeMb);
+        Assert.Equal("KEY", CredentialStore.Get(context, "Prowlarr", CredentialKind.ApiKey));
+        Assert.Equal("admin", CredentialStore.Get(context, "qBittorrent", CredentialKind.Username));
+        Assert.True(CredentialStore.IsEncrypted(context.ProviderCredentials.Single(c => c.Provider == "qBittorrent" && c.Kind == CredentialKind.Password).Value));
+        Assert.True(vm.IsProwlarrConnected);
+        Assert.True(vm.IsQBittorrentConnected);
     }
 }

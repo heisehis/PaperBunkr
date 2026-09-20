@@ -51,6 +51,19 @@ public sealed class CandidateRowViewModel
     public required string DownloadUrl { get; init; }
 }
 
+/// <summary>An imported issue whose ComicVine details could not be added (a failed scrape-on-import); the row stays until the user retries or dismisses it.</summary>
+public sealed class ScrapeReviewRowViewModel
+{
+    public required int Id { get; init; }
+    public required string Title { get; init; }
+    public required string Reason { get; init; }
+
+    /// <summary>Retrying without the user changing something is pointless (no such issue upstream, no key).</summary>
+    public bool NeedsYourAction { get; init; }
+    public string Hint => NeedsYourAction ? "Needs your attention" : "Paperbunkr will retry on its own";
+    public RemoteCoverSource Cover { get; init; } = new(null);
+}
+
 /// <summary>An issue that has been sent to the download client: downloading, or failed and waiting for the user.</summary>
 public sealed class DownloadRowViewModel
 {
@@ -148,6 +161,13 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
     public ObservableCollection<WantedRowViewModel> WantedRows { get; } = new();
     public ObservableCollection<WantedRowViewModel> UpcomingRows { get; } = new();
     public ObservableCollection<DownloadRowViewModel> DownloadRows { get; } = new();
+
+    /// <summary>Imported issues still missing their ComicVine details (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 6.2).</summary>
+    public ObservableCollection<ScrapeReviewRowViewModel> ScrapeReviewRows { get; } = new();
+
+    public bool HasScrapeReview => ScrapeReviewRows.Count > 0;
+
+    public string ScrapeReviewHeading => ScrapeReviewRows.Count == 1 ? "NEEDS ATTENTION · 1 issue is missing its ComicVine details" : $"NEEDS ATTENTION · {ScrapeReviewRows.Count} issues are missing their ComicVine details";
     public ObservableCollection<CandidateGroupViewModel> CandidateGroups { get; } = new();
     public ObservableCollection<WatchedSeriesRowViewModel> SeriesRows { get; } = new();
     public ObservableCollection<VolumeResultViewModel> SearchResults { get; } = new();
@@ -213,6 +233,18 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
             .OrderBy(w => w.Status == WantedIssueStatus.Failed ? 0 : 1).ThenBy(w => w.CreatedAt)
             .ToList().Select(ToDownloadRow));
 
+        Fill(ScrapeReviewRows, context.WantedIssues.Include(w => w.WatchedSeries)
+            .Where(w => w.ScrapeStatus == ScrapeStatus.Failed)
+            .OrderBy(w => w.ScrapeLastAttemptAt)
+            .ToList().Select(w => new ScrapeReviewRowViewModel
+            {
+                Id = w.Id,
+                Title = $"{w.WatchedSeries?.Name} #{w.IssueNumber}",
+                Reason = w.ScrapeError ?? "Couldn't add ComicVine details.",
+                NeedsYourAction = w.ScrapeFailureIsTerminal,
+                Cover = CoverFor(w),
+            }));
+
         var candidateCounts = context.ReleaseCandidates
             .GroupBy(c => c.WantedIssueId)
             .Select(g => new { g.Key, Count = g.Count() })
@@ -262,6 +294,8 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(HasNoWanted));
         OnPropertyChanged(nameof(HasNoDownloads));
+        OnPropertyChanged(nameof(HasScrapeReview));
+        OnPropertyChanged(nameof(ScrapeReviewHeading));
         OnPropertyChanged(nameof(WantedTabCount));
         OnPropertyChanged(nameof(HasNoUpcoming));
         OnPropertyChanged(nameof(HasNoCandidates));
@@ -292,6 +326,59 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
             Refresh();
         }
     }
+
+    /// <summary>Tries a failed scrape again now. Deferred a tick: the row's own button is still routing its click, and the row is about to leave the list.</summary>
+    [RelayCommand]
+    private void RetryScrape(ScrapeReviewRowViewModel row) => _post(() =>
+    {
+        using (var context = _createContext())
+        {
+            Paperbunkr.Daemon.Services.ScrapeSweeper.Requeue(context, row.Id);
+        }
+
+        Refresh();
+    });
+
+    /// <summary>Gives up on one issue's ComicVine details; the issue stays in the library as it is.</summary>
+    [RelayCommand]
+    private void DismissScrape(ScrapeReviewRowViewModel row) => _post(() =>
+    {
+        using (var context = _createContext())
+        {
+            Paperbunkr.Daemon.Services.ScrapeSweeper.Dismiss(context, row.Id);
+        }
+
+        Refresh();
+    });
+
+    /// <summary>One click for a whole failed batch (a bad key fixed, ComicVine back up): every failed issue goes back in the queue.</summary>
+    [RelayCommand]
+    private void RetryAllScrapes() => _post(() =>
+    {
+        int count;
+        using (var context = _createContext())
+        {
+            var ids = context.WantedIssues.Where(w => w.ScrapeStatus == ScrapeStatus.Failed).Select(w => w.Id).ToList();
+            count = ids.Count(id => Paperbunkr.Daemon.Services.ScrapeSweeper.Requeue(context, id));
+        }
+
+        SetStatus(count == 0 ? string.Empty : $"Trying again for {count} issue{(count == 1 ? string.Empty : "s")}.", isError: false);
+        Refresh();
+    });
+
+    [RelayCommand]
+    private void DismissAllScrapes() => _post(() =>
+    {
+        using (var context = _createContext())
+        {
+            foreach (var id in context.WantedIssues.Where(w => w.ScrapeStatus == ScrapeStatus.Failed).Select(w => w.Id).ToList())
+            {
+                Paperbunkr.Daemon.Services.ScrapeSweeper.Dismiss(context, id);
+            }
+        }
+
+        Refresh();
+    });
 
     /// <summary>"I have this": stops wanting it without ever searching. Deferred a tick - the row's own button is still routing its click.</summary>
     [RelayCommand]

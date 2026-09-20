@@ -48,7 +48,7 @@ public sealed class ImportProcessor(
             return ImportOutcome.Deferred("Choose a destination library folder in Preferences → Acquisition so finished downloads can be imported.");
         }
 
-        var templateError = NameTemplate.Validate(settings.RenameTemplate);
+        var templateError = ImportNaming.Validate(settings.RenameTemplate);
         if (templateError is not null)
         {
             return ImportOutcome.Deferred($"The naming template in Preferences → Acquisition is invalid: {templateError}");
@@ -174,7 +174,7 @@ public sealed class ImportProcessor(
 
             var (cbz, _) = ComicArchive.PrepareCbz(sourcePath, temp, info);
 
-            var relative = NameTemplate.FormatPath(settings.RenameTemplate, token => Token(token, watched, wanted, sourcePath), ".cbz");
+            var relative = ImportNaming.FormatPath(settings.RenameTemplate, watched, wanted, sourcePath, ".cbz");
             var destination = UniquePath(Path.Combine(settings.DestinationFolderPath, relative.Replace('/', Path.DirectorySeparatorChar)));
 
             // The template can never place a file outside the library folder.
@@ -188,7 +188,7 @@ public sealed class ImportProcessor(
             File.Move(cbz, destination);
 
             var issueId = await ingester.IngestAsync(destination, cancellationToken).ConfigureAwait(false);
-            Record(wanted.Id, watched, wanted.IssueNumber, issueId);
+            Record(wanted.Id, watched, wanted.IssueNumber, issueId, settings.ScrapeOnImport);
             return destination;
         }
         finally
@@ -197,13 +197,23 @@ public sealed class ImportProcessor(
         }
     }
 
-    private void Record(int wantedId, WatchedSeries watched, string number, int? issueId)
+    private void Record(int wantedId, WatchedSeries watched, string number, int? issueId, bool scrapeOnImport)
     {
         using var context = createContext();
         var wanted = context.WantedIssues.First(w => w.Id == wantedId);
         wanted.Status = WantedIssueStatus.Imported;
         wanted.IssueId = issueId;
         wanted.ImportedAt = _now();
+
+        // Pending is written in the same save that marks the issue imported: if the app dies right after, the retry sweep still finds this row.
+        if (issueId is not null && scrapeOnImport)
+        {
+            wanted.ScrapeStatus = ScrapeStatus.Pending;
+            wanted.ScrapeAttempts = 0;
+            wanted.ScrapeError = null;
+            wanted.ScrapeFailureIsTerminal = false;
+        }
+
         wanted.DownloadProgress = null;
         wanted.FailureReason = null;
         context.SaveChanges();
@@ -226,21 +236,6 @@ public sealed class ImportProcessor(
         context.SaveChanges();
         events.Publish(new IssueFailedEvent(wanted.Id, $"{wanted.WatchedSeries?.Name} #{wanted.IssueNumber}", reason));
     }
-
-    private static string? Token(string name, WatchedSeries watched, WantedIssue wanted, string sourcePath) => name switch
-    {
-        "series" => watched.Name,
-        "title" => wanted.Name,
-        "volume" => watched.StartYear is int y ? $"v{y}" : null,
-        "volumeyear" => watched.StartYear?.ToString(),
-        "number" => wanted.IssueNumber,
-        "year" => wanted.StoreDate?.Year.ToString(),
-        "month" => wanted.StoreDate?.Month.ToString("00"),
-        "day" => wanted.StoreDate?.Day.ToString("00"),
-        "publisher" => watched.Publisher,
-        "filename" => Path.GetFileNameWithoutExtension(sourcePath),
-        _ => null,
-    };
 
     /// <summary>The file path inside the download folder, or <c>null</c> if it would escape it (a hostile torrent with "..\" in a path).</summary>
     private static string? ResolveSafely(string savePath, string relative)

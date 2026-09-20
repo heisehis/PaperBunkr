@@ -252,6 +252,25 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Connections_HasADownloadAutomationGroup_WhoseRowsFollowTheSavedConnection()
+    {
+        var vm = CreateViewModel();
+
+        Assert.Equal(new[] { "Prowlarr", "qBittorrent" }, vm.DownloadProviderRows.Select(r => r.Id));
+        Assert.Equal(ConnectionDialogKind.Prowlarr, vm.DownloadProviderRows[0].Kind);
+        Assert.Equal(ConnectionDialogKind.QBittorrent, vm.DownloadProviderRows[1].Kind);
+        Assert.All(vm.DownloadProviderRows, r => Assert.False(r.IsConnected));
+
+        vm.Acquisition.ProwlarrUrl = "http://prowlarr:9696";
+        vm.Acquisition.ProwlarrApiKey = "KEY";
+        vm.Acquisition.QBittorrentUrl = "http://qbit:8080";
+        vm.Acquisition.SaveConnectionsCommand.Execute(null);
+
+        Assert.All(vm.DownloadProviderRows, r => Assert.True(r.IsConnected));      // the checkmark follows the saved state
+        Assert.Contains("Prowlarr: connected", vm.Acquisition.ConnectionsSummary);
+    }
+
+    [Fact]
     public void OpenConnectionDialogCommand_SetsSelectedProviderAndOpensDialog()
     {
         var vm = CreateViewModel();

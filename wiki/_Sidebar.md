@@ -16,6 +16,7 @@
 - [Home Dashboard & Recommendations](Home-Dashboard-and-Recommendations)
 - [Story Events & Relations](Story-Events-and-Relations)
 - [Trackers](Trackers)
+- [Scraping & Organizing](Scraping-and-Organizing)
 
 **Customize**
 - [Metadata & Editing](Metadata-and-Editing)

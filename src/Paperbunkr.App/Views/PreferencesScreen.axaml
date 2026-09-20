@@ -215,6 +215,14 @@
                                     <TextBlock Text="Connections" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsOrganizeScrapeSection}"
+                                    Command="{Binding GoOrganizeScrapeCommand}"
+                                    AutomationProperties.AutomationId="PreferencesOrganizeScrapeNavButton">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="ArrowDownload" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Organize &amp; Scrape" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsAcquisitionSection}"
                                     Command="{Binding GoAcquisitionCommand}"
                                     AutomationProperties.AutomationId="PreferencesAcquisitionNavButton">
@@ -281,6 +289,9 @@
                 <pref:KeyboardShortcutsSection IsVisible="{Binding IsKeyboardShortcutsSection}" />
                 <pref:ConnectionsSection IsVisible="{Binding IsConnectionsSection}" />
                 <!-- Own view model: the wrapper carries the visibility binding (against the screen's DataContext), the section the Acquisition one. -->
+                <Panel IsVisible="{Binding IsOrganizeScrapeSection}">
+                    <pref:OrganizeScrapeSection DataContext="{Binding OrganizeScrape}" />
+                </Panel>
                 <Panel IsVisible="{Binding IsAcquisitionSection}">
                     <pref:AcquisitionSection DataContext="{Binding Acquisition}" />
                 </Panel>

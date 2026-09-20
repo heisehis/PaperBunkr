@@ -99,6 +99,11 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<ReleaseCandidate> ReleaseCandidates => Set<ReleaseCandidate>();
     public DbSet<AcquisitionSettings> AcquisitionSettings => Set<AcquisitionSettings>();
     public DbSet<ReleaseBlocklist> ReleaseBlocklist => Set<ReleaseBlocklist>();
+    public DbSet<Paperbunkr.Data.Organizing.OrganizerProfile> OrganizerProfiles => Set<Paperbunkr.Data.Organizing.OrganizerProfile>();
+    public DbSet<Paperbunkr.Data.Organizing.OrganizeBatch> OrganizeBatches => Set<Paperbunkr.Data.Organizing.OrganizeBatch>();
+    public DbSet<Paperbunkr.Data.Organizing.OrganizeMove> OrganizeMoves => Set<Paperbunkr.Data.Organizing.OrganizeMove>();
+    public DbSet<Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow> ScrapeSettingsRows => Set<Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow>();
+    public DbSet<Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry> ComicVineMatchMemories => Set<Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry>();
 
     public DbSet<VirtualTagDefinition> VirtualTagDefinitions => Set<VirtualTagDefinition>();
 
@@ -261,12 +266,46 @@ public class PaperbunkrDbContext : DbContext
             builder.HasIndex(c => c.WantedIssueId);
         });
 
+        modelBuilder.Entity<Paperbunkr.Data.Organizing.OrganizerProfile>(builder =>
+        {
+            builder.HasKey(p => p.Id);
+            builder.Property(p => p.Mode).HasConversion<int>();
+            builder.Property(p => p.AutomationCollisionPolicy).HasConversion<int>();
+            builder.Ignore(p => p.MonthNames);
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.Organizing.OrganizeBatch>(builder =>
+        {
+            builder.HasKey(b => b.Id);
+            builder.HasMany(b => b.Moves).WithOne(m => m.Batch).HasForeignKey(m => m.BatchId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.Organizing.OrganizeMove>(builder =>
+        {
+            builder.HasKey(m => m.Id);
+            builder.HasIndex(m => m.BatchId);
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.HasIndex(e => new { e.SearchKey, e.ChosenVolumeId }).IsUnique();
+        });
+
         modelBuilder.Entity<AcquisitionSettings>(builder =>
         {
             builder.HasKey(a => a.Id);
             builder.Property(a => a.Id).ValueGeneratedNever();
             // Added after the table first shipped, so existing rows need a DB-level default to backfill.
-            builder.Property(a => a.RenameTemplate).HasDefaultValue("{publisher}/{series} ({volumeyear})/{series} #{number:000}");
+            builder.Property(a => a.RenameTemplate).HasDefaultValue(Entities.AcquisitionSettings.LegacyDefaultRenameTemplate);
+            builder.Property(a => a.RenameTemplateGrammar).HasConversion<int>().HasDefaultValue(TemplateGrammar.Import);
+            builder.Property(a => a.ScrapeOnImport).HasDefaultValue(true);
             builder.Property(a => a.AutoGrabMinScore).HasDefaultValue(20);
             builder.Property(a => a.WriteComicInfo).HasDefaultValue(true);
         });

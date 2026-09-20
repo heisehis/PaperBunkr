@@ -73,6 +73,44 @@ public class ComicVineRateLimitHandlerTests
     }
 
     [Fact]
+    public void TheShippedDefaults_ReserveAtLeastAFifthOfTheHourlyBudgetForInteractiveWork()
+    {
+        // The scraper's interactive actions and the background acquisition/scrape work share one 200/h budget
+        // (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md section 3). Background (Low) may never take more than 80% of it.
+        var defaults = new ComicVineRateLimitHandler.Options();
+
+        Assert.True(defaults.LowPriorityLimit <= defaults.HourlyLimit * 0.8, $"Low may use {defaults.LowPriorityLimit} of {defaults.HourlyLimit}");
+        Assert.True(defaults.LowPriorityLimit < defaults.HourlyLimit);
+    }
+
+    [Fact]
+    public async Task AtTheShippedLimits_ABackgroundBacklogNeverLocksOutInteractiveRequests()
+    {
+        var clock = new FakeClock();
+        var inner = new RecordingInner(clock);
+        var defaults = new ComicVineRateLimitHandler.Options();
+        using var invoker = new HttpMessageInvoker(new ComicVineRateLimitHandler(
+            inner, Opts(clock, hourly: defaults.HourlyLimit, low: defaults.LowPriorityLimit, spacing: TimeSpan.Zero)));
+        var start = clock.Now;
+
+        // A backlog uses every Low slot the window allows...
+        for (int i = 0; i < defaults.LowPriorityLimit; i++)
+        {
+            using var _ = await invoker.SendAsync(Req("low" + i, ComicVineRequestPriority.Low), CancellationToken.None);
+        }
+
+        // ...and a person clicking "Scrape with ComicVine..." right after is served immediately, for the whole reserved remainder.
+        int reserved = defaults.HourlyLimit - defaults.LowPriorityLimit;
+        for (int i = 0; i < reserved; i++)
+        {
+            using var _ = await invoker.SendAsync(Req("high" + i), CancellationToken.None);
+        }
+
+        Assert.Equal(start, clock.Now);                                       // nobody waited
+        Assert.Equal(defaults.HourlyLimit, inner.Calls.Count);
+    }
+
+    [Fact]
     public async Task LowPriority_IsCappedBelowTheHourlyLimit_WhileHighKeepsGoing()
     {
         var clock = new FakeClock();

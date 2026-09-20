@@ -107,3 +107,5 @@ technically succeed. Only run plugins you trust.
 A `.py` script gets the same environment object and a comparable sandbox: static analysis
 rejects a `clr.AddReference(...)` call naming anything outside the same fixed reference set
 the `.csx` path uses, at discovery time rather than only at runtime.
+
+> **Cluster Library Manager** (ComicVine scraping and library organizing) is now built into Paperbunkr. See [Scraping and Organizing](Scraping-and-Organizing). An installed copy of the old plugin is not loaded.

@@ -25,6 +25,12 @@ public enum ConnectionDialogKind
     /// shared public client like Kitsu's) *and* username + password, confirmed live 2026-09-18.
     /// The only provider needing both an app registration and account credentials at once.</summary>
     CredentialWithClient,
+
+    /// <summary>Prowlarr - address + API key, with a Test button. Edited through the acquisition view-model (one source of truth for these fields).</summary>
+    Prowlarr,
+
+    /// <summary>qBittorrent - web UI address, username, password and category, with a Test button. Same view-model as <see cref="Prowlarr"/>.</summary>
+    QBittorrent,
 }
 
 /// <summary>
@@ -131,6 +137,21 @@ public partial class ConnectionProviderRow : ObservableObject
         {
             Id = "Metron", DisplayName = "Metron", Kind = ConnectionDialogKind.Credential,
             PrimaryActionLabel = "Save", HelpText = "Sign in with your metron.cloud account.",
+        },
+    };
+
+    /// <summary>The download-automation services acquisition talks to (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 7).</summary>
+    public static List<ConnectionProviderRow> CreateDownloadProviders() => new()
+    {
+        new()
+        {
+            Id = "Prowlarr", DisplayName = "Prowlarr", Kind = ConnectionDialogKind.Prowlarr,
+            PrimaryActionLabel = "Save", HelpText = "Your own Prowlarr finds releases. Find the API key in Prowlarr under Settings → General; it is stored encrypted.",
+        },
+        new()
+        {
+            Id = "qBittorrent", DisplayName = "qBittorrent", Kind = ConnectionDialogKind.QBittorrent,
+            PrimaryActionLabel = "Save", HelpText = "Approved releases are sent here. Paperbunkr puts them in its own category and only ever touches torrents in it.",
         },
     };
 

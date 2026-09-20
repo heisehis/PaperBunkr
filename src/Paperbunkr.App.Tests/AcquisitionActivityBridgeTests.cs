@@ -145,4 +145,32 @@ public class AcquisitionActivityBridgeTests
         Assert.Single(activity.Alerts);
         bridge.Dispose();
     }
+
+    [Fact]
+    public void AScrapeFailure_RaisesADedupedAlert_ThatASuccessfulRetryClears()
+    {
+        var (bridge, activity, _, _, _) = Create();
+
+        bridge.Handle(new IssueScrapeFailedEvent(7, "Spawn #263", "ComicVine request failed", WillRetry: true));
+        bridge.Handle(new IssueScrapeFailedEvent(7, "Spawn #263", "ComicVine request failed", WillRetry: true));
+
+        var alert = Assert.Single(activity.Alerts);                 // the same want never piles up alerts
+        Assert.Contains("Spawn #263", alert.Title);
+        Assert.Contains("try again", alert.Detail);
+        Assert.Equal(ActivityLinkKind.WantedScreen, alert.ActionLink!.Kind);
+
+        bridge.Handle(new IssueScrapedEvent(7, "Spawn #263", FieldsChanged: 9));
+
+        Assert.Empty(activity.Alerts);
+    }
+
+    [Fact]
+    public void ATerminalScrapeFailure_DoesNotPromiseARetry()
+    {
+        var (bridge, activity, _, _, _) = Create();
+
+        bridge.Handle(new IssueScrapeFailedEvent(8, "Spawn #1", "ComicVine has no issue with this id.", WillRetry: false));
+
+        Assert.DoesNotContain("try again", Assert.Single(activity.Alerts).Detail);
+    }
 }

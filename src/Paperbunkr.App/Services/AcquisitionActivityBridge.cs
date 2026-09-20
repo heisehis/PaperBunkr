@@ -159,6 +159,33 @@ public sealed class AcquisitionActivityBridge : IDisposable
                 _onWantedChanged?.Invoke();
                 break;
 
+            case IssueScrapeFailedEvent scrapeFailed:
+                // The durable record is the want's ScrapeStatus; this alert only points at it (dismissing it never loses the failure).
+                _activity.RaiseAlert(new ActivityAlert
+                {
+                    Severity = ActivityAlertSeverity.Warning,
+                    Title = $"Couldn't add ComicVine details to {scrapeFailed.Label}",
+                    Detail = scrapeFailed.WillRetry ? $"{scrapeFailed.Reason} Paperbunkr will try again." : scrapeFailed.Reason,
+                    DedupeKey = $"acquisition-scrape-failed-{scrapeFailed.WantedIssueId}",
+                    ActionLabel = "Open Wanted",
+                    ActionLink = new ActivityLink(ActivityLinkKind.WantedScreen),
+                });
+                _onWantedChanged?.Invoke();
+                break;
+
+            case IssueScrapedEvent scraped:
+            {
+                // A retry that finally worked clears its own earlier alert.
+                var stale = _activity.Alerts.FirstOrDefault(a => a.DedupeKey == $"acquisition-scrape-failed-{scraped.WantedIssueId}");
+                if (stale is not null)
+                {
+                    _activity.DismissAlert(stale.Id);
+                }
+
+                _onWantedChanged?.Invoke();
+                break;
+            }
+
             case DaemonAlertClearedEvent cleared:
                 var existing = _activity.Alerts.FirstOrDefault(a => a.DedupeKey == cleared.Key);
                 if (existing is not null)

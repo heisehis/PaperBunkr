@@ -81,6 +81,8 @@
                             </StackPanel>
                             <TextBlock Text="{Binding Author, StringFormat='by {0}'}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                        IsVisible="{Binding Author, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                            <TextBlock Text="{Binding RequiresApiText}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
+                                       IsVisible="{Binding HasRequiresApi}" />
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Border IsVisible="{Binding IsNativeTier}" Background="#1E3A5A" CornerRadius="3" Padding="6,2">
                                     <TextBlock Text="Native" FontSize="11" Foreground="#6EB4E8" />

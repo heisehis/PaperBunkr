@@ -24,6 +24,8 @@ internal sealed class PluginActivityHandleAdapter : IPluginActivityHandle
 
     public void Report(int done, int total, string? detail = null) => _inner.Report(done, total, detail);
 
+    public void Report(string detail) => _inner.Report(detail);
+
     public void Succeed(string summary) => _inner.Succeed(summary);
 
     public void Fail(string summary) => _inner.Fail(summary);

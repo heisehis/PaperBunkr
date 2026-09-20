@@ -27,4 +27,7 @@ public enum ActivityJobKind
 
     /// <summary>The comic acquisition daemon's polling cycle (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md).</summary>
     Acquisition,
+
+    /// <summary>A background job started by a plugin through <c>IPluginEnvironment.Activity</c> (Plugin API 4.1, docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §4). Titles are prefixed with the plugin's name.</summary>
+    Plugin,
 }

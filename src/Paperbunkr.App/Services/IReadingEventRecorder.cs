@@ -31,4 +31,17 @@ public interface IReadingEventRecorder
 
     /// <summary>Raised after any successful write. Handlers may be invoked from a background thread.</summary>
     event Action? ReadingEventRecorded;
+
+    /// <summary>
+    /// Raised after a <see cref="ReadingEventKind.Finished"/> row was saved, carrying that row - the
+    /// feed for the <c>BookRead</c> plugin hook (docs/superpowers/specs/2026-09-20-plugin-api-4-1-
+    /// design.md §5.2). <see cref="ReadingEventRecorded"/> can't serve because it carries nothing.
+    /// Fires for every finish, so a re-read fires again. Handlers may be invoked from a background thread.
+    /// The default is a no-op so an implementer that doesn't produce finishes (a test double) needn't declare it.
+    /// </summary>
+    event Action<ReadingEvent>? ReadingFinished
+    {
+        add { }
+        remove { }
+    }
 }

@@ -117,15 +117,20 @@ public partial class PluginScreenViewModel : ViewModelBase
 
         var scopedCommands = _host.Engine.AllCommands.Where(c => c.PluginKey == row.Package.Key).ToList();
         var loadResult = _host.Engine.NativeLoadResults.GetValueOrDefault(row.Package.Key);
+        var apiInfo = _host.Engine.PackageApiInfo.GetValueOrDefault(row.Package.Key);
         SelectedPackageDetail = new PluginPackageDetailViewModel(
             row.Package,
             scopedCommands,
             _host,
             _filePicker,
-            loadError: loadResult?.LoadError,
-            hasConfigure: loadResult?.Module is INativePluginSettingsUi,
+            // A native package carries its own load error (which already includes a requiresApi block);
+            // a script package blocked by requiresApi registers no commands, so the engine's blocked
+            // reason is the only place that failure is visible - show it in the same banner.
+            loadError: loadResult?.LoadError ?? apiInfo?.BlockedReason,
+            hasConfigure: loadResult?.Module is INativePluginSettingsUi || _host.Engine.SettingsSchemas.ContainsKey(row.Package.Key),
             onRemoved: () => RemovePackage(row.Package),
-            onRefreshRequested: Refresh);
+            onRefreshRequested: Refresh,
+            requiresApi: apiInfo?.RequiresApi);
     }
 
     /// <summary>Health dot (docs §4.3) - a native package whose own load failed is broken; a package
@@ -149,6 +154,13 @@ public partial class PluginScreenViewModel : ViewModelBase
             {
                 return true;
             }
+        }
+
+        // A script package blocked by requiresApi registers zero commands, and the rule below
+        // deliberately never flags a zero-command package broken - so it needs its own check.
+        if (_host.Engine.PackageApiInfo.GetValueOrDefault(package.Key)?.BlockedReason is not null)
+        {
+            return true;
         }
 
         var ownCommands = _host.Engine.AllCommands.Where(c => c.PluginKey == package.Key).ToList();

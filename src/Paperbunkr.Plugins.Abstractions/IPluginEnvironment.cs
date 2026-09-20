@@ -30,6 +30,9 @@ public interface IPluginEnvironment : IPluginConfig, ICloneable
     /// <summary>Curated, audited per-field metadata write surface (Plugin API v3 §5).</summary>
     IMetadataWriter Writer { get; }
 
+    /// <summary>Reports background jobs and alerts through the Activity Center (Plugin API 4.1, docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §4). Attributed to the plugin owning the current command; build a fresh one per command clone rather than caching it across clones.</summary>
+    IPluginActivity Activity { get; }
+
     /// <summary>Folder the currently-executing command's script/manifest lives in; set on the per-command clone by <see cref="Command.Initialize"/>.</summary>
     string CommandPath { get; set; }
 

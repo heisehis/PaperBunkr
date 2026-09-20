@@ -20,8 +20,9 @@ public sealed class PythonHelloPluginTests
     [Fact]
     public async Task Startup_hook_runs_through_the_real_engine_and_returns_its_message()
     {
+        var environment = new FakePluginEnvironment();
         var engine = new PluginEngine();
-        engine.Discover(PluginsRoot, new FakePluginEnvironment());
+        engine.Discover(PluginsRoot, environment);
 
         Command cmd = Assert.Single(engine.AllCommands);
         Assert.IsType<PythonCommand>(cmd);
@@ -30,7 +31,13 @@ public sealed class PythonHelloPluginTests
         var results = await engine.InvokeAsync(PluginHooks.Startup, env => new StartupHookGlobals { Environment = env });
 
         var result = Assert.Single(results);
-        Assert.True(result.Success);
+        Assert.True(result.Success, result.Error?.ToString());
         Assert.Contains("active", (string)result.ReturnValue!);
+
+        // The sample also drives the Plugin API 4.1 Activity reporter from Python.
+        var job = Assert.Single(environment.RecordedActivity.Jobs);
+        Assert.Equal("Saying hello", job.Title);
+        Assert.Equal(new[] { "Starting up" }, job.Reports);
+        Assert.Equal("Succeeded: Python Hello is ready", job.Outcome);
     }
 }

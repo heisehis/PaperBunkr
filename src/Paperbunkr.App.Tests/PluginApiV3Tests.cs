@@ -421,6 +421,7 @@ public sealed class PluginApiV3Tests : IDisposable
         Rules = new PaperbunkrRulesEngine(),
         Writer = new PaperbunkrMetadataWriter(),
         ThemePlugin = new StubThemePlugin(),
+        ActivityService = new Paperbunkr.App.Services.ActivityService(dispatch: a => a(), recordRun: _ => { }),
         PluginKey = pluginKey,
     };
 

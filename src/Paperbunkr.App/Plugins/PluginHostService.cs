@@ -6,7 +6,10 @@ using Avalonia.Controls;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
+using Paperbunkr.App.Views;
+using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Events;
 using Paperbunkr.Plugins;
 using Paperbunkr.Plugins.Abstractions.Ui;
 using Paperbunkr.Plugins.Hooks;
@@ -48,6 +51,9 @@ public sealed class PluginHostService
             Rules = new PaperbunkrRulesEngine(),
             Writer = new PaperbunkrMetadataWriter(),
             ThemePlugin = new PaperbunkrThemePlugin(),
+            ActivityService = main.Activity,
+            ResolvePluginName = key => Engine.PackageNames.GetValueOrDefault(key, key),
+            SettingsAccess = Settings,
         };
 
         // Native-capable (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-design.md §3) -
@@ -57,6 +63,9 @@ public sealed class PluginHostService
         _environment = new PaperbunkrNativePluginEnvironment(baseEnvironment, main.Activity, main.NativePluginModalHost);
 
         DiscoverAndApplyOverrides();
+
+        ActivityForAlerts = main.Activity;
+        AttachDomainEvents(main.ReadingEvents, LibraryEvents.Default);
 
         InvokeAndReport(PluginHooks.Startup, env => new StartupHookGlobals { Environment = env });
     }
@@ -88,6 +97,7 @@ public sealed class PluginHostService
         try
         {
             Engine.Discover(PluginPaths.RootDirectory, _environment);
+            RejectNativePluginsWithTwoSettingsDefinitions();
             ApplyPersistedOverrides();
         }
         catch (Exception ex)
@@ -96,8 +106,28 @@ public sealed class PluginHostService
         }
     }
 
+    /// <summary>
+    /// A native plugin that declares a <c>&lt;Settings&gt;</c> schema <em>and</em> implements its own
+    /// <see cref="INativePluginSettingsUi"/> defines its settings twice (docs/superpowers/specs/2026-09-20-
+    /// plugin-api-4-1-design.md §6.3) - rejected, with a reason, so there is exactly one source of truth.
+    /// This can only be checked here: <c>INativePluginSettingsUi</c> lives in the Avalonia-dependent project
+    /// the engine doesn't reference, and the module has to be loaded to ask. (A script plugin with a schema
+    /// and a ConfigScript command is caught earlier, in the engine.)
+    /// </summary>
+    private void RejectNativePluginsWithTwoSettingsDefinitions()
+    {
+        foreach ((string key, NativePluginLoadResult result) in Engine.NativeLoadResults.ToList())
+        {
+            if (result.Module is INativePluginSettingsUi && Engine.SettingsSchemas.ContainsKey(key))
+            {
+                Engine.RejectPackage(key, "the plugin declares a <Settings> schema and also implements its own settings UI - a plugin can have only one settings definition");
+            }
+        }
+    }
+
     public void Shutdown()
     {
+        DetachDomainEvents();
         InvokeAndReport(PluginHooks.Shutdown, env => new ShutdownHookGlobals { Environment = env });
     }
 
@@ -259,6 +289,25 @@ public sealed class PluginHostService
             return;
         }
 
+        // A plugin that declares a <Settings> schema gets the host-rendered overlay (docs/superpowers/specs/
+        // 2026-09-20-plugin-api-4-1-design.md §6.4) through this same modal path. A schema and a custom
+        // settings UI together are rejected at discovery, so at most one of the two branches applies.
+        if (Engine.SettingsSchemas.TryGetValue(pluginKey, out PluginSettingsSchema? schema))
+        {
+            string pluginName = Engine.PackageNames.GetValueOrDefault(pluginKey, pluginKey);
+            var schemaView = new PluginSettingsSchemaView { DataContext = new PluginSettingsSchemaViewModel(pluginKey, pluginName, schema, Settings) };
+            try
+            {
+                await uiEnvironment.ShowModalAsync<object?>(_ => schemaView).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Dismissed via the shell's own scrim/close button - the only way this modal ends.
+            }
+
+            return;
+        }
+
         if (!Engine.NativeLoadResults.TryGetValue(pluginKey, out var loadResult) || loadResult.Module is not INativePluginSettingsUi settingsUi)
         {
             return;
@@ -386,5 +435,211 @@ public sealed class PluginHostService
             DiagnosticsService.LogMilestone($"Plugin hook '{hook}' invocation failed: {ex.Message}");
             return Array.Empty<PluginInvocationResult>();
         }
+    }
+
+    private PluginSettingsAccess? _settings;
+
+    /// <summary>
+    /// The schema-aware view of the per-plugin settings store (docs/superpowers/specs/2026-09-20-plugin-api-4-1-
+    /// design.md §6): what plugins see through <c>GetSetting</c>/<c>SetSetting</c> and what the settings overlay
+    /// edits. Resolves each plugin's schema from the engine's current discovery, so a re-discovery is picked up.
+    /// </summary>
+    public PluginSettingsAccess Settings => _settings ??= new PluginSettingsAccess(
+        () => ContextFactory(),
+        key => Engine.SettingsSchemas.GetValueOrDefault(key),
+        DpapiSecretProtector.Instance);
+
+    // ---- Plugin API 4.1 domain-event hooks (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §5) ----
+    // BookRead, LibraryScanCompleted, MissingFileDetected and ReadingListChanged. The services that produce
+    // these events stay plugin-unaware: they raise on the recorder / LibraryEvents, and this host subscribes
+    // and dispatches through DomainHookDispatcher (fire-and-forget, one queue per command, timeout, report-once).
+
+    private DomainHookDispatcher? _domainHooks;
+    private IReadingEventRecorder? _subscribedRecorder;
+    private LibraryEvents? _subscribedEvents;
+
+    /// <summary>Test seam - where <c>BookRead</c> looks up the finished item. Production uses the real per-user database.</summary>
+    internal Func<PaperbunkrDbContext> ContextFactory { get; set; } = PaperbunkrDb.CreateContext;
+
+    /// <summary>Where a domain-hook problem alert is raised. Set from <c>MainViewModel.Activity</c> in <see cref="Initialize"/>; tests supply their own.</summary>
+    internal IActivityService? ActivityForAlerts { get; set; }
+
+    /// <summary>The dispatcher every domain hook runs through. Created on first use.</summary>
+    public DomainHookDispatcher DomainHooks => _domainHooks ??= new DomainHookDispatcher(Engine, ReportDomainHookProblem);
+
+    /// <summary>
+    /// Starts listening for the events that drive the four domain hooks. Called once from
+    /// <see cref="Initialize"/>; tests call it with their own recorder/events (and optionally a dispatcher
+    /// with a short timeout). Replaces any previous subscription rather than doubling up.
+    /// </summary>
+    internal void AttachDomainEvents(IReadingEventRecorder? recorder, LibraryEvents events, DomainHookDispatcher? dispatcher = null)
+    {
+        DetachDomainEvents();
+        if (dispatcher is not null)
+        {
+            _domainHooks = dispatcher;
+        }
+
+        _subscribedRecorder = recorder;
+        _subscribedEvents = events;
+
+        if (recorder is not null)
+        {
+            recorder.ReadingFinished += OnReadingFinished;
+        }
+
+        events.LibraryScanCompleted += OnLibraryScanCompleted;
+        events.MissingFileConfirmed += OnMissingFileConfirmed;
+        events.ReadingListChanged += OnReadingListChanged;
+    }
+
+    internal void DetachDomainEvents()
+    {
+        if (_subscribedRecorder is not null)
+        {
+            _subscribedRecorder.ReadingFinished -= OnReadingFinished;
+            _subscribedRecorder = null;
+        }
+
+        if (_subscribedEvents is not null)
+        {
+            _subscribedEvents.LibraryScanCompleted -= OnLibraryScanCompleted;
+            _subscribedEvents.MissingFileConfirmed -= OnMissingFileConfirmed;
+            _subscribedEvents.ReadingListChanged -= OnReadingListChanged;
+            _subscribedEvents = null;
+        }
+    }
+
+    /// <summary>Cheap guard so a hook nobody registered never pays for a database lookup or globals allocation.</summary>
+    private bool HasCommands(string hook) => Engine.GetCommands(hook).Any();
+
+    private void OnReadingFinished(ReadingEvent finished)
+    {
+        if (!HasCommands(PluginHooks.BookRead))
+        {
+            return;
+        }
+
+        // The item is looked up here, once, rather than per command. Either may legitimately be null:
+        // the item can be deleted between the finish and this running, and exactly one of the two
+        // applies to any event (comics/manga are Issues, novels are Books).
+        Issue? issue = null;
+        Book? book = null;
+        try
+        {
+            using var context = ContextFactory();
+            if (finished.ItemType == ReadingItemType.Comic)
+            {
+                issue = context.Issues.Find(finished.ItemId);
+            }
+            else
+            {
+                book = context.Books.Find(finished.ItemId);
+            }
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsService.LogMilestone($"BookRead: couldn't load the finished item: {ex.Message}");
+        }
+
+        DomainHooks.Dispatch(PluginHooks.BookRead, env => new BookReadHookGlobals
+        {
+            Environment = env,
+            ItemType = finished.ItemType,
+            ItemId = finished.ItemId,
+            SeriesId = finished.SeriesId,
+            PagesRead = finished.PagesRead,
+            FinishedUtc = finished.TimestampUtc,
+            Issue = issue,
+            Book = book,
+        });
+    }
+
+    private void OnLibraryScanCompleted(LibraryScanCompletedEvent scan)
+    {
+        if (!HasCommands(PluginHooks.LibraryScanCompleted))
+        {
+            return;
+        }
+
+        DomainHooks.Dispatch(PluginHooks.LibraryScanCompleted, env => new LibraryScanCompletedHookGlobals
+        {
+            Environment = env,
+            FolderPaths = scan.FolderPaths,
+            AddedCount = scan.AddedCount,
+            UpdatedCount = scan.UpdatedCount,
+            SeriesTouched = scan.SeriesTouched,
+            Duration = scan.Duration,
+            AddedItemIds = scan.AddedItemIds,
+            UpdatedItemIds = scan.UpdatedItemIds,
+        });
+    }
+
+    private void OnMissingFileConfirmed(MissingFileConfirmedEvent missing)
+    {
+        if (!HasCommands(PluginHooks.MissingFileDetected))
+        {
+            return;
+        }
+
+        DomainHooks.Dispatch(PluginHooks.MissingFileDetected, env => new MissingFileDetectedHookGlobals
+        {
+            Environment = env,
+            ItemType = missing.ItemType,
+            ItemId = missing.ItemId,
+            FilePath = missing.FilePath,
+            Title = missing.Title,
+        });
+    }
+
+    private void OnReadingListChanged(ReadingListChangedEvent change)
+    {
+        if (!HasCommands(PluginHooks.ReadingListChanged))
+        {
+            return;
+        }
+
+        DomainHooks.Dispatch(PluginHooks.ReadingListChanged, env => new ReadingListChangedHookGlobals
+        {
+            Environment = env,
+            ListId = change.ListId,
+            ListName = change.ListName,
+            Kind = change.Kind,
+            AddedIssueIds = change.AddedIssueIds,
+            RemovedIssueIds = change.RemovedIssueIds,
+        });
+    }
+
+    /// <summary>
+    /// A domain-hook problem worth telling the user about - at most once per command per kind per
+    /// session (the dispatcher enforces that). Goes to the Activity Center as an alert attributed to the
+    /// plugin, deduped under the same plugin-scoped key namespace <c>IPluginActivity</c> uses, and to the
+    /// diagnostics log. Never throws.
+    /// </summary>
+    private void ReportDomainHookProblem(DomainHookProblem problem)
+    {
+        DiagnosticsService.LogMilestone($"Plugin domain hook: {problem.Message}");
+
+        IActivityService? activity = ActivityForAlerts ?? _main?.Activity;
+        if (activity is null)
+        {
+            return;
+        }
+
+        string pluginName = Engine.PackageNames.GetValueOrDefault(problem.Command.PluginKey, problem.Command.PluginKey);
+        (string title, ActivityAlertSeverity severity) = problem.Kind switch
+        {
+            DomainHookProblemKind.Failed => ($"{pluginName} failed", ActivityAlertSeverity.Error),
+            DomainHookProblemKind.TimedOut => ($"{pluginName} isn't responding", ActivityAlertSeverity.Warning),
+            _ => ($"{pluginName} can't keep up", ActivityAlertSeverity.Warning),
+        };
+
+        activity.RaiseAlert(new ActivityAlert
+        {
+            Severity = severity,
+            Title = title,
+            Detail = problem.Message,
+            DedupeKey = $"plugin:{problem.Command.PluginKey}:hook:{problem.Command.Key}:{problem.Kind}",
+        });
     }
 }

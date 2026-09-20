@@ -68,6 +68,7 @@ public static class CsvReadingListIO
         }
 
         context.ReadingLists.Add(list);
+        ReadingListManager.RecordCreatedWithItems(context, list);
         context.SaveChanges();
         return new CsvImportResult(list, list.Items.Count - placeholderCount, placeholderCount, skippedRows);
     }

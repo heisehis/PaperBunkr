@@ -165,11 +165,56 @@ public class PaperbunkrDbContext : DbContext
         {
             try
             {
-                return base.SaveChanges(acceptAllChangesOnSuccess);
+                int written = base.SaveChanges(acceptAllChangesOnSuccess);
+                RunAfterSaveActions();
+                return written;
             }
             catch (DbUpdateException ex) when (attempt < maxAttempts && IsTransientLockError(ex))
             {
                 Thread.Sleep(attempt * 150);
+            }
+        }
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        int written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
+        RunAfterSaveActions();
+        return written;
+    }
+
+    private List<Action>? _afterSaveActions;
+
+    /// <summary>
+    /// Queues <paramref name="action"/> to run once, after the next <em>successful</em> save on this
+    /// context (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §5.4). This is how
+    /// <c>ReadingListManager</c> announces a change: it stages the change while the caller is still
+    /// assembling a unit of work, and the announcement is released only if that work actually
+    /// persisted - never for a failed or abandoned save. It exists because several writers use a
+    /// caller-owned context whose <c>SaveChanges</c> belongs to a larger operation (deleting an issue,
+    /// refreshing an arc), so a helper can't just save-and-notify on its own. A throwing action never
+    /// reaches the caller; a context that is disposed without saving simply drops its queue.
+    /// </summary>
+    public void RunAfterSave(Action action) => (_afterSaveActions ??= new List<Action>()).Add(action);
+
+    private void RunAfterSaveActions()
+    {
+        if (_afterSaveActions is not { Count: > 0 } pending)
+        {
+            return;
+        }
+
+        // Detach first: an action that itself saves on this context must not re-run the queue.
+        _afterSaveActions = null;
+        foreach (Action action in pending)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception)
+            {
+                // A notification failing must never turn a successful save into an error.
             }
         }
     }

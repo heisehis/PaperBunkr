@@ -1932,6 +1932,34 @@ ideas aren't lost, not because scope/approach is settled.
 *None of items 8-16 are scoped or brainstormed yet — same caveat as items 1-7 above: needs its own
 brainstorm → design spec per this project's `CLAUDE.md` workflow before implementation starts.*
 
+### Plugin API 4.1 — all four slices implemented 2026-09-20 (on-screen verification pending)
+Design: `docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md` (§ "As implemented" notes in §4.4, §5.3/§5.4,
+§6.5). Plans: `...-4-1-slice1-versioning-plan.md`, `...-slice2-activity-reporter-plan.md`,
+`...-slice3-domain-hooks-plan.md`, `...-slice4-settings-schema-plan.md`. `PluginApi.Current` is **4.1**.
+
+1. **`requiresApi` versioning** — a major mismatch (either direction) or a malformed value blocks the plugin
+   before anything is compiled or loaded; a minor difference never blocks and only adds a hint to a failure.
+2. **Activity reporter** — `IPluginEnvironment.Activity`: jobs (`Plugin` kind, attributed to the plugin, toast
+   only on failure) and alerts (plugin-scoped dedupe keys). Reuses the native tier's existing `IPluginActivityHandle`.
+3. **Domain hooks** — `BookRead`, `LibraryScanCompleted`, `MissingFileDetected`, `ReadingListChanged`, run through
+   `DomainHookDispatcher` (serial lane per command, 16-event queue that drops the oldest, cooperative
+   `CancellationToken` at 30 s, hung commands get nothing new, each problem reported once). All production
+   reading-list writes now go through `ReadingListManager`, which announces only after a successful save.
+4. **Settings schema** — `<Settings>` in `plugin.xml`; the host validates it, sanitises reads (invalid → default),
+   encrypts `secret` values with DPAPI (shared `DpapiSecrets`, now also used by `CredentialStore`), and renders a
+   settings overlay.
+
+**Verified:** Plugins.Tests, the reading-list subset of Data.Tests, DPAPI + `CredentialStore` tests, and the new App
+tests (adapter, producers, host wiring, settings storage/view-model, a headless mount of the real settings view) all
+pass; the App project builds with 0 errors after forced recompiles so the XAML weave ran. The larger App regression
+subsets fail only in tests that also fail on untouched `HEAD` (an Activity Center test that depends on the shared
+Avalonia dispatcher; `LiveFolderWatch` timing tests flake under machine load).
+**Not verified:** anything on screen (the Plugin screen's version line/banner, the settings overlay's real layout),
+anything against a real running app with a real plugin, and DPAPI on any account but this one.
+**Known limits:** `UpdatedCount`/`UpdatedItemIds` on `LibraryScanCompleted` are reserved (always 0/empty); nothing
+*enforces* use of `ReadingListManager` (backlog item 20); the headless test environment can't template an
+`ItemsControl`, so the settings view's row layout inside the running app is a by-eye check.
+
 ### Plugin API pitches — deferred (pitched 2026-09-20)
 Not started — each needs its own brainstorm → design spec before implementation. Captured so the
 ideas aren't lost, not because scope/approach is settled. These are everything the 2026-09-20 pitch
@@ -1989,6 +2017,12 @@ list proposed that was **not** taken into `docs/superpowers/specs/2026-09-20-plu
 19. **`IPluginLogger`** — routes plugin-specific logs into isolated per-plugin files (e.g.
     `logs/plugins/<key>.log`) instead of the main app log. Would also feed the item 9 dev-mode log
     pane.
+
+20. **Enforcement backstop for `ReadingListManager`** — 4.1 routes every reading-list write through
+    one manager but nothing *enforces* it, so a future direct `ReadingListItems.Add` compiles and
+    silently skips the `ReadingListChanged` hook. Options: an EF `SaveChangesInterceptor`, or a
+    Roslyn analyzer scoped to production assemblies (tests write rows directly on purpose). Only
+    worth building if a bypass actually happens.
 
 *Reviewed and not added:* capability manifests and dry-run (already items 6–8), `AppStarted`/
 `AppClosing` hooks (`Startup`/`Shutdown` already exist), inter-plugin event bus (same as item 12;

@@ -15,6 +15,11 @@ internal sealed class FakePluginEnvironment : IPluginEnvironment
     public IRulesEngine Rules { get; }
     public IMetadataWriter Writer { get; } = new FakeMetadataWriter();
     public IThemePlugin ThemePlugin { get; } = new FakeThemePlugin();
+
+    /// <summary>What every command clone reported through <see cref="Activity"/> - shared by reference across <see cref="Clone"/>.</summary>
+    public FakePluginActivity RecordedActivity { get; } = new();
+
+    public IPluginActivity Activity => RecordedActivity;
     public string CommandPath { get; set; } = string.Empty;
     public string PluginKey { get; set; } = string.Empty;
     public IEnumerable<string> LibraryPaths { get; } = Array.Empty<string>();

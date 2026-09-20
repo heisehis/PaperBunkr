@@ -37,6 +37,9 @@ public interface IPluginActivityHandle : IDisposable
 
     void Report(int done, int total, string? detail = null);
 
+    /// <summary>Updates the job's status text without a progress fraction (Plugin API 4.1).</summary>
+    void Report(string detail);
+
     void Succeed(string summary);
 
     void Fail(string summary);

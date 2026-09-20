@@ -1,4 +1,5 @@
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Events;
 
 namespace Paperbunkr.Plugins.Hooks;
 
@@ -12,6 +13,16 @@ namespace Paperbunkr.Plugins.Hooks;
 public abstract class PluginGlobals
 {
     public required IPluginEnvironment Environment { get; init; }
+
+    /// <summary>
+    /// Tripped when the host gives up on this invocation - today the domain-event hooks
+    /// (<see cref="PluginHooks.BookRead"/> and friends) cancel it after a 30 s timeout. Cooperative:
+    /// a plugin that never looks at it, or blocks synchronously, keeps running, so long-running
+    /// plugin work should pass it to anything cancellable and check it in loops. Defaults to
+    /// <see cref="System.Threading.CancellationToken.None"/> for every hook that has no timeout, and is
+    /// deliberately not <c>required</c> so existing globals construction is unchanged.
+    /// </summary>
+    public CancellationToken CancellationToken { get; set; }
 }
 
 /// <summary>Shared by <see cref="PluginHooks.Library"/> and <see cref="PluginHooks.Editor"/> - both
@@ -132,4 +143,75 @@ public sealed class QuickOpenHookGlobals : PluginGlobals
 public sealed class DrawThumbnailOverlayHookGlobals : PluginGlobals
 {
     public required Issue Book { get; init; }
+}
+
+// ---- Plugin API 4.1 domain-event hooks (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §5) ----
+// All notification-only: a script's return value is ignored. They run in the background, so a slow
+// plugin never blocks reading or scanning. Hooks about live items carry the entity; hooks whose subject
+// may already be gone by the time the plugin runs carry ids and snapshots only.
+
+/// <summary>
+/// <see cref="PluginHooks.BookRead"/> - an item was read through to the end. Comics and manga are
+/// <see cref="Issue"/>, novels are <see cref="Book"/> (no shared base), so exactly one of
+/// <see cref="Issue"/>/<see cref="Book"/> is set, matching <see cref="ItemType"/> - and either may be
+/// null if the item was deleted between the finish and the plugin running. Fires on every finish, so a
+/// re-read counts; dedupe with <see cref="FinishedUtc"/> if you only want the first.
+/// </summary>
+public sealed class BookReadHookGlobals : PluginGlobals
+{
+    public required ReadingItemType ItemType { get; init; }
+    public required int ItemId { get; init; }
+    public int? SeriesId { get; init; }
+
+    /// <summary>Pages read in the session up to the finish; null when unknown. An estimate for reflowed EPUBs.</summary>
+    public int? PagesRead { get; init; }
+
+    public required DateTime FinishedUtc { get; init; }
+    public Issue? Issue { get; init; }
+    public Book? Book { get; init; }
+}
+
+/// <summary>
+/// <see cref="PluginHooks.LibraryScanCompleted"/> - a full comic/manga folder scan finished. Counts and ids
+/// only, so a plugin never has to diff the whole library to learn what changed. Books are scanned by a
+/// separate service and don't fire this. <see cref="UpdatedItemIds"/> is a reserved, currently
+/// always-empty collection (the scanner doesn't track updates to existing issues), and
+/// <see cref="UpdatedCount"/> is 0.
+/// </summary>
+public sealed class LibraryScanCompletedHookGlobals : PluginGlobals
+{
+    public required IReadOnlyList<string> FolderPaths { get; init; }
+    public required int AddedCount { get; init; }
+    public required int UpdatedCount { get; init; }
+    public required int SeriesTouched { get; init; }
+    public required TimeSpan Duration { get; init; }
+    public required IReadOnlyList<int> AddedItemIds { get; init; }
+    public required IReadOnlyList<int> UpdatedItemIds { get; init; }
+}
+
+/// <summary>
+/// <see cref="PluginHooks.MissingFileDetected"/> - a file was confirmed missing under the Library
+/// Health threshold. Announced once, on the pass the count crosses the threshold (not on every later
+/// pass, and not on a single failed check).
+/// </summary>
+public sealed class MissingFileDetectedHookGlobals : PluginGlobals
+{
+    public required ReadingItemType ItemType { get; init; }
+    public required int ItemId { get; init; }
+    public required string FilePath { get; init; }
+    public required string Title { get; init; }
+}
+
+/// <summary>
+/// <see cref="PluginHooks.ReadingListChanged"/> - one reading-list operation's net effect. Ids only: the
+/// items may already be gone. <see cref="Kind"/> is a flags value (an arc refresh can add, remove and
+/// reorder in one pass); creating, renaming or deleting a whole list is not an event.
+/// </summary>
+public sealed class ReadingListChangedHookGlobals : PluginGlobals
+{
+    public required int ListId { get; init; }
+    public required string ListName { get; init; }
+    public required ReadingListChangeKind Kind { get; init; }
+    public required IReadOnlyList<int> AddedIssueIds { get; init; }
+    public required IReadOnlyList<int> RemovedIssueIds { get; init; }
 }

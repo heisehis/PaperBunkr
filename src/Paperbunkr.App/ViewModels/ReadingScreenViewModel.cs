@@ -304,17 +304,10 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
 
         using (var context = PaperbunkrDb.CreateContext())
         {
-            var existing = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => i.IssueId).ToHashSet();
-            int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
-            foreach (var result in SearchResults.Where(r => SearchSelection.SelectedIds.Contains(r.Id)))
-            {
-                if (existing.Add(result.IssueId))
-                {
-                    context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = result.IssueId, SortOrder = nextOrder++ });
-                }
-            }
-
-            BumpUpdatedAt(context, listId);
+            ReadingListManager.AddIssues(
+                context,
+                listId,
+                SearchResults.Where(r => SearchSelection.SelectedIds.Contains(r.Id)).Select(r => r.IssueId).ToList());
             context.SaveChanges();
         }
 
@@ -364,20 +357,9 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         if (result.IssueIds.Count > 0)
         {
             using var context = PaperbunkrDb.CreateContext();
-            var existing = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => i.IssueId).ToHashSet();
-            int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
-            foreach (int issueId in result.IssueIds)
-            {
-                if (existing.Add(issueId))
-                {
-                    context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = issueId, SortOrder = nextOrder++ });
-                    added++;
-                }
-            }
-
+            added = ReadingListManager.AddIssues(context, listId, result.IssueIds).Added;
             if (added > 0)
             {
-                BumpUpdatedAt(context, listId);
                 context.SaveChanges();
             }
         }
@@ -418,18 +400,8 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
 
         using (var context = PaperbunkrDb.CreateContext())
         {
-            var existing = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => i.IssueId).ToHashSet();
-            int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
             var seriesIssues = context.Issues.Where(i => i.SeriesId == result.SeriesId && !i.IsPlaceholder).AsEnumerable().OrderByNumber();
-            foreach (var issue in seriesIssues)
-            {
-                if (existing.Add(issue.Id))
-                {
-                    context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = issue.Id, SortOrder = nextOrder++ });
-                }
-            }
-
-            BumpUpdatedAt(context, listId);
+            ReadingListManager.AddIssues(context, listId, seriesIssues.Select(i => i.Id).ToList());
             context.SaveChanges();
         }
 
@@ -447,8 +419,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         var ids = MemberSelection.SelectedIds.ToList();
         using (var context = PaperbunkrDb.CreateContext())
         {
-            context.ReadingListItems.RemoveRange(context.ReadingListItems.Where(i => ids.Contains(i.Id)));
-            BumpUpdatedAt(context, listId);
+            ReadingListManager.RemoveItems(context, listId, ids);
             context.SaveChanges();
         }
 
@@ -1020,16 +991,11 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         using var context = PaperbunkrDb.CreateContext();
-        var items = context.ReadingListItems.Where(i => i.ReadingListId == listId).OrderBy(i => i.SortOrder).ToList();
-        int index = items.FindIndex(i => i.Id == row.Item.Id);
-        int swapWith = index + offset;
-        if (index < 0 || swapWith < 0 || swapWith >= items.Count)
+        if (!ReadingListManager.MoveItem(context, listId, row.Item.Id, offset))
         {
             return;
         }
 
-        (items[index].SortOrder, items[swapWith].SortOrder) = (items[swapWith].SortOrder, items[index].SortOrder);
-        BumpUpdatedAt(context, listId);
         context.SaveChanges();
         LoadReadingList(listId);
     }
@@ -1042,14 +1008,11 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         using var context = PaperbunkrDb.CreateContext();
-        var item = context.ReadingListItems.FirstOrDefault(i => i.Id == row.Item.Id);
-        if (item is null)
+        if (ReadingListManager.RemoveItems(context, listId, new[] { row.Item.Id }) == 0)
         {
             return;
         }
 
-        context.ReadingListItems.Remove(item);
-        BumpUpdatedAt(context, listId);
         context.SaveChanges();
         LoadReadingList(listId);
     }
@@ -1120,9 +1083,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         }
         else
         {
-            int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
-            context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = result.IssueId, SortOrder = nextOrder });
-            BumpUpdatedAt(context, listId);
+            ReadingListManager.AddIssues(context, listId, new[] { result.IssueId });
             context.SaveChanges();
         }
 

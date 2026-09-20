@@ -34,7 +34,7 @@ Upcoming stays empty. Mylar builds its list from a weekly pull list, so future i
 
 ## 5. Out of scope
 
-A ComicVine-sourced weekly list; a per-publisher default filter; notifications for new releases; cover-date (as opposed to store-date) listing; auto-following series.
+A ComicVine-sourced weekly list; a per-publisher default filter; cover-date (as opposed to store-date) listing; auto-following series; a daily request counter for Metron (its 5,000 a day is far above a personal library's use and the 429 cool-off covers a burst); recording which source scraped an issue (nothing would read it yet); Metron series covers (Metron has none).
 
 ## 6. Status
 
@@ -46,3 +46,9 @@ A ComicVine-sourced weekly list; a per-publisher default filter; notifications f
 | Releases tab (filters, Request, Follow) and empty states | Done |
 
 Verified: Data, Daemon and Wanted view-model tests for all of it. Not yet verified: a live fetch against Metron (fixtures only), the Releases tab on screen, and how long a first refresh takes on a real account (up to about 150 series lookups at the background rate of 14 requests a minute, so roughly ten minutes, then cached).
+
+### Follow-ups (2026-09-20)
+
+- **Hide a release.** `PullListRelease.IsHidden` (migration `AddPullListReleaseHidden`): a hidden release leaves the tab ("Show hidden" brings it back with a Restore button), is never turned into a want, and keeps the choice through refreshes.
+- **New-release notice.** When the daemon makes wants from the list it publishes one `NewReleasesEvent` per batch; the Activity Center shows an info notice ("6 new releases from series you follow", naming a few) linking to Wanted. Each batch is its own notice, since the alert's dedupe key would otherwise keep a stale count.
+- **Wording.** Text that said "ComicVine" where a want may be Metron's (import-details setting, the needs-attention list, the failure notice, the Detail panel's intro) is now source-neutral.

@@ -110,6 +110,20 @@ public sealed class AcquisitionActivityBridge : IDisposable
                 });
                 break;
 
+            case NewReleasesEvent releases:
+                // Announced once per batch, not per issue: a new week can bring a dozen at a time.
+                _activity.RaiseAlert(new ActivityAlert
+                {
+                    Severity = ActivityAlertSeverity.Info,
+                    Title = releases.Count == 1 ? "1 new release from a series you follow" : $"{releases.Count} new releases from series you follow",
+                    Detail = string.Join(", ", releases.Labels) + (releases.Count > releases.Labels.Count ? $" and {releases.Count - releases.Labels.Count} more" : string.Empty),
+                    DedupeKey = $"acquisition-new-releases-{releases.At.UtcTicks}",   // each batch is its own notice: a dedupe key would keep the old count
+                    ActionLabel = "Open Wanted",
+                    ActionLink = new ActivityLink(ActivityLinkKind.WantedScreen),
+                });
+                _onWantedChanged?.Invoke();
+                break;
+
             case IssueSnatchedEvent:
                 _onWantedChanged?.Invoke();
                 break;
@@ -164,7 +178,7 @@ public sealed class AcquisitionActivityBridge : IDisposable
                 _activity.RaiseAlert(new ActivityAlert
                 {
                     Severity = ActivityAlertSeverity.Warning,
-                    Title = $"Couldn't add ComicVine details to {scrapeFailed.Label}",
+                    Title = $"Couldn't add details to {scrapeFailed.Label}",
                     Detail = scrapeFailed.WillRetry ? $"{scrapeFailed.Reason} Paperbunkr will try again." : scrapeFailed.Reason,
                     DedupeKey = $"acquisition-scrape-failed-{scrapeFailed.WantedIssueId}",
                     ActionLabel = "Open Wanted",

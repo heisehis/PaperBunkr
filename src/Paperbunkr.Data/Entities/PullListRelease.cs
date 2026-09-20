@@ -26,6 +26,9 @@ public class PullListRelease
     public string? CoverImageUrl { get; set; }
 
     public DateTime FetchedAt { get; set; }
+
+    /// <summary>The user hid this release (not interested). Kept across refreshes, and a hidden release is never turned into a want.</summary>
+    public bool IsHidden { get; set; }
 }
 
 /// <summary>

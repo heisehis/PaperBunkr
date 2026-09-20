@@ -122,7 +122,7 @@ public sealed class ScrapeSweeper(
         }
         else
         {
-            events.Publish(new IssueScrapeFailedEvent(wantedId, label, outcome.Message ?? "Couldn't add ComicVine details.", willRetry));
+            events.Publish(new IssueScrapeFailedEvent(wantedId, label, outcome.Message ?? "Couldn't add details.", willRetry));
         }
     }
 

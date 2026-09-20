@@ -28,10 +28,14 @@ public sealed class ReleaseRowViewModel
     /// <summary>This issue is already wanted, downloading or owned, so there is nothing to request.</summary>
     public bool IsTaken { get; init; }
 
-    public bool CanFollow => !IsFollowed;
-    public bool CanRequest => !IsTaken;
-    public string StatusText => IsTaken ? "Wanted" : IsFollowed ? "Following" : string.Empty;
-    public bool HasStatus => IsTaken || IsFollowed;
+    /// <summary>The user hid this release; only shown while "Show hidden" is on.</summary>
+    public bool IsHidden { get; init; }
+    public bool CanHide => !IsHidden;
+
+    public bool CanFollow => !IsFollowed && !IsHidden;
+    public bool CanRequest => !IsTaken && !IsHidden;
+    public string StatusText => IsHidden ? "Hidden" : IsTaken ? "Wanted" : IsFollowed ? "Following" : string.Empty;
+    public bool HasStatus => IsHidden || IsTaken || IsFollowed;
 }
 
 /// <summary>A week of releases with its heading ("This week", "Next week", "Week of Oct 7").</summary>
@@ -57,6 +61,9 @@ public sealed partial class WantedScreenViewModel
 
     [ObservableProperty] private bool _releasesFollowedOnly;
 
+    /// <summary>Also list the releases the user hid, each with a Restore button.</summary>
+    [ObservableProperty] private bool _releasesShowHidden;
+
     /// <summary>Every publisher seen in the cached list, plus "All publishers" first.</summary>
     [ObservableProperty] private IReadOnlyList<string> _releasePublisherNames = new[] { AllPublishers };
 
@@ -66,6 +73,8 @@ public sealed partial class WantedScreenViewModel
     partial void OnReleasePublisherTextChanged(string value) => ReloadReleases();
 
     partial void OnReleasesFollowedOnlyChanged(bool value) => ReloadReleases();
+
+    partial void OnReleasesShowHiddenChanged(bool value) => ReloadReleases();
 
     private void ReloadReleases()
     {
@@ -117,6 +126,11 @@ public sealed partial class WantedScreenViewModel
                 continue;
             }
 
+            if (release.IsHidden && !ReleasesShowHidden)
+            {
+                continue;
+            }
+
             bool isFollowed = followed.ContainsKey(release.SeriesId);
             if (ReleasesFollowedOnly && !isFollowed)
             {
@@ -139,6 +153,7 @@ public sealed partial class WantedScreenViewModel
                 Cover = new RemoteCoverSource(release.CoverImageUrl),
                 IsFollowed = isFollowed,
                 IsTaken = isTaken,
+                IsHidden = release.IsHidden,
             }));
         }
 
@@ -237,6 +252,30 @@ public sealed partial class WantedScreenViewModel
         SetStatus(requested > 0 ? $"Following {name}: requested {requested} upcoming issue{(requested == 1 ? string.Empty : "s")}." : $"Following {name}: new issues will be requested automatically.", isError: false);
         Refresh();
     });
+
+    [RelayCommand]
+    private void HideRelease(ReleaseRowViewModel row) => _post(() => SetReleaseHidden(row, hidden: true));
+
+    [RelayCommand]
+    private void RestoreRelease(ReleaseRowViewModel row) => _post(() => SetReleaseHidden(row, hidden: false));
+
+    private void SetReleaseHidden(ReleaseRowViewModel row, bool hidden)
+    {
+        using (var context = _createContext())
+        {
+            var release = context.PullListReleases.Find(row.ReleaseId);
+            if (release is null)
+            {
+                return;
+            }
+
+            release.IsHidden = hidden;
+            context.SaveChanges();
+        }
+
+        SetStatus(hidden ? $"Hid {row.Title}. Turn on Show hidden to bring it back." : $"Restored {row.Title}.", isError: false);
+        Refresh();
+    }
 
     [RelayCommand] private void GoReleases() => ActiveTab = WantedTab.Releases;
 }

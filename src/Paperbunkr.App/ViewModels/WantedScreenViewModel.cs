@@ -177,12 +177,12 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
     public ObservableCollection<WantedRowViewModel> UpcomingRows { get; } = new();
     public ObservableCollection<DownloadRowViewModel> DownloadRows { get; } = new();
 
-    /// <summary>Imported issues still missing their ComicVine details (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 6.2).</summary>
+    /// <summary>Imported issues still missing their details (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 6.2).</summary>
     public ObservableCollection<ScrapeReviewRowViewModel> ScrapeReviewRows { get; } = new();
 
     public bool HasScrapeReview => ScrapeReviewRows.Count > 0;
 
-    public string ScrapeReviewHeading => ScrapeReviewRows.Count == 1 ? "NEEDS ATTENTION · 1 issue is missing its ComicVine details" : $"NEEDS ATTENTION · {ScrapeReviewRows.Count} issues are missing their ComicVine details";
+    public string ScrapeReviewHeading => ScrapeReviewRows.Count == 1 ? "NEEDS ATTENTION · 1 issue is missing its details" : $"NEEDS ATTENTION · {ScrapeReviewRows.Count} issues are missing their details";
     public ObservableCollection<CandidateGroupViewModel> CandidateGroups { get; } = new();
     public ObservableCollection<WatchedSeriesRowViewModel> SeriesRows { get; } = new();
     public ObservableCollection<VolumeResultViewModel> SearchResults { get; } = new();
@@ -275,7 +275,7 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
             {
                 Id = w.Id,
                 Title = $"{w.WatchedSeries?.Name} #{w.IssueNumber}",
-                Reason = w.ScrapeError ?? "Couldn't add ComicVine details.",
+                Reason = w.ScrapeError ?? "Couldn't add details.",
                 NeedsYourAction = w.ScrapeFailureIsTerminal,
                 Cover = CoverFor(w),
             }));

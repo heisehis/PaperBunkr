@@ -113,4 +113,28 @@ public class PullListCycleTests : CycleTestBase
         Assert.Contains(events, e => e is DaemonAlertEvent alert && alert.Key == AcquisitionCycle.MetronAlert);
         Assert.Contains(events, e => e is CycleCompletedEvent);
     }
+
+    [Fact]
+    public async Task NewWantsFromTheList_AreAnnouncedOnce_AsOneBatch_AndNotAgainNextTime()
+    {
+        Configure();
+        SaveMetronLogin();
+        FollowMetronSpawn();
+        var source = new FakeSource();
+        for (int i = 0; i < 6; i++)
+        {
+            source.Entries.Add(new PullListEntry(900 + i, 10, "Spawn", (350 + i).ToString(), Now.Date.AddDays(7 + i), null, null));
+        }
+
+        var cycle = CycleWith(source);
+        await cycle.RunAsync(manual: true, CancellationToken.None);
+
+        var announced = Assert.Single(Drain().OfType<NewReleasesEvent>());
+        Assert.Equal(6, announced.Count);
+        Assert.Equal(4, announced.Labels.Count);                            // the message names a few, the count says the rest
+        Assert.Equal("Spawn #350", announced.Labels[0]);
+
+        await cycle.RunAsync(manual: true, CancellationToken.None);
+        Assert.Empty(Drain().OfType<NewReleasesEvent>());                   // nothing new, nothing said
+    }
 }

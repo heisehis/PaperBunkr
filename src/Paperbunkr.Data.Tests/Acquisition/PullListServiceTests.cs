@@ -201,4 +201,22 @@ public class PullListServiceTests : AcquisitionTestBase
         Context.SaveChanges();
         Assert.True(PullListService.IsDue(Context, now, manual: false));
     }
+
+    [Fact]
+    public void AHiddenRelease_IsNeverRequested_AndStaysHiddenThroughARefresh()
+    {
+        TrackSpawn(ComicProvider.Metron, 10, follow: true, out _);
+        PullListService.Store(Context, new[] { Entry(1, 10, "Spawn", "350", Today.AddDays(7)), Entry(2, 10, "Spawn", "351", Today.AddDays(14)) }, DateTime.UtcNow);
+        Context.PullListReleases.Single(r => r.ExternalIssueId == 1).IsHidden = true;
+        Context.SaveChanges();
+
+        var created = PullListService.PromoteFollowedReleasesDetailed(Context, Today);
+
+        var wanted = Assert.Single(created);
+        Assert.Equal("351", wanted.IssueNumber);
+        Assert.Equal("Spawn", wanted.WatchedSeries!.Name);                          // loaded, so the caller can name it
+
+        PullListService.Store(Context, new[] { Entry(1, 10, "Spawn", "350", Today.AddDays(9)), Entry(2, 10, "Spawn", "351", Today.AddDays(14)) }, DateTime.UtcNow);
+        Assert.True(Context.PullListReleases.Single(r => r.ExternalIssueId == 1).IsHidden);   // a refresh (even a moved date) keeps the choice
+    }
 }

@@ -120,11 +120,14 @@ public static class PullListService
     /// Requests every release of a followed series that comes out today or later and isn't owned or already tracked, mirroring
     /// <see cref="WantedService.PromoteFollowedUpcoming"/> for the releases this list found. Returns how many were requested.
     /// </summary>
-    public static int PromoteFollowedReleases(PaperbunkrDbContext context, DateTime today)
+    public static int PromoteFollowedReleases(PaperbunkrDbContext context, DateTime today) => PromoteFollowedReleasesDetailed(context, today).Count;
+
+    /// <summary>Like <see cref="PromoteFollowedReleases"/>, but returns the wants it made (with their series loaded) so the caller can announce them.</summary>
+    public static IReadOnlyList<WantedIssue> PromoteFollowedReleasesDetailed(PaperbunkrDbContext context, DateTime today)
     {
-        int requested = 0;
+        var created = new List<WantedIssue>();
         var followed = context.WatchedSeries.Where(w => w.WatchFutureReleases && !w.IsPaused).ToList();
-        var upcoming = context.PullListReleases.Where(r => r.StoreDate >= today.Date).ToList();
+        var upcoming = context.PullListReleases.Where(r => r.StoreDate >= today.Date && !r.IsHidden).ToList();
 
         foreach (var watched in followed)
         {
@@ -135,13 +138,14 @@ public static class PullListService
 
             foreach (var release in upcoming.Where(r => r.SeriesId == seriesId))
             {
-                if (WantedService.RequestFromRelease(context, watched, release) is not null)
+                if (WantedService.RequestFromRelease(context, watched, release) is { } wanted)
                 {
-                    requested++;
+                    wanted.WatchedSeries = watched;
+                    created.Add(wanted);
                 }
             }
         }
 
-        return requested;
+        return created;
     }
 }

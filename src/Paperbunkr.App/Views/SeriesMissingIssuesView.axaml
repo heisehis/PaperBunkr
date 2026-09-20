@@ -23,7 +23,7 @@
                     <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                     <TextBlock Text="Find missing issues" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                 </StackPanel>
-                <TextBlock Text="Match this series to its ComicVine listing to see which issues you don't have yet, and request them."
+                <TextBlock Text="Match this series to its ComicVine or Metron listing to see which issues you don't have yet, and request them."
                            FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
                 <!-- Same bar as the ComicVine match dialog: source, editable search, sort, Search. -->
                 <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8" MaxWidth="720" HorizontalAlignment="Left">

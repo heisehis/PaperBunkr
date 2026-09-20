@@ -104,7 +104,11 @@ public sealed class AcquisitionCycle(
         await RefreshFollowedVolumesAsync(context, cancellationToken).ConfigureAwait(false);
         await RefreshPullListAsync(context, manual, cancellationToken).ConfigureAwait(false);
         WantedService.PromoteFollowedUpcoming(context, today);
-        PullListService.PromoteFollowedReleases(context, today);
+        var newReleases = PullListService.PromoteFollowedReleasesDetailed(context, today);
+        if (newReleases.Count > 0)
+        {
+            events.Publish(new NewReleasesEvent(newReleases.Count, newReleases.Take(4).Select(w => $"{w.WatchedSeries?.Name} #{w.IssueNumber}").ToList()));
+        }
 
         var searcher = new ReleaseSearcher(indexer, new ScoringOptions
         {

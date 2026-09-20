@@ -157,4 +157,33 @@ public class WantedReleasesTests : IDisposable
         Assert.All(vm.ReleaseWeeks.SelectMany(w => w.Rows).Where(r => r.Title.StartsWith("Batman")), r => Assert.True(r.IsFollowed));
         Assert.True(vm.HasInfoStatus);
     }
+
+    [Fact]
+    public void HidingARelease_RemovesItFromTheList_UntilShowHiddenIsOn_AndRestoreBringsItBack()
+    {
+        Seed();
+        var vm = Create();
+        vm.Refresh();
+        var row = vm.ReleaseWeeks.SelectMany(w => w.Rows).Single(r => r.Title == "Spawn #350");
+        Assert.True(row.CanHide);
+
+        vm.HideReleaseCommand.Execute(row);
+
+        Assert.Equal(3, vm.ReleaseCount);
+        Assert.DoesNotContain(vm.ReleaseWeeks.SelectMany(w => w.Rows), r => r.Title == "Spawn #350");
+        using (var context = NewContext())
+        {
+            Assert.True(context.PullListReleases.Single(r => r.ExternalIssueId == 2).IsHidden);
+        }
+
+        vm.ReleasesShowHidden = true;
+        var hidden = vm.ReleaseWeeks.SelectMany(w => w.Rows).Single(r => r.Title == "Spawn #350");
+        Assert.Equal("Hidden", hidden.StatusText);
+        Assert.False(hidden.CanRequest);                                    // a hidden release offers Restore, not Request or Follow
+        Assert.False(hidden.CanFollow);
+
+        vm.RestoreReleaseCommand.Execute(hidden);
+        vm.ReleasesShowHidden = false;
+        Assert.Equal(4, vm.ReleaseCount);
+    }
 }

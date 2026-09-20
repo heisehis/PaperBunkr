@@ -65,3 +65,6 @@ public sealed record IssueScrapedEvent(int WantedIssueId, string Label, int Fiel
 /// (<c>ScrapeStatus.Failed</c>), so this event only announces it. <paramref name="WillRetry"/> is true when the sweep will try again on its own.
 /// </summary>
 public sealed record IssueScrapeFailedEvent(int WantedIssueId, string Label, string Reason, bool WillRetry) : DaemonEvent;
+
+/// <summary>The weekly pull list found releases of followed series and made them wanted; <paramref name="Labels"/> are "Series #N" for each (capped by the sender).</summary>
+public sealed record NewReleasesEvent(int Count, IReadOnlyList<string> Labels) : DaemonEvent;

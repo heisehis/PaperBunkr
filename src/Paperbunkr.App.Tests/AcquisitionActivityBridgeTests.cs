@@ -173,4 +173,22 @@ public class AcquisitionActivityBridgeTests
 
         Assert.DoesNotContain("try again", Assert.Single(activity.Alerts).Detail);
     }
+
+    [Fact]
+    public void NewReleases_BecomeOneInfoAlertPerBatch_NamingAFew()
+    {
+        var (bridge, activity, _, _, _) = Create();
+
+        bridge.Handle(new NewReleasesEvent(6, new[] { "Spawn #350", "Spawn #351", "Batman #1", "Batman #2" }));
+
+        var alert = Assert.Single(activity.Alerts);
+        Assert.Equal(ActivityAlertSeverity.Info, alert.Severity);
+        Assert.Equal("6 new releases from series you follow", alert.Title);
+        Assert.Equal("Spawn #350, Spawn #351, Batman #1, Batman #2 and 2 more", alert.Detail);
+        Assert.Equal(ActivityLinkKind.WantedScreen, alert.ActionLink!.Kind);
+
+        bridge.Handle(new NewReleasesEvent(1, new[] { "Spawn #352" }) { At = DateTimeOffset.UtcNow.AddMinutes(30) });
+        Assert.Equal(2, activity.Alerts.Count);                              // a later batch is a new notice, not a stale count kept by a dedupe key
+        Assert.Contains(activity.Alerts, a => a.Title == "1 new release from a series you follow");
+    }
 }

@@ -1,4 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:beh="using:Paperbunkr.App.Behaviors"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:controls="using:Paperbunkr.App.Controls"
@@ -121,12 +122,12 @@
             </pref:SettingsRow>
             <pref:SettingsRow Icon="Clock" Title="Switch to dark at" IsVisible="{Binding IsThemeScheduledMode}">
                 <pref:SettingsRow.SettingsContent>
-                    <NumericUpDown Value="{Binding ThemeScheduledDarkHour}" Minimum="0" Maximum="23" Width="120" />
+                    <TextBox Text="{Binding ThemeScheduledDarkHour}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="23" Width="120" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="Clock" Title="Switch to light at" IsVisible="{Binding IsThemeScheduledMode}">
                 <pref:SettingsRow.SettingsContent>
-                    <NumericUpDown Value="{Binding ThemeScheduledLightHour}" Minimum="0" Maximum="23" Width="120" />
+                    <TextBox Text="{Binding ThemeScheduledLightHour}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="23" Width="120" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="Clock" Title="Auto-enable true black at"

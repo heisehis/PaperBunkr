@@ -1,4 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:beh="using:Paperbunkr.App.Behaviors"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:controls="using:Paperbunkr.App.Controls"
@@ -141,7 +142,7 @@
 
             <pref:SettingsRow Icon="Archive" Title="Backups to keep">
                 <pref:SettingsRow.SettingsContent>
-                    <NumericUpDown Value="{Binding BackupsToKeep}" Minimum="0" Maximum="99" Width="120" />
+                    <TextBox Text="{Binding BackupsToKeep}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="99" Width="120" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
 
@@ -153,7 +154,7 @@
 
             <pref:SettingsRow Icon="Clock" Title="Minimum hours between automatic backups" IsVisible="{Binding AutoBackupEnabled}">
                 <pref:SettingsRow.SettingsContent>
-                    <NumericUpDown Value="{Binding AutoBackupMinIntervalHours}" Minimum="1" Maximum="168" Width="120" />
+                    <TextBox Text="{Binding AutoBackupMinIntervalHours}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="1" beh:TextSpinner.Maximum="168" Width="120" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
 

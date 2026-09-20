@@ -78,4 +78,17 @@ public class TextSpinnerTests
         // fractional delta to a whole number rather than throwing or misbehaving.
         Assert.Equal("2.MU", TextSpinner.Step("1.MU", 1.0m, 0, int.MaxValue));
     }
+
+    [Theory]
+    [InlineData("500", "100", 0, 100)]      // above the range
+    [InlineData("3", "15", 15, 1440)]       // below the range
+    [InlineData(" 999 ", "24", 0, 24)]      // whitespace is ignored
+    [InlineData("12", null, 0, 24)]         // in range: left alone
+    [InlineData("1.MU", null, 0, 24)]       // not a plain number: left alone
+    [InlineData("", null, 0, 24)]           // empty means unset, never forced to a number
+    [InlineData(null, null, 0, 24)]
+    public void ClampWholeNumber_PullsOnlyOutOfRangeNumbersBackIn(string? text, string? expected, int min, int max)
+    {
+        Assert.Equal(expected, TextSpinner.ClampWholeNumber(text, min, max));
+    }
 }

@@ -1,4 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:beh="using:Paperbunkr.App.Behaviors"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:controls="using:Paperbunkr.App.Controls"
@@ -88,7 +89,7 @@
                                     <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="8">
                                         <controls:SuggestBox IsStrict="True" Text="{Binding ModeText}"
                                                              Suggestions="{Binding ModeNames}" MinWidth="110" />
-                                        <NumericUpDown Value="{Binding IntervalHours}" Minimum="1" Maximum="720" Width="100"
+                                        <TextBox Text="{Binding IntervalHours}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="1" beh:TextSpinner.Maximum="720" Width="100"
                                                        IsVisible="{Binding IsIntervalMode}" />
                                         <TextBlock Text="hours" VerticalAlignment="Center" IsVisible="{Binding IsIntervalMode}"
                                                    FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />

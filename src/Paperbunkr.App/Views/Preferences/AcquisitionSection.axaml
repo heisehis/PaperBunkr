@@ -4,6 +4,7 @@
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
+             xmlns:beh="using:Paperbunkr.App.Behaviors"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="680" d:DesignHeight="720"
@@ -93,7 +94,7 @@
                 <pref:SettingsRow Icon="Clock" Title="Check every (minutes)"
                                    Description="How often wanted issues are searched again. At least 15. If Prowlarr can't be reached, Paperbunkr waits longer between tries.">
                     <pref:SettingsRow.SettingsContent>
-                        <NumericUpDown Value="{Binding PollIntervalMinutes}" Minimum="15" Maximum="1440" Width="120"
+                        <TextBox Text="{Binding PollIntervalMinutes}" Width="120" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="15" beh:TextSpinner.Maximum="1440"
                                        AutomationProperties.Name="Check interval in minutes" />
                     </pref:SettingsRow.SettingsContent>
                 </pref:SettingsRow>
@@ -101,7 +102,7 @@
                 <pref:SettingsRow Icon="ArrowDownload" Title="Smallest release (MB)"
                                    Description="Ignore anything smaller than this. 0 means no minimum.">
                     <pref:SettingsRow.SettingsContent>
-                        <NumericUpDown Value="{Binding MinSizeMb}" Minimum="0" Maximum="100000" Width="120"
+                        <TextBox Text="{Binding MinSizeMb}" Width="120" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="100000"
                                        AutomationProperties.Name="Smallest release in megabytes" />
                     </pref:SettingsRow.SettingsContent>
                 </pref:SettingsRow>
@@ -109,7 +110,7 @@
                 <pref:SettingsRow Icon="ArrowDownload" Title="Largest single issue (MB)"
                                    Description="Ignore single issues larger than this. Multi-issue packs are exempt but are never picked automatically. 0 means no limit.">
                     <pref:SettingsRow.SettingsContent>
-                        <NumericUpDown Value="{Binding MaxSizeMb}" Minimum="0" Maximum="100000" Width="120"
+                        <TextBox Text="{Binding MaxSizeMb}" Width="120" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="100000"
                                        AutomationProperties.Name="Largest single issue in megabytes" />
                     </pref:SettingsRow.SettingsContent>
                 </pref:SettingsRow>
@@ -227,7 +228,7 @@
                 <pref:SettingsRow Icon="Settings" Title="Minimum score"
                                    Description="A release must score at least this to be taken automatically (seeders up to 100, +25 for .cbz, +100 for a preferred group).">
                     <pref:SettingsRow.SettingsContent>
-                        <NumericUpDown Value="{Binding AutoGrabMinScore}" Minimum="0" Maximum="500" Width="120" AutomationProperties.Name="Minimum score for automatic downloads" />
+                        <TextBox Text="{Binding AutoGrabMinScore}" Width="120" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="500" AutomationProperties.Name="Minimum score for automatic downloads" />
                     </pref:SettingsRow.SettingsContent>
                 </pref:SettingsRow>
             </StackPanel>

@@ -96,6 +96,7 @@
                     <!-- Grabbed issues: on their way (progress) or failed (retry) -->
                     <StackPanel Grid.Row="0" IsVisible="{Binding !HasNoDownloads}" Spacing="8" Margin="24,16,24,4" MaxWidth="960" HorizontalAlignment="Left">
                         <TextBlock Classes="settingsGroupCaption" Text="DOWNLOADS" />
+                        <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding DownloadRows}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:DownloadRowViewModel">
@@ -134,6 +135,7 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        </ScrollViewer>
                     </StackPanel>
 
                                         <!-- Imported issues still missing their ComicVine details: durable state, retried by the sweep, bulk actions here -->
@@ -145,6 +147,7 @@
                             <Button Grid.Column="2" Classes="headerAction ghost" Content="Dismiss all" Command="{Binding DismissAllScrapesCommand}" Margin="6,0,0,0"
                                     AutomationProperties.Name="Stop trying for every issue missing ComicVine details" />
                         </Grid>
+                        <ScrollViewer MaxHeight="240" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding ScrapeReviewRows}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ScrapeReviewRowViewModel">
@@ -172,6 +175,7 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        </ScrollViewer>
                     </StackPanel>
 
                     <ItemsControl Grid.Row="2" Classes="vlist" ItemsSource="{Binding WantedRows}">

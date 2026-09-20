@@ -1,8 +1,13 @@
 using System;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Paperbunkr.Daemon.Clients;
+using Paperbunkr.Daemon.Import;
 using Paperbunkr.Daemon.Indexers;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Credentials;
@@ -25,12 +30,18 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
     private readonly Func<PaperbunkrDbContext> _createContext;
     private readonly Action _openConnections;
     private readonly Func<string, string, IIndexerClient> _createIndexer;
+    private readonly Func<string, string, string, string, IDownloadClient> _createDownloadClient;
 
-    public AcquisitionSettingsViewModel(Func<PaperbunkrDbContext> createContext, Action openConnections, Func<string, string, IIndexerClient>? createIndexer = null)
+    public AcquisitionSettingsViewModel(
+        Func<PaperbunkrDbContext> createContext,
+        Action openConnections,
+        Func<string, string, IIndexerClient>? createIndexer = null,
+        Func<string, string, string, string, IDownloadClient>? createDownloadClient = null)
     {
         _createContext = createContext;
         _openConnections = openConnections;
         _createIndexer = createIndexer ?? ((url, key) => new ProwlarrSearchClient(url, key));
+        _createDownloadClient = createDownloadClient ?? ((url, user, password, category) => new QBittorrentClient(url, user, password, category));
         Load();
     }
 
@@ -46,6 +57,59 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
     [ObservableProperty] private string _preferredReleaseGroups = string.Empty;
     [ObservableProperty] private string _ignoredWords = string.Empty;
     [ObservableProperty] private bool _preferCbz = true;
+
+    // qBittorrent (slice 2)
+    [ObservableProperty] private string _qBittorrentUrl = string.Empty;
+    [ObservableProperty] private string _qBittorrentUsername = string.Empty;
+
+    /// <summary>Write-only, like the Prowlarr key: blank means "keep the stored password".</summary>
+    [ObservableProperty] private string _qBittorrentPassword = string.Empty;
+
+    [ObservableProperty] private string _qBittorrentCategory = "paperbunkr-comics";
+    [ObservableProperty] private bool _hasSavedQBittorrentPassword;
+
+    // Import (slice 3)
+    [ObservableProperty] private string _destinationFolderPath = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RenameTemplatePreview), nameof(RenameTemplateIsValid))]
+    private string _renameTemplate = "{publisher}/{series} ({volumeyear})/{series} #{number:000}";
+
+    [ObservableProperty] private bool _writeComicInfo = true;
+    [ObservableProperty] private bool _moveOriginalOnImport;
+
+    // Auto-grab (slice 4)
+    [ObservableProperty] private bool _autoGrab;
+    [ObservableProperty] private int _autoGrabMinScore = 20;
+
+    /// <summary>The user's library folders, offered as destinations.</summary>
+    public ObservableCollection<string> DestinationChoices { get; } = new();
+
+    public bool RenameTemplateIsValid => NameTemplate.Validate(RenameTemplate) is null;
+
+    /// <summary>A live example of what the template produces (or why it is invalid), so mistakes show before anything is imported.</summary>
+    public string RenameTemplatePreview
+    {
+        get
+        {
+            var error = NameTemplate.Validate(RenameTemplate);
+            if (error is not null)
+            {
+                return error;
+            }
+
+            string? Sample(string token) => token switch
+            {
+                "series" => "Spawn", "number" => "263", "year" => "2026", "volumeyear" => "1992", "publisher" => "Image",
+                "title" => "Origins", "month" => "09", "day" => "16", _ => null,
+            };
+            return "e.g. " + NameTemplate.FormatPath(RenameTemplate, Sample, ".cbz");
+        }
+    }
+
+    public string QBittorrentPasswordWatermark => HasSavedQBittorrentPassword ? "Saved — leave blank to keep it" : "qBittorrent password (blank if none)";
+
+    partial void OnHasSavedQBittorrentPasswordChanged(bool value) => OnPropertyChanged(nameof(QBittorrentPasswordWatermark));
 
     [ObservableProperty] private bool _hasSavedApiKey;
     [ObservableProperty] private bool _hasComicVineKey;
@@ -83,6 +147,24 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         PreferredReleaseGroups = settings.PreferredReleaseGroups;
         IgnoredWords = settings.IgnoredWords;
         PreferCbz = settings.PreferCbz;
+        QBittorrentUrl = settings.QBittorrentUrl;
+        QBittorrentCategory = settings.QBittorrentCategory;
+        DestinationFolderPath = settings.DestinationFolderPath;
+        RenameTemplate = settings.RenameTemplate;
+        WriteComicInfo = settings.WriteComicInfo;
+        MoveOriginalOnImport = settings.MoveOriginalOnImport;
+        AutoGrab = settings.AutoGrab;
+        AutoGrabMinScore = settings.AutoGrabMinScore;
+
+        QBittorrentUsername = CredentialStore.Get(context, DownloadClientFactory.CredentialProvider, CredentialKind.Username) ?? string.Empty;
+        HasSavedQBittorrentPassword = !string.IsNullOrEmpty(CredentialStore.Get(context, DownloadClientFactory.CredentialProvider, CredentialKind.Password));
+        QBittorrentPassword = string.Empty;
+
+        DestinationChoices.Clear();
+        foreach (var path in context.WatchedFolders.Select(f => f.Path).OrderBy(p => p))
+        {
+            DestinationChoices.Add(path);
+        }
 
         HasSavedApiKey = !string.IsNullOrEmpty(CredentialStore.Get(context, "Prowlarr", CredentialKind.ApiKey));
         HasComicVineKey = !string.IsNullOrEmpty(CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey));
@@ -98,6 +180,20 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
             return;
         }
 
+        var templateError = NameTemplate.Validate(RenameTemplate);
+        if (templateError is not null)
+        {
+            SetStatus($"The naming template is invalid: {templateError}", isError: true);
+            return;
+        }
+
+        var destination = DestinationFolderPath.Trim();
+        if (destination.Length > 0 && !Directory.Exists(destination))
+        {
+            SetStatus("The destination folder doesn't exist. Pick one of your library folders.", isError: true);
+            return;
+        }
+
         using var context = _createContext();
         var settings = context.GetOrCreateAcquisitionSettings();
 
@@ -109,7 +205,26 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         settings.PreferredReleaseGroups = PreferredReleaseGroups.Trim();
         settings.IgnoredWords = IgnoredWords.Trim();
         settings.PreferCbz = PreferCbz;
+        settings.QBittorrentUrl = QBittorrentUrl.Trim();
+        // Paperbunkr only ever touches torrents in its own category, so an empty one is never allowed once qBittorrent is set up.
+        settings.QBittorrentCategory = string.IsNullOrWhiteSpace(QBittorrentCategory) ? "paperbunkr-comics" : QBittorrentCategory.Trim();
+        settings.DestinationFolderPath = destination;
+        settings.RenameTemplate = RenameTemplate.Trim();
+        settings.WriteComicInfo = WriteComicInfo;
+        settings.MoveOriginalOnImport = MoveOriginalOnImport;
+        settings.AutoGrab = AutoGrab;
+        settings.AutoGrabMinScore = Math.Clamp(AutoGrabMinScore, 0, 500);
         context.SaveChanges();
+
+        QBittorrentCategory = settings.QBittorrentCategory;
+        AutoGrabMinScore = settings.AutoGrabMinScore;
+        CredentialStore.Set(context, DownloadClientFactory.CredentialProvider, CredentialKind.Username, QBittorrentUsername.Trim());
+        if (!string.IsNullOrWhiteSpace(QBittorrentPassword))
+        {
+            CredentialStore.Set(context, DownloadClientFactory.CredentialProvider, CredentialKind.Password, QBittorrentPassword);
+            HasSavedQBittorrentPassword = true;
+            QBittorrentPassword = string.Empty;
+        }
 
         if (!string.IsNullOrWhiteSpace(ProwlarrApiKey))
         {
@@ -150,6 +265,36 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         catch (IndexerException ex)
         {
             SetStatus(ex.Message, isError: true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SetStatus($"Couldn't test the connection: {ex.Message}", isError: true);
+        }
+    }
+
+    /// <summary>Tests qBittorrent as currently typed (falling back to the stored password), without saving anything.</summary>
+    [RelayCommand]
+    private async Task TestQBittorrentAsync(CancellationToken cancellationToken)
+    {
+        var url = QBittorrentUrl.Trim();
+        var password = QBittorrentPassword;
+        if (password.Length == 0)
+        {
+            using var context = _createContext();
+            password = CredentialStore.Get(context, DownloadClientFactory.CredentialProvider, CredentialKind.Password) ?? string.Empty;
+        }
+
+        if (url.Length == 0)
+        {
+            SetStatus("Enter the qBittorrent address first.", isError: true);
+            return;
+        }
+
+        var category = string.IsNullOrWhiteSpace(QBittorrentCategory) ? "paperbunkr-comics" : QBittorrentCategory.Trim();
+        try
+        {
+            var result = await _createDownloadClient(url, QBittorrentUsername.Trim(), password, category).TestConnectionAsync(cancellationToken);
+            SetStatus(result.Message, isError: !result.Success);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

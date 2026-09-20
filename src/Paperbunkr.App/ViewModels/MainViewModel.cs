@@ -159,6 +159,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             resultLink: () => new ActivityLink(ActivityLinkKind.WantedScreen),
             onWantedChanged: () => { if (IsWanted) Wanted.Refresh(); });
         Scraper = new Scraper.ScrapeCoordinator(NativePluginModalHost, Services.PaperbunkrDb.CreateContext, Activity, issueId => MetadataWriteBack.Enqueue(issueId));
+        Organizer = new Scraper.OrganizeCoordinator(NativePluginModalHost, Services.PaperbunkrDb.CreateContext, Activity, issueId => MetadataWriteBack.Enqueue(issueId));
         Wanted = new WantedScreenViewModel(
             Services.PaperbunkrDb.CreateContext,
             Acquisition.RunNowAsync,
@@ -209,6 +210,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         Detail = new DetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
         MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
         Library.ScrapeIssues = ids => Scraper.ScrapeIssuesAsync(ids);
+        Library.OrganizeIssues = ids => Organizer.OrganizeIssuesAsync(ids);
         Detail.Tabs.ScraperPanelFactory = Scraper.CreateSeriesPanel;
         var keyBindingService = new KeyBindingService();
         Reader = new ReaderScreenViewModel(NavigateBack, keyBindingService, ReadingEvents, TrackerAutoSync);
@@ -548,6 +550,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>"Scrape with ComicVine…": review dialogs, batch header and Activity Center job (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8).</summary>
     public Scraper.ScrapeCoordinator Scraper { get; }
+
+    /// <summary>"Organize…": profile picker, collision dialog and Activity Center job.</summary>
+    public Scraper.OrganizeCoordinator Organizer { get; }
 
     /// <summary>
     /// The ComicVine issue-details client for scrape-on-import, at Low priority so background work can never starve interactive lookups (the shared rate limiter

@@ -3,6 +3,7 @@
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
+             xmlns:scraper="using:Paperbunkr.App.Scraper"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="680" d:DesignHeight="720"
@@ -141,6 +142,13 @@
                            Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
                 <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasInfoStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"
                            Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
+            </StackPanel>
+
+            <StackPanel Tag="organizeScrape.profiles" Spacing="10" IsVisible="{Binding Profiles, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <TextBlock Classes="settingsGroupCaption" Text="ORGANIZER PROFILES" />
+                <TextBlock Text="Right-click comics or a series and choose Organize to move or copy files into folders named by a profile's templates. Every move can be undone."
+                           FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+                <scraper:ProfileManagerView DataContext="{Binding Profiles}" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

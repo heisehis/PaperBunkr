@@ -1,0 +1,181 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:vm="using:Paperbunkr.App.Scraper"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="600"
+             x:Class="Paperbunkr.App.Scraper.ProfileManagerView"
+             x:DataType="vm:ProfileManagerViewModel">
+
+    <!-- Config screen redesign (2026-09-13) - same card language as SettingsView.axaml's Comic Vine
+         tabs, applied to the master-detail layout this tab already had. -->
+    <UserControl.Styles>
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+        <Style Selector="TextBlock.cardHeader">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+        <Style Selector="TextBlock.hint">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.secondary">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+        <Style Selector="Button.secondary:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+        <Style Selector="Button.primary">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+            <Setter Property="FontWeight" Value="Medium" />
+        </Style>
+        <Style Selector="Button.destructive">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="{DynamicResource PbDangerSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid ColumnDefinitions="200,*" Margin="4">
+        <StackPanel Grid.Column="0" Spacing="10">
+            <Border Classes="card">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Profiles" Classes="cardHeader" />
+                    <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding Selected}" Background="Transparent">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:OrganizerProfileRowViewModel">
+                                <TextBlock Text="{Binding Name}" Foreground="{DynamicResource PbTextBrush}" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button Content="New profile" Classes="secondary" Command="{Binding AddProfileCommand}" HorizontalAlignment="Stretch" />
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Undo" Classes="cardHeader" />
+                    <TextBlock Text="Reverses the most recent Move-mode organize batch." Classes="hint" />
+                    <Button Content="Undo last organize" Classes="secondary" Command="{Binding UndoLastOrganizeCommand}"
+                            IsEnabled="{Binding !IsUndoing}" HorizontalAlignment="Stretch" />
+                    <TextBlock Text="{Binding UndoStatusMessage}" Classes="hint"
+                               IsVisible="{Binding UndoStatusMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <ScrollViewer Grid.Column="1" Margin="16,0,0,0"
+                      IsVisible="{Binding Selected, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+            <StackPanel Spacing="12">
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Name" Classes="cardHeader" />
+                        <TextBox Text="{Binding Selected.Name}" />
+                        <TextBlock Text="Base folder" Classes="cardHeader" Margin="0,4,0,0" />
+                        <TextBox Text="{Binding Selected.BaseFolder}" Watermark="Root folder this profile organizes into" />
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Naming templates" Classes="cardHeader" />
+                        <TextBlock Text="Folder template" Classes="fieldLabel" />
+                        <TextBox Text="{Binding Selected.FolderTemplate}" AcceptsReturn="False" />
+                        <TextBlock Text="File template" Classes="fieldLabel" />
+                        <TextBox Text="{Binding Selected.FileTemplate}" AcceptsReturn="False" />
+                        <TextBlock Text="Insert token into folder / file template:" Classes="hint" Margin="0,4,0,0" />
+                        <ItemsControl ItemsSource="{Binding InsertableTokens}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:InsertableToken">
+                                    <StackPanel Orientation="Horizontal" Spacing="2" Margin="0,0,4,4">
+                                        <Button Content="{Binding Token}" Classes="secondary" FontSize="11" Height="24" Padding="6,0"
+                                                Command="{Binding InsertIntoFolder}" CommandParameter="{Binding Token}"
+                                                ToolTip.Tip="Insert into folder template" />
+                                        <Button Content="→file" Classes="secondary" FontSize="11" Height="24" Padding="6,0"
+                                                Command="{Binding InsertIntoFile}" CommandParameter="{Binding Token}"
+                                                ToolTip.Tip="Insert into file template" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Behavior" Classes="cardHeader" />
+                        <TextBlock Text="Mode" Classes="fieldLabel" />
+                        <controls:SuggestBox IsStrict="True" Text="{Binding Selected.ModeText}" Suggestions="{x:Static vm:OrganizerProfileRowViewModel.ModeNames}" HorizontalAlignment="Stretch" />
+                        <TextBlock Text="When run automatically and a file already exists" Classes="fieldLabel" Margin="0,4,0,0" />
+                        <controls:SuggestBox IsStrict="True" Text="{Binding Selected.CollisionPolicyText}" Suggestions="{x:Static vm:OrganizerProfileRowViewModel.CollisionPolicyNames}" HorizontalAlignment="Stretch" />
+                        <CheckBox Content="Remove empty folders left behind after organizing" IsChecked="{Binding Selected.RemoveEmptyFolders}" Margin="0,4,0,0" />
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Exclude from organizing when" Classes="cardHeader" />
+                        <TextBlock Text="Books matching every condition below (ANDed) are skipped. No conditions means nothing is excluded." Classes="hint" />
+                        <ItemsControl ItemsSource="{Binding Selected.ExcludeConditions}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="6" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ExcludeConditionRowViewModel">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <controls:SuggestBox IsStrict="True" Text="{Binding FieldText}" Suggestions="{x:Static vm:ExcludeConditionRowViewModel.FieldNames}" Width="150" />
+                                        <controls:SuggestBox IsStrict="True" Text="{Binding OperatorText}" Suggestions="{x:Static vm:ExcludeConditionRowViewModel.OperatorNames}" Width="150" />
+                                        <TextBox Text="{Binding Value}" Watermark="Value" Width="140" />
+                                        <CheckBox Content="Not" IsChecked="{Binding Not}" />
+                                        <Button Content="Remove" Classes="secondary" Command="{Binding RemoveCommand}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="Add condition" Classes="secondary" Command="{Binding AddExcludeConditionCommand}" HorizontalAlignment="Left" />
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <Button Content="Delete" Classes="destructive" Command="{Binding DeleteSelectedCommand}" />
+                    <Button Content="Save" Classes="primary" Command="{Binding SaveSelectedCommand}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

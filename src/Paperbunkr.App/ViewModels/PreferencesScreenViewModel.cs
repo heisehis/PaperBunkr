@@ -151,7 +151,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         // per-Kind template binds to these instead of a hardcoded per-provider command name. Command
         // bodies are unchanged.
         Acquisition = new AcquisitionSettingsViewModel(_contextFactory, () => ActiveSection = PreferencesSection.Connections);
-        OrganizeScrape = new OrganizeScrapeSettingsViewModel(_contextFactory, () => ActiveSection = PreferencesSection.Connections);
+        OrganizeScrape = new OrganizeScrapeSettingsViewModel(
+            _contextFactory, () => ActiveSection = PreferencesSection.Connections,
+            new Scraper.ProfileManagerViewModel(
+                new Paperbunkr.Data.Organizing.OrganizerProfileStore(_contextFactory),
+                organizerService: Scraper.OrganizeCoordinator.CreateService(_contextFactory),
+                createDbContext: _contextFactory));
         Acquisition.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(AcquisitionSettingsViewModel.IsProwlarrConnected) or nameof(AcquisitionSettingsViewModel.IsQBittorrentConnected))

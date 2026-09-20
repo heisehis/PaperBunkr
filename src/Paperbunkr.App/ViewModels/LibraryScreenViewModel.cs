@@ -2678,6 +2678,42 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         RefreshAfterScrape();
     }
 
+    /// <summary>Host hook for "Organize…": runs the organize flow over the given issue ids and returns a one-line result. Set by the shell.</summary>
+    public Func<IReadOnlyList<int>, Task<string>>? OrganizeIssues { get; set; }
+
+    /// <summary>"Organize…" on the right-clicked issue, expanded to the whole selection when it is part of one.</summary>
+    [RelayCommand]
+    private async Task OrganizeWithProfile(int issueId)
+    {
+        if (OrganizeIssues is null)
+        {
+            return;
+        }
+
+        await OrganizeIssues(Selection.UnionForAction(issueId).ToList());
+        RefreshAfterScrape();
+    }
+
+    /// <summary>Series-card equivalent: every issue of the (selection-expanded) series.</summary>
+    [RelayCommand]
+    private async Task OrganizeSeriesWithProfile(int seriesId)
+    {
+        if (OrganizeIssues is null)
+        {
+            return;
+        }
+
+        var seriesIds = SeriesSelection.UnionForAction(seriesId).ToList();
+        List<int> ids;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            ids = context.Issues.Where(i => seriesIds.Contains(i.SeriesId)).Select(i => i.Id).ToList();
+        }
+
+        await OrganizeIssues(ids);
+        RefreshAfterScrape();
+    }
+
     private void RefreshAfterScrape() => Avalonia.Threading.Dispatcher.UIThread.Post(() => LoadFromDatabase());
 
     /// <summary>Series-card equivalent - fans out to every member issue of the (selection-expanded) series.</summary>

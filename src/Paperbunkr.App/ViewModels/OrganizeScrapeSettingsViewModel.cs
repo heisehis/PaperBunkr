@@ -41,10 +41,11 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
     private readonly Func<PaperbunkrDbContext> _createContext;
     private readonly Action _openConnections;
 
-    public OrganizeScrapeSettingsViewModel(Func<PaperbunkrDbContext> createContext, Action openConnections)
+    public OrganizeScrapeSettingsViewModel(Func<PaperbunkrDbContext> createContext, Action openConnections, Scraper.ProfileManagerViewModel? profiles = null)
     {
         _createContext = createContext;
         _openConnections = openConnections;
+        Profiles = profiles;
         foreach (var field in Enum.GetValues<ScrapeField>())
         {
             FieldToggles.Add(new ScrapeFieldToggle(field));
@@ -52,6 +53,9 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
     }
 
     public ObservableCollection<ScrapeFieldToggle> FieldToggles { get; } = new();
+
+    /// <summary>Organizer profiles (create, edit, undo); null in tests that only exercise the scrape settings.</summary>
+    public Scraper.ProfileManagerViewModel? Profiles { get; }
 
     [ObservableProperty] private bool _autoChooseTopMatch;
     [ObservableProperty] private bool _confirmIssueMatch = true;
@@ -107,6 +111,7 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
         }
 
         HasComicVineKey = !string.IsNullOrEmpty(CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey));
+        Profiles?.Reload();
     }
 
     [RelayCommand]

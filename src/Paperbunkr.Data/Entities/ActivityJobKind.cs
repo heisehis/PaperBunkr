@@ -24,4 +24,7 @@ public enum ActivityJobKind
     /// <summary>The single always-present ambient rollup row (live folder-watch + thumbnail decode). Never reaches a terminal state.</summary>
     Upkeep,
     Other,
+
+    /// <summary>The comic acquisition daemon's polling cycle (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md).</summary>
+    Acquisition,
 }

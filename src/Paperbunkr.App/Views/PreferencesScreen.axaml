@@ -215,6 +215,14 @@
                                     <TextBlock Text="Connections" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsAcquisitionSection}"
+                                    Command="{Binding GoAcquisitionCommand}"
+                                    AutomationProperties.AutomationId="PreferencesAcquisitionNavButton">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Acquisition" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsPluginsSection}"
                                     Command="{Binding GoPluginsCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
@@ -272,6 +280,10 @@
                 <pref:ReaderSection IsVisible="{Binding IsReaderSection}" />
                 <pref:KeyboardShortcutsSection IsVisible="{Binding IsKeyboardShortcutsSection}" />
                 <pref:ConnectionsSection IsVisible="{Binding IsConnectionsSection}" />
+                <!-- Own view model: the wrapper carries the visibility binding (against the screen's DataContext), the section the Acquisition one. -->
+                <Panel IsVisible="{Binding IsAcquisitionSection}">
+                    <pref:AcquisitionSection DataContext="{Binding Acquisition}" />
+                </Panel>
                 <pref:PluginsSection IsVisible="{Binding IsPluginsSection}" />
                 <pref:AdvancedSection IsVisible="{Binding IsAdvancedSection}" />
                 <pref:AboutSection IsVisible="{Binding IsAboutSection}" />

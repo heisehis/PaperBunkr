@@ -149,6 +149,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         // (docs/superpowers/specs/2026-09-07-connections-redesign-design.md) - the dialog's generic
         // per-Kind template binds to these instead of a hardcoded per-provider command name. Command
         // bodies are unchanged.
+        Acquisition = new AcquisitionSettingsViewModel(_contextFactory, () => ActiveSection = PreferencesSection.Connections);
+
         ComicVineRow.SaveCommand = SaveComicVineCredentialsCommand;
         ComicVineRow.DisconnectCommand = DisconnectComicVineCommand;
         MetronRow.PrimaryCommand = SaveMetronCredentialsCommand;
@@ -377,6 +379,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public bool IsReaderSection => ActiveSection == PreferencesSection.Reader;
     public bool IsKeyboardShortcutsSection => ActiveSection == PreferencesSection.KeyboardShortcuts;
     public bool IsConnectionsSection => ActiveSection == PreferencesSection.Connections;
+
+    /// <summary>Preferences → Acquisition (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md §7); its own view model so this class doesn't grow further.</summary>
+    public bool IsAcquisitionSection => ActiveSection == PreferencesSection.Acquisition;
+
+    public AcquisitionSettingsViewModel Acquisition { get; }
     public bool IsPluginsSection => ActiveSection == PreferencesSection.Plugins;
     public bool IsAdvancedSection => ActiveSection == PreferencesSection.Advanced;
     public bool IsAboutSection => ActiveSection == PreferencesSection.About;
@@ -740,6 +747,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsReaderSection));
         OnPropertyChanged(nameof(IsKeyboardShortcutsSection));
         OnPropertyChanged(nameof(IsConnectionsSection));
+        OnPropertyChanged(nameof(IsAcquisitionSection));
         OnPropertyChanged(nameof(IsPluginsSection));
         OnPropertyChanged(nameof(IsAdvancedSection));
         OnPropertyChanged(nameof(IsAboutSection));
@@ -756,6 +764,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void GoAutomation() => ActiveSection = PreferencesSection.Automation;
+
+    [RelayCommand]
+    private void GoAcquisition()
+    {
+        Acquisition.Load();   // pick up a ComicVine key added under Connections since this section was last shown
+        ActiveSection = PreferencesSection.Acquisition;
+    }
 
     /// <summary>
     /// Library Health lives inside the Library tab, not as its own section (per user decision,

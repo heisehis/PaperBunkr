@@ -186,6 +186,8 @@
                             <MenuItem Header="Link story event…" Command="{Binding ToggleLinkStoryEventCommand}" />
                             <MenuItem Header="Build from a story arc…" Command="{Binding ToggleArcSearchCommand}" />
                             <MenuItem Header="Refresh from source" Command="{Binding RefreshArcListCommand}" IsVisible="{Binding IsArcLinked}" />
+                            <MenuItem Header="Request missing issues" Command="{Binding RequestMissingFromArcCommand}" IsVisible="{Binding IsArcLinked}" />
+                            <MenuItem Header="Follow this arc" ToggleType="CheckBox" IsChecked="{Binding FollowArc, Mode=TwoWay}" IsVisible="{Binding IsArcLinked}" />
                             <Separator />
                             <MenuItem Header="Edit details…" Command="{Binding OpenPropertiesCommand}" />
                         </MenuFlyout>
@@ -497,8 +499,13 @@
                                                                     <TextBlock Text="Read" />
                                                                 </StackPanel>
                                                             </Button>
-                                                            <Button Classes="headerAction ghost" Content="Find &amp; link" Padding="8,3" FontSize="10.5"
-                                                                    Command="{Binding LinkCommand}" IsVisible="{Binding IsMissing}" />
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsMissing}">
+                                                                <Button Classes="headerAction ghost" Content="Find &amp; link" Padding="8,3" FontSize="10.5"
+                                                                        Command="{Binding LinkCommand}" />
+                                                                <Button Classes="headerAction ghost" Content="Request" Padding="8,3" FontSize="10.5"
+                                                                        Command="{Binding RequestCommand}" IsVisible="{Binding CanRequest}"
+                                                                        AutomationProperties.Name="Request this missing issue" />
+                                                            </StackPanel>
                                                         </Panel>
 
                                                         <!-- hover: one ⋯ menu -->

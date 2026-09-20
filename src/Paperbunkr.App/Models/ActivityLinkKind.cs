@@ -39,4 +39,7 @@ public enum ActivityLinkKind
     /// stays pending until the next restart (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-
     /// tier-design.md §4), so the user isn't left to remember to close and reopen the app themselves.</summary>
     RestartApp,
+
+    /// <summary>Open the Wanted screen (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 7) - no payload.</summary>
+    WantedScreen,
 }

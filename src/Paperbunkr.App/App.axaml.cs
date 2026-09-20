@@ -368,6 +368,16 @@ public partial class App : Application
         mainViewModel.Scheduler.Start();
         desktop.Exit += (_, _) => mainViewModel.Scheduler.Stop();
 
+        // Comic acquisition daemon: the bridge drains its events into Activity Center, then the timer starts. On exit the
+        // service is stopped with a short cap so a cycle stuck on the network can never hold the app open.
+        mainViewModel.AcquisitionBridge.Start();
+        _ = mainViewModel.Acquisition.StartAsync(System.Threading.CancellationToken.None);
+        desktop.Exit += (_, _) =>
+        {
+            System.Threading.Tasks.Task.Run(() => mainViewModel.Acquisition.StopAsync(System.Threading.CancellationToken.None)).Wait(TimeSpan.FromSeconds(3));
+            mainViewModel.AcquisitionBridge.Dispose();
+        };
+
         // Auto-backup shutdown trigger (spec §2) - the primary trigger, since it also catches
         // sessions left open all day that never restart. Synchronous and best-effort: a normal
         // checkpoint+file-copy is fast enough not to perceptibly delay exit, and

@@ -246,6 +246,15 @@
                             <TextBlock Classes="railLabel" Text="Continuity" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
+                    <Button Classes="rail" Classes.active="{Binding IsWanted}"
+                            Command="{Binding GoWantedCommand}" ToolTip.Tip="Wanted"
+                            AutomationProperties.AutomationId="WantedRailButton"
+                            AutomationProperties.Name="Wanted">
+                        <StackPanel Orientation="Horizontal">
+                            <fi:SymbolIcon Symbol="Search" IconVariant="{Binding IsWanted, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
+                            <TextBlock Classes="railLabel" Text="Wanted" IsVisible="{Binding IsNavRailExpanded}" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
                 <StackPanel Grid.Row="2" Margin="10,0" Spacing="2">
@@ -902,6 +911,9 @@
                     </DataTemplate>
                     <DataTemplate DataType="vm:InsightsScreenViewModel">
                         <views:InsightsScreen />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:WantedScreenViewModel">
+                        <views:WantedScreen />
                     </DataTemplate>
                     <DataTemplate DataType="vm:LibraryScreenViewModel">
                         <views:LibraryScreen />

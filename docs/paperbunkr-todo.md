@@ -26,6 +26,25 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-19/20, comic acquisition — Mylar-style want-list, slices 1-4 built on branch `feat/comic-acquisition-daemon`, NOT merged or released):**
+> Design: `docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md`; plan and per-step status:
+> `...-plan.md`. Built and unit-tested: DPAPI-encrypted `CredentialStore`; a shared, prioritized ComicVine
+> rate-limit handler; the UI-free `Paperbunkr.Daemon` project (search loop, Prowlarr native JSON search,
+> strict-then-sanitized query cascade, scoring/pack detection, category-locked qBittorrent client, grab/reject/retry/cancel,
+> blocklist, download tracker, copy-then-import with CE-syntax rename template + ComicInfo.xml, drop-in close-out, opt-in
+> auto-grab); watch-list/want-list entities + two additive migrations; the Acquisition Preferences section; the **Wanted**
+> screen (Wanted with Downloads, Upcoming, Candidates, Series; virtualized, with cover thumbnails); "Missing Issues (n)" with covers on the
+> series Detail screen; "Request missing" + "Follow this arc" on reading lists; a daily "Follow story arcs" scheduled task (off by default).
+> **Verified:** `Daemon.Tests` (188) pass; `Data.Tests` 1168 pass / the same 6 pre-existing migration failures as untouched `master`;
+> each new/touched `App.Tests` class passes when run on its own, and the headless tests construct each new view (proves the XAML
+> weave) and prove 3000 rows realize under 100. **Not verified:** nothing has been run against a real Prowlarr, qBittorrent or
+> ComicVine key, and nothing has been looked at on screen (review checklist applied by reading). **The full `App.Tests` suite
+> cannot complete on `master` or this branch** (dispatcher thread-affinity crash), and running two headless classes in one
+> filtered run can trip the same problem, so App evidence is per-class.
+> **Still to do:** owned-trade coverage; a library right-click "Repack & Inject Metadata" action (backlog); virtualizing the series
+> Missing Issues cards and the Series tab; an on-screen pass. Merging note: this file and `Paperbunkr-Roadmap.md` also
+> have uncommitted edits from another session in the main working tree — expect a trivial merge.
+
 > **Manual session note (2026-09-18, 16 smart-feature + 7 cosmetic-feature pitch items recorded):**
 > Not scoped, not brainstormed, not started — pure idea capture so they aren't lost. Full detail and
 > rationale lives in `Paperbunkr-Roadmap.md`'s "Smart features pitch" and "Cosmetics pitch" sections

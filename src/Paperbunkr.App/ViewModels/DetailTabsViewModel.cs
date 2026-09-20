@@ -72,6 +72,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         _openInReader = openInReader ?? (_ => { });
         _goLibraryWithSearch = goLibraryWithSearch ?? (_ => { });
         _contextFactory = contextFactory;
+        Missing = new SeriesMissingIssuesViewModel(contextFactory);
         _metadataProvider = metadataProvider ?? new AniListMetadataProvider(AniListHttpClient.Shared);
         CreditRoles = new ObservableCollection<CreditRoleGroup>();
         AdditionalDetails = new ObservableCollection<DetailFieldRow>();
@@ -116,6 +117,9 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     /// panel automatically" behavior to manga (docs/superpowers/specs/2026-09-18-tracker-behavior-
     /// settings-design.md §3.1); never comic or Unknown.</summary>
     public bool IsMangaDetailHost { get; set; }
+
+    /// <summary>The Issues tab's "Missing Issues (n)" section (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 7). Its own view model so this class doesn't grow further.</summary>
+    public SeriesMissingIssuesViewModel Missing { get; }
 
     /// <summary>
     /// Also set to <see langword="false"/> by <c>MangaDetailScreenViewModel</c>: that screen builds
@@ -303,6 +307,11 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(HasComicScraperDetailView));
         OnPropertyChanged(nameof(ShowDefaultSeriesDetailUi));
         OnPropertyChanged(nameof(ShowComicScraperDetailUi));
+
+        if (!IsMangaDetailHost)
+        {
+            Missing.Load(series.Id, series.Name);
+        }
 
         using (var context = _contextFactory())
         {

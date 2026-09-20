@@ -27,6 +27,7 @@ public static class ScheduledTaskCatalog
     public const string GenerateCovers = "generate-covers";
     public const string StoryEventAutodetect = "story-event-autodetect";
     public const string ContinuityWikidataAutodetect = "continuity-wikidata-autodetect";
+    public const string FollowArcs = "follow-arcs";
 
     public static IReadOnlyList<ScheduledTaskDescriptor> All { get; } = Build();
 
@@ -174,6 +175,44 @@ public static class ScheduledTaskCatalog
                 // Same idempotent-Succeed reasoning as StoryEventAutodetect above.
                 var link = suggestions.Count > 0 ? new ActivityLink(ActivityLinkKind.StoryEventsScreen) : null;
                 handle.Succeed(summary, link);
+                return summary;
+            }),
+
+        // "Follow arc" (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 8): off by default, and does nothing unless the user has also
+        // turned Acquisition on and added a ComicVine key. Runs at low ComicVine priority so it can never starve the UI's own lookups.
+        new ScheduledTaskDescriptor(
+            FollowArcs, "Follow story arcs",
+            "Refreshes the story-arc reading lists you follow and requests any newly listed issues you don't have. " +
+            "Needs Acquisition switched on and your ComicVine key.",
+            ActivityJobKind.Acquisition, Priority: 10, SchedulerResourceClass.Network,
+            TimeSpan.FromDays(1), DefaultEnabled: false, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                if (!context.GetOrCreateAcquisitionSettings().Enabled)
+                {
+                    const string off = "Acquisition is switched off, so nothing was requested.";
+                    handle.Succeed(off);
+                    return off;
+                }
+
+                handle.Report("Refreshing followed arcs…");
+                var key = Paperbunkr.Data.Credentials.CredentialStore.Get(context, "ComicVine", Paperbunkr.Data.Entities.CredentialKind.ApiKey);
+                var comicVine = string.IsNullOrWhiteSpace(key)
+                    ? null
+                    : new Paperbunkr.Data.ComicVine.ComicVineClient(key, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low);
+
+                var result = await Paperbunkr.Data.Acquisition.ArcFollowService.RunAsync(context, comicVine, ct, progress: (done, total) => handle.Report(done, total, $"{done} / {total} arcs"));
+
+                var parts = new System.Collections.Generic.List<string> { $"{result.ListsChecked} arc{Plural(result.ListsChecked)} checked" };
+                if (result.IssuesAdded > 0) parts.Add($"{result.IssuesAdded} new entr{(result.IssuesAdded == 1 ? "y" : "ies")}");
+                if (result.Requested > 0) parts.Add($"{result.Requested} requested");
+                if (result.Unresolved > 0) parts.Add($"{result.Unresolved} couldn't be matched");
+                if (comicVine is null && result.ListsChecked > 0) parts.Add("add a ComicVine key to request missing issues");
+                if (result.Problems.Count > 0) parts.Add($"{result.Problems.Count} problem{Plural(result.Problems.Count)}: {result.Problems[0]}");
+
+                string summary = string.Join(", ", parts) + ".";
+                handle.Succeed(summary, result.Requested > 0 ? new ActivityLink(ActivityLinkKind.WantedScreen) : null);
                 return summary;
             }),
     };

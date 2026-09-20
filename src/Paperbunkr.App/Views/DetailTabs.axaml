@@ -346,6 +346,9 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+            <!-- Missing Issues (n): the ComicVine list minus what you own, with Request buttons -->
+            <views:SeriesMissingIssuesView DataContext="{Binding Missing}" />
         </StackPanel>
 
         <!-- ================= SPECIALS TAB ================= -->

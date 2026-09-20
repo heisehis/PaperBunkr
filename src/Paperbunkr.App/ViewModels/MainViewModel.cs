@@ -71,7 +71,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         ["smart"] = 4,
         ["reading"] = 5,
         ["events"] = 6,
-        ["preferences"] = 7,
+        ["wanted"] = 7,
+        ["preferences"] = 8,
     };
 
     /// <summary><see cref="RailOrder"/>'s keys sorted by their index, for <see cref="CycleScreen"/> -
@@ -127,6 +128,42 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         Scheduler = new Services.Scheduling.SchedulerService(Activity);
 
         ActivityCenter = new ActivityCenterViewModel(Activity, ResolveActivityLink, Scheduler);
+
+        // Comic acquisition daemon (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md). Built here, started in
+        // App.OnFrameworkInitializationCompleted next to the scheduler. The daemon only publishes events; the bridge is the one
+        // place they become Activity Center jobs and alerts.
+        AcquisitionEvents = new Paperbunkr.Daemon.Events.ChannelEventPublisher();
+        Grab = new Paperbunkr.Daemon.Services.GrabService(
+            Services.PaperbunkrDb.CreateContext, Paperbunkr.Daemon.Clients.DownloadClientFactory.Create, AcquisitionEvents);
+        var downloadTracker = new Paperbunkr.Daemon.Services.DownloadTracker(
+            Services.PaperbunkrDb.CreateContext,
+            Paperbunkr.Daemon.Clients.DownloadClientFactory.Create,
+            new Paperbunkr.Daemon.Import.ImportProcessor(Services.PaperbunkrDb.CreateContext, new Services.LibraryIngester(), AcquisitionEvents),
+            AcquisitionEvents);
+        Acquisition = new Paperbunkr.Daemon.Services.AcquisitionService(
+            new Paperbunkr.Daemon.Services.AcquisitionCycle(
+                Services.PaperbunkrDb.CreateContext,
+                (url, key) => new Paperbunkr.Daemon.Indexers.ProwlarrSearchClient(url, key),
+                key => new Paperbunkr.Data.ComicVine.ComicVineClient(key, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low),
+                AcquisitionEvents,
+                grabService: Grab),
+            Services.PaperbunkrDb.CreateContext,
+            downloads: downloadTracker);
+        AcquisitionBridge = new Services.AcquisitionActivityBridge(
+            Activity, AcquisitionEvents.Reader,
+            resultLink: () => new ActivityLink(ActivityLinkKind.WantedScreen),
+            onWantedChanged: () => { if (IsWanted) Wanted.Refresh(); });
+        Wanted = new WantedScreenViewModel(
+            Services.PaperbunkrDb.CreateContext,
+            Acquisition.RunNowAsync,
+            GoDetailForSeries,
+            () =>
+            {
+                GoPreferencesCommand.Execute(null);
+                Preferences.GoAcquisitionCommand.Execute(null);
+            },
+            Services.ClipboardHelper.CopyTextAsync,
+            Grab);
         StatusBar = new StatusBarViewModel(Activity, QueryLibraryStats, () => ActivityCenter.TogglePeekCommand.Execute(null));
         Activity.CompletionToastRequested += ShowToast;
 
@@ -474,6 +511,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Maintenance-task scheduler (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-durability-design.md, Part 1).</summary>
     public Services.Scheduling.ISchedulerService Scheduler { get; }
 
+    /// <summary>The comic acquisition daemon's timer; <c>RunNow()</c> is "Search now".</summary>
+    public Paperbunkr.Daemon.Services.AcquisitionService Acquisition { get; }
+
+    public Paperbunkr.Daemon.Events.ChannelEventPublisher AcquisitionEvents { get; }
+
+    /// <summary>Approve/reject/retry/cancel for the Wanted screen (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 5).</summary>
+    public Paperbunkr.Daemon.Services.GrabService Grab { get; }
+
+    public Services.AcquisitionActivityBridge AcquisitionBridge { get; }
+
+    /// <summary>The Wanted screen (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 7).</summary>
+    public WantedScreenViewModel Wanted { get; }
+
     /// <summary>Backs the persistent bottom status bar.</summary>
     public StatusBarViewModel StatusBar { get; }
 
@@ -621,6 +671,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         "smart" => Smart,
         "reading" => Reading,
         "events" => Events,
+        "wanted" => Wanted,
         "preferences" => Preferences,
         _ => null,
     };
@@ -669,6 +720,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public bool IsSmart => CurrentScreen == "smart";
     public bool IsReading => CurrentScreen == "reading";
     public bool IsEvents => CurrentScreen == "events";
+    public bool IsWanted => CurrentScreen == "wanted";
     public bool IsPreferences => CurrentScreen == "preferences";
     public bool IsReader => CurrentScreen == "reader";
 
@@ -813,6 +865,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(IsSmart));
         OnPropertyChanged(nameof(IsReading));
         OnPropertyChanged(nameof(IsEvents));
+        OnPropertyChanged(nameof(IsWanted));
         OnPropertyChanged(nameof(IsPreferences));
         OnPropertyChanged(nameof(IsReader));
         OnPropertyChanged(nameof(ShowContextualSidebar));
@@ -924,6 +977,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     });
 
     [RelayCommand]
+    private void GoWanted() => TryLeaveCurrentEditor(() =>
+    {
+        Wanted.Refresh();
+        CurrentScreen = "wanted";
+        ResetHistoryRoot("wanted");
+    });
+
+    [RelayCommand]
     private void GoPreferences() => TryLeaveCurrentEditor(() =>
     {
         Preferences.EnsureLoaded();
@@ -971,6 +1032,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             case "smart": GoSmart(); break;
             case "reading": GoReading(); break;
             case "events": GoEvents(); break;
+            case "wanted": GoWanted(); break;
             case "preferences": GoPreferences(); break;
         }
     }
@@ -1179,6 +1241,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                     "smart" => GoSmartCommand,
                     "reading" => GoReadingCommand,
                     "events" => GoEventsCommand,
+                    "wanted" => GoWantedCommand,
                     "preferences" => GoPreferencesCommand,
                     _ => GoHomeCommand,
                 }).Execute(null);
@@ -2125,6 +2188,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 Events.EnsureEventLoaded();
                 CurrentScreen = "events";
                 break;
+            case "wanted":
+                Wanted.Refresh();
+                CurrentScreen = "wanted";
+                break;
             case "preferences":
                 Preferences.EnsureLoaded();
                 CurrentScreen = "preferences";
@@ -2237,6 +2304,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         ["smart"] = "Smart Lists",
         ["reading"] = "Reading Lists",
         ["events"] = "Continuity",
+        ["wanted"] = "Wanted",
         ["preferences"] = "Preferences",
     };
 
@@ -2442,6 +2510,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 case "events":
                     GoEvents();
                     return;
+                case "wanted":
+                    GoWanted();
+                    return;
                 case "preferences":
                     GoPreferences();
                     return;
@@ -2633,6 +2704,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 {
                     Preferences.GoLibraryHealthCommand.Execute(null);
                 }
+                else if (link.Payload == "Acquisition")
+                {
+                    Preferences.GoAcquisitionCommand.Execute(null);
+                }
                 else if (link.Payload == "Advanced")
                 {
                     Preferences.GoAdvancedCommand.Execute(null);
@@ -2645,6 +2720,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 break;
             case ActivityLinkKind.StoryEventsScreen:
                 GoEventsCommand.Execute(null);
+                break;
+            case ActivityLinkKind.WantedScreen:
+                GoWantedCommand.Execute(null);
                 break;
             case ActivityLinkKind.RestartApp:
                 App.RelaunchAndExit();

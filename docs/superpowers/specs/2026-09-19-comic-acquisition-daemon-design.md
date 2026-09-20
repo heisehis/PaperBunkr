@@ -1,6 +1,6 @@
 # Comic Acquisition Daemon (Mylar-style want-list + acquisition) — Design
 
-Date: 2026-09-19 · Status: draft for user review
+Date: 2026-09-19 · Status: approved; **slices 1-4 implemented on branch `feat/comic-acquisition-daemon`** (qBittorrent grab/progress/blocklist, import, auto-grab, "Follow arc", cover thumbnails, virtualized lists; see the plan for per-step status and baselines). Nothing has been run against a real Prowlarr, qBittorrent or ComicVine, or checked on screen.
 
 ## 1. Goal and scope
 
@@ -11,7 +11,7 @@ finished files into the library. Story-arc gaps in reading lists feed the same w
 Behavior is modeled on Mylar3 by studying what it does; **no Mylar3 code is copied** (it is GPL-3).
 The UI pattern for per-series "Missing Issues" is modeled on Omnibus (hankscafe/omnibus).
 
-**Target stack (user's own):** Prowlarr (Torznab) + qBittorrent. Paperbunkr ships **no** indexers,
+**Target stack (user's own):** Prowlarr + qBittorrent. Paperbunkr ships **no** indexers,
 tracker lists or defaults; the user supplies their own Prowlarr.
 
 **Out of scope (deferred):** SABnzbd, direct Newznab/Torznab clients, Deluge/NZBGet, owned-trade
@@ -26,7 +26,7 @@ Slack; Activity Center covers in-app notification, so this is backlog).
 |---|---|---|
 | LiteDB | EF Core + SQLite in the existing DB and migrations | The repo has no LiteDB; `Paperbunkr.Data` is EF Core 10 / SQLite |
 | `Core` / `Daemon` / `UI` projects | One new `Paperbunkr.Daemon` project; contracts live in it | Repo already has `Common`, `Data`, `Engine`, `App`; a separate `Core` is YAGNI until a headless host exists |
-| Torznab + Newznab clients | Prowlarr Torznab endpoint only, behind `IIndexerClient` | User runs Prowlarr; it handles indexer auth and limits |
+| Torznab + Newznab clients | Prowlarr's **native JSON search** (`GET /api/v1/search`) only, behind `IIndexerClient` | User runs Prowlarr and it handles indexer auth and limits. Prowlarr has **no combined Torznab feed** (its `/{id}/api` endpoints each hit one tracker), so its native search is the only single call across all indexers |
 | qBittorrent + SABnzbd | qBittorrent only, behind `IDownloadClient` | User's stack |
 | Status machine `Wanted…Ignored` | Kept as `Wanted, Snatched, Downloading, Imported, Failed, Ignored` | Matches brief; "Upcoming" is a future-dated `Wanted` row, not a status |
 
@@ -43,7 +43,7 @@ Slack; Activity Center covers in-app notification, so this is backlog).
 - **Threading/DB:** each tick uses its own `DbContext` with short transactions; SQLite WAL keeps UI
   reads unblocked.
 - **ComicVine client:** new `ComicVineClient` (volume search, volume issue lists, store dates). All
-  ComicVine HTTP goes through one shared `DelegatingHandler`: min 1 s spacing, an hourly budget
+  ComicVine HTTP goes through one shared `DelegatingHandler`: min ~1.1 s spacing (ComicVine returns HTTP 420 / status_code 107 on velocity violations), an hourly budget
   (~200 req/h, the documented ComicVine limit), ban/429 detection that pauses all ComicVine calls.
   The handler is also applied to the existing `ComicVineSource` (whose per-instance `ThrottleAsync`
   has no hourly cap or ban handling). Other sources are left alone.
@@ -150,7 +150,8 @@ All changes happen on a copy.
   sets the issue `Failed` and adds the release to `ReleaseBlocklist`; the loop then searches again
   and skips it.
 - **Rename template:** CE-style `{token}` with `[optional group]`, default
-  `{publisher}/{series} ({year})/{series} #{number}.cbz`.
+  `{publisher}/{series} ({volumeyear})/{series} #{number:000}.cbz`
+  (`{volumeyear}` is the series' start year, so one series is never split across folders by each issue's own year; `{year}` stays available).
   **CE parity note (verified in `_reference/ComicRackCE`):** CE's `ComicBook.FormatTitle` supports
   series, title, volume, number, year, month, day, format and filename, applies **no zero-padding**,
   and has **no publisher token**. `{publisher}` and a zero-pad option are therefore deliberate
@@ -223,13 +224,19 @@ All changes happen on a copy.
   Failed torrent → `Failed` (retry only if configured). ComicVine ban/429 → all ComicVine calls pause.
 - Tests: unit tests for query variants, scoring, status machine, owned-matching; fake Prowlarr and
   qBittorrent HTTP servers for client tests; in-memory SQLite for data tests; UI tests use
-  `TestDispatcher.Drain()`.
+  a per-class `PumpDispatcher()` (`Dispatcher.UIThread.RunJobs()`).
 - Safety: no bundled indexers/trackers; manual approve by default; secrets follow `CredentialStore`.
 
-## 11. Open items to verify during planning
+## 11. What implementation changed (slice 1)
 
-- Exact ComicVine fields for issue store dates and volume issue lists (new client; check the API, not
-  memory).
+- Prowlarr is searched through its native JSON API, not Torznab (section 2). `IIndexerClient` is a plain text-query transport; the cascade lives in `ReleaseSearcher`.
+- Arc sources return no ComicVine ids, so arc "Request missing" matches each series to a ComicVine volume itself (exact name, arc year to disambiguate, ambiguous entries reported, never guessed). Placeholders already have a local `Series`, so none is created.
+- "Request all" confirms inline (a second click) instead of via a dialog. Slice 1's Preferences section omits the qBittorrent and destination-folder controls (they arrive with slices 2/3). The Wanted screen has no cover thumbnails yet.
+- The shared ComicVine handler/client live in `Paperbunkr.Data`, not `Daemon`, so `ComicVineSource` can use the same rate limiter.
+
+## 12. Open items to verify during planning
+
+- ~~Exact ComicVine fields~~ **Resolved** against ComicVine's published API docs (`store_date`, `cover_date`, `issue_number`, `image`, `volume`; 100 per page). Live behavior is only fixture-tested, not exercised against a real key.
 - Mylar behaviors marked unverified in research (Skipped/Archived/Ignored statuses, pull-list
   refresh, arc match keys) were not relied on.
-- Whether the `Series`/`Issue` schema needs a ComicVine issue id column for owned-matching.
+- ~~Whether `Series`/`Issue` need a ComicVine id column~~ **Resolved:** neither carries one and `ExternalMetadataProvider` has no ComicVine member, so `WatchedSeries.SeriesId` is the link (a series with no `WatchedSeries` shows a "Track this series" action that searches ComicVine volumes). Owned-matching is by `WatchedSeries.SeriesId` + issue number, and by `WantedIssue.IssueId` once imported.

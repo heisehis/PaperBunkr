@@ -40,6 +40,7 @@ public class QuickOpenService
         ("smart", "Smart Lists"),
         ("reading", "Reading Lists"),
         ("events", "Events and Continuity"),
+        ("wanted", "Wanted (comic acquisition)"),
         ("preferences", "Preferences"),
     };
 

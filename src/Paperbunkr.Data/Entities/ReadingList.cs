@@ -35,6 +35,14 @@ public class ReadingList
     /// <summary>Phase 4c overhaul (docs/superpowers/specs/2026-08-17-metadata-model-phase4c-reading-list-overhaul-design.md) - classification per the source doc's §24, defaults to User for every pre-existing list.</summary>
     public ReadingListType Type { get; set; } = ReadingListType.User;
 
+    /// <summary>
+    /// "Follow arc" (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md §8): a scheduled task re-runs Refresh on this
+    /// arc-linked list and requests newly appearing gaps. Off by default; meaningless on lists without <see cref="Source"/>/<see cref="ArcId"/>.
+    /// </summary>
+    public bool FollowArc { get; set; }
+
+    public DateTime? LastFollowedAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }

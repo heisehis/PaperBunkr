@@ -151,7 +151,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             downloads: downloadTracker,
             scrapes: new Paperbunkr.Daemon.Services.ScrapeSweeper(
                 Services.PaperbunkrDb.CreateContext,
-                new Paperbunkr.Data.ComicVine.Scraping.ScrapeByIdService(Services.PaperbunkrDb.CreateContext, CreateComicVineDetailsSource),
+                new Paperbunkr.Data.ComicVine.Scraping.ScrapeByIdService(Services.PaperbunkrDb.CreateContext, CreateDetailsSource),
                 AcquisitionEvents,
                 onScraped: issueId => MetadataWriteBack.Enqueue(issueId)));
         AcquisitionBridge = new Services.AcquisitionActivityBridge(
@@ -557,16 +557,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public Scraper.OrganizeCoordinator Organizer { get; }
 
     /// <summary>
-    /// The ComicVine issue-details client for scrape-on-import, at Low priority so background work can never starve interactive lookups (the shared rate limiter
-    /// reserves the rest of the hourly budget for High). <c>null</c> when no key is saved, which the scraper reports as a terminal, fixable-by-the-user failure.
+    /// The issue-details client for scrape-on-import, for the provider a want belongs to (ComicVine or Metron), at Low priority so background work can never starve interactive
+    /// lookups (each provider's shared rate limiter reserves the rest of its budget for High). <c>null</c> when that provider's credentials aren't saved, which the scraper reports as a
+    /// terminal, fixable-by-the-user failure.
     /// </summary>
-    private static Paperbunkr.Data.ComicVine.IComicVineIssueDetailsSource? CreateComicVineDetailsSource()
+    private static Paperbunkr.Data.ComicVine.IComicVineIssueDetailsSource? CreateDetailsSource(Paperbunkr.Data.Entities.ComicProvider provider)
     {
         using var context = Services.PaperbunkrDb.CreateContext();
-        var key = Paperbunkr.Data.Credentials.CredentialStore.Get(context, "ComicVine", Paperbunkr.Data.Entities.CredentialKind.ApiKey);
-        return string.IsNullOrWhiteSpace(key)
-            ? null
-            : new Paperbunkr.Data.ComicVine.ComicVineClient(key, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low);
+        return Paperbunkr.Data.ComicVine.ComicProviderFactory.Create(context, provider, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low);
     }
 
     private void EnqueueMetadataWriteBack(int issueId, bool manual = false) => MetadataWriteBack.Enqueue(issueId, manual);

@@ -16,12 +16,12 @@ public static class WantedService
     /// series (kept if already set and none is passed). <paramref name="watchFutureReleases"/> is only ever turned <b>on</b>
     /// by this call, never silently off, so re-tracking can't undo a user's choice.
     /// </summary>
-    public static WatchedSeries TrackVolume(PaperbunkrDbContext context, ComicVineVolume volume, int? seriesId, bool watchFutureReleases)
+    public static WatchedSeries TrackVolume(PaperbunkrDbContext context, ComicVineVolume volume, int? seriesId, bool watchFutureReleases, ComicProvider provider = ComicProvider.ComicVine)
     {
-        var watched = context.WatchedSeries.FirstOrDefault(w => w.ExternalVolumeId == volume.Id);
+        var watched = context.WatchedSeries.FirstOrDefault(w => w.Provider == provider && w.ExternalVolumeId == volume.Id);
         if (watched is null)
         {
-            watched = new WatchedSeries { ExternalVolumeId = volume.Id, AddedAt = DateTime.UtcNow };
+            watched = new WatchedSeries { Provider = provider, ExternalVolumeId = volume.Id, AddedAt = DateTime.UtcNow };
             context.WatchedSeries.Add(watched);
         }
 
@@ -53,12 +53,12 @@ public static class WantedService
             if (!existing.TryGetValue(issue.Id, out var row))
             {
                 // ExternalIssueId is unique across volumes; a row that already lives under another volume is left alone.
-                if (context.CatalogIssues.Any(c => c.ExternalIssueId == issue.Id))
+                if (context.CatalogIssues.Any(c => c.Provider == watched.Provider && c.ExternalIssueId == issue.Id))
                 {
                     continue;
                 }
 
-                row = new CatalogIssue { WatchedSeriesId = watched.Id, ExternalIssueId = issue.Id };
+                row = new CatalogIssue { WatchedSeriesId = watched.Id, Provider = watched.Provider, ExternalIssueId = issue.Id };
                 context.CatalogIssues.Add(row);
             }
 
@@ -97,12 +97,13 @@ public static class WantedService
     /// <summary>Marks an issue wanted. Already wanted/snatched/downloading/imported rows are left as they are; a failed or ignored one is put back to Wanted.</summary>
     public static WantedIssue Request(PaperbunkrDbContext context, WatchedSeries watched, ComicVineIssue issue)
     {
-        var wanted = context.WantedIssues.FirstOrDefault(w => w.ExternalIssueId == issue.Id);
+        var wanted = context.WantedIssues.FirstOrDefault(w => w.Provider == watched.Provider && w.ExternalIssueId == issue.Id);
         if (wanted is null)
         {
             wanted = new WantedIssue
             {
                 WatchedSeriesId = watched.Id,
+                Provider = watched.Provider,
                 ExternalIssueId = issue.Id,
                 CreatedAt = DateTime.UtcNow,
             };
@@ -140,12 +141,13 @@ public static class WantedService
     /// <summary>"I have this / ignore": removes an issue from Missing without ever searching for it.</summary>
     public static WantedIssue Ignore(PaperbunkrDbContext context, WatchedSeries watched, CatalogIssue issue)
     {
-        var wanted = context.WantedIssues.FirstOrDefault(w => w.ExternalIssueId == issue.ExternalIssueId);
+        var wanted = context.WantedIssues.FirstOrDefault(w => w.Provider == watched.Provider && w.ExternalIssueId == issue.ExternalIssueId);
         if (wanted is null)
         {
             wanted = new WantedIssue
             {
                 WatchedSeriesId = watched.Id,
+                Provider = watched.Provider,
                 ExternalIssueId = issue.ExternalIssueId,
                 IssueNumber = issue.IssueNumber,
                 Name = issue.Name,

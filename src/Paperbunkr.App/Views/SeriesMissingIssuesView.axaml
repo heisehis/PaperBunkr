@@ -27,19 +27,17 @@
                            FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
                 <!-- Same bar as the ComicVine match dialog: source, editable search, sort, Search. -->
                 <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8" MaxWidth="720" HorizontalAlignment="Left">
-                    <Border Grid.Column="0" Height="34" CornerRadius="{StaticResource PbRadiusSm}" Padding="12,0"
-                            Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
-                        <TextBlock Text="ComicVine" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                    </Border>
-                    <TextBox Grid.Column="1" Text="{Binding SearchText}" Watermark="Series name on ComicVine" VerticalContentAlignment="Center"
-                             AutomationProperties.Name="Search ComicVine for this series" AutomationProperties.AutomationId="SeriesComicVineSearchBox" />
+                    <controls:SuggestBox Grid.Column="0" IsStrict="True" Width="120" Text="{Binding ProviderText}" Suggestions="{x:Static vm:SeriesMissingIssuesViewModel.ProviderNames}"
+                                         AutomationProperties.Name="Search source" AutomationProperties.AutomationId="SeriesProviderSelect" />
+                    <TextBox Grid.Column="1" Text="{Binding SearchText}" Watermark="{Binding SearchWatermark}" VerticalContentAlignment="Center"
+                             AutomationProperties.Name="{Binding SearchLabel}" AutomationProperties.AutomationId="SeriesComicVineSearchBox" />
                     <controls:SuggestBox Grid.Column="2" IsStrict="True" Width="140" Text="{Binding SortText}" Suggestions="{x:Static vm:SeriesMissingIssuesViewModel.SortNames}"
                                          AutomationProperties.Name="Sort results" AutomationProperties.AutomationId="SeriesComicVineSort" />
                     <Button Grid.Column="3" Classes="headerAction primary" Content="Search" Command="{Binding FindOnComicVineCommand}"
                             AutomationProperties.AutomationId="SeriesFindOnComicVineButton" />
                 </Grid>
-                <TextBlock IsVisible="{Binding !HasComicVineKey}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
-                           Text="This needs your ComicVine API key (Preferences → Connections)." />
+                <TextBlock IsVisible="{Binding !HasProviderCredentials}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
+                           Text="This source needs its login saved under Preferences → Connections." />
 
                 <TextBlock Text="{Binding SearchSummary}" IsVisible="{Binding HasSearchResults}" FontSize="11.5" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left"
                            Foreground="{DynamicResource PbTextFaintBrush}" />
@@ -81,6 +79,9 @@
                     <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding Heading}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
                                AutomationProperties.AutomationId="SeriesMissingHeading" />
+                    <Border Classes="pbChip" Padding="7,1" IsVisible="{Binding IsMetronTracked}" VerticalAlignment="Center">
+                        <TextBlock Text="Metron" FontSize="10.5" Foreground="{DynamicResource PbAccentBrush}" />
+                    </Border>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
@@ -88,7 +89,7 @@
                     <ToggleSwitch IsChecked="{Binding WatchFutureReleases}" OnContent="{x:Null}" OffContent="{x:Null}"
                                   AutomationProperties.Name="Follow this series and request its new issues automatically" />
                     <Button Classes="headerAction ghost" Content="Refresh" Command="{Binding RefreshFromComicVineCommand}"
-                            AutomationProperties.Name="Refresh this series' issue list from ComicVine" />
+                            AutomationProperties.Name="Refresh this series' issue list" />
 
                     <!-- Request all: first click asks in place, second click requests -->
                     <Button Classes="headerAction primary" Content="Request all" Command="{Binding RequestAllCommand}"

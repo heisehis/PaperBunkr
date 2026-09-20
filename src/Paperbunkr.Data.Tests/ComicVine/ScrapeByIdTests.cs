@@ -109,7 +109,7 @@ public class ScrapeByIdServiceTests : AcquisitionTestBase
         return (wanted.Id, issue.Id);
     }
 
-    private ScrapeByIdService Service(IComicVineIssueDetailsSource? source) => new(NewContext, () => source);
+    private ScrapeByIdService Service(IComicVineIssueDetailsSource? source) => new(NewContext, _ => source);
 
     [Fact]
     public async Task Scrapes_ByTheKnownComicVineId_WithoutSearching()

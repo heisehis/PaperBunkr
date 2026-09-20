@@ -459,6 +459,62 @@ public class SeriesMissingIssuesViewModelTests : IDisposable
         Assert.Equal(1, paged.PagedCalls);
     }
 
+    private void SetMetronLogin()
+    {
+        using var context = NewContext();
+        CredentialStore.Set(context, "Metron", CredentialKind.Username, "reader");
+        CredentialStore.Set(context, "Metron", CredentialKind.Password, "pw");
+    }
+
+    [Fact]
+    public async Task Metron_CanBeChosenAsTheSource_AndTheSeriesIsTrackedWithIt()
+    {
+        SetMetronLogin();                                   // no ComicVine key at all
+        var requested = new List<ComicProvider>();
+        var metron = new FakeComicVine();
+        metron.Volumes.Add(new ComicVineVolume(77, "Spawn", "Image", 1992, 300, null));
+        metron.Issues.Add(new ComicVineIssue(5, "262", "Past", Today.AddDays(-7), null, null, 77));
+        var vm = new SeriesMissingIssuesViewModel(NewContext, provider => { requested.Add(provider); return metron; }, a => a());
+        vm.Load(_seriesId, "Spawn");
+
+        vm.ProviderText = "Metron";
+        Assert.True(vm.HasProviderCredentials);
+        Assert.Equal("Series name on Metron", vm.SearchWatermark);
+
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+        Assert.Contains("Metron", vm.SearchSummary);
+        await vm.TrackCommand.ExecuteAsync(vm.SearchResults[0]);
+
+        Assert.All(requested, p => Assert.Equal(ComicProvider.Metron, p));
+        Assert.True(vm.IsTracked);
+        Assert.True(vm.IsMetronTracked);
+        using var context = NewContext();
+        var watched = context.WatchedSeries.Single();
+        Assert.Equal(ComicProvider.Metron, watched.Provider);
+        Assert.Equal(77, watched.ExternalVolumeId);
+
+        vm.ProviderText = "ComicVine";                        // a tracked series keeps its own source
+        await vm.RefreshFromComicVineCommand.ExecuteAsync(null);
+        Assert.Equal(ComicProvider.Metron, requested[^1]);
+    }
+
+    [Fact]
+    public async Task ChoosingASourceWithoutItsLogin_SaysWhatToAdd_AndMakesNoRequest()
+    {
+        SetKey();                                           // ComicVine only
+        var requested = 0;
+        var vm = new SeriesMissingIssuesViewModel(NewContext, _ => { requested++; return new FakeComicVine(); }, a => a());
+        vm.Load(_seriesId, "Spawn");
+
+        vm.ProviderText = "Metron";
+        Assert.False(vm.HasProviderCredentials);
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, requested);
+        Assert.True(vm.HasErrorStatus);
+        Assert.Contains("Metron login", vm.StatusMessage);
+    }
+
     [Fact]
     public async Task FindOnComicVine_UsesTheEditedSearchText()
     {

@@ -22,11 +22,13 @@ public sealed class AcquisitionCycle(
     Func<string, IComicVineClient> createComicVine,
     IEventPublisher events,
     Func<DateTime>? now = null,
-    GrabService? grabService = null)
+    GrabService? grabService = null,
+    Func<string, string, IComicVineClient>? createMetron = null)
 {
     public const string NotConfiguredAlert = "acquisition-not-configured";
     public const string IndexerAlert = "acquisition-indexer";
     public const string ComicVineAlert = "acquisition-comicvine";
+    public const string MetronAlert = "acquisition-metron";
 
     /// <summary>Volumes refreshed per cycle at most: each costs one or more ComicVine requests from a 200/hour budget shared with the UI.</summary>
     internal const int MaxVolumeRefreshesPerCycle = 15;
@@ -152,15 +154,12 @@ public sealed class AcquisitionCycle(
             searched, found));
     }
 
-    /// <summary>Refreshes the cached ComicVine issue lists of followed, unpaused volumes that are stale, oldest first, within the per-cycle cap.</summary>
+    /// <summary>
+    /// Refreshes the cached issue lists of followed, unpaused volumes that are stale, oldest first, within the per-cycle cap. Each series is refreshed through its own provider
+    /// (ComicVine or Metron); a provider whose credentials aren't saved is simply skipped, and each provider has its own alert so a bad Metron login never hides a ComicVine problem.
+    /// </summary>
     private async Task RefreshFollowedVolumesAsync(PaperbunkrDbContext context, CancellationToken cancellationToken)
     {
-        var apiKey = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey);
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            return; // no key: catalogs simply aren't refreshed; searching still works for what's already wanted
-        }
-
         var staleBefore = _now() - CatalogRefreshAge;
         var stale = context.WatchedSeries
             .Where(w => w.WatchFutureReleases && !w.IsPaused && (w.LastRefreshedAt == null || w.LastRefreshedAt < staleBefore))
@@ -173,29 +172,73 @@ public sealed class AcquisitionCycle(
             return;
         }
 
-        var comicVine = createComicVine(apiKey);
+        var clients = new Dictionary<ComicProvider, IComicVineClient?>();
+        var stopped = new HashSet<ComicProvider>();
+        var touched = new HashSet<ComicProvider>();
+
         foreach (var watched in stale)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var provider = watched.Provider;
+            if (stopped.Contains(provider))
+            {
+                continue;
+            }
+
+            if (!clients.TryGetValue(provider, out var client))
+            {
+                client = clients[provider] = ClientFor(context, provider);
+            }
+
+            if (client is null)
+            {
+                continue; // no credentials for this provider: its catalogs simply aren't refreshed; searching still works for what's already wanted
+            }
+
+            touched.Add(provider);
+            var name = ComicProviderFactory.DisplayName(provider);
+            var alert = provider == ComicProvider.Metron ? MetronAlert : ComicVineAlert;
             try
             {
-                var issues = await comicVine.GetVolumeIssuesAsync(watched.ExternalVolumeId, cancellationToken).ConfigureAwait(false);
+                var issues = await client.GetVolumeIssuesAsync(watched.ExternalVolumeId, cancellationToken).ConfigureAwait(false);
                 WantedService.RefreshCatalog(context, watched, issues);
             }
             catch (ComicVineException ex) when (ex.ApiStatusCode == 100)
             {
-                events.Publish(new DaemonAlertEvent(ComicVineAlert, DaemonAlertSeverity.Warning, "ComicVine rejected your API key", "Update it in Preferences → Connections."));
-                return;
+                events.Publish(new DaemonAlertEvent(alert, DaemonAlertSeverity.Warning, provider == ComicProvider.Metron ? "Metron rejected your login" : "ComicVine rejected your API key", "Update it in Preferences → Connections."));
+                stopped.Add(provider);
             }
             catch (ComicVineException ex)
             {
-                // Rate limit (107) or a hiccup: stop refreshing this cycle, keep going with what's already cached.
-                events.Publish(new DaemonAlertEvent(ComicVineAlert, DaemonAlertSeverity.Info, "ComicVine updates are paused", ex.Message));
-                return;
+                // Rate limit (107) or a hiccup: stop refreshing this provider for this cycle, keep going with what's already cached.
+                events.Publish(new DaemonAlertEvent(alert, DaemonAlertSeverity.Info, $"{name} updates are paused", ex.Message));
+                stopped.Add(provider);
             }
         }
 
-        events.Publish(new DaemonAlertClearedEvent(ComicVineAlert));
+        foreach (var provider in touched.Where(p => !stopped.Contains(p)))
+        {
+            events.Publish(new DaemonAlertClearedEvent(provider == ComicProvider.Metron ? MetronAlert : ComicVineAlert));
+        }
+    }
+
+    /// <summary>The background (low-priority) client for a provider, or <c>null</c> when its credentials aren't saved.</summary>
+    private IComicVineClient? ClientFor(PaperbunkrDbContext context, ComicProvider provider)
+    {
+        if (provider == ComicProvider.Metron)
+        {
+            var user = CredentialStore.Get(context, "Metron", CredentialKind.Username);
+            var password = CredentialStore.Get(context, "Metron", CredentialKind.Password);
+            if (string.IsNullOrWhiteSpace(user) || string.IsNullOrEmpty(password))
+            {
+                return null;
+            }
+
+            return (createMetron ?? ((u, p) => new MetronClient(u, p, ComicVineRequestPriority.Low)))(user, password);
+        }
+
+        var apiKey = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey);
+        return string.IsNullOrWhiteSpace(apiKey) ? null : createComicVine(apiKey);
     }
 
     private async Task<bool> TryAutoGrabAsync(IReadOnlyList<ReleaseCandidate> candidates, int minScore, CancellationToken cancellationToken)

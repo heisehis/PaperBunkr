@@ -34,6 +34,7 @@ public sealed class WantedRowViewModel
     public string? Subtitle { get; init; }
     public required string StatusText { get; init; }
     public RemoteCoverSource Cover { get; init; } = new(null);
+    public bool IsMetron { get; init; }
     public int CandidateCount { get; init; }
     public bool HasCandidates => CandidateCount > 0;
     public string CandidateText => CandidateCount == 1 ? "1 candidate" : $"{CandidateCount} candidates";
@@ -99,6 +100,7 @@ public sealed partial class WatchedSeriesRowViewModel : ObservableObject
     public bool CanOpen => SeriesId is not null;
     public int MissingCount { get; init; }
     public int WantedCount { get; init; }
+    public bool IsMetron { get; init; }
     public string CountsText => $"{MissingCount} missing · {WantedCount} wanted";
 
     /// <summary>"Follow": request future issues automatically. The initial value is set through the field, so loading never fires <see cref="FollowChanged"/>.</summary>
@@ -138,7 +140,7 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
     private readonly Func<CancellationToken, Task> _searchNow;
     private readonly Action<int> _openSeries;
     private readonly Action _openAcquisitionSettings;
-    private readonly Func<string, IComicVineClient> _createComicVine;
+    private readonly Func<ComicProvider, IComicVineClient> _createProvider;
     private readonly Func<string, Task> _copyToClipboard;
     private readonly GrabService _grab;
     private readonly Action<Action> _post;
@@ -151,7 +153,7 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
         Action openAcquisitionSettings,
         Func<string, Task> copyToClipboard,
         GrabService grab,
-        Func<string, IComicVineClient>? createComicVine = null,
+        Func<ComicProvider, IComicVineClient>? createProvider = null,
         Action<Action>? post = null,
         Func<DateTime>? today = null)
     {
@@ -161,7 +163,11 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
         _openAcquisitionSettings = openAcquisitionSettings;
         _copyToClipboard = copyToClipboard;
         _grab = grab;
-        _createComicVine = createComicVine ?? (key => new ComicVineClient(key, ComicVineRequestPriority.High));
+        _createProvider = createProvider ?? (provider =>
+        {
+            using var context = createContext();
+            return ComicProviderFactory.Create(context, provider)!;
+        });
         _post = post ?? (action => Dispatcher.UIThread.Post(action));
         _today = today ?? (() => DateTime.Today);
     }
@@ -202,6 +208,24 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
     [ObservableProperty] private bool _isEnabled;
     [ObservableProperty] private bool _hasComicVineKey;
 
+    /// <summary>Which source "Track a series" searches ("ComicVine" or "Metron").</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SeriesSearchWatermark), nameof(HasSeriesProviderCredentials))]
+    private string _seriesProviderText = "ComicVine";
+
+    public static IReadOnlyList<string> ProviderNames => SeriesMissingIssuesViewModel.ProviderNames;
+
+    public string SeriesSearchWatermark => $"Search {ComicProviderFactory.DisplayName(ComicProviderFactory.Parse(SeriesProviderText))}, e.g. Spawn";
+
+    public bool HasSeriesProviderCredentials
+    {
+        get
+        {
+            using var context = _createContext();
+            return ComicProviderFactory.IsAvailable(context, ComicProviderFactory.Parse(SeriesProviderText));
+        }
+    }
+
     /// <summary>qBittorrent is set up, so candidates can be grabbed (otherwise they can only be copied).</summary>
     [ObservableProperty] private bool _hasDownloadClient;
     [ObservableProperty] private bool _isSearching;
@@ -233,6 +257,7 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
 
         IsEnabled = context.GetOrCreateAcquisitionSettings().Enabled;
         HasComicVineKey = !string.IsNullOrEmpty(CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey));
+        OnPropertyChanged(nameof(HasSeriesProviderCredentials));
 
         HasDownloadClient = !string.IsNullOrWhiteSpace(context.GetOrCreateAcquisitionSettings().QBittorrentUrl);
 
@@ -286,6 +311,7 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
                 Name = watched.Name,
                 Subtitle = string.Join(" · ", new[] { watched.Publisher, watched.StartYear?.ToString(CultureInfo.InvariantCulture) }.Where(s => !string.IsNullOrEmpty(s))),
                 SeriesId = watched.SeriesId,
+                IsMetron = watched.Provider == ComicProvider.Metron,
                 MissingCount = WantedService.GetMissing(context, watched).Count,
                 WantedCount = context.WantedIssues.Count(w => w.WatchedSeriesId == watched.Id && w.Status == WantedIssueStatus.Wanted),
             };
@@ -480,27 +506,26 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
             return;
         }
 
-        string? key;
+        var provider = ComicProviderFactory.Parse(SeriesProviderText);
         HashSet<int> tracked;
         using (var context = _createContext())
         {
-            key = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey);
-            tracked = context.WatchedSeries.Select(w => w.ExternalVolumeId).ToHashSet();
-        }
+            if (!ComicProviderFactory.IsAvailable(context, provider))
+            {
+                SetStatus(ComicProviderFactory.MissingCredentialsMessage(provider).Replace("first.", "to search for series."), isError: true);
+                return;
+            }
 
-        if (string.IsNullOrEmpty(key))
-        {
-            SetStatus("Add your ComicVine API key under Preferences → Connections to search for series.", isError: true);
-            return;
+            tracked = context.WatchedSeries.Where(w => w.Provider == provider).Select(w => w.ExternalVolumeId).ToHashSet();
         }
 
         try
         {
             // Ranked by name match (there is no local series to compare with here), and more than ComicVine's first 25 by issue count.
-            var volumes = await VolumeSearchService.SearchAndRankAsync(_createComicVine(key), query, new LocalSeriesHints(query), cancellationToken);
+            var volumes = await VolumeSearchService.SearchAndRankAsync(_createProvider(provider), query, new LocalSeriesHints(query), cancellationToken);
             Fill(SearchResults, volumes.Take(VolumeResultViewModel.PageSize).Select((r, i) => new VolumeResultViewModel { Volume = r.Volume, IsTracked = tracked.Contains(r.Volume.Id), IsBestMatch = i == 0 && volumes.Count > 1, Cover = new RemoteCoverSource(r.Volume.ImageUrl) }));
             OnPropertyChanged(nameof(HasSearchResults));
-            SetStatus(volumes.Count == 0 ? $"No ComicVine series found for \"{query}\"." : string.Empty, isError: false);
+            SetStatus(volumes.Count == 0 ? $"No {ComicProviderFactory.DisplayName(provider)} series found for \"{query}\"." : string.Empty, isError: false);
         }
         catch (ComicVineException ex)
         {
@@ -512,25 +537,24 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
     [RelayCommand]
     private async Task TrackVolumeAsync(VolumeResultViewModel result, CancellationToken cancellationToken)
     {
-        string? key;
-        using (var context = _createContext())
+        // Results are only ever shown for the source that was searched, so the selector still names the right one.
+        var provider = ComicProviderFactory.Parse(SeriesProviderText);
+        using (var check = _createContext())
         {
-            key = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey);
-        }
-
-        if (string.IsNullOrEmpty(key))
-        {
-            SetStatus("Add your ComicVine API key under Preferences → Connections first.", isError: true);
-            return;
+            if (!ComicProviderFactory.IsAvailable(check, provider))
+            {
+                SetStatus(ComicProviderFactory.MissingCredentialsMessage(provider), isError: true);
+                return;
+            }
         }
 
         try
         {
-            var issues = await _createComicVine(key).GetVolumeIssuesAsync(result.Volume.Id, cancellationToken);
+            var issues = await _createProvider(provider).GetVolumeIssuesAsync(result.Volume.Id, cancellationToken);
 
             using var context = _createContext();
             int? seriesId = context.Series.AsEnumerable().FirstOrDefault(s => SeriesNames.Same(s.Name, result.Volume.Name))?.Id;
-            var watched = WantedService.TrackVolume(context, result.Volume, seriesId, watchFutureReleases: false);
+            var watched = WantedService.TrackVolume(context, result.Volume, seriesId, watchFutureReleases: false, provider);
             WantedService.RefreshCatalog(context, watched, issues);
             int missing = WantedService.GetMissing(context, watched).Count;
 
@@ -561,6 +585,7 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
             ? $"Arrives {due.ToString("MMM d, yyyy", CultureInfo.CurrentCulture)}"
             : string.Join(" · ", new[] { wanted.WatchedSeries?.Publisher, wanted.Name }.Where(s => !string.IsNullOrEmpty(s))),
         StatusText = upcoming ? "Upcoming" : wanted.LastSearchedAt is null ? "Not searched yet" : "Wanted",
+        IsMetron = wanted.Provider == ComicProvider.Metron,
         CandidateCount = candidateCounts.TryGetValue(wanted.Id, out int count) ? count : 0,
         Cover = CoverFor(wanted),
     };

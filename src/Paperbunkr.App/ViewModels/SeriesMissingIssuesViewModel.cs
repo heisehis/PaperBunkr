@@ -36,16 +36,20 @@ public sealed class MissingIssueRowViewModel
 public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
 {
     private readonly Func<PaperbunkrDbContext> _createContext;
-    private readonly Func<string, IComicVineClient> _createComicVine;
+    private readonly Func<ComicProvider, IComicVineClient> _createProvider;
     private readonly Action<Action> _post;
     private bool _loading;
     private int _seriesId;
     private int _watchedSeriesId;
 
-    public SeriesMissingIssuesViewModel(Func<PaperbunkrDbContext> createContext, Func<string, IComicVineClient>? createComicVine = null, Action<Action>? post = null)
+    public SeriesMissingIssuesViewModel(Func<PaperbunkrDbContext> createContext, Func<ComicProvider, IComicVineClient>? createProvider = null, Action<Action>? post = null)
     {
         _createContext = createContext;
-        _createComicVine = createComicVine ?? (key => new ComicVineClient(key, ComicVineRequestPriority.High));
+        _createProvider = createProvider ?? (provider =>
+        {
+            using var context = createContext();
+            return ComicProviderFactory.Create(context, provider)!;
+        });
         _post = post ?? (action => Dispatcher.UIThread.Post(action));
     }
 
@@ -56,6 +60,36 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
 
     /// <summary>What to look for on ComicVine. Starts as the series name and can be edited (add a subtitle, drop "The", fix a spelling) before searching again.</summary>
     [ObservableProperty] private string _searchText = string.Empty;
+
+    public static IReadOnlyList<string> ProviderNames { get; } = ComicProviderFactory.All.Select(ComicProviderFactory.DisplayName).ToList();
+
+    /// <summary>Which source the search below uses ("ComicVine" or "Metron"; a text value for the suggest box). A tracked series always uses the source it was tracked with.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SearchWatermark), nameof(SearchLabel))]
+    private string _providerText = "ComicVine";
+
+    private ComicProvider SelectedProvider => IsTracked ? _trackedProvider : ComicProviderFactory.Parse(ProviderText);
+    private ComicProvider _trackedProvider;
+
+    /// <summary>The source's name (ComicVine / Metron) for messages.</summary>
+    private string ProviderName => ComicProviderFactory.DisplayName(SelectedProvider);
+
+    public string SearchWatermark => $"Series name on {ComicProviderFactory.DisplayName(ComicProviderFactory.Parse(ProviderText))}";
+    public string SearchLabel => $"Search {ComicProviderFactory.DisplayName(ComicProviderFactory.Parse(ProviderText))} for this series";
+
+    /// <summary>True when the tracked series comes from Metron (shows a small "Metron" chip; ComicVine, the default, shows nothing).</summary>
+    public bool IsMetronTracked => IsTracked && _trackedProvider == ComicProvider.Metron;
+
+    [ObservableProperty] private bool _hasProviderCredentials;
+
+    partial void OnProviderTextChanged(string value)
+    {
+        if (!_loading)
+        {
+            using var context = _createContext();
+            HasProviderCredentials = ComicProviderFactory.IsAvailable(context, ComicProviderFactory.Parse(value));
+        }
+    }
 
     /// <summary>How many of the ranked results are showing; "Show more" reveals another page.</summary>
     [ObservableProperty]
@@ -135,6 +169,7 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
         SeriesName = seriesName;
         SearchText = seriesName;
         _ranked = Array.Empty<RankedVolume>();
+        ProviderText = "ComicVine";
         SortText = "Best match";
         SearchSummary = string.Empty;
         SearchResults.Clear();
@@ -152,7 +187,10 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
             HasComicVineKey = !string.IsNullOrEmpty(CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey));
 
             var watched = context.WatchedSeries.FirstOrDefault(w => w.SeriesId == _seriesId);
+            _trackedProvider = watched?.Provider ?? ComicProvider.ComicVine;
+            HasProviderCredentials = ComicProviderFactory.IsAvailable(context, watched is not null ? watched.Provider : ComicProviderFactory.Parse(ProviderText));
             IsTracked = watched is not null;
+            OnPropertyChanged(nameof(IsMetronTracked));
             _watchedSeriesId = watched?.Id ?? 0;
             WatchFutureReleases = watched?.WatchFutureReleases ?? false;
 
@@ -261,7 +299,7 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
     [RelayCommand]
     private async Task RefreshFromComicVineAsync(CancellationToken cancellationToken)
     {
-        if (!TryGetKey(out var key))
+        if (!TryGetProvider(out var provider))
         {
             return;
         }
@@ -274,14 +312,14 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
                 volumeId = context.WatchedSeries.First(w => w.Id == _watchedSeriesId).ExternalVolumeId;
             }
 
-            var issues = await _createComicVine(key).GetVolumeIssuesAsync(volumeId, cancellationToken);
+            var issues = await _createProvider(provider).GetVolumeIssuesAsync(volumeId, cancellationToken);
             using (var context = _createContext())
             {
                 WantedService.RefreshCatalog(context, context.WatchedSeries.First(w => w.Id == _watchedSeriesId), issues);
             }
 
             Reload();
-            SetStatus($"Updated from ComicVine: {issues.Count} issues, {MissingRows.Count} missing.", isError: false);
+            SetStatus($"Updated from {ProviderName}: {issues.Count} issues, {MissingRows.Count} missing.", isError: false);
         }
         catch (ComicVineException ex)
         {
@@ -293,7 +331,7 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
     [RelayCommand]
     private async Task FindOnComicVineAsync(CancellationToken cancellationToken)
     {
-        if (!TryGetKey(out var key))
+        if (!TryGetProvider(out var provider))
         {
             return;
         }
@@ -302,14 +340,14 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
         try
         {
             var hints = BuildHints(query);
-            _ranked = await VolumeSearchService.SearchAndRankAsync(_createComicVine(key), query, hints, cancellationToken);
+            _ranked = await VolumeSearchService.SearchAndRankAsync(_createProvider(provider), query, hints, cancellationToken);
             ShownCount = Math.Min(VolumeResultViewModel.PageSize, _ranked.Count);
             RebuildResults();
 
             SearchSummary = _ranked.Count == 0
                 ? string.Empty
-                : $"Best of {_ranked.Count} ComicVine series, ranked by name, start year, issue count and publisher against what you have.";
-            SetStatus(_ranked.Count == 0 ? $"No ComicVine series found for \"{query}\". Try a shorter or different name." : "Pick the right series below.", isError: _ranked.Count == 0);
+                : $"Best of {_ranked.Count} {ProviderName} series, ranked by name, start year, issue count and publisher against what you have.";
+            SetStatus(_ranked.Count == 0 ? $"No {ProviderName} series found for \"{query}\". Try a shorter or different name." : "Pick the right series below.", isError: _ranked.Count == 0);
         }
         catch (ComicVineException ex)
         {
@@ -361,18 +399,18 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
     [RelayCommand]
     private async Task TrackAsync(VolumeResultViewModel result, CancellationToken cancellationToken)
     {
-        if (!TryGetKey(out var key))
+        if (!TryGetProvider(out var provider))
         {
             return;
         }
 
         try
         {
-            var issues = await _createComicVine(key).GetVolumeIssuesAsync(result.Volume.Id, cancellationToken);
+            var issues = await _createProvider(provider).GetVolumeIssuesAsync(result.Volume.Id, cancellationToken);
 
             using (var context = _createContext())
             {
-                var watched = WantedService.TrackVolume(context, result.Volume, _seriesId, watchFutureReleases: false);
+                var watched = WantedService.TrackVolume(context, result.Volume, _seriesId, watchFutureReleases: false, provider);
                 if (watched.SeriesId != _seriesId)
                 {
                     // That volume is already tracked and linked to a different local series; keep that link, tell the user.
@@ -394,13 +432,13 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
         }
     }
 
-    private bool TryGetKey(out string key)
+    private bool TryGetProvider(out ComicProvider provider)
     {
+        provider = SelectedProvider;
         using var context = _createContext();
-        key = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey) ?? string.Empty;
-        if (key.Length == 0)
+        if (!ComicProviderFactory.IsAvailable(context, provider))
         {
-            SetStatus("Add your ComicVine API key under Preferences → Connections to find missing issues.", isError: true);
+            SetStatus(ComicProviderFactory.MissingCredentialsMessage(provider).Replace("first.", "to find missing issues."), isError: true);
             return false;
         }
 

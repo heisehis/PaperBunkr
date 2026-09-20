@@ -90,7 +90,7 @@ public static class ArcRequestService
                     continue;
                 }
 
-                var existing = context.WantedIssues.FirstOrDefault(w => w.ExternalIssueId == entry.ExternalIssueId);
+                var existing = context.WantedIssues.FirstOrDefault(w => w.Provider == ComicProvider.ComicVine && w.ExternalIssueId == entry.ExternalIssueId);
                 if (existing is not null && existing.Status is not (WantedIssueStatus.Failed or WantedIssueStatus.Ignored))
                 {
                     already++;
@@ -108,7 +108,7 @@ public static class ArcRequestService
     private static async Task<WatchedSeries?> ResolveWatchedSeriesAsync(PaperbunkrDbContext context, Series series, IReadOnlyList<Issue> items,
         IComicVineClient comicVine, List<UnresolvedRequest> unresolved, CancellationToken cancellationToken)
     {
-        var existing = context.WatchedSeries.FirstOrDefault(w => w.SeriesId == series.Id);
+        var existing = context.WatchedSeries.FirstOrDefault(w => w.Provider == ComicProvider.ComicVine && w.SeriesId == series.Id);
         if (existing is not null)
         {
             return existing;
@@ -125,7 +125,7 @@ public static class ArcRequestService
         }
 
         // A volume already tracked under another local series is reused as-is (its link is kept).
-        return WantedService.TrackVolume(context, chosen, series.Id, watchFutureReleases: false);
+        return WantedService.TrackVolume(context, chosen, series.Id, watchFutureReleases: false, ComicProvider.ComicVine);
     }
 
     /// <summary>

@@ -53,7 +53,7 @@ public class ScrapeSweeperTests : IDisposable
         Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), new[] { new ComicVineCredit("Todd", "Writer") });
 
     private ScrapeSweeper Sweeper() =>
-        new(NewContext, new ScrapeByIdService(NewContext, () => new Source(this)), new Recorder(_events), _writeBacks.Add, () => _now);
+        new(NewContext, new ScrapeByIdService(NewContext, _ => new Source(this)), new Recorder(_events), _writeBacks.Add, () => _now);
 
     private int SeedImported(ScrapeStatus status, int attempts = 0, DateTime? lastAttempt = null, bool terminal = false, int comicVineIssueId = 1)
     {

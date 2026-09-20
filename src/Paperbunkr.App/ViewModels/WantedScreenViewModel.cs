@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.Daemon.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Acquisition;
 using Paperbunkr.Data.ComicVine;
@@ -40,11 +41,29 @@ public sealed class WantedRowViewModel
 /// <summary>One release found for a wanted issue.</summary>
 public sealed class CandidateRowViewModel
 {
+    public required int Id { get; init; }
+    public required int WantedIssueId { get; init; }
     public required string Title { get; init; }
     public required string Detail { get; init; }
     public required string ScoreText { get; init; }
     public bool IsPack { get; init; }
     public required string DownloadUrl { get; init; }
+}
+
+/// <summary>An issue that has been sent to the download client: downloading, or failed and waiting for the user.</summary>
+public sealed class DownloadRowViewModel
+{
+    public required int Id { get; init; }
+    public required string Title { get; init; }
+    public required string StatusText { get; init; }
+    public string? Detail { get; init; }
+
+    /// <summary>0..100 for the progress bar.</summary>
+    public double ProgressPercent { get; init; }
+
+    public bool IsFailed { get; init; }
+    public bool ShowProgress => !IsFailed;
+    public string ProgressText => $"{ProgressPercent:0}%";
 }
 
 public sealed class CandidateGroupViewModel
@@ -98,6 +117,7 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
     private readonly Action _openAcquisitionSettings;
     private readonly Func<string, IComicVineClient> _createComicVine;
     private readonly Func<string, Task> _copyToClipboard;
+    private readonly GrabService _grab;
     private readonly Action<Action> _post;
     private readonly Func<DateTime> _today;
 
@@ -107,6 +127,7 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
         Action<int> openSeries,
         Action openAcquisitionSettings,
         Func<string, Task> copyToClipboard,
+        GrabService grab,
         Func<string, IComicVineClient>? createComicVine = null,
         Action<Action>? post = null,
         Func<DateTime>? today = null)
@@ -116,6 +137,7 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
         _openSeries = openSeries;
         _openAcquisitionSettings = openAcquisitionSettings;
         _copyToClipboard = copyToClipboard;
+        _grab = grab;
         _createComicVine = createComicVine ?? (key => new ComicVineClient(key, ComicVineRequestPriority.High));
         _post = post ?? (action => Dispatcher.UIThread.Post(action));
         _today = today ?? (() => DateTime.Today);
@@ -123,6 +145,7 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
 
     public ObservableCollection<WantedRowViewModel> WantedRows { get; } = new();
     public ObservableCollection<WantedRowViewModel> UpcomingRows { get; } = new();
+    public ObservableCollection<DownloadRowViewModel> DownloadRows { get; } = new();
     public ObservableCollection<CandidateGroupViewModel> CandidateGroups { get; } = new();
     public ObservableCollection<WatchedSeriesRowViewModel> SeriesRows { get; } = new();
     public ObservableCollection<VolumeResultViewModel> SearchResults { get; } = new();
@@ -136,7 +159,11 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
     public bool IsCandidatesTab => ActiveTab == WantedTab.Candidates;
     public bool IsSeriesTab => ActiveTab == WantedTab.Series;
 
-    public bool HasNoWanted => WantedRows.Count == 0;
+    public bool HasNoWanted => WantedRows.Count == 0 && DownloadRows.Count == 0;
+    public bool HasNoDownloads => DownloadRows.Count == 0;
+
+    /// <summary>What the Wanted tab counts: issues still to find plus those already on their way.</summary>
+    public int WantedTabCount => WantedRows.Count + DownloadRows.Count;
     public bool HasNoUpcoming => UpcomingRows.Count == 0;
     public bool HasNoCandidates => CandidateGroups.Count == 0;
     public bool HasNoSeries => SeriesRows.Count == 0;
@@ -144,6 +171,9 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
 
     [ObservableProperty] private bool _isEnabled;
     [ObservableProperty] private bool _hasComicVineKey;
+
+    /// <summary>qBittorrent is set up, so candidates can be grabbed (otherwise they can only be copied).</summary>
+    [ObservableProperty] private bool _hasDownloadClient;
     [ObservableProperty] private bool _isSearching;
 
     [ObservableProperty]
@@ -173,6 +203,13 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
 
         IsEnabled = context.GetOrCreateAcquisitionSettings().Enabled;
         HasComicVineKey = !string.IsNullOrEmpty(CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey));
+
+        HasDownloadClient = !string.IsNullOrWhiteSpace(context.GetOrCreateAcquisitionSettings().QBittorrentUrl);
+
+        Fill(DownloadRows, context.WantedIssues.Include(w => w.WatchedSeries)
+            .Where(w => w.Status == WantedIssueStatus.Snatched || w.Status == WantedIssueStatus.Downloading || w.Status == WantedIssueStatus.Failed)
+            .OrderBy(w => w.Status == WantedIssueStatus.Failed ? 0 : 1).ThenBy(w => w.CreatedAt)
+            .ToList().Select(ToDownloadRow));
 
         var candidateCounts = context.ReleaseCandidates
             .GroupBy(c => c.WantedIssueId)
@@ -222,6 +259,8 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
         Fill(SeriesRows, rows);
 
         OnPropertyChanged(nameof(HasNoWanted));
+        OnPropertyChanged(nameof(HasNoDownloads));
+        OnPropertyChanged(nameof(WantedTabCount));
         OnPropertyChanged(nameof(HasNoUpcoming));
         OnPropertyChanged(nameof(HasNoCandidates));
         OnPropertyChanged(nameof(HasNoSeries));
@@ -281,6 +320,40 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
 
         Refresh();
     });
+
+    /// <summary>Approves a candidate: sends it to qBittorrent. Progress and the import then follow on their own.</summary>
+    [RelayCommand]
+    private async Task GrabAsync(CandidateRowViewModel candidate, CancellationToken cancellationToken)
+    {
+        var result = await _grab.GrabAsync(candidate.Id, automatic: false, cancellationToken);
+        SetStatus(result.Message, isError: !result.Success);
+        Refresh();
+    }
+
+    /// <summary>Rejects a candidate: it is blocklisted and never offered again. Deferred a tick - its own button is still routing the click.</summary>
+    [RelayCommand]
+    private void RejectCandidate(CandidateRowViewModel candidate) => _post(() =>
+    {
+        _grab.Reject(candidate.Id);
+        Refresh();
+    });
+
+    /// <summary>Puts a failed issue back to Wanted for another search.</summary>
+    [RelayCommand]
+    private void RetryDownload(DownloadRowViewModel row) => _post(() =>
+    {
+        _grab.Retry(row.Id);
+        Refresh();
+    });
+
+    /// <summary>Stops a grab (removing its torrent, only ever one in the Paperbunkr category) and returns the issue to Wanted.</summary>
+    [RelayCommand]
+    private async Task CancelDownloadAsync(DownloadRowViewModel row, CancellationToken cancellationToken)
+    {
+        var result = await _grab.CancelAsync(row.Id, deleteFiles: true, cancellationToken);
+        SetStatus(result.Message, isError: !result.Success);
+        Refresh();
+    }
 
     [RelayCommand]
     private async Task CopyLinkAsync(CandidateRowViewModel candidate)
@@ -393,8 +466,25 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
         CandidateCount = candidateCounts.TryGetValue(wanted.Id, out int count) ? count : 0,
     };
 
+    private static DownloadRowViewModel ToDownloadRow(WantedIssue wanted) => new()
+    {
+        Id = wanted.Id,
+        Title = $"{wanted.WatchedSeries?.Name} #{wanted.IssueNumber}",
+        IsFailed = wanted.Status == WantedIssueStatus.Failed,
+        StatusText = wanted.Status switch
+        {
+            WantedIssueStatus.Failed => "Failed",
+            WantedIssueStatus.Snatched => "Sent to qBittorrent",
+            _ => wanted.DownloadProgress is >= 0.9999 ? "Importing…" : "Downloading",
+        },
+        Detail = wanted.Status == WantedIssueStatus.Failed ? wanted.FailureReason : wanted.GrabbedTitle,
+        ProgressPercent = (wanted.DownloadProgress ?? 0) * 100,
+    };
+
     private static CandidateRowViewModel ToCandidateRow(ReleaseCandidate candidate) => new()
     {
+        Id = candidate.Id,
+        WantedIssueId = candidate.WantedIssueId,
         Title = candidate.Title,
         Detail = string.Join(" · ", new[]
         {

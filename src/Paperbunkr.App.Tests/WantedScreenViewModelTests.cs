@@ -8,6 +8,8 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
+using Paperbunkr.Daemon.Events;
+using Paperbunkr.Daemon.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Acquisition;
 using Paperbunkr.Data.ComicVine;
@@ -48,6 +50,7 @@ public class WantedScreenViewModelTests : IDisposable
         _opened.Add,
         () => _settingsOpened = true,
         text => { _copied.Add(text); return Task.CompletedTask; },
+        new GrabService(NewContext, _ => null, new ChannelEventPublisher()),
         _ => _comicVine,
         post: a => a(),
         today: () => Today);

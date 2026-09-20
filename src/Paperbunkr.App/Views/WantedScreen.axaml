@@ -23,7 +23,7 @@
                             AutomationProperties.AutomationId="WantedTabWanted">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <TextBlock Text="Wanted" VerticalAlignment="Center" />
-                            <TextBlock Classes="tabCount" Text="{Binding WantedRows.Count}" VerticalAlignment="Center" />
+                            <TextBlock Classes="tabCount" Text="{Binding WantedTabCount}" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                     <Button Classes="tab" Classes.active="{Binding IsUpcomingTab}" Command="{Binding GoUpcomingCommand}"
@@ -76,6 +76,43 @@
             <!-- WANTED -->
             <ScrollViewer IsVisible="{Binding IsWantedTab}">
                 <StackPanel Margin="24,16,24,32" Spacing="8" MaxWidth="960" HorizontalAlignment="Left">
+                    <!-- Grabbed issues: on their way (progress) or failed (retry) -->
+                    <StackPanel IsVisible="{Binding !HasNoDownloads}" Spacing="8" Margin="0,0,0,8">
+                        <TextBlock Classes="settingsGroupCaption" Text="DOWNLOADS" />
+                        <ItemsControl ItemsSource="{Binding DownloadRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:DownloadRowViewModel">
+                                    <Border Classes="card" Margin="0,0,0,8" Padding="14,10">
+                                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                                                <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                                <Border Classes="pbChip" Padding="8,2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{DynamicResource PbAccentBrush}" />
+                                                </Border>
+                                            </StackPanel>
+                                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                <Button Classes="headerAction ghost" Content="Retry" IsVisible="{Binding IsFailed}"
+                                                        AutomationProperties.Name="{Binding Title, StringFormat='Try again for {0}'}"
+                                                        Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RetryDownloadCommand}" CommandParameter="{Binding}" />
+                                                <Button Classes="headerAction ghost" Content="Cancel" IsVisible="{Binding ShowProgress}"
+                                                        AutomationProperties.Name="{Binding Title, StringFormat='Cancel downloading {0}'}"
+                                                        Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).CancelDownloadCommand}" CommandParameter="{Binding}" />
+                                            </StackPanel>
+                                            <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" Margin="0,8,0,0" IsVisible="{Binding ShowProgress}">
+                                                <ProgressBar Grid.Column="0" Minimum="0" Maximum="100" Value="{Binding ProgressPercent}" Height="6" VerticalAlignment="Center"
+                                                             AutomationProperties.Name="Download progress" />
+                                                <TextBlock Grid.Column="1" Text="{Binding ProgressText}" FontSize="11.5" Margin="10,0,0,0" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            </Grid>
+                                            <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding Detail}" FontSize="11.5" TextWrapping="Wrap" Margin="0,6,0,0"
+                                                       Foreground="{DynamicResource PbTextFaintBrush}"
+                                                       IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
                     <ItemsControl ItemsSource="{Binding WantedRows}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:WantedRowViewModel">
@@ -157,7 +194,7 @@
             <ScrollViewer IsVisible="{Binding IsCandidatesTab}">
                 <StackPanel Margin="24,16,24,32" Spacing="8" MaxWidth="960" HorizontalAlignment="Left">
                     <TextBlock IsVisible="{Binding !HasNoCandidates}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
-                               Text="Best match first. Downloading straight from Paperbunkr arrives in a later update — for now, copy a link and paste it into your download client." />
+                               Text="Best match first. Grab sends a release to qBittorrent (set it up in Acquisition settings); Copy link works with any download client. Reject blocks a release for good." />
                     <ItemsControl ItemsSource="{Binding CandidateGroups}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:CandidateGroupViewModel">
@@ -175,9 +212,18 @@
                                                         <Border Grid.Column="1" Classes="pbChip" Padding="8,2" Margin="10,0,0,0" VerticalAlignment="Center" IsVisible="{Binding IsPack}">
                                                             <TextBlock Text="Pack" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
                                                         </Border>
-                                                        <Button Grid.Column="2" Classes="headerAction ghost" Content="Copy link" Margin="10,0,0,0" VerticalAlignment="Center"
-                                                                AutomationProperties.Name="{Binding Title, StringFormat='Copy download link for {0}'}"
-                                                                Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).CopyLinkCommand}" CommandParameter="{Binding}" />
+                                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="10,0,0,0" VerticalAlignment="Center">
+                                                            <Button Classes="headerAction primary" Content="Grab"
+                                                                    IsVisible="{Binding #Root.((vm:WantedScreenViewModel)DataContext).HasDownloadClient}"
+                                                                    AutomationProperties.Name="{Binding Title, StringFormat='Send {0} to qBittorrent'}"
+                                                                    Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).GrabCommand}" CommandParameter="{Binding}" />
+                                                            <Button Classes="headerAction ghost" Content="Copy link"
+                                                                    AutomationProperties.Name="{Binding Title, StringFormat='Copy download link for {0}'}"
+                                                                    Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).CopyLinkCommand}" CommandParameter="{Binding}" />
+                                                            <Button Classes="headerAction ghost" Content="Reject"
+                                                                    AutomationProperties.Name="{Binding Title, StringFormat='Never offer {0} again'}"
+                                                                    Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RejectCandidateCommand}" CommandParameter="{Binding}" />
+                                                        </StackPanel>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>

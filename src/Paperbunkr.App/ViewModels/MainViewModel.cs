@@ -133,14 +133,26 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // App.OnFrameworkInitializationCompleted next to the scheduler. The daemon only publishes events; the bridge is the one
         // place they become Activity Center jobs and alerts.
         AcquisitionEvents = new Paperbunkr.Daemon.Events.ChannelEventPublisher();
+        Grab = new Paperbunkr.Daemon.Services.GrabService(
+            Services.PaperbunkrDb.CreateContext, Paperbunkr.Daemon.Clients.DownloadClientFactory.Create, AcquisitionEvents);
+        var downloadTracker = new Paperbunkr.Daemon.Services.DownloadTracker(
+            Services.PaperbunkrDb.CreateContext,
+            Paperbunkr.Daemon.Clients.DownloadClientFactory.Create,
+            new Paperbunkr.Daemon.Import.ImportProcessor(Services.PaperbunkrDb.CreateContext, new Services.LibraryIngester(), AcquisitionEvents),
+            AcquisitionEvents);
         Acquisition = new Paperbunkr.Daemon.Services.AcquisitionService(
             new Paperbunkr.Daemon.Services.AcquisitionCycle(
                 Services.PaperbunkrDb.CreateContext,
                 (url, key) => new Paperbunkr.Daemon.Indexers.ProwlarrSearchClient(url, key),
                 key => new Paperbunkr.Data.ComicVine.ComicVineClient(key, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low),
-                AcquisitionEvents),
-            Services.PaperbunkrDb.CreateContext);
-        AcquisitionBridge = new Services.AcquisitionActivityBridge(Activity, AcquisitionEvents.Reader, resultLink: () => new ActivityLink(ActivityLinkKind.WantedScreen));
+                AcquisitionEvents,
+                grabService: Grab),
+            Services.PaperbunkrDb.CreateContext,
+            downloads: downloadTracker);
+        AcquisitionBridge = new Services.AcquisitionActivityBridge(
+            Activity, AcquisitionEvents.Reader,
+            resultLink: () => new ActivityLink(ActivityLinkKind.WantedScreen),
+            onWantedChanged: () => { if (IsWanted) Wanted.Refresh(); });
         Wanted = new WantedScreenViewModel(
             Services.PaperbunkrDb.CreateContext,
             Acquisition.RunNowAsync,
@@ -150,7 +162,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 GoPreferencesCommand.Execute(null);
                 Preferences.GoAcquisitionCommand.Execute(null);
             },
-            Services.ClipboardHelper.CopyTextAsync);
+            Services.ClipboardHelper.CopyTextAsync,
+            Grab);
         StatusBar = new StatusBarViewModel(Activity, QueryLibraryStats, () => ActivityCenter.TogglePeekCommand.Execute(null));
         Activity.CompletionToastRequested += ShowToast;
 
@@ -502,6 +515,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public Paperbunkr.Daemon.Services.AcquisitionService Acquisition { get; }
 
     public Paperbunkr.Daemon.Events.ChannelEventPublisher AcquisitionEvents { get; }
+
+    /// <summary>Approve/reject/retry/cancel for the Wanted screen (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 5).</summary>
+    public Paperbunkr.Daemon.Services.GrabService Grab { get; }
 
     public Services.AcquisitionActivityBridge AcquisitionBridge { get; }
 

@@ -106,8 +106,30 @@
                         Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
                     <Panel>
                         <TextBlock Text="☰" FontSize="26" Foreground="{DynamicResource PbTextFaintBrush}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   IsVisible="{Binding ArcCoverImage, Converter={x:Static conv:ObjectConverters.IsNull}}" />
+                                   HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock.IsVisible>
+                                <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                    <Binding Path="ArcCoverImage" Converter="{x:Static conv:ObjectConverters.IsNull}" />
+                                    <Binding Path="!ShowCoverMosaic" />
+                                </MultiBinding>
+                            </TextBlock.IsVisible>
+                        </TextBlock>
+                        <!-- 2x2 member-cover mosaic (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #7) - only
+                             when the list has no arc cover of its own. Covers come through the Library's own cover cache
+                             (AsyncCoverImage), not the separate ArcCoverImageCache. -->
+                        <ItemsControl ItemsSource="{Binding CoverMosaicKeys}" IsVisible="{Binding ShowCoverMosaic}"
+                                      AutomationProperties.AutomationId="ReadingListCoverMosaic">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="{Binding CoverMosaicColumns}" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <Image views:AsyncCoverImage.SourceId="{Binding}" Stretch="UniformToFill" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                         <Image Source="{Binding ArcCoverImage}" Stretch="UniformToFill"
                                IsVisible="{Binding ArcCoverImage, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
                     </Panel>
@@ -116,9 +138,14 @@
 
             <StackPanel Grid.Column="1" VerticalAlignment="Top">
                 <TextBlock Classes="pbTextHeading" Text="{Binding ListName}" TextWrapping="Wrap" />
-                <Border Background="Transparent" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="1" CornerRadius="999"
+                <Border Background="Transparent" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="1" CornerRadius="{StaticResource PbRadiusChip}"
                         Padding="7,1" HorizontalAlignment="Left" Margin="0,5,0,0" IsVisible="{Binding IsArcLinked}">
-                    <TextBlock Text="{Binding ArcSourceLabel}" FontSize="9.5" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <TextBlock Text="via" FontSize="9.5" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                        <!-- Real service mark (falls back to the name as text for a source with no mark) - #14 BrandMark pass. -->
+                        <controls:BrandMark Family="Service" Value="{Binding ArcSourceName}" ShowText="True" MarkSize="12"
+                                            Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                    </StackPanel>
                 </Border>
 
                 <TextBlock Text="{Binding MetaLine}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,0" TextWrapping="Wrap" />
@@ -186,6 +213,8 @@
                             <MenuItem Header="Link story event…" Command="{Binding ToggleLinkStoryEventCommand}" />
                             <MenuItem Header="Build from a story arc…" Command="{Binding ToggleArcSearchCommand}" />
                             <MenuItem Header="Refresh from source" Command="{Binding RefreshArcListCommand}" IsVisible="{Binding IsArcLinked}" />
+                            <MenuItem Header="Request missing issues" Command="{Binding RequestMissingFromArcCommand}" IsVisible="{Binding IsArcLinked}" />
+                            <MenuItem Header="Follow this arc" ToggleType="CheckBox" IsChecked="{Binding FollowArc, Mode=TwoWay}" IsVisible="{Binding IsArcLinked}" />
                             <Separator />
                             <MenuItem Header="Edit details…" Command="{Binding OpenPropertiesCommand}" />
                         </MenuFlyout>
@@ -345,6 +374,8 @@
                 <Border Margin="28,20,28,40" Padding="24" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                         CornerRadius="{DynamicResource PbRadius}" IsVisible="{Binding IsEmptyList}">
                     <StackPanel HorizontalAlignment="Center" Spacing="12">
+                        <!-- Empty-state illustration (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #13). -->
+                        <controls:EmptyIllustration Kind="List" HorizontalAlignment="Center" />
                         <TextBlock Text="Add issues to get started" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" />
                         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
                             <Button Classes="headerAction primary" Content="＋ Add issues" Command="{Binding ToggleAddIssuesCommand}" />
@@ -414,9 +445,13 @@
                 </Border>
 
                 <!-- no reading lists at all -->
-                <TextBlock Text="No reading lists yet — create one from the sidebar to get started." FontSize="13"
-                           Foreground="{DynamicResource PbTextFaintBrush}" Margin="28,20,28,40" TextWrapping="Wrap"
-                           IsVisible="{Binding HasNoReadingLists}" />
+                <StackPanel Spacing="12" Margin="28,40,28,40" HorizontalAlignment="Center" IsVisible="{Binding HasNoReadingLists}">
+                    <controls:EmptyIllustration Kind="Bookmark" HorizontalAlignment="Center" />
+                    <TextBlock Text="No reading lists yet — create one from the sidebar to get started." FontSize="13" TextAlignment="Center"
+                               Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="360" />
+                    <Button Classes="headerAction primary" Content="＋ New reading list" HorizontalAlignment="Center"
+                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenNewReadingListDialogCommand}" />
+                </StackPanel>
 
                 <!-- member-selection action bar -->
                 <Border Margin="20,4,20,6" Background="{DynamicResource PbSurface2Brush}" CornerRadius="5" Padding="8,6"
@@ -497,8 +532,13 @@
                                                                     <TextBlock Text="Read" />
                                                                 </StackPanel>
                                                             </Button>
-                                                            <Button Classes="headerAction ghost" Content="Find &amp; link" Padding="8,3" FontSize="10.5"
-                                                                    Command="{Binding LinkCommand}" IsVisible="{Binding IsMissing}" />
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsMissing}">
+                                                                <Button Classes="headerAction ghost" Content="Find &amp; link" Padding="8,3" FontSize="10.5"
+                                                                        Command="{Binding LinkCommand}" />
+                                                                <Button Classes="headerAction ghost" Content="Request" Padding="8,3" FontSize="10.5"
+                                                                        Command="{Binding RequestCommand}" IsVisible="{Binding CanRequest}"
+                                                                        AutomationProperties.Name="Request this missing issue" />
+                                                            </StackPanel>
                                                         </Panel>
 
                                                         <!-- hover: one ⋯ menu -->

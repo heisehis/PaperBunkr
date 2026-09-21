@@ -26,6 +26,7 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
     private readonly PluginHostService _host;
     private readonly IFilePickerService _filePicker;
     private readonly Action _onRefreshRequested;
+    private readonly Action<string> _openFolder;
 
     /// <summary>
     /// <paramref name="loadError"/>/<paramref name="hasConfigure"/> are passed in already-resolved
@@ -40,8 +41,11 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
         string? loadError,
         bool hasConfigure,
         Action onRemoved,
-        Action onRefreshRequested)
+        Action onRefreshRequested,
+        string? requiresApi = null,
+        Action<string>? openFolder = null)
     {
+        _openFolder = openFolder ?? (path => cYo.Common.Win32.FileExplorer.OpenFolder(path));
         _package = package;
         _host = host;
         _filePicker = filePicker;
@@ -61,7 +65,16 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
 
         LoadError = loadError;
         HasConfigure = hasConfigure;
+        RequiresApiText = string.IsNullOrWhiteSpace(requiresApi) ? null : $"Requires API {requiresApi.Trim()}";
     }
+
+    /// <summary>The plugin's declared <c>requiresApi</c> as plain information (docs/superpowers/specs/
+    /// 2026-09-20-plugin-api-4-1-design.md §3.4), or null when the manifest declares none. Deliberately
+    /// never a warning: a plugin declaring a higher minor than this app provides is left alone while it
+    /// runs fine, and a blocked one already surfaces its reason through <see cref="LoadError"/>.</summary>
+    public string? RequiresApiText { get; }
+
+    public bool HasRequiresApi => RequiresApiText is not null;
 
     /// <summary>The correlation key this detail pane was built for - lets <see cref="PluginScreenViewModel.Refresh"/> re-select the same package across a rebuild (e.g. after Reload/master-toggle) without holding a reference to a stale <see cref="PackageManager.Package"/> instance.</summary>
     public string PackageKey => _package.Key;
@@ -89,6 +102,21 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
 
     [RelayCommand]
     private async Task Configure() => await _host.OpenPluginSettingsAsync(_package.Key);
+
+    /// <summary>Opens the folder holding every plugin's log (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md §1), creating it first so the button works before anything has logged. Failing to open a folder is never worth a crash.</summary>
+    [RelayCommand]
+    private void OpenLogFolder()
+    {
+        try
+        {
+            string folder = _host.LogFiles.Directory;
+            System.IO.Directory.CreateDirectory(folder);
+            _openFolder(folder);
+        }
+        catch (System.Exception)
+        {
+        }
+    }
 
     /// <summary>Script-tier only (docs §4.4) - a native package's load can only be re-attempted by
     /// actually reloading its AssemblyLoadContext, which "restart to apply" already covers; offering

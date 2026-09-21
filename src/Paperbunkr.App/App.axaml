@@ -127,6 +127,14 @@
         <CornerRadius x:Key="PbRadius">7</CornerRadius>
         <CornerRadius x:Key="PbRadiusSm">5</CornerRadius>
         <CornerRadius x:Key="PbRadiusLg">14</CornerRadius>
+        <!-- Chips are squircles, not ovals: a radius well under half a chip's height keeps the corners round without collapsing the ends into a pill. -->
+        <CornerRadius x:Key="PbRadiusChip">9</CornerRadius>
+
+        <!-- Density tokens (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #17) - these are the Comfortable values; ThemeService
+             overwrites them at startup and live from Preferences > Appearance > Density. Consumers use DynamicResource. -->
+        <Thickness x:Key="PbListRowPadding">10</Thickness>
+        <Thickness x:Key="PbDetailsRowPadding">0,3</Thickness>
+        <Thickness x:Key="PbSidebarItemPadding">8,7</Thickness>
 
         <!-- Motion tokens (design doc, "snappy & responsive") - PbMotionFast is overwritten to
              TimeSpan.Zero live by ThemeService.ApplyReducedMotion when the user enables the

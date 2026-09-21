@@ -148,14 +148,14 @@
         <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="999" />
+        <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
         <Setter Property="Padding" Value="12,5" />
     </Style>
     <Style Selector="Button.pbChip">
         <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="999" />
+        <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
         <Setter Property="Padding" Value="12,5" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
@@ -216,6 +216,9 @@
              fainter version read as invisible against a card's own drop shadow at typical viewing
              distance. -->
         <BoxShadows x:Key="PbGlowRing">0 0 0 4 #99E0995A</BoxShadows>
+        <!-- Fixed Normal-tier twin of PbGlowRing for non-hover consumers (reader bookmark pulse) - the
+             glow-tier setting only changes PbGlowRing. Overwritten at runtime by ThemeService.ApplyGlowRing. -->
+        <BoxShadows x:Key="PbGlowPulseRing">0 0 0 4 #99E0995A</BoxShadows>
     </Styles.Resources>
 
     <!-- PosterTile - see Views/PosterTile.axaml. Root there is a Border (not Button) specifically

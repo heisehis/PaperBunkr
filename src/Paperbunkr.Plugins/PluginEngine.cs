@@ -17,6 +17,29 @@ public sealed record PluginInvocationResult(Command Command, bool Success, objec
 public sealed record NativePluginLoadResult(INativePluginModule? Module, string? LoadError);
 
 /// <summary>
+/// One plugin package's <c>requiresApi</c> outcome (docs/superpowers/specs/2026-09-20-plugin-api-4-1-
+/// design.md §3), recorded for both tiers so the plugin manager can show the declared requirement and
+/// - for a script package, which registers no commands when blocked - the reason it didn't load.
+/// </summary>
+/// <param name="RequiresApi">The manifest's raw <c>requiresApi</c> text, or null when absent.</param>
+/// <param name="Declared">The parsed declaration, or null when absent or malformed.</param>
+/// <param name="BlockedReason">Non-null only when the plugin was blocked at load (major mismatch or a malformed value).</param>
+public sealed record PluginApiInfo(string? RequiresApi, Version? Declared, string? BlockedReason);
+
+/// <summary>
+/// Wraps a command's invoke-time failure with a version hint (docs/superpowers/specs/2026-09-20-
+/// plugin-api-4-1-design.md §3.2). Deliberately a wrapper rather than a new field on
+/// <see cref="PluginInvocationResult"/>: every caller already formats <c>result.Error?.Message</c>, so
+/// the hint reaches all of them without editing any call site.
+/// </summary>
+public sealed class PluginApiMismatchException : Exception
+{
+    public PluginApiMismatchException(string message, Exception inner) : base(message, inner)
+    {
+    }
+}
+
+/// <summary>
 /// Ported from ComicRackCE's <c>PluginEngine</c> (docs/superpowers/specs/
 /// 2026-08-24-plugin-api-v2-design.md §2/§3): discovers plugin manifests under a root folder,
 /// initializes + eagerly precompiles their commands, and dispatches hook invocations to every
@@ -39,6 +62,67 @@ public sealed class PluginEngine
     /// packages have no entry here (native-only concept).
     /// </summary>
     public IReadOnlyDictionary<string, NativePluginLoadResult> NativeLoadResults => _nativeLoadResults;
+
+    private readonly Dictionary<string, PluginApiInfo> _packageApi = new();
+
+    /// <summary>
+    /// Per-package <c>requiresApi</c> outcome for every manifest that parsed, either tier, keyed by the
+    /// same plugin key <see cref="Command.PluginKey"/> uses. A script package blocked at load has an
+    /// entry here with a <see cref="PluginApiInfo.BlockedReason"/> and no commands anywhere; a native
+    /// one also gets a <see cref="NativeLoadResults"/> entry carrying the same reason.
+    /// </summary>
+    public IReadOnlyDictionary<string, PluginApiInfo> PackageApiInfo => _packageApi;
+
+    private readonly Dictionary<string, string> _packageNames = new();
+    private readonly Dictionary<string, PluginSettingsSchema> _settingsSchemas = new();
+
+    /// <summary>
+    /// Plugin key → its validated <c>&lt;Settings&gt;</c> schema, for every plugin that declared a valid one
+    /// and wasn't blocked. The host reads it to schema-check <c>GetSetting</c>/<c>SetSetting</c> and to render
+    /// the settings overlay (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §6).
+    /// </summary>
+    public IReadOnlyDictionary<string, PluginSettingsSchema> SettingsSchemas => _settingsSchemas;
+
+    /// <summary>
+    /// Rejects an already-discovered package after the fact, with a reason shown like any other load
+    /// failure: its commands are removed, its native module (if any) is dropped from
+    /// <see cref="NativeLoadResults"/> in favour of the error, and its schema is discarded. Used by the App
+    /// layer for a rule this project can't check itself - a native plugin that both declares a settings
+    /// schema and implements its own settings UI (<c>INativePluginSettingsUi</c> lives in the
+    /// Avalonia-dependent project this one doesn't reference). A no-op for an unknown key.
+    /// </summary>
+    public void RejectPackage(string pluginKey, string reason)
+    {
+        _commands.RemoveAll(c => c.PluginKey == pluginKey);
+        _settingsSchemas.Remove(pluginKey);
+        if (_nativeLoadResults.TryGetValue(pluginKey, out NativePluginLoadResult? existing))
+        {
+            (existing.Module as IDisposable)?.Dispose();
+            _nativeLoadResults[pluginKey] = new NativePluginLoadResult(null, reason);
+        }
+
+        if (_packageApi.TryGetValue(pluginKey, out PluginApiInfo? info))
+        {
+            _packageApi[pluginKey] = info with { BlockedReason = reason };
+        }
+    }
+
+    /// <summary>
+    /// Plugin key → the manifest's display <c>name</c>, for every manifest that parsed (either tier).
+    /// Used to attribute Activity Center jobs and alerts to a plugin by name rather than by key
+    /// (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §4.3).
+    /// </summary>
+    public IReadOnlyDictionary<string, string> PackageNames => _packageNames;
+
+    /// <summary>
+    /// Plugins that have been absorbed into the app, and what to tell the user. Cluster Library Manager (ComicVine scraping and library organizing) became built-in
+    /// (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md section 9); an installed copy is left on disk for the user to remove but is not run.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> RetiredPluginKeys { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["cluster-library-manager"] = "Now built in: ComicVine scraping and library organizing are part of Paperbunkr itself " +
+            "(right-click comics → Scrape / Organize; settings under Preferences → Organize & Scrape). This plugin is no longer needed and is not loaded; you can remove it.",
+    };
 
     /// <summary>Walks <paramref name="pluginsRoot"/> for <c>plugin.xml</c> manifests, initializing and precompiling every command found. Never throws - a broken plugin is flagged via <see cref="Command.IsBroken"/>, not skipped from discovery, and never aborts loading the rest (docs §2).</summary>
     public void Discover(string pluginsRoot, IPluginEnvironment baseEnvironment)
@@ -66,6 +150,9 @@ public sealed class PluginEngine
 
         _commands.Clear();
         _nativeLoadResults.Clear();
+        _packageApi.Clear();
+        _packageNames.Clear();
+        _settingsSchemas.Clear();
         if (!Directory.Exists(pluginsRoot))
         {
             return;
@@ -81,20 +168,73 @@ public sealed class PluginEngine
             // RegisterCommands, not manifest-declared scripts - so they take a separate path
             // entirely rather than going through XmlPluginInitializer.GetCommands below.
             PluginManifest? manifest = XmlPluginInitializer.ReadManifest(manifestFile);
+
+            // requiresApi gate (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §3.2). Runs
+            // BEFORE anything is compiled or loaded: a major mismatch in either direction (or a
+            // malformed value) must mean the plugin's code is never touched. A same-major minor
+            // difference is deliberately lenient and only ever explains a failure later.
+            PluginApiCompatibility compat = PluginApiCompatibility.Evaluate(manifest?.RequiresApi, PluginApi.Current);
+
+            // The declared settings schema (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md
+            // §6) is validated at the same gate, for the same reason: a malformed manifest entry - or a
+            // plugin that defines its settings twice (a <Settings> schema AND a ConfigScript command) -
+            // means the plugin's code is never touched, and the reason is shown like any other block.
+            string? blockedReason = compat.Reason;
+            PluginSettingsSchema? schema = null;
+            if (manifest is not null && blockedReason is null)
+            {
+                schema = PluginSettingsSchema.Parse(manifest, out string? schemaError);
+                if (schemaError is null && schema is not null
+                    && manifest.Commands.Any(c => string.Equals(c.Hook, PluginHooks.ConfigScript, StringComparison.OrdinalIgnoreCase)))
+                {
+                    schemaError = "the plugin declares both <Settings> and a ConfigScript command - a plugin can have only one settings definition";
+                }
+
+                if (schemaError is not null)
+                {
+                    blockedReason = $"invalid <Settings>: {schemaError}";
+                    schema = null;
+                }
+            }
+
+            if (manifest is not null)
+            {
+                string apiKey = string.IsNullOrWhiteSpace(manifest.Key) ? Path.GetFileName(pluginDir) : manifest.Key;
+                _packageApi[apiKey] = new PluginApiInfo(manifest.RequiresApi, compat.Declared, blockedReason);
+                _packageNames[apiKey] = string.IsNullOrWhiteSpace(manifest.Name) ? apiKey : manifest.Name;
+                if (schema is not null)
+                {
+                    _settingsSchemas[apiKey] = schema;
+                }
+            }
+
             if (manifest is not null && string.Equals(manifest.Tier, "Native", StringComparison.OrdinalIgnoreCase))
             {
-                DiscoverNative(manifest, pluginDir, baseEnvironment);
+                DiscoverNative(manifest, pluginDir, baseEnvironment, compat, blockedReason);
+                continue;
+            }
+
+            if (blockedReason is not null)
+            {
                 continue;
             }
 
             foreach (Command cmd in XmlPluginInitializer.GetCommands(manifestFile))
             {
+                cmd.DeclaredApi = compat.Declared;
                 if (!cmd.Initialize(baseEnvironment, pluginDir))
                 {
                     continue;
                 }
 
                 cmd.PreCompile();
+
+                // Compile failures only get the hint for a declared-higher minor; a plain syntax
+                // error in a plugin that declares nothing isn't drift (see FailureHint).
+                if (cmd.IsBroken)
+                {
+                    cmd.AppendVersionHint(PluginApiCompatibility.FailureHint(cmd.DeclaredApi, PluginApi.Current, driftShapedFailure: false));
+                }
 
                 if (cmd.Hook == PluginHooks.ConfigScript)
                 {
@@ -135,7 +275,7 @@ public sealed class PluginEngine
     /// instead of swallowed (docs/superpowers/specs/2026-09-12-plugin-management-screen-redesign-
     /// design.md §4.2 - this is exactly the concrete "silently vanishes" bug that design fixes).
     /// </summary>
-    private void DiscoverNative(PluginManifest manifest, string pluginDir, IPluginEnvironment baseEnvironment)
+    private void DiscoverNative(PluginManifest manifest, string pluginDir, IPluginEnvironment baseEnvironment, PluginApiCompatibility compat, string? blockedReason)
     {
         if (baseEnvironment is not INativePluginEnvironment nativeEnvironment)
         {
@@ -167,6 +307,14 @@ public sealed class PluginEngine
 
         string pluginKey = string.IsNullOrWhiteSpace(manifest.Key) ? Path.GetFileName(pluginDir) : manifest.Key;
 
+        // A plugin whose feature is now built into the app is never loaded: running both would scrape or reorganize the same library twice.
+        // Recorded as a load result so the Plugins screen shows why, instead of the package silently vanishing.
+        if (RetiredPluginKeys.TryGetValue(pluginKey, out string? retiredMessage))
+        {
+            _nativeLoadResults[pluginKey] = new NativePluginLoadResult(null, retiredMessage);
+            return;
+        }
+
         // Both packages share this exact key, so there is only ever one dictionary slot for it -
         // "the first package keeps its own healthy result untouched" isn't achievable once a second
         // package claims the same key. Surfacing the conflict in that one shared slot (rather than
@@ -179,6 +327,16 @@ public sealed class PluginEngine
             return;
         }
 
+        // requiresApi gate: after the duplicate-key check (that conflict takes precedence) and
+        // strictly BEFORE LoadPlugin, so a blocked plugin's assembly is never loaded and its module
+        // never constructed. Recorded as a normal load failure so the plugin manager shows it the
+        // same way it already shows any other native load error.
+        if (blockedReason is not null)
+        {
+            _nativeLoadResults[pluginKey] = new NativePluginLoadResult(null, blockedReason);
+            return;
+        }
+
         try
         {
             (INativePluginModule module, IReadOnlyList<NativeCommand> commands) = PluginLoadContext.LoadPlugin(assemblyPath, pluginKey, nativeEnvironment);
@@ -186,6 +344,7 @@ public sealed class PluginEngine
 
             foreach (NativeCommand cmd in commands)
             {
+                cmd.DeclaredApi = compat.Declared;
                 if (!cmd.Initialize(baseEnvironment, pluginDir))
                 {
                     continue;
@@ -208,7 +367,8 @@ public sealed class PluginEngine
             // LoadError is actually useful instead of exactly the kind of misleading text this whole
             // design exists to eliminate.
             Exception real = ex is System.Reflection.TargetInvocationException { InnerException: { } inner } ? inner : ex;
-            _nativeLoadResults[pluginKey] = new NativePluginLoadResult(null, real.Message);
+            string? hint = PluginApiCompatibility.FailureHint(compat.Declared, PluginApi.Current, IsDriftShaped(real));
+            _nativeLoadResults[pluginKey] = new NativePluginLoadResult(null, hint is null ? real.Message : $"{real.Message} ({hint})");
         }
     }
 
@@ -240,10 +400,42 @@ public sealed class PluginEngine
             }
             catch (Exception ex)
             {
-                results.Add(new PluginInvocationResult(cmd, false, null, ex));
+                results.Add(new PluginInvocationResult(cmd, false, null, WithVersionHint(cmd, ex)));
             }
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// True for the failure shapes plugin-API drift produces - a member or type the host doesn't have
+    /// (a plugin built against a newer API), or an assembly that won't load against this one. An
+    /// ordinary exception thrown by the plugin's own logic is never drift.
+    /// </summary>
+    private static bool IsDriftShaped(Exception ex) =>
+        ex is MissingMemberException or TypeLoadException or System.Reflection.ReflectionTypeLoadException
+            or FileLoadException or BadImageFormatException;
+
+    /// <summary>
+    /// Invoke-time hint (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §3.2): unwraps
+    /// reflection/aggregate wrappers, and if the real failure is drift-shaped and a hint applies,
+    /// returns a <see cref="PluginApiMismatchException"/> carrying it. Anything else passes through
+    /// untouched. Never disables the command - one bad call must not silently turn a command off.
+    /// </summary>
+    private static Exception WithVersionHint(Command cmd, Exception ex)
+    {
+        Exception real = ex;
+        while (real.InnerException is not null && real is System.Reflection.TargetInvocationException or AggregateException)
+        {
+            real = real.InnerException;
+        }
+
+        if (!IsDriftShaped(real))
+        {
+            return ex;
+        }
+
+        string? hint = PluginApiCompatibility.FailureHint(cmd.DeclaredApi, PluginApi.Current, driftShapedFailure: true);
+        return hint is null ? ex : new PluginApiMismatchException($"{real.Message} ({hint})", ex);
     }
 }

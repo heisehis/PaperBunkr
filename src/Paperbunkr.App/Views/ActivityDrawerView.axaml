@@ -93,7 +93,7 @@
                         Command="{Binding ShowActiveTabCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <TextBlock Text="Active" />
-                        <Border CornerRadius="999" Background="{DynamicResource PbSurface3Brush}" Padding="5,0"
+                        <Border CornerRadius="{StaticResource PbRadiusChip}" Background="{DynamicResource PbSurface3Brush}" Padding="5,0"
                                 IsVisible="{Binding HasRunningJobs}">
                             <TextBlock Text="{Binding RunningCount}" FontSize="10" Foreground="{DynamicResource PbAccentTextBrush}" />
                         </Border>
@@ -117,7 +117,18 @@
             <!-- Active tab -->
             <ScrollViewer Grid.Row="2" Padding="12" IsVisible="{Binding IsActiveTab}">
                 <StackPanel Spacing="2">
-                    <ItemsControl ItemsSource="{Binding RunningJobs}" ItemTemplate="{StaticResource ActivityJobRowTemplate}" />
+                    <!-- Flat list of jobs + section headings (ActivityJobGrouping) - flat so each job row's commands still bind to this
+                         view model through the one ItemsControl. -->
+                    <ItemsControl ItemsSource="{Binding RunningJobsGrouped}">
+                        <ItemsControl.DataTemplates>
+                            <DataTemplate DataType="models:ActivityGroupHeader">
+                                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource ActivityGroupHeaderTemplate}" />
+                            </DataTemplate>
+                            <DataTemplate DataType="models:ActivityJob">
+                                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource ActivityJobRowTemplate}" />
+                            </DataTemplate>
+                        </ItemsControl.DataTemplates>
+                    </ItemsControl>
 
                     <StackPanel IsVisible="{Binding UpkeepJob.UpkeepActive, FallbackValue=False}" Margin="0,4,0,0">
                         <TextBlock Text="BACKGROUND UPKEEP" FontSize="{DynamicResource PbFontSizeMicro}" FontWeight="Bold"

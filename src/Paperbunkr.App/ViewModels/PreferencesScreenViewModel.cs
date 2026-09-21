@@ -144,11 +144,27 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         // (see ConnectionProviderRow's own doc comment on why).
         SourceProviderRows = new ObservableCollection<ConnectionProviderRow>(ConnectionProviderRow.CreateSourceProviders());
         TrackerProviderRows = new ObservableCollection<ConnectionProviderRow>(ConnectionProviderRow.CreateTrackerProviders());
+        DownloadProviderRows = new ObservableCollection<ConnectionProviderRow>(ConnectionProviderRow.CreateDownloadProviders());
 
         // Wire each row's command references to the matching [RelayCommand]-generated command
         // (docs/superpowers/specs/2026-09-07-connections-redesign-design.md) - the dialog's generic
         // per-Kind template binds to these instead of a hardcoded per-provider command name. Command
         // bodies are unchanged.
+        Acquisition = new AcquisitionSettingsViewModel(_contextFactory, () => ActiveSection = PreferencesSection.Connections);
+        OrganizeScrape = new OrganizeScrapeSettingsViewModel(
+            _contextFactory, () => ActiveSection = PreferencesSection.Connections,
+            new Scraper.ProfileManagerViewModel(
+                new Paperbunkr.Data.Organizing.OrganizerProfileStore(_contextFactory),
+                organizerService: Scraper.OrganizeCoordinator.CreateService(_contextFactory),
+                createDbContext: _contextFactory));
+        Acquisition.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(AcquisitionSettingsViewModel.IsProwlarrConnected) or nameof(AcquisitionSettingsViewModel.IsQBittorrentConnected))
+            {
+                SyncDownloadRowsFromViewModel();
+            }
+        };
+
         ComicVineRow.SaveCommand = SaveComicVineCredentialsCommand;
         ComicVineRow.DisconnectCommand = DisconnectComicVineCommand;
         MetronRow.PrimaryCommand = SaveMetronCredentialsCommand;
@@ -377,6 +393,22 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public bool IsReaderSection => ActiveSection == PreferencesSection.Reader;
     public bool IsKeyboardShortcutsSection => ActiveSection == PreferencesSection.KeyboardShortcuts;
     public bool IsConnectionsSection => ActiveSection == PreferencesSection.Connections;
+
+    /// <summary>Preferences → Acquisition (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md §7); its own view model so this class doesn't grow further.</summary>
+    public bool IsAcquisitionSection => ActiveSection == PreferencesSection.Acquisition;
+
+    public bool IsOrganizeScrapeSection => ActiveSection == PreferencesSection.OrganizeScrape;
+
+    /// <summary>Preferences → Sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md §9); its own view model, set by the shell after construction (it needs the app-wide sharing services).</summary>
+    public bool IsSharingSection => ActiveSection == PreferencesSection.Sharing;
+
+    [ObservableProperty]
+    private SharingSettingsViewModel? _sharing;
+
+    /// <summary>Preferences → Organize &amp; Scrape (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8); its own view model, like <see cref="Acquisition"/>.</summary>
+    public OrganizeScrapeSettingsViewModel OrganizeScrape { get; }
+
+    public AcquisitionSettingsViewModel Acquisition { get; }
     public bool IsPluginsSection => ActiveSection == PreferencesSection.Plugins;
     public bool IsAdvancedSection => ActiveSection == PreferencesSection.Advanced;
     public bool IsAboutSection => ActiveSection == PreferencesSection.About;
@@ -740,6 +772,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsReaderSection));
         OnPropertyChanged(nameof(IsKeyboardShortcutsSection));
         OnPropertyChanged(nameof(IsConnectionsSection));
+        OnPropertyChanged(nameof(IsAcquisitionSection));
+        OnPropertyChanged(nameof(IsOrganizeScrapeSection));
+        OnPropertyChanged(nameof(IsSharingSection));
         OnPropertyChanged(nameof(IsPluginsSection));
         OnPropertyChanged(nameof(IsAdvancedSection));
         OnPropertyChanged(nameof(IsAboutSection));
@@ -756,6 +791,31 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void GoAutomation() => ActiveSection = PreferencesSection.Automation;
+
+    [RelayCommand]
+    private void GoOrganizeScrape()
+    {
+        OrganizeScrape.Load();   // pick up a ComicVine key added under Connections since this section was last shown
+        ActiveSection = PreferencesSection.OrganizeScrape;
+    }
+
+    [RelayCommand]
+    private void GoSharing()
+    {
+        Sharing?.Load();   // pick up lists created and libraries synced since this section was last shown
+        if (Sharing is { IsHostRunning: true })
+        {
+            _ = Sharing.RefreshNetworkWarningAsync();
+        }
+        ActiveSection = PreferencesSection.Sharing;
+    }
+
+    [RelayCommand]
+    private void GoAcquisition()
+    {
+        Acquisition.Load();   // pick up a ComicVine key added under Connections since this section was last shown
+        ActiveSection = PreferencesSection.Acquisition;
+    }
 
     /// <summary>
     /// Library Health lives inside the Library tab, not as its own section (per user decision,
@@ -828,11 +888,20 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ThemeScheduledLightHour = lightHour;
         TrueBlackAutoHourText = _themeService.GetTrueBlackAutoHour()?.ToString() ?? string.Empty;
         AccentOverrideHexText = _themeService.GetAccentOverrideHex() ?? string.Empty;
+        GlowTierText = GlowTierToText(_themeService.GetGlowTier());
+        DensityText = DensityPresets.NameOf(_themeService.GetDensityPreset());
         _suppressThemeOptionsApply = false;
 
         using var context = _contextFactory();
         var settings = context.GetOrCreateAppSettings();
         _suppressBehaviorApply = true;
+        BindingSpine = settings.BindingSpine;
+        ProgressRing = settings.ProgressRing;
+        ReadingListMosaic = settings.ReadingListMosaic;
+        SplashAmbientMotion = settings.SplashAmbientMotion;
+        ShowSelectionCheckbox = settings.ShowSelectionCheckbox;
+        HeroBackdrop = settings.HeroBackdrop;
+        SeriesAccentColor = settings.SeriesAccentColor;
         OpenLastPage = settings.OpenLastPage;
         AutoNavigateComics = settings.AutoNavigateComics;
         ReverseRtlNavigation = settings.ReverseRtlNavigation;
@@ -1140,6 +1209,112 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         _themeService.ApplyReducedMotion(value);
+    }
+
+    // ===================== Cosmetics (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md) =====================
+
+    /// <summary>Binding-spine texture on Poster/Panorama covers (cosmetics pitch #1).</summary>
+    [ObservableProperty]
+    private bool _bindingSpine = true;
+
+    partial void OnBindingSpineChanged(bool value)
+    {
+        CosmeticThumbnailSettings.BindingSpine = value;
+        PersistBehaviorSetting(s => s.BindingSpine = value);
+    }
+
+    /// <summary>Read-progress ring on Poster/Panorama covers (cosmetics pitch #2).</summary>
+    [ObservableProperty]
+    private bool _progressRing = true;
+
+    partial void OnProgressRingChanged(bool value)
+    {
+        CosmeticThumbnailSettings.ProgressRing = value;
+        PersistBehaviorSetting(s => s.ProgressRing = value);
+    }
+
+    /// <summary>Blurred cover backdrop behind the Detail hero (default on).</summary>
+    [ObservableProperty]
+    private bool _heroBackdrop = true;
+
+    partial void OnHeroBackdropChanged(bool value)
+    {
+        CosmeticThumbnailSettings.HeroBackdrop = value;
+        PersistBehaviorSetting(s => s.HeroBackdrop = value);
+    }
+
+    /// <summary>Tint a Detail screen's accent from the series cover's dominant colour (default off).</summary>
+    [ObservableProperty]
+    private bool _seriesAccentColor;
+
+    partial void OnSeriesAccentColorChanged(bool value)
+    {
+        CosmeticThumbnailSettings.SeriesAccentColor = value;
+        PersistBehaviorSetting(s => s.SeriesAccentColor = value);
+    }
+
+    /// <summary>Hover multi-select checkbox on Library grid tiles (default off - Ctrl/Shift+click selects; selected tiles still show a checked box).</summary>
+    [ObservableProperty]
+    private bool _showSelectionCheckbox;
+
+    partial void OnShowSelectionCheckboxChanged(bool value)
+    {
+        CosmeticThumbnailSettings.ShowSelectionCheckbox = value;
+        PersistBehaviorSetting(s => s.ShowSelectionCheckbox = value);
+    }
+
+    /// <summary>2x2 member-cover mosaic as a reading list's header cover (cosmetics pitch #7). Read when a list is opened.</summary>
+    [ObservableProperty]
+    private bool _readingListMosaic = true;
+
+    partial void OnReadingListMosaicChanged(bool value) => PersistBehaviorSetting(s => s.ReadingListMosaic = value);
+
+    /// <summary>Drifting dots on the splash screen (cosmetics pitch #6). Read at the next launch; Reduced Motion overrides it.</summary>
+    [ObservableProperty]
+    private bool _splashAmbientMotion = true;
+
+    partial void OnSplashAmbientMotionChanged(bool value) => PersistBehaviorSetting(s => s.SplashAmbientMotion = value);
+
+    /// <summary>String projection for <c>controls:SuggestBox</c> - Compact / Comfortable / Spacious (cosmetics pitch 2 #17).</summary>
+    public IReadOnlyList<string> DensityOptionsList => DensityPresets.Names;
+
+    [ObservableProperty]
+    private string _densityText = "Comfortable";
+
+    partial void OnDensityTextChanged(string value)
+    {
+        if (_suppressThemeOptionsApply)
+        {
+            return;
+        }
+
+        _themeService.ApplyDensity(DensityPresets.FromName(value));
+    }
+
+    private static readonly string[] GlowTierOptions = { "Off", "Subtle", "Normal", "Vivid" };
+
+    /// <summary>String projection for <c>controls:SuggestBox</c> (the app-wide SuggestBox convention, same shape as <see cref="ThemeAutoModeOptionsList"/>).</summary>
+    public IReadOnlyList<string> GlowTierOptionsList => GlowTierOptions;
+
+    [ObservableProperty]
+    private string _glowTierText = "Normal";
+
+    partial void OnGlowTierTextChanged(string value)
+    {
+        if (_suppressThemeOptionsApply)
+        {
+            return;
+        }
+
+        _themeService.ApplyGlowTier(GlowTierFromText(value));
+    }
+
+    private static string GlowTierToText(int tier) => GlowTierOptions[ThemeService.NormalizeGlowTier(tier)];
+
+    private static int GlowTierFromText(string? text)
+    {
+        int index = Array.IndexOf(GlowTierOptions, text);
+        return index >= 0 ? index : ThemeService.GlowTierNormal;
     }
 
     // ===================== Theme options (docs/superpowers/specs/2026-09-16-theme-system-design.md
@@ -2563,6 +2738,15 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// <summary>Row list backing the Connections screen's "Reading List Sources" section (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-redesign-design.md).</summary>
     public ObservableCollection<ConnectionProviderRow> SourceProviderRows { get; }
 
+    /// <summary>Prowlarr and qBittorrent (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 7): their fields live in <see cref="Acquisition"/>, the rows only carry the connected state.</summary>
+    public ObservableCollection<ConnectionProviderRow> DownloadProviderRows { get; }
+
+    private void SyncDownloadRowsFromViewModel()
+    {
+        SyncProviderRowConnectedState(DownloadProviderRows, "Prowlarr", Acquisition.IsProwlarrConnected);
+        SyncProviderRowConnectedState(DownloadProviderRows, "qBittorrent", Acquisition.IsQBittorrentConnected);
+    }
+
     private ConnectionProviderRow ComicVineRow => SourceProviderRows.Single(r => r.Id == "ComicVine");
     private ConnectionProviderRow MetronRow => SourceProviderRows.Single(r => r.Id == "Metron");
 
@@ -2580,6 +2764,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         SyncProviderRowConnectedState(SourceProviderRows, "ComicVine", IsComicVineConnected);
         SyncProviderRowConnectedState(SourceProviderRows, "Metron", IsMetronConnected);
+
+        // Prowlarr / qBittorrent share the acquisition view-model's fields; load them so the rows and dialogs are current.
+        Acquisition.Load();
+        SyncDownloadRowsFromViewModel();
     }
 
     [RelayCommand]
@@ -3256,10 +3444,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             bool confirmedMissing = issue.MissingVerificationCount >= _libraryHealth.ConfirmedMissingThreshold;
             MissingFileItems.Add(new MissingFileRowViewModel(
                 issueId,
-                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}{(confirmedMissing ? " · confirmed missing" : "")}",
+                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}",
                 onRelink: RelinkMissingFile,
                 onRemove: _ => RemoveMissingFile(issueId),
-                onDismiss: _ => DismissMissingFile(issueId)));
+                onDismiss: _ => DismissMissingFile(issueId),
+                severity: confirmedMissing ? HealthSeverity.Error : HealthSeverity.Warning,
+                severityLabel: confirmedMissing ? "Confirmed missing" : "Missing"));
         }
 
         var cutoff = DateTime.UtcNow.AddDays(-RecentlyRemovedRetentionDays);
@@ -3296,10 +3486,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             int issueId = issue.Id;
             EmptyIssueItems.Add(new MissingFileRowViewModel(
                 issueId,
-                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()} · unreadable",
+                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}",
                 onRelink: RelinkEmptyIssue,
                 onRemove: _ => RemoveEmptyIssue(issueId),
-                onDismiss: _ => DismissEmptyIssue(issueId)));
+                onDismiss: _ => DismissEmptyIssue(issueId),
+                severity: HealthSeverity.Error,
+                severityLabel: "Unreadable"));
         }
 
         NotifyLibraryHealthCountsChanged();

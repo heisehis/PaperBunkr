@@ -56,6 +56,8 @@ public sealed class PaperbunkrNativePluginEnvironment : INativePluginUiEnvironme
     public IRulesEngine Rules => _inner.Rules;
     public IMetadataWriter Writer => _inner.Writer;
     public IThemePlugin ThemePlugin => _inner.ThemePlugin;
+    public IPluginActivity Activity => _inner.Activity;
+    public IPluginLogger Log => _inner.Log;
     public IEnumerable<string> LibraryPaths => _inner.LibraryPaths;
 
     public string CommandPath

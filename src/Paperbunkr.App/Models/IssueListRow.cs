@@ -29,7 +29,7 @@ namespace Paperbunkr.App.Models;
 /// wipe the visible selection.
 /// </para>
 /// </summary>
-public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IVariableWidthTile, ICoverKeyProvider
+public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IVariableWidthTile, ICoverKeyProvider, ITileProgressSource, IPlaceholderCoverSource
 {
     /// <summary>Panorama's variable-width virtualizing panel packs rows against this - the same
     /// value the tile's DataTemplate binds its own <c>Width</c> to.</summary>
@@ -119,7 +119,14 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
     /// as manga-family.</summary>
     public bool IsMangaFamily => ContentTypeLabel is "Manga" or "Manhua" or "Manhwa";
 
-    public bool HasFile => !string.IsNullOrEmpty(FilePath);
+    /// <summary>True for a book mirrored from another Paperbunkr's shared library (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md section 7.2). It has no local file, but it is readable.</summary>
+    public bool IsRemote { get; init; }
+
+    /// <summary>The remote library's display name, when <see cref="IsRemote"/>.</summary>
+    public string? RemoteSourceName { get; init; }
+
+    /// <summary>"Readable content exists": a local file, or a remote book whose pages the host serves.</summary>
+    public bool HasFile => !string.IsNullOrEmpty(FilePath) || IsRemote;
 
     /// <summary>Cache-file stem for this issue's current file identity - what
     /// <c>CoverImageConverter</c> binds against (docs/superpowers/specs/2026-08-27-cover-thumbnail-
@@ -179,6 +186,14 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
     public int SeriesIssueCount { get; init; }
     public int SeriesUnreadCount { get; init; }
 
+    // --- ITileProgressSource (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #1/#2).
+    // ReadPercentage is 0-100 (Issue.ReadPercentage(), same scale Home divides by 100). ---
+    /// <summary>Text for the generated placeholder cover (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #18).</summary>
+    public string? CoverTitle => SeriesName;
+    public double ReadFraction => IsRead ? 1.0 : Math.Clamp(ReadPercentage / 100.0, 0.0, 1.0);
+    public bool IsFinished => IsRead;
+    public bool IsRightToLeft => ReadingDirectionLabel == "RightToLeft";
+
     // --- docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md. ---
     public bool? IsFinalIssue { get; init; }
     public bool HasPendingProposal { get; init; }
@@ -226,6 +241,8 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
         ReadPercentage = issue.ReadPercentage(),
         OpenCount = issue.OpenCount,
         IsMissing = issue.FileIsMissing,
+        IsRemote = issue.RemoteSourceId is not null,
+        RemoteSourceName = issue.RemoteSource?.DisplayName ?? series.RemoteSource?.DisplayName,
         HasCustomCover = CustomCoverPaths.Exists(issue.Id),
         CoverBrush = SeriesCardSample.CoverBrushFor(series.Name),
         Volume = issue.EffectiveVolume(),

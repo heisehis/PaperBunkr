@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Paperbunkr.App.Scraper"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="72"
+             x:Class="Paperbunkr.App.Scraper.ScrapeBatchHeaderView"
+             x:DataType="vm:ScrapeBatchHeaderViewModel">
+
+    <!-- docs/superpowers/specs/2026-09-13-cluster-scraper-ui-redesign-design.md §4: persists across
+         the whole scrape run via NativePluginModalHostViewModel.HeaderContent, independent of
+         whatever per-book dialog is currently swapped in below it. -->
+    <UserControl.Styles>
+        <!-- Same unified button language as ComicVineMatchReviewDialogView.axaml - see that file's
+             own comment for why this is duplicated rather than shared. -->
+        <Style Selector="Button.secondary">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+        <Style Selector="Button.secondary:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Padding="0,0,0,14" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,4">
+        <Grid ColumnDefinitions="48,*,Auto">
+            <Border Grid.Column="0" Width="48" Height="72" CornerRadius="4" Background="{DynamicResource PbSurface2Brush}">
+                <Image Source="{Binding CurrentCover}" Stretch="Uniform" />
+            </Border>
+            <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center" Spacing="4">
+                <TextBlock Text="{Binding CurrentBookLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding ProgressLabel}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                <ProgressBar Minimum="0" Maximum="{Binding Total}" Value="{Binding CurrentIndex}" Height="4"
+                             Background="{DynamicResource PbBorderBrush}" Foreground="{DynamicResource PbAccentBrush}" />
+            </StackPanel>
+            <Button Grid.Column="2" Content="Cancel" Classes="secondary" VerticalAlignment="Center" Command="{Binding CancelCommand}" />
+        </Grid>
+    </Border>
+</UserControl>

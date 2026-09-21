@@ -1,3 +1,4 @@
+using FluentIcons.Common;
 using System.Collections.Generic;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
@@ -21,11 +22,11 @@ public sealed class BookDetailContextMenuBuilder
     {
         BookBookmarkSummary bookmark => new[]
         {
-            ContextMenuEntry.Item("Delete Bookmark", _vm.DeleteBookmarkCommand, bookmark),
+            ContextMenuEntry.Item("Delete Bookmark", _vm.DeleteBookmarkCommand, bookmark, Symbol.Delete, isDanger: true),
         },
         BookCardSample card => new[]
         {
-            ContextMenuEntry.Item("Edit…", _vm.EditBookInSeriesCommand, card),
+            ContextMenuEntry.Item("Edit…", _vm.EditBookInSeriesCommand, card, Symbol.Edit),
         },
         _ => null,
     };

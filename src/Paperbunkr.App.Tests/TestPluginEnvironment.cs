@@ -1,5 +1,6 @@
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Plugins;
+using Paperbunkr.Plugins.Abstractions.Native;
 using Paperbunkr.Plugins.Automation;
 using Paperbunkr.Plugins.Theme;
 
@@ -23,6 +24,12 @@ internal sealed class TestPluginEnvironment : IPluginEnvironment
     public IRulesEngine Rules { get; } = new FakeRulesEngine();
     public IMetadataWriter Writer { get; } = new FakeMetadataWriter();
     public IThemePlugin ThemePlugin { get; } = new FakeThemePlugin();
+    /// <summary>What every command clone reported through <see cref="Activity"/> - shared by reference across <see cref="Clone"/>.</summary>
+    public RecordingPluginActivity RecordedActivity { get; } = new();
+
+    public IPluginActivity Activity => RecordedActivity;
+
+    public IPluginLogger Log { get; } = new NullPluginLogger();
     public string CommandPath { get; set; } = string.Empty;
     public string PluginKey { get; set; } = string.Empty;
     public IEnumerable<string> LibraryPaths { get; } = Array.Empty<string>();
@@ -99,6 +106,73 @@ internal sealed class TestPluginEnvironment : IPluginEnvironment
     private sealed class FakeThemePlugin : IThemePlugin
     {
         public string CurrentThemeKey => "default";
+    }
+
+}
+
+internal sealed class NullPluginLogger : IPluginLogger
+{
+    public void Debug(string message) { }
+    public void Info(string message) { }
+    public void Warn(string message) { }
+    public void Error(string message, Exception? exception = null) { }
+}
+
+/// <summary>Records every alert a plugin raised and every job title it started; job handles are inert. Thread-safe - domain hooks run in the background.</summary>
+internal sealed class RecordingPluginActivity : IPluginActivity
+{
+    private readonly object _gate = new();
+    private readonly List<(PluginAlertSeverity Severity, string Title, string? Detail, string? DedupeKey)> _alerts = new();
+    private readonly List<string> _jobs = new();
+
+    public IReadOnlyList<(PluginAlertSeverity Severity, string Title, string? Detail, string? DedupeKey)> Alerts
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _alerts.ToList();
+            }
+        }
+    }
+
+    public IReadOnlyList<string> Jobs
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _jobs.ToList();
+            }
+        }
+    }
+
+    public IPluginActivityHandle StartJob(string title, bool cancellable = true)
+    {
+        lock (_gate)
+        {
+            _jobs.Add(title);
+        }
+
+        return new InertHandle();
+    }
+
+    public void RaiseAlert(PluginAlertSeverity severity, string title, string? detail = null, string? dedupeKey = null)
+    {
+        lock (_gate)
+        {
+            _alerts.Add((severity, title, detail, dedupeKey));
+        }
+    }
+
+    private sealed class InertHandle : IPluginActivityHandle
+    {
+        public System.Threading.CancellationToken CancellationToken => default;
+        public void Report(int done, int total, string? detail = null) { }
+        public void Report(string detail) { }
+        public void Succeed(string summary) { }
+        public void Fail(string summary) { }
+        public void Dispose() { }
     }
 }
 

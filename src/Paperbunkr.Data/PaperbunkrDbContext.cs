@@ -86,6 +86,19 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ExternalMediaRelation> ExternalMediaRelations => Set<ExternalMediaRelation>();
 
+    public DbSet<RemoteSource> RemoteSources => Set<RemoteSource>();
+
+    /// <summary>
+    /// When false (the default) every <see cref="Issue"/>/<see cref="Series"/> query sees only local rows -
+    /// the global query filter below hides rows mirrored from another instance (docs/superpowers/specs/
+    /// 2026-09-19-remote-library-sharing-design.md §8). That inverts the exclusion problem: instead of
+    /// patching ~260 query sites so local-only jobs (scan, write-back, health, cover repair, duplicate
+    /// and merge helpers, tracker/arc verification, stats totals, ...) skip remote rows, every job
+    /// skips them <em>unless</em> its context opts in. A view that shows remote content, and the mirror
+    /// sync itself, create their context with <c>PaperbunkrDb.CreateContext(includeRemote: true)</c>.
+    /// </summary>
+    public bool IncludeRemote { get; set; }
+
     public DbSet<ExternalMetadataSnapshot> ExternalMetadataSnapshots => Set<ExternalMetadataSnapshot>();
 
     public DbSet<ExternalRating> ExternalRatings => Set<ExternalRating>();
@@ -93,6 +106,19 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
 
     public DbSet<ProviderCredential> ProviderCredentials => Set<ProviderCredential>();
+    public DbSet<WatchedSeries> WatchedSeries => Set<WatchedSeries>();
+    public DbSet<CatalogIssue> CatalogIssues => Set<CatalogIssue>();
+    public DbSet<PullListRelease> PullListReleases => Set<PullListRelease>();
+    public DbSet<ReleaseSeriesInfo> ReleaseSeries => Set<ReleaseSeriesInfo>();
+    public DbSet<WantedIssue> WantedIssues => Set<WantedIssue>();
+    public DbSet<ReleaseCandidate> ReleaseCandidates => Set<ReleaseCandidate>();
+    public DbSet<AcquisitionSettings> AcquisitionSettings => Set<AcquisitionSettings>();
+    public DbSet<ReleaseBlocklist> ReleaseBlocklist => Set<ReleaseBlocklist>();
+    public DbSet<Paperbunkr.Data.Organizing.OrganizerProfile> OrganizerProfiles => Set<Paperbunkr.Data.Organizing.OrganizerProfile>();
+    public DbSet<Paperbunkr.Data.Organizing.OrganizeBatch> OrganizeBatches => Set<Paperbunkr.Data.Organizing.OrganizeBatch>();
+    public DbSet<Paperbunkr.Data.Organizing.OrganizeMove> OrganizeMoves => Set<Paperbunkr.Data.Organizing.OrganizeMove>();
+    public DbSet<Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow> ScrapeSettingsRows => Set<Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow>();
+    public DbSet<Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry> ComicVineMatchMemories => Set<Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry>();
 
     public DbSet<VirtualTagDefinition> VirtualTagDefinitions => Set<VirtualTagDefinition>();
 
@@ -149,16 +175,160 @@ public class PaperbunkrDbContext : DbContext
     /// </summary>
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        AnnounceUnmanagedReadingListWrites();
+
         const int maxAttempts = 3;
         for (int attempt = 1; ; attempt++)
         {
             try
             {
-                return base.SaveChanges(acceptAllChangesOnSuccess);
+                int written = base.SaveChanges(acceptAllChangesOnSuccess);
+                RunAfterSaveActions();
+                return written;
             }
             catch (DbUpdateException ex) when (attempt < maxAttempts && IsTransientLockError(ex))
             {
                 Thread.Sleep(attempt * 150);
+            }
+        }
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        AnnounceUnmanagedReadingListWrites();
+        int written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
+        RunAfterSaveActions();
+        return written;
+    }
+
+    private List<Action>? _afterSaveActions;
+
+    /// <summary>
+    /// Queues <paramref name="action"/> to run once, after the next <em>successful</em> save on this
+    /// context (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §5.4). This is how
+    /// <c>ReadingListManager</c> announces a change: it stages the change while the caller is still
+    /// assembling a unit of work, and the announcement is released only if that work actually
+    /// persisted - never for a failed or abandoned save. It exists because several writers use a
+    /// caller-owned context whose <c>SaveChanges</c> belongs to a larger operation (deleting an issue,
+    /// refreshing an arc), so a helper can't just save-and-notify on its own. A throwing action never
+    /// reaches the caller; a context that is disposed without saving simply drops its queue.
+    /// </summary>
+    public void RunAfterSave(Action action) => (_afterSaveActions ??= new List<Action>()).Add(action);
+
+
+    // ---- ReadingListManager backstop (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md section 3) ----
+
+    private HashSet<int>? _managedListIds;
+    private HashSet<ReadingList>? _managedLists;
+
+    /// <summary>
+    /// Records that a <c>ReadingListManager</c> call covers <paramref name="list"/> on this context for the next
+    /// save, so the gap-filler below leaves it alone. Covers by id (an existing list) and, when the list isn't saved
+    /// yet or has navigation-attached items, by reference.
+    /// </summary>
+    internal void MarkReadingListManaged(ReadingList list)
+    {
+        (_managedLists ??= new HashSet<ReadingList>(ReferenceEqualityComparer.Instance)).Add(list);
+        if (list.Id != 0)
+        {
+            (_managedListIds ??= new HashSet<int>()).Add(list.Id);
+        }
+    }
+
+    internal void MarkReadingListManaged(int listId) => (_managedListIds ??= new HashSet<int>()).Add(listId);
+
+    /// <summary>
+    /// The backstop for <c>ReadingListManager</c> (which nothing otherwise forces anyone to use): any tracked
+    /// <see cref="ReadingListItem"/> added or removed on a list that no manager call covered on this context is
+    /// announced here, after the save lands, as <c>Added</c> / <c>Removed</c> - and a bypass diagnostic is raised
+    /// so the offending write can be found and moved onto the manager. Relinking (an item's issue changes, state
+    /// Modified) and deleting a whole list are not membership changes and are not flagged. Announces on
+    /// <see cref="Events.LibraryEvents.Default"/>; the context has no other hub to know about.
+    /// </summary>
+    private void AnnounceUnmanagedReadingListWrites()
+    {
+        List<(ReadingList? List, int ListId, ReadingListItem Item, bool Added)>? changes = null;
+        foreach (var entry in ChangeTracker.Entries<ReadingListItem>())
+        {
+            if (entry.State is not (EntityState.Added or EntityState.Deleted))
+            {
+                continue;
+            }
+
+            ReadingListItem item = entry.Entity;
+            ReadingList? list = item.ReadingList;
+            int listId = list is { Id: not 0 } ? list.Id : item.ReadingListId;
+            bool covered = (list is not null && _managedLists?.Contains(list) == true)
+                           || (listId != 0 && _managedListIds?.Contains(listId) == true);
+            if (!covered)
+            {
+                (changes ??= new()).Add((list, listId, item, entry.State == EntityState.Added));
+            }
+        }
+
+        if (changes is null)
+        {
+            return;
+        }
+
+        var hub = Events.LibraryEvents.Default;
+        foreach (var group in changes.GroupBy(c => (object)c.List! ?? c.ListId, ReferenceOrValueComparer.Instance))
+        {
+            ReadingList? list = group.First().List;
+            int listId = group.First().ListId;
+            var added = group.Where(c => c.Added).Select(c => c.Item.IssueId).ToList();
+            var removed = group.Where(c => !c.Added).Select(c => c.Item.IssueId).ToList();
+            var kind = (added.Count > 0 ? Events.ReadingListChangeKind.Added : Events.ReadingListChangeKind.None)
+                       | (removed.Count > 0 ? Events.ReadingListChangeKind.Removed : Events.ReadingListChangeKind.None);
+
+            // The name is read now: after the save the caller may have disposed or moved on.
+            string name = list?.Name
+                          ?? ReadingLists.AsNoTracking().Where(l => l.Id == listId).Select(l => l.Name).FirstOrDefault()
+                          ?? string.Empty;
+
+            RunAfterSave(() =>
+            {
+                int finalId = list is { Id: not 0 } ? list.Id : listId;
+                hub.Raise(new Events.ReadingListChangedEvent(finalId, list?.Name ?? name, kind, added, removed));
+                hub.RaiseManagerBypassed(
+                    $"Reading list '{list?.Name ?? name}' (id {finalId}) changed without going through ReadingListManager: "
+                    + $"{added.Count} added, {removed.Count} removed. The context announced it; new code should call ReadingListManager.");
+            });
+        }
+    }
+
+    /// <summary>Groups tracked list objects by reference and raw list ids by value, in one key space.</summary>
+    private sealed class ReferenceOrValueComparer : IEqualityComparer<object>
+    {
+        public static readonly ReferenceOrValueComparer Instance = new();
+
+        public new bool Equals(object? x, object? y) => x is int a && y is int b ? a == b : ReferenceEquals(x, y);
+
+        public int GetHashCode(object obj) => obj is int i ? i : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+    }
+
+    private void RunAfterSaveActions()
+    {
+        // Coverage is per save: a later direct write on this same context, after a managed one, is a bypass.
+        _managedListIds = null;
+        _managedLists = null;
+
+        if (_afterSaveActions is not { Count: > 0 } pending)
+        {
+            return;
+        }
+
+        // Detach first: an action that itself saves on this context must not re-run the queue.
+        _afterSaveActions = null;
+        foreach (Action action in pending)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception)
+            {
+                // A notification failing must never turn a successful save into an error.
             }
         }
     }
@@ -170,6 +340,20 @@ public class PaperbunkrDbContext : DbContext
     /// </summary>
     public static bool IsTransientLockError(DbUpdateException ex) =>
         ex.InnerException is SqliteException { SqliteErrorCode: 5 or 6 };
+
+    /// <summary>Returns the singleton <see cref="Entities.AcquisitionSettings"/> row (<c>Id</c> always 1), creating it on first access.</summary>
+    public AcquisitionSettings GetOrCreateAcquisitionSettings()
+    {
+        var settings = AcquisitionSettings.FirstOrDefault(a => a.Id == 1);
+        if (settings is null)
+        {
+            settings = new AcquisitionSettings();
+            AcquisitionSettings.Add(settings);
+            SaveChanges();
+        }
+
+        return settings;
+    }
 
     /// <summary>
     /// Returns the singleton <see cref="Entities.AppSettings"/> row (<c>Id</c> always 1), creating
@@ -199,6 +383,124 @@ public class PaperbunkrDbContext : DbContext
         // member reordering (an int-backed enum silently corrupts existing rows if a value is
         // ever inserted/reordered rather than appended; a string-backed one just needs a rename
         // migration, which is visible and deliberate). Applied consistently to every enum below.
+        // Comic acquisition (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md §4).
+        // One-way FKs into Series/Issue (no inverse navigations) so those existing entities and their
+        // model-snapshot blocks stay untouched.
+        modelBuilder.Entity<WatchedSeries>(builder =>
+        {
+            builder.HasKey(w => w.Id);
+            builder.Property(w => w.Name).IsRequired().HasMaxLength(256);
+            builder.Property(w => w.Publisher).HasMaxLength(256);
+            builder.HasIndex(w => new { w.Provider, w.ExternalVolumeId }).IsUnique();
+            builder.Property(w => w.Provider).HasConversion<int>().HasDefaultValue(ComicProvider.ComicVine);
+            builder.HasOne(w => w.Series).WithMany().HasForeignKey(w => w.SeriesId).OnDelete(DeleteBehavior.SetNull);
+            builder.HasMany(w => w.Catalog).WithOne(c => c.WatchedSeries).HasForeignKey(c => c.WatchedSeriesId).OnDelete(DeleteBehavior.Cascade);
+            builder.HasMany(w => w.WantedIssues).WithOne(i => i.WatchedSeries).HasForeignKey(i => i.WatchedSeriesId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CatalogIssue>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.IssueNumber).IsRequired().HasMaxLength(64);
+            builder.HasIndex(c => new { c.Provider, c.ExternalIssueId }).IsUnique();
+            builder.Property(c => c.Provider).HasConversion<int>().HasDefaultValue(ComicProvider.ComicVine);
+            builder.HasIndex(c => c.WatchedSeriesId);
+        });
+
+        modelBuilder.Entity<PullListRelease>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.IssueNumber).IsRequired().HasMaxLength(64);
+            builder.Property(r => r.SeriesName).IsRequired().HasMaxLength(300);
+            builder.Property(r => r.Provider).HasConversion<int>();   // no model default: Metron (1) is not the enum's zero value, so a default here would turn every ComicVine (0) row into Metron's
+            builder.HasIndex(r => new { r.Provider, r.ExternalIssueId }).IsUnique();
+            builder.HasIndex(r => r.StoreDate);
+        });
+
+        modelBuilder.Entity<ReleaseSeriesInfo>(builder =>
+        {
+            builder.ToTable("ReleaseSeries");
+            builder.HasKey(m => new { m.Provider, m.SeriesId });
+            builder.Property(m => m.Provider).HasConversion<int>();   // no model default: Metron (1) is not the enum's zero value, so a default here would turn every ComicVine (0) row into Metron's
+            builder.Property(m => m.SeriesId).ValueGeneratedNever();
+            builder.Property(m => m.Name).IsRequired().HasMaxLength(300);
+        });
+
+        modelBuilder.Entity<WantedIssue>(builder =>
+        {
+            builder.HasKey(i => i.Id);
+            builder.Property(i => i.IssueNumber).IsRequired().HasMaxLength(64);
+            builder.Property(i => i.Status).HasConversion<string>().HasMaxLength(32);
+            builder.Property(i => i.TorrentHash).HasMaxLength(64);
+            builder.HasIndex(i => new { i.Provider, i.ExternalIssueId }).IsUnique();
+            builder.Property(i => i.Provider).HasConversion<int>().HasDefaultValue(ComicProvider.ComicVine);
+            builder.HasIndex(i => i.Status);
+            builder.HasOne(i => i.Issue).WithMany().HasForeignKey(i => i.IssueId).OnDelete(DeleteBehavior.SetNull);
+            builder.HasMany(i => i.Candidates).WithOne(c => c.WantedIssue).HasForeignKey(c => c.WantedIssueId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ReleaseCandidate>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.Title).IsRequired();
+            builder.Property(c => c.DownloadUrl).IsRequired();
+            builder.HasIndex(c => c.WantedIssueId);
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.Organizing.OrganizerProfile>(builder =>
+        {
+            builder.HasKey(p => p.Id);
+            builder.Property(p => p.Mode).HasConversion<int>();
+            builder.Property(p => p.AutomationCollisionPolicy).HasConversion<int>();
+            builder.Ignore(p => p.MonthNames);
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.Organizing.OrganizeBatch>(builder =>
+        {
+            builder.HasKey(b => b.Id);
+            builder.HasMany(b => b.Moves).WithOne(m => m.Batch).HasForeignKey(m => m.BatchId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.Organizing.OrganizeMove>(builder =>
+        {
+            builder.HasKey(m => m.Id);
+            builder.HasIndex(m => m.BatchId);
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.ComicVine.Scraping.ScrapeSettingsRow>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<Paperbunkr.Data.ComicVine.Scraping.ComicVineMatchMemoryEntry>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.HasIndex(e => new { e.Provider, e.SearchKey, e.ChosenVolumeId }).IsUnique();
+            builder.Property(e => e.Provider).HasConversion<int>().HasDefaultValue(ComicProvider.ComicVine);
+        });
+
+        modelBuilder.Entity<AcquisitionSettings>(builder =>
+        {
+            builder.HasKey(a => a.Id);
+            builder.Property(a => a.Id).ValueGeneratedNever();
+            // Added after the table first shipped, so existing rows need a DB-level default to backfill.
+            builder.Property(a => a.RenameTemplate).HasDefaultValue(Entities.AcquisitionSettings.LegacyDefaultRenameTemplate);
+            builder.Property(a => a.RenameTemplateGrammar).HasConversion<int>().HasDefaultValue(TemplateGrammar.Import);
+            builder.Property(a => a.ScrapeOnImport).HasDefaultValue(true);
+            builder.Property(a => a.AutoGrabMinScore).HasDefaultValue(20);
+            builder.Property(a => a.WriteComicInfo).HasDefaultValue(true);
+        });
+
+        modelBuilder.Entity<ReleaseBlocklist>(builder =>
+        {
+            builder.HasKey(b => b.Id);
+            builder.Property(b => b.ReleaseName).IsRequired();
+            builder.Property(b => b.TorrentHash).HasMaxLength(64);
+            builder.Property(b => b.Reason).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(b => b.TorrentHash);
+        });
+
         modelBuilder.Entity<Series>(builder =>
         {
             builder.HasKey(s => s.Id);
@@ -873,6 +1175,39 @@ public class PaperbunkrDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Remote library sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md §7.1).
+        // Brand-new table plus nullable columns on Issues/Series - no backfill; every existing row is local.
+        modelBuilder.Entity<RemoteSource>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.InstanceId).IsRequired();
+            builder.Property(e => e.DisplayName).IsRequired();
+            builder.Property(e => e.Host).IsRequired();
+            builder.Property(e => e.CertFingerprint).IsRequired();
+            builder.HasIndex(e => e.InstanceId).IsUnique();
+        });
+
+        modelBuilder.Entity<Issue>(builder =>
+        {
+            builder.HasQueryFilter(i => IncludeRemote || i.RemoteSourceId == null);
+            builder.HasOne(i => i.RemoteSource)
+                .WithMany()
+                .HasForeignKey(i => i.RemoteSourceId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // SQLite treats NULLs as distinct in a unique index, so local rows (both null) never collide.
+            builder.HasIndex(i => new { i.RemoteSourceId, i.RemoteIssueId }).IsUnique();
+        });
+
+        modelBuilder.Entity<Series>(builder =>
+        {
+            builder.HasQueryFilter(s => IncludeRemote || s.RemoteSourceId == null);
+            builder.HasOne(s => s.RemoteSource)
+                .WithMany()
+                .HasForeignKey(s => s.RemoteSourceId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasIndex(s => new { s.RemoteSourceId, s.RemoteSeriesId }).IsUnique();
+        });
+
         modelBuilder.Entity<ExternalMetadataSnapshot>(builder =>
         {
             builder.HasKey(e => e.Id);
@@ -1128,6 +1463,18 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.ShowToolTips).HasDefaultValue(false);
             builder.Property(a => a.NumericRatingThumbnails).HasDefaultValue(true);
             builder.Property(a => a.ExportedListsContainFilenames).HasDefaultValue(false);
+
+            // Cosmetics pitch (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md) - the
+            // defaults keep the pre-pitch look for glow (2 = Normal) and turn the new overlays on.
+            builder.Property(a => a.BindingSpine).HasDefaultValue(true);
+            builder.Property(a => a.ProgressRing).HasDefaultValue(true);
+            builder.Property(a => a.GlowTier).HasDefaultValue(2);
+            builder.Property(a => a.ReadingListMosaic).HasDefaultValue(true);
+            builder.Property(a => a.SplashAmbientMotion).HasDefaultValue(true);
+            builder.Property(a => a.ShowSelectionCheckbox).HasDefaultValue(false);
+            builder.Property(a => a.HeroBackdrop).HasDefaultValue(true);
+            builder.Property(a => a.SeriesAccentColor).HasDefaultValue(false);
+            builder.Property(a => a.DensityPreset).HasDefaultValue(1);
         });
 
         modelBuilder.Entity<VirtualTagDefinition>(builder =>
@@ -1362,8 +1709,7 @@ public class PaperbunkrDbContext : DbContext
             return DatabasePathOverride;
         }
 
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, "Paperbunkr");
+        string dir = AppDataPaths.Root;
         Directory.CreateDirectory(dir);
         return Path.Combine(dir, "paperbunkr.db");
     }

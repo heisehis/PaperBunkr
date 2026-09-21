@@ -95,7 +95,7 @@
         <Style Selector="Button.pageDot">
             <Setter Property="Width" Value="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).DotStripItemWidth}" />
             <Setter Property="Height" Value="5" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Margin" Value="0,8" />
             <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
@@ -177,8 +177,11 @@
                 </Transitions>
             </Setter>
         </Style>
+        <!-- PbGlowPulseRing, not PbGlowRing: the pulse is feedback, not a hover affordance, so the
+             user's glow tier (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #3, even Off)
+             must not disable it. -->
         <Style Selector="Border.bookmarkGlow.pulsing">
-            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowPulseRing}" />
         </Style>
 
         <Style Selector="TextBlock.drawerSectionHeader">

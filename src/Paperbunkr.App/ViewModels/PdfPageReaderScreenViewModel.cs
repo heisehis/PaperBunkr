@@ -307,8 +307,7 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
             return;
         }
 
-        string destinationDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Paperbunkr", "annotations");
+        string destinationDirectory = Paperbunkr.Data.AppDataPaths.Combine("annotations");
         string imagePath = BookAnnotationCaptureService.CropAndSave(
             CurrentPage, fractionalRect.X, fractionalRect.Y, fractionalRect.Width, fractionalRect.Height, destinationDirectory);
 

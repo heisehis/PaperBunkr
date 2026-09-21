@@ -15,9 +15,14 @@
                 Padding="9,7" Margin="0,2">
             <StackPanel Spacing="3">
                 <Grid ColumnDefinitions="Auto,*,Auto">
-                    <fi:SymbolIcon Grid.Column="0" FontSize="{StaticResource PbIconSizeSm}" Margin="0,0,7,0" VerticalAlignment="Center"
-                                   Symbol="{Binding Kind, Converter={x:Static views:ActivityKindIconConverter.Instance}}"
-                                   Foreground="{Binding Status, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}" />
+                    <!-- The job's kind icon (a per-source glyph), ringed by a determinate progress arc while it runs
+                         (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #21). -->
+                    <Panel Grid.Column="0" Width="26" Height="26" Margin="0,0,7,0" VerticalAlignment="Center">
+                        <controls:ProgressArcRing Fraction="{Binding Fraction}" IsIndeterminate="{Binding IsIndeterminate}" IsVisible="{Binding IsRunning}" />
+                        <fi:SymbolIcon FontSize="{StaticResource PbIconSizeXs}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Symbol="{Binding Kind, Converter={x:Static views:ActivityKindIconConverter.Instance}}"
+                                       Foreground="{Binding Status, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}" />
+                    </Panel>
 
                     <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="{DynamicResource PbFontSizeControl}"
                                FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
@@ -30,7 +35,7 @@
                         <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                     </Button>
 
-                    <Border Grid.Column="2" IsVisible="{Binding IsFinished}" CornerRadius="999" Padding="7,1"
+                    <Border Grid.Column="2" IsVisible="{Binding IsFinished}" CornerRadius="{StaticResource PbRadiusChip}" Padding="7,1"
                             Background="{DynamicResource PbSurface2Brush}" VerticalAlignment="Center">
                         <TextBlock FontSize="{DynamicResource PbFontSizeMicro}"
                                    Text="{Binding Status, Converter={x:Static views:ActivityStatusLabelConverter.Instance}}"
@@ -51,6 +56,16 @@
                         Content="{Binding ResultSummary}" />
             </StackPanel>
         </Border>
+    </DataTemplate>
+
+    <!-- Section heading between groups of running jobs in the drawer's Active tab (ActivityJobGrouping). -->
+    <DataTemplate x:Key="ActivityGroupHeaderTemplate" DataType="models:ActivityGroupHeader">
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,8,0,2">
+            <TextBlock Text="{Binding Title}" FontSize="{DynamicResource PbFontSizeMicro}" FontWeight="Bold"
+                       Foreground="{DynamicResource PbTextFaintBrush}" />
+            <TextBlock Text="{Binding Count}" FontSize="{DynamicResource PbFontSizeMicro}"
+                       Foreground="{DynamicResource PbTextFaintBrush}" />
+        </StackPanel>
     </DataTemplate>
 
     <DataTemplate x:Key="ActivityAlertRowTemplate" DataType="vm:ActivityAlertViewModel">

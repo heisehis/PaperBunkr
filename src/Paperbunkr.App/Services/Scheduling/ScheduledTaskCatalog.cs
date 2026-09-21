@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -27,6 +28,10 @@ public static class ScheduledTaskCatalog
     public const string GenerateCovers = "generate-covers";
     public const string StoryEventAutodetect = "story-event-autodetect";
     public const string ContinuityWikidataAutodetect = "continuity-wikidata-autodetect";
+    public const string FollowArcs = "follow-arcs";
+    public const string ComicVineScrape = "comicvine-scrape";
+    public const string LibraryOrganize = "library-organize";
+    public const string RemotePageCacheSweep = "remote-page-cache-sweep";
 
     public static IReadOnlyList<ScheduledTaskDescriptor> All { get; } = Build();
 
@@ -176,6 +181,117 @@ public static class ScheduledTaskCatalog
                 handle.Succeed(summary, link);
                 return summary;
             }),
+
+        // "Follow arc" (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 8): off by default, and does nothing unless the user has also
+        // turned Acquisition on and added a ComicVine key. Runs at low ComicVine priority so it can never starve the UI's own lookups.
+        new ScheduledTaskDescriptor(
+            FollowArcs, "Follow story arcs",
+            "Refreshes the story-arc reading lists you follow and requests any newly listed issues you don't have. " +
+            "Needs Acquisition switched on and your ComicVine key.",
+            ActivityJobKind.Acquisition, Priority: 10, SchedulerResourceClass.Network,
+            TimeSpan.FromDays(1), DefaultEnabled: false, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                if (!context.GetOrCreateAcquisitionSettings().Enabled)
+                {
+                    const string off = "Acquisition is switched off, so nothing was requested.";
+                    handle.Succeed(off);
+                    return off;
+                }
+
+                handle.Report("Refreshing followed arcs…");
+                var key = Paperbunkr.Data.Credentials.CredentialStore.Get(context, "ComicVine", Paperbunkr.Data.Entities.CredentialKind.ApiKey);
+                var comicVine = string.IsNullOrWhiteSpace(key)
+                    ? null
+                    : new Paperbunkr.Data.ComicVine.ComicVineClient(key, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low);
+
+                var metron = Paperbunkr.Data.ComicVine.ComicProviderFactory.Create(context, Paperbunkr.Data.Entities.ComicProvider.Metron, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low);
+                var result = await Paperbunkr.Data.Acquisition.ArcFollowService.RunAsync(context, comicVine, ct, progress: (done, total) => handle.Report(done, total, $"{done} / {total} arcs"),
+                    clientFor: comicVine is null && metron is null ? null : provider => provider == Paperbunkr.Data.Entities.ComicProvider.Metron ? metron : comicVine);
+
+                var parts = new System.Collections.Generic.List<string> { $"{result.ListsChecked} arc{Plural(result.ListsChecked)} checked" };
+                if (result.IssuesAdded > 0) parts.Add($"{result.IssuesAdded} new entr{(result.IssuesAdded == 1 ? "y" : "ies")}");
+                if (result.Requested > 0) parts.Add($"{result.Requested} requested");
+                if (result.Unresolved > 0) parts.Add($"{result.Unresolved} couldn't be matched");
+                if (comicVine is null && result.ListsChecked > 0) parts.Add("add a ComicVine key to request missing issues");
+                if (result.Problems.Count > 0) parts.Add($"{result.Problems.Count} problem{Plural(result.Problems.Count)}: {result.Problems[0]}");
+
+                string summary = string.Join(", ", parts) + ".";
+                handle.Succeed(summary, result.Requested > 0 ? new ActivityLink(ActivityLinkKind.WantedScreen) : null);
+                return summary;
+            }),
+
+        // "Scrape with ComicVine" on a schedule (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8): off by default, never opens a dialog.
+        // Every comic with no ComicVine volume link is matched; with "choose the best match automatically" off it skips whatever would have needed a question.
+        new ScheduledTaskDescriptor(
+            ComicVineScrape, "Scrape unscraped comics with ComicVine",
+            "Matches comics that have no details yet (from the source chosen under Organize & Scrape), without asking. Comics that need a choice are skipped unless \"Choose the best match automatically\" is on " +
+            "(Preferences → Organize & Scrape). Needs your ComicVine key.",
+            ActivityJobKind.Scrape, Priority: 11, SchedulerResourceClass.Network,
+            TimeSpan.FromDays(1), DefaultEnabled: false, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                var scraper = Paperbunkr.App.Scraper.ScheduledCoordinators.Scraper;
+                if (scraper is null)
+                {
+                    const string notReady = "The scraper isn't ready yet.";
+                    handle.Succeed(notReady);
+                    return notReady;
+                }
+
+                handle.Report("Scraping unscraped comics…");
+                string summary = await scraper.ScrapeUnscrapedAsync(ct, handle);
+                handle.Succeed(summary);
+                return summary;
+            }),
+
+        // "Organize library" on a schedule: off by default; uses the first organizer profile marked for scheduled runs, and never opens a dialog
+        // (collisions follow that profile's automatic-collision setting).
+        new ScheduledTaskDescriptor(
+            LibraryOrganize, "Organize library",
+            "Moves or copies files into the folders an organizer profile's templates describe. Uses the profile marked for scheduled runs " +
+            "(Preferences → Organize & Scrape); nothing happens until one is. Every move can be undone.",
+            ActivityJobKind.Import, Priority: 12, SchedulerResourceClass.Db,
+            TimeSpan.FromDays(1), DefaultEnabled: false, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                var organizer = Paperbunkr.App.Scraper.ScheduledCoordinators.Organizer;
+                if (organizer is null)
+                {
+                    const string notReady = "The organizer isn't ready yet.";
+                    handle.Succeed(notReady);
+                    return notReady;
+                }
+
+                var profile = organizer.Profiles.GetAll().FirstOrDefault(p => p.UseForScheduledRun);
+                if (profile is null)
+                {
+                    const string none = "No organizer profile is marked for scheduled runs, so nothing was organized.";
+                    handle.Succeed(none);
+                    return none;
+                }
+
+                handle.Report($"Organizing with \"{profile.Name}\"…");
+                string summary = await organizer.OrganizeLibraryAsync(profile.Id, ct, handle);
+                handle.Succeed(summary);
+                return summary;
+            }),
+
+        // Pages read from remote libraries are cached on disk under a size quota; this is the other bound (docs/superpowers/specs/
+        // 2026-09-19-remote-library-sharing-design.md section 7.3): pages nobody has opened for 30 days go, so the cache can't quietly
+        // hold everything you ever read once.
+        new ScheduledTaskDescriptor(
+            RemotePageCacheSweep, "Clean up remote library pages",
+            "Removes pages of remote libraries you haven't opened in 30 days from this computer. They are downloaded again if you open them.",
+            ActivityJobKind.Other, Priority: 13, SchedulerResourceClass.DiskCpu,
+            TimeSpan.FromDays(7), DefaultEnabled: true, ScheduleMode.Interval,
+            static (handle, ct) => Task.Run(() =>
+            {
+                handle.Report("Checking cached pages…");
+                int removed = Paperbunkr.App.Services.Sharing.PeerPageCache.Shared.SweepExpired();
+                return removed == 0 ? "Nothing to clean up" : $"Removed {removed} page{Plural(removed)}";
+            }, ct)),
     };
 
     public static ScheduledTaskDescriptor? Find(string id)

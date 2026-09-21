@@ -39,10 +39,7 @@ public static class GraphicsBootstrap
     /// <summary>Test-only override for environment-variable reads, so tests never touch the real process environment.</summary>
     internal static Func<string, string?>? EnvReaderOverride { get; set; }
 
-    public static string CachePath => CachePathOverride ?? Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "Paperbunkr",
-        "graphics.json");
+    public static string CachePath => CachePathOverride ?? Paperbunkr.Data.AppDataPaths.Combine("graphics.json");
 
     /// <summary>
     /// Bootstrap read, called from <c>Program.Main</c> before Avalonia starts and before the

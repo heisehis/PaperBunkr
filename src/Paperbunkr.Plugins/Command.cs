@@ -46,6 +46,22 @@ public abstract class Command
 
     public bool IsBroken => CompileError is not null;
 
+    /// <summary>
+    /// The API version this command's plugin declared via <c>requiresApi</c> (docs/superpowers/specs/
+    /// 2026-09-20-plugin-api-4-1-design.md §3), or null when the attribute was absent (the 4.0
+    /// baseline). Set by <see cref="PluginEngine"/> at discovery; used only to explain a failure.
+    /// </summary>
+    public Version? DeclaredApi { get; set; }
+
+    /// <summary>Appends a version hint to an already-recorded <see cref="CompileError"/> (its setter is protected). No-op when there's no error or no hint.</summary>
+    internal void AppendVersionHint(string? hint)
+    {
+        if (CompileError is not null && hint is not null)
+        {
+            CompileError = $"{CompileError} ({hint})";
+        }
+    }
+
     public bool IsHook(params string[] hooks) => hooks.Contains(Hook);
 
     /// <summary>Clones <paramref name="env"/>, points the clone's <see cref="IPluginEnvironment.CommandPath"/> at <paramref name="pluginPath"/>, and runs any subclass-specific precompilation. Returns false (never throws) if the command couldn't be prepared.</summary>
@@ -66,13 +82,34 @@ public abstract class Command
         }
     }
 
+    /// <summary>How this command has behaved since the app started - runs, failures and durations (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md §2). In memory only.</summary>
+    public CommandStats Stats { get; } = new();
+
     public async Task<object?> InvokeAsync(PluginGlobals globals)
     {
         // Per-invocation confirmation gate for IMetadataWriter (docs/superpowers/specs/2026-08-28-
         // plugin-api-v3-data-manager-design.md §5) - scoped to exactly this call, flows across the
         // script's awaits.
         using var _ = PluginInvocationContext.Enter(PluginKey, ConfirmWrites);
-        return await OnInvokeAsync(globals).ConfigureAwait(false);
+
+        // Timed here, in the one method every hook and every caller goes through, so the numbers cover
+        // the CE-era hooks and the domain hooks alike. A thrown exception is counted and rethrown untouched.
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        bool failed = false;
+        try
+        {
+            return await OnInvokeAsync(globals).ConfigureAwait(false);
+        }
+        catch
+        {
+            failed = true;
+            throw;
+        }
+        finally
+        {
+            timer.Stop();
+            Stats.RecordRun(timer.Elapsed, failed);
+        }
     }
 
     protected virtual void OnInitialize(string pluginPath)

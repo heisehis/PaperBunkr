@@ -31,8 +31,58 @@ public sealed class LibraryContextMenuBuilder
         _ => null,
     };
 
+    /// <summary>
+    /// A book from a remote library (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md section 7.2): read it, keep
+    /// your own read state, find its series - and nothing that would change or delete it. Every entry that is missing here is one the
+    /// view model would refuse anyway; hiding it means nobody has to find that out by trying.
+    /// </summary>
+    private IReadOnlyList<ContextMenuEntry> BuildRemoteIssueMenu(IssueListRow row)
+    {
+        bool multi = _vm.Selection.IsSelected(row.Id) && _vm.Selection.Count > 1;
+        int n = _vm.Selection.Count;
+
+        var entries = new List<ContextMenuEntry?>
+        {
+            ContextMenuEntry.Item("Open", _vm.IssueList.OpenIssueCommand, row, Symbol.Open, inputGesture: "Enter"),
+            ContextMenuEntry.Separator,
+            ContextMenuEntry.SubMenu(
+                multi ? $"Mark {n} as" : "Mark as",
+                new[]
+                {
+                    ContextMenuEntry.Item("Read", _vm.MarkIssueReadCommand, row.Id, Symbol.CheckmarkCircle),
+                    ContextMenuEntry.Item("Unread", _vm.MarkIssueUnreadCommand, row.Id, Symbol.Circle),
+                },
+                Symbol.Checkmark),
+            ContextMenuEntry.Item("Go to Series", _vm.GoToSeriesCommand, row.SeriesId, Symbol.ArrowForward),
+            ContextMenuEntry.Separator,
+            ContextMenuEntry.Item("Select All", _vm.SelectAllVisibleIssuesCommand, icon: Symbol.SelectAllOn),
+            ContextMenuEntry.Item("Clear Selection", _vm.ClearSelectionCommand, icon: Symbol.SelectAllOff, isEnabled: _vm.HasSelection),
+        };
+
+        return ContextMenuEntry.Compact(entries);
+    }
+
+    /// <summary>A series from a remote library: open it and select it, nothing else (see <see cref="BuildRemoteIssueMenu"/>).</summary>
+    private IReadOnlyList<ContextMenuEntry> BuildRemoteSeriesMenu(SeriesCardSample card)
+    {
+        var entries = new List<ContextMenuEntry?>
+        {
+            ContextMenuEntry.Item("Open Series", _vm.SelectCardCommand, card, Symbol.Open),
+            ContextMenuEntry.Separator,
+            ContextMenuEntry.Item("Select All", _vm.SelectAllVisibleSeriesCommand, icon: Symbol.SelectAllOn),
+            ContextMenuEntry.Item("Clear Selection", _vm.ClearSelectionCommand, icon: Symbol.SelectAllOff, isEnabled: _vm.HasSelection),
+        };
+
+        return ContextMenuEntry.Compact(entries);
+    }
+
     private IReadOnlyList<ContextMenuEntry> BuildIssueMenu(IssueListRow row)
     {
+        if (row.IsRemote)
+        {
+            return BuildRemoteIssueMenu(row);
+        }
+
         bool multi = _vm.Selection.IsSelected(row.Id) && _vm.Selection.Count > 1;
         int n = _vm.Selection.Count;
         string plural = multi ? $" {n} comics" : "";
@@ -47,8 +97,8 @@ public sealed class LibraryContextMenuBuilder
                 multi ? $"Mark {n} as" : "Mark as",
                 new[]
                 {
-                    ContextMenuEntry.Item("Read", _vm.MarkIssueReadCommand, row.Id),
-                    ContextMenuEntry.Item("Unread", _vm.MarkIssueUnreadCommand, row.Id),
+                    ContextMenuEntry.Item("Read", _vm.MarkIssueReadCommand, row.Id, Symbol.CheckmarkCircle),
+                    ContextMenuEntry.Item("Unread", _vm.MarkIssueUnreadCommand, row.Id, Symbol.Circle),
                 },
                 Symbol.Checkmark),
             ContextMenuEntry.SubMenu(
@@ -75,6 +125,8 @@ public sealed class LibraryContextMenuBuilder
                 },
                 Symbol.Library),
             ContextMenuEntry.Separator,
+            ContextMenuEntry.Item(multi ? $"Scrape {n}…" : "Scrape…", _vm.ScrapeWithComicVineCommand, row.Id, Symbol.ArrowDownload),
+            ContextMenuEntry.Item(multi ? $"Organize {n}…" : "Organize…", _vm.OrganizeWithProfileCommand, row.Id, Symbol.FolderArrowRight),
             ContextMenuEntry.Item("Show in Explorer", _vm.RevealIssueCommand, row.Id, Symbol.FolderOpen, isEnabled: row.HasFile),
             _vm.CanWriteMetadataToFiles
                 ? ContextMenuEntry.Item(multi ? $"Write metadata to {n} files" : "Write metadata to file", _vm.WriteIssueMetadataToFilesCommand, row.Id, Symbol.Save, isEnabled: row.HasFile)
@@ -103,12 +155,19 @@ public sealed class LibraryContextMenuBuilder
 
     private IReadOnlyList<ContextMenuEntry> BuildSeriesMenu(SeriesCardSample card)
     {
+        if (card.IsRemote)
+        {
+            return BuildRemoteSeriesMenu(card);
+        }
+
         bool multi = _vm.SeriesSelection.IsSelected(card.SeriesId) && _vm.SeriesSelection.Count > 1;
         int n = _vm.SeriesSelection.Count;
 
         var entries = new List<ContextMenuEntry?>
         {
             ContextMenuEntry.Item("Open Series", _vm.SelectCardCommand, card, Symbol.Open),
+            ContextMenuEntry.Item(multi ? $"Scrape {n} series…" : "Scrape…", _vm.ScrapeSeriesWithComicVineCommand, card.SeriesId, Symbol.ArrowDownload),
+            ContextMenuEntry.Item(multi ? $"Organize {n} series…" : "Organize…", _vm.OrganizeSeriesWithProfileCommand, card.SeriesId, Symbol.FolderArrowRight),
             ContextMenuEntry.SubMenu(
                 multi ? $"Add {n} to Collection" : "Add to Collection",
                 CollectionChildren(card.SeriesId, _vm.AddSeriesToCollectionCommand, _vm.CreateCollectionAndAddSeriesCommand),

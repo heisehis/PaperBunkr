@@ -17,9 +17,16 @@ public enum PreferencesSection
     Reader,
     KeyboardShortcuts,
     Connections,
+    Acquisition,
+
+    /// <summary>Scrape behavior (and, later, organizer profiles) for the built-in ComicVine scraper and library organizer.</summary>
+    OrganizeScrape,
     Plugins,
     Advanced,
     About,
+
+    /// <summary>Preferences → Sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md §9). Appended at the end so no existing value shifts.</summary>
+    Sharing,
 }
 
 /// <summary>Sidebar ordering + display labels for <see cref="PreferencesSection"/>.</summary>

@@ -15,6 +15,7 @@ respective owners; the license column is the copyright status of the SVG file it
 | `mangadex.svg` | mangadex.org media kit — `img/brand/mangadex-logo.svg` (brandmark, #ff6740) | brand asset |
 | `mangaupdates.svg` | Simple Icons (`mangaupdates`) | CC0-1.0 |
 | `metron.svg` | github.com/Metron-Project/metron — `static/site/img/metron.svg` | project asset (GPL-3.0 repo) |
+| `prowlarr.svg`, `qbittorrent.svg` | Drawn for Paperbunkr as plain single-path glyphs (a magnifier for the indexer, a download ring for the client); **not** the projects' logos | original, no restrictions |
 | `comicvine.svg` | comicvine.gamespot.com — inline masthead SVG (`svg.symbol-logo-comicvine`), full-colour wordmark | brand asset |
 | `animeplanet.svg` | anime-planet.com — the `#mobile` group of their inline `#logo` SVG (the `a‿p` smiley mark), recoloured to their `#FC5342` | brand asset |
 | `shikimori.svg` | github.com/shikimori/shikimori — `app/assets/images/src/glyph_logo.svg` (赤SHIKIMORI wordmark) | project asset (repo is source-available) |

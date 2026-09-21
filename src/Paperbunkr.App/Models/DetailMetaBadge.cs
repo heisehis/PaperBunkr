@@ -9,9 +9,15 @@ namespace Paperbunkr.App.Models;
 /// screen-icons-and-glyphs-design.md Part 4). Either a FluentIcons glyph + text
 /// (<see cref="Icon"/>) or a resolved brand/metadata <see cref="BrandMark"/> (<see cref="Mark"/>).
 /// </summary>
-public sealed record DetailMetaBadge(string Text, Symbol? Icon = null, MarkFamily? Mark = null, string? MarkValue = null)
+public sealed record DetailMetaBadge(string Text, Symbol? Icon = null, MarkFamily? Mark = null, string? MarkValue = null, string? StatusKind = null)
 {
     public bool IsMark => Mark is not null;
+
+    /// <summary>True for the series-status badge, which renders as a <c>SeriesStatusChip</c> (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #10) instead of a generic icon + text chip.</summary>
+    public bool IsStatus => StatusKind is not null;
+
+    /// <summary>The generic icon + text chip - everything that is neither a brand mark nor the status chip.</summary>
+    public bool IsPlain => !IsMark && !IsStatus;
 
     /// <summary>Non-null projections for the compiled bindings (which can't take a nullable enum);
     /// only the relevant one is actually rendered per <see cref="IsMark"/>.</summary>
@@ -29,7 +35,7 @@ public sealed record DetailMetaBadge(string Text, Symbol? Icon = null, MarkFamil
     public static IReadOnlyList<DetailMetaBadge> Build(
         string? publisher, string? statusLabel, bool isComplete,
         string? year, string? format, string? ageRating, string? languageIso,
-        string? issueCountLabel = null, string? unreadLabel = null)
+        string? issueCountLabel = null, string? unreadLabel = null, string? statusKind = null)
     {
         var list = new List<DetailMetaBadge>();
 
@@ -40,7 +46,11 @@ public sealed record DetailMetaBadge(string Text, Symbol? Icon = null, MarkFamil
 
         if (!string.IsNullOrWhiteSpace(statusLabel))
         {
-            list.Add(new DetailMetaBadge(statusLabel!, Icon: isComplete ? Symbol.CheckmarkCircle : Symbol.Circle));
+            // A real (non-Unknown) series status gets the shared colour + icon chip; anything else (books' "Finished",
+            // a comic series whose status was never set) keeps the generic chip it always had.
+            list.Add(SeriesStatusStyle.For(statusKind) is not null
+                ? new DetailMetaBadge(statusLabel!, StatusKind: statusKind)
+                : new DetailMetaBadge(statusLabel!, Icon: isComplete ? Symbol.CheckmarkCircle : Symbol.Circle));
         }
 
         if (!string.IsNullOrWhiteSpace(issueCountLabel))

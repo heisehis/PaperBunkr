@@ -301,7 +301,6 @@ public static class DiagnosticsService
 
     private static string GetDefaultLogDirectory()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "Paperbunkr", "logs");
+        return Paperbunkr.Data.AppDataPaths.Combine("logs");
     }
 }

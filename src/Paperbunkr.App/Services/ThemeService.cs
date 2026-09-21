@@ -231,6 +231,8 @@ public class ThemeService
         using var context = _contextFactory();
         var settings = context.GetOrCreateAppSettings();
         var theme = LoadTheme(settings.ActiveThemeKey);
+        _glowTier = NormalizeGlowTier(settings.GlowTier);
+        ApplyDensityResources(settings.DensityPreset);
         ApplyThemeResources(theme);
         ApplyFontResource(settings.SelectedFontFamily, theme.DefaultFontFamily);
         Application.Current!.Resources["PbMotionFast"] = settings.ReducedMotion ? TimeSpan.Zero : DefaultMotionFast;
@@ -694,14 +696,102 @@ public class ThemeService
     /// </summary>
     private static void ApplyGlowRing(IResourceDictionary resources, Color glowColor)
     {
-        resources["PbGlowRing"] = new BoxShadows(new BoxShadow
+        _glowColor = glowColor;
+        resources["PbGlowRing"] = BuildGlowRing(glowColor, _glowTier);
+
+        // A fixed Normal-tier copy for consumers that are not a hover/focus affordance - the reader's
+        // bookmark-toggle pulse - so the user's glow tier (even Off) never disables their feedback.
+        resources["PbGlowPulseRing"] = BuildGlowRing(glowColor, GlowTierNormal);
+    }
+
+    /// <summary>Glow-intensity tiers (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #3).
+    /// <see cref="GlowTierNormal"/> reproduces the ring exactly as it was before tiers existed.</summary>
+    public const int GlowTierOff = 0;
+    public const int GlowTierSubtle = 1;
+    public const int GlowTierNormal = 2;
+    public const int GlowTierVivid = 3;
+
+    private static int _glowTier = GlowTierNormal;
+    private static Color? _glowColor;
+
+    public static int NormalizeGlowTier(int tier) => tier is >= GlowTierOff and <= GlowTierVivid ? tier : GlowTierNormal;
+
+    /// <summary>The <c>PbGlowRing</c> value for a tier: Off is empty (no ring), Subtle a thinner fainter ring,
+    /// Normal the original 4px ring at 0x99 alpha, Vivid a stronger ring plus a soft halo.</summary>
+    public static BoxShadows BuildGlowRing(Color glowColor, int tier)
+    {
+        static BoxShadow Ring(Color c, byte alpha, double spread, double blur = 0) => new()
         {
             OffsetX = 0,
             OffsetY = 0,
-            Blur = 0,
-            Spread = 4,
-            Color = Color.FromArgb(0x99, glowColor.R, glowColor.G, glowColor.B),
-        });
+            Blur = blur,
+            Spread = spread,
+            Color = Color.FromArgb(alpha, c.R, c.G, c.B),
+        };
+
+        return NormalizeGlowTier(tier) switch
+        {
+            GlowTierOff => default,
+            GlowTierSubtle => new BoxShadows(Ring(glowColor, 0x66, 2)),
+            GlowTierVivid => new BoxShadows(Ring(glowColor, 0xE6, 4), new[] { Ring(glowColor, 0x80, 0, 12) }),
+            _ => new BoxShadows(Ring(glowColor, 0x99, 4)),
+        };
+    }
+
+    /// <summary>Writes the density preset's spacing tokens into the live resources (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #17).</summary>
+    internal static void ApplyDensityResources(int preset)
+    {
+        if (Application.Current is null)
+        {
+            return;
+        }
+
+        var values = DensityPresets.For(preset);
+        var resources = Application.Current.Resources;
+        resources["PbListRowPadding"] = values.ListRowPadding;
+        resources["PbDetailsRowPadding"] = values.DetailsRowPadding;
+        resources["PbSidebarItemPadding"] = values.SidebarItemPadding;
+    }
+
+    /// <summary>Returns the persisted density preset (0 Compact, 1 Comfortable, 2 Spacious).</summary>
+    public int GetDensityPreset()
+    {
+        using var context = _contextFactory();
+        return DensityPresets.Normalize(context.GetOrCreateAppSettings().DensityPreset);
+    }
+
+    /// <summary>Applies the density preset live and persists it.</summary>
+    public void ApplyDensity(int preset)
+    {
+        preset = DensityPresets.Normalize(preset);
+        ApplyDensityResources(preset);
+
+        using var context = _contextFactory();
+        var settings = context.GetOrCreateAppSettings();
+        settings.DensityPreset = preset;
+        context.SaveChanges();
+    }
+
+    /// <summary>Returns the currently persisted glow tier (0 Off .. 3 Vivid).</summary>
+    public int GetGlowTier()
+    {
+        using var context = _contextFactory();
+        return NormalizeGlowTier(context.GetOrCreateAppSettings().GlowTier);
+    }
+
+    /// <summary>Applies the glow tier live (rebuilds <c>PbGlowRing</c> from the active glow color) and persists it.</summary>
+    public void ApplyGlowTier(int tier)
+    {
+        _glowTier = NormalizeGlowTier(tier);
+        if (_glowColor is { } color && Application.Current is not null)
+        {
+            Application.Current.Resources["PbGlowRing"] = BuildGlowRing(color, _glowTier);
+        }
+
+        using var context = _contextFactory();
+        var settings = context.GetOrCreateAppSettings();
+        settings.GlowTier = _glowTier;
+        context.SaveChanges();
     }
 
     /// <summary>
@@ -741,7 +831,7 @@ public class ThemeService
         return (0.2126 * Lin(c.R)) + (0.7152 * Lin(c.G)) + (0.0722 * Lin(c.B));
     }
 
-    private static double ContrastRatio(Color a, Color b)
+    internal static double ContrastRatio(Color a, Color b)
     {
         double l1 = RelativeLuminance(a);
         double l2 = RelativeLuminance(b);
@@ -763,7 +853,7 @@ public class ThemeService
     /// and has to stay legible against whichever theme is active, not just a Light one). Direction is
     /// decided from <paramref name="bg"/>'s own luminance, never <paramref name="fg"/>'s.
     /// </summary>
-    private static Color AdjustForContrast(Color fg, Color bg, double targetRatio)
+    internal static Color AdjustForContrast(Color fg, Color bg, double targetRatio)
     {
         if (ContrastRatio(fg, bg) >= targetRatio)
         {
@@ -843,6 +933,13 @@ public class ThemeService
         var resources = Application.Current!.Resources;
         string? resolved = explicitOverride ?? themeDefaultFontFamily;
         resources["PbFontFamily"] = resolved is null ? DefaultFontFamily : new FontFamily(resolved);
+    }
+
+    /// <summary>Returns the persisted "Splash ambient motion" preference (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #6).</summary>
+    public bool GetSplashAmbientMotion()
+    {
+        using var context = _contextFactory();
+        return context.GetOrCreateAppSettings().SplashAmbientMotion;
     }
 
     /// <summary>Returns the currently persisted reduced-motion preference.</summary>

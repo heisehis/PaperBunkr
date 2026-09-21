@@ -1,0 +1,366 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:pref="using:Paperbunkr.App.Views.Preferences"
+             xmlns:beh="using:Paperbunkr.App.Behaviors"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="680" d:DesignHeight="900"
+             x:Class="Paperbunkr.App.Views.Preferences.SharingSection"
+             x:DataType="vm:SharingSettingsViewModel">
+
+    <!-- Preferences -> Sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md 9). Same section shell as
+         Acquisition/Automation: one ScrollViewer, SettingsRow rows, Pb* tokens only. Two groups: SHARE THIS LIBRARY (host) and
+         REMOTE LIBRARIES (client). Confirmations, the certificate re-trust and Relink are inline panels on the row, never modal
+         dialogs. Status is always text first; the badge colour only reinforces it. -->
+    <UserControl.Styles>
+        <Style Selector="Border.statusBadge">
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.statusBadge > TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Border.statusBadge.ok">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbSuccessBrush}" />
+        </Style>
+        <Style Selector="Border.statusBadge.ok > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbSuccessBrush}" />
+        </Style>
+        <Style Selector="Border.statusBadge.warn">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+        <Style Selector="Border.statusBadge.warn > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+        <Style Selector="Border.statusBadge.error">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
+        </Style>
+        <Style Selector="Border.statusBadge.error > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
+        </Style>
+        <Style Selector="TextBox.fingerprint">
+            <Setter Property="FontFamily" Value="Consolas, Menlo, monospace" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel Margin="28,20,28,40" Spacing="20">
+            <TextBlock Classes="pbTextHeading" Text="Sharing" />
+
+            <TextBlock Text="Share part of this library with your other Paperbunkr installs over your home network or a VPN, and read theirs the same way. Everything is read-only, off by default, and needs a password. It only works while Paperbunkr is open, and it is not meant to be exposed to the public internet."
+                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+
+            <!-- ============================ HOST ============================ -->
+            <StackPanel Tag="sharing.host" Spacing="6">
+                <TextBlock Classes="settingsGroupCaption" Text="SHARE THIS LIBRARY" />
+
+                <pref:SettingsRow Icon="Share" Title="Share this library"
+                                   Description="Lets other Paperbunkr installs that know the password browse and read what you choose below.">
+                    <pref:SettingsRow.SettingsContent>
+                        <ToggleSwitch IsChecked="{Binding ShareEnabled}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                      AutomationProperties.Name="Share this library"
+                                      AutomationProperties.AutomationId="SharingEnabledToggle" />
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+
+                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,4">
+                    <Border Classes="statusBadge ok" IsVisible="{Binding IsHostRunning}">
+                        <TextBlock Text="Running" />
+                    </Border>
+                    <TextBlock Text="{Binding HostStatus}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center"
+                               AutomationProperties.LiveSetting="Polite" AutomationProperties.AutomationId="SharingHostStatus" />
+                    <TextBlock Text="{Binding ClientsText}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <Border IsVisible="{Binding HasNetworkWarning}" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="1" CornerRadius="6" Padding="10" MaxWidth="640"
+                        HorizontalAlignment="Left" Margin="0,0,0,6">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentBrush}" VerticalAlignment="Top" />
+                        <TextBlock Text="{Binding NetworkWarning}" TextWrapping="Wrap" MaxWidth="580" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}"
+                                   AutomationProperties.LiveSetting="Polite" AutomationProperties.AutomationId="SharingNetworkWarning" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="{Binding HostMessage}" IsVisible="{Binding HasHostMessage}" FontSize="11.5" TextWrapping="Wrap" MaxWidth="640"
+                           Foreground="{DynamicResource PbAccentBrush}" HorizontalAlignment="Left" Margin="0,0,0,6"
+                           AutomationProperties.LiveSetting="Polite" />
+
+                <StackPanel Spacing="4" Margin="0,4,0,10">
+                    <TextBlock Text="Name others will see" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBox Text="{Binding DisplayName}" Width="320" HorizontalAlignment="Left" MaxLength="60"
+                             AutomationProperties.Name="Name others will see" />
+                </StackPanel>
+
+                <StackPanel Spacing="4" Margin="0,0,0,10">
+                    <TextBlock Text="Port" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBox Text="{Binding PortText}" Width="120" HorizontalAlignment="Left"
+                             beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="1024" beh:TextSpinner.Maximum="65535"
+                             AutomationProperties.Name="Sharing port" />
+                    <TextBlock Text="Others connect to this computer's address on this port. The default is fine unless something else uses it."
+                               FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="560" />
+                </StackPanel>
+
+                <StackPanel Spacing="4" Margin="0,0,0,10">
+                    <TextBlock Text="Sharing password" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBox Text="{Binding NewPassword}" PasswordChar="●" Width="320" Watermark="New password (8 or more characters)"
+                                 AutomationProperties.Name="New sharing password" AutomationProperties.AutomationId="SharingPasswordBox" />
+                        <Button Classes="headerAction primary" Content="Set password" Command="{Binding SetPasswordCommand}"
+                                AutomationProperties.AutomationId="SharingSetPasswordButton" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding PasswordStatus}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="560" />
+                </StackPanel>
+
+                <StackPanel Spacing="4" Margin="0,0,0,10">
+                    <TextBlock Text="What to share" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <RadioButton GroupName="ShareScope" IsChecked="{Binding ScopeNothing}" Content="Nothing yet"
+                                 AutomationProperties.Name="Share nothing" />
+                    <RadioButton GroupName="ShareScope" IsChecked="{Binding ScopeAll}" Content="My whole library"
+                                 AutomationProperties.Name="Share my whole library" />
+                    <RadioButton GroupName="ShareScope" IsChecked="{Binding ScopeSelected}" Content="Only the lists I choose"
+                                 AutomationProperties.Name="Share only the lists I choose" />
+
+                    <StackPanel IsVisible="{Binding ScopeSelected}" Spacing="2" Margin="26,4,0,0">
+                        <TextBlock Text="Nothing to choose from yet - create a reading list, collection or smart list first."
+                                   IsVisible="{Binding !HasListChoices}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                        <ItemsControl ItemsSource="{Binding ListChoices}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ShareListChoiceViewModel">
+                                    <CheckBox IsChecked="{Binding IsSelected}" AutomationProperties.Name="{Binding Name}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                                            <TextBlock Text="{Binding KindLabel}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+
+                <Button Classes="headerAction primary" Content="Apply changes" Command="{Binding ApplyCommand}" HorizontalAlignment="Left"
+                        AutomationProperties.AutomationId="SharingApplyButton" />
+
+                <StackPanel Spacing="4" Margin="0,14,0,0">
+                    <TextBlock Text="This computer's certificate" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBox Classes="fingerprint" Text="{Binding CertificateFingerprint, Mode=OneWay}" MaxWidth="560" HorizontalAlignment="Left"
+                             AutomationProperties.Name="This computer's certificate fingerprint" />
+                    <TextBlock Text="When someone adds your library, they are shown this fingerprint and should check it matches. Making a new certificate is only needed if you think the old one was exposed - everyone will have to trust the new one."
+                               FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="560" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                        <Button Classes="headerAction ghost" Content="Make a new certificate…" Command="{Binding AskRegenerateCommand}"
+                                IsVisible="{Binding !IsConfirmingRegenerate}" />
+                        <TextBlock Text="Make a new certificate? Everyone will need to trust it again." IsVisible="{Binding IsConfirmingRegenerate}"
+                                   VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                        <Button Classes="headerAction primary" Content="Make new certificate" Command="{Binding ConfirmRegenerateCommand}"
+                                IsVisible="{Binding IsConfirmingRegenerate}" />
+                        <Button Classes="headerAction ghost" Content="Cancel" Command="{Binding CancelRegenerateCommand}"
+                                IsVisible="{Binding IsConfirmingRegenerate}" />
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- ============================ REMOTE LIBRARIES ============================ -->
+            <StackPanel Tag="sharing.remote" Spacing="10">
+                <TextBlock Classes="settingsGroupCaption" Text="REMOTE LIBRARIES" />
+
+                <TextBlock Text="Libraries other people share with you appear alongside your own in the Library, marked as remote. You can read them and keep your own progress, but you can't change them."
+                           FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="headerAction primary" Content="Add a remote library" Command="{Binding OpenAddPanelCommand}"
+                            IsVisible="{Binding !IsAddPanelOpen}" AutomationProperties.AutomationId="SharingAddRemoteButton" />
+                    <Button Classes="headerAction ghost" Content="Refresh all" Command="{Binding RefreshAllCommand}"
+                            IsVisible="{Binding HasSources}" />
+                </StackPanel>
+
+                <!-- Add flow: 1) address + password  2) confirm the fingerprint, then the password is sent -->
+                <Border Classes="card" IsVisible="{Binding IsAddPanelOpen}" Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Classes="cardHeading" Text="Add a remote library" />
+
+                        <StackPanel Spacing="8" IsVisible="{Binding !HasPendingProbe}">
+                            <StackPanel Spacing="6">
+                                <Button Classes="headerAction ghost" Content="Find on this network" Command="{Binding FindOnNetworkCommand}"
+                                        IsEnabled="{Binding !IsSearching}" HorizontalAlignment="Left"
+                                        AutomationProperties.AutomationId="SharingFindOnNetworkButton" />
+                                <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsSearching}" MaxWidth="240" HorizontalAlignment="Left" />
+                                <TextBlock Text="{Binding DiscoveryMessage}" IsVisible="{Binding HasDiscoveryMessage}" FontSize="11.5" TextWrapping="Wrap"
+                                           MaxWidth="480" Foreground="{DynamicResource PbTextFaintBrush}" AutomationProperties.LiveSetting="Polite" />
+                                <ItemsControl ItemsSource="{Binding DiscoveredHosts}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:DiscoveredHostRowViewModel">
+                                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,2">
+                                                <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Address}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                                <Button Classes="headerAction ghost" Content="Use this" Command="{Binding UseCommand}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Address" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                                <TextBox Text="{Binding AddHost}" Width="320" HorizontalAlignment="Left" Watermark="e.g. 192.168.1.20 or den-pc"
+                                         AutomationProperties.Name="Remote library address" AutomationProperties.AutomationId="SharingAddHost" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Port" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                                <TextBox Text="{Binding AddPortText}" Width="120" HorizontalAlignment="Left"
+                                         beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="1" beh:TextSpinner.Maximum="65535"
+                                         AutomationProperties.Name="Remote library port" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Sharing password" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                                <TextBox Text="{Binding AddPassword}" PasswordChar="●" Width="320" HorizontalAlignment="Left"
+                                         AutomationProperties.Name="Remote library sharing password" AutomationProperties.AutomationId="SharingAddPassword" />
+                            </StackPanel>
+                            <CheckBox IsChecked="{Binding AddSavePassword}" Content="Remember the password on this computer"
+                                      AutomationProperties.Name="Remember the password on this computer" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Classes="headerAction primary" Content="Connect" Command="{Binding ConnectCommand}" IsEnabled="{Binding !IsAddBusy}"
+                                        AutomationProperties.AutomationId="SharingConnectButton" />
+                                <Button Classes="headerAction ghost" Content="Cancel" Command="{Binding CancelAddCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Spacing="8" IsVisible="{Binding HasPendingProbe}">
+                            <TextBlock TextWrapping="Wrap" MaxWidth="560" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}">
+                                <Run Text="Found" /> <Run Text="{Binding PendingName}" FontWeight="SemiBold" /><Run Text=". Before connecting, check that this fingerprint matches the one shown in that computer's Sharing settings:" />
+                            </TextBlock>
+                            <TextBox Classes="fingerprint" Text="{Binding PendingFingerprint, Mode=OneWay}" MaxWidth="560" HorizontalAlignment="Left"
+                                     AutomationProperties.Name="Fingerprint to verify" />
+                            <TextBlock Text="If it doesn't match, don't continue - you may not be talking to the computer you think you are. Your password is only sent after you trust it."
+                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="560" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Classes="headerAction primary" Content="It matches - trust and add" Command="{Binding TrustAndAddCommand}" IsEnabled="{Binding !IsAddBusy}"
+                                        AutomationProperties.AutomationId="SharingTrustAndAddButton" />
+                                <Button Classes="headerAction ghost" Content="Cancel" Command="{Binding CancelAddCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsAddBusy}" MaxWidth="320" HorizontalAlignment="Left" />
+                        <TextBlock Text="{Binding AddError}" IsVisible="{Binding HasAddError}" TextWrapping="Wrap" MaxWidth="560"
+                                   Foreground="{DynamicResource PbDangerBrush}" FontSize="12" AutomationProperties.LiveSetting="Assertive" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Empty state: what this is, and the one action -->
+                <Border Classes="card" IsVisible="{Binding HasNoSources}" Padding="20">
+                    <StackPanel Spacing="6" HorizontalAlignment="Left">
+                        <fi:SymbolIcon Symbol="Globe" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Left" />
+                        <TextBlock Text="No remote libraries yet" Classes="cardHeading" />
+                        <TextBlock Text="Ask the owner of another Paperbunkr for their address and sharing password, then use Add a remote library."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="480" />
+                    </StackPanel>
+                </Border>
+
+                <ItemsControl ItemsSource="{Binding Sources}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:RemoteSourceRowViewModel">
+                            <Border Classes="card" Padding="16" Margin="0,0,0,10">
+                                <StackPanel Spacing="8">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Grid.Column="0" Spacing="2">
+                                            <TextBlock Text="{Binding Name}" Classes="cardHeading" />
+                                            <TextBlock Text="{Binding Address}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            <TextBlock Text="{Binding LastSyncedText}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Classes="statusBadge" Classes.ok="{Binding IsStatusOk}" Classes.warn="{Binding IsStatusWarn}" Classes.error="{Binding IsStatusError}">
+                                            <TextBlock Text="{Binding StatusText}" AutomationProperties.LiveSetting="Polite" />
+                                        </Border>
+                                    </Grid>
+
+                                    <TextBlock Text="{Binding Detail}" IsVisible="{Binding HasDetail}" TextWrapping="Wrap" MaxWidth="560"
+                                               FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+
+                                    <!-- Changed certificate: old vs new, explicit confirm (spec 6). Nothing has been fetched from the host. -->
+                                    <Border IsVisible="{Binding IsCertificateChanged}" BorderBrush="{DynamicResource PbDangerBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="This computer's certificate changed" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbDangerBrush}" />
+                                            <TextBlock Text="Nothing was downloaded. This is normal if its owner reinstalled or made a new certificate; otherwise someone could be impersonating it. Compare with what its owner sees in their Sharing settings."
+                                                       FontSize="11.5" TextWrapping="Wrap" MaxWidth="540" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            <TextBlock Text="You trusted" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                            <TextBox Classes="fingerprint" Text="{Binding TrustedFingerprint, Mode=OneWay}" MaxWidth="540" HorizontalAlignment="Left"
+                                                     AutomationProperties.Name="Fingerprint you trusted" />
+                                            <TextBlock Text="It now shows" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                            <TextBox Classes="fingerprint" Text="{Binding NewFingerprint, Mode=OneWay}" MaxWidth="540" HorizontalAlignment="Left"
+                                                     AutomationProperties.Name="Fingerprint it shows now" />
+                                            <Button Classes="headerAction primary" Content="I've checked - trust the new certificate" Command="{Binding TrustNewCertificateCommand}"
+                                                    HorizontalAlignment="Left" AutomationProperties.AutomationId="SharingTrustNewCertButton" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Password rejected / not saved -->
+                                    <StackPanel IsVisible="{Binding NeedsPassword}" Spacing="6">
+                                        <TextBlock Text="Enter the current sharing password" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBox Text="{Binding RowPassword}" PasswordChar="●" Width="260" AutomationProperties.Name="Sharing password for this library" />
+                                            <Button Classes="headerAction primary" Content="Reconnect" Command="{Binding SubmitPasswordCommand}" />
+                                        </StackPanel>
+                                        <CheckBox IsChecked="{Binding SaveRowPassword}" Content="Remember it on this computer" />
+                                    </StackPanel>
+
+                                    <!-- Host reset: relink keeps reading progress -->
+                                    <Border IsVisible="{Binding IsHostChanged}" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="1" CornerRadius="6" Padding="12">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="This address is now a different library" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbAccentBrush}" />
+                                            <TextBlock Text="Its library may have been rebuilt. If it's the same one, Relink matches your books to the new copy so your reading progress and ratings are kept. Otherwise add it as a new library."
+                                                       FontSize="11.5" TextWrapping="Wrap" MaxWidth="540" Foreground="{DynamicResource PbTextMutedBrush}" />
+
+                                            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !IsRelinking}">
+                                                <Button Classes="headerAction primary" Content="Relink…" Command="{Binding StartRelinkCommand}" />
+                                                <Button Classes="headerAction ghost" Content="Add as a new library" Command="{Binding AddAsNewCommand}" />
+                                            </StackPanel>
+
+                                            <StackPanel IsVisible="{Binding IsRelinking}" Spacing="6">
+                                                <TextBlock FontSize="12" TextWrapping="Wrap" MaxWidth="540" Foreground="{DynamicResource PbTextBrush}">
+                                                    <Run Text="It now identifies as" /> <Run Text="{Binding RelinkHostName}" FontWeight="SemiBold" /><Run Text=". Check its fingerprint:" />
+                                                </TextBlock>
+                                                <TextBox Classes="fingerprint" Text="{Binding RelinkFingerprint, Mode=OneWay}" MaxWidth="540" HorizontalAlignment="Left"
+                                                         AutomationProperties.Name="Fingerprint to verify for relink" />
+                                                <TextBox Text="{Binding RowPassword}" PasswordChar="●" Width="260" Watermark="Sharing password"
+                                                         AutomationProperties.Name="Sharing password for relink" />
+                                                <CheckBox IsChecked="{Binding SaveRowPassword}" Content="Remember it on this computer" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button Classes="headerAction primary" Content="Relink and keep my progress" Command="{Binding ConfirmRelinkCommand}" />
+                                                    <Button Classes="headerAction ghost" Content="Cancel" Command="{Binding CancelRelinkCommand}" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding RelinkError}" IsVisible="{Binding RelinkError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                       Foreground="{DynamicResource PbDangerBrush}" FontSize="12" TextWrapping="Wrap" MaxWidth="540"
+                                                       AutomationProperties.LiveSetting="Assertive" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding ShowNormalActions}">
+                                        <Button Classes="headerAction ghost" Content="Sync now" Command="{Binding SyncNowCommand}" IsEnabled="{Binding !IsBusy}" />
+                                        <Button Classes="headerAction ghost" Content="Remove…" Command="{Binding AskRemoveCommand}" />
+                                    </StackPanel>
+
+                                    <StackPanel IsVisible="{Binding IsConfirmingRemove}" Spacing="6">
+                                        <TextBlock Text="Remove this library from Paperbunkr? Your own comics aren't touched, but the reading progress, ratings and bookmarks you kept for its books will be deleted."
+                                                   FontSize="12" TextWrapping="Wrap" MaxWidth="540" Foreground="{DynamicResource PbTextBrush}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Button Classes="headerAction primary" Content="Remove library and my progress" Command="{Binding ConfirmRemoveCommand}" />
+                                            <Button Classes="headerAction ghost" Content="Keep it" Command="{Binding CancelRemoveCommand}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

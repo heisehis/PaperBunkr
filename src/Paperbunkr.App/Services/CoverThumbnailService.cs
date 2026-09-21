@@ -207,7 +207,12 @@ public class CoverThumbnailService
         }
 
         string generated = CoverThumbnailPaths.GetCachePath(issueId);
-        return File.Exists(generated) ? generated : null;
+        if (File.Exists(generated))
+        {
+            return generated;
+        }
+
+        return Sharing.PeerCoverPaths.Exists(issueId) ? Sharing.PeerCoverPaths.GetCachePath(issueId) : null;
     }
 
     /// <summary>

@@ -33,13 +33,116 @@ public partial class LibraryScreen : UserControl
         AddHandler(TextInputEvent, OnLibraryScreenTextInput, RoutingStrategies.Tunnel);
         Toolbar.FocusGridRequested += (_, _) => FocusFirstGridItem();
         DataContextChanged += OnDataContextChanged;
+        ApplySelectionCheckboxSetting();
+        // Any inner ScrollViewer (grids, list boxes) bubbles this - keeps the A-Z rail's current letter in step (cosmetics pitch 2 #26).
+        AddHandler(ScrollViewer.ScrollChangedEvent, OnAnyScrollChanged);
     }
+
+    private string? _railCurrentLetter;
+
+    private void OnAnyScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        if (DataContext is not LibraryScreenViewModel vm || !vm.ShowAlphabetIndex || e.Source is not ScrollViewer scrollViewer)
+        {
+            return;
+        }
+
+        string? letter = CurrentLetterInView(scrollViewer, vm);
+        if (letter == _railCurrentLetter)
+        {
+            return;
+        }
+
+        _railCurrentLetter = letter;
+        foreach (var button in AlphabetRail.GetVisualDescendants().OfType<Button>())
+        {
+            button.Classes.Set("current", letter is not null && Equals(button.Tag, letter));
+        }
+    }
+
+    /// <summary>The rail letter of whatever is at the top of the scrolled view, or null when it can't be told. Grouped views: the first realized group
+    /// still on screen. Ungrouped grids: the item at the estimated first visible row (the inverse of <see cref="ScrollToIndexInGrid"/>'s geometry).
+    /// Lists: the first realized row.</summary>
+    private string? CurrentLetterInView(ScrollViewer scrollViewer, LibraryScreenViewModel vm)
+    {
+        if (vm.ViewMode is LibraryViewMode.List or LibraryViewMode.DetailsTable)
+        {
+            var box = (vm.ViewMode, vm.IsSeriesGranularity) switch
+            {
+                (LibraryViewMode.List, false) => ListModeIssueBox,
+                (LibraryViewMode.List, true) => ListModeSeriesBox,
+                (LibraryViewMode.DetailsTable, false) => DetailsModeIssueBox,
+                (LibraryViewMode.DetailsTable, true) => DetailsModeSeriesBox,
+                _ => null,
+            };
+            if (box?.ItemsPanelRoot is VirtualizingStackPanel panel && box.ItemsSource is System.Collections.IList items
+                && panel.FirstRealizedIndex is >= 0 and int first && first < items.Count)
+            {
+                return AlphabetIndexEntry.LetterForItem(items[first]);
+            }
+
+            return null;
+        }
+
+        var geometry = GetGridScrollGeometry(vm.GridCoverFit, vm);
+        if (!ReferenceEquals(scrollViewer, geometry.ScrollViewer))
+        {
+            return null; // a scroll from some other viewer (e.g. a popup list) - not the grid the rail drives
+        }
+
+        if (vm.IsGrouped)
+        {
+            foreach (var itemsControl in scrollViewer.GetVisualDescendants().OfType<ItemsControl>())
+            {
+                if (!itemsControl.IsEffectivelyVisible || itemsControl.ItemsSource is not System.Collections.IList groups || groups.Count == 0
+                    || AlphabetIndexEntry.LetterForItem(groups[0]) is null || groups[0] is not (SeriesCardGroup or IssueListRowGroup))
+                {
+                    continue;
+                }
+
+                for (int i = 0; i < groups.Count; i++)
+                {
+                    if (itemsControl.ContainerFromIndex(i) is Control container
+                        && container.TranslatePoint(new Point(0, container.Bounds.Height), scrollViewer) is { Y: > 0 })
+                    {
+                        return AlphabetIndexEntry.LetterForItem(groups[i]);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        System.Collections.IList flat = vm.IsSeriesGranularity ? vm.Covers : vm.IssueList.Rows;
+        if (flat.Count == 0)
+        {
+            return null;
+        }
+
+        int itemsPerRow = Math.Max(1, (int)(scrollViewer.Bounds.Width / (geometry.CardWidth + geometry.Margin)));
+        int firstRow = (int)Math.Max(0, scrollViewer.Offset.Y / (geometry.CardHeight + geometry.Margin));
+        int index = Math.Clamp(firstRow * itemsPerRow, 0, flat.Count - 1);
+        return AlphabetIndexEntry.LetterForItem(flat[index]);
+    }
+
+    /// <summary>Mirrors <see cref="CosmeticThumbnailSettings.ShowSelectionCheckbox"/> onto <c>RootGrid</c>'s
+    /// <c>selectionCheckboxOff</c> class (the style in LibraryScreen.axaml keys off it).</summary>
+    private void ApplySelectionCheckboxSetting()
+        => RootGrid.Classes.Set("selectionCheckboxOff", !CosmeticThumbnailSettings.ShowSelectionCheckbox);
 
     /// <summary>Tells the grid cover pipeline this window's render scaling, so a card bound before it is attached still picks the right decode-size bucket (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §3.1).</summary>
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
         AsyncCoverImage.NoteRenderScaling(TopLevel.GetTopLevel(this)?.RenderScaling);
+        CosmeticThumbnailSettings.OverlaySettingsChanged += ApplySelectionCheckboxSetting;
+        ApplySelectionCheckboxSetting();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        CosmeticThumbnailSettings.OverlaySettingsChanged -= ApplySelectionCheckboxSetting;
+        base.OnDetachedFromVisualTree(e);
     }
 
     /// <summary>Wires <see cref="LibraryScreenViewModel.ScrollToIndexRequested"/> (docs/superpowers/
@@ -411,6 +514,11 @@ public partial class LibraryScreen : UserControl
 
     private void OnCoverPointerEntered(object? sender, PointerEventArgs e)
     {
+        if (sender is Border { Child: Grid overlayHost })
+        {
+            SetTileRingHover(overlayHost, true);
+        }
+
         if (sender is not Border coverBorder || ResolvePeekRow(coverBorder.DataContext) is not { } row)
         {
             return;
@@ -540,10 +648,30 @@ public partial class LibraryScreen : UserControl
             return;
         }
 
+        if (coverBorder.Child is Grid overlayHost)
+        {
+            SetTileRingHover(overlayHost, false);
+        }
+
         var peekImage = FindDogEarPeekImage(coverBorder);
         if (peekImage is not null)
         {
             peekImage.IsVisible = false;
+        }
+    }
+
+    /// <summary>Pushes the pointer-over state into the cover's <see cref="Views.TileCosmeticsOverlay"/>
+    /// (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #2) - a direct child of the cover Grid,
+    /// so a plain <c>Children</c> scan; no per-tile binding or subscription needed.</summary>
+    private static void SetTileRingHover(Grid coverGrid, bool hovering)
+    {
+        foreach (var child in coverGrid.Children)
+        {
+            if (child is TileCosmeticsOverlay overlay)
+            {
+                overlay.HoverRing = hovering;
+                return;
+            }
         }
     }
 
@@ -588,6 +716,14 @@ public partial class LibraryScreen : UserControl
             return;
         }
 
+        // Grouped by letter (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #26): jump to that
+        // letter's group header rather than estimating an offset into a flat list.
+        if (vm.IsGrouped)
+        {
+            ScrollToLetterGroup(letter, vm);
+            return;
+        }
+
         // ShowAlphabetIndex only lights up for the granularity whose own sort is Name/Series and
         // ungrouped (see LibraryScreenViewModel.ShowAlphabetIndex) - the other granularity's
         // collection is irrelevant to this click regardless of which one is "active" here.
@@ -600,6 +736,56 @@ public partial class LibraryScreen : UserControl
         }
 
         ScrollToIndex(index, vm);
+    }
+
+    /// <summary>Scrolls the active grouped view so the group whose header is <paramref name="letter"/> comes into view. Poster/Panorama/
+    /// Tiles render each group inside a virtualizing <see cref="ItemsControl"/> of groups, found here as the visible one whose items are
+    /// group objects; List/Details use their flattened <see cref="ListBox"/> (header rows are real entries), scrolled by the header's flat index.</summary>
+    private void ScrollToLetterGroup(string letter, LibraryScreenViewModel vm)
+    {
+        if (vm.ViewMode is LibraryViewMode.List or LibraryViewMode.DetailsTable)
+        {
+            var flat = vm.IsSeriesGranularity ? (IList<object>)vm.FlatCovers : vm.IssueList.FlatRows;
+            for (int i = 0; i < flat.Count; i++)
+            {
+                if (flat[i] is GridSectionHeader header && header.Header == letter)
+                {
+                    ScrollToIndex(i, vm);
+                    return;
+                }
+            }
+
+            return;
+        }
+
+        var scrollViewer = GetGridScrollGeometry(vm.GridCoverFit, vm).ScrollViewer;
+        foreach (var itemsControl in scrollViewer.GetVisualDescendants().OfType<ItemsControl>())
+        {
+            if (!itemsControl.IsEffectivelyVisible || itemsControl.ItemsSource is not System.Collections.IList groups || groups.Count == 0)
+            {
+                continue;
+            }
+
+            for (int i = 0; i < groups.Count; i++)
+            {
+                string? header = groups[i] switch
+                {
+                    SeriesCardGroup s => s.Header,
+                    IssueListRowGroup r => r.Header,
+                    _ => null,
+                };
+                if (header is null)
+                {
+                    break; // not a groups control (e.g. the tiles inside a group)
+                }
+
+                if (header == letter)
+                {
+                    itemsControl.ScrollIntoView(i);
+                    return;
+                }
+            }
+        }
     }
 
     /// <summary>The view-mode-aware scroll dispatch shared by <see cref="OnAlphabetIndexLetterClick"/>

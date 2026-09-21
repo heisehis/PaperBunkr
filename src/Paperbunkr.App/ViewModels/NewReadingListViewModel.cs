@@ -197,6 +197,10 @@ public partial class NewReadingListViewModel : ViewModelBase
         }
 
         context.ReadingLists.Add(list);
+
+        // A list created from a story event arrives with its members already in it - membership
+        // gained, so the ReadingListChanged hook hears about it (as Added; it isn't an external import).
+        ReadingListManager.RecordCreatedWithItems(context, list, Paperbunkr.Data.Events.ReadingListChangeKind.Added);
         context.SaveChanges();
         _onCreated(list.Id);
     }

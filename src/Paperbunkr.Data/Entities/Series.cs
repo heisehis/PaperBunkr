@@ -76,6 +76,14 @@ public class Series
     /// fields on <see cref="Issue"/>). Not a fallback source for those per-issue fields.</summary>
     public string? Creator { get; set; }
 
+    /// <summary>Non-null for a series mirrored from another instance (see <see cref="RemoteSource"/>). Name-based series lookups for local work must exclude these, or a local scan could attach files to a remote series of the same name.</summary>
+    public int? RemoteSourceId { get; set; }
+
+    public RemoteSource? RemoteSource { get; set; }
+
+    /// <summary>The host's own <see cref="Id"/> for this series.</summary>
+    public int? RemoteSeriesId { get; set; }
+
     /// <summary>Issue whose cover thumbnail represents the series (e.g. in library grid views).</summary>
     public int? CoverIssueId { get; set; }
 

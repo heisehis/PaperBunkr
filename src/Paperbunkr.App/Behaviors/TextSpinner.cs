@@ -41,6 +41,17 @@ public static class TextSpinner
     public static readonly AttachedProperty<decimal> StepProperty =
         AvaloniaProperty.RegisterAttached<TextBox, decimal>("Step", typeof(TextSpinner), 1);
 
+    /// <summary>
+    /// Opt-in: when the box loses focus and its whole text is a plain number outside <see cref="MinimumProperty"/>..<see cref="MaximumProperty"/>,
+    /// pull it back into range - what a <see cref="NumericUpDown"/> did on commit. Off by default because the mixed-text fields
+    /// (Number "1.MU", negative issue numbers) must keep whatever the user typed. Text that isn't a plain number is left alone.
+    /// </summary>
+    public static readonly AttachedProperty<bool> ClampTypedProperty =
+        AvaloniaProperty.RegisterAttached<TextBox, bool>("ClampTyped", typeof(TextSpinner));
+
+    public static void SetClampTyped(TextBox t, bool v) => t.SetValue(ClampTypedProperty, v);
+    public static bool GetClampTyped(TextBox t) => t.GetValue(ClampTypedProperty);
+
     public static void SetEnabled(TextBox t, bool v) => t.SetValue(EnabledProperty, v);
     public static bool GetEnabled(TextBox t) => t.GetValue(EnabledProperty);
     public static void SetMinimum(TextBox t, decimal v) => t.SetValue(MinimumProperty, v);
@@ -53,6 +64,14 @@ public static class TextSpinner
     static TextSpinner()
     {
         EnabledProperty.Changed.AddClassHandler<TextBox>(OnEnabledChanged);
+        ClampTypedProperty.Changed.AddClassHandler<TextBox>((box, e) =>
+        {
+            box.LostFocus -= OnClampLostFocus;
+            if (e.NewValue is true)
+            {
+                box.LostFocus += OnClampLostFocus;
+            }
+        });
     }
 
     private static void OnEnabledChanged(TextBox box, AvaloniaPropertyChangedEventArgs e)
@@ -65,6 +84,30 @@ public static class TextSpinner
         {
             box.InnerRightContent = null;
         }
+    }
+
+    private static void OnClampLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is TextBox box)
+        {
+            string? clamped = ClampWholeNumber(box.Text, GetMinimum(box), GetMaximum(box));
+            if (clamped is not null)
+            {
+                box.Text = clamped;
+            }
+        }
+    }
+
+    /// <summary>The clamped text when <paramref name="text"/> is a plain number outside the range; null when it is in range or isn't a plain number.</summary>
+    public static string? ClampWholeNumber(string? text, decimal min, decimal max)
+    {
+        if (!decimal.TryParse(text?.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out decimal value))
+        {
+            return null;
+        }
+
+        decimal clamped = Clamp(value, min, max);
+        return clamped == value ? null : clamped.ToString(CultureInfo.InvariantCulture);
     }
 
     private sealed class SpinnerTag { }

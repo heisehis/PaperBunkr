@@ -33,8 +33,70 @@ public sealed class PluginManifest
     [XmlAttribute("assembly")]
     public string? Assembly { get; set; }
 
+    /// <summary>
+    /// The minimum plugin API this plugin needs, <c>"N"</c> or <c>"N.M"</c> (docs/superpowers/specs/
+    /// 2026-09-20-plugin-api-4-1-design.md §3). Absent means the 4.0 baseline, so every manifest
+    /// written before this attribute existed keeps working unchanged. A different major than the
+    /// host's blocks the plugin at load; a different minor never does.
+    /// </summary>
+    [XmlAttribute("requiresApi")]
+    public string? RequiresApi { get; set; }
+
     [XmlElement("Command")]
     public List<CommandManifestEntry> Commands { get; set; } = new();
+
+    /// <summary>
+    /// The plugin's declared settings (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §6.1),
+    /// rendered by the host and stored through the existing per-plugin settings store. Null when the
+    /// manifest has no <c>&lt;Settings&gt;</c> element (deliberately not pre-initialised, so "absent" and
+    /// "empty" stay distinguishable to the serializer).
+    /// </summary>
+    [XmlArray("Settings")]
+    [XmlArrayItem("Setting")]
+    public List<SettingManifestEntry>? Settings { get; set; }
+}
+
+/// <summary>One <c>&lt;Setting&gt;</c> in a manifest's <c>&lt;Settings&gt;</c>. Everything is a raw string here; <see cref="PluginSettingsSchema.Parse"/> validates it.</summary>
+public sealed class SettingManifestEntry
+{
+    [XmlAttribute("key")]
+    public string? Key { get; set; }
+
+    [XmlAttribute("label")]
+    public string? Label { get; set; }
+
+    /// <summary><c>toggle</c>, <c>text</c>, <c>choice</c>, <c>number</c> or <c>secret</c> (case-insensitive).</summary>
+    [XmlAttribute("type")]
+    public string? Type { get; set; }
+
+    [XmlAttribute("default")]
+    public string? Default { get; set; }
+
+    [XmlAttribute("description")]
+    public string? Description { get; set; }
+
+    [XmlAttribute("min")]
+    public string? Min { get; set; }
+
+    [XmlAttribute("max")]
+    public string? Max { get; set; }
+
+    /// <summary><c>true</c> to stop the user editing this setting in the overlay once a value is stored (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md §4). <c>true</c>/<c>false</c> only.</summary>
+    [XmlAttribute("locked")]
+    public string? Locked { get; set; }
+
+    [XmlElement("Choice")]
+    public List<ChoiceManifestEntry> Choices { get; set; } = new();
+}
+
+/// <summary>One <c>&lt;Choice value label/&gt;</c> under a choice setting.</summary>
+public sealed class ChoiceManifestEntry
+{
+    [XmlAttribute("value")]
+    public string? Value { get; set; }
+
+    [XmlAttribute("label")]
+    public string? Label { get; set; }
 }
 
 /// <summary>One &lt;Command&gt; element in a plugin manifest - mirrors CE's <c>Command</c> XML attributes plus a <see cref="Script"/> path pointing at the .csx file this entry compiles into a <see cref="CSharpCommand"/>.</summary>

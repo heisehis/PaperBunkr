@@ -40,7 +40,9 @@ public sealed class CSharpCommand : Command
             "System.Collections.Generic",
             "System.Threading.Tasks",
             "Paperbunkr.Data.Entities",
+            "Paperbunkr.Data.Events",
             "Paperbunkr.Plugins",
+            "Paperbunkr.Plugins.Abstractions.Native",
             "Paperbunkr.Plugins.Automation",
             "Paperbunkr.Plugins.Theme",
             "Paperbunkr.Plugins.Hooks");

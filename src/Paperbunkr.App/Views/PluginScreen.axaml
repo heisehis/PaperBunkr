@@ -81,6 +81,8 @@
                             </StackPanel>
                             <TextBlock Text="{Binding Author, StringFormat='by {0}'}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                        IsVisible="{Binding Author, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                            <TextBlock Text="{Binding RequiresApiText}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
+                                       IsVisible="{Binding HasRequiresApi}" />
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Border IsVisible="{Binding IsNativeTier}" Background="#1E3A5A" CornerRadius="3" Padding="6,2">
                                     <TextBlock Text="Native" FontSize="11" Foreground="#6EB4E8" />
@@ -100,6 +102,8 @@
                             <Button Content="Reload" IsVisible="{Binding ShowReload}" Command="{Binding ReloadCommand}"
                                     ToolTip.Tip="Re-scans and recompiles every script-tier plugin - no restart needed. Use this after fixing a broken script." />
                             <Button Content="⚙ Configure" IsVisible="{Binding HasConfigure}" Command="{Binding ConfigureCommand}" />
+                            <Button Content="Open log folder" Command="{Binding OpenLogFolderCommand}"
+                                    ToolTip.Tip="Opens the folder holding every plugin's log file - this plugin's is named after its key." />
                             <Button Content="{Binding DeleteConfirm.Label}" Command="{Binding DeleteConfirm.TriggerCommand}" />
                         </StackPanel>
                     </Grid>
@@ -145,6 +149,9 @@
                                             <TextBlock Text="{Binding CompileError}" FontSize="12"
                                                        Foreground="#E06060"
                                                        TextWrapping="Wrap" IsVisible="{Binding IsBroken}" />
+                                            <TextBlock Text="{Binding PerformanceText}" FontSize="11"
+                                                       Foreground="{DynamicResource PbTextFaintBrush}"
+                                                       IsVisible="{Binding HasPerformance}" />
                                         </StackPanel>
 
                                         <ToggleSwitch Grid.Column="1" IsChecked="{Binding IsEnabled}" VerticalAlignment="Top" Margin="0,0,8,0" OnContent="{x:Null}" OffContent="{x:Null}" />

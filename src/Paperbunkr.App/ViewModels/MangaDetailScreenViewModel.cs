@@ -120,11 +120,11 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true, IsEnabled: _continueIssueId is not null, Icon: Symbol.Play),
         new DetailHeroAction("Edit", EditCommand, IsEnabled: CanEdit, Icon: Symbol.Edit),
         new DetailHeroAction("Change Cover", Command: null, Icon: Symbol.Image, FlyoutContext: BuildCoverPickerViewModel()),
-    };
+    }.Where(a => !IsRemoteSeries || a.Label != "Change Cover").ToArray();   // a remote series' cover isn't ours to change
 
     /// <summary>Same shape as <see cref="DetailScreenViewModel.BuildCoverPickerViewModel"/> - see its doc comment.</summary>
     private CoverPickerViewModel? BuildCoverPickerViewModel() =>
-        _coverIssueId is int issueId ? new CoverPickerViewModel(issueId, _seriesId, ReloadCurrentSeries, FindMangaBakaCoverContext()) : null;
+        !IsRemoteSeries && _coverIssueId is int issueId ? new CoverPickerViewModel(issueId, _seriesId, ReloadCurrentSeries, FindMangaBakaCoverContext()) : null;
 
     /// <summary>Same shape as <see cref="DetailScreenViewModel.FindMangaBakaCoverContext"/> - see its doc comment.</summary>
     private (ExternalMetadataProvider Provider, string ExternalId)? FindMangaBakaCoverContext()
@@ -253,7 +253,10 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     [ObservableProperty]
     private string _continueLabel = "Start Reading";
 
-    public bool CanEdit => _continueIssueId is not null;
+    /// <summary>True when this series is a mirror of another library's; editing and cover changes are unavailable.</summary>
+    public bool IsRemoteSeries { get; private set; }
+
+    public bool CanEdit => !IsRemoteSeries && _continueIssueId is not null;
 
     [ObservableProperty]
     private ChapterListFilter _chapterFilter = ChapterListFilter.All;
@@ -294,7 +297,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     /// <summary>Loads the series with the given id and refreshes every bound field - same shape as <see cref="DetailScreenViewModel.LoadSeries"/>.</summary>
     public void LoadSeries(int seriesId)
     {
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals)
             .Include(s => s.Issues).ThenInclude(i => i.Tags)
             .Include(s => s.MetadataProposals)
@@ -304,6 +307,9 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         {
             return;
         }
+
+        // A series mirrored from another library is read-only here (remote-library-sharing design 7.2): hero Edit / Change Cover go away.
+        IsRemoteSeries = series.RemoteSourceId is not null;
 
         _isLoadingSeries = true;
         _seriesId = seriesId;
@@ -408,7 +414,8 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         // chapter, not off the cover one.
         var f = SeriesMetaFields.FromSeries(series);
         _metaBadges = new DetailMetaBadgeGroup(DetailMetaBadge.Build(f.Publisher, StatusLabel,
-            series.Status == SeriesStatus.Completed, f.Year, f.Format, f.AgeRating, f.LanguageIso));
+            series.Status == SeriesStatus.Completed, f.Year, f.Format, f.AgeRating, f.LanguageIso,
+            statusKind: series.Status.ToString()));
 
         // Plain-text line (Part 4 revision, user direction) - separate row under the badges, above
         // the action buttons, same wording the original MetaLine used.
@@ -620,7 +627,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var issue = context.Issues.Find(row.Id);
         if (issue is null)
         {

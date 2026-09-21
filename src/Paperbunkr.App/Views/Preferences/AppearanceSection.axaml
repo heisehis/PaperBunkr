@@ -1,4 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:beh="using:Paperbunkr.App.Behaviors"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:controls="using:Paperbunkr.App.Controls"
@@ -73,7 +74,12 @@
                                                 <StackPanel Grid.Column="1" Margin="8,4,0,0" Spacing="6">
                                                     <Border Height="4" Width="70" Background="{Binding TextMutedBrush}" CornerRadius="2" HorizontalAlignment="Left" />
                                                     <Border Height="4" Width="90" Background="{Binding TextMutedBrush}" CornerRadius="2" HorizontalAlignment="Left" />
-                                                    <Border Height="4" Width="50" Background="{Binding TextMutedBrush}" CornerRadius="2" HorizontalAlignment="Left" />
+                                                    <!-- A mini poster tile + an accent chip, so the preview shows the skin's tile and chip colours too
+                                                         (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #15). Same theme.json colours as above. -->
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <Border Width="20" Height="28" CornerRadius="2" Background="{Binding AccentBrush}" Opacity="0.85" />
+                                                        <Border Width="30" Height="10" CornerRadius="5" Background="{Binding AccentBrush}" VerticalAlignment="Bottom" />
+                                                    </StackPanel>
                                                 </StackPanel>
                                             </Grid>
                                         </StackPanel>
@@ -121,12 +127,12 @@
             </pref:SettingsRow>
             <pref:SettingsRow Icon="Clock" Title="Switch to dark at" IsVisible="{Binding IsThemeScheduledMode}">
                 <pref:SettingsRow.SettingsContent>
-                    <NumericUpDown Value="{Binding ThemeScheduledDarkHour}" Minimum="0" Maximum="23" Width="120" />
+                    <TextBox Text="{Binding ThemeScheduledDarkHour}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="23" Width="120" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="Clock" Title="Switch to light at" IsVisible="{Binding IsThemeScheduledMode}">
                 <pref:SettingsRow.SettingsContent>
-                    <NumericUpDown Value="{Binding ThemeScheduledLightHour}" Minimum="0" Maximum="23" Width="120" />
+                    <TextBox Text="{Binding ThemeScheduledLightHour}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="23" Width="120" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="Clock" Title="Auto-enable true black at"
@@ -158,11 +164,76 @@
                        FontSize="14" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,8,0,0" />
         </StackPanel>
 
+        <!-- Cosmetics (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md) - Paperbunkr
+             additions with no ComicRack equivalent; all applied live. -->
+        <StackPanel Tag="appearance.cosmetics">
+            <TextBlock Classes="settingsGroupCaption" Text="COVER COSMETICS" />
+            <pref:SettingsRow Icon="Book" Title="Binding spine"
+                               Description="A subtle spine shadow on the cover edge in the Poster and Panorama grids.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding BindingSpine}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Clock" Title="Read-progress ring"
+                               Description="Shows how far through a series or issue you are when you hover a cover, and always once it's finished.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding ProgressRing}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Checkmark" Title="Selection checkbox on tiles"
+                               Description="Off: select several tiles with Ctrl+click (Shift+click for a range). A selected tile still shows its checked box.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding ShowSelectionCheckbox}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Library" Title="Reading-list cover mosaic"
+                               Description="Shows a 2×2 collage of a list's first covers when it has no cover of its own.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding ReadingListMosaic}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Sparkle" Title="Splash ambient motion"
+                               Description="Slow drifting dots behind the startup splash. Applies at the next launch; off when Reduce motion is on.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding SplashAmbientMotion}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Color" Title="Accent glow"
+                               Description="How strongly a hovered or focused card glows. Normal is the default look.">
+                <pref:SettingsRow.SettingsContent>
+                    <controls:SuggestBox IsStrict="True" Text="{Binding GlowTierText}" Suggestions="{Binding GlowTierOptionsList}" Width="160" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+
+        <!-- Detail screens (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #8/#9). -->
+        <StackPanel Tag="appearance.detail">
+            <TextBlock Classes="settingsGroupCaption" Text="DETAIL SCREENS" />
+            <pref:SettingsRow Icon="Image" Title="Hero backdrop"
+                               Description="A blurred copy of the cover behind the series header.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding HeroBackdrop}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Color" Title="Series accent color"
+                               Description="Tint a series page's chips, progress and buttons from its cover. Falls back to your skin's accent.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding SeriesAccentColor}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+
         <!-- Interface - Motion/Navigation/Developer consolidated from 3 single-row groups into one
              (docs/superpowers/specs/2026-09-07-appearance-redesign-design.md §4/Goal 6). Developer's
              row keeps its own IsDebugBuild visibility rather than the whole group needing it. -->
         <StackPanel Tag="appearance.interface">
             <TextBlock Classes="settingsGroupCaption" Text="INTERFACE" />
+            <pref:SettingsRow Icon="TextLineSpacing" Title="Density"
+                               Description="How tightly list rows and sidebar items are spaced. Comfortable is the default.">
+                <pref:SettingsRow.SettingsContent>
+                    <controls:SuggestBox IsStrict="True" Text="{Binding DensityText}" Suggestions="{Binding DensityOptionsList}" Width="160" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
             <pref:SettingsRow Icon="Pulse" Title="Reduce motion"
                                Description="Shortens UI transitions to effectively instant.">
                 <pref:SettingsRow.SettingsContent>

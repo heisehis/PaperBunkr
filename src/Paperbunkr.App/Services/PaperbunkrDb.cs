@@ -15,6 +15,9 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public static class PaperbunkrDb
 {
+    /// <summary>A local-only context (see <see cref="CreateContext(bool)"/>). What every existing caller and method-group conversion uses.</summary>
+    public static PaperbunkrDbContext CreateContext() => CreateContext(includeRemote: false);
+
     /// <summary>
     /// Crash-safety pragmas (docs/superpowers/specs/2026-08-29-db-corruption-safeguards-design.md
     /// §1), set on every context: WAL mode moves writes off the main file so a hard kill mid-write
@@ -24,12 +27,20 @@ public static class PaperbunkrDb
     /// short-lived contexts racing each other into <c>SQLITE_BUSY</c>. <c>journal_mode</c> is sticky
     /// per-file so this is a no-op after the first call, but it's cheap enough to just always run.
     /// </summary>
-    public static PaperbunkrDbContext CreateContext()
+    /// <param name="includeRemote">
+    /// Opt in to rows mirrored from another instance (docs/superpowers/specs/2026-09-19-remote-library-
+    /// sharing-design.md §8). Off by default so every existing job stays local-only; pass true only from
+    /// views that display remote content and from the mirror sync. A separate overload rather than an
+    /// optional parameter on purpose: <c>PaperbunkrDb.CreateContext</c> is passed around as a method
+    /// group (<c>Func&lt;PaperbunkrDbContext&gt;</c>) in many places, and an optional parameter would
+    /// break every one of those conversions.
+    /// </param>
+    public static PaperbunkrDbContext CreateContext(bool includeRemote)
     {
         var options = new DbContextOptionsBuilder<PaperbunkrDbContext>()
             .UseSqlite($"Data Source={PaperbunkrDbContext.GetDefaultDatabasePath()}")
             .Options;
-        var context = new PaperbunkrDbContext(options);
+        var context = new PaperbunkrDbContext(options) { IncludeRemote = includeRemote };
         context.Database.OpenConnection();
         context.Database.ExecuteSqlRaw("PRAGMA journal_mode = 'WAL';");
         context.Database.ExecuteSqlRaw("PRAGMA synchronous = 'FULL';");
@@ -45,6 +56,7 @@ public static class PaperbunkrDb
         context.Database.Migrate();
         SeedSystemSmartLists(context);
         BackfillCharacterIndex(context);
+        Paperbunkr.Data.Acquisition.TemplateUpgrade.Run(context);   // one-time: acquisition rename template -> shared template grammar
 
         // Deterministically create the AppSettings singleton row here, synchronously, on a single
         // context - not left to whichever caller happens to touch it first. Confirmed necessary the

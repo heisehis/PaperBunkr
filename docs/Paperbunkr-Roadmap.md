@@ -62,7 +62,8 @@ Checked each against `docs/paperbunkr-todo.md`, the doc a human actually maintai
   manga metadata scraping" below, which is the real tracking entry for this. Partially built
   already (publisher-based heuristic classifier, tracker sync stages 1-4, manga detail screen,
   MangaBaka + MangaUpdates + Kitsu adapters, Apply-from-Provider, MangaDex metadata scraping,
-  two-way tracker sync all shipped); only the Stage 5 stats dashboard remains unbuilt.
+  two-way tracker sync, and the Stage 5 stats dashboard as Stats v2 on 2026-09-08 all shipped);
+  the auto-classify pipeline itself is what remains open.
 
 ## Before tagging a release
 
@@ -162,9 +163,11 @@ missing the stuff from komikku").
   shape (CLAUDE.md) that a 2026-09-12 sweep had already fixed in ~15 other spots but missed here.
   Deferred via `Dispatcher.UIThread.Post`, same shape as the rest.
 
-Explicitly deferred, not started: the Komikku-style Tracking settings toggles (auto-open-track-menu-
+~~Explicitly deferred, not started: the Komikku-style Tracking settings toggles (auto-open-track-menu-
 on-add, update-progress-after-reading/when-marked-as-read, auto-sync-from-trackers,
-select-entries-using-source-metadata) — flagged by the user as a follow-up, not part of this pass.
+select-entries-using-source-metadata) — flagged by the user as a follow-up, not part of this pass.~~
+**Superseded 2026-09-18:** implemented — see "Tracker behavior settings" above (on-screen
+verification still pending).
 
 **3 post-ship bugs found+fixed on-screen, same day:**
 
@@ -687,6 +690,10 @@ curated-browse-design.md`. **Not yet committed as of this write-up** — still s
 changes in this working tree.
 
 ### Remote/server library sharing
+> **Built 2026-09-20 on branch `feat/remote-library-sharing` (unmerged, not verified on-screen).** Design + plan:
+> `docs/superpowers/specs/2026-09-19-remote-library-sharing-{design,plan}.md`; the session note in `paperbunkr-todo.md` lists what was verified and the open follow-ups.
+> The paragraph below is the original pre-design note, kept for history.
+
 Client (connect to another instance's shared library) + server (host, password-protected,
 per-list sharing). Substantial subsystem, not named anywhere in the
 original onboarding.md — needs its own brainstorm → design spec before any implementation starts.
@@ -822,10 +829,12 @@ driving use case yet; revisit if one shows up). Design specs:
   aware (respects AniList's actual current 30 req/min degraded limit), licensing-verified against
   AniList's real terms (`github.com/AniList/docs`). **No longer backend-only** — a real search-and-link
   UI landed 2026-08-19 (`MetadataLinkResolver`/`TitleMatchScorer`, wired into `DetailTabsViewModel`;
-  still uncommitted as of this sync, see `paperbunkr-todo.md`'s live-tracker section for status). Every
-  *other* provider (MAL/MangaDex/GCD/etc.) is still deliberately deferred — MangaDex has a sketched-
-  only design spec (R5, not implemented); full tracker-service *sync* (as opposed to read-only
-  search/link) remains the item below, and reuses this adapter rather than rebuilding it.
+  since committed). **Superseded:** MangaDex and MangaBaka metadata providers shipped (2026-09-05 /
+  2026-08-23), as did tracker sync for all 8 adapters and two-way sync (2026-09-05); see the
+  Content-type classification section below. Still unbuilt: GCD as a provider. The fuller
+  external-metadata extraction (covers, staff, tags, relations, cross-reference auto-link) is
+  **implemented** (`fbe7295`, verified 2026-09-19; see `paperbunkr-todo.md` for open items) —
+  `2026-09-18-external-metadata-full-extraction-{design,plan}.md`.
 - **Phase 6a — Recommendation engine**: `RecommendationResolver`, a relationally-anchored (not
   whole-library-similarity) 7-signal explainable scoring engine reusing the Phase 3/4a/4b resolvers.
   Live-computed, not a persisted table. **No longer backend-only — a real Home screen shipped
@@ -1925,6 +1934,107 @@ ideas aren't lost, not because scope/approach is settled.
     review UI needed, just a new proposal source.
 
 *None of items 8-16 are scoped or brainstormed yet — same caveat as items 1-7 above: needs its own
+brainstorm → design spec per this project's `CLAUDE.md` workflow before implementation starts.*
+
+### Plugin API 4.1 — all four slices implemented 2026-09-20 (on-screen verification pending)
+Design: `docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md` (§ "As implemented" notes in §4.4, §5.3/§5.4,
+§6.5). Plans: `...-4-1-slice1-versioning-plan.md`, `...-slice2-activity-reporter-plan.md`,
+`...-slice3-domain-hooks-plan.md`, `...-slice4-settings-schema-plan.md`. `PluginApi.Current` is **4.1**.
+
+1. **`requiresApi` versioning** — a major mismatch (either direction) or a malformed value blocks the plugin
+   before anything is compiled or loaded; a minor difference never blocks and only adds a hint to a failure.
+2. **Activity reporter** — `IPluginEnvironment.Activity`: jobs (`Plugin` kind, attributed to the plugin, toast
+   only on failure) and alerts (plugin-scoped dedupe keys). Reuses the native tier's existing `IPluginActivityHandle`.
+3. **Domain hooks** — `BookRead`, `LibraryScanCompleted`, `MissingFileDetected`, `ReadingListChanged`, run through
+   `DomainHookDispatcher` (serial lane per command, 16-event queue that drops the oldest, cooperative
+   `CancellationToken` at 30 s, hung commands get nothing new, each problem reported once). All production
+   reading-list writes now go through `ReadingListManager`, which announces only after a successful save.
+4. **Settings schema** — `<Settings>` in `plugin.xml`; the host validates it, sanitises reads (invalid → default),
+   encrypts `secret` values with DPAPI (shared `DpapiSecrets`, now also used by `CredentialStore`), and renders a
+   settings overlay.
+
+**Verified:** Plugins.Tests, the reading-list subset of Data.Tests, DPAPI + `CredentialStore` tests, and the new App
+tests (adapter, producers, host wiring, settings storage/view-model, a headless mount of the real settings view) all
+pass; the App project builds with 0 errors after forced recompiles so the XAML weave ran. The larger App regression
+subsets fail only in tests that also fail on untouched `HEAD` (an Activity Center test that depends on the shared
+Avalonia dispatcher; `LiveFolderWatch` timing tests flake under machine load).
+**Not verified:** anything on screen (the Plugin screen's version line/banner, the settings overlay's real layout),
+anything against a real running app with a real plugin, and DPAPI on any account but this one.
+**Known limits:** `UpdatedCount`/`UpdatedItemIds` on `LibraryScanCompleted` are reserved (always 0/empty); nothing
+*enforces* use of `ReadingListManager` (backlog item 20); the headless test environment can't template an
+`ItemsControl`, so the settings view's row layout inside the running app is a by-eye check.
+
+### Plugin API pitches — deferred (pitched 2026-09-20)
+Not started — each needs its own brainstorm → design spec before implementation. Captured so the
+ideas aren't lost, not because scope/approach is settled. These are everything the 2026-09-20 pitch
+list proposed that was **not** taken into `docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md`
+(versioning, Activity reporter, `BookRead`/`LibraryScanCompleted`/`MissingFileDetected`/
+`ReadingListChanged`, settings schema — that spec's §9 is the authoritative non-goals list).
+
+1. **Plugin-registered metadata provider** — plugins register as a scraper alongside ComicVine /
+   AniList / MangaBaka and propose through the existing `MetadataProposals` path so the user
+   approves and nothing writes silently. Needs `IMetadataProvider` (today in `Paperbunkr.Data`,
+   not plugin-facing) exposed or wrapped.
+2. **Plugin cover provider** — alternate cover source feeding the cover picker and
+   `ArcCoverImageCache` (a separate system from the reader's cover pipeline).
+3. **Extensible arc/CBL lookup source** — make the CBL Manager port's 6 built-in sources a list a
+   plugin can add to.
+4. **Native UI surfaces** — issue-detail panel and Library toolbar action (next to
+   `INativeSeriesDetailUi`), context-menu contributions via a registrar on the shared `MenuFlyout`
+   mechanism, and a custom Insights widget.
+5. **Smart-list custom fields/operators** — plugin-defined virtual fields (e.g. "days since last
+   read") usable in `IRulesEngine` and the SmartList editor; pairs with the Virtual Tags dynamic
+   sort/group axis.
+6. **Network permission manifest** — declare allowed hosts (`network="api.example.com"`), shown in
+   the plugin-install prompt. Same "accidental overreach, not adversarial isolation" model as the
+   existing sandbox.
+7. **Scoped `IFileSystem` facade** — limit plugins to declared folders instead of raw `System.IO`.
+   Only worth doing if it can actually be enforced.
+8. **`IMetadataWriter` batch/transaction API with dry-run diff** — reuse the `confirmWrites`
+   machinery for "show me what will change", then apply or roll back.
+9. **Plugin dev mode** — hot-reload of `.csx` scripts and a live log pane in the Plugin screen.
+   Pitched as the highest-leverage item for getting third-party plugins written at all.
+10. **Scaffolding command + typed `.d.cs` reference stub** — IntelliSense for `.csx`.
+11. **`Paperbunkr.Plugins.Testing` package** — publish the Data-Manager fixture-plugin pattern
+    (`Paperbunkr.Plugins.Tests`) as a reusable test harness.
+12. **Plugin-to-plugin service registry** — `environment.Publish<T>()` / `Get<T>()`. Recommended
+    cut unless a real plugin needs it (invites dependency-ordering problems).
+13. **Further domain hooks** — `SeriesStatusChanged` (tracker sync has many write paths, so emit
+    points need surveying first), `ContinuityCompleted` / `EventCompleted` (wait for their own
+    feature to settle), `ScheduledTaskRan`.
+14. **Native UI surfaces for Python plugins** — the `.py` path (IronPython, `PythonCommand`) has no
+    equivalent of `INativeSeriesDetailUi` / `INativePluginSettingsUi`.
+
+*From an external review of the 4.1 spec (2026-09-20) — new ideas not already covered above:*
+
+15. ✅ **Hook performance telemetry** — *shipped in 4.2 (2026-09-20, uncommitted; on-screen check pending): in-memory `CommandStats` per command, shown as a muted line on the Plugin screen.* Original pitch: — a developer-settings view of average execution time per hook
+    per plugin, so users can tell which plugin is causing stutter or background lag. Natural
+    follow-on to the 4.1 bounded per-command queue, which already has to track in-flight/hung state.
+16. ✅ **Plugin settings export/import** — *shipped in 4.2: JSON per plugin from the settings overlay, declared secrets excluded, import validated against the schema.* Original pitch: — serialize a plugin's configured settings to portable JSON so
+    they can be backed up alongside library data. **Must account for DPAPI:** 4.1 encrypts `secret`
+    settings per Windows user/machine, so exported secrets cannot simply be copied across.
+17. ✅ **Locked settings** — *shipped in 4.2: `locked="true"` engages once a value is stored, blocks only the user in the overlay, two-step Unlock per overlay session.* Original pitch: — `<Setting … locked="true"/>`, read-only after initial setup, to stop
+    accidental changes to critical values such as root paths. Needs a decision on how a user
+    unlocks one (and whether the plugin or only the user can).
+18. ⛔ **Default-settings file** — *superseded in 4.2 by Reset to defaults (per setting and "Reset all"); `default=` already exists and a second source would disagree.* Original pitch: — a `.json`/`.xml` of defaults the host re-imports if the user clears
+    a plugin's configuration, instead of relying only on the inline `default=` attributes.
+19. ✅ **`IPluginLogger`** — *shipped in 4.2 as `Environment.Log` (files under `%AppData%\Paperbunkr\logs\plugins\<key>.log`, 1 MB roll); the live log pane (item 9) is still open.* Original pitch: — routes plugin-specific logs into isolated per-plugin files (e.g.
+    `logs/plugins/<key>.log`) instead of the main app log. Would also feed the item 9 dev-mode log
+    pane.
+
+20. ✅ **Enforcement backstop for `ReadingListManager`** — *shipped in 4.2 as a `SaveChanges` gap-filler in `PaperbunkrDbContext`: an unmanaged item add/remove is announced by the context and logged as a bypass.* Original pitch: — 4.1 routes every reading-list write through
+    one manager but nothing *enforces* it, so a future direct `ReadingListItems.Add` compiles and
+    silently skips the `ReadingListChanged` hook. Options: an EF `SaveChangesInterceptor`, or a
+    Roslyn analyzer scoped to production assemblies (tests write rows directly on purpose). Only
+    worth building if a bypass actually happens.
+
+*Reviewed and not added:* capability manifests and dry-run (already items 6–8), `AppStarted`/
+`AppClosing` hooks (`Startup`/`Shutdown` already exist), inter-plugin event bus (same as item 12;
+recommended cut), and "AppDomain sandboxing" (`AppDomain`s don't exist in .NET; an
+`AssemblyLoadContext` doesn't stop a plugin crash from taking down the host, and native plugins are
+full-trust by the v4 decision).
+
+*None of these are scoped or brainstormed — same caveat as the pitch lists above: needs its own
 brainstorm → design spec per this project's `CLAUDE.md` workflow before implementation starts.*
 
 ### Deferred / dropped (no action needed)

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Events;
 using Paperbunkr.Data.ReadingLists.Sources;
 
 namespace Paperbunkr.Data.ReadingLists;
@@ -47,6 +48,7 @@ public static class ArcReadingListBuilder
         }
 
         context.ReadingLists.Add(list);
+        ReadingListManager.RecordCreatedWithItems(context, list);
         context.SaveChanges();
         return list;
     }
@@ -88,6 +90,12 @@ public static class ArcReadingListBuilder
         int addedCount = 0;
         int sortOrder = 0;
 
+        // What this refresh actually changed, announced once at the end as a single compound change
+        // (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §5.4).
+        var addedIssueIds = new List<int>();
+        var removedIssueIds = new List<int>();
+        bool reordered = false;
+
         foreach (var arcIssue in arcIssues)
         {
             var resolved = ResolveArcIssue(context, arcIssue);
@@ -104,12 +112,18 @@ public static class ArcReadingListBuilder
             {
                 // Already in the list (real or still a placeholder) - just move it to the arc's
                 // current position. Role/Notes/GroupLabel are never touched by refresh.
+                if (existingItem.SortOrder != sortOrder)
+                {
+                    reordered = true;
+                }
+
                 existingItem.SortOrder = sortOrder++;
             }
             else
             {
                 context.ReadingListItems.Add(new ReadingListItem { ReadingListId = list.Id, IssueId = resolved.Id, SortOrder = sortOrder++ });
                 addedCount++;
+                addedIssueIds.Add(resolved.Id);
             }
         }
 
@@ -119,6 +133,7 @@ public static class ArcReadingListBuilder
             var orphanedIssue = oldItem.Issue;
             int oldItemId = oldItem.Id;
             context.ReadingListItems.Remove(oldItem);
+            removedIssueIds.Add(oldItem.IssueId);
 
             if (orphanedIssue is { IsPlaceholder: true })
             {
@@ -141,6 +156,24 @@ public static class ArcReadingListBuilder
             list.CoverImageUrl = overview.CoverImageUrl;
         }
         list.UpdatedAt = DateTime.UtcNow;
+
+        var kind = ReadingListChangeKind.None;
+        if (addedIssueIds.Count > 0)
+        {
+            kind |= ReadingListChangeKind.Added;
+        }
+
+        if (removedIssueIds.Count > 0)
+        {
+            kind |= ReadingListChangeKind.Removed;
+        }
+
+        if (reordered)
+        {
+            kind |= ReadingListChangeKind.Reordered;
+        }
+
+        ReadingListManager.Record(context, list, kind, addedIssueIds, removedIssueIds);
 
         context.SaveChanges();
 

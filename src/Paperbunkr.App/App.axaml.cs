@@ -205,7 +205,7 @@ public partial class App : Application
             flightDuration: () => (TimeSpan)(Application.Current!.Resources["PbMotionLarge"] ?? TimeSpan.FromMilliseconds(320)),
             easing: new CubicEaseOut());
         DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] transition coordinator ready; constructing MainViewModel...");
-        var mainViewModel = new MainViewModel(transitionCoordinator.RunAsync);
+        var mainViewModel = new MainViewModel(transitionCoordinator.RunAsync, themeService);
         DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] MainViewModel ready; constructing MainWindow...");
         var mainWindow = new MainWindow
         {
@@ -367,6 +367,36 @@ public partial class App : Application
         // can't miss an early scheduled job's hooks.
         mainViewModel.Scheduler.Start();
         desktop.Exit += (_, _) => mainViewModel.Scheduler.Stop();
+
+        // Comic acquisition daemon: the bridge drains its events into Activity Center, then the timer starts. On exit the
+        // service is stopped with a short cap so a cycle stuck on the network can never hold the app open.
+        mainViewModel.AcquisitionBridge.Start();
+        _ = mainViewModel.Acquisition.StartAsync(System.Threading.CancellationToken.None);
+        desktop.Exit += (_, _) =>
+        {
+            System.Threading.Tasks.Task.Run(() => mainViewModel.Acquisition.StopAsync(System.Threading.CancellationToken.None)).Wait(TimeSpan.FromSeconds(3));
+            mainViewModel.AcquisitionBridge.Dispose();
+        };
+
+        // Remote library sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md): start serving only if the user
+        // turned it on, and refresh the saved remote libraries quietly. Both report through Activity Center and never throw into startup.
+        _ = System.Threading.Tasks.Task.Run(async () =>
+        {
+            try
+            {
+                await mainViewModel.ShareHost.StartIfEnabledAsync();
+                await mainViewModel.RemoteLibraries.SyncAllAsync(Paperbunkr.Data.Entities.ActivityTrigger.Startup);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsService.LogMilestone($"Remote sharing startup failed: {ex.Message}");
+            }
+        });
+        desktop.Exit += (_, _) =>
+        {
+            System.Threading.Tasks.Task.Run(() => mainViewModel.ShareHost.StopAsync()).Wait(TimeSpan.FromSeconds(3));
+            mainViewModel.RemoteLibraries.Dispose();
+        };
 
         // Auto-backup shutdown trigger (spec §2) - the primary trigger, since it also catches
         // sessions left open all day that never restart. Synchronous and best-effort: a normal

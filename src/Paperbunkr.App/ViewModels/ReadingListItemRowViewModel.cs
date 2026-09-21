@@ -24,6 +24,7 @@ public partial class ReadingListItemRowViewModel : ViewModelBase, Models.ISelect
     private readonly Action<ReadingListItemRowViewModel> _onLink;
     private readonly Action<ReadingListItemRowViewModel> _onOpen;
     private readonly Action<ReadingListItemRowViewModel> _onToggleRead;
+    private readonly Action<ReadingListItemRowViewModel>? _onRequest;
 
     public ReadingListItemRowViewModel(
         ReadingListItem item,
@@ -33,7 +34,8 @@ public partial class ReadingListItemRowViewModel : ViewModelBase, Models.ISelect
         Action<ReadingListItemRowViewModel> onFieldChanged,
         Action<ReadingListItemRowViewModel> onLink,
         Action<ReadingListItemRowViewModel> onOpen,
-        Action<ReadingListItemRowViewModel> onToggleRead)
+        Action<ReadingListItemRowViewModel> onToggleRead,
+        Action<ReadingListItemRowViewModel>? onRequest = null)
     {
         Item = item;
         _onMoveUp = onMoveUp;
@@ -43,6 +45,7 @@ public partial class ReadingListItemRowViewModel : ViewModelBase, Models.ISelect
         _onLink = onLink;
         _onOpen = onOpen;
         _onToggleRead = onToggleRead;
+        _onRequest = onRequest;
         _selectedRole = item.Role;
         _selectedRoleOption = item.Role is EventMembershipRole role ? RoleOptions.FirstOrDefault(o => o.Role == role) : null;
         _notes = item.Notes ?? string.Empty;
@@ -110,6 +113,11 @@ public partial class ReadingListItemRowViewModel : ViewModelBase, Models.ISelect
     public bool IsOwned => Item.Issue is { FileIsMissing: false };
 
     public bool IsMissing => !IsOwned;
+
+    /// <summary>An entry the list knows about but the library has never had (as opposed to a real issue whose file went missing) - the only kind that can be requested for acquisition.</summary>
+    public bool IsPlaceholder => Item.Issue is { IsPlaceholder: true };
+
+    public bool CanRequest => IsPlaceholder && _onRequest is not null;
 
     /// <summary>Phase 4c overhaul (docs/superpowers/specs/2026-08-17-metadata-model-phase4c-reading-list-overhaul-design.md) - reuses <see cref="EventMembershipRole"/>, optional/blank by default.</summary>
     public static Models.EventMembershipRoleOption[] RoleOptions => Models.EventMembershipRoleOption.All;
@@ -189,6 +197,10 @@ public partial class ReadingListItemRowViewModel : ViewModelBase, Models.ISelect
 
     [RelayCommand]
     private void Link() => _onLink(this);
+
+    /// <summary>Asks for this missing entry to be acquired (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 8).</summary>
+    [RelayCommand]
+    private void Request() => _onRequest?.Invoke(this);
 
     [RelayCommand]
     private void Open() => _onOpen(this);

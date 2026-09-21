@@ -29,8 +29,7 @@ public static class CoverThumbnailPaths
 
     private static string BuildDefaultDirectory()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "Paperbunkr", "thumbnails");
+        return Paperbunkr.Data.AppDataPaths.Combine("thumbnails");
     }
 
     /// <summary>Full path of the cache file for a <see cref="CoverFingerprint.Stem"/> value (the bare id).</summary>

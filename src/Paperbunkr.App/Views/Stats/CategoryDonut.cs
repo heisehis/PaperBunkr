@@ -27,10 +27,76 @@ public sealed class CategoryDonut : Control
     public static readonly StyledProperty<IReadOnlyList<CompositionSlice>> SlicesProperty =
         AvaloniaProperty.Register<CategoryDonut, IReadOnlyList<CompositionSlice>>(nameof(Slices), Array.Empty<CompositionSlice>());
 
+    /// <summary>0..1 fraction of the ring drawn - animated from 0 to 1 whenever <see cref="Slices"/> changes (docs/superpowers/specs/2026-09-21-
+    /// cosmetics-pitch-2-design.md #16). 1 (fully drawn) when motion is off, so a static frame is always the complete donut.</summary>
+    public static readonly StyledProperty<double> SweepProgressProperty =
+        AvaloniaProperty.Register<CategoryDonut, double>(nameof(SweepProgress), 1d);
+
+    private int _sweepGeneration;
+
     static CategoryDonut()
     {
-        AffectsRender<CategoryDonut>(SlicesProperty);
+        AffectsRender<CategoryDonut>(SlicesProperty, SweepProgressProperty);
         AffectsMeasure<CategoryDonut>(SlicesProperty);
+    }
+
+    public double SweepProgress { get => GetValue(SweepProgressProperty); set => SetValue(SweepProgressProperty, value); }
+
+    /// <summary>The duration of the entry sweep: the app's large-motion token, which is <see cref="TimeSpan.Zero"/> under Reduced Motion (so the
+    /// donut simply appears whole). Falls back to 0 when no resource is found (headless/design-time): no animation rather than a guessed one.</summary>
+    internal TimeSpan EntranceDuration()
+        => this.TryFindResource("PbMotionLarge", out object? value) && value is TimeSpan duration ? duration : TimeSpan.Zero;
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == SlicesProperty)
+        {
+            StartEntrance();
+        }
+    }
+
+    private void StartEntrance()
+    {
+        int generation = ++_sweepGeneration;
+        var duration = EntranceDuration();
+        if (duration <= TimeSpan.Zero || TopLevel.GetTopLevel(this) is not { } topLevel)
+        {
+            SweepProgress = 1;
+            return;
+        }
+
+        SweepProgress = 0;
+        double startSeconds = double.NaN;
+
+        void Frame(TimeSpan timestamp)
+        {
+            if (generation != _sweepGeneration)
+            {
+                return; // superseded by a newer data change (or detached)
+            }
+
+            if (double.IsNaN(startSeconds))
+            {
+                startSeconds = timestamp.TotalSeconds;
+            }
+
+            double t = Math.Clamp((timestamp.TotalSeconds - startSeconds) / duration.TotalSeconds, 0, 1);
+            SweepProgress = 1 - Math.Pow(1 - t, 3); // ease-out cubic
+            if (t < 1)
+            {
+                topLevel.RequestAnimationFrame(Frame);
+            }
+        }
+
+        topLevel.RequestAnimationFrame(Frame);
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _sweepGeneration++;
+        SweepProgress = 1;
+        base.OnDetachedFromVisualTree(e);
     }
 
     public IReadOnlyList<CompositionSlice> Slices { get => GetValue(SlicesProperty); set => SetValue(SlicesProperty, value); }
@@ -80,7 +146,7 @@ public sealed class CategoryDonut : Control
             }
         }
 
-        double startAngle = -Math.PI / 2;
+        double startAngle = ArcGeometry.TopAngle;
         for (int i = 0; i < slices.Count; i++)
         {
             var brush = ResolveBrush(CategoricalBrushKeys[i % CategoricalBrushKeys.Length], Colors.Gray);
@@ -90,17 +156,16 @@ public sealed class CategoryDonut : Control
                 sweep -= reservedForMinimums;
             }
 
+            sweep *= SweepProgress;
+            if (sweep <= 0.0001)
+            {
+                startAngle += sweep;
+                continue;
+            }
+
             double endAngle = startAngle + sweep;
 
-            var geometry = new StreamGeometry();
-            using (var ctx = geometry.Open())
-            {
-                var p0 = PointOnCircle(center, radius, startAngle);
-                var p1 = PointOnCircle(center, radius, endAngle);
-                ctx.BeginFigure(p0, false);
-                ctx.ArcTo(p1, new Size(radius, radius), 0, sweep > Math.PI, SweepDirection.Clockwise);
-                ctx.EndFigure(false);
-            }
+            var geometry = ArcGeometry.CreateArc(center, radius, startAngle, sweep);
 
             context.DrawGeometry(null, new Pen(brush, thickness) { LineCap = PenLineCap.Round }, geometry);
             startAngle = endAngle;
@@ -118,9 +183,6 @@ public sealed class CategoryDonut : Control
         context.DrawText(big, new Point(center.X - big.Width / 2, center.Y - blockHeight / 2));
         context.DrawText(small, new Point(center.X - small.Width / 2, center.Y - blockHeight / 2 + big.Height));
     }
-
-    private static Point PointOnCircle(Point center, double radius, double angle)
-        => new(center.X + radius * Math.Cos(angle), center.Y + radius * Math.Sin(angle));
 
     private IBrush ResolveBrush(string key, Color fallback)
         => this.TryFindResource(key, out object? value) && value is IBrush brush ? brush : new SolidColorBrush(fallback);

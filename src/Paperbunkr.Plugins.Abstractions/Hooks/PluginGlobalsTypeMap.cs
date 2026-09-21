@@ -22,6 +22,10 @@ public static class PluginGlobalsTypeMap
         [PluginHooks.QuickOpenHtml] = typeof(QuickOpenHookGlobals),
         [PluginHooks.QuickOpenUI] = typeof(QuickOpenHookGlobals),
         [PluginHooks.DrawThumbnailOverlay] = typeof(DrawThumbnailOverlayHookGlobals),
+        [PluginHooks.BookRead] = typeof(BookReadHookGlobals),
+        [PluginHooks.LibraryScanCompleted] = typeof(LibraryScanCompletedHookGlobals),
+        [PluginHooks.MissingFileDetected] = typeof(MissingFileDetectedHookGlobals),
+        [PluginHooks.ReadingListChanged] = typeof(ReadingListChangedHookGlobals),
     };
 
     public static Type Resolve(string hook)

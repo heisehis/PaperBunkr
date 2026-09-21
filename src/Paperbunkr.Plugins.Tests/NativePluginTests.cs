@@ -193,4 +193,26 @@ public sealed class NativePluginTests
         NativePluginLoadResult result = engine.NativeLoadResults["minimal-native"];
         Assert.Contains("Duplicate plugin key", result.LoadError);
     }
+
+    [Fact]
+    public void An_installed_Cluster_Library_Manager_is_not_loaded_and_says_it_is_now_built_in()
+    {
+        string pluginsRoot = Directory.CreateTempSubdirectory("clm-retired-native-test-").FullName;
+        WriteNativeManifest(key: "cluster-library-manager", intoDir: Path.Combine(pluginsRoot, "clm"));
+        var engine = new PluginEngine();
+
+        engine.Discover(pluginsRoot, new FakeNativePluginEnvironment());
+
+        NativePluginLoadResult result = engine.NativeLoadResults["cluster-library-manager"];
+        Assert.Null(result.Module);                                              // never loaded: two scrapers on one library would double-write
+        Assert.Contains("Now built in", result.LoadError);
+        Assert.Empty(engine.AllCommands.Where(c => c.PluginKey == "cluster-library-manager"));
+    }
+
+    [Fact]
+    public void A_different_native_plugin_is_unaffected_by_the_retirement_list()
+    {
+        Assert.DoesNotContain("minimal-native", PluginEngine.RetiredPluginKeys.Keys);
+        Assert.Contains("cluster-library-manager", PluginEngine.RetiredPluginKeys.Keys);
+    }
 }

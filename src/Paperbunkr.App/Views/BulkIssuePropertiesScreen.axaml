@@ -138,13 +138,13 @@
                     </Button.Flyout>
                 </Button>
 
-                <!-- Numeric fields (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md §5.1):
-                     a real NumericUpDown for pure integers, a TextBox + TextSpinner for the ones that
-                     can hold "1.MU" / "2001" (Number, Volume, Alternate Number). -->
-                <NumericUpDown Grid.Column="2" HorizontalAlignment="Left" Width="160" FormatString="0"
-                               Minimum="{Binding NumericMin}" Maximum="{Binding NumericMax}"
-                               IsVisible="{Binding IsNumericSpinnerKind}"
-                               Value="{Binding Value, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" />
+                <!-- Numeric fields (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md 5.1): every numeric field is a text box with the
+                     compact TextSpinner. Pure integers also clamp what is typed to the field's range; the ones that can hold "1.MU" / "2001"
+                     (Number, Volume, Alternate Number) keep whatever text was typed. -->
+                <TextBox Grid.Column="2" HorizontalAlignment="Left" Width="160" Text="{Binding Value}"
+                         IsVisible="{Binding IsNumericSpinnerKind}"
+                         beh:TextSpinner.Enabled="{Binding IsNumericSpinnerKind}" beh:TextSpinner.ClampTyped="True"
+                         beh:TextSpinner.Minimum="{Binding NumericMin}" beh:TextSpinner.Maximum="{Binding NumericMax}" />
                 <TextBox Grid.Column="2" HorizontalAlignment="Left" Width="160" Text="{Binding Value}"
                          IsVisible="{Binding IsNumericTextKind}"
                          beh:TextSpinner.Enabled="{Binding IsNumericTextKind}" />

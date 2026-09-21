@@ -71,7 +71,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         ["smart"] = 4,
         ["reading"] = 5,
         ["events"] = 6,
-        ["preferences"] = 7,
+        ["wanted"] = 7,
+        ["preferences"] = 8,
     };
 
     /// <summary><see cref="RailOrder"/>'s keys sorted by their index, for <see cref="CycleScreen"/> -
@@ -87,7 +88,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// <see cref="NavigateBack"/> already being plain constructor-supplied callbacks.</summary>
     private readonly Func<string?, Action, Task> _runDrillTransition;
 
-    public MainViewModel(Func<string?, Action, Task>? runDrillTransition = null)
+    public MainViewModel(Func<string?, Action, Task>? runDrillTransition = null, ThemeService? sharedThemeService = null)
     {
         _runDrillTransition = runDrillTransition ?? ((_, swap) => { swap(); return Task.CompletedTask; });
 
@@ -127,6 +128,49 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         Scheduler = new Services.Scheduling.SchedulerService(Activity);
 
         ActivityCenter = new ActivityCenterViewModel(Activity, ResolveActivityLink, Scheduler);
+
+        // Comic acquisition daemon (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md). Built here, started in
+        // App.OnFrameworkInitializationCompleted next to the scheduler. The daemon only publishes events; the bridge is the one
+        // place they become Activity Center jobs and alerts.
+        AcquisitionEvents = new Paperbunkr.Daemon.Events.ChannelEventPublisher();
+        Grab = new Paperbunkr.Daemon.Services.GrabService(
+            Services.PaperbunkrDb.CreateContext, Paperbunkr.Daemon.Clients.DownloadClientFactory.Create, AcquisitionEvents);
+        var downloadTracker = new Paperbunkr.Daemon.Services.DownloadTracker(
+            Services.PaperbunkrDb.CreateContext,
+            Paperbunkr.Daemon.Clients.DownloadClientFactory.Create,
+            new Paperbunkr.Daemon.Import.ImportProcessor(Services.PaperbunkrDb.CreateContext, new Services.LibraryIngester(), AcquisitionEvents),
+            AcquisitionEvents);
+        Acquisition = new Paperbunkr.Daemon.Services.AcquisitionService(
+            new Paperbunkr.Daemon.Services.AcquisitionCycle(
+                Services.PaperbunkrDb.CreateContext,
+                (url, key) => new Paperbunkr.Daemon.Indexers.ProwlarrSearchClient(url, key),
+                key => new Paperbunkr.Data.ComicVine.ComicVineClient(key, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low),
+                AcquisitionEvents,
+                grabService: Grab),
+            Services.PaperbunkrDb.CreateContext,
+            downloads: downloadTracker,
+            scrapes: new Paperbunkr.Daemon.Services.ScrapeSweeper(
+                Services.PaperbunkrDb.CreateContext,
+                new Paperbunkr.Data.ComicVine.Scraping.ScrapeByIdService(Services.PaperbunkrDb.CreateContext, CreateDetailsSource),
+                AcquisitionEvents,
+                onScraped: issueId => MetadataWriteBack.Enqueue(issueId)));
+        AcquisitionBridge = new Services.AcquisitionActivityBridge(
+            Activity, AcquisitionEvents.Reader,
+            resultLink: () => new ActivityLink(ActivityLinkKind.WantedScreen),
+            onWantedChanged: () => { if (IsWanted) Wanted.Refresh(); });
+        Scraper = new Scraper.ScrapeCoordinator(NativePluginModalHost, Services.PaperbunkrDb.CreateContext, Activity, issueId => MetadataWriteBack.Enqueue(issueId));
+        Organizer = new Scraper.OrganizeCoordinator(NativePluginModalHost, Services.PaperbunkrDb.CreateContext, Activity, issueId => MetadataWriteBack.Enqueue(issueId));
+        Wanted = new WantedScreenViewModel(
+            Services.PaperbunkrDb.CreateContext,
+            Acquisition.RunNowAsync,
+            GoDetailForSeries,
+            () =>
+            {
+                GoPreferencesCommand.Execute(null);
+                Preferences.GoAcquisitionCommand.Execute(null);
+            },
+            Services.ClipboardHelper.CopyTextAsync,
+            Grab);
         StatusBar = new StatusBarViewModel(Activity, QueryLibraryStats, () => ActivityCenter.TogglePeekCommand.Execute(null));
         Activity.CompletionToastRequested += ShowToast;
 
@@ -143,7 +187,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // this specific instance's ThemeApplied to know when to re-render the cover-wall on a live
         // theme switch; a second ThemeService instance would never fire into that subscription since
         // the event isn't static/process-wide.
-        var themeService = new ThemeService();
+        var themeService = sharedThemeService ?? new ThemeService();
         _themeService = themeService;
         _themeService.ThemeApplied += OnThemeAppliedForMatrixRain;
         _themeService.ScheduledThemeCrossfadeRequested += OnScheduledThemeCrossfadeRequested;
@@ -165,6 +209,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         PdfReader = new PdfPageReaderScreenViewModel(NavigateBack, ReadingEvents);
         Detail = new DetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
         MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
+        Paperbunkr.App.Scraper.ScheduledCoordinators.Scraper = Scraper;
+        Paperbunkr.App.Scraper.ScheduledCoordinators.Organizer = Organizer;
+        Library.ScrapeIssues = ids => Scraper.ScrapeIssuesAsync(ids);
+        Library.OrganizeIssues = ids => Organizer.OrganizeIssuesAsync(ids);
+        Detail.Tabs.ScraperPanelFactory = Scraper.CreateSeriesPanel;
         var keyBindingService = new KeyBindingService();
         Reader = new ReaderScreenViewModel(NavigateBack, keyBindingService, ReadingEvents, TrackerAutoSync);
         // "Ask me to rate a comic when I finish it" (docs/superpowers/specs/2026-09-04-behavior-
@@ -287,6 +336,64 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             _updateService,
             enqueueMetadataWriteBack: EnqueueMetadataWriteBack);
         Preferences.AttachScheduler(Scheduler);
+
+        // Remote library sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md). Built here like the other
+        // manually-composed services; App.axaml.cs starts serving (if the user turned it on) and syncs the saved remote libraries.
+        // Everything they report goes through Activity, and Preferences → Sharing is their only UI.
+        ShareHost = new Services.Sharing.ShareHostService(
+            new Paperbunkr.Sharing.ShareSettingsStore(Paperbunkr.Data.AppDataPaths.Combine("sharing", "settings.json")),
+            PaperbunkrDb.CreateContext,
+            Activity,
+            Paperbunkr.Data.AppDataPaths.Combine("sharing"));
+        // Reading a remote library's books: pages come through a bounded fetcher and a bounded disk cache, covers are
+        // downloaded into their own directory after each sync, and removing a library purges both caches.
+        PeerPages = Services.Sharing.PeerPageCache.Shared;
+        RemoteLibraries = new Services.Sharing.RemoteLibraryService(
+            PaperbunkrDb.CreateContext,
+            Activity,
+            onSourceRemoved: (sourceId, issueIds) =>
+            {
+                PeerPages.PurgeSource(sourceId);
+                Services.Sharing.PeerCoverPaths.Delete(issueIds);
+                foreach (int id in issueIds)
+                {
+                    CoverImageCache.Invalidate(id);
+                }
+            },
+            afterSync: sourceId => new Services.Sharing.PeerCoverFetcher(PaperbunkrDb.CreateContext, RemoteLibraries!.GetClient).FetchMissingAsync(sourceId),
+            onContentInvalidated: (sourceId, remoteIssueIds) =>
+            {
+                // The book behind these ids changed, so its cached cover is stale too: drop it (the sync that follows re-downloads
+                // whatever is missing). Cover files and the in-memory cache are keyed by the local mirror row's id.
+                using (var context = PaperbunkrDb.CreateContext(includeRemote: true))
+                {
+                    var stale = context.Issues
+                        .Where(i => i.RemoteSourceId == sourceId && (remoteIssueIds == null || (i.RemoteIssueId != null && remoteIssueIds.Contains(i.RemoteIssueId.Value))))
+                        .Select(i => i.Id).ToList();
+                    Services.Sharing.PeerCoverPaths.Delete(stale);
+                    foreach (int localId in stale)
+                    {
+                        CoverImageCache.Invalidate(localId);
+                    }
+                }
+
+                if (remoteIssueIds is null)
+                {
+                    PeerPages.PurgeSource(sourceId);   // relinked: ids were re-keyed, so cached pages belong to other books now
+                    return;
+                }
+
+                foreach (int remoteId in remoteIssueIds)
+                {
+                    PeerPages.PurgeIssue(sourceId, remoteId);
+                }
+            });
+        Reader.RemoteReader = new Services.Sharing.RemoteReaderSource(new Services.Sharing.RemotePageFetcher(RemoteLibraries.GetClient, PeerPages));
+        Preferences.Sharing = new SharingSettingsViewModel(ShareHost, RemoteLibraries, PaperbunkrDb.CreateContext);
+
+        // A synced/changed/removed remote library changes what the Library shows; reload it if it is on screen. Posted:
+        // the event fires from a background sync.
+        RemoteLibraries.MirrorChanged += _ => Avalonia.Threading.Dispatcher.UIThread.Post(() => Library.LoadFromDatabase());
 
         // Real bug, found via manual testing: Reader.CanvasBackgroundBrush/PageMarginMultiplier
         // (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
@@ -474,6 +581,28 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Maintenance-task scheduler (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-durability-design.md, Part 1).</summary>
     public Services.Scheduling.ISchedulerService Scheduler { get; }
 
+    /// <summary>The comic acquisition daemon's timer; <c>RunNow()</c> is "Search now".</summary>
+    public Paperbunkr.Daemon.Services.AcquisitionService Acquisition { get; }
+
+    public Paperbunkr.Daemon.Events.ChannelEventPublisher AcquisitionEvents { get; }
+
+    /// <summary>Approve/reject/retry/cancel for the Wanted screen (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 5).</summary>
+    public Paperbunkr.Daemon.Services.GrabService Grab { get; }
+
+    public Services.AcquisitionActivityBridge AcquisitionBridge { get; }
+
+    /// <summary>Serves part of this library to other installs while the app is open (off unless the user turned it on).</summary>
+    public Services.Sharing.ShareHostService ShareHost { get; }
+
+    /// <summary>The saved remote libraries and their local mirror.</summary>
+    public Services.Sharing.RemoteLibraryService RemoteLibraries { get; }
+
+    /// <summary>Bounded on-disk cache of pages read from remote libraries; purged per library on removal and swept by the scheduler.</summary>
+    public Services.Sharing.PeerPageCache PeerPages { get; }
+
+    /// <summary>The Wanted screen (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 7).</summary>
+    public WantedScreenViewModel Wanted { get; }
+
     /// <summary>Backs the persistent bottom status bar.</summary>
     public StatusBarViewModel StatusBar { get; }
 
@@ -487,6 +616,23 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// as a plain callback, threaded the same way <see cref="ShowToast"/> is.
     /// </summary>
     public MetadataWriteBackQueue MetadataWriteBack { get; }
+
+    /// <summary>"Scrape with ComicVine…": review dialogs, batch header and Activity Center job (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8).</summary>
+    public Scraper.ScrapeCoordinator Scraper { get; }
+
+    /// <summary>"Organize…": profile picker, collision dialog and Activity Center job.</summary>
+    public Scraper.OrganizeCoordinator Organizer { get; }
+
+    /// <summary>
+    /// The issue-details client for scrape-on-import, for the provider a want belongs to (ComicVine or Metron), at Low priority so background work can never starve interactive
+    /// lookups (each provider's shared rate limiter reserves the rest of its budget for High). <c>null</c> when that provider's credentials aren't saved, which the scraper reports as a
+    /// terminal, fixable-by-the-user failure.
+    /// </summary>
+    private static Paperbunkr.Data.ComicVine.IComicVineIssueDetailsSource? CreateDetailsSource(Paperbunkr.Data.Entities.ComicProvider provider)
+    {
+        using var context = Services.PaperbunkrDb.CreateContext();
+        return Paperbunkr.Data.ComicVine.ComicProviderFactory.Create(context, provider, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low);
+    }
 
     private void EnqueueMetadataWriteBack(int issueId, bool manual = false) => MetadataWriteBack.Enqueue(issueId, manual);
 
@@ -621,6 +767,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         "smart" => Smart,
         "reading" => Reading,
         "events" => Events,
+        "wanted" => Wanted,
         "preferences" => Preferences,
         _ => null,
     };
@@ -669,6 +816,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public bool IsSmart => CurrentScreen == "smart";
     public bool IsReading => CurrentScreen == "reading";
     public bool IsEvents => CurrentScreen == "events";
+    public bool IsWanted => CurrentScreen == "wanted";
     public bool IsPreferences => CurrentScreen == "preferences";
     public bool IsReader => CurrentScreen == "reader";
 
@@ -813,6 +961,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(IsSmart));
         OnPropertyChanged(nameof(IsReading));
         OnPropertyChanged(nameof(IsEvents));
+        OnPropertyChanged(nameof(IsWanted));
         OnPropertyChanged(nameof(IsPreferences));
         OnPropertyChanged(nameof(IsReader));
         OnPropertyChanged(nameof(ShowContextualSidebar));
@@ -924,6 +1073,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     });
 
     [RelayCommand]
+    private void GoWanted() => TryLeaveCurrentEditor(() =>
+    {
+        Wanted.Refresh();
+        CurrentScreen = "wanted";
+        ResetHistoryRoot("wanted");
+    });
+
+    [RelayCommand]
     private void GoPreferences() => TryLeaveCurrentEditor(() =>
     {
         Preferences.EnsureLoaded();
@@ -971,6 +1128,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             case "smart": GoSmart(); break;
             case "reading": GoReading(); break;
             case "events": GoEvents(); break;
+            case "wanted": GoWanted(); break;
             case "preferences": GoPreferences(); break;
         }
     }
@@ -1179,6 +1337,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                     "smart" => GoSmartCommand,
                     "reading" => GoReadingCommand,
                     "events" => GoEventsCommand,
+                    "wanted" => GoWantedCommand,
                     "preferences" => GoPreferencesCommand,
                     _ => GoHomeCommand,
                 }).Execute(null);
@@ -2125,6 +2284,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 Events.EnsureEventLoaded();
                 CurrentScreen = "events";
                 break;
+            case "wanted":
+                Wanted.Refresh();
+                CurrentScreen = "wanted";
+                break;
             case "preferences":
                 Preferences.EnsureLoaded();
                 CurrentScreen = "preferences";
@@ -2237,6 +2400,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         ["smart"] = "Smart Lists",
         ["reading"] = "Reading Lists",
         ["events"] = "Continuity",
+        ["wanted"] = "Wanted",
         ["preferences"] = "Preferences",
     };
 
@@ -2442,6 +2606,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 case "events":
                     GoEvents();
                     return;
+                case "wanted":
+                    GoWanted();
+                    return;
                 case "preferences":
                     GoPreferences();
                     return;
@@ -2633,6 +2800,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 {
                     Preferences.GoLibraryHealthCommand.Execute(null);
                 }
+                else if (link.Payload == "Sharing")
+                {
+                    Preferences.GoSharingCommand.Execute(null);
+                }
+                else if (link.Payload == "Acquisition")
+                {
+                    Preferences.GoAcquisitionCommand.Execute(null);
+                }
                 else if (link.Payload == "Advanced")
                 {
                     Preferences.GoAdvancedCommand.Execute(null);
@@ -2645,6 +2820,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 break;
             case ActivityLinkKind.StoryEventsScreen:
                 GoEventsCommand.Execute(null);
+                break;
+            case ActivityLinkKind.WantedScreen:
+                GoWantedCommand.Execute(null);
                 break;
             case ActivityLinkKind.RestartApp:
                 App.RelaunchAndExit();

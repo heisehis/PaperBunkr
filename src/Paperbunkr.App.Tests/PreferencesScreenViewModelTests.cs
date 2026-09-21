@@ -252,6 +252,25 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Connections_HasADownloadAutomationGroup_WhoseRowsFollowTheSavedConnection()
+    {
+        var vm = CreateViewModel();
+
+        Assert.Equal(new[] { "Prowlarr", "qBittorrent" }, vm.DownloadProviderRows.Select(r => r.Id));
+        Assert.Equal(ConnectionDialogKind.Prowlarr, vm.DownloadProviderRows[0].Kind);
+        Assert.Equal(ConnectionDialogKind.QBittorrent, vm.DownloadProviderRows[1].Kind);
+        Assert.All(vm.DownloadProviderRows, r => Assert.False(r.IsConnected));
+
+        vm.Acquisition.ProwlarrUrl = "http://prowlarr:9696";
+        vm.Acquisition.ProwlarrApiKey = "KEY";
+        vm.Acquisition.QBittorrentUrl = "http://qbit:8080";
+        vm.Acquisition.SaveConnectionsCommand.Execute(null);
+
+        Assert.All(vm.DownloadProviderRows, r => Assert.True(r.IsConnected));      // the checkmark follows the saved state
+        Assert.Contains("Prowlarr: connected", vm.Acquisition.ConnectionsSummary);
+    }
+
+    [Fact]
     public void OpenConnectionDialogCommand_SetsSelectedProviderAndOpensDialog()
     {
         var vm = CreateViewModel();
@@ -614,20 +633,198 @@ public class PreferencesScreenViewModelTests : IDisposable
     [Fact]
     public void ReducedMotion_Change_PersistsToAppSettings_AndAppliesLive()
     {
+        // Turning Reduced Motion on rewrites four process-global motion tokens to zero. Put them back afterwards: leaving them at zero silently
+        // switches off every later test that needs real motion (the Matrix rain render tests found this the hard way - they only failed when
+        // this test happened to run first).
+        var resources = Avalonia.Application.Current!.Resources;
+        string[] keys = { "PbMotionFast", "PbMotionSlow", "PbMotionStandard", "PbMotionLarge" };
+        var before = keys.ToDictionary(k => k, k => resources.TryGetValue(k, out var v) ? v : null);
+        try
+        {
+            var vm = CreateViewModel();
+            vm.EnsureLoaded();
+            Assert.False(vm.ReducedMotion);
+
+            vm.ReducedMotion = true;
+
+            using var context = new PaperbunkrDbContext(_dbOptions);
+            Assert.True(context.GetOrCreateAppSettings().ReducedMotion);
+            Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionFast"]);
+            Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionSlow"]);
+            // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - PbMotionStandard/
+            // PbMotionLarge get the same zero-on-reduced-motion treatment as Fast/Slow above.
+            Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionStandard"]);
+            Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionLarge"]);
+        }
+        finally
+        {
+            foreach (var (key, value) in before)
+            {
+                if (value is null)
+                {
+                    resources.Remove(key);
+                }
+                else
+                {
+                    resources[key] = value;
+                }
+            }
+        }
+    }
+
+    /// <summary>docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #1/#2 - both overlays load on,
+    /// persist to AppSettings, and push to the hot-path static cache the tiles read.</summary>
+    [Fact]
+    public void BindingSpineAndProgressRing_LoadOn_Persist_AndUpdateTheStaticCache()
+    {
+        bool oldSpine = Paperbunkr.App.Services.CosmeticThumbnailSettings.BindingSpine;
+        bool oldRing = Paperbunkr.App.Services.CosmeticThumbnailSettings.ProgressRing;
+        try
+        {
+            var vm = CreateViewModel();
+            vm.EnsureLoaded();
+            Assert.True(vm.BindingSpine);
+            Assert.True(vm.ProgressRing);
+
+            vm.BindingSpine = false;
+            vm.ProgressRing = false;
+
+            using (var context = new PaperbunkrDbContext(_dbOptions))
+            {
+                var settings = context.GetOrCreateAppSettings();
+                Assert.False(settings.BindingSpine);
+                Assert.False(settings.ProgressRing);
+            }
+
+            Assert.False(Paperbunkr.App.Services.CosmeticThumbnailSettings.BindingSpine);
+            Assert.False(Paperbunkr.App.Services.CosmeticThumbnailSettings.ProgressRing);
+        }
+        finally
+        {
+            Paperbunkr.App.Services.CosmeticThumbnailSettings.BindingSpine = oldSpine;
+            Paperbunkr.App.Services.CosmeticThumbnailSettings.ProgressRing = oldRing;
+        }
+    }
+
+    /// <summary>Cosmetics pitch #6/#7 - both load on, and a change persists to AppSettings (read later by the splash / a list open).</summary>
+    [Fact]
+    public void ReadingListMosaicAndSplashAmbientMotion_LoadOn_AndPersist()
+    {
         var vm = CreateViewModel();
         vm.EnsureLoaded();
-        Assert.False(vm.ReducedMotion);
+        Assert.True(vm.ReadingListMosaic);
+        Assert.True(vm.SplashAmbientMotion);
 
-        vm.ReducedMotion = true;
+        vm.ReadingListMosaic = false;
+        vm.SplashAmbientMotion = false;
 
         using var context = new PaperbunkrDbContext(_dbOptions);
-        Assert.True(context.GetOrCreateAppSettings().ReducedMotion);
-        Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionFast"]);
-        Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionSlow"]);
-        // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - PbMotionStandard/
-        // PbMotionLarge get the same zero-on-reduced-motion treatment as Fast/Slow above.
-        Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionStandard"]);
-        Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionLarge"]);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.False(settings.ReadingListMosaic);
+        Assert.False(settings.SplashAmbientMotion);
+        Assert.False(new ThemeService(() => new PaperbunkrDbContext(_dbOptions)).GetSplashAmbientMotion());
+    }
+
+    /// <summary>Cosmetics pitch 2 #8/#9 - backdrop on and series accent off by default; both persist and reach the static cache.</summary>
+    [Fact]
+    public void HeroBackdropAndSeriesAccent_Defaults_Persist_AndUpdateTheStaticCache()
+    {
+        bool oldBackdrop = Paperbunkr.App.Services.CosmeticThumbnailSettings.HeroBackdrop;
+        bool oldAccent = Paperbunkr.App.Services.CosmeticThumbnailSettings.SeriesAccentColor;
+        try
+        {
+            var vm = CreateViewModel();
+            vm.EnsureLoaded();
+            Assert.True(vm.HeroBackdrop);
+            Assert.False(vm.SeriesAccentColor);
+
+            vm.HeroBackdrop = false;
+            vm.SeriesAccentColor = true;
+
+            using var context = new PaperbunkrDbContext(_dbOptions);
+            var settings = context.GetOrCreateAppSettings();
+            Assert.False(settings.HeroBackdrop);
+            Assert.True(settings.SeriesAccentColor);
+            Assert.False(Paperbunkr.App.Services.CosmeticThumbnailSettings.HeroBackdrop);
+            Assert.True(Paperbunkr.App.Services.CosmeticThumbnailSettings.SeriesAccentColor);
+        }
+        finally
+        {
+            Paperbunkr.App.Services.CosmeticThumbnailSettings.HeroBackdrop = oldBackdrop;
+            Paperbunkr.App.Services.CosmeticThumbnailSettings.SeriesAccentColor = oldAccent;
+        }
+    }
+
+    /// <summary>Cosmetics pitch 2 #17 - density loads as Comfortable, the choice persists and writes the live spacing tokens.</summary>
+    [Fact]
+    public void DensityText_LoadsComfortable_ChangePersists_AndAppliesTheTokens()
+    {
+        try
+        {
+            var vm = CreateViewModel();
+            vm.EnsureLoaded();
+            Assert.Equal("Comfortable", vm.DensityText);
+            Assert.Equal(new[] { "Compact", "Comfortable", "Spacious" }, vm.DensityOptionsList);
+
+            vm.DensityText = "Compact";
+
+            using var context = new PaperbunkrDbContext(_dbOptions);
+            Assert.Equal(0, context.GetOrCreateAppSettings().DensityPreset);
+            Assert.Equal(new Avalonia.Thickness(6), Avalonia.Application.Current!.Resources["PbListRowPadding"]);
+        }
+        finally
+        {
+            ThemeService.ApplyDensityResources(1);
+        }
+    }
+
+    /// <summary>The hover multi-select checkbox is opt-in (Ctrl/Shift+click is the default way to multi-select); the choice persists and reaches the static cache the Library reads.</summary>
+    [Fact]
+    public void ShowSelectionCheckbox_DefaultsOff_Persists_AndUpdatesTheStaticCache()
+    {
+        bool old = Paperbunkr.App.Services.CosmeticThumbnailSettings.ShowSelectionCheckbox;
+        try
+        {
+            var vm = CreateViewModel();
+            vm.EnsureLoaded();
+            Assert.False(vm.ShowSelectionCheckbox);
+
+            vm.ShowSelectionCheckbox = true;
+
+            using var context = new PaperbunkrDbContext(_dbOptions);
+            Assert.True(context.GetOrCreateAppSettings().ShowSelectionCheckbox);
+            Assert.True(Paperbunkr.App.Services.CosmeticThumbnailSettings.ShowSelectionCheckbox);
+        }
+        finally
+        {
+            Paperbunkr.App.Services.CosmeticThumbnailSettings.ShowSelectionCheckbox = old;
+        }
+    }
+
+    [Fact]
+    public void GlowTierText_LoadsNormal_ChangePersistsAndRebuildsRing_UnknownTextFallsBackToNormal()
+    {
+        var themeService = new ThemeService(() => new PaperbunkrDbContext(_dbOptions));
+        try
+        {
+            var vm = CreateViewModel();
+            vm.EnsureLoaded();
+            Assert.Equal("Normal", vm.GlowTierText);
+            Assert.Equal(new[] { "Off", "Subtle", "Normal", "Vivid" }, vm.GlowTierOptionsList);
+
+            vm.GlowTierText = "Vivid";
+
+            using var context = new PaperbunkrDbContext(_dbOptions);
+            Assert.Equal(ThemeService.GlowTierVivid, context.GetOrCreateAppSettings().GlowTier);
+
+            vm.GlowTierText = "nonsense";
+            using var context2 = new PaperbunkrDbContext(_dbOptions);
+            Assert.Equal(ThemeService.GlowTierNormal, context2.GetOrCreateAppSettings().GlowTier);
+        }
+        finally
+        {
+            themeService.ApplyGlowTier(ThemeService.GlowTierNormal);
+        }
     }
 
     [Fact]
@@ -2814,6 +3011,44 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         var row = Assert.Single(vm.EmptyIssueItems);
         Assert.Contains("#1", row.DisplayLabel);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #5 - the severity that used to be a
+    /// text suffix on <c>DisplayLabel</c> is now data the chip binds to: amber Missing until the confirm
+    /// threshold, red Confirmed missing after it, red Unreadable for content-empty issues.</summary>
+    [Fact]
+    public void HealthRows_CarrySeverity_NotATextSuffix()
+    {
+        SeedMissingIssue(fileName: "soft.cbz", missingVerificationCount: 1, seriesName: "Soft Series");
+        SeedMissingIssue(fileName: "hard.cbz", missingVerificationCount: 9, seriesName: "Hard Series");
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Corrupt Series" };
+            context.Series.Add(series);
+            context.SaveChanges();
+            context.Issues.Add(new Issue { SeriesId = series.Id, Number = "1", FilePath = Path.Combine(_scanRoot, "corrupt.cbz"), IsContentEmpty = true });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        var soft = Assert.Single(vm.MissingFileItems, r => r.DisplayLabel.StartsWith("Soft Series"));
+        Assert.Equal(HealthSeverity.Warning, soft.Severity);
+        Assert.Equal("Missing", soft.SeverityLabel);
+        Assert.True(soft.IsWarning);
+        Assert.False(soft.IsError);
+
+        var hard = Assert.Single(vm.MissingFileItems, r => r.DisplayLabel.StartsWith("Hard Series"));
+        Assert.Equal(HealthSeverity.Error, hard.Severity);
+        Assert.Equal("Confirmed missing", hard.SeverityLabel);
+        Assert.True(hard.IsError);
+        Assert.DoesNotContain("confirmed", hard.DisplayLabel, StringComparison.OrdinalIgnoreCase);
+
+        var unreadable = Assert.Single(vm.EmptyIssueItems);
+        Assert.Equal(HealthSeverity.Error, unreadable.Severity);
+        Assert.Equal("Unreadable", unreadable.SeverityLabel);
+        Assert.DoesNotContain("unreadable", unreadable.DisplayLabel, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -42,6 +42,12 @@ public class Issue
     /// </summary>
     public string? Volume { get; set; }
 
+    /// <summary>
+    /// Which database the last scrape took this issue's details from (ComicVine or Metron); null when it was never scraped, or was scraped before this was recorded.
+    /// The scraper starts a re-scrape on the source most of the chosen comics came from, because <see cref="Volume"/> is only an id and means nothing without it.
+    /// </summary>
+    public ComicProvider? MetadataSource { get; set; }
+
     public string? AlternateSeries { get; set; }
 
     public string? AlternateNumber { get; set; }
@@ -174,6 +180,17 @@ public class Issue
     // --- read-state / file fields carried over from ComicBook.cs ---
 
     public string? FilePath { get; set; }
+
+    /// <summary>Non-null for a row mirrored from another instance (see <see cref="RemoteSource"/>). Such rows always have a null <see cref="FilePath"/>.</summary>
+    public int? RemoteSourceId { get; set; }
+
+    public RemoteSource? RemoteSource { get; set; }
+
+    /// <summary>The host's own <see cref="Id"/> for this issue - the mirror key together with <see cref="RemoteSourceId"/>.</summary>
+    public int? RemoteIssueId { get; set; }
+
+    /// <summary>Opaque content identity the host reported for this book (a hash of its file size, modified time and page count). A change means the host replaced the book, so pages cached for it are stale. Null for local rows and for hosts that predate it.</summary>
+    public string? RemoteContentStamp { get; set; }
 
     public DateTime? AddedTime { get; set; }
 

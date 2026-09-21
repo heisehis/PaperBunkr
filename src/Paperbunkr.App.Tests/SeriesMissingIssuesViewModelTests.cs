@@ -1,0 +1,588 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.ViewModels;
+using Paperbunkr.App.Views;
+using Paperbunkr.Data;
+using Paperbunkr.Data.Acquisition;
+using Paperbunkr.Data.ComicVine;
+using Paperbunkr.Data.Credentials;
+using Paperbunkr.Data.Entities;
+using Xunit;
+
+namespace Paperbunkr.App.Tests;
+
+/// <summary>The series Detail screen's "Missing Issues (n)" section. Joins <see cref="AvaloniaTestCollection"/> like every Detail test.</summary>
+[Collection(nameof(AvaloniaTestCollection))]
+public class SeriesMissingIssuesViewModelTests : IDisposable
+{
+    private static readonly DateTime Today = DateTime.Today;
+    private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_missing_{Guid.NewGuid():N}.db");
+    private readonly DbContextOptions<PaperbunkrDbContext> _options;
+    private readonly FakeComicVine _comicVine = new();
+    private readonly int _seriesId;
+
+    public SeriesMissingIssuesViewModelTests()
+    {
+        _options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath};Foreign Keys=True").Options;
+        using var context = NewContext();
+        context.Database.EnsureCreated();
+        var series = new Series { Name = "Spawn" };
+        context.Series.Add(series);
+        context.SaveChanges();
+        context.Issues.Add(new Issue { SeriesId = series.Id, Number = "261", FilePath = "C:\\x\\261.cbz" });
+        context.SaveChanges();
+        _seriesId = series.Id;
+    }
+
+    public void Dispose()
+    {
+        SqliteConnection.ClearAllPools();
+        try { if (File.Exists(_dbPath)) File.Delete(_dbPath); } catch (IOException) { }
+    }
+
+    private PaperbunkrDbContext NewContext() => new(_options);
+
+    private SeriesMissingIssuesViewModel Create() => new(NewContext, _ => _comicVine, post: a => a());
+
+    private sealed class FakeComicVine : IComicVineClient
+    {
+        public List<ComicVineVolume> Volumes { get; } = new();
+        public List<ComicVineIssue> Issues { get; } = new();
+        public Exception? Throw { get; set; }
+        public int IssueCalls { get; private set; }
+
+        public Task<IReadOnlyList<ComicVineVolume>> SearchVolumesAsync(string query, CancellationToken cancellationToken)
+        {
+            if (Throw is not null) throw Throw;
+            return Task.FromResult<IReadOnlyList<ComicVineVolume>>(Volumes.ToList());
+        }
+
+        public Task<ComicVineVolume?> GetVolumeAsync(int volumeId, CancellationToken cancellationToken) => Task.FromResult(Volumes.FirstOrDefault(v => v.Id == volumeId));
+
+        public Task<IReadOnlyList<ComicVineIssue>> GetVolumeIssuesAsync(int volumeId, CancellationToken cancellationToken)
+        {
+            IssueCalls++;
+            if (Throw is not null) throw Throw;
+            return Task.FromResult<IReadOnlyList<ComicVineIssue>>(Issues.ToList());
+        }
+    }
+
+    private void SetKey()
+    {
+        using var context = NewContext();
+        CredentialStore.Set(context, "ComicVine", CredentialKind.ApiKey, "CV");
+    }
+
+    /// <summary>Tracks volume 100 for the local series with issues 261 (owned), 262 (past), 263 (upcoming) in its catalog.</summary>
+    private void TrackWithCatalog()
+    {
+        using var context = NewContext();
+        var watched = WantedService.TrackVolume(context, new ComicVineVolume(100, "Spawn", "Image", 1992, 300, null), _seriesId, watchFutureReleases: false);
+        WantedService.RefreshCatalog(context, watched, new[]
+        {
+            new ComicVineIssue(1, "261", "Owned", Today.AddDays(-30), null, null, 100),
+            new ComicVineIssue(2, "262", "Past", Today.AddDays(-7), null, null, 100),
+            new ComicVineIssue(3, "263", null, Today.AddDays(14), null, null, 100),
+        });
+    }
+
+    [Fact]
+    public void AnUntrackedSeries_OffersToFindItsComicVineListing_AndShowsNoMissingIssues()
+    {
+        var vm = Create();
+
+        vm.Load(_seriesId, "Spawn");
+
+        Assert.True(vm.IsNotTracked);
+        Assert.False(vm.IsTracked);
+        Assert.Empty(vm.MissingRows);
+        Assert.False(vm.IsAllCaughtUp);
+    }
+
+    [Fact]
+    public void ATrackedSeries_ListsWhatItLacks_ExcludingOwnedIssues_WithTheCountInTheHeading()
+    {
+        TrackWithCatalog();
+        var vm = Create();
+
+        vm.Load(_seriesId, "Spawn");
+
+        Assert.True(vm.IsTracked);
+        Assert.Equal(new[] { "262", "263" }, vm.MissingRows.Select(r => r.Number));   // 261 is owned
+        Assert.Equal("Missing Issues (2)", vm.Heading);
+        Assert.False(vm.MissingRows[0].IsUpcoming);
+        Assert.True(vm.MissingRows[1].IsUpcoming);
+        Assert.Equal("#262 · Past", vm.MissingRows[0].Title);
+        Assert.Equal("Spawn #263", vm.MissingRows[1].Title);                            // no issue name: falls back to the series name
+    }
+
+    [Fact]
+    public void Request_MarksTheIssueWanted_AndItLeavesTheMissingList()
+    {
+        TrackWithCatalog();
+        var vm = Create();
+        vm.Load(_seriesId, "Spawn");
+
+        vm.RequestCommand.Execute(vm.MissingRows[0]);
+
+        Assert.Equal(new[] { "263" }, vm.MissingRows.Select(r => r.Number));
+        Assert.Equal("Missing Issues (1)", vm.Heading);
+        using var context = NewContext();
+        var wanted = Assert.Single(context.WantedIssues);
+        Assert.Equal("262", wanted.IssueNumber);
+        Assert.Equal(WantedIssueStatus.Wanted, wanted.Status);
+        Assert.Contains("Requested #262", vm.StatusMessage);
+    }
+
+    [Fact]
+    public void RequestAll_AsksFirst_AndOnlyRequestsOnceConfirmed()
+    {
+        TrackWithCatalog();
+        var vm = Create();
+        vm.Load(_seriesId, "Spawn");
+
+        vm.RequestAllCommand.Execute(null);
+
+        Assert.True(vm.IsConfirmingRequestAll);
+        Assert.Equal("Request all 2 issues?", vm.ConfirmText);
+        using (var context = NewContext())
+        {
+            Assert.Empty(context.WantedIssues);                 // asking is not requesting
+        }
+
+        vm.CancelRequestAllCommand.Execute(null);
+        Assert.False(vm.IsConfirmingRequestAll);
+        Assert.Equal(2, vm.MissingRows.Count);
+
+        vm.RequestAllCommand.Execute(null);
+        vm.ConfirmRequestAllCommand.Execute(null);
+
+        Assert.False(vm.IsConfirmingRequestAll);
+        Assert.Empty(vm.MissingRows);
+        Assert.True(vm.IsAllCaughtUp);
+        using var check = NewContext();
+        Assert.Equal(2, check.WantedIssues.Count());
+        Assert.Equal("Requested 2 issues.", vm.StatusMessage);
+    }
+
+    [Fact]
+    public void RequestAll_DoesNothing_WhenNothingIsMissing()
+    {
+        TrackWithCatalog();
+        var vm = Create();
+        vm.Load(_seriesId, "Spawn");
+        vm.RequestAllCommand.Execute(null);
+        vm.ConfirmRequestAllCommand.Execute(null);
+
+        vm.RequestAllCommand.Execute(null);                       // nothing left
+
+        Assert.False(vm.IsConfirmingRequestAll);
+    }
+
+    [Fact]
+    public void IHaveThis_RemovesTheIssueFromMissing_WithoutRequestingIt()
+    {
+        TrackWithCatalog();
+        var vm = Create();
+        vm.Load(_seriesId, "Spawn");
+
+        vm.IgnoreCommand.Execute(vm.MissingRows[0]);
+
+        Assert.Equal(new[] { "263" }, vm.MissingRows.Select(r => r.Number));
+        using var context = NewContext();
+        Assert.Equal(WantedIssueStatus.Ignored, Assert.Single(context.WantedIssues).Status);
+    }
+
+    [Fact]
+    public void FollowToggle_Persists_ButLoadingNeverFiresIt()
+    {
+        TrackWithCatalog();
+        var vm = Create();
+        vm.Load(_seriesId, "Spawn");
+        vm.Load(_seriesId, "Spawn");                              // reloading must not flip anything
+        using (var context = NewContext())
+        {
+            Assert.False(context.WatchedSeries.Single().WatchFutureReleases);
+        }
+
+        vm.WatchFutureReleases = true;
+
+        using var check = NewContext();
+        Assert.True(check.WatchedSeries.Single().WatchFutureReleases);
+        Assert.Contains("Following", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task FindOnComicVine_NeedsAKey_ThenListsMatchingVolumes()
+    {
+        var vm = Create();
+        vm.Load(_seriesId, "Spawn");
+
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+        Assert.True(vm.HasErrorStatus);
+        Assert.Empty(vm.SearchResults);
+
+        SetKey();
+        _comicVine.Volumes.Add(new ComicVineVolume(100, "Spawn", "Image", 1992, 300, null));
+        vm.Load(_seriesId, "Spawn");
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+
+        Assert.Single(vm.SearchResults);
+        Assert.True(vm.HasSearchResults);
+        Assert.True(vm.HasComicVineKey);
+    }
+
+    [Fact]
+    public async Task Track_LinksTheVolumeToThisSeries_CachesTheCatalog_AndShowsWhatIsMissing()
+    {
+        SetKey();
+        _comicVine.Issues.AddRange(new[]
+        {
+            new ComicVineIssue(1, "261", null, Today.AddDays(-30), null, null, 100),
+            new ComicVineIssue(2, "262", null, Today.AddDays(-7), null, null, 100),
+        });
+        var vm = Create();
+        vm.Load(_seriesId, "Spawn");
+
+        await vm.TrackCommand.ExecuteAsync(new VolumeResultViewModel { Volume = new ComicVineVolume(100, "Spawn", "Image", 1992, 300, null) });
+
+        using var context = NewContext();
+        var watched = context.WatchedSeries.Single();
+        Assert.Equal(_seriesId, watched.SeriesId);
+        Assert.False(watched.WatchFutureReleases);                 // tracking is not following
+        Assert.Equal(2, context.CatalogIssues.Count());
+        Assert.True(vm.IsTracked);
+        Assert.Equal(new[] { "262" }, vm.MissingRows.Select(r => r.Number));   // 261 is owned
+        Assert.Empty(vm.SearchResults);
+    }
+
+    [Fact]
+    public async Task Track_RefusesAVolumeAlreadyLinkedToAnotherLocalSeries()
+    {
+        SetKey();
+        int otherSeriesId;
+        using (var context = NewContext())
+        {
+            var other = new Series { Name = "Spawn (2nd copy)" };
+            context.Series.Add(other);
+            context.SaveChanges();
+            otherSeriesId = other.Id;
+            WantedService.TrackVolume(context, new ComicVineVolume(100, "Spawn", "Image", 1992, 300, null), otherSeriesId, false);
+        }
+
+        var vm = Create();
+        vm.Load(_seriesId, "Spawn");
+
+        await vm.TrackCommand.ExecuteAsync(new VolumeResultViewModel { Volume = new ComicVineVolume(100, "Spawn", "Image", 1992, 300, null) });
+
+        Assert.True(vm.HasErrorStatus);
+        Assert.False(vm.IsTracked);
+        using var check = NewContext();
+        Assert.Equal(otherSeriesId, check.WatchedSeries.Single().SeriesId);       // the existing link is untouched
+    }
+
+    [Fact]
+    public async Task RefreshFromComicVine_PicksUpNewIssues()
+    {
+        SetKey();
+        TrackWithCatalog();
+        _comicVine.Issues.AddRange(new[]
+        {
+            new ComicVineIssue(1, "261", null, Today.AddDays(-30), null, null, 100),
+            new ComicVineIssue(2, "262", null, Today.AddDays(-7), null, null, 100),
+            new ComicVineIssue(3, "263", null, Today.AddDays(14), null, null, 100),
+            new ComicVineIssue(4, "264", null, Today.AddDays(21), null, null, 100),
+        });
+        var vm = Create();
+        vm.Load(_seriesId, "Spawn");
+        Assert.Equal(2, vm.MissingRows.Count);
+
+        await vm.RefreshFromComicVineCommand.ExecuteAsync(null);
+
+        Assert.Equal(3, vm.MissingRows.Count);
+        Assert.Contains("Updated from ComicVine", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task ComicVineFailures_BecomeStatusMessages()
+    {
+        SetKey();
+        _comicVine.Throw = new ComicVineException("ComicVine request failed.");
+        var vm = Create();
+        vm.Load(_seriesId, "Spawn");
+
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+
+        Assert.True(vm.HasErrorStatus);
+        Assert.Equal("ComicVine request failed.", vm.StatusMessage);
+    }
+
+    [Fact]
+    public void LoadingADifferentSeries_ResetsTheSection()
+    {
+        TrackWithCatalog();
+        var vm = Create();
+        vm.Load(_seriesId, "Spawn");
+        vm.RequestAllCommand.Execute(null);
+        Assert.True(vm.IsConfirmingRequestAll);
+
+        vm.Load(_seriesId + 999, "Something else");
+
+        Assert.False(vm.IsConfirmingRequestAll);
+        Assert.True(vm.IsNotTracked);
+        Assert.Empty(vm.MissingRows);
+        Assert.Equal(string.Empty, vm.StatusMessage);
+    }
+
+    [Fact]
+    public void TheDetailTabs_LoadTheMissingSection_WithTheSeries()
+    {
+        TrackWithCatalog();
+        var tabs = new DetailTabsViewModel(_ => { }, _ => { }, null, NewContext);
+        Series series;
+        using (var context = NewContext())
+        {
+            series = context.Series.Include(s => s.Issues).Single(s => s.Id == _seriesId);
+        }
+
+        tabs.LoadSeries(series);
+
+        Assert.True(tabs.Missing.IsTracked);
+        Assert.Equal(new[] { "262", "263" }, tabs.Missing.MissingRows.Select(r => r.Number));
+    }
+
+    [Fact]
+    public void TheMangaHost_DoesNotLoadTheSection()
+    {
+        TrackWithCatalog();
+        var tabs = new DetailTabsViewModel(_ => { }, _ => { }, null, NewContext) { IsMangaDetailHost = true };
+        Series series;
+        using (var context = NewContext())
+        {
+            series = context.Series.Include(s => s.Issues).Single(s => s.Id == _seriesId);
+        }
+
+        tabs.LoadSeries(series);
+
+        Assert.False(tabs.Missing.IsTracked);
+    }
+
+    /// <summary>Proves the section's compiled XAML was woven (see CLAUDE.md, "adding a new Avalonia View").</summary>
+    [Fact]
+    public void TheSectionView_Constructs_AndBindsToTheViewModel()
+    {
+        TestAppBuilder.EnsureInitialized();
+        TrackWithCatalog();
+        var vm = Create();
+        vm.Load(_seriesId, "Spawn");
+
+        var view = new SeriesMissingIssuesView { DataContext = vm };
+
+        Assert.NotNull(view.Content);
+    }
+
+    /// <summary>A fake that also does paged searching, like the real client, so the picker takes the "more than 25 results" path.</summary>
+    private sealed class PagedFake : IComicVineClient, IComicVineVolumeSearch
+    {
+        public List<ComicVineVolume> Volumes { get; } = new();
+        public int PagedCalls;
+        public int LastMax;
+
+        public Task<IReadOnlyList<ComicVineVolume>> SearchVolumesAsync(string query, CancellationToken cancellationToken) => throw new InvalidOperationException("the picker must use the paged search");
+
+        public Task<IReadOnlyList<ComicVineVolume>> SearchVolumesAsync(string query, int maxResults, CancellationToken cancellationToken)
+        {
+            PagedCalls++;
+            LastMax = maxResults;
+            return Task.FromResult<IReadOnlyList<ComicVineVolume>>(Volumes.ToList());
+        }
+
+        public Task<ComicVineVolume?> GetVolumeAsync(int volumeId, CancellationToken cancellationToken) => Task.FromResult(Volumes.FirstOrDefault(v => v.Id == volumeId));
+
+        public Task<IReadOnlyList<ComicVineIssue>> GetVolumeIssuesAsync(int volumeId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ComicVineIssue>>(new List<ComicVineIssue>());
+    }
+
+    [Fact]
+    public async Task FindOnComicVine_RanksAgainstWhatTheLibraryHas_NotJustByIssueCount_AndPagesTheResults()
+    {
+        SetKey();
+        int captainId;
+        using (var context = NewContext())
+        {
+            var series = new Series { Name = "Captain America" };
+            context.Series.Add(series);
+            context.Issues.AddRange(
+                new Issue { Series = series, Number = "3", Year = 2018, Publisher = "Marvel", FilePath = "C:/x/ca3.cbz" },
+                new Issue { Series = series, Number = "12", Year = 2018, Publisher = "Marvel", FilePath = "C:/x/ca12.cbz" });
+            context.SaveChanges();
+            captainId = series.Id;
+        }
+
+        var paged = new PagedFake();
+        // The long old runs ComicVine's own order puts first...
+        paged.Volumes.Add(new ComicVineVolume(1, "Captain America", "Marvel", 1968, 355, null));
+        paged.Volumes.Add(new ComicVineVolume(2, "Captain America Comics", "Marvel", 1941, 73, null));
+        // ...a same-named series from another publisher, and the short recent Marvel one the library actually has.
+        paged.Volumes.Add(new ComicVineVolume(3, "Captain America", "Panini", 2018, 40, null));
+        paged.Volumes.Add(new ComicVineVolume(4, "Captain America", "Marvel", 2018, 30, null));
+        for (int i = 0; i < 40; i++)
+        {
+            paged.Volumes.Add(new ComicVineVolume(100 + i, $"Captain America Special {i}", "Marvel", 1990 + i % 20, 1 + i, null));
+        }
+
+        var vm = new SeriesMissingIssuesViewModel(NewContext, _ => paged, post: a => a());
+        vm.Load(captainId, "Captain America");
+        Assert.Equal("Captain America", vm.SearchText);
+
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, paged.PagedCalls);
+        Assert.Equal(VolumeSearchService.MaxVolumesConsidered, paged.LastMax);       // asks for far more than ComicVine's first 25
+        Assert.Equal(VolumeResultViewModel.PageSize, vm.SearchResults.Count);
+        Assert.Equal(4, vm.SearchResults[0].Volume.Id);                              // the 2018 Marvel series wins, not the 355-issue 1968 run
+        Assert.True(vm.SearchResults[0].IsBestMatch);
+        Assert.False(vm.SearchResults[1].IsBestMatch);
+        Assert.Contains("Best of 44", vm.SearchSummary);
+        Assert.True(vm.CanShowMore);
+
+        vm.ShowMoreCommand.Execute(null);
+        Assert.True(vm.SearchResults.Count > VolumeResultViewModel.PageSize);
+        vm.ShowMoreCommand.Execute(null);
+        Assert.Equal(44, vm.SearchResults.Count);
+        Assert.False(vm.CanShowMore);                                                // nothing left, and no new request was made
+        Assert.Equal(1, paged.PagedCalls);
+    }
+
+    private void SetMetronLogin()
+    {
+        using var context = NewContext();
+        CredentialStore.Set(context, "Metron", CredentialKind.Username, "reader");
+        CredentialStore.Set(context, "Metron", CredentialKind.Password, "pw");
+    }
+
+    [Fact]
+    public async Task Metron_CanBeChosenAsTheSource_AndTheSeriesIsTrackedWithIt()
+    {
+        SetMetronLogin();                                   // no ComicVine key at all
+        var requested = new List<ComicProvider>();
+        var metron = new FakeComicVine();
+        metron.Volumes.Add(new ComicVineVolume(77, "Spawn", "Image", 1992, 300, null));
+        metron.Issues.Add(new ComicVineIssue(5, "262", "Past", Today.AddDays(-7), null, null, 77));
+        var vm = new SeriesMissingIssuesViewModel(NewContext, provider => { requested.Add(provider); return metron; }, a => a());
+        vm.Load(_seriesId, "Spawn");
+
+        vm.ProviderText = "Metron";
+        Assert.True(vm.HasProviderCredentials);
+        Assert.Equal("Series name on Metron", vm.SearchWatermark);
+
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+        Assert.Contains("Metron", vm.SearchSummary);
+        await vm.TrackCommand.ExecuteAsync(vm.SearchResults[0]);
+
+        Assert.All(requested, p => Assert.Equal(ComicProvider.Metron, p));
+        Assert.True(vm.IsTracked);
+        Assert.True(vm.IsMetronTracked);
+        using var context = NewContext();
+        var watched = context.WatchedSeries.Single();
+        Assert.Equal(ComicProvider.Metron, watched.Provider);
+        Assert.Equal(77, watched.ExternalVolumeId);
+
+        vm.ProviderText = "ComicVine";                        // a tracked series keeps its own source
+        await vm.RefreshFromComicVineCommand.ExecuteAsync(null);
+        Assert.Equal(ComicProvider.Metron, requested[^1]);
+    }
+
+    [Fact]
+    public async Task MetronResults_BorrowACoverFromTheWeeklyListsCache_WhenTheSeriesIsInIt()
+    {
+        SetMetronLogin();
+        using (var context = NewContext())
+        {
+            context.PullListReleases.Add(new PullListRelease { ExternalIssueId = 1, SeriesId = 77, SeriesName = "Spawn", IssueNumber = "350", StoreDate = Today.AddDays(3), CoverImageUrl = "https://x/spawn350.jpg" });
+            context.SaveChanges();
+        }
+
+        var metron = new FakeComicVine();
+        metron.Volumes.Add(new ComicVineVolume(77, "Spawn", "Image", 1992, 300, null));
+        metron.Volumes.Add(new ComicVineVolume(78, "Spawn Kills Everyone", "Image", 2018, 3, null));   // not in the list: no cover, no request spent looking
+        var vm = new SeriesMissingIssuesViewModel(NewContext, _ => metron, a => a());
+        vm.Load(_seriesId, "Spawn");
+        vm.ProviderText = "Metron";
+
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+
+        var withCover = vm.SearchResults.Single(r => r.Volume.Id == 77);
+        Assert.Equal("https://x/spawn350.jpg", withCover.Volume.ImageUrl);
+        Assert.Null(vm.SearchResults.Single(r => r.Volume.Id == 78).Volume.ImageUrl);
+    }
+
+    [Fact]
+    public async Task ChoosingASourceWithoutItsLogin_SaysWhatToAdd_AndMakesNoRequest()
+    {
+        SetKey();                                           // ComicVine only
+        var requested = 0;
+        var vm = new SeriesMissingIssuesViewModel(NewContext, _ => { requested++; return new FakeComicVine(); }, a => a());
+        vm.Load(_seriesId, "Spawn");
+
+        vm.ProviderText = "Metron";
+        Assert.False(vm.HasProviderCredentials);
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, requested);
+        Assert.True(vm.HasErrorStatus);
+        Assert.Contains("Metron login", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task FindOnComicVine_UsesTheEditedSearchText()
+    {
+        SetKey();
+        var paged = new PagedFake();
+        paged.Volumes.Add(new ComicVineVolume(9, "Spawn: Origins", "Image", 1992, 10, null));
+        var vm = new SeriesMissingIssuesViewModel(NewContext, _ => paged, post: a => a());
+        vm.Load(_seriesId, "Spawn");
+
+        vm.SearchText = "  Spawn: Origins ";
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+
+        Assert.Single(vm.SearchResults);
+        Assert.False(vm.SearchResults[0].IsBestMatch);                               // a lone result isn't "best" of anything
+    }
+
+    [Fact]
+    public async Task TheSort_ReordersTheFetchedResults_WithoutANewRequest_AndOnlyBestMatchGetsTheChip()
+    {
+        SetKey();
+        var paged = new PagedFake();
+        paged.Volumes.Add(new ComicVineVolume(1, "Spawn", "Image", 1992, 300, null));
+        paged.Volumes.Add(new ComicVineVolume(2, "Spawn", "Image", 2016, 20, null));
+        paged.Volumes.Add(new ComicVineVolume(3, "Spawn Zero", "Image", 1999, 5, null));
+        var vm = new SeriesMissingIssuesViewModel(NewContext, _ => paged, post: a => a());
+        vm.Load(_seriesId, "Spawn");
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+        Assert.Equal("Best match", vm.SortText);
+        Assert.True(vm.SearchResults[0].IsBestMatch);
+
+        vm.SortText = "Most issues";
+        Assert.Equal(new[] { 1, 2, 3 }, vm.SearchResults.Select(r => r.Volume.Id).OrderBy(i => i));   // the same three results, just reordered
+        Assert.Equal(1, vm.SearchResults[0].Volume.Id);
+        Assert.DoesNotContain(vm.SearchResults, r => r.IsBestMatch);
+
+        vm.SortText = "Newest";
+        Assert.Equal(new[] { 2, 3, 1 }, vm.SearchResults.Select(r => r.Volume.Id));
+        vm.SortText = "Oldest";
+        Assert.Equal(new[] { 1, 3, 2 }, vm.SearchResults.Select(r => r.Volume.Id));
+        vm.SortText = "Name A–Z";
+        Assert.Equal("Spawn Zero", vm.SearchResults[^1].Volume.Name);
+
+        Assert.Equal(1, paged.PagedCalls);                                        // sorting never went back to ComicVine
+        vm.SortText = "Best match";
+        Assert.True(vm.SearchResults[0].IsBestMatch);
+    }
+}

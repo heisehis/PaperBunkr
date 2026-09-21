@@ -156,6 +156,8 @@
                                      IsVisible="{Binding TileGlyph, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:IssueTileGlyph.Read}}" />
                     <pbc:StatusBadge Variant="InProgress" IconSize="{StaticResource PbIconSizeXs}"
                                      IsVisible="{Binding TileGlyph, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:IssueTileGlyph.InProgress}}" />
+                    <pbc:StatusBadge Variant="Unread"
+                                     IsVisible="{Binding TileGlyph, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:IssueTileGlyph.Unread}}" />
                 </Panel>
                 <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="Bold" VerticalAlignment="Center"
                            Foreground="{DynamicResource PbTextBrush}" />
@@ -346,6 +348,9 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+            <!-- Missing Issues (n): the ComicVine list minus what you own, with Request buttons -->
+            <views:SeriesMissingIssuesView DataContext="{Binding Missing}" />
         </StackPanel>
 
         <!-- ================= SPECIALS TAB ================= -->

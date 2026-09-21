@@ -82,7 +82,7 @@ public sealed partial class IssueCardSample : ObservableObject, ISelectableCard
 
     /// <summary>Read-state badge for the detail-screen tile (docs/superpowers/specs/2026-09-04-
     /// detail-screen-icons-and-glyphs-design.md §4).</summary>
-    public IssueTileGlyph TileGlyph => IsRead ? IssueTileGlyph.Read : IsInProgress ? IssueTileGlyph.InProgress : IssueTileGlyph.None;
+    public IssueTileGlyph TileGlyph => IssueTileGlyphs.Resolve(IsRead, IsInProgress);
 
     public string CoverDateLabel => CoverDate?.ToString("MMM yyyy") ?? string.Empty;
 

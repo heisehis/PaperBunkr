@@ -13,6 +13,9 @@ using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Acquisition;
+using Paperbunkr.Data.ComicVine;
+using Paperbunkr.Data.Credentials;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.ReadingLists;
@@ -301,17 +304,10 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
 
         using (var context = PaperbunkrDb.CreateContext())
         {
-            var existing = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => i.IssueId).ToHashSet();
-            int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
-            foreach (var result in SearchResults.Where(r => SearchSelection.SelectedIds.Contains(r.Id)))
-            {
-                if (existing.Add(result.IssueId))
-                {
-                    context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = result.IssueId, SortOrder = nextOrder++ });
-                }
-            }
-
-            BumpUpdatedAt(context, listId);
+            ReadingListManager.AddIssues(
+                context,
+                listId,
+                SearchResults.Where(r => SearchSelection.SelectedIds.Contains(r.Id)).Select(r => r.IssueId).ToList());
             context.SaveChanges();
         }
 
@@ -361,20 +357,9 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         if (result.IssueIds.Count > 0)
         {
             using var context = PaperbunkrDb.CreateContext();
-            var existing = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => i.IssueId).ToHashSet();
-            int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
-            foreach (int issueId in result.IssueIds)
-            {
-                if (existing.Add(issueId))
-                {
-                    context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = issueId, SortOrder = nextOrder++ });
-                    added++;
-                }
-            }
-
+            added = ReadingListManager.AddIssues(context, listId, result.IssueIds).Added;
             if (added > 0)
             {
-                BumpUpdatedAt(context, listId);
                 context.SaveChanges();
             }
         }
@@ -415,18 +400,8 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
 
         using (var context = PaperbunkrDb.CreateContext())
         {
-            var existing = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => i.IssueId).ToHashSet();
-            int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
             var seriesIssues = context.Issues.Where(i => i.SeriesId == result.SeriesId && !i.IsPlaceholder).AsEnumerable().OrderByNumber();
-            foreach (var issue in seriesIssues)
-            {
-                if (existing.Add(issue.Id))
-                {
-                    context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = issue.Id, SortOrder = nextOrder++ });
-                }
-            }
-
-            BumpUpdatedAt(context, listId);
+            ReadingListManager.AddIssues(context, listId, seriesIssues.Select(i => i.Id).ToList());
             context.SaveChanges();
         }
 
@@ -444,8 +419,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         var ids = MemberSelection.SelectedIds.ToList();
         using (var context = PaperbunkrDb.CreateContext())
         {
-            context.ReadingListItems.RemoveRange(context.ReadingListItems.Where(i => ids.Contains(i.Id)));
-            BumpUpdatedAt(context, listId);
+            ReadingListManager.RemoveItems(context, listId, ids);
             context.SaveChanges();
         }
 
@@ -576,9 +550,25 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     [ObservableProperty]
     private string? _arcSourceLabel;
 
+    /// <summary>The arc source's display name ("ComicVine", ...) on its own, for the brand mark beside the "via" text (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #14).</summary>
+    [ObservableProperty]
+    private string? _arcSourceName;
+
     /// <summary>Downloaded lazily by <see cref="LoadArcCoverAsync"/> once <see cref="LoadReadingList"/> knows the list has a cover URL - null until then, or if there's no cover/the download failed.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowCoverMosaic))]
     private Bitmap? _arcCoverImage;
+
+    /// <summary>Cover keys for the header mosaic (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #7) - see <see cref="ReadingListCoverMosaic"/>. Empty when the toggle is off or the list has no covers.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowCoverMosaic))]
+    [NotifyPropertyChangedFor(nameof(CoverMosaicColumns))]
+    private IReadOnlyList<string> _coverMosaicKeys = Array.Empty<string>();
+
+    /// <summary>The mosaic only stands in when the list has no arc cover of its own - an explicit or downloaded arc cover always wins.</summary>
+    public bool ShowCoverMosaic => ArcCoverImage is null && CoverMosaicKeys.Count > 0;
+
+    public int CoverMosaicColumns => CoverMosaicKeys.Count > 1 ? 2 : 1;
 
     /// <summary>Staggered row entrance (docs/superpowers/specs/2026-09-12-entrance-animation-v2-
     /// design.md) - set true only when <see cref="LoadReadingList"/> is called with
@@ -626,7 +616,11 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         LinkedStoryEventName = list.StoryEvent?.Name;
         CreatedAtLabel = $"Created {list.CreatedAt:MMM d, yyyy}";
         IsArcLinked = !string.IsNullOrEmpty(list.Source);
+        _loadingFollowArc = true;
+        FollowArc = IsArcLinked && list.FollowArc;
+        _loadingFollowArc = false;
         ArcSourceLabel = IsArcLinked ? $"via {ReadingListSourceRegistry.GetDisplayName(list.Source!)}" : null;
+        ArcSourceName = IsArcLinked ? ReadingListSourceRegistry.GetDisplayName(list.Source!) : null;
 
         ArcCoverImage = ArcCoverImageCache.Get(list.Id);
         if (ArcCoverImage is null && !string.IsNullOrEmpty(list.CoverImageUrl))
@@ -636,11 +630,19 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
 
         var items = list.Items.OrderBy(i => i.SortOrder).ToList();
 
+        CoverMosaicKeys = context.GetOrCreateAppSettings().ReadingListMosaic
+            ? ReadingListCoverMosaic.PickCoverKeys(items
+                .Select(i => i.Issue)
+                .Where(issue => issue is { FilePath: not null })
+                .Select(issue => CoverFingerprint.Stem(issue!.Id, issue.FilePath, issue.FileSize))
+                .ToList())
+            : Array.Empty<string>();
+
         Groups.Clear();
         foreach (var group in items.GroupBy(i => i.GroupLabel ?? string.Empty))
         {
             var rows = new ObservableCollection<ReadingListItemRowViewModel>(
-                group.Select(i => new ReadingListItemRowViewModel(i, MoveItemUp, MoveItemDown, RemoveItem, PersistFieldChange, StartLink, OpenIssue, ToggleReadRow)));
+                group.Select(i => new ReadingListItemRowViewModel(i, MoveItemUp, MoveItemDown, RemoveItem, PersistFieldChange, StartLink, OpenIssue, ToggleReadRow, RequestItem)));
             Groups.Add(new ReadingListGroupViewModel { Label = group.Key, Rows = rows });
         }
 
@@ -1014,16 +1016,11 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         using var context = PaperbunkrDb.CreateContext();
-        var items = context.ReadingListItems.Where(i => i.ReadingListId == listId).OrderBy(i => i.SortOrder).ToList();
-        int index = items.FindIndex(i => i.Id == row.Item.Id);
-        int swapWith = index + offset;
-        if (index < 0 || swapWith < 0 || swapWith >= items.Count)
+        if (!ReadingListManager.MoveItem(context, listId, row.Item.Id, offset))
         {
             return;
         }
 
-        (items[index].SortOrder, items[swapWith].SortOrder) = (items[swapWith].SortOrder, items[index].SortOrder);
-        BumpUpdatedAt(context, listId);
         context.SaveChanges();
         LoadReadingList(listId);
     }
@@ -1036,14 +1033,11 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         using var context = PaperbunkrDb.CreateContext();
-        var item = context.ReadingListItems.FirstOrDefault(i => i.Id == row.Item.Id);
-        if (item is null)
+        if (ReadingListManager.RemoveItems(context, listId, new[] { row.Item.Id }) == 0)
         {
             return;
         }
 
-        context.ReadingListItems.Remove(item);
-        BumpUpdatedAt(context, listId);
         context.SaveChanges();
         LoadReadingList(listId);
     }
@@ -1114,9 +1108,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         }
         else
         {
-            int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
-            context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = result.IssueId, SortOrder = nextOrder });
-            BumpUpdatedAt(context, listId);
+            ReadingListManager.AddIssues(context, listId, new[] { result.IssueId });
             context.SaveChanges();
         }
 
@@ -1401,6 +1393,145 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         {
             StatusMessage = ex.Message;
         }
+    }
+
+    private bool _loadingFollowArc;
+
+    /// <summary>
+    /// "Follow this arc": a scheduled task keeps the list in step with its source and requests newly listed issues you don't have
+    /// (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 8). Only meaningful on arc-linked lists.
+    /// </summary>
+    [ObservableProperty]
+    private bool _followArc;
+
+    partial void OnFollowArcChanged(bool value)
+    {
+        if (_loadingFollowArc || _activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var list = context.ReadingLists.FirstOrDefault(l => l.Id == listId);
+        if (list is null || string.IsNullOrEmpty(list.Source))
+        {
+            return;
+        }
+
+        list.FollowArc = value;
+        context.SaveChanges();
+        StatusMessage = value
+            ? "Following this arc: new issues are checked for daily (turn on \"Follow story arcs\" under Preferences → Automation)."
+            : "No longer following this arc.";
+    }
+
+    /// <summary>Test seam: the ComicVine client used for "Request missing". Production uses the shared, rate-limited one at foreground priority.</summary>
+    internal Func<string, IComicVineClient> CreateComicVine { get; set; } = key => new ComicVineClient(key, ComicVineRequestPriority.High);
+
+    /// <summary>Test seam: the Metron client, for a series that was tracked on Metron. Production builds it from the login saved under Connections.</summary>
+    internal Func<IComicVineClient?> CreateMetron { get; set; } = () =>
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        return ComicProviderFactory.Create(context, ComicProvider.Metron, ComicVineRequestPriority.High);
+    };
+
+    /// <summary>
+    /// "Request missing issues" (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 8): turns this arc-linked list's
+    /// placeholders into wanted issues. Runs as an Activity Center job because matching each series to ComicVine takes a few rate-limited requests.
+    /// </summary>
+    [RelayCommand]
+    private async Task RequestMissingFromArc()
+    {
+        if (_activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        if (!IsArcLinked)
+        {
+            StatusMessage = "Bulk requests are only available on lists built from a story arc. Use Request on individual missing issues instead.";
+            return;
+        }
+
+        await RequestAsync(listId, "Requesting missing issues", (context, client, clientFor, ct) => ArcRequestService.RequestMissingAsync(context, listId, client, ct, clientFor));
+    }
+
+    /// <summary>Per-item Request on a missing (placeholder) row of any list.</summary>
+    private void RequestItem(ReadingListItemRowViewModel row)
+    {
+        if (_activeReadingListId is not int listId || row.Item.Issue is not { IsPlaceholder: true } issue)
+        {
+            return;
+        }
+
+        _ = RequestAsync(listId, $"Requesting {issue.Series?.Name} #{issue.Number}", (context, client, clientFor, ct) =>
+            ArcRequestService.RequestPlaceholdersAsync(context, new[] { issue }, client, ct, clientFor));
+    }
+
+    private async Task RequestAsync(int listId, string jobTitle, Func<PaperbunkrDbContext, IComicVineClient?, Func<ComicProvider, IComicVineClient?>, CancellationToken, Task<ArcRequestResult>> request)
+    {
+        string? key;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            key = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey);
+        }
+
+        var metron = CreateMetron();
+        if (string.IsNullOrEmpty(key) && metron is null)
+        {
+            StatusMessage = "Requesting needs your ComicVine API key - add it under Preferences → Connections.";
+            return;
+        }
+
+        var comicVine = string.IsNullOrEmpty(key) ? null : CreateComicVine(key);
+        IComicVineClient? ClientFor(ComicProvider provider) => provider == ComicProvider.Metron ? metron : comicVine;
+
+        using var job = _activity.StartJob(ActivityJobKind.Acquisition, jobTitle);
+        try
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            var result = await request(context, comicVine, ClientFor, job.CancellationToken);
+
+            var summary = DescribeRequestResult(result);
+            StatusMessage = summary;
+            job.Succeed(summary, new ActivityLink(ActivityLinkKind.WantedScreen), itemsProcessed: result.Requested, itemsFailed: result.Unresolved.Count);
+        }
+        catch (OperationCanceledException)
+        {
+            StatusMessage = "Cancelled.";
+        }
+        catch (ComicVineException ex)
+        {
+            StatusMessage = ex.Message;
+            job.Fail(ex.Message);
+        }
+    }
+
+    /// <summary>One line of totals, then up to three of the entries that couldn't be matched (never silently dropped).</summary>
+    internal static string DescribeRequestResult(ArcRequestResult result)
+    {
+        var parts = new List<string> { result.Requested == 1 ? "Requested 1 issue" : $"Requested {result.Requested} issues" };
+        if (result.AlreadyTracked > 0)
+        {
+            parts.Add($"{result.AlreadyTracked} already requested");
+        }
+
+        if (result.Unresolved.Count > 0)
+        {
+            parts.Add($"{result.Unresolved.Count} couldn't be matched");
+        }
+
+        var text = string.Join(", ", parts) + ".";
+        if (result.Unresolved.Count > 0)
+        {
+            text += string.Concat(result.Unresolved.Take(3).Select(u => $"{Environment.NewLine}{u.Series} #{u.Number}: {u.Reason}"));
+            if (result.Unresolved.Count > 3)
+            {
+                text += $"{Environment.NewLine}…and {result.Unresolved.Count - 3} more.";
+            }
+        }
+
+        return text;
     }
 
     private IReadingListSource? ResolveCurrentArcSource()

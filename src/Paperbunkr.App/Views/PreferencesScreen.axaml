@@ -215,6 +215,30 @@
                                     <TextBlock Text="Connections" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsOrganizeScrapeSection}"
+                                    Command="{Binding GoOrganizeScrapeCommand}"
+                                    AutomationProperties.AutomationId="PreferencesOrganizeScrapeNavButton">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="ArrowDownload" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Organize &amp; Scrape" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsAcquisitionSection}"
+                                    Command="{Binding GoAcquisitionCommand}"
+                                    AutomationProperties.AutomationId="PreferencesAcquisitionNavButton">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Acquisition" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsSharingSection}"
+                                    Command="{Binding GoSharingCommand}"
+                                    AutomationProperties.AutomationId="PreferencesSharingNavButton">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="Share" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Sharing" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsPluginsSection}"
                                     Command="{Binding GoPluginsCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
@@ -272,6 +296,17 @@
                 <pref:ReaderSection IsVisible="{Binding IsReaderSection}" />
                 <pref:KeyboardShortcutsSection IsVisible="{Binding IsKeyboardShortcutsSection}" />
                 <pref:ConnectionsSection IsVisible="{Binding IsConnectionsSection}" />
+                <!-- Own view model: the wrapper carries the visibility binding (against the screen's DataContext), the section the Acquisition one. -->
+                <Panel IsVisible="{Binding IsOrganizeScrapeSection}">
+                    <pref:OrganizeScrapeSection DataContext="{Binding OrganizeScrape}" />
+                </Panel>
+                <Panel IsVisible="{Binding IsAcquisitionSection}">
+                    <pref:AcquisitionSection DataContext="{Binding Acquisition}" />
+                </Panel>
+                <!-- Own view model, set after construction: the wrapper carries the visibility binding, the section the Sharing one. -->
+                <Panel IsVisible="{Binding IsSharingSection}">
+                    <pref:SharingSection DataContext="{Binding Sharing}" />
+                </Panel>
                 <pref:PluginsSection IsVisible="{Binding IsPluginsSection}" />
                 <pref:AdvancedSection IsVisible="{Binding IsAdvancedSection}" />
                 <pref:AboutSection IsVisible="{Binding IsAboutSection}" />

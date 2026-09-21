@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.ReadingLists;
 
 namespace Paperbunkr.App.Services;
 
@@ -29,8 +30,9 @@ public static class LibraryDeletionHelper
     /// <summary>Removes an Issue: its cross-references, records its path in the removed-files blacklist, its file (to the Recycle Bin, best-effort), then the row itself. Caller owns <c>SaveChanges</c>.</summary>
     public static void RemoveIssue(PaperbunkrDbContext context, Issue issue)
     {
-        var listItems = context.ReadingListItems.Where(i => i.IssueId == issue.Id);
-        context.ReadingListItems.RemoveRange(listItems);
+        // Through ReadingListManager so the ReadingListChanged plugin hook hears about the removal
+        // (one Removed event per affected list, released after the caller's SaveChanges).
+        ReadingListManager.RemoveIssueFromAllLists(context, issue.Id);
 
         var memberships = context.EventMemberships.Where(m => m.IssueId == issue.Id);
         context.EventMemberships.RemoveRange(memberships);

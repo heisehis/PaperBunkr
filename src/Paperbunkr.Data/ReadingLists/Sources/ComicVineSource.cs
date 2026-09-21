@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Paperbunkr.Data.ComicVine;
 
 namespace Paperbunkr.Data.ReadingLists.Sources;
 
@@ -17,15 +18,11 @@ public sealed class ComicVineSource : IReadingListSource
     private const string BaseUrl = "https://comicvine.gamespot.com/api";
     private const int BatchChunkSize = 40;
 
-    private static readonly HttpClient Http = CreateClient();
-
-    // ComicVine documents a ~200 req/hour limit; a simple minimum spacing between requests is a
-    // cheap, good-enough courtesy throttle for the handful of calls one user action makes.
-    private static readonly TimeSpan MinRequestInterval = TimeSpan.FromSeconds(1);
+    // All ComicVine traffic shares one client whose handler enforces spacing, the hourly budget and
+    // rate-limit pauses process-wide (ComicVineRateLimitHandler). Requests here are foreground (High).
+    private static HttpClient Http => ComicVineHttp.Client;
 
     private readonly string _apiKey;
-    private readonly object _throttleLock = new();
-    private DateTime _lastRequestUtc = DateTime.MinValue;
 
     public ComicVineSource(string apiKey)
     {
@@ -173,12 +170,12 @@ public sealed class ComicVineSource : IReadingListSource
 
     private async Task<JsonNode?> GetJsonAsync(string url, CancellationToken cancellationToken)
     {
-        await ThrottleAsync(cancellationToken).ConfigureAwait(false);
-
         string body;
         try
         {
-            body = await Http.GetStringAsync(url, cancellationToken).ConfigureAwait(false);
+            using var response = await Http.SendAsync(ComicVineHttp.Get(url), cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)
         {
@@ -201,6 +198,12 @@ public sealed class ComicVineSource : IReadingListSource
         }
 
         int statusCode = root?["status_code"]?.GetValue<int>() ?? 0;
+        if (statusCode == 107)
+        {
+            // ComicVine's own "rate limit exceeded": pause every caller, not just this request.
+            ComicVineHttp.Handler.ReportRateLimited();
+        }
+
         if (statusCode != 1)
         {
             string? error = root?["error"]?.GetValue<string>();
@@ -208,32 +211,5 @@ public sealed class ComicVineSource : IReadingListSource
         }
 
         return root;
-    }
-
-    private async Task ThrottleAsync(CancellationToken cancellationToken)
-    {
-        TimeSpan delay;
-        lock (_throttleLock)
-        {
-            delay = MinRequestInterval - (DateTime.UtcNow - _lastRequestUtc);
-        }
-
-        if (delay > TimeSpan.Zero)
-        {
-            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-        }
-
-        lock (_throttleLock)
-        {
-            _lastRequestUtc = DateTime.UtcNow;
-        }
-    }
-
-    private static HttpClient CreateClient()
-    {
-        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-        // ComicVine rejects requests without a real User-Agent header.
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Paperbunkr/0.1 (comic library manager)");
-        return client;
     }
 }

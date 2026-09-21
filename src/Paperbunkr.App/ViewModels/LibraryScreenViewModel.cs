@@ -968,7 +968,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _dataVersion++;
         _projection = null;
 
-        using var context = PaperbunkrDb.CreateContext();
+        // The one load that opts in to books mirrored from other libraries (docs/superpowers/specs/2026-09-19-remote-
+        // library-sharing-design.md section 7.2): everything else in the app still sees local rows only.
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         // Include(Tags) - MatchesSearch and IssueListRow both read Issue.JoinedGenre()/JoinedTags()
         // (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-design.md); without it every
         // issue would look like it has no Genre/Tags at all, breaking Library search and the Comic
@@ -989,10 +991,16 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             .Include(s => s.CollectionItems)
             .Include(s => s.TrackingLinks)
             .Include(s => s.Titles)
+            .Include(s => s.RemoteSource)
             .AsNoTracking()
             .AsSplitQuery()
             .OrderBy(s => s.SortName ?? s.Name)
             .ToList();
+
+        // Which ids belong to a remote library, so read-only gating (menus, editors, scrape, delete) never has to hit the database.
+        _remoteSeriesIds = _allSeries.Where(s => s.RemoteSourceId is not null).Select(s => s.Id).ToHashSet();
+        _remoteIssueIds = _allSeries.SelectMany(s => s.Issues).Where(i => i.RemoteSourceId is not null).Select(i => i.Id).ToHashSet();
+        RefreshSourceOptions();
 
         // Enabled Virtual Tags, for IssueList's dynamic per-tag sort/group entries (design §1) -
         // same query shape as SmartScreenViewModel's own _virtualTagOptions load.
@@ -1276,7 +1284,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             FilterTrackedOnly,
             FilterUnreadOnly,
             FilterMissingIssues,
-            IssueList.CaptureSortGroupSpec());
+            IssueList.CaptureSortGroupSpec(),
+            SourceFilter);
 
         return new ViewRequest(
             inputs,
@@ -1345,6 +1354,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         IssueList.ApplyPrecomputed(result.Rows, result.RowGroups, result.IsGrouped);
 
+        OnPropertyChanged(nameof(ShowAlphabetIndex));
+        OnPropertyChanged(nameof(AlphabetIndex));
         OnPropertyChanged(nameof(HasAnyResults));
         OnPropertyChanged(nameof(ShowEmptyState));
         OnPropertyChanged(nameof(EmptyStateMessage));
@@ -1435,6 +1446,52 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         patch(series);
         _projection = _projection?.WithSeriesRebuilt(series, IssueList.VirtualTagDefinitions);
         RebuildView(ViewTrigger.Invalidate);
+    }
+
+    // ---- Remote libraries are read-only (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md sections 7.2/8) ----
+    // Most commands below already do nothing for a remote id (they Find() the row in a default context, which cannot see it - verified
+    // by RemoteRowIsolationTests). These guards cover the entry points that do NOT go through such a lookup - they open an editor,
+    // start a scrape/organize job or ask a whole selection - and turn a confusing silent failure into an explicit message.
+
+    private HashSet<int> _remoteIssueIds = new();
+    private HashSet<int> _remoteSeriesIds = new();
+
+    private const string RemoteReadOnlyTitle = "Remote books are read-only";
+    private const string RemoteReadOnlyDetail = "Books from another library can't be edited, scraped, organized or deleted here. You can read them, and your own progress is kept.";
+
+    /// <summary>True (and a message is shown) if any of these ids is a book/series from a remote library.</summary>
+    private bool BlockIfRemote(IEnumerable<int>? issueIds = null, IEnumerable<int>? seriesIds = null)
+    {
+        bool remote = (issueIds?.Any(_remoteIssueIds.Contains) ?? false) || (seriesIds?.Any(_remoteSeriesIds.Contains) ?? false);
+        if (remote)
+        {
+            _showToast(RemoteReadOnlyTitle, RemoteReadOnlyDetail);
+        }
+
+        return remote;
+    }
+
+    /// <summary>The local subset of <paramref name="ids"/>; tells the user when remote ones were left out of a mixed selection.</summary>
+    private List<int> LocalIssuesOnly(IReadOnlyList<int> ids)
+    {
+        var local = ids.Where(id => !_remoteIssueIds.Contains(id)).ToList();
+        if (local.Count != ids.Count)
+        {
+            _showToast(RemoteReadOnlyTitle, $"{ids.Count - local.Count} book(s) from a remote library were left out. {RemoteReadOnlyDetail}");
+        }
+
+        return local;
+    }
+
+    private List<int> LocalSeriesOnly(IReadOnlyList<int> ids)
+    {
+        var local = ids.Where(id => !_remoteSeriesIds.Contains(id)).ToList();
+        if (local.Count != ids.Count)
+        {
+            _showToast(RemoteReadOnlyTitle, $"{ids.Count - local.Count} series from a remote library were left out. {RemoteReadOnlyDetail}");
+        }
+
+        return local;
     }
 
     // 0 = idle, 1 = a reconcile pass is running. Static: one library-wide cover cache, and
@@ -2075,7 +2132,37 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <see cref="IssueList"/>'s sort/group state directly since that's the only one left (see the
     /// constructor's relay for how this stays live).</summary>
     public bool ShowAlphabetIndex =>
-        IssueList.SortField == IssueListSortField.Series && !IssueList.IsGrouped;
+        IssueList.SortField == IssueListSortField.Series && (!IssueList.IsGrouped || GroupsAreLetterBuckets);
+
+    /// <summary>True when the active granularity's groups are the single-letter buckets ("A", "B", ...) - the Alphabetical
+    /// grouping. The rail then jumps to a group header instead of estimating an offset into a flat list (docs/superpowers/specs/
+    /// 2026-09-21-cosmetics-pitch-2-design.md #26).</summary>
+    public bool GroupsAreLetterBuckets => IsSeriesGranularity
+        ? Groups.Count > 0 && Groups.All(g => g.Header.Length == 1)
+        : IssueList.Groups.Count > 0 && IssueList.Groups.All(g => g.Header.Length == 1);
+
+    /// <summary>The rail's 27 letters, with letters that have no items in the current view marked so they can dim. Rebuilt with the view.</summary>
+    public IReadOnlyList<AlphabetIndexEntry> AlphabetIndex
+    {
+        get
+        {
+            if (!ShowAlphabetIndex)
+            {
+                return AlphabetIndexEntry.Build(Array.Empty<string>());
+            }
+
+            if (IsGrouped)
+            {
+                return AlphabetIndexEntry.Build(IsSeriesGranularity
+                    ? Groups.Select(g => g.Header)
+                    : IssueList.Groups.Select(g => g.Header));
+            }
+
+            return AlphabetIndexEntry.Build(IsSeriesGranularity
+                ? Covers.Select(c => c.Name)
+                : IssueList.Rows.Select(r => r.SeriesName));
+        }
+    }
 
     // --- Toolbar chrome (docs/superpowers/specs/2026-08-27-library-browsing-4b-toolbar-rework-
     // design.md §2-§5) - one "View & Sort" tabbed popup replacing the old Filter/Sort/Group/Display
@@ -2544,7 +2631,52 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     // --- Chips row + empty state ---
 
     public bool HasActiveFilters =>
-        FilterUnreadOnly || FilterMissingIssues || FilterTrackedOnly || SearchMode != SearchMode.All;
+        FilterUnreadOnly || FilterMissingIssues || FilterTrackedOnly || SearchMode != SearchMode.All || SourceFilter is not null;
+
+    // ---- Library source filter (remote-library-sharing design 8): every library / this computer / one remote library. ----
+    // Session-only on purpose: it is not part of saved layouts or workspaces (a remote library may not exist next launch).
+
+    /// <summary>One choice in the source filter: <see cref="Id"/> null = all, 0 = this computer, n = remote source n.</summary>
+    public sealed record SourceOption(int? Id, string Label);
+
+    [ObservableProperty]
+    private int? _sourceFilter;
+
+    /// <summary>Filter choices; only has more than the default when at least one remote library is mirrored.</summary>
+    public IReadOnlyList<SourceOption> SourceOptions { get; private set; } = Array.Empty<SourceOption>();
+
+    public bool HasRemoteSources => SourceOptions.Count > 0;
+
+    public string SourceChipLabel => SourceOptions.FirstOrDefault(o => o.Id == SourceFilter)?.Label ?? "Library";
+
+    partial void OnSourceFilterChanged(int? value)
+    {
+        OnPropertyChanged(nameof(SourceChipLabel));
+        RaiseChipAndEmptyState();
+        RebuildView(ViewTrigger.Filter);
+    }
+
+    [RelayCommand] private void SetSourceFilter(int? id) => SourceFilter = id;
+    [RelayCommand] private void ClearSourceFilter() => SourceFilter = null;
+
+    private void RefreshSourceOptions()
+    {
+        var remotes = _allSeries.Where(s => s.RemoteSourceId is not null)
+            .GroupBy(s => s.RemoteSourceId!.Value)
+            .Select(g => new SourceOption(g.Key, g.First().RemoteSource?.DisplayName ?? "Remote library"))
+            .OrderBy(o => o.Label, StringComparer.CurrentCultureIgnoreCase).ToList();
+        SourceOptions = remotes.Count == 0
+            ? Array.Empty<SourceOption>()
+            : new[] { new SourceOption(null, "All libraries"), new SourceOption(0, "This computer") }.Concat(remotes).ToList();
+        if (SourceFilter is int current && current != 0 && remotes.All(o => o.Id != current))
+        {
+            SourceFilter = null;   // that remote library is gone
+        }
+
+        OnPropertyChanged(nameof(SourceOptions));
+        OnPropertyChanged(nameof(HasRemoteSources));
+        OnPropertyChanged(nameof(SourceChipLabel));
+    }
 
     public bool IsSortNonDefault =>
         !(IssueList.SortField == IssueListSortField.Added && IssueList.SortDirection == SortDirection.Descending);
@@ -2584,6 +2716,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         FilterUnreadOnly = false;
         FilterMissingIssues = false;
         FilterTrackedOnly = false;
+        SourceFilter = null;
         SearchMode = SearchMode.All;
     }
 
@@ -2638,6 +2771,103 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             _enqueueMetadataWriteBack(id, true);
         }
     }
+
+    /// <summary>
+    /// Host hook for "Scrape with ComicVine…" (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8): runs the scrape over the given issue ids and
+    /// returns a one-line result. Set by the shell; null means the feature isn't available (no host), which hides nothing but does nothing.
+    /// </summary>
+    public Func<IReadOnlyList<int>, Task<string>>? ScrapeIssues { get; set; }
+
+    /// <summary>"Scrape with ComicVine…" on the right-clicked issue, expanded to the whole selection when it is part of one.</summary>
+    [RelayCommand]
+    private async Task ScrapeWithComicVine(int issueId)
+    {
+        if (BlockIfRemote(Selection.UnionForAction(issueId)))
+        {
+            return;
+        }
+
+        if (ScrapeIssues is null)
+        {
+            return;
+        }
+
+        await ScrapeIssues(Selection.UnionForAction(issueId).ToList());
+        RefreshAfterScrape();
+    }
+
+    /// <summary>Series-card equivalent: every issue of the (selection-expanded) series.</summary>
+    [RelayCommand]
+    private async Task ScrapeSeriesWithComicVine(int seriesId)
+    {
+        if (BlockIfRemote(seriesIds: SeriesSelection.UnionForAction(seriesId)))
+        {
+            return;
+        }
+
+        if (ScrapeIssues is null)
+        {
+            return;
+        }
+
+        var seriesIds = SeriesSelection.UnionForAction(seriesId).ToList();
+        List<int> ids;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            ids = context.Issues.Where(i => seriesIds.Contains(i.SeriesId)).Select(i => i.Id).ToList();
+        }
+
+        await ScrapeIssues(ids);
+        RefreshAfterScrape();
+    }
+
+    /// <summary>Host hook for "Organize…": runs the organize flow over the given issue ids and returns a one-line result. Set by the shell.</summary>
+    public Func<IReadOnlyList<int>, Task<string>>? OrganizeIssues { get; set; }
+
+    /// <summary>"Organize…" on the right-clicked issue, expanded to the whole selection when it is part of one.</summary>
+    [RelayCommand]
+    private async Task OrganizeWithProfile(int issueId)
+    {
+        if (BlockIfRemote(Selection.UnionForAction(issueId)))
+        {
+            return;
+        }
+
+        if (OrganizeIssues is null)
+        {
+            return;
+        }
+
+        await OrganizeIssues(Selection.UnionForAction(issueId).ToList());
+        RefreshAfterScrape();
+    }
+
+    /// <summary>Series-card equivalent: every issue of the (selection-expanded) series.</summary>
+    [RelayCommand]
+    private async Task OrganizeSeriesWithProfile(int seriesId)
+    {
+        if (BlockIfRemote(seriesIds: SeriesSelection.UnionForAction(seriesId)))
+        {
+            return;
+        }
+
+        if (OrganizeIssues is null)
+        {
+            return;
+        }
+
+        var seriesIds = SeriesSelection.UnionForAction(seriesId).ToList();
+        List<int> ids;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            ids = context.Issues.Where(i => seriesIds.Contains(i.SeriesId)).Select(i => i.Id).ToList();
+        }
+
+        await OrganizeIssues(ids);
+        RefreshAfterScrape();
+    }
+
+    private void RefreshAfterScrape() => Avalonia.Threading.Dispatcher.UIThread.Post(() => LoadFromDatabase());
 
     /// <summary>Series-card equivalent - fans out to every member issue of the (selection-expanded) series.</summary>
     [RelayCommand]
@@ -2787,7 +3017,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     private void MarkIssuesRead(IReadOnlyList<int> issueIds)
     {
-        using var context = PaperbunkrDb.CreateContext();
+        // Progress on a remote book is stored on this computer's own row, so - unlike editing - marking it read is allowed.
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         int marked = 0;
         var seriesIds = new HashSet<int>();
         foreach (int issueId in issueIds)
@@ -2825,7 +3056,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     private void MarkIssuesUnread(IReadOnlyList<int> issueIds)
     {
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         int marked = 0;
         foreach (int issueId in issueIds)
         {
@@ -3017,30 +3248,11 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     private void AddIssuesToReadingList(PaperbunkrDbContext context, ReadingList list, IReadOnlyList<int> issueIds)
     {
-        var existingIssueIds = context.ReadingListItems
-            .Where(i => i.ReadingListId == list.Id)
-            .Select(i => i.IssueId)
-            .ToHashSet();
-
-        int nextOrder = context.ReadingListItems.Count(i => i.ReadingListId == list.Id);
-        int added = 0;
-        int skipped = 0;
-        foreach (int issueId in issueIds)
-        {
-            if (existingIssueIds.Contains(issueId))
-            {
-                skipped++;
-                continue;
-            }
-
-            context.ReadingListItems.Add(new ReadingListItem
-            {
-                ReadingListId = list.Id,
-                IssueId = issueId,
-                SortOrder = nextOrder++,
-            });
-            added++;
-        }
+        // Through ReadingListManager (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §5.4)
+        // so the ReadingListChanged plugin hook hears about it; the caller still owns SaveChanges.
+        var result = ReadingListManager.AddIssues(context, list.Id, issueIds);
+        int added = result.Added;
+        int skipped = result.Skipped;
 
         string message = (added, skipped) switch
         {
@@ -3053,7 +3265,13 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     /// <summary>Quick Rating + free-text Review in one popup (docs/ce-feature-inventory.md §A) - opens the lightweight overlay instead of the full single-book Issue Properties editor.</summary>
     [RelayCommand]
-    private void OpenQuickRate(int issueId) => _onQuickRate(issueId);
+    private void OpenQuickRate(int issueId)
+    {
+        if (!BlockIfRemote(new[] { issueId }))
+        {
+            _onQuickRate(issueId);
+        }
+    }
 
     /// <summary>Series-card equivalent of <see cref="RevealIssueCommand"/> - a series card has no
     /// single file of its own, so this reveals its first issue's folder instead (docs/superpowers/
@@ -3092,6 +3310,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     private void DeleteIssues(IReadOnlyList<int> issueIds)
     {
+        issueIds = LocalIssuesOnly(issueIds);
         using var context = PaperbunkrDb.CreateContext();
         foreach (int issueId in issueIds)
         {
@@ -3149,6 +3368,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     private void OpenIssueEditor(IReadOnlyList<int> issueIds)
     {
+        issueIds = LocalIssuesOnly(issueIds);
         if (issueIds.Count == 0)
         {
             return;
@@ -3273,7 +3493,14 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>Action bar's "Bulk Edit" button (series granularity) - opens
     /// <see cref="BulkSeriesPropertiesScreenViewModel"/> for the whole current selection.</summary>
     [RelayCommand]
-    private void BulkEditSeriesSelection() => _goBulkSeriesProperties(SeriesSelection.SelectedIds.ToList());
+    private void BulkEditSeriesSelection()
+    {
+        var local = LocalSeriesOnly(SeriesSelection.SelectedIds.ToList());
+        if (local.Count > 0)
+        {
+            _goBulkSeriesProperties(local);
+        }
+    }
 
     /// <summary>Action bar's "Delete" button (series granularity) - deletes every currently selected series.</summary>
     [RelayCommand]
@@ -3325,6 +3552,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     private void DeleteSeriesList(IReadOnlyList<int> seriesIds)
     {
+        seriesIds = LocalSeriesOnly(seriesIds);
         using var context = PaperbunkrDb.CreateContext();
         foreach (int seriesId in seriesIds)
         {

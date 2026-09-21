@@ -100,7 +100,7 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="Padding" Value="8,7" />
+            <Setter Property="Padding" Value="{DynamicResource PbSidebarItemPadding}" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="Cursor" Value="Hand" />
@@ -189,8 +189,13 @@
             <Grid RowDefinitions="Auto,*,Auto" Margin="0,14,0,10">
 
                 <StackPanel Grid.Row="0" Margin="10,0" Spacing="2">
-                    <Border Width="26" Height="26" CornerRadius="6" BorderThickness="1.5"
-                            BorderBrush="{DynamicResource PbAccentBrush}" Margin="0,0,0,12" HorizontalAlignment="Center" />
+                    <!-- App mark. A small pre-scaled copy of Assets/paperbunkr-logo-source.png (96 px, sharp at 3x for a 32 px slot) so the rail
+                         doesn't keep the 1024 px source decoded. Fixed brand colours, not skin-tinted. Decorative: no command or tooltip. 32 + 6 keeps the
+                         38 px this slot has always occupied (26 box + 12 gap), so the rail buttons below don't move. -->
+                    <Image Width="32" Height="32" Margin="0,0,0,6" HorizontalAlignment="Center"
+                           Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-rail.png"
+                           RenderOptions.BitmapInterpolationMode="HighQuality"
+                           AutomationProperties.AccessibilityView="Raw" />
 
                     <Button Classes="rail" Classes.active="{Binding IsHome}"
                             Command="{Binding GoHomeCommand}" ToolTip.Tip="Home"
@@ -244,6 +249,15 @@
                         <StackPanel Orientation="Horizontal">
                             <fi:SymbolIcon Symbol="Planet" IconVariant="{Binding IsEvents, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Continuity" IsVisible="{Binding IsNavRailExpanded}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="rail" Classes.active="{Binding IsWanted}"
+                            Command="{Binding GoWantedCommand}" ToolTip.Tip="Wanted"
+                            AutomationProperties.AutomationId="WantedRailButton"
+                            AutomationProperties.Name="Wanted">
+                        <StackPanel Orientation="Horizontal">
+                            <fi:SymbolIcon Symbol="Search" IconVariant="{Binding IsWanted, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
+                            <TextBlock Classes="railLabel" Text="Wanted" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
                 </StackPanel>
@@ -660,7 +674,7 @@
                         </Grid>
 
                         <Border IsVisible="{Binding Reading.HasActiveTagFilter}" Background="{DynamicResource PbAccentSoftBrush}"
-                                CornerRadius="999" Padding="10,4" Margin="8,0,8,10">
+                                CornerRadius="{StaticResource PbRadiusChip}" Padding="10,4" Margin="8,0,8,10">
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Grid.Column="0" Text="{Binding Reading.ActiveTagFilter, StringFormat='Tag: {0}'}"
                                            FontSize="11.5" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
@@ -902,6 +916,9 @@
                     </DataTemplate>
                     <DataTemplate DataType="vm:InsightsScreenViewModel">
                         <views:InsightsScreen />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:WantedScreenViewModel">
+                        <views:WantedScreen />
                     </DataTemplate>
                     <DataTemplate DataType="vm:LibraryScreenViewModel">
                         <views:LibraryScreen />

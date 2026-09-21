@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Paperbunkr.App.Scraper"
+             mc:Ignorable="d" d:DesignWidth="360" d:DesignHeight="280"
+             x:Class="Paperbunkr.App.Scraper.ProfileSelectDialogView"
+             x:DataType="vm:ProfileSelectDialogViewModel">
+
+    <!-- No card chrome here - the host's NativePluginModalHost Border (MainWindow.axaml) owns it. -->
+    <StackPanel Spacing="14" Width="360">
+        <TextBlock Text="Which profile should this run use?" FontSize="16" FontWeight="Bold"
+                   Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+
+        <ItemsControl ItemsSource="{Binding Profiles}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Spacing="4" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ProfileSelectRowViewModel">
+                    <Button Content="{Binding Name}" Command="{Binding ChooseCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Button Content="Cancel" Command="{Binding CancelCommand}" HorizontalAlignment="Right" />
+    </StackPanel>
+</UserControl>

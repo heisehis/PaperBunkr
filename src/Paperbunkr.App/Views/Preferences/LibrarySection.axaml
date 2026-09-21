@@ -1,4 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:beh="using:Paperbunkr.App.Behaviors"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
@@ -56,8 +57,29 @@
         <DataTemplate x:Key="MissingFileRowTemplate" x:DataType="vm:MissingFileRowViewModel">
             <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
                 <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
-                    <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
-                               VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <!-- Severity chip (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #5): dot + icon +
+                             the text label, so colour is never the only signal. Warning = amber (PbBadge*, same family
+                             as the "Currently missing" tile), Error = red (PbDanger*). PbRadiusChip, never an oval. -->
+                        <Border IsVisible="{Binding IsWarning}" CornerRadius="{StaticResource PbRadiusChip}" Padding="7,2"
+                                Background="{DynamicResource PbBadgeSoftBrush}" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Ellipse Width="6" Height="6" Fill="{DynamicResource PbBadgeBrush}" VerticalAlignment="Center" />
+                                <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" />
+                                <TextBlock Text="{Binding SeverityLabel}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbBadgeBrush}" />
+                            </StackPanel>
+                        </Border>
+                        <Border IsVisible="{Binding IsError}" CornerRadius="{StaticResource PbRadiusChip}" Padding="7,2"
+                                Background="{DynamicResource PbDangerSoftBrush}" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Ellipse Width="6" Height="6" Fill="{DynamicResource PbDangerBrush}" VerticalAlignment="Center" />
+                                <fi:SymbolIcon Symbol="ErrorCircle" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                <TextBlock Text="{Binding SeverityLabel}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbDangerBrush}" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                         <Button Classes="headerAction ghost" Command="{Binding RelinkCommand}">
                             <StackPanel Orientation="Horizontal" Spacing="5">
@@ -224,7 +246,7 @@
                         <pref:SettingsRow Icon="Warning" Title="Confirm missing after this many checks"
                                            Description="How many consecutive Verify passes a file must be missing for before it's eligible for Remove All Confirmed Missing or unattended auto-remove during Scan.">
                             <pref:SettingsRow.SettingsContent>
-                                <NumericUpDown Value="{Binding LibraryHealthConfirmedMissingThreshold}" Minimum="1" Maximum="5" Width="120"
+                                <TextBox Text="{Binding LibraryHealthConfirmedMissingThreshold}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="1" beh:TextSpinner.Maximum="5" Width="120"
                                                AutomationProperties.AutomationId="LibraryHealthConfirmedMissingThresholdInput" />
                             </pref:SettingsRow.SettingsContent>
                         </pref:SettingsRow>

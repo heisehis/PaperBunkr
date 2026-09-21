@@ -5,8 +5,8 @@ namespace Paperbunkr.Data.Tests;
 
 /// <summary>
 /// Verifies the hand-written <c>AddSmoothScrolling</c> migration (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-
-/// design.md section 6): one additive boolean <c>AppSettings.SmoothScrolling</c> column defaulting to true, with a plain
-/// <c>DropColumn</c> on Down (not exercised, see the test).
+/// design.md section 6): one additive boolean <c>AppSettings.SmoothScrolling</c> column defaulting to true, with a no-op
+/// Down (see the test).
 /// </summary>
 public class AddSmoothScrollingMigrationTests : IDisposable
 {
@@ -63,10 +63,10 @@ public class AddSmoothScrollingMigrationTests : IDisposable
             Assert.False(context.GetOrCreateAppSettings().SmoothScrolling);
         }
 
-        // Down() is deliberately not exercised here. On SQLite a DropColumn rebuilds the table from the previous migration's model
-        // (AddMatrixRainEnabled), and that Designer still lists columns (ReaderAutoHideChrome, ReaderChromeHoverMode) which the
-        // committed snapshot no longer has - the same pre-existing snapshot drift described above - so the rollback fails for reasons
-        // unrelated to this migration. Down() never runs in the app; it is a plain DropColumn of the column Up() adds.
+        // Down() is a deliberate no-op (orphan-column convention): a real DropColumn rebuilds AppSettings from the previous
+        // migration's snapshot, which silently drops the orphaned LibraryGroupField/LibrarySortField/LibrarySortDirection columns
+        // and breaks every older migration's Down() later in the same rollback. Its safety is covered by the other migration
+        // tests, which all roll back through this migration.
     }
 
     [Fact]

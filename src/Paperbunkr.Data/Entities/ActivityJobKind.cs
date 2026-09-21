@@ -24,4 +24,16 @@ public enum ActivityJobKind
     /// <summary>The single always-present ambient rollup row (live folder-watch + thumbnail decode). Never reaches a terminal state.</summary>
     Upkeep,
     Other,
+
+    /// <summary>The comic acquisition daemon's polling cycle (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md).</summary>
+    Acquisition,
+
+    /// <summary>A background job started by a plugin through <c>IPluginEnvironment.Activity</c> (Plugin API 4.1, docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §4). Titles are prefixed with the plugin's name.</summary>
+    Plugin,
+
+    /// <summary>Pulling a remote library's catalog into the local mirror (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md §9). Stored by name, so appending needs no migration.</summary>
+    RemoteSync,
+
+    /// <summary>The host side of remote sharing: a long-lived job that is "Running" while this library is being served. Cancelling it stops the server.</summary>
+    Sharing,
 }

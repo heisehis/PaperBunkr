@@ -26,6 +26,56 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-20, Remote/server library sharing built on branch `feat/remote-library-sharing`; **MERGED to master 2026-09-21 (dcaef82, v0.6.9.0) and confirmed on-screen by the user; branch/worktree removed**):** design + plan in
+> `docs/superpowers/specs/2026-09-19-remote-library-sharing-{design,plan}.md`; all phases P0-P5 implemented. **P0** `PAPERBUNKR_DATA_DIR` (`AppDataPaths`, ~17 paths routed through it).
+> **P1** new `Paperbunkr.Sharing` (Kestrel HTTPS server, PBKDF2 password + session tokens + failed-auth lockout, DPAPI-protected self-signed ECDSA cert, paginated JSON
+> catalog with ETag, pages/covers with Range and `?w=`) and `DbShareCatalogSource` + `ArchivePageSource` (Data/App). **P2** `RemoteSource` + `RemoteSourceId`/`RemoteIssueId`/
+> `RemoteSeriesId` (migration `AddRemoteSources`, deliberate no-op `Down()`), pinned-cert `ShareClient`, `RemoteMirrorSync`, `RemoteRelinkReconciler`, and - the key safety
+> decision, a change from the spec's per-site plan - a **global EF query filter** on Issue/Series so every existing job excludes remote rows *by default*; only the Library load,
+> Detail load/selection, and the reader opt in (`includeRemote`), guarded by an allowlist test. **P3** `RemoteImageProvider`/`RemoteAccessorSession` feed the existing
+> `ReaderImagePipeline` (no new reader), bounded `PeerPageCache` (2 GB LRU + 30-day TTL, scheduled sweep task), `RemotePageFetcher` (max 3 in flight, shared in-flight fetches),
+> covers in their own dir. **P4** Preferences -> Sharing (host controls, saved libraries, inline trust/re-trust/relink/remove, mDNS "Find on this network" via
+> `Makaretu.Dns.Multicast.New`), all reporting through the Activity Center. **P5** Windows Public-network warning.
+> **Verified:** unit/integration tests against real in-process hosts (Sharing, Data, App suites - see the final run below), incl. a changed certificate never being accepted silently,
+> Relink preserving reading progress, and reading real pages through the real reader pipeline. **NOT verified:** nothing has been run on-screen with two real instances
+> (use `PAPERBUNKR_DATA_DIR` for the second); Windows Firewall prompt wording; mDNS across real machines. **Known gaps / follow-ups:** Books (EPUB/PDF) not shared; QuickRate on remote books refused; Detail tabs (tracker/external metadata) not gated. **2026-09-21 follow-ups done + tested:** Library source filter + "Remote" tile pill, Insights/Stats count remote reads (size figures stay local), read-only gating (Library command guards, reduced remote menus, Detail hero), content stamp so replaced books drop stale cached pages/covers - see design doc section 13.
+
+> **Manual session note (2026-09-20, Cluster Library Manager into core — branch `feat/clm-into-core`, NOT merged):** all five phases implemented (shared template engine + one-time
+> template upgrade, durable scrape-on-import with retry and a Needs-attention list, Prowlarr/qBittorrent moved to Connections, the ComicVine scraper and review dialogs in core, the organizer with
+> profiles and undo, two off-by-default scheduled tasks, and the plugin refused at load with a "now built in" message). Design + plan: `docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-{design,plan}.md`.
+> **Not verified** against a real ComicVine key, Prowlarr, qBittorrent, or on screen. Merge note: the main tree has an uncommitted spinner change touching the same Preferences views.
+
+> **Manual session note (2026-09-20/21, Metron as a second comic database + weekly pull list - all merged to `master`, unreleased):**
+> Specs: `docs/superpowers/specs/2026-09-20-metron-as-comicvine-alternative-design.md` and `...-weekly-pull-list-design.md` (each has a status section and follow-ups).
+> Built, tested and merged: `ComicProvider` (ComicVine/Metron) per tracked series, want and catalog row (ids renamed `ExternalVolumeId`/`ExternalIssueId`; migration `AddComicProvider`);
+> `MetronClient` behind `IComicProvider` (search, catalog, issue details, releases by store date) with its own 1-minute rate limit and a daily-quota tracker read from Metron's response headers
+> (`MetronQuota`; background work leaves a 10% reserve); a source selector on the series Missing Issues panel, Wanted "Track a series" and the scraper (default under Organize & Scrape, per-run
+> switch in the match dialog, provider-specific match memory); the **weekly pull list** (Wanted -> Releases tab: Metron store-date releases cached, promoted to Upcoming wants for followed series,
+> hide/restore, publisher filter, Activity Center notice; ComicVine as the fallback source; migrations `AddWeeklyPullList`, `AddPullListReleaseHidden`, `AddReleaseListProvider`);
+> arc requests follow a series' own source; `Issue.MetadataSource` (`AddIssueMetadataSource`) so a re-scrape starts on the right source; covers for Metron series; Wanted's Downloads list scrolls.
+> **Verified:** Data (1417), Daemon (197) and the touched App test classes pass, including a migration test that carries Metron's cache over and caught an EF default-value bug; the user then
+> tried it against real Metron, Prowlarr and qBittorrent and confirmed the screens. **Known limits:** a Metron-tracked series is not matched by a ComicVine weekly list; ComicVine's list only
+> looks up 40 publishers per refresh; Cloudflare-protected indexers need the user's own FlareSolverr. **Not done:** books (metadata source or acquisition) - see the Books section.
+
+> **Manual session note (2026-09-19/20, comic acquisition — Mylar-style want-list, slices 1-4 built on branch `feat/comic-acquisition-daemon`, NOT merged or released):**
+> Design: `docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md`; plan and per-step status:
+> `...-plan.md`. Built and unit-tested: DPAPI-encrypted `CredentialStore`; a shared, prioritized ComicVine
+> rate-limit handler; the UI-free `Paperbunkr.Daemon` project (search loop, Prowlarr native JSON search,
+> strict-then-sanitized query cascade, scoring/pack detection, category-locked qBittorrent client, grab/reject/retry/cancel,
+> blocklist, download tracker, copy-then-import with CE-syntax rename template + ComicInfo.xml, drop-in close-out, opt-in
+> auto-grab); watch-list/want-list entities + two additive migrations; the Acquisition Preferences section; the **Wanted**
+> screen (Wanted with Downloads, Upcoming, Candidates, Series; virtualized, with cover thumbnails); "Missing Issues (n)" with covers on the
+> series Detail screen; "Request missing" + "Follow this arc" on reading lists; a daily "Follow story arcs" scheduled task (off by default).
+> **Verified:** `Daemon.Tests` (188) pass; `Data.Tests` 1168 pass / the same 6 pre-existing migration failures as untouched `master`;
+> each new/touched `App.Tests` class passes when run on its own, and the headless tests construct each new view (proves the XAML
+> weave) and prove 3000 rows realize under 100. **Not verified:** nothing has been run against a real Prowlarr, qBittorrent or
+> ComicVine key, and nothing has been looked at on screen (review checklist applied by reading). **The full `App.Tests` suite
+> cannot complete on `master` or this branch** (dispatcher thread-affinity crash), and running two headless classes in one
+> filtered run can trip the same problem, so App evidence is per-class.
+> **Still to do:** owned-trade coverage; a library right-click "Repack & Inject Metadata" action (backlog); virtualizing the series
+> Missing Issues cards and the Series tab; an on-screen pass. Merging note: this file and `Paperbunkr-Roadmap.md` also
+> have uncommitted edits from another session in the main working tree — expect a trivial merge.
+
 > **Manual session note (2026-09-18, 16 smart-feature + 7 cosmetic-feature pitch items recorded):**
 > Not scoped, not brainstormed, not started — pure idea capture so they aren't lost. Full detail and
 > rationale lives in `Paperbunkr-Roadmap.md`'s "Smart features pitch" and "Cosmetics pitch" sections
@@ -43,6 +93,24 @@ this file itself already did once (see the note below).
 > `LibraryHealthService`), drop-off detection, smart "Up Next" blended queue, reading-stats
 > dashboard refinements (check against shipped Insights/Stats v2 first), best-scan dedup heuristic
 > (extends Duplicate Finder); **medium/local-ML —** full-text dialogue OCR search, semantic
+> **Cosmetics pitch items 8–26 BUILT (2026-09-21, uncommitted; user reviewed it running and signed off the same day):** spec `…-cosmetics-pitch-2-design.md` + plan
+> `…-cosmetics-pitch-2-plan.md`. Slice A (series status chip, unread glyph, placeholder covers, A–Z rail for grouped views), slice B (hero backdrop
+> switch, per-series accent, arc-source brand mark), slice C (empty-state illustrations, menu icon audit, chart hover/contrast/donut sweep, Activity Center
+> rings + grouping, skin-preview tile/chip, density presets). Most items already partly existed; the spec's "Implementation notes" lists what was actually
+> added per item. Also: the tile multi-select checkbox is now opt-in (Ctrl/Shift+click selects). New `AppSettings` columns: `ShowSelectionCheckbox`,
+> `HeroBackdrop`, `SeriesAccentColor`, `DensityPreset`. Verified by unit + headless render tests, then reviewed on screen by the user (spine, ring, checkbox,
+> A-Z rail all iterated on from real screenshots). Chapter closed; the remaining pitch items are the reader/platform ones listed below. Not built from the pitch:
+> #11/#22/#23 (reader), #19 (bookshelf), #24 (taskbar badge), #12/#27 (already shipped).
+>
+> **Cosmetics pitch items 1–7 BUILT (2026-09-21, uncommitted; user reviewed it running and signed off the same day - CLOSED):** spec
+> `docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md` + plan `…-cosmetics-pitch-plan.md`. Binding spine + read-progress
+> ring (one `TileCosmeticsOverlay` on the 4 Poster/Panorama cover templates), glow tiers (`ThemeService.BuildGlowRing`),
+> Library Health severity chips, reading-list 2×2 cover mosaic, Events-timeline connector art, splash ambient dots; five new
+> `AppSettings` columns in migration `AddCosmeticsPitchSettings`. Verified: unit + headless render tests, migration test,
+> full App suite green on the slice-B tree (3275 passed). **Not verified:** how any of it looks on screen. The spec's
+> "Implementation notes" lists where reality differed from the pitch (e.g. Library Health had no text severity chip to
+> reskin; ring is bottom-centre and hover-only). Items 8–27 of the pitch (added 2026-09-21) are untouched.
+>
 > search over descriptions/covers (local embeddings), auto-tagging with confidence (feeds the
 > existing `MetadataProposal` review queue).
 > Every one of these needs its own brainstorm → design spec per this project's `CLAUDE.md`
@@ -71,15 +139,25 @@ this file itself already did once (see the note below).
 >   New 3-tab `CoverPickerViewModel`/`CoverPickerView` (Series / Reading List / Browse File
 >   candidates) now backs all 3 existing "change cover" entry points (Detail, Manga Detail,
 >   DetailTabs), replacing the old direct-file-picker-only path. Not GUI-verified this session.
-> - **External Metadata Full Extraction — design + plan only, zero implementation:**
+> - **External Metadata Full Extraction — IMPLEMENTED (status corrected 2026-09-19; this note
+>   originally said "design + plan only, not started", which went stale):**
 >   `docs/superpowers/specs/2026-09-18-external-metadata-full-extraction-{design,plan}.md`. Expands
->   the AniList/MangaBaka/MangaDex providers past today's thin title/description/status fields: cover
->   images (priority ask), creator/staff, publication year/format, demographic, cross-references, and
->   weighted/categorized tags feeding real `IssueTag` import (not a flat CSV). MangaBaka provider
->   switches its beta `v2` API to the stable `v1` family (`v2` lacks covers/relations/tag taxonomy
->   entirely). 6 phases, foundation then cover pipeline first; not started.
-> **Not committed as of this note** — all three items above sit staged/uncommitted in the working
-> tree (confirm via `git status` before assuming any of it is on `origin/master`).
+>   the AniList/MangaBaka/MangaDex providers past title/description/status: cover images, creator/
+>   staff, publication year/format, demographic, cross-references, and categorized tags feeding real
+>   `IssueTag` import. MangaBaka moved from beta `v2` to stable `v1`. Landed in `fbe7295` (merged
+>   via PR #89). Verified 2026-09-19 by reading the code (grep, not built/run): A1–A4 (schema,
+>   AniList/MangaDex/MangaBaka v1), B (cover pipeline: `TrySetCustomCoverFromBytes`,
+>   `IMultiCoverProvider`, `ProviderCoverCandidateCache`, picker provider tab), C (`Series.Creator`
+>   + resolver wiring), D (`MergeFromCategorized`, `ExternalTagImportResolver`), E1–E3
+>   (`ExternalMediaRelation`, `IRelationsProvider` on AniList + MangaBaka, placeholder→
+>   `MediaRelation` auto-upgrade), E4 view-model side (lazy fetch + `ExternalRelationPlaceholders`),
+>   F1 (`UpsertCrossReferences`). User confirmed on screen that the Linking tab auto-links
+>   cross-referenced providers and shows per-provider cover actions. **Open:** (1) no "Not in
+>   library" badge string found in the Related-tab view — check on screen; (2) no dedicated tests
+>   found for the AniList/MangaDex normalizer fields or `ExternalTagImportResolver` (plan asked
+>   for them); (3) stale `v2` doc comment at `MangaBakaMetadataProvider.cs:23`.
+> **Not committed as of this note** — all three items above sat staged/uncommitted in the working
+> tree when written. *(Update 2026-09-19: since landed in `fbe7295`, merged via PR #89.)*
 
 > **Manual session note (2026-09-17, IsFinalIssue migration-rollback bug actually fixed):**
 > Closes the task spawned 2026-09-12 (`Fix migration rollback: IsFinalIssue NOT NULL bug`, noted
@@ -1118,8 +1196,10 @@ below directly (verified by re-grepping the source, not by trusting commit messa
 - `MainWindow.axaml` — Collections row now bound to `Library.Collections` with a real
   `"No collections yet."` empty state ✅; Duplicate Finder's hardcoded `"7"` badge and fake demo
   content removed, rail icon retitled to "Plugins" ✅
-- `Assets/avalonia-logo.ico` — **still open.** Still the default Avalonia project-template icon,
-  still wired as the actual window icon (`MainWindow.axaml` line 11). Needs a real Paperbunkr icon.
+- ~~`Assets/avalonia-logo.ico` — **still open.** Still the default Avalonia project-template icon,
+  still wired as the actual window icon (`MainWindow.axaml` line 11). Needs a real Paperbunkr icon.~~
+  **Done** (see P4 section below) — replaced by `Assets/paperbunkr.ico`; re-confirmed present
+  2026-09-19.
 
 **P6 has substantial real progress**, not just the demo-data fix that was previously (wrongly)
 credited to it. Since the doc was last written: `18d7ad8` (Reading Lists empty states), `8ace219`

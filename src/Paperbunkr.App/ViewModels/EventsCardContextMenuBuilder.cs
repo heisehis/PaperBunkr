@@ -1,3 +1,4 @@
+using FluentIcons.Common;
 using System.Collections.Generic;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
@@ -33,8 +34,8 @@ public sealed class EventsCardContextMenuBuilder
     {
         var entries = new List<ContextMenuEntry>
         {
-            ContextMenuEntry.Item("Open", _vm.Events.SelectEventCommand, row),
-            ContextMenuEntry.Item("Edit details", _vm.EditEventFromContextMenuCommand, row),
+            ContextMenuEntry.Item("Open", _vm.Events.SelectEventCommand, row, Symbol.Open),
+            ContextMenuEntry.Item("Edit details", _vm.EditEventFromContextMenuCommand, row, Symbol.Edit),
         };
 
         entries.Add(ContextMenuEntry.Separator);
@@ -46,8 +47,8 @@ public sealed class EventsCardContextMenuBuilder
     {
         var entries = new List<ContextMenuEntry>
         {
-            ContextMenuEntry.Item("Open", _vm.Events.SelectContinuityCommand, row),
-            ContextMenuEntry.Item("Edit details", _vm.EditContinuityFromContextMenuCommand, row),
+            ContextMenuEntry.Item("Open", _vm.Events.SelectContinuityCommand, row, Symbol.Open),
+            ContextMenuEntry.Item("Edit details", _vm.EditContinuityFromContextMenuCommand, row, Symbol.Edit),
         };
 
         if (row.DeleteConfirm is { } deleteConfirm)

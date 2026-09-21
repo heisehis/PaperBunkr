@@ -1,0 +1,161 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="400"
+             x:Class="Paperbunkr.App.Views.SeriesMissingIssuesView"
+             x:Name="Root"
+             x:DataType="vm:SeriesMissingIssuesViewModel">
+
+    <!-- Series Detail: "Missing Issues (n)" (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 7, the Omnibus pattern).
+         Embedded under the Issues tab. Shared chrome only: Border.card, Pb* tokens, no hardcoded colors. -->
+    <StackPanel Spacing="12" Margin="0,28,0,0">
+
+        <Border Height="1" Background="{DynamicResource PbBorderBrush}" />
+
+        <!-- NOT TRACKED YET: offer to find the ComicVine volume -->
+        <Border Classes="card" IsVisible="{Binding IsNotTracked}">
+            <StackPanel Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="Find missing issues" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Text="Match this series to its ComicVine or Metron listing to see which issues you don't have yet, and request them."
+                           FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+                <!-- Same bar as the ComicVine match dialog: source, editable search, sort, Search. -->
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8" MaxWidth="720" HorizontalAlignment="Left">
+                    <controls:SuggestBox Grid.Column="0" IsStrict="True" Width="120" Text="{Binding ProviderText}" Suggestions="{x:Static vm:SeriesMissingIssuesViewModel.ProviderNames}"
+                                         AutomationProperties.Name="Search source" AutomationProperties.AutomationId="SeriesProviderSelect" />
+                    <TextBox Grid.Column="1" Text="{Binding SearchText}" Watermark="{Binding SearchWatermark}" VerticalContentAlignment="Center"
+                             AutomationProperties.Name="{Binding SearchLabel}" AutomationProperties.AutomationId="SeriesComicVineSearchBox" />
+                    <controls:SuggestBox Grid.Column="2" IsStrict="True" Width="140" Text="{Binding SortText}" Suggestions="{x:Static vm:SeriesMissingIssuesViewModel.SortNames}"
+                                         AutomationProperties.Name="Sort results" AutomationProperties.AutomationId="SeriesComicVineSort" />
+                    <Button Grid.Column="3" Classes="headerAction primary" Content="Search" Command="{Binding FindOnComicVineCommand}"
+                            AutomationProperties.AutomationId="SeriesFindOnComicVineButton" />
+                </Grid>
+                <TextBlock IsVisible="{Binding !HasProviderCredentials}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
+                           Text="This source needs its login saved under Preferences → Connections." />
+
+                <TextBlock Text="{Binding SearchSummary}" IsVisible="{Binding HasSearchResults}" FontSize="11.5" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left"
+                           Foreground="{DynamicResource PbTextFaintBrush}" />
+
+                <ItemsControl ItemsSource="{Binding SearchResults}" IsVisible="{Binding HasSearchResults}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:VolumeResultViewModel">
+                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,6,0,0">
+                                <Border Grid.Column="0" Width="34" Height="50" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" Margin="0,0,12,0" VerticalAlignment="Center"
+                                        Background="{DynamicResource PbSurface2Brush}">
+                                    <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                        <Border Classes="pbChip" Padding="7,1" IsVisible="{Binding IsBestMatch}" VerticalAlignment="Center">
+                                            <TextBlock Text="Best match" FontSize="10.5" Foreground="{DynamicResource PbAccentBrush}" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                </StackPanel>
+                                <Button Grid.Column="2" Classes="headerAction ghost" Content="This one" Margin="10,0,0,0"
+                                        AutomationProperties.Name="{Binding Title, StringFormat='Track {0}'}"
+                                        Command="{Binding #Root.((vm:SeriesMissingIssuesViewModel)DataContext).TrackCommand}" CommandParameter="{Binding}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Button Classes="headerAction ghost" Content="{Binding ShowMoreLabel}" IsVisible="{Binding CanShowMore}" Command="{Binding ShowMoreCommand}"
+                        HorizontalAlignment="Left" AutomationProperties.AutomationId="SeriesShowMoreVolumesButton" />
+            </StackPanel>
+        </Border>
+
+        <!-- TRACKED: header + missing cards -->
+        <StackPanel IsVisible="{Binding IsTracked}" Spacing="12">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Heading}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
+                               AutomationProperties.AutomationId="SeriesMissingHeading" />
+                    <Border Classes="pbChip" Padding="7,1" IsVisible="{Binding IsMetronTracked}" VerticalAlignment="Center">
+                        <TextBlock Text="Metron" FontSize="10.5" Foreground="{DynamicResource PbAccentBrush}" />
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <TextBlock Text="Follow" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                    <ToggleSwitch IsChecked="{Binding WatchFutureReleases}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                  AutomationProperties.Name="Follow this series and request its new issues automatically" />
+                    <Button Classes="headerAction ghost" Content="Refresh" Command="{Binding RefreshFromComicVineCommand}"
+                            AutomationProperties.Name="Refresh this series' issue list" />
+
+                    <!-- Request all: first click asks in place, second click requests -->
+                    <Button Classes="headerAction primary" Content="Request all" Command="{Binding RequestAllCommand}"
+                            IsVisible="{Binding IsNotConfirming}" IsEnabled="{Binding HasMissing}"
+                            AutomationProperties.AutomationId="SeriesRequestAllButton" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsConfirmingRequestAll}">
+                        <TextBlock Text="{Binding ConfirmText}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                        <Button Classes="headerAction primary" Content="Yes, request" Command="{Binding ConfirmRequestAllCommand}" />
+                        <Button Classes="headerAction ghost" Content="Cancel" Command="{Binding CancelRequestAllCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+
+            <ItemsControl ItemsSource="{Binding MissingRows}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:MissingIssueRowViewModel">
+                        <Border Classes="card" Width="300" Margin="0,0,12,12" Padding="12">
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                                <!-- ComicVine's cover once it has loaded; until then (or when there isn't one) a quiet placeholder carrying the number -->
+                                <Border Grid.Column="0" Grid.RowSpan="2" Width="44" Height="62" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True"
+                                        Background="{DynamicResource PbSurface2Brush}" Margin="0,0,12,0" VerticalAlignment="Top">
+                                    <Panel>
+                                        <TextBlock Text="{Binding Number, StringFormat='#{0}'}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
+                                    </Panel>
+                                </Border>
+                                <StackPanel Grid.Column="1" Grid.Row="0" Spacing="1">
+                                    <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                                               IsVisible="{Binding Subtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0" VerticalAlignment="Bottom">
+                                    <Button Classes="headerAction ghost"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='Request {0}'}"
+                                            Command="{Binding #Root.((vm:SeriesMissingIssuesViewModel)DataContext).RequestCommand}" CommandParameter="{Binding}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <fi:SymbolIcon Symbol="ArrowDownload" FontSize="{StaticResource PbIconSizeXs}" />
+                                            <TextBlock Text="Request" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Classes="headerAction ghost" Content="I have this"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='I already have {0}'}"
+                                            Command="{Binding #Root.((vm:SeriesMissingIssuesViewModel)DataContext).IgnoreCommand}" CommandParameter="{Binding}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <StackPanel IsVisible="{Binding IsAllCaughtUp}" Orientation="Horizontal" Spacing="8">
+                <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="You have every issue ComicVine lists for this series, or have asked for the rest." FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Status (live region) -->
+        <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasErrorStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left"
+                   Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
+        <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasInfoStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left"
+                   Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
+    </StackPanel>
+</UserControl>

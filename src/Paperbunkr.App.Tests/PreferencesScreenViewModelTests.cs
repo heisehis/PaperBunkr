@@ -633,20 +633,43 @@ public class PreferencesScreenViewModelTests : IDisposable
     [Fact]
     public void ReducedMotion_Change_PersistsToAppSettings_AndAppliesLive()
     {
-        var vm = CreateViewModel();
-        vm.EnsureLoaded();
-        Assert.False(vm.ReducedMotion);
+        // Turning Reduced Motion on rewrites four process-global motion tokens to zero. Put them back afterwards: leaving them at zero silently
+        // switches off every later test that needs real motion (the Matrix rain render tests found this the hard way - they only failed when
+        // this test happened to run first).
+        var resources = Avalonia.Application.Current!.Resources;
+        string[] keys = { "PbMotionFast", "PbMotionSlow", "PbMotionStandard", "PbMotionLarge" };
+        var before = keys.ToDictionary(k => k, k => resources.TryGetValue(k, out var v) ? v : null);
+        try
+        {
+            var vm = CreateViewModel();
+            vm.EnsureLoaded();
+            Assert.False(vm.ReducedMotion);
 
-        vm.ReducedMotion = true;
+            vm.ReducedMotion = true;
 
-        using var context = new PaperbunkrDbContext(_dbOptions);
-        Assert.True(context.GetOrCreateAppSettings().ReducedMotion);
-        Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionFast"]);
-        Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionSlow"]);
-        // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - PbMotionStandard/
-        // PbMotionLarge get the same zero-on-reduced-motion treatment as Fast/Slow above.
-        Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionStandard"]);
-        Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionLarge"]);
+            using var context = new PaperbunkrDbContext(_dbOptions);
+            Assert.True(context.GetOrCreateAppSettings().ReducedMotion);
+            Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionFast"]);
+            Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionSlow"]);
+            // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - PbMotionStandard/
+            // PbMotionLarge get the same zero-on-reduced-motion treatment as Fast/Slow above.
+            Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionStandard"]);
+            Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionLarge"]);
+        }
+        finally
+        {
+            foreach (var (key, value) in before)
+            {
+                if (value is null)
+                {
+                    resources.Remove(key);
+                }
+                else
+                {
+                    resources[key] = value;
+                }
+            }
+        }
     }
 
     /// <summary>docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #1/#2 - both overlays load on,

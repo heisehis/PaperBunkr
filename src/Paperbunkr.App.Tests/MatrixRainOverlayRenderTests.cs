@@ -69,6 +69,31 @@ public class MatrixRainOverlayRenderTests
         return count;
     }
 
+    /// <summary>Runs <paramref name="body"/> with the app's motion tokens set to a known value, restoring what was there. The overlay
+    /// deliberately stays idle when <c>PbMotionFast</c> is zero (Reduced Motion), so these tests must not inherit a zero left behind by an
+    /// unrelated test - that made them fail only in full-suite runs, depending on test order.</summary>
+    private static void WithMotion(TimeSpan fast, Action body)
+    {
+        var resources = Application.Current!.Resources;
+        bool had = resources.TryGetValue("PbMotionFast", out var previous);
+        resources["PbMotionFast"] = fast;
+        try
+        {
+            body();
+        }
+        finally
+        {
+            if (had)
+            {
+                resources["PbMotionFast"] = previous!;
+            }
+            else
+            {
+                resources.Remove("PbMotionFast");
+            }
+        }
+    }
+
     private static Window Mount(bool initiallyVisible, out MatrixRainOverlay overlay)
     {
         overlay = new MatrixRainOverlay { IsVisible = initiallyVisible };
@@ -86,7 +111,7 @@ public class MatrixRainOverlayRenderTests
     }
 
     [Fact]
-    public void Overlay_VisibleFromMount_RendersGreenGlyphs()
+    public void Overlay_VisibleFromMount_RendersGreenGlyphs() => WithMotion(TimeSpan.FromMilliseconds(150), () =>
     {
         var window = Mount(initiallyVisible: true, out _);
         try
@@ -98,10 +123,26 @@ public class MatrixRainOverlayRenderTests
         {
             window.Close();
         }
-    }
+    });
 
     [Fact]
-    public void Overlay_MountedInvisible_ThenFlippedVisible_RendersGreenGlyphs()
+    public void Overlay_UnderReducedMotion_StaysIdle_RendersNoGlyphs() => WithMotion(TimeSpan.Zero, () =>
+    {
+        // The mechanism behind the order-dependent failure: with PbMotionFast at zero the rain never starts. Kept as a test so the behaviour is
+        // deliberate and documented, and so a leaked zero shows up here by name instead of as a mysterious "no green pixels".
+        var window = Mount(initiallyVisible: true, out _);
+        try
+        {
+            Assert.Equal(0, CountGreenPixelsAfterRunning(window, 1500));
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
+    [Fact]
+    public void Overlay_MountedInvisible_ThenFlippedVisible_RendersGreenGlyphs() => WithMotion(TimeSpan.FromMilliseconds(150), () =>
     {
         var window = Mount(initiallyVisible: false, out var overlay);
         try
@@ -118,5 +159,5 @@ public class MatrixRainOverlayRenderTests
         {
             window.Close();
         }
-    }
+    });
 }

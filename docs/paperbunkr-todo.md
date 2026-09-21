@@ -45,6 +45,24 @@ this file itself already did once (see the note below).
 > profiles and undo, two off-by-default scheduled tasks, and the plugin refused at load with a "now built in" message). Design + plan: `docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-{design,plan}.md`.
 > **Not verified** against a real ComicVine key, Prowlarr, qBittorrent, or on screen. Merge note: the main tree has an uncommitted spinner change touching the same Preferences views.
 
+> **Manual session note (2026-09-21, Wanted screen redesign - on `master` working tree, uncommitted, unreleased):**
+> Spec + plan: `docs/superpowers/specs/2026-09-21-wanted-screen-redesign-{design,plan}.md` (approved after a grilling pass and three visual-companion rounds).
+> Built: five tabs -> **Queue / Series / Releases**. Queue is one full-width virtualized list of series groups (needs-attention groups open on their own, user choices persist for the session)
+> with stage filter chips (Wanted / Upcoming / Has candidates / Downloading / Failed / Needs details) and live counts, sort (Attention / A-Z / Recently added), inline candidate expanders, a
+> downloads strip showing speed and ETA (already published by `DownloadProgressEvent`, previously dropped by the UI), confirmed group bulk actions ("I have all" / "Remove all"; the
+> mockup's "Request all" was dropped because everything queued is already requested), and in-place reconciling so live updates never jump the scroll. Series: "Track a series" moved to a flyout,
+> new **Untrack** (cascades the series' wants), reloads no longer rebuild rows. Releases: cover-tile shelf, one week per page, custom month calendar with release/followed dots,
+> and an **on-demand week fetch** (`PullListService.FetchRangeAsync` + range-scoped `Store`, `PullListSourceFactory`) for weeks outside the cached window (they last until the next scheduled
+> refresh replaces the cache). Transient messages are now toasts; the inline status line is gone; one dismissible "automatic searching is off" banner. Right-click / Menu key / "..." share
+> `WantedScreenViewModel : IContextMenuProvider`. No migrations. User wiki (`Getting-Comics-Automatically.md`) updated.
+> **Verified:** full `App.Tests` (3258 pass), `Daemon.Tests` (197), the touched Data pull-list/acquisition tests (71); headless tests construct the real screen (proves the XAML weave), realize under 100
+> of 3000 queue rows, and lay out a 150-tile week.
+> **Verified on screen by the user (same day):** the Queue, the chips (now squircles - `PbRadiusChip`, applied app-wide to every former `CornerRadius="999"` chip/badge), the group-header hover fix,
+> the Releases shelf and calendar popup, and the right-click menu (it offers only what applies: an already-wanted, followed tile offers just Hide). Covers: a series without one now borrows its first
+> issue's, then (Metron) the weekly list's cache, in both the Queue and the Series tab. A tile's "Request" label was clipped at 124px and its button padding was tightened (not yet re-checked on screen).
+> **Not verified:** compact width, contrast, and the on-demand week fetch against real Metron/ComicVine. `avalonia-pro-max/review-checklist` applied by reading. Known small gaps: calendar dots rely on
+> colour plus an accessible name; the release tile grid isn't virtualized (Avalonia has no virtualizing wrap panel).
+
 > **Manual session note (2026-09-20/21, Metron as a second comic database + weekly pull list - all merged to `master`, unreleased):**
 > Specs: `docs/superpowers/specs/2026-09-20-metron-as-comicvine-alternative-design.md` and `...-weekly-pull-list-design.md` (each has a status section and follow-ups).
 > Built, tested and merged: `ComicProvider` (ComicVine/Metron) per tracked series, want and catalog row (ids renamed `ExternalVolumeId`/`ExternalIssueId`; migration `AddComicProvider`);
@@ -53,9 +71,8 @@ this file itself already did once (see the note below).
 > switch in the match dialog, provider-specific match memory); the **weekly pull list** (Wanted -> Releases tab: Metron store-date releases cached, promoted to Upcoming wants for followed series,
 > hide/restore, publisher filter, Activity Center notice; ComicVine as the fallback source; migrations `AddWeeklyPullList`, `AddPullListReleaseHidden`, `AddReleaseListProvider`);
 > arc requests follow a series' own source; `Issue.MetadataSource` (`AddIssueMetadataSource`) so a re-scrape starts on the right source; covers for Metron series; Wanted's Downloads list scrolls.
-> **Verified:** Data (1417), Daemon (197) and the touched App test classes pass, including a migration test that carries Metron's cache over and caught an EF default-value bug; the user then
-> tried it against real Metron, Prowlarr and qBittorrent and confirmed the screens. **Known limits:** a Metron-tracked series is not matched by a ComicVine weekly list; ComicVine's list only
-> looks up 40 publishers per refresh; Cloudflare-protected indexers need the user's own FlareSolverr. **Not done:** books (metadata source or acquisition) - see the Books section.
+> **Verified:** Data (1417), Daemon (197) and the touched App test classes pass, including a migration test that carries Metron's cache over and caught an EF default-value bug. The user then tested everything live (real Metron, Prowlarr and qBittorrent, on screen), including the final gap-closing pass (arcs by source, the daily-quota tracker, `Issue.MetadataSource`, Metron covers, the ComicVine weekly list).
+> **Known limits:** a Metron-tracked series is not matched by a ComicVine weekly list; ComicVine's list only looks up 40 publishers per refresh; Cloudflare-protected indexers need the user's own FlareSolverr. **Not done:** books - the Books section has no metadata source or acquisition path yet (not started).
 
 > **Manual session note (2026-09-19/20, comic acquisition — Mylar-style want-list, slices 1-4 built on branch `feat/comic-acquisition-daemon`, NOT merged or released):**
 > Design: `docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md`; plan and per-step status:
@@ -76,23 +93,6 @@ this file itself already did once (see the note below).
 > Missing Issues cards and the Series tab; an on-screen pass. Merging note: this file and `Paperbunkr-Roadmap.md` also
 > have uncommitted edits from another session in the main working tree — expect a trivial merge.
 
-> **Manual session note (2026-09-18, 16 smart-feature + 7 cosmetic-feature pitch items recorded):**
-> Not scoped, not brainstormed, not started — pure idea capture so they aren't lost. Full detail and
-> rationale lives in `Paperbunkr-Roadmap.md`'s "Smart features pitch" and "Cosmetics pitch" sections
-> (search those headings); one-line index here since this is the doc a human opens first.
-> **Cosmetic pitch (7, from 2026-09-14):** series binding spine texture; read-progress ring on
-> poster hover; skin-aware accent glow tiers (subtle/normal/vivid); Continuity/Event timeline
-> connector art (deliberate CE deviation); Library Health traffic-light chip reskin; splash/startup
-> ambient motion; Reading-list CBL 4-cover mosaic thumbnail.
-> **Smart-feature pitch (16 total — 7 from 2026-09-14, 9 added 2026-09-18):** Smart Lists v2 preset
-> gallery; Continuity auto-suggest via shared-character MediaRelation data; Reading-order conflict
-> detector (CBL order vs. StoryEvent chronology); auto-match missing files against series-identity
-> scan; scheduled cover-refresh on tracker-status change; Insights-driven auto smart-lists; Plugin
-> API on-continuity-complete hook; **cheap/local —** library gap detection (missing-issue-number
-> analysis), reading-integrity health scan (low-res/duplicate/blank pages, extends
-> `LibraryHealthService`), drop-off detection, smart "Up Next" blended queue, reading-stats
-> dashboard refinements (check against shipped Insights/Stats v2 first), best-scan dedup heuristic
-> (extends Duplicate Finder); **medium/local-ML —** full-text dialogue OCR search, semantic
 > **Cosmetics pitch items 8–26 BUILT (2026-09-21, uncommitted; user reviewed it running and signed off the same day):** spec `…-cosmetics-pitch-2-design.md` + plan
 > `…-cosmetics-pitch-2-plan.md`. Slice A (series status chip, unread glyph, placeholder covers, A–Z rail for grouped views), slice B (hero backdrop
 > switch, per-series accent, arc-source brand mark), slice C (empty-state illustrations, menu icon audit, chart hover/contrast/donut sweep, Activity Center
@@ -111,6 +111,52 @@ this file itself already did once (see the note below).
 > "Implementation notes" lists where reality differed from the pitch (e.g. Library Health had no text severity chip to
 > reskin; ring is bottom-centre and hover-only). Items 8–27 of the pitch (added 2026-09-21) are untouched.
 >
+> **Manual session note (2026-09-18, 16 smart-feature + 7 cosmetic-feature pitch items recorded):**
+> Not scoped, not brainstormed, not started — pure idea capture so they aren't lost. Full detail and
+> rationale lives in `Paperbunkr-Roadmap.md`'s "Smart features pitch" and "Cosmetics pitch" sections
+> (search those headings); one-line index here since this is the doc a human opens first.
+> **Cosmetic pitch (7, from 2026-09-14):** series binding spine texture; read-progress ring on
+> poster hover; skin-aware accent glow tiers (subtle/normal/vivid); Continuity/Event timeline
+> connector art (deliberate CE deviation); Library Health traffic-light chip reskin; splash/startup
+> ambient motion; Reading-list CBL 4-cover mosaic thumbnail. **Items 8–27 added 2026-09-21** (20 more,
+> idea capture only; detail in the Roadmap's "Cosmetics pitch"): detail-hero backdrop blur; per-series
+> dominant-color accent; series-status color language; reader page-turn feel; reader chrome auto-dim;
+> empty-state illustrations; BrandMark consistency; live skin previews; Insights chart polish;
+> density/typography presets; generated placeholder covers; bookshelf spine view; read-state glyph
+> set; Activity Center visual polish; reader ambient letterbox; page-thumbnail scrubber; taskbar/tray
+> badge; context-menu polish; slim scrollbars + A–Z letter rail; auto light/dark + OLED skin.
+> **Comic reader pitch (30 items, 2026-09-21, comic reader only, idea capture; detail in the
+> Roadmap's "Comic reader pitch"):** guided panel view; double-click smart zoom; event/reading-list
+> context strip; pinned reference page; image adjustments/night mode; auto-crop; moiré-aware
+> downscaling; optional upscaling; auto-skip tagged pages; auto-tag ads by page hash; report bad
+> page; auto mark-read at story end; on-device OCR/translate; series-level reader defaults;
+> end-of-issue card; jump-back chip; reader profiles; slider markers; command palette; session
+> stats HUD; eye-care reminders; media keys/gamepad; pen/ink layer; copy/share; tap-zone editor;
+> page notes/clips; two-edition compare; in-reader info panel; pre-open next issue; adaptive prefetch.
+> **Insights pitch (10 items, 2026-09-21, idea capture; detail in the Roadmap's "Insights pitch"):**
+> year-in-review recap; reading goals/challenges; reading rhythm (needs a new session-duration
+> field); backlog burn-down (needs a nightly library snapshot); drop-off analysis; period-over-period
+> deltas + sparklines; creator/publisher affinity linked to Wanted; storage/format breakdown;
+> recommendations surface (UI for the backend-only Phase 6a engine); milestones timeline.
+> **Comic reader pitch, slice A "Flow & defaults" — built 2026-09-21 (uncommitted; on-screen check by the
+> user outstanding):** series-level fit-mode/auto-rotate defaults (`Series.PageFitModeOverride`/
+> `AutoRotateOverride`, migration `AddSeriesReaderDefaults`, "Apply to series" in the reader's fit flyout and
+> drawer, clear on the Details Info sub-tab of both comic and manga detail screens), end-of-issue card (5 s
+> auto-advance countdown when `AutoNavigateComics` is on), context strip (reading list, else Story Event),
+> jump-back chip (`Reader.JumpBack`, Alt+Left, >5-page jumps from thumbnails/bookmarks), all on a shared
+> `ReadingOrderResolver`. Verified by tests only, nothing viewed on screen: full `Paperbunkr.App.Tests` 3432 passed/0 failed and full
+> `Paperbunkr.Data.Tests` 1493 passed/0 failed (both with `--blame`). An earlier plain full run of each aborted with
+> "Test host process crashed" (App after 3068 passing, Data with no detail) and did not reproduce; a clean-HEAD Data run
+> also passed, so treat it as an intermittent host crash of unknown cause. Not built: #16 (needs the Cosmetics scrubber), #19 (slice F). Slices B–H not started.
+> **Smart-feature pitch (16 total — 7 from 2026-09-14, 9 added 2026-09-18):** Smart Lists v2 preset
+> gallery; Continuity auto-suggest via shared-character MediaRelation data; Reading-order conflict
+> detector (CBL order vs. StoryEvent chronology); auto-match missing files against series-identity
+> scan; scheduled cover-refresh on tracker-status change; Insights-driven auto smart-lists; Plugin
+> API on-continuity-complete hook; **cheap/local —** library gap detection (missing-issue-number
+> analysis), reading-integrity health scan (low-res/duplicate/blank pages, extends
+> `LibraryHealthService`), drop-off detection, smart "Up Next" blended queue, reading-stats
+> dashboard refinements (check against shipped Insights/Stats v2 first), best-scan dedup heuristic
+> (extends Duplicate Finder); **medium/local-ML —** full-text dialogue OCR search, semantic
 > search over descriptions/covers (local embeddings), auto-tagging with confidence (feeds the
 > existing `MetadataProposal` review queue).
 > Every one of these needs its own brainstorm → design spec per this project's `CLAUDE.md`

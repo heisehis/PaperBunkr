@@ -31,6 +31,17 @@ public class Series
     public PageLayoutMode? PageLayoutMode { get; set; }
 
     /// <summary>
+    /// Series-level default page-fit mode (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-
+    /// design.md §2). <see langword="null"/> falls through to <c>AppSettings.DefaultPageFitMode</c>; an
+    /// issue's own <see cref="Issue.PageFitModeOverride"/> still wins. Written only by the Reader's
+    /// "Apply to series" action, cleared from the detail screens.
+    /// </summary>
+    public ImageFitMode? PageFitModeOverride { get; set; }
+
+    /// <summary>Series-level default for the auto-rotate-landscape-pages toggle, same shape as <see cref="PageFitModeOverride"/>.</summary>
+    public bool? AutoRotateOverride { get; set; }
+
+    /// <summary>
     /// Real source of truth as of docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-
     /// metadata-design.md - has no CE precedent at all (a deliberate new feature, not parity).
     /// </summary>

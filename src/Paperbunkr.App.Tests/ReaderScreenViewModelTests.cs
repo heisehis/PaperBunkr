@@ -249,6 +249,279 @@ public class ReaderScreenViewModelTests : IDisposable
         context.SaveChanges();
     }
 
+    // ===== Jump-back chip (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-design.md 4, pitch #10) =====
+
+    private string? _longIssuePath;
+
+    /// <summary>Best-effort: the reader may still hold the archive open (same reason <see cref="Dispose"/> swallows IOException).</summary>
+    private void TryDeleteLongIssue()
+    {
+        try
+        {
+            if (_longIssuePath is not null && File.Exists(_longIssuePath)) File.Delete(_longIssuePath);
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    /// <summary>A 12-page issue in the test series - the shared fixtures top out at 6 pages, too short for a jump of more than 5.</summary>
+    private int CreateLongIssue()
+    {
+        _longIssuePath = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_vm_long_{Guid.NewGuid():N}.cbz");
+        CbzFixture.Create(_longIssuePath, pageCount: 12);
+        using var context = PaperbunkrDb.CreateContext();
+        var issue = new Issue { SeriesId = _seriesId, Number = "5", FilePath = _longIssuePath };
+        context.Issues.Add(issue);
+        context.SaveChanges();
+        return issue.Id;
+    }
+
+    [Fact]
+    public void JumpBack_ThumbnailJumpOverThreshold_ShowsChip_AndReturnRestoresThePage()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[10]);
+
+            Assert.Equal("PAGE 11 / 12", vm.PageLabel);
+            Assert.True(vm.HasJumpBack);
+            Assert.Equal("Back to page 1", vm.JumpBackLabel);
+
+            vm.JumpBackCommand.Execute(null);
+
+            Assert.Equal("PAGE 1 / 12", vm.PageLabel);
+            Assert.False(vm.HasJumpBack);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Theory]
+    [InlineData(5, false)] // exactly the threshold is not "a big jump"
+    [InlineData(6, true)]
+    public void JumpBack_OnlyAppearsForJumpsBeyondTheThreshold(int targetPage, bool expectChip)
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[targetPage]);
+
+            Assert.Equal(expectChip, vm.HasJumpBack);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void JumpBack_ClearsOnTheNextPageTurn_AndOnExpiry()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[10]);
+            vm.NextPageCommand.Execute(null);
+            Assert.False(vm.HasJumpBack);
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[0]);
+            Assert.True(vm.HasJumpBack);
+            vm.OnJumpBackExpired(null, EventArgs.Empty);
+            Assert.False(vm.HasJumpBack);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void JumpBack_KeepsOnlyTheMostRecentOrigin()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[8]); // from page 1
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[0]); // from page 9
+
+            Assert.Equal("Back to page 9", vm.JumpBackLabel);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void JumpBack_IsARegisteredRemappableCommand()
+    {
+        Assert.Contains(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderJumpBack);
+    }
+
+    // ===== Context strip (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-design.md 4) =====
+
+    [Fact]
+    public void ContextStrip_OpenedFromAReadingList_ShowsLabelPositionAndNeighbours()
+    {
+        int listId = CreateReadingList(_issue1Id, _issue4Id, _issue2Id);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue4Id, listId);
+
+        Assert.True(vm.HasContextStrip);
+        Assert.Equal("Test List \u00b7 2 of 3", vm.ContextStripLabel);
+        Assert.True(vm.CanContextStripPrevious);
+        Assert.True(vm.CanContextStripNext);
+    }
+
+    [Fact]
+    public void ContextStrip_NoListAndNoEvent_IsHidden()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.False(vm.HasContextStrip);
+        Assert.Null(vm.ContextStripLabel);
+        Assert.False(vm.IsContextStripVisible);
+    }
+
+    [Fact]
+    public void ContextStrip_FallsBackToStoryEventMembership_WhenNotOpenedFromAList()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var evt = new StoryEvent { Name = "Absolute Universe" };
+            evt.Members.Add(new EventMembership { IssueId = _issue1Id, Position = 0 });
+            evt.Members.Add(new EventMembership { IssueId = _issue2Id, Position = 1 });
+            context.StoryEvents.Add(evt);
+            context.SaveChanges();
+        }
+
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal("Absolute Universe \u00b7 1 of 2", vm.ContextStripLabel);
+        Assert.False(vm.CanContextStripPrevious);
+        Assert.True(vm.CanContextStripNext);
+    }
+
+    [Fact]
+    public void ContextStrip_FlashesOnOpen_ThenRidesWithTheChromeOnly()
+    {
+        int listId = CreateReadingList(_issue1Id, _issue2Id);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id, listId);
+        Assert.False(vm.ShowChrome);
+        Assert.True(vm.IsContextStripFlashing);
+        Assert.True(vm.IsContextStripVisible); // flash forces it visible even with the chrome hidden
+
+        vm.OnContextStripFlashTick(null, EventArgs.Empty);
+        Assert.False(vm.IsContextStripVisible);
+
+        vm.IsNavigateClusterHovered = true;
+        Assert.True(vm.IsContextStripVisible);
+    }
+
+    [Fact]
+    public void ContextStrip_NextCommand_LoadsTheStripsNeighbour_KeepingTheListAnchor()
+    {
+        // List order deliberately differs from series order: issue1 -> issue4 (other series) -> issue2.
+        int listId = CreateReadingList(_issue1Id, _issue4Id, _issue2Id);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id, listId);
+
+        vm.ContextStripNextCommand.Execute(null);
+
+        Assert.Contains("Other Series", vm.BreadcrumbSeries);
+        Assert.Equal("Test List \u00b7 2 of 3", vm.ContextStripLabel);
+    }
+
+    // ===== Series-level fit / auto-rotate defaults (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-design.md §2) =====
+
+    [Fact]
+    public void LoadIssue_NoOverrides_UsesSeriesFitDefault_OverGlobal()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Series.Find(_seriesId)!.PageFitModeOverride = ImageFitMode.BestFit;
+            context.Series.Find(_seriesId)!.AutoRotateOverride = true;
+            context.SaveChanges();
+        }
+
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(ImageFitMode.BestFit, vm.FitMode);
+        Assert.True(vm.AutoRotate);
+    }
+
+    [Fact]
+    public void LoadIssue_IssueOverride_BeatsSeriesDefault()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Series.Find(_seriesId)!.PageFitModeOverride = ImageFitMode.BestFit;
+            context.Issues.Find(_issue1Id)!.PageFitModeOverride = ImageFitMode.Original;
+            context.SaveChanges();
+        }
+
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(ImageFitMode.Original, vm.FitMode);
+    }
+
+    [Fact]
+    public void SetFitMode_WritesOnlyTheIssue_ApplyToSeries_WritesTheSeriesAndSiblingsInherit()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.SetFitModeCommand.Execute(ImageFitMode.Fit);
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Assert.Null(context.Series.Find(_seriesId)!.PageFitModeOverride);
+            Assert.Equal(ImageFitMode.Fit, context.Issues.Find(_issue1Id)!.PageFitModeOverride);
+        }
+
+        vm.ApplyFitModeToSeriesCommand.Execute(null);
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Assert.Equal(ImageFitMode.Fit, context.Series.Find(_seriesId)!.PageFitModeOverride);
+        }
+
+        var sibling = new ReaderScreenViewModel(goBack: () => { });
+        sibling.LoadIssue(_issue2Id);
+        Assert.Equal(ImageFitMode.Fit, sibling.FitMode);
+    }
+
+    [Fact]
+    public void ApplyAutoRotateToSeries_WritesTheCurrentToggleToTheSeries()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ToggleAutoRotateCommand.Execute(null);
+
+        vm.ApplyAutoRotateToSeriesCommand.Execute(null);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Equal(vm.AutoRotate, context.Series.Find(_seriesId)!.AutoRotateOverride);
+    }
+
     [Fact]
     public void SharedElementKey_NullBeforeAnyIssueLoaded_ThenIssueCoverAfterLoadIssue()
     {
@@ -339,7 +612,8 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal("PAGE 3 / 3", vm.PageLabel);
 
         vm.NextPageCommand.Execute(null);
-        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty); // docs/superpowers/specs/2026-08-23-reader-chapter-transition-design.md - navigation is deferred behind the transition card's hold timer; advance it directly (same test seam as OnAutoScrollTick).
+        Assert.Equal(ChapterTransitionState.EndCard, vm.ChapterTransitionState);
+        vm.NextPageCommand.Execute(null); // paging forward again while the end card is up means Continue (2026-09-21 design 3)
 
         Assert.Equal("PAGE 1 / 2", vm.PageLabel);
         Assert.Contains("#2", vm.IssueTitle);
@@ -467,7 +741,7 @@ public class ReaderScreenViewModelTests : IDisposable
     // transition-design.md) =====================
 
     [Fact]
-    public void NextPage_PastLastPage_ShowsCardImmediately_AndDefersTheActualNavigate()
+    public void NextPage_PastLastPage_ShowsEndCard_AndDefersTheActualNavigate()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
@@ -476,16 +750,19 @@ public class ReaderScreenViewModelTests : IDisposable
 
         vm.NextPageCommand.Execute(null);
 
-        Assert.Equal(ChapterTransitionState.Card, vm.ChapterTransitionState);
-        Assert.Equal("#1", vm.ChapterTransitionFromLabel);
-        Assert.Equal("#2", vm.ChapterTransitionToLabel);
-        // Navigate is deferred behind the hold timer - still on issue 1 until the tick fires.
+        Assert.Equal(ChapterTransitionState.EndCard, vm.ChapterTransitionState);
+        Assert.Equal("Finished \u00b7 #1", vm.EndCardFinishedLabel);
+        Assert.True(vm.EndCardHasNext);
+        Assert.Equal("#2", vm.EndCardNextLabel);
+        Assert.Equal("Series: Test Series \u00b7 3 of 3", vm.EndCardSourceLabel);
+        Assert.Equal("Auto in 5s \u00b7 any key cancels", vm.EndCardCountdownText);
+        // Navigation waits for Continue or the countdown - still on issue 1.
         Assert.Equal("PAGE 3 / 3", vm.PageLabel);
         Assert.Contains("#1", vm.IssueTitle);
     }
 
     [Fact]
-    public void NextPage_HoldTick_HidesTheCard()
+    public void EndCard_CountdownTicksDown_ThenAdvancesToTheNextIssue()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
@@ -493,9 +770,130 @@ public class ReaderScreenViewModelTests : IDisposable
         vm.NextPageCommand.Execute(null);
         vm.NextPageCommand.Execute(null);
 
-        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty);
+        vm.OnEndCardCountdownTick(null, EventArgs.Empty);
+        Assert.Equal("Auto in 4s \u00b7 any key cancels", vm.EndCardCountdownText);
+        for (int i = 0; i < 3; i++)
+        {
+            vm.OnEndCardCountdownTick(null, EventArgs.Empty);
+        }
+
+        Assert.Equal(ChapterTransitionState.EndCard, vm.ChapterTransitionState);
+        vm.OnEndCardCountdownTick(null, EventArgs.Empty); // 5th tick reaches zero
 
         Assert.Equal(ChapterTransitionState.Hidden, vm.ChapterTransitionState);
+        Assert.Contains("#2", vm.IssueTitle);
+    }
+
+    [Fact]
+    public void EndCard_CancelCountdown_KeepsTheCardWithoutAdvancing()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        vm.CancelEndCardCountdown();
+        for (int i = 0; i < 6; i++)
+        {
+            vm.OnEndCardCountdownTick(null, EventArgs.Empty);
+        }
+
+        Assert.Equal(ChapterTransitionState.EndCard, vm.ChapterTransitionState);
+        Assert.Null(vm.EndCardCountdownText);
+        Assert.Contains("#1", vm.IssueTitle);
+    }
+
+    [Fact]
+    public void EndCard_ContinueCommand_AdvancesImmediately()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        vm.EndCardContinueCommand.Execute(null);
+
+        Assert.Equal(ChapterTransitionState.Hidden, vm.ChapterTransitionState);
+        Assert.Contains("#2", vm.IssueTitle);
+    }
+
+    [Fact]
+    public void EndCard_PagingBack_DismissesTheCard()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+        Assert.Equal(ChapterTransitionState.EndCard, vm.ChapterTransitionState);
+
+        vm.PreviousPageCommand.Execute(null);
+
+        Assert.Equal(ChapterTransitionState.Hidden, vm.ChapterTransitionState);
+        Assert.Equal("PAGE 2 / 3", vm.PageLabel);
+    }
+
+    [Fact]
+    public void EndCard_OnTheLastIssue_SaysSo_AndHasNothingToContinueTo()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue2Id); // last issue in the series
+        vm.NextPageCommand.Execute(null);
+
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Equal(ChapterTransitionState.EndCard, vm.ChapterTransitionState);
+        Assert.False(vm.EndCardHasNext);
+        Assert.Equal("That's the last issue", vm.EndCardNextLabel);
+        Assert.Null(vm.EndCardSourceLabel);
+        Assert.Null(vm.EndCardCountdownText);
+        vm.EndCardContinueCommand.Execute(null); // no-op
+        Assert.Contains("#2", vm.IssueTitle);
+    }
+
+    [Fact]
+    public void EndCard_FromAReadingList_LabelsTheListAndPosition()
+    {
+        int listId = CreateReadingList(_issue1Id, _issue4Id, _issue2Id);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id, listId);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Equal("Reading list: Test List \u00b7 2 of 3", vm.EndCardSourceLabel);
+    }
+
+    [Fact]
+    public void EndCard_MarkRead_SetsTheLastPage_AndDisablesItself()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        vm.EndCardMarkReadCommand.Execute(null);
+
+        Assert.True(vm.EndCardMarkedRead);
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.True(context.Issues.Find(_issue1Id)!.LastPageRead >= 2);
+    }
+
+    [Fact]
+    public void EndCard_Rate_RaisesTheReviewPrompt_EvenWhenTheFinishPromptSettingIsOff()
+    {
+        var prompted = new List<int>();
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.ReviewPromptRequested += prompted.Add;
+        vm.LoadIssue(_issue1Id);
+
+        vm.EndCardRateCommand.Execute(null);
+
+        Assert.Equal(new[] { _issue1Id }, prompted);
     }
 
     [Fact]
@@ -512,7 +910,7 @@ public class ReaderScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void NextPage_PastLastPage_AutoNavigateDisabled_NeverShowsTheCard()
+    public void NextPage_PastLastPage_AutoNavigateDisabled_ShowsTheEndCardWithoutACountdown()
     {
         SetAutoNavigateComics(false);
         var vm = new ReaderScreenViewModel(goBack: () => { });
@@ -522,24 +920,25 @@ public class ReaderScreenViewModelTests : IDisposable
 
         vm.NextPageCommand.Execute(null);
 
-        Assert.Equal(ChapterTransitionState.Hidden, vm.ChapterTransitionState);
+        Assert.Equal(ChapterTransitionState.EndCard, vm.ChapterTransitionState);
+        Assert.True(vm.EndCardHasNext);
+        Assert.Null(vm.EndCardCountdownText);
+        Assert.Contains("#1", vm.IssueTitle);
     }
 
     [Fact]
-    public void NextPage_RepeatedPresses_WhileCardShowing_AreIgnored()
+    public void PreviousPage_BeforeFirstPage_RepeatedPresses_WhileCardShowing_AreIgnored()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
-        vm.LoadIssue(_issue1Id);
-        vm.NextPageCommand.Execute(null);
-        vm.NextPageCommand.Execute(null);
-        vm.NextPageCommand.Execute(null); // shows the card, defers navigate
+        vm.LoadIssue(_issue2Id);
+        vm.PreviousPageCommand.Execute(null); // shows the backward card, defers navigate
 
-        vm.NextPageCommand.Execute(null); // re-entrant press while still showing
-        vm.NextPageCommand.Execute(null);
+        vm.PreviousPageCommand.Execute(null); // re-entrant press while still showing
+        vm.PreviousPageCommand.Execute(null);
 
-        // Still just one pending transition - the hold tick lands on issue 2, not further.
+        // Still just one pending transition - the hold tick lands on issue 1, not further.
         vm.OnChapterTransitionHoldTick(null, EventArgs.Empty);
-        Assert.Contains("#2", vm.IssueTitle);
+        Assert.Contains("#1", vm.IssueTitle);
     }
 
     [Fact]
@@ -739,7 +1138,7 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal("PAGE 3 / 3", vm.PageLabel);
 
         vm.GoLeftCommand.Execute(null);
-        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty); // see NextPage_PastLastPage_LoadsNextIssue_WhenAutoNavigateEnabled
+        vm.EndCardContinueCommand.Execute(null); // forward crossing now goes through the end card (2026-09-21 design 3)
 
         Assert.Equal("PAGE 1 / 2", vm.PageLabel);
         Assert.Contains("#2", vm.IssueTitle);
@@ -887,7 +1286,7 @@ public class ReaderScreenViewModelTests : IDisposable
         vm.PanOffsetY = -10;
 
         vm.NextPageCommand.Execute(null);
-        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty); // see NextPage_PastLastPage_LoadsNextIssue_WhenAutoNavigateEnabled
+        vm.EndCardContinueCommand.Execute(null); // forward crossing now goes through the end card (2026-09-21 design 3)
 
         Assert.Contains("#2", vm.IssueTitle);
         Assert.Equal(1.0, vm.ZoomLevel);
@@ -2425,7 +2824,7 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal("PAGE 3 / 3", vm.PageLabel);
 
         vm.NextPageCommand.Execute(null);
-        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty);
+        vm.EndCardContinueCommand.Execute(null); // forward crossing now goes through the end card (2026-09-21 design 3)
 
         Assert.Equal("PAGE 1 / 1", vm.PageLabel);
         Assert.Contains("Other Series", vm.BreadcrumbSeries);
@@ -2442,7 +2841,7 @@ public class ReaderScreenViewModelTests : IDisposable
         vm.NextPageCommand.Execute(null);
 
         vm.NextPageCommand.Execute(null);
-        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty);
+        vm.EndCardContinueCommand.Execute(null); // forward crossing now goes through the end card (2026-09-21 design 3)
 
         Assert.Contains("Other Series", vm.BreadcrumbSeries); // landed on issue4, not the placeholder
     }
@@ -2462,7 +2861,8 @@ public class ReaderScreenViewModelTests : IDisposable
 
         Assert.Equal("PAGE 3 / 3", vm.PageLabel);
         Assert.Contains("#1", vm.IssueTitle);
-        Assert.Equal(ChapterTransitionState.Hidden, vm.ChapterTransitionState);
+        Assert.Equal(ChapterTransitionState.EndCard, vm.ChapterTransitionState);
+        Assert.False(vm.EndCardHasNext); // the list ends here - no fallback to series order
     }
 
     [Fact]

@@ -300,6 +300,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         _seriesId = series.Id;
         Publisher = SeriesMetaFields.FromSeries(series).Publisher ?? "Unknown";
         SetReadingModeLabel(series.ReadingMode);
+        SetSeriesReaderDefaults(series);
         OnPropertyChanged(nameof(Publisher));
 
         RefreshCreditRoles(series.Issues);
@@ -2133,6 +2134,75 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         context.SaveChanges();
 
         SetReadingModeLabel(series.ReadingMode);
+    }
+
+    // ===== Series-level reader defaults (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-design.md §2) =====
+    // Shown on the Info sub-tab for both the Western and the manga detail screens (the latter embeds this
+    // same view model). Set from the Reader's "Apply to series"; cleared here.
+
+    [ObservableProperty]
+    private string _seriesFitDefaultLabel = "Not set";
+
+    [ObservableProperty]
+    private bool _hasSeriesFitDefault;
+
+    [ObservableProperty]
+    private string _seriesAutoRotateDefaultLabel = "Not set";
+
+    [ObservableProperty]
+    private bool _hasSeriesAutoRotateDefault;
+
+    private void SetSeriesReaderDefaults(Series series)
+    {
+        HasSeriesFitDefault = series.PageFitModeOverride is not null;
+        SeriesFitDefaultLabel = series.PageFitModeOverride switch
+        {
+            ImageFitMode.Original => "Original size",
+            ImageFitMode.Fit => "Fit page",
+            ImageFitMode.FitWidth => "Fit width",
+            ImageFitMode.FitHeight => "Fit height",
+            ImageFitMode.BestFit => "Best fit",
+            _ => "Not set",
+        };
+
+        HasSeriesAutoRotateDefault = series.AutoRotateOverride is not null;
+        SeriesAutoRotateDefaultLabel = series.AutoRotateOverride switch
+        {
+            true => "On",
+            false => "Off",
+            null => "Not set",
+        };
+    }
+
+    [RelayCommand]
+    private void ClearSeriesFitDefault()
+    {
+        UpdateSeriesReaderDefaults(series => series.PageFitModeOverride = null);
+    }
+
+    [RelayCommand]
+    private void ClearSeriesAutoRotateDefault()
+    {
+        UpdateSeriesReaderDefaults(series => series.AutoRotateOverride = null);
+    }
+
+    private void UpdateSeriesReaderDefaults(Action<Series> change)
+    {
+        if (_seriesId is not int seriesId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        var series = context.Series.FirstOrDefault(s => s.Id == seriesId);
+        if (series is null)
+        {
+            return;
+        }
+
+        change(series);
+        context.SaveChanges();
+        SetSeriesReaderDefaults(series);
     }
 
     [ObservableProperty]

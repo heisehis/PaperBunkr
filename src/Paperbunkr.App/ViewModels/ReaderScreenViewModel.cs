@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Reader;
 using Paperbunkr.App.Views;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
@@ -192,6 +193,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     public string PageTurnRightHint => GetShortcutHint(KeyboardCommandRegistry.ReaderPageTurnRight);
     public string PreviousBookmarkHint => GetShortcutHint(KeyboardCommandRegistry.ReaderPreviousBookmark);
     public string NextBookmarkHint => GetShortcutHint(KeyboardCommandRegistry.ReaderNextBookmark);
+    public string JumpBackHint => GetShortcutHint(KeyboardCommandRegistry.ReaderJumpBack);
 
     /// <summary>Public since 2026-09-16: <c>ReaderScreen.axaml.cs</c>'s root-canvas PointerMoved now
     /// calls this directly (instead of the wider <see cref="NotifyCursorActivity"/>, which also
@@ -208,6 +210,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(PageTurnRightHint));
         OnPropertyChanged(nameof(PreviousBookmarkHint));
         OnPropertyChanged(nameof(NextBookmarkHint));
+        OnPropertyChanged(nameof(JumpBackHint));
     }
 
     public ObservableCollection<ReaderThumbnailSample> Thumbnails { get; }
@@ -319,6 +322,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
     [ObservableProperty]
     private IReadOnlyList<KeyGesture> _nextBookmarkKey = [new(Key.PageDown, KeyModifiers.Control)];
+
+    [ObservableProperty]
+    private IReadOnlyList<KeyGesture> _jumpBackKey = [new(Key.Left, KeyModifiers.Alt)];
 
     [ObservableProperty]
     private IReadOnlyList<KeyGesture> _toggleFullscreenKey = [new(Key.F)];
@@ -1015,6 +1021,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         _loadedSeriesId = series.Id;
         _activeReadingListId = readingListId;
         _reviewPromptShown = false;
+        DismissEndCard();
+        ClearJumpBack();
+        RefreshContextStrip(context, issue.Id, readingListId);
 
         // Real open-tracking (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-
         // metadata-design.md) - the first place either of these fields is actually written; confirmed
@@ -1093,6 +1102,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         ToggleAutoScrollKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleAutoScroll);
         PreviousBookmarkKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPreviousBookmark);
         NextBookmarkKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderNextBookmark);
+        JumpBackKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderJumpBack);
         ToggleFullscreenKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleFullscreen);
         RotateClockwiseKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderRotateClockwise);
         RotateCounterClockwiseKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderRotateCounterClockwise);
@@ -1111,8 +1121,8 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         ScrollOffset = 0;
         CurrentContinuousPageIndex = -1;
         ManualRotationDegrees = 0;
-        FitMode = issue.PageFitModeOverride ?? appSettings.DefaultPageFitMode;
-        AutoRotate = issue.AutoRotateOverride ?? appSettings.DefaultAutoRotate;
+        FitMode = ReaderDefaultsResolver.EffectiveFitMode(issue, series, appSettings);
+        AutoRotate = ReaderDefaultsResolver.EffectiveAutoRotate(issue, series, appSettings);
 
         _brightnessGlobalDefault = appSettings.DefaultBrightness;
         _contrastGlobalDefault = appSettings.DefaultContrast;
@@ -1436,6 +1446,46 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         }
     }
 
+    /// <summary>
+    /// "Apply to series" (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-design.md §2):
+    /// writes the current fit mode to <c>Series.PageFitModeOverride</c> so every issue of the series that
+    /// has no override of its own picks it up. <see cref="SetFitMode"/> itself still writes only the issue.
+    /// </summary>
+    [RelayCommand]
+    private void ApplyFitModeToSeries()
+    {
+        if (_loadedSeriesId is not int seriesId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
+        var series = context.Series.Find(seriesId);
+        if (series is not null)
+        {
+            series.PageFitModeOverride = FitMode;
+            context.SaveChanges();
+        }
+    }
+
+    /// <summary>Same as <see cref="ApplyFitModeToSeries"/>, for the auto-rotate toggle.</summary>
+    [RelayCommand]
+    private void ApplyAutoRotateToSeries()
+    {
+        if (_loadedSeriesId is not int seriesId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
+        var series = context.Series.Find(seriesId);
+        if (series is not null)
+        {
+            series.AutoRotateOverride = AutoRotate;
+            context.SaveChanges();
+        }
+    }
+
     /// <summary>Same per-book override shape as <see cref="SetFitMode"/>, for the auto-rotate-landscape-pages toggle.</summary>
     [RelayCommand]
     private void ToggleAutoRotate()
@@ -1509,7 +1559,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// hide preference is on, exactly as before.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsNavigateClusterVisible), nameof(IsActionsClusterVisible), nameof(IsViewClusterVisible), nameof(IsPageTurnClusterVisible))]
+    [NotifyPropertyChangedFor(nameof(IsNavigateClusterVisible), nameof(IsActionsClusterVisible), nameof(IsViewClusterVisible), nameof(IsPageTurnClusterVisible), nameof(IsContextStripVisible))]
     private bool _showChrome = true;
 
     /// <summary>Per-corner hover state (2026-09-16, direct user request) - each cluster now pops in
@@ -1521,7 +1571,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// and each corner has genuinely different content, so parallel bools read clearer here than a
     /// generic lookup.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsNavigateClusterVisible))]
+    [NotifyPropertyChangedFor(nameof(IsNavigateClusterVisible), nameof(IsContextStripVisible))]
     private bool _isNavigateClusterHovered;
 
     [ObservableProperty]
@@ -1725,7 +1775,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     {
         if (bookmark is not null)
         {
-            GoToPage(bookmark.PageNumber);
+            JumpToPage(bookmark.PageNumber);
         }
     }
 
@@ -1777,7 +1827,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         int? target = Bookmarks.Select(b => (int?)b.PageNumber).Where(p => p < _currentPageIndex).Max();
         if (target is int page)
         {
-            GoToPage(page);
+            JumpToPage(page);
         }
     }
 
@@ -1787,7 +1837,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         int? target = Bookmarks.Select(b => (int?)b.PageNumber).Where(p => p > _currentPageIndex).Min();
         if (target is int page)
         {
-            GoToPage(page);
+            JumpToPage(page);
         }
     }
 
@@ -2246,6 +2296,8 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         }
 
         _currentPageIndex = pageIndex;
+        DismissEndCard();
+        ClearJumpBack();
         UpdatePageLabelAndProgress();
         PageRotationOverrideDegrees = _pageOverrides.TryGetValue(_currentPageIndex, out var pageOverride) ? pageOverride.RotationDegrees : 0;
 
@@ -2437,7 +2489,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        GoToPage(index);
+        JumpToPage(index);
     }
 
     /// <summary>Item 2 of docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md - the per-page manual spread-phase override; <see cref="PageSpreadPosition.Default"/> when the page has no <see cref="IssuePage"/> row (the common case).</summary>
@@ -2578,56 +2630,14 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return false;
         }
 
-        if (_activeReadingListId is int listId)
-        {
-            var items = context.ReadingListItems
-                .Where(i => i.ReadingListId == listId)
-                .Include(i => i.Issue).ThenInclude(i => i!.Series)
-                .Include(i => i.Issue).ThenInclude(i => i!.MetadataProposals)
-                .OrderBy(i => i.SortOrder)
-                .ToList();
-            int listIndex = items.FindIndex(i => i.IssueId == currentIssueId);
-            if (listIndex < 0)
-            {
-                return false;
-            }
-
-            fromIssue = items[listIndex].Issue!;
-            int step = forward ? 1 : -1;
-            for (int i = listIndex + step; i >= 0 && i < items.Count; i += step)
-            {
-                if (items[i].Issue is { FileIsMissing: false, Series: not null } candidate)
-                {
-                    toIssue = candidate;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        if (_loadedSeriesId is not int seriesId)
+        var step = ReadingOrderResolver.ResolveNeighbour(context, currentIssueId, _loadedSeriesId, _activeReadingListId, forward);
+        if (step is null)
         {
             return false;
         }
 
-        var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals).FirstOrDefault(s => s.Id == seriesId);
-        var orderedIssues = series?.Issues.OrderByNumber().ToList();
-        int seriesIndex = orderedIssues?.FindIndex(i => i.Id == currentIssueId) ?? -1;
-        if (series is null || orderedIssues is null || seriesIndex < 0)
-        {
-            return false;
-        }
-
-        int adjacentIndex = forward ? seriesIndex + 1 : seriesIndex - 1;
-        if (adjacentIndex < 0 || adjacentIndex >= orderedIssues.Count)
-        {
-            return false;
-        }
-
-        fromIssue = orderedIssues[seriesIndex];
-        toIssue = orderedIssues[adjacentIndex];
-        toIssue.Series ??= series;
+        fromIssue = step.From;
+        toIssue = step.To;
         return true;
     }
 
@@ -2667,6 +2677,322 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     private Issue? _pendingChapterTransitionFromIssue;
     private Issue? _pendingChapterTransitionToIssue;
 
+    // ===================== Jump-back chip (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-
+    // design.md 4, pitch #10) - after a jump of more than JumpBackThreshold pages (thumbnail click,
+    // bookmark jump) offers "Back to page N". One stored position, no history stack. Paged mode only:
+    // continuous mode has no discrete current page. =====================
+
+    internal const int JumpBackThreshold = 5;
+    private static readonly TimeSpan JumpBackLifetime = TimeSpan.FromSeconds(6);
+
+    [ObservableProperty]
+    private bool _hasJumpBack;
+
+    [ObservableProperty]
+    private string? _jumpBackLabel;
+
+    private int _jumpBackPage;
+    private DispatcherTimer? _jumpBackTimer;
+
+    /// <summary>A page change that is not a normal step: records where the reader was when it moves more than <see cref="JumpBackThreshold"/> pages.</summary>
+    private void JumpToPage(int target)
+    {
+        int from = _currentPageIndex;
+        if (Math.Abs(target - from) > JumpBackThreshold)
+        {
+            GoToPage(target);
+            SetJumpBack(from);
+            return;
+        }
+
+        GoToPage(target);
+    }
+
+    private void SetJumpBack(int fromPage)
+    {
+        _jumpBackPage = fromPage;
+        JumpBackLabel = $"Back to page {fromPage + 1}";
+        HasJumpBack = true;
+        if (_jumpBackTimer is null)
+        {
+            _jumpBackTimer = new DispatcherTimer { Interval = JumpBackLifetime };
+            _jumpBackTimer.Tick += OnJumpBackExpired;
+        }
+
+        _jumpBackTimer.Stop();
+        _jumpBackTimer.Start();
+    }
+
+    private void ClearJumpBack()
+    {
+        _jumpBackTimer?.Stop();
+        HasJumpBack = false;
+        JumpBackLabel = null;
+    }
+
+    /// <summary>Test seam, same rationale as <see cref="OnAutoScrollTick"/>.</summary>
+    internal void OnJumpBackExpired(object? sender, EventArgs e) => ClearJumpBack();
+
+    [RelayCommand]
+    private void JumpBack()
+    {
+        if (!HasJumpBack)
+        {
+            return;
+        }
+
+        int page = _jumpBackPage;
+        // GoToPage clears the chip (any page change does), so the return itself never leaves a chip behind.
+        GoToPage(page);
+    }
+
+    // ===================== Context strip (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-
+    // design.md 4) - "Absolute Universe - 3 of 12" with its own prev/next, shown with the navigate cluster
+    // and flashed for a few seconds when an issue opens. Only when the issue has a reading-list/Event context. =====================
+
+    private static readonly TimeSpan ContextStripFlashDuration = TimeSpan.FromSeconds(4);
+
+    [ObservableProperty]
+    private string? _contextStripLabel;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsContextStripVisible))]
+    private bool _hasContextStrip;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsContextStripVisible))]
+    private bool _isContextStripFlashing;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ContextStripPreviousCommand))]
+    private bool _canContextStripPrevious;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ContextStripNextCommand))]
+    private bool _canContextStripNext;
+
+    /// <summary>The strip rides with the navigate cluster (hover/chrome) and is also forced visible during the open-flash.</summary>
+    public bool IsContextStripVisible => HasContextStrip && (ShowChrome || IsNavigateClusterHovered || IsContextStripFlashing);
+
+    private int? _contextStripPreviousIssueId;
+    private int? _contextStripNextIssueId;
+    private DispatcherTimer? _contextStripFlashTimer;
+
+    private void RefreshContextStrip(PaperbunkrDbContext context, int issueId, int? readingListId)
+    {
+        var strip = ReadingOrderResolver.ResolveContext(context, issueId, readingListId);
+        _contextStripPreviousIssueId = strip?.PrevIssueId;
+        _contextStripNextIssueId = strip?.NextIssueId;
+        CanContextStripPrevious = strip?.PrevIssueId is not null;
+        CanContextStripNext = strip?.NextIssueId is not null;
+        ContextStripLabel = strip is null ? null : $"{strip.Label} \u00b7 {strip.Position} of {strip.Total}";
+        HasContextStrip = strip is not null;
+
+        _contextStripFlashTimer?.Stop();
+        IsContextStripFlashing = false;
+        if (strip is not null)
+        {
+            IsContextStripFlashing = true;
+            if (_contextStripFlashTimer is null)
+            {
+                _contextStripFlashTimer = new DispatcherTimer { Interval = ContextStripFlashDuration };
+                _contextStripFlashTimer.Tick += OnContextStripFlashTick;
+            }
+
+            _contextStripFlashTimer.Start();
+        }
+    }
+
+    /// <summary>Test seam, same rationale as <see cref="OnAutoScrollTick"/>.</summary>
+    internal void OnContextStripFlashTick(object? sender, EventArgs e)
+    {
+        _contextStripFlashTimer?.Stop();
+        IsContextStripFlashing = false;
+    }
+
+    /// <summary>Loads the strip's own previous/next issue, keeping the reading-list anchor so the strip and paging order stay in the same context.</summary>
+    [RelayCommand(CanExecute = nameof(CanContextStripPrevious))]
+    private void ContextStripPrevious()
+    {
+        if (_contextStripPreviousIssueId is int id)
+        {
+            LoadIssue(id, _activeReadingListId);
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanContextStripNext))]
+    private void ContextStripNext()
+    {
+        if (_contextStripNextIssueId is int id)
+        {
+            LoadIssue(id, _activeReadingListId);
+        }
+    }
+
+    // ===================== End-of-issue card (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-
+    // design.md 3) - shown on paging forward past the last page, whether or not there is a next issue and
+    // whether or not AutoNavigateComics is on. =====================
+
+    private static readonly TimeSpan EndCardCountdownTick = TimeSpan.FromSeconds(1);
+    private const int EndCardCountdownSeconds = 5;
+
+    [ObservableProperty]
+    private string _endCardFinishedLabel = string.Empty;
+
+    [ObservableProperty]
+    private bool _endCardHasNext;
+
+    /// <summary>"#4" of the next issue, or "That's the last issue" when there is none.</summary>
+    [ObservableProperty]
+    private string _endCardNextLabel = string.Empty;
+
+    /// <summary>"Reading list: Absolute Universe - 4 of 12" (or the series equivalent); null when there is no next issue.</summary>
+    [ObservableProperty]
+    private string? _endCardSourceLabel;
+
+    [ObservableProperty]
+    private Bitmap? _endCardCoverImage;
+
+    /// <summary>"Auto in 5s - any key cancels" while the countdown runs; null when it is not running.</summary>
+    [ObservableProperty]
+    private string? _endCardCountdownText;
+
+    [ObservableProperty]
+    private bool _endCardMarkedRead;
+
+    private DispatcherTimer? _endCardCountdownTimer;
+    private int _endCardSecondsLeft;
+
+    private void ShowEndCard()
+    {
+        if (_loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
+        bool autoNavigate = context.GetOrCreateAppSettings().AutoNavigateComics;
+        var current = context.Issues.Find(issueId);
+        var step = ReadingOrderResolver.ResolveNeighbour(context, issueId, _loadedSeriesId, _activeReadingListId, forward: true);
+
+        EndCardFinishedLabel = $"Finished \u00b7 #{current?.EffectiveNumber() ?? "?"}";
+        EndCardHasNext = step is not null;
+        EndCardNextLabel = step is null ? "That's the last issue" : $"#{step.To.EffectiveNumber() ?? "?"}";
+        EndCardSourceLabel = step is null ? null : $"{step.SourceLabel} \u00b7 {step.ToPosition} of {step.Total}";
+        EndCardCoverImage = step is null ? null : CoverImageCache.Get(step.To.Id, step.To.FilePath, step.To.FileSize);
+        EndCardMarkedRead = false;
+
+        // Nothing to advance to, or auto-advance is off: the reader is done with this book and waiting -
+        // the natural "finished" signal for the review prompt (behaviour unchanged from before the card).
+        if (step is null || !autoNavigate)
+        {
+            MaybePromptReviewOnFinish();
+        }
+
+        ChapterTransitionState = ChapterTransitionState.EndCard;
+
+        if (step is not null && autoNavigate)
+        {
+            StartEndCardCountdown();
+        }
+    }
+
+    private void StartEndCardCountdown()
+    {
+        _endCardSecondsLeft = EndCardCountdownSeconds;
+        EndCardCountdownText = $"Auto in {_endCardSecondsLeft}s \u00b7 any key cancels";
+        if (_endCardCountdownTimer is null)
+        {
+            _endCardCountdownTimer = new DispatcherTimer { Interval = EndCardCountdownTick };
+            _endCardCountdownTimer.Tick += OnEndCardCountdownTick;
+        }
+
+        _endCardCountdownTimer.Stop();
+        _endCardCountdownTimer.Start();
+    }
+
+    /// <summary>Test seam, same rationale as <see cref="OnAutoScrollTick"/>.</summary>
+    internal void OnEndCardCountdownTick(object? sender, EventArgs e)
+    {
+        if (ChapterTransitionState != ChapterTransitionState.EndCard || EndCardCountdownText is null)
+        {
+            _endCardCountdownTimer?.Stop();
+            return;
+        }
+
+        _endCardSecondsLeft--;
+        if (_endCardSecondsLeft <= 0)
+        {
+            EndCardContinue();
+            return;
+        }
+
+        EndCardCountdownText = $"Auto in {_endCardSecondsLeft}s \u00b7 any key cancels";
+    }
+
+    /// <summary>Stops the auto-advance countdown but leaves the card up. The reader view calls this on any key or pointer press.</summary>
+    public void CancelEndCardCountdown()
+    {
+        _endCardCountdownTimer?.Stop();
+        EndCardCountdownText = null;
+    }
+
+    /// <summary>Hides the card without navigating (page turned back, Escape).</summary>
+    [RelayCommand]
+    private void DismissEndCard()
+    {
+        if (ChapterTransitionState != ChapterTransitionState.EndCard)
+        {
+            return;
+        }
+
+        CancelEndCardCountdown();
+        ChapterTransitionState = ChapterTransitionState.Hidden;
+    }
+
+    [RelayCommand]
+    private void EndCardContinue()
+    {
+        if (ChapterTransitionState != ChapterTransitionState.EndCard || !EndCardHasNext)
+        {
+            return;
+        }
+
+        CancelEndCardCountdown();
+        ChapterTransitionState = ChapterTransitionState.Hidden;
+        NavigateToAdjacentIssue(forward: true, bypassAutoNavigateSetting: true);
+    }
+
+    [RelayCommand]
+    private void EndCardMarkRead()
+    {
+        if (_loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
+        var issue = context.Issues.Find(issueId);
+        if (issue is not null)
+        {
+            IssueReadStateResolver.MarkAsRead(issue);
+            context.SaveChanges();
+        }
+
+        EmitFinishedIfNeeded();
+        EndCardMarkedRead = true;
+    }
+
+    /// <summary>Opens the Quick Rate overlay for the finished issue, regardless of <c>PromptReviewOnFinish</c> (that setting only governs the automatic prompt).</summary>
+    [RelayCommand]
+    private void EndCardRate()
+    {
+        if (_loadedIssueId is int issueId)
+        {
+            ReviewPromptRequested?.Invoke(issueId);
+        }
+    }
+
     /// <summary>
     /// Paged mode's boundary trigger (<see cref="NextPage"/>/<see cref="PreviousPage"/>, at the
     /// last/first real page). Shows the card immediately (no <see cref="ChapterTransitionState.Loading"/>
@@ -2676,6 +3002,28 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// </summary>
     private void TriggerChapterTransition(bool forward)
     {
+        // Paging forward past the last page: the end-of-issue card (design 3) owns this now. Paging forward
+        // again while it is showing means "Continue" (or does nothing when there is no next issue).
+        if (forward)
+        {
+            if (ChapterTransitionState == ChapterTransitionState.EndCard)
+            {
+                if (EndCardHasNext)
+                {
+                    EndCardContinue();
+                }
+
+                return;
+            }
+
+            if (ChapterTransitionState == ChapterTransitionState.Hidden)
+            {
+                ShowEndCard();
+            }
+
+            return;
+        }
+
         if (ChapterTransitionState != ChapterTransitionState.Hidden)
         {
             return;

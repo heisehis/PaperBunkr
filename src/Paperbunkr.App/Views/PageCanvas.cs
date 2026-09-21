@@ -91,6 +91,9 @@ public class PageCanvas : Control
     public static readonly StyledProperty<ICommand?> NextBookmarkCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(NextBookmarkCommand));
 
+    public static readonly StyledProperty<ICommand?> JumpBackCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(JumpBackCommand));
+
     public static readonly StyledProperty<ICommand?> ZoomInCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ZoomInCommand));
 
@@ -190,6 +193,9 @@ public class PageCanvas : Control
 
     public static readonly StyledProperty<IReadOnlyList<KeyGesture>> NextBookmarkGestureProperty =
         AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(NextBookmarkGesture), defaultValue: [new KeyGesture(Key.PageDown, KeyModifiers.Control)]);
+
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> JumpBackGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(JumpBackGesture), defaultValue: [new KeyGesture(Key.Left, KeyModifiers.Alt)]);
 
     public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ZoomInGestureProperty =
         AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ZoomInGesture), defaultValue: [new KeyGesture(Key.Z)]);
@@ -626,6 +632,12 @@ public class PageCanvas : Control
         set => SetValue(NextBookmarkCommandProperty, value);
     }
 
+    public ICommand? JumpBackCommand
+    {
+        get => GetValue(JumpBackCommandProperty);
+        set => SetValue(JumpBackCommandProperty, value);
+    }
+
     public ICommand? RotateCounterClockwiseCommand
     {
         get => GetValue(RotateCounterClockwiseCommandProperty);
@@ -788,6 +800,12 @@ public class PageCanvas : Control
     {
         get => GetValue(NextBookmarkGestureProperty);
         set => SetValue(NextBookmarkGestureProperty, value);
+    }
+
+    public IReadOnlyList<KeyGesture> JumpBackGesture
+    {
+        get => GetValue(JumpBackGestureProperty);
+        set => SetValue(JumpBackGestureProperty, value);
     }
 
     public IReadOnlyList<KeyGesture> ZoomInGesture
@@ -2323,6 +2341,16 @@ public class PageCanvas : Control
         if (AnyMatches(NextBookmarkGesture, e))
         {
             if (TryExecute(NextBookmarkCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (AnyMatches(JumpBackGesture, e))
+        {
+            if (TryExecute(JumpBackCommand))
             {
                 e.Handled = true;
             }

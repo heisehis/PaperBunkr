@@ -37,7 +37,13 @@ public partial class ReaderScreen : UserControl
         // it fires even though PageCanvas is the focused element - handledEventsToo covers the case
         // where PageCanvas already marked an unrelated modifier chord handled.
         AddHandler(KeyDownEvent, OnReaderKeyDown, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+
+        // "Auto in 5s - any key cancels" on the end-of-issue card. Tunnel only: the key press that opens the card
+        // must not cancel the countdown the same press just started (a bubble handler would run after the command).
+        AddHandler(KeyDownEvent, OnEndCardKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
     }
+
+    private void OnEndCardKeyDown(object? sender, KeyEventArgs e) => _viewModel?.CancelEndCardCountdown();
 
     private void OnReaderKeyDown(object? sender, KeyEventArgs e)
     {

@@ -13,5 +13,8 @@ public enum ChapterTransitionState
     Loading,
 
     /// <summary>Cover art + "Previous: #N" / "Current: #N+1" labels.</summary>
-    Card
+    Card,
+
+    /// <summary>End-of-issue card (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-design.md 3): finished actions plus the up-next block, with an optional auto-advance countdown. Waits for the user when there is no countdown.</summary>
+    EndCard
 }

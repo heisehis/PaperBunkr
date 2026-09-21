@@ -1844,8 +1844,12 @@ deferred:
   weight than usual here since this batch is unusually visual/interactive.
 
 ### Cosmetics pitch (unscoped, pitched 2026-09-14)
-Not started — needs its own brainstorm → design spec before implementation. Captured here so the
-ideas aren't lost, not because scope/approach is settled.
+**Items 1–7 and 8–26 below: built 2026-09-21** (grilled → spec → plan → implemented; reviewed on screen and signed off by the user). Still open:
+#11, #22, #23 (reader), #19 (bookshelf view), #24 (taskbar badge); #12 and #27 already shipped. See
+`docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md` and `…-pitch-2-design.md` ("Implementation notes" records where the built
+version differs from these one-liners). Any later-numbered items in this section are still unscoped: each needs its
+own brainstorm → design spec before implementation. Captured here so the ideas aren't lost, not because
+scope/approach is settled.
 
 1. **Series binding spine texture** — subtle spine/binding shadow on Panorama/Poster grid tiles,
    toggleable per skin.
@@ -1864,6 +1868,64 @@ ideas aren't lost, not because scope/approach is settled.
    with Chrome & Content Motion Polish.
 7. **Reading-list CBL card cover collage** — 4-cover mosaic thumbnail for reading lists instead of
    a single cover.
+
+**Added 2026-09-21 (items 8–27).** Same status: unscoped idea capture. Items 1–7 already have a
+design spec in flight (`docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md`); 8–27 do not.
+Chips and badges follow the squircle rule (`PbRadiusChip`, no ovals); anything animated is gated on
+the existing reduced-motion setting; colors come from theme resources, never hardcoded hex.
+
+8. **Detail hero backdrop blur** — heavily blurred, color-graded copy of the series cover as the
+   ambient background of the comic/manga/book detail hero. Reuses the cover cache; needs a
+   skin-aware scrim so text stays legible in light themes.
+9. **Dominant-color accent per series** — extract a palette from the cover and tint the detail
+   screen's accent (chips, progress, buttons). Toggle under Preferences → Appearance with the skin
+   accent as fallback; extract once and cache alongside `Issue.CoverAspectRatio`.
+10. **Series-status color language** — one consistent color + icon each for Ongoing, Completed,
+    Hiatus, Cancelled, used the same way in Library, Detail hero, Wanted, and tracker views.
+11. **Reader page-turn feel** — optional page transitions (slide, paper-curl) for the paged reader,
+    default "None". Must respect `SuppressFringePrefetch` during transitions to avoid the fast-flip
+    issues seen before. Reader change: needs an on-screen check.
+12. **Reader chrome auto-dim** — fade toolbar, page slider, and clock/battery overlay after N seconds
+    without input; restore on mouse-move. Distinct from fullscreen.
+13. **Empty-state illustrations** — replace bare "No members yet" / "No series yet" text on Events,
+    Continuities, Collections, Reading Lists, and Wanted with small SVG line illustrations (skin
+    foreground color) plus one clear call-to-action.
+14. **`BrandMark` consistency pass** — extend `MarkResolver`/`BrandMark` so publisher imprints and
+    tracker sources (ComicVine, Metron, AniList, MangaBaka) render consistent, correctly sized marks
+    everywhere; some surfaces are likely still text-only.
+15. **Live skin previews in Preferences → Appearance** — mini-mockup (tiny grid, sidebar, chip) per
+    skin, rendered from the real skin resource dictionary so it cannot drift from the actual theme.
+16. **Insights/Stats chart polish** — hover crosshairs and value tooltips, animated bar/donut entry,
+    one shared categorical palette validated in light and dark; unifies with the item-2 progress ring.
+17. **Density and typography presets** — Compact / Comfortable / Spacious presets scaling spacing,
+    row height, and type scale together (today only the poster density slider exists), plus an
+    optional reading-friendly font for EPUB/PDF chrome.
+18. **Generated placeholder covers** — when an issue has no cover (or the cover failed to decode),
+    render a typographic cover (series initials/title on a skin-tinted gradient) instead of a blank
+    grey tile. Deterministic per series so it does not flicker between loads.
+19. **Bookshelf spine view** — an alternate Library view mode showing books as vertical spines on a
+    shelf, colored from each cover's dominant color (shares item 9's extraction). Large item: must be
+    virtualized like the other view modes (2000+ library).
+20. **Read-state glyph set** — one consistent set of micro-glyphs (unread dot, half-filled
+    in-progress, finished check, "new" ribbon for recently added) used identically on tiles, rows,
+    and the Detail issue list. Complements the dog-ear work rather than replacing it.
+21. **Activity Center visual polish** — per-job progress rings, grouping by job type, and a source
+    icon per job/alert in the peek popover and drawer. Presentation only; routing stays through the
+    Activity Center per the existing notification rule.
+22. **Reader ambient letterbox** — fill the reader background around a page with a soft gradient
+    sampled from that page's edges instead of flat black. Reader change: needs an on-screen check.
+23. **Page-thumbnail scrubber** — hovering the reader's page slider shows a small preview of the
+    target page. Can reuse the reader decode/prefetch pipeline's thumbnail path; must not compete
+    with page prefetch for decode budget.
+24. **Taskbar and tray badge** — Windows taskbar overlay icon with an unread/new-releases count and
+    an accent-tinted tray icon variant. Pairs with the Wanted weekly pull list.
+25. **Context-menu polish** — consistent leading icons, right-aligned shortcut hints, destructive
+    entries in the danger color, tidier separator grouping. Builds on the shared `MenuFlyout`
+    mechanism from the context menu rebuild.
+26. **Slim scrollbars + A–Z letter-jump rail** — thin auto-hiding accent-tinted scrollbars, and in
+    name-sorted Library views a letter rail (with tick marks) for jumping through a large library.
+27. **Auto light/dark schedule + true-black OLED skin** — follow system theme or sunrise/sunset, and
+    add a pure-black skin for OLED displays.
 
 *Not duplicated here: dog-ear unread-page fold + cosmetic thumbnail toggles — already in progress
 as of 2026-09-13/14 (`CosmeticThumbnailSettings`, `DogEarEligibility`, `DogEarThumbnailCache`,
@@ -2036,6 +2098,161 @@ full-trust by the v4 decision).
 
 *None of these are scoped or brainstormed — same caveat as the pitch lists above: needs its own
 brainstorm → design spec per this project's `CLAUDE.md` workflow before implementation starts.*
+
+### Comic reader pitch (unscoped, pitched 2026-09-21)
+**Sliced 2026-09-21** into eight independent sub-projects (A Flow & defaults 4/5/10/27; B Page intelligence
+6/9/12/13; C Image quality 2/3/25; D Panel/zoom 1/14; E Info & compare 28/7/11/29; F Input & comfort
+15/19/20/22/30/17/18; G Performance 23/24; H OCR 8). **Slice A is built (2026-09-21, uncommitted, on-screen
+check pending)** - #4, #5, #10, #27; spec `docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-design.md`,
+plan `...-plan.md`, both with the deviations found while building (no manual "flag for review" exists, so the end
+card has no Flag button; the jump-back chip has only thumbnail and bookmark triggers because the comic reader has no
+go-to-page or search yet; continuity defines no issue order so the strip uses reading lists and Story Events only;
+`PageLayoutMode` already had a series level so #4 added only two columns). #16 and #19 were left out of slice A.
+**Slice B (#6, #9, #12, #13) is designed, one spec** (`docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md`,
+not yet planned or built): page skipping (Deleted on / ads off by default), story-end finish plus a CE read-percentage fix
+(issues under 20 pages could never count as read), bad-page reports in Library Health, and dHash-based ad-page proposals
+reviewed in Needs Review. Slices C-H not started.
+26, 21 and 8 are deferred as "needs its own project". **Survey corrections (2026-09-21):** #2 mostly exists
+(per-issue and global brightness/contrast/saturation/gamma; only night/sepia, auto-levels and sharpen remain);
+#3 is new, CE has no auto-crop; #5 extends an existing chapter-transition card and review prompt; #4 only needs
+fit mode, auto-rotate and page layout, since reading mode already inherits; #6 is CE parity (CE filters
+navigation by page type) but paging ignores tags today; #13 deviates from CE; #16 is blocked on the Cosmetics
+scrubber (the reader has no page slider); #27 needs the continuity resolver, which the reader's next-issue logic
+ignores; #15, #20, #28, #30 have no CE counterpart. Paperbunkr's read percentage is 0-based where CE uses
+`(LastPageRead+1)`, to be fixed in slice B. Other slices still need their own grilling and specs.
+
+Original pitch text follows. Scope is the **comic
+reader only** (the Books/EPUB/PDF reader is deliberately out of scope for this list). Excludes
+anything already shipped (fit modes, zoom presets, rotation, spreads + Near/Far override, webtoon
+band decode, split-page navigation, per-page rotation and tags, gestures, remappable shortcuts,
+Save Page As) and the permanently declined magnifier. Reader *cosmetics* (page-turn feel, chrome
+auto-dim, ambient letterbox, page-thumbnail scrubber) live in the Cosmetics pitch as items 11, 12,
+22, 23. Seamless issue-to-issue infinite scrolling is deliberately not proposed (user dislikes
+infinite-scroll navigation). CE-parity lookups against `_reference/ComicRackCE` are still owed for
+items 2, 3, 6, 13, 15, 20, 28, and 30 before any spec, per the standing rule.
+
+**Reading experience**
+1. **Guided panel view** — step through a page panel by panel in reading order (RTL-aware). Start
+   with a local gutter-detection heuristic (scan for near-uniform whitespace rows/columns), no ML
+   dependency; fall back to whole-page when detection is unsure; cache results per page.
+14. **Double-click smart zoom** — double-click zooms to the detected balloon/panel under the cursor
+    and back out; shares detection with item 1.
+27. **Event / reading-list context strip** — small strip showing where the issue sits in its Event
+    or Reading List ("Absolute Universe · 3 of 12") with previous/next in that reading order, not
+    series order. Uses existing continuity/reading-list data; mid-read counterpart to item 5.
+29. **Pinned reference page** — pin any page (recap, map, character lineup) as a small floating
+    reference that stays visible while reading on.
+
+**Image quality**
+2. **Image adjustments and night mode** — per-issue brightness/contrast/gamma/saturation, warm/sepia
+   night filter, "auto-levels" for washed-out scans. Must be part of the decode-pipeline cache key.
+3. **Auto-crop margins** — detect and trim white/black scan borders per page so fit modes use the
+   real content area; cached, with a per-page override like the per-page rotation override.
+25. **Moiré/halftone-aware downscaling** — softens screentone before downscale so manga scans do not
+    shimmer when fit to the window; cached with the page like other filters.
+26. **Optional low-res upscaling** — opt-in local enhancer (e.g. ONNX super-resolution) for small or
+    blurry pages; off the UI thread, cached, off by default, size warning before whole-issue runs.
+
+**Page intelligence**
+6. **Auto-skip tagged pages** — skip pages tagged ad/deleted while paging, with a "skipped 2 pages"
+   hint and an override. Verify whether paging already respects tags before scoping.
+9. **Auto-tag ad/credit pages by page hash** — tag once, compute a perceptual hash, and propose the
+   same tag on matching pages in other issues. Proposals only until confirmed (same model as
+   metadata proposals). Feeds items 6 and 13.
+12. **Report bad page** — one key flags a page as corrupt/blank/low-res and writes it to Library
+    Health, seeding the reading-integrity scan with real reports.
+13. **Auto mark-read at story end** — treat the last story page as finished instead of the literal
+    last page, so trailing ads/previews do not leave an issue stuck near 96%. Uses page tags.
+8. **On-device OCR search and manga translate overlay** — Windows built-in OCR (`Windows.Media.Ocr`,
+   no cloud) makes page text searchable; optional translated-text overlay for raw manga. Opt-in,
+   off the UI thread, text cached per page. The most ambitious item on this list.
+
+**Flow and defaults**
+4. **Series-level reader defaults** — fit mode and reading direction persist per issue today; add
+   issue → series → global inheritance so one setting covers a whole series.
+5. **End-of-issue "what's next" card** — after the last page: the next issue (continuity, reading
+   list, or series), Mark read, Rate, Flag for review, Back to library. Connects to the smart
+   "Up Next" queue idea.
+10. **Jump-back chip** — after a big jump (slider drag, bookmark, search hit) show "Back to page 34"
+    with a shortcut to return, like a browser back button.
+15. **Reader profiles** — named presets ("Manga night", "Webtoon", "Tablet") bundling fit mode,
+    filters, transitions, and chrome behavior, switchable by hotkey; series defaults (item 4) can
+    point at a profile.
+16. **Slider markers** — ticks on the page slider for bookmarks, story-arc starts, and tagged pages.
+19. **Reader command palette** — Ctrl+K in the reader for "go to page 40", "toggle RTL", "rate 4",
+    "apply profile"; builds on the remappable-shortcut work.
+
+**Input and comfort**
+17. **Session stats HUD** — optional overlay with pages/min, session time, estimated time left;
+    reads from the `ReadingEvent` log, sits beside the clock/battery overlay.
+18. **Eye-care reminders** — optional 20-20-20 break nudges and a schedule-based warm shift. Nudges
+    go through the Activity Center per the notification rule.
+20. **Media keys, gamepad, and clicker support** — page turns from media keys, an Xbox controller,
+    and presentation clickers, plus configurable extra mouse buttons.
+21. **Pen/ink layer** — draw on pages on Windows tablets; strokes stored as a sidecar, never in the
+    archive. Pairs with item 7.
+22. **Copy and share** — copy a page or selected region to the clipboard; export a stitched
+    double-page spread. Complements Save Page As.
+30. **Tap-zone layout editor and one-handed mode** — configurable touch/click zones with left- and
+    right-hand presets; the zones already exist, this is the customization layer.
+
+**Compare and inspect**
+7. **Page notes and region clips** — per-page notes and drag-a-rectangle crop clips with optional
+   export; follows the PDF reader's captures-drawer pattern (comics only have named bookmarks today).
+11. **Two-edition compare mode** — same page from two files side by side or as a flicker toggle, to
+    pick the better scan and safely delete the duplicate; ties into Find Similar Series.
+28. **In-reader info panel** — slide-in summary, characters, credits, and story arc without leaving
+    the page. CE's `ComicInfoUI` hook is a precedent; check how CE handled it first.
+
+**Performance**
+23. **Pre-open the next issue** — while on the last few pages, open the next issue's archive and
+    decode its first pages so opening it is instant. Prefetch only; never changes the visible page.
+24. **Adaptive prefetch depth** — scale prefetch ahead/behind by flip rate; a tuning layer on the
+    existing decode/cache/prefetch pipeline.
+
+*Suggested starting order (not a commitment):* 27 and 28 (most Paperbunkr-specific, use
+continuity/metadata CE never had), 9 (biggest quality-of-life win for scanned libraries), 25
+(cheapest, immediate for manga readers), then 4, 5, 10, 16, 19 as cheap flow wins.
+
+### Insights pitch (unscoped, pitched 2026-09-21)
+Not started — needs its own brainstorm → design spec before implementation. Checked against the
+shipped Insights/Stats v2 sections above: none of these repeat the attention cards, streaks, pace
+chart, activity heatmap, library growth, breakdowns, top genres/creators, or highlights row.
+"You vs Community" stays deferred (needs adapter work to populate `ExternalRating`). New cards
+should use the plain inline `Border.card` markup the Stats tab uses (the reusable `StatCard`
+control rendered blank from a self-referencing element binding).
+
+1. **Year-in-review recap** — "Wrapped"-style summary for any year or the last 12 months: pages
+   read, issues finished, top series/creators, longest streak, busiest day, personal records;
+   renders as an exportable image card. Built from `ReadingEvent`, fully local.
+2. **Reading goals and challenges** — targets such as "50 issues this year" or "3,000 pages a
+   month" (optionally per series/publisher), progress ring, pace projection ("on track" / "12
+   behind"). Milestone and behind-pace nudges go through the Activity Center.
+3. **Reading rhythm** — weekday × hour heatmap, session-length distribution, average session time.
+   **Data gap:** `ReadingEvent` has no session duration; needs one new field (e.g. `DurationSeconds`)
+   written at session teardown, and pre-existing history will have none (charts must say so).
+4. **Backlog burn-down** — owned-but-unread pile over time plus a projected clear date at the
+   current pace. Library Growth uses each item's *current* status (no historical status tracking);
+   a small nightly library snapshot (counts by reading state) fixes that going forward and is the
+   foundation for other honest trend charts.
+5. **Drop-off analysis** — where stopped series stalled (issue number, how far in) and
+   abandon-vs-finish rate by publisher, genre, and content type; links to the existing stalled
+   attention card.
+6. **Period-over-period deltas and sparklines** — stat tiles show change vs the previous equivalent
+   period ("▲ 18% vs prior 90 days") with a tiny trend sparkline; reuses the range selector.
+7. **Creator and publisher affinity** — rank creators by average rating × completion rate and show
+   "unowned works by your top creators" linking into Wanted.
+8. **Storage and format breakdown** — disk usage by publisher and format (CBZ/CBR/PDF/EPUB), largest
+   files, estimated savings from duplicates; links to Library Health.
+9. **Recommendations surface** — UI for the existing backend-only Phase 6a recommendation engine:
+   a "Because you finished X" row on the Overview tab, each suggestion showing why it was picked.
+10. **Milestones timeline** — opt-in timeline of firsts and thresholds (100th finished issue, 30-day
+    streak, first complete run of a series, first manga volume) with squircle badges.
+
+*Related items elsewhere:* #9 overlaps the "Insights-driven smart list" in the Smart features
+pitch; #3 shares its session-duration data with the comic reader session-stats HUD (item 17).
+*Suggested starting order (not a commitment):* 6 (cheapest), 1 and 2 (most delight), and item 4's
+snapshot table (foundation for several trend features).
 
 ### Deferred / dropped (no action needed)
 - **News reader** (`Help > News` RSS) — deferred, live idea to repurpose the feed mechanism for

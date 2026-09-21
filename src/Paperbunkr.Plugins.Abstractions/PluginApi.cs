@@ -11,8 +11,8 @@ namespace Paperbunkr.Plugins;
 /// </summary>
 public static class PluginApi
 {
-    /// <summary>The current API version. 4.1 added <c>IPluginEnvironment.Activity</c> (the Activity reporter), the first plugin-callable addition after the 4.0 baseline.</summary>
-    public static readonly Version Current = new(4, 1);
+    /// <summary>The current API version. 4.1 added <c>IPluginEnvironment.Activity</c> (the Activity reporter); 4.2 added <c>IPluginEnvironment.Log</c> (the per-plugin logger).</summary>
+    public static readonly Version Current = new(4, 2);
 }
 
 /// <summary>How a manifest's declared <c>requiresApi</c> relates to the host's API version.</summary>

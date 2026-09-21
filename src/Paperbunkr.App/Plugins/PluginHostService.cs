@@ -156,6 +156,7 @@ public sealed class PluginHostService
         }
         catch (Exception ex)
         {
+            LogFiles.Write(command.PluginKey, "ERR", $"\"{command.Name}\" ({command.Hook}) failed: {ex.Message}", ex);
             return new PluginInvocationResult(command, false, null, ex);
         }
     }
@@ -295,7 +296,7 @@ public sealed class PluginHostService
         if (Engine.SettingsSchemas.TryGetValue(pluginKey, out PluginSettingsSchema? schema))
         {
             string pluginName = Engine.PackageNames.GetValueOrDefault(pluginKey, pluginKey);
-            var schemaView = new PluginSettingsSchemaView { DataContext = new PluginSettingsSchemaViewModel(pluginKey, pluginName, schema, Settings) };
+            var schemaView = new PluginSettingsSchemaView { DataContext = new PluginSettingsSchemaViewModel(pluginKey, pluginName, schema, Settings, new Paperbunkr.App.Services.FilePickerService()) };
             try
             {
                 await uiEnvironment.ShowModalAsync<object?>(_ => schemaView).ConfigureAwait(false);
@@ -425,6 +426,7 @@ public sealed class PluginHostService
             foreach (var failure in results.Where(r => !r.Success))
             {
                 DiagnosticsService.LogMilestone($"Plugin command '{failure.Command.Name}' ({hook}) failed: {failure.Error?.Message}");
+                LogFiles.Write(failure.Command.PluginKey, "ERR", $"\"{failure.Command.Name}\" ({hook}) failed: {failure.Error?.Message}", failure.Error);
                 _main?.ShowToastForPlugin("Plugin error", $"\"{failure.Command.Name}\" failed: {failure.Error?.Message}");
             }
 
@@ -457,6 +459,9 @@ public sealed class PluginHostService
     private DomainHookDispatcher? _domainHooks;
     private IReadingEventRecorder? _subscribedRecorder;
     private LibraryEvents? _subscribedEvents;
+
+    /// <summary>Where a plugin's own log lives; defaults to the real per-user folder, tests point it at a temp one.</summary>
+    internal PluginLogFiles LogFiles { get; set; } = PluginLogFiles.Default;
 
     /// <summary>Test seam - where <c>BookRead</c> looks up the finished item. Production uses the real per-user database.</summary>
     internal Func<PaperbunkrDbContext> ContextFactory { get; set; } = PaperbunkrDb.CreateContext;
@@ -491,6 +496,7 @@ public sealed class PluginHostService
         events.LibraryScanCompleted += OnLibraryScanCompleted;
         events.MissingFileConfirmed += OnMissingFileConfirmed;
         events.ReadingListChanged += OnReadingListChanged;
+        events.ManagerBypassed += OnManagerBypassed;
     }
 
     internal void DetachDomainEvents()
@@ -506,9 +512,13 @@ public sealed class PluginHostService
             _subscribedEvents.LibraryScanCompleted -= OnLibraryScanCompleted;
             _subscribedEvents.MissingFileConfirmed -= OnMissingFileConfirmed;
             _subscribedEvents.ReadingListChanged -= OnReadingListChanged;
+            _subscribedEvents.ManagerBypassed -= OnManagerBypassed;
             _subscribedEvents = null;
         }
     }
+
+    /// <summary>A reading-list write skipped <c>ReadingListManager</c> (the context announced it anyway) - logged so it can be found and moved (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md section 3).</summary>
+    private static void OnManagerBypassed(string message) => DiagnosticsService.LogMilestone(message);
 
     /// <summary>Cheap guard so a hook nobody registered never pays for a database lookup or globals allocation.</summary>
     private bool HasCommands(string hook) => Engine.GetCommands(hook).Any();
@@ -619,6 +629,10 @@ public sealed class PluginHostService
     private void ReportDomainHookProblem(DomainHookProblem problem)
     {
         DiagnosticsService.LogMilestone($"Plugin domain hook: {problem.Message}");
+
+        // The plugin's own log is the one place its author looks (docs/superpowers/specs/2026-09-20-
+        // plugin-api-4-2-followons-design.md §1), so the host writes what went wrong with it there too.
+        LogFiles.Write(problem.Command.PluginKey, problem.Kind == DomainHookProblemKind.Failed ? "ERR" : "WRN", problem.Message);
 
         IActivityService? activity = ActivityForAlerts ?? _main?.Activity;
         if (activity is null)

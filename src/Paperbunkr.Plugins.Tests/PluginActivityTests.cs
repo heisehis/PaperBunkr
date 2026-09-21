@@ -46,9 +46,9 @@ public sealed class PluginActivityTests : IDisposable
     }
 
     [Fact]
-    public void The_api_version_is_4_1_now_that_the_reporter_exists()
+    public void The_api_version_is_4_2_now_that_the_logger_exists()
     {
-        Assert.Equal(new Version(4, 1), PluginApi.Current);
+        Assert.Equal(new Version(4, 2), PluginApi.Current);
     }
 
     [Fact]

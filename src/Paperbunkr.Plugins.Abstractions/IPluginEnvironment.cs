@@ -33,6 +33,9 @@ public interface IPluginEnvironment : IPluginConfig, ICloneable
     /// <summary>Reports background jobs and alerts through the Activity Center (Plugin API 4.1, docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §4). Attributed to the plugin owning the current command; build a fresh one per command clone rather than caching it across clones.</summary>
     IPluginActivity Activity { get; }
 
+    /// <summary>This plugin's own log file (Plugin API 4.2, docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md §1). Built per access, like <see cref="Activity"/>.</summary>
+    IPluginLogger Log { get; }
+
     /// <summary>Folder the currently-executing command's script/manifest lives in; set on the per-command clone by <see cref="Command.Initialize"/>.</summary>
     string CommandPath { get; set; }
 

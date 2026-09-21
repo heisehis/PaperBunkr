@@ -20,6 +20,11 @@ internal sealed class FakePluginEnvironment : IPluginEnvironment
     public FakePluginActivity RecordedActivity { get; } = new();
 
     public IPluginActivity Activity => RecordedActivity;
+
+    /// <summary>What every command clone logged through <see cref="Log"/> - shared by reference across <see cref="Clone"/>.</summary>
+    public FakePluginLogger RecordedLog { get; } = new();
+
+    public IPluginLogger Log => RecordedLog;
     public string CommandPath { get; set; } = string.Empty;
     public string PluginKey { get; set; } = string.Empty;
     public IEnumerable<string> LibraryPaths { get; } = Array.Empty<string>();

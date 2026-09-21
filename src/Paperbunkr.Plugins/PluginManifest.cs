@@ -81,6 +81,10 @@ public sealed class SettingManifestEntry
     [XmlAttribute("max")]
     public string? Max { get; set; }
 
+    /// <summary><c>true</c> to stop the user editing this setting in the overlay once a value is stored (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md §4). <c>true</c>/<c>false</c> only.</summary>
+    [XmlAttribute("locked")]
+    public string? Locked { get; set; }
+
     [XmlElement("Choice")]
     public List<ChoiceManifestEntry> Choices { get; set; } = new();
 }

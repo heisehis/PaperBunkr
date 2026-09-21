@@ -202,6 +202,7 @@ public sealed class DomainHookDispatcher
 
             if (dropped)
             {
+                _command.Stats.RecordDropped();
                 _owner.Report(_command, hook, DomainHookProblemKind.EventsDropped,
                     $"\"{_command.Name}\" ({hook}) can't keep up - its queue of {_owner._capacity} waiting events is full, so the oldest is being dropped.");
             }
@@ -256,6 +257,7 @@ public sealed class DomainHookDispatcher
                     timedOut = true;
                     cancellation.Cancel();
                     Hung = true;
+                    _command.Stats.RecordTimeout();
                     _owner.Report(_command, work.Hook, DomainHookProblemKind.TimedOut,
                         $"\"{_command.Name}\" ({work.Hook}) is still running after {_owner._timeout.TotalSeconds:0.#}s and was asked to stop. It won't be given new events until it finishes.");
                 }

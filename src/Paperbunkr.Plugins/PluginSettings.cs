@@ -25,7 +25,8 @@ public sealed record PluginSettingDefinition(
     string? Description,
     decimal? Min,
     decimal? Max,
-    IReadOnlyList<PluginSettingChoice> Choices);
+    IReadOnlyList<PluginSettingChoice> Choices,
+    bool Locked = false);
 
 /// <summary>
 /// Protects <c>secret</c> setting values at rest. The app's implementation is Windows DPAPI; tests use a
@@ -133,6 +134,17 @@ public sealed class PluginSettingsSchema
             return "min/max are only valid on a number setting";
         }
 
+        bool locked = false;
+        if (entry.Locked is not null)
+        {
+            if (!IsBool(entry.Locked))
+            {
+                return $"locked '{entry.Locked}' isn't true or false";
+            }
+
+            locked = string.Equals(entry.Locked, "true", StringComparison.OrdinalIgnoreCase);
+        }
+
         string label = string.IsNullOrWhiteSpace(entry.Label) ? key : entry.Label!;
         string? defaultValue = entry.Default;
         decimal? min = null;
@@ -221,7 +233,7 @@ public sealed class PluginSettingsSchema
                 break;
         }
 
-        definition = new PluginSettingDefinition(key, label, type, defaultValue, entry.Description, min, max, choices);
+        definition = new PluginSettingDefinition(key, label, type, defaultValue, entry.Description, min, max, choices, locked);
         return null;
     }
 

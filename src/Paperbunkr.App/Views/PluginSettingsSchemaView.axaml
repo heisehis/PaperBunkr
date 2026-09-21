@@ -20,7 +20,17 @@
     <Border Width="560" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
             BorderThickness="1" CornerRadius="8" Padding="20">
         <StackPanel Spacing="12">
-            <TextBlock Classes="pbTextHeading" Text="{Binding Title}" />
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="pbTextHeading" Text="{Binding Title}" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                    <Button Content="Import…" Command="{Binding ImportCommand}" FontSize="11" Padding="8,3" />
+                    <Button Content="Export…" Command="{Binding ExportCommand}" FontSize="11" Padding="8,3" />
+                    <Button Content="{Binding ResetAll.Label}" Command="{Binding ResetAll.TriggerCommand}" FontSize="11" Padding="8,3" />
+                </StackPanel>
+            </Grid>
+
+            <TextBlock IsVisible="{Binding HasStatus}" Text="{Binding Status}" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource PbTextMutedBrush}" AutomationProperties.LiveSetting="Polite" />
 
             <Border IsVisible="{Binding HasSecretsUnavailableNote}" Background="{DynamicResource PbAccentSoftBrush}"
                     CornerRadius="6" Padding="10">
@@ -35,11 +45,11 @@
                             <pref:SettingsRow Icon="Settings" Title="{Binding Label}" Description="{Binding Description}">
                                 <pref:SettingsRow.SettingsContent>
                                     <StackPanel Spacing="4" MinWidth="220" MaxWidth="280">
-                                        <ToggleSwitch IsVisible="{Binding IsToggle}" IsChecked="{Binding IsOn}"
+                                        <ToggleSwitch IsVisible="{Binding IsToggle}" IsChecked="{Binding IsOn}" IsEnabled="{Binding IsEnabled}"
                                                       OnContent="{x:Null}" OffContent="{x:Null}" HorizontalAlignment="Right"
                                                       AutomationProperties.Name="{Binding Label}" />
 
-                                        <TextBox IsVisible="{Binding IsText}" Text="{Binding Text}"
+                                        <TextBox IsVisible="{Binding IsText}" Text="{Binding Text}" IsEnabled="{Binding IsEnabled}"
                                                  AutomationProperties.Name="{Binding Label}" />
 
                                         <TextBox IsVisible="{Binding IsSecret}" Text="{Binding Text}" PasswordChar="●"
@@ -47,14 +57,25 @@
                                                  AutomationProperties.Name="{Binding Label}" />
 
                                         <TextBox IsVisible="{Binding IsNumber}" Text="{Binding Text}" Width="120" HorizontalAlignment="Right"
+                                                 IsEnabled="{Binding IsEnabled}"
                                                  beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True"
                                                  beh:TextSpinner.Minimum="{Binding SpinnerMinimum}"
                                                  beh:TextSpinner.Maximum="{Binding SpinnerMaximum}"
                                                  AutomationProperties.Name="{Binding Label}" />
 
-                                        <controls:SuggestBox IsVisible="{Binding IsChoice}" IsStrict="True" Text="{Binding Text}"
+                                        <controls:SuggestBox IsVisible="{Binding IsChoice}" IsStrict="True" Text="{Binding Text}" IsEnabled="{Binding IsEnabled}"
                                                              Suggestions="{Binding ChoiceLabels}"
                                                              AutomationProperties.Name="{Binding Label}" />
+
+                                        <StackPanel IsVisible="{Binding IsLocked}" Spacing="4" HorizontalAlignment="Right">
+                                            <TextBlock Text="Locked by the plugin once a value is saved." FontSize="11.5"
+                                                       Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                            <Button Content="{Binding Unlock.Label}" Command="{Binding Unlock.TriggerCommand}"
+                                                    FontSize="11" Padding="8,3" HorizontalAlignment="Right" />
+                                        </StackPanel>
+
+                                        <Button IsVisible="{Binding CanReset}" Content="Reset to default" Command="{Binding ResetCommand}"
+                                                FontSize="11" Padding="8,3" HorizontalAlignment="Right" />
 
                                         <TextBlock IsVisible="{Binding HasError}" Text="{Binding Error}" FontSize="11.5"
                                                    TextWrapping="Wrap" Foreground="{DynamicResource PbDangerBrush}"

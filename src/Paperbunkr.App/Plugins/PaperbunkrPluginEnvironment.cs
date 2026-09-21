@@ -50,6 +50,12 @@ public sealed class PaperbunkrPluginEnvironment : IPluginEnvironment
     /// </summary>
     public IPluginActivity Activity => new PluginActivityAdapter(ActivityService, PluginKey, ResolvePluginName(PluginKey));
 
+    /// <summary>Where plugin logs are written; defaults to the real per-user folder, tests point it at a temp one.</summary>
+    public PluginLogFiles LogFiles { get; init; } = PluginLogFiles.Default;
+
+    /// <summary>Built per access for the same reason as <see cref="Activity"/>: only <see cref="PluginKey"/> differs between the per-command clones.</summary>
+    public IPluginLogger Log => new PluginLogger(LogFiles, PluginKey);
+
     public string CommandPath { get; set; } = string.Empty;
 
     public string PluginKey { get; set; } = string.Empty;

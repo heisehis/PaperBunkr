@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Paperbunkr.Data;
@@ -134,6 +135,43 @@ public sealed class PluginSettingsAccess
         }
 
         return raw;
+    }
+
+    /// <summary>True when a value (even an empty or invalid one) is stored for <paramref name="key"/>.</summary>
+    public bool HasStored(string pluginKey, string key) => GetRaw(pluginKey, key) is not null;
+
+    /// <summary>
+    /// True when the plugin declared <paramref name="definition"/> <c>locked</c> and a value is already stored -
+    /// first-time setup stays editable (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md §4).
+    /// It gates the <em>user</em> in the settings overlay only; the plugin's own <c>SetSetting</c> is unaffected.
+    /// </summary>
+    public bool IsLocked(string pluginKey, PluginSettingDefinition definition) => definition.Locked && HasStored(pluginKey, definition.Key);
+
+    /// <summary>Removes the stored value so reads fall back to the declared default (a secret is simply cleared). Returns false if nothing was stored.</summary>
+    public bool Reset(string pluginKey, string key)
+    {
+        using var context = _contextFactory();
+        var row = context.PluginSettingStates.FirstOrDefault(s => s.PluginKey == pluginKey && s.Key == key);
+        if (row is null)
+        {
+            return false;
+        }
+
+        context.PluginSettingStates.Remove(row);
+        context.SaveChanges();
+        return true;
+    }
+
+    /// <summary>Every stored key for the plugin with its raw stored value (ciphertext for a secret), in key order.</summary>
+    public IReadOnlyList<KeyValuePair<string, string>> StoredEntries(string pluginKey)
+    {
+        using var context = _contextFactory();
+        return context.PluginSettingStates
+            .Where(s => s.PluginKey == pluginKey)
+            .OrderBy(s => s.Key)
+            .AsEnumerable()
+            .Select(s => new KeyValuePair<string, string>(s.Key, s.Value))
+            .ToList();
     }
 
     private void WriteRaw(string pluginKey, string key, string value)

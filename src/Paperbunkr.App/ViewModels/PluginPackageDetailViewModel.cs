@@ -26,6 +26,7 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
     private readonly PluginHostService _host;
     private readonly IFilePickerService _filePicker;
     private readonly Action _onRefreshRequested;
+    private readonly Action<string> _openFolder;
 
     /// <summary>
     /// <paramref name="loadError"/>/<paramref name="hasConfigure"/> are passed in already-resolved
@@ -41,8 +42,10 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
         bool hasConfigure,
         Action onRemoved,
         Action onRefreshRequested,
-        string? requiresApi = null)
+        string? requiresApi = null,
+        Action<string>? openFolder = null)
     {
+        _openFolder = openFolder ?? (path => cYo.Common.Win32.FileExplorer.OpenFolder(path));
         _package = package;
         _host = host;
         _filePicker = filePicker;
@@ -99,6 +102,21 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
 
     [RelayCommand]
     private async Task Configure() => await _host.OpenPluginSettingsAsync(_package.Key);
+
+    /// <summary>Opens the folder holding every plugin's log (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md §1), creating it first so the button works before anything has logged. Failing to open a folder is never worth a crash.</summary>
+    [RelayCommand]
+    private void OpenLogFolder()
+    {
+        try
+        {
+            string folder = _host.LogFiles.Directory;
+            System.IO.Directory.CreateDirectory(folder);
+            _openFolder(folder);
+        }
+        catch (System.Exception)
+        {
+        }
+    }
 
     /// <summary>Script-tier only (docs §4.4) - a native package's load can only be re-attempted by
     /// actually reloading its AssemblyLoadContext, which "restart to apply" already covers; offering

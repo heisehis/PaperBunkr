@@ -2003,22 +2003,22 @@ list proposed that was **not** taken into `docs/superpowers/specs/2026-09-20-plu
 
 *From an external review of the 4.1 spec (2026-09-20) — new ideas not already covered above:*
 
-15. **Hook performance telemetry** — a developer-settings view of average execution time per hook
+15. ✅ **Hook performance telemetry** — *shipped in 4.2 (2026-09-20, uncommitted; on-screen check pending): in-memory `CommandStats` per command, shown as a muted line on the Plugin screen.* Original pitch: — a developer-settings view of average execution time per hook
     per plugin, so users can tell which plugin is causing stutter or background lag. Natural
     follow-on to the 4.1 bounded per-command queue, which already has to track in-flight/hung state.
-16. **Plugin settings export/import** — serialize a plugin's configured settings to portable JSON so
+16. ✅ **Plugin settings export/import** — *shipped in 4.2: JSON per plugin from the settings overlay, declared secrets excluded, import validated against the schema.* Original pitch: — serialize a plugin's configured settings to portable JSON so
     they can be backed up alongside library data. **Must account for DPAPI:** 4.1 encrypts `secret`
     settings per Windows user/machine, so exported secrets cannot simply be copied across.
-17. **Locked settings** — `<Setting … locked="true"/>`, read-only after initial setup, to stop
+17. ✅ **Locked settings** — *shipped in 4.2: `locked="true"` engages once a value is stored, blocks only the user in the overlay, two-step Unlock per overlay session.* Original pitch: — `<Setting … locked="true"/>`, read-only after initial setup, to stop
     accidental changes to critical values such as root paths. Needs a decision on how a user
     unlocks one (and whether the plugin or only the user can).
-18. **Default-settings file** — a `.json`/`.xml` of defaults the host re-imports if the user clears
+18. ⛔ **Default-settings file** — *superseded in 4.2 by Reset to defaults (per setting and "Reset all"); `default=` already exists and a second source would disagree.* Original pitch: — a `.json`/`.xml` of defaults the host re-imports if the user clears
     a plugin's configuration, instead of relying only on the inline `default=` attributes.
-19. **`IPluginLogger`** — routes plugin-specific logs into isolated per-plugin files (e.g.
+19. ✅ **`IPluginLogger`** — *shipped in 4.2 as `Environment.Log` (files under `%AppData%\Paperbunkr\logs\plugins\<key>.log`, 1 MB roll); the live log pane (item 9) is still open.* Original pitch: — routes plugin-specific logs into isolated per-plugin files (e.g.
     `logs/plugins/<key>.log`) instead of the main app log. Would also feed the item 9 dev-mode log
     pane.
 
-20. **Enforcement backstop for `ReadingListManager`** — 4.1 routes every reading-list write through
+20. ✅ **Enforcement backstop for `ReadingListManager`** — *shipped in 4.2 as a `SaveChanges` gap-filler in `PaperbunkrDbContext`: an unmanaged item add/remove is announced by the context and logged as a bypass.* Original pitch: — 4.1 routes every reading-list write through
     one manager but nothing *enforces* it, so a future direct `ReadingListItems.Add` compiles and
     silently skips the `ReadingListChanged` hook. Options: an EF `SaveChangesInterceptor`, or a
     Roslyn analyzer scoped to production assemblies (tests write rows directly on purpose). Only

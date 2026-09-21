@@ -120,6 +120,34 @@ public sealed class PluginSettingsSchemaTests : IDisposable
         Assert.Equal(PluginSettingType.Toggle, schema.Find("k")!.Type);
     }
 
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("TRUE", true)]
+    [InlineData("false", false)]
+    public void Locked_parses_true_or_false(string attribute, bool expected)
+    {
+        var schema = ParseOk(Manifest($"""<Settings><Setting key="k" type="text" locked="{attribute}"/></Settings>"""));
+        Assert.Equal(expected, schema.Find("k")!.Locked);
+    }
+
+    [Fact]
+    public void Locked_defaults_to_false_when_not_declared()
+    {
+        var schema = ParseOk(Manifest("""<Settings><Setting key="k" type="text"/></Settings>"""));
+        Assert.False(schema.Find("k")!.Locked);
+    }
+
+    [Theory]
+    [InlineData("yes")]
+    [InlineData("1")]
+    [InlineData("")]
+    public void Locked_with_anything_but_true_or_false_is_a_schema_error(string attribute)
+    {
+        string? error = ParseError($"""<Settings><Setting key="k" type="text" locked="{attribute}"/></Settings>""");
+        Assert.Contains("locked", error);
+        Assert.Contains("k", error);
+    }
+
     [Fact]
     public void A_manifest_with_no_settings_yields_no_schema_and_no_error()
     {

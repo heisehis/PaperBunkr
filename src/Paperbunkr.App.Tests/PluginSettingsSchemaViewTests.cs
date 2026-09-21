@@ -68,20 +68,24 @@ public sealed class PluginSettingsSchemaViewTests : IDisposable
 
     private PaperbunkrDbContext NewContext() => new(_options);
 
-    private PluginSettingsAccess Access()
+    private const string DefaultSettings = """
+        <Setting key="url" label="API URL" type="text" default="https://default.example" description="Where to sync"/>
+        <Setting key="mode" label="Mode" type="choice" default="fast">
+          <Choice value="fast" label="Fast"/>
+          <Choice value="thorough" label="Thorough"/>
+        </Setting>
+        <Setting key="limit" label="Limit" type="number" default="10" min="1" max="100"/>
+        <Setting key="enabled" label="Enabled" type="toggle" default="true"/>
+        <Setting key="token" label="API token" type="secret"/>
+        """;
+
+    private PluginSettingsAccess Access(string settingsBody = DefaultSettings)
     {
         File.WriteAllText(Path.Combine(_pluginsRoot, Key, "plugin.xml"), $"""
             <Plugin key="{Key}" name="View Plugin">
               <Command hook="Startup" key="{Key}.startup" name="Startup" script="run.csx" />
               <Settings>
-                <Setting key="url" label="API URL" type="text" default="https://default.example" description="Where to sync"/>
-                <Setting key="mode" label="Mode" type="choice" default="fast">
-                  <Choice value="fast" label="Fast"/>
-                  <Choice value="thorough" label="Thorough"/>
-                </Setting>
-                <Setting key="limit" label="Limit" type="number" default="10" min="1" max="100"/>
-                <Setting key="enabled" label="Enabled" type="toggle" default="true"/>
-                <Setting key="token" label="API token" type="secret"/>
+                {settingsBody}
               </Settings>
             </Plugin>
             """);
@@ -166,6 +170,55 @@ public sealed class PluginSettingsSchemaViewTests : IDisposable
             }
 
             Assert.Contains("Where to sync", texts);   // the description
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [Fact]
+    public void The_header_offers_import_export_and_reset_all_and_a_stored_value_offers_a_row_reset()
+    {
+        var access = Access();
+        var window = Show(access);
+        try
+        {
+            var buttons = Visible<Button>(window).Select(b => b.Content as string).ToList();
+            Assert.Contains("Import…", buttons);
+            Assert.Contains("Export…", buttons);
+            Assert.Contains("Reset all", buttons);
+            Assert.DoesNotContain("Reset to default", buttons);   // nothing stored yet, so no per-row reset
+        }
+        finally
+        {
+            window.Close();
+        }
+
+        access.Set(Key, "limit", "42");
+        window = Show(access);
+        try
+        {
+            Assert.Single(Visible<Button>(window), b => b.Content as string == "Reset to default");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [Fact]
+    public void A_locked_setting_with_a_value_shows_a_disabled_input_and_an_unlock_button()
+    {
+        var access = Access("""<Setting key="url" label="API URL" type="text" default="https://default.example" locked="true"/>""");
+        access.Set(Key, "url", "https://mine.example");
+        var window = Show(access);
+        try
+        {
+            var box = Assert.Single(Visible<TextBox>(window), t => t.Text == "https://mine.example");
+            Assert.False(box.IsEnabled);
+            Assert.Single(Visible<Button>(window), b => b.Content as string == "Unlock");
+            Assert.DoesNotContain(Visible<Button>(window), b => b.Content as string == "Reset to default");
         }
         finally
         {

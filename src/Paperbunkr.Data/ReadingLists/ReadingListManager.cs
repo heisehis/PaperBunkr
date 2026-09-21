@@ -36,6 +36,7 @@ public static class ReadingListManager
     /// </summary>
     public static AddIssuesResult AddIssues(PaperbunkrDbContext context, int listId, IEnumerable<int> issueIds, LibraryEvents? events = null)
     {
+        context.MarkReadingListManaged(listId);
         var existing = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => i.IssueId).ToHashSet();
         int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
 
@@ -65,6 +66,7 @@ public static class ReadingListManager
     /// <summary>Removes the given items (by <see cref="ReadingListItem.Id"/>) from <paramref name="listId"/>, bumps <see cref="ReadingList.UpdatedAt"/>, and stages a <see cref="ReadingListChangeKind.Removed"/> announcement. Returns how many were removed.</summary>
     public static int RemoveItems(PaperbunkrDbContext context, int listId, IReadOnlyCollection<int> itemIds, LibraryEvents? events = null)
     {
+        context.MarkReadingListManaged(listId);
         var items = context.ReadingListItems.Where(i => i.ReadingListId == listId && itemIds.Contains(i.Id)).ToList();
         if (items.Count == 0)
         {
@@ -81,6 +83,7 @@ public static class ReadingListManager
     /// <summary>Swaps an item with its neighbour (<paramref name="offset"/> -1 = up, +1 = down), bumps <see cref="ReadingList.UpdatedAt"/>, and stages a <see cref="ReadingListChangeKind.Reordered"/> announcement. False if it can't move (not found / already at the edge).</summary>
     public static bool MoveItem(PaperbunkrDbContext context, int listId, int itemId, int offset, LibraryEvents? events = null)
     {
+        context.MarkReadingListManaged(listId);
         var items = context.ReadingListItems.Where(i => i.ReadingListId == listId).OrderBy(i => i.SortOrder).ToList();
         int index = items.FindIndex(i => i.Id == itemId);
         int swapWith = index + offset;
@@ -112,6 +115,7 @@ public static class ReadingListManager
         context.ReadingListItems.RemoveRange(items);
         foreach (int listId in items.Select(i => i.ReadingListId).Distinct())
         {
+            context.MarkReadingListManaged(listId);
             Stage(context, listId, ReadingListChangeKind.Removed, Array.Empty<int>(), new[] { issueId }, events);
         }
     }
@@ -124,6 +128,8 @@ public static class ReadingListManager
     /// </summary>
     public static void RecordCreatedWithItems(PaperbunkrDbContext context, ReadingList list, ReadingListChangeKind kind = ReadingListChangeKind.Imported, LibraryEvents? events = null)
     {
+        // Marked covered even if it turns out to have no items to announce.
+        context.MarkReadingListManaged(list);
         LibraryEvents hub = events ?? LibraryEvents.Default;
         context.RunAfterSave(() =>
         {
@@ -145,6 +151,10 @@ public static class ReadingListManager
     /// </summary>
     public static void Record(PaperbunkrDbContext context, ReadingList list, ReadingListChangeKind kind, IReadOnlyList<int> addedIssueIds, IReadOnlyList<int> removedIssueIds, LibraryEvents? events = null)
     {
+        // Covered even when nothing is announced: an arc refresh that only cleaned up duplicate rows still
+        // deleted items on this list, and must not be mistaken for a bypass.
+        context.MarkReadingListManaged(list);
+
         if (kind == ReadingListChangeKind.None)
         {
             return;

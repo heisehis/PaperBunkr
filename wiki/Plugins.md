@@ -178,6 +178,28 @@ one of them, a `default` outside `min`/`max`) blocks the plugin the same way, na
 
 Needs API `4.1` - declare `requiresApi="4.1"`.
 
+#### Locking a setting, resetting, and moving settings between machines (API 4.2)
+
+- **`locked="true"`** on a `<Setting>` (for something critical like a root path) leaves it editable until a value is
+  saved, then greys it out in the settings window. The user can press **Unlock** (two clicks) to change it for that
+  visit. Your own `SetSetting` calls are never blocked. Anything other than `true`/`false` blocks the plugin.
+- **Reset to default** appears beside any setting that has a saved value, and **Reset all** in the window header
+  resets every unlocked setting (it tells you how many locked ones it skipped). A reset secret is simply cleared.
+- **Export… / Import…** in the header save and load a plugin's settings as a small JSON file. Secrets are never
+  exported (they only decrypt for one Windows account), and an import skips secrets, values that break the plugin's
+  rules, and locked settings that already have a value, then tells the user what it skipped. A file exported from a
+  different plugin is refused.
+
+### Logging from a plugin (API 4.2)
+
+`Environment.Log.Info("synced 12 items")` (also `Debug`, `Warn`, and `Error("message", exception)`) writes to
+`%AppData%\Paperbunkr\logs\plugins\<your-key>.log`, separate from the app log; the file rolls to `.1.log` at 1 MB.
+The Plugin screen's **Open log folder** button opens it, and a failing command or hook is logged there
+automatically. Logging never throws. Each command also shows a muted line on the Plugin screen with its run count,
+average and slowest time, failures, timeouts and dropped events since the app started (not saved between runs).
+
+Needs API `4.2` - declare `requiresApi="4.2"`.
+
 ### Declaring the API version you need
 
 Add `requiresApi` to the `<Plugin>` element to say which plugin API version your plugin was

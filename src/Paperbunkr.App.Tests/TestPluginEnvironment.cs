@@ -28,6 +28,8 @@ internal sealed class TestPluginEnvironment : IPluginEnvironment
     public RecordingPluginActivity RecordedActivity { get; } = new();
 
     public IPluginActivity Activity => RecordedActivity;
+
+    public IPluginLogger Log { get; } = new NullPluginLogger();
     public string CommandPath { get; set; } = string.Empty;
     public string PluginKey { get; set; } = string.Empty;
     public IEnumerable<string> LibraryPaths { get; } = Array.Empty<string>();
@@ -106,6 +108,14 @@ internal sealed class TestPluginEnvironment : IPluginEnvironment
         public string CurrentThemeKey => "default";
     }
 
+}
+
+internal sealed class NullPluginLogger : IPluginLogger
+{
+    public void Debug(string message) { }
+    public void Info(string message) { }
+    public void Warn(string message) { }
+    public void Error(string message, Exception? exception = null) { }
 }
 
 /// <summary>Records every alert a plugin raised and every job title it started; job handles are inert. Thread-safe - domain hooks run in the background.</summary>

@@ -21,6 +21,7 @@ public partial class PluginCommandRowViewModel : ViewModelBase
         _command = command;
         _host = host;
         _isEnabled = command.Enabled;
+        PerformanceText = command.Stats.Snapshot().Describe();
     }
 
     public string Name => _command.Name;
@@ -38,6 +39,11 @@ public partial class PluginCommandRowViewModel : ViewModelBase
     public string? CompileError => _command.CompileError;
 
     public bool HasConfigure => _command.Configure is not null;
+
+    /// <summary>One muted line of how this command has run since the app started (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md §2), or null before it has run. A snapshot taken when the pane is built - selecting the package again rebuilds it.</summary>
+    public string? PerformanceText { get; }
+
+    public bool HasPerformance => PerformanceText is not null;
 
     /// <summary>
     /// Manual "Run" trigger (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5/§7) -

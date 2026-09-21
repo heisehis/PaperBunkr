@@ -198,6 +198,45 @@ public sealed class PluginScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task A_command_row_shows_how_the_command_has_run_and_nothing_before_it_has()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            string dir = Path.Combine(root, "timed");
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "plugin.xml"), """
+                <Plugin key="timed" name="Timed">
+                  <Command hook="Startup" key="timed.startup" name="Startup" script="s.csx" />
+                </Plugin>
+                """);
+            File.WriteAllText(Path.Combine(dir, "s.csx"), "return 1;");
+            var host = new PluginHostService();
+            host.Engine.Discover(root, MakeEnvironment());
+            var command = host.Engine.AllCommands.Single();
+
+            // Before any run there is nothing to show.
+            var before = new PluginCommandRowViewModel(command, host);
+            Assert.False(before.HasPerformance);
+            Assert.Null(before.PerformanceText);
+
+            await command.InvokeAsync(new Paperbunkr.Plugins.Hooks.StartupHookGlobals { Environment = command.Environment! });
+            await command.InvokeAsync(new Paperbunkr.Plugins.Hooks.StartupHookGlobals { Environment = command.Environment! });
+
+            // The row is a snapshot taken when the pane is built - a rebuilt row sees the runs.
+            var after = new PluginCommandRowViewModel(command, host);
+            Assert.True(after.HasPerformance);
+            Assert.StartsWith("2 runs · avg ", after.PerformanceText);
+            Assert.Contains(" · max ", after.PerformanceText);
+            Assert.DoesNotContain("failed", after.PerformanceText);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Refresh_WithNoHost_LeavesPackagesEmpty()
     {
         var vm = new PluginScreenViewModel(new NoOpFilePicker(), new FakeDialogService(), MakeIsolatedPackageService());

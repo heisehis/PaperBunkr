@@ -162,6 +162,8 @@ public class PaperbunkrDbContext : DbContext
     /// </summary>
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        AnnounceUnmanagedReadingListWrites();
+
         const int maxAttempts = 3;
         for (int attempt = 1; ; attempt++)
         {
@@ -180,6 +182,7 @@ public class PaperbunkrDbContext : DbContext
 
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        AnnounceUnmanagedReadingListWrites();
         int written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
         RunAfterSaveActions();
         return written;
@@ -199,8 +202,104 @@ public class PaperbunkrDbContext : DbContext
     /// </summary>
     public void RunAfterSave(Action action) => (_afterSaveActions ??= new List<Action>()).Add(action);
 
+
+    // ---- ReadingListManager backstop (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md section 3) ----
+
+    private HashSet<int>? _managedListIds;
+    private HashSet<ReadingList>? _managedLists;
+
+    /// <summary>
+    /// Records that a <c>ReadingListManager</c> call covers <paramref name="list"/> on this context for the next
+    /// save, so the gap-filler below leaves it alone. Covers by id (an existing list) and, when the list isn't saved
+    /// yet or has navigation-attached items, by reference.
+    /// </summary>
+    internal void MarkReadingListManaged(ReadingList list)
+    {
+        (_managedLists ??= new HashSet<ReadingList>(ReferenceEqualityComparer.Instance)).Add(list);
+        if (list.Id != 0)
+        {
+            (_managedListIds ??= new HashSet<int>()).Add(list.Id);
+        }
+    }
+
+    internal void MarkReadingListManaged(int listId) => (_managedListIds ??= new HashSet<int>()).Add(listId);
+
+    /// <summary>
+    /// The backstop for <c>ReadingListManager</c> (which nothing otherwise forces anyone to use): any tracked
+    /// <see cref="ReadingListItem"/> added or removed on a list that no manager call covered on this context is
+    /// announced here, after the save lands, as <c>Added</c> / <c>Removed</c> - and a bypass diagnostic is raised
+    /// so the offending write can be found and moved onto the manager. Relinking (an item's issue changes, state
+    /// Modified) and deleting a whole list are not membership changes and are not flagged. Announces on
+    /// <see cref="Events.LibraryEvents.Default"/>; the context has no other hub to know about.
+    /// </summary>
+    private void AnnounceUnmanagedReadingListWrites()
+    {
+        List<(ReadingList? List, int ListId, ReadingListItem Item, bool Added)>? changes = null;
+        foreach (var entry in ChangeTracker.Entries<ReadingListItem>())
+        {
+            if (entry.State is not (EntityState.Added or EntityState.Deleted))
+            {
+                continue;
+            }
+
+            ReadingListItem item = entry.Entity;
+            ReadingList? list = item.ReadingList;
+            int listId = list is { Id: not 0 } ? list.Id : item.ReadingListId;
+            bool covered = (list is not null && _managedLists?.Contains(list) == true)
+                           || (listId != 0 && _managedListIds?.Contains(listId) == true);
+            if (!covered)
+            {
+                (changes ??= new()).Add((list, listId, item, entry.State == EntityState.Added));
+            }
+        }
+
+        if (changes is null)
+        {
+            return;
+        }
+
+        var hub = Events.LibraryEvents.Default;
+        foreach (var group in changes.GroupBy(c => (object)c.List! ?? c.ListId, ReferenceOrValueComparer.Instance))
+        {
+            ReadingList? list = group.First().List;
+            int listId = group.First().ListId;
+            var added = group.Where(c => c.Added).Select(c => c.Item.IssueId).ToList();
+            var removed = group.Where(c => !c.Added).Select(c => c.Item.IssueId).ToList();
+            var kind = (added.Count > 0 ? Events.ReadingListChangeKind.Added : Events.ReadingListChangeKind.None)
+                       | (removed.Count > 0 ? Events.ReadingListChangeKind.Removed : Events.ReadingListChangeKind.None);
+
+            // The name is read now: after the save the caller may have disposed or moved on.
+            string name = list?.Name
+                          ?? ReadingLists.AsNoTracking().Where(l => l.Id == listId).Select(l => l.Name).FirstOrDefault()
+                          ?? string.Empty;
+
+            RunAfterSave(() =>
+            {
+                int finalId = list is { Id: not 0 } ? list.Id : listId;
+                hub.Raise(new Events.ReadingListChangedEvent(finalId, list?.Name ?? name, kind, added, removed));
+                hub.RaiseManagerBypassed(
+                    $"Reading list '{list?.Name ?? name}' (id {finalId}) changed without going through ReadingListManager: "
+                    + $"{added.Count} added, {removed.Count} removed. The context announced it; new code should call ReadingListManager.");
+            });
+        }
+    }
+
+    /// <summary>Groups tracked list objects by reference and raw list ids by value, in one key space.</summary>
+    private sealed class ReferenceOrValueComparer : IEqualityComparer<object>
+    {
+        public static readonly ReferenceOrValueComparer Instance = new();
+
+        public new bool Equals(object? x, object? y) => x is int a && y is int b ? a == b : ReferenceEquals(x, y);
+
+        public int GetHashCode(object obj) => obj is int i ? i : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+    }
+
     private void RunAfterSaveActions()
     {
+        // Coverage is per save: a later direct write on this same context, after a managed one, is a bypass.
+        _managedListIds = null;
+        _managedLists = null;
+
         if (_afterSaveActions is not { Count: > 0 } pending)
         {
             return;

@@ -82,13 +82,34 @@ public abstract class Command
         }
     }
 
+    /// <summary>How this command has behaved since the app started - runs, failures and durations (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md §2). In memory only.</summary>
+    public CommandStats Stats { get; } = new();
+
     public async Task<object?> InvokeAsync(PluginGlobals globals)
     {
         // Per-invocation confirmation gate for IMetadataWriter (docs/superpowers/specs/2026-08-28-
         // plugin-api-v3-data-manager-design.md §5) - scoped to exactly this call, flows across the
         // script's awaits.
         using var _ = PluginInvocationContext.Enter(PluginKey, ConfirmWrites);
-        return await OnInvokeAsync(globals).ConfigureAwait(false);
+
+        // Timed here, in the one method every hook and every caller goes through, so the numbers cover
+        // the CE-era hooks and the domain hooks alike. A thrown exception is counted and rethrown untouched.
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        bool failed = false;
+        try
+        {
+            return await OnInvokeAsync(globals).ConfigureAwait(false);
+        }
+        catch
+        {
+            failed = true;
+            throw;
+        }
+        finally
+        {
+            timer.Stop();
+            Stats.RecordRun(timer.Elapsed, failed);
+        }
     }
 
     protected virtual void OnInitialize(string pluginPath)

@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Plugins;
+using Paperbunkr.App.Services;
 using Paperbunkr.Plugins;
 
 namespace Paperbunkr.App.ViewModels;
@@ -14,10 +18,22 @@ namespace Paperbunkr.App.ViewModels;
 /// native plugin's own settings view uses. One <see cref="PluginSettingRowViewModel"/> per declared setting,
 /// in declaration order.
 /// </summary>
-public sealed class PluginSettingsSchemaViewModel : ViewModelBase
+public sealed partial class PluginSettingsSchemaViewModel : ViewModelBase
 {
-    public PluginSettingsSchemaViewModel(string pluginKey, string pluginName, PluginSettingsSchema schema, PluginSettingsAccess access)
+    private readonly string _pluginKey;
+    private readonly string _pluginName;
+    private readonly PluginSettingsSchema _schema;
+    private readonly PluginSettingsAccess _access;
+    private readonly IFilePickerService? _filePicker;
+
+    public PluginSettingsSchemaViewModel(string pluginKey, string pluginName, PluginSettingsSchema schema, PluginSettingsAccess access, IFilePickerService? filePicker = null)
     {
+        _pluginKey = pluginKey;
+        _pluginName = pluginName;
+        _schema = schema;
+        _access = access;
+        _filePicker = filePicker;
+        ResetAll = new TwoStepConfirm(ResetAllRows, "Reset all", "Confirm reset all?");
         Title = $"{pluginName} settings";
         Rows = new ObservableCollection<PluginSettingRowViewModel>(
             schema.Definitions.Select(d => new PluginSettingRowViewModel(pluginKey, d, access)));
@@ -35,6 +51,106 @@ public sealed class PluginSettingsSchemaViewModel : ViewModelBase
     public string? SecretsUnavailableNote { get; }
 
     public bool HasSecretsUnavailableNote => SecretsUnavailableNote is not null;
+
+    /// <summary>Two-step "Reset all": every unlocked setting goes back to its declared default.</summary>
+    public TwoStepConfirm ResetAll { get; }
+
+    /// <summary>What the last reset / export / import did, in one line.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStatus))]
+    private string? _status;
+
+    public bool HasStatus => Status is not null;
+
+    // Rows are refreshed in place - never by clearing Rows from inside a click (see the removal-during-event gotcha in CLAUDE.md).
+    private void ResetAllRows()
+    {
+        int reset = 0;
+        int skippedLocked = 0;
+        foreach (var row in Rows)
+        {
+            if (row.IsLocked)
+            {
+                skippedLocked++;
+            }
+            else if (row.ResetValue())
+            {
+                reset++;
+            }
+        }
+
+        Status = (reset, skippedLocked) switch
+        {
+            (0, 0) => "Nothing to reset - every setting is already at its default.",
+            (_, 0) => $"Reset {reset} {(reset == 1 ? "setting" : "settings")} to default.",
+            _ => $"Reset {reset} {(reset == 1 ? "setting" : "settings")} to default; {skippedLocked} locked {(skippedLocked == 1 ? "setting was" : "settings were")} skipped.",
+        };
+    }
+
+    [RelayCommand]
+    private async Task Export()
+    {
+        if (_filePicker is null)
+        {
+            return;
+        }
+
+        string? path = await _filePicker.PickSaveFileAsync("Export plugin settings", $"{_pluginKey}-settings.json", "json", "Plugin settings (.json)");
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            string json = PluginSettingsTransfer.Export(_access, _pluginKey, _pluginName, _schema);
+            await File.WriteAllTextAsync(path, json);
+            int secrets = _schema.Definitions.Count(d => d.Type == PluginSettingType.Secret);
+            Status = secrets == 0
+                ? "Settings exported."
+                : $"Settings exported. {secrets} secret {(secrets == 1 ? "setting was" : "settings were")} left out.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Status = $"Couldn't write the file: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task Import()
+    {
+        if (_filePicker is null)
+        {
+            return;
+        }
+
+        string? path = await _filePicker.PickOpenFileAsync("Import plugin settings", "json", "Plugin settings (.json)");
+        if (path is null)
+        {
+            return;
+        }
+
+        string json;
+        try
+        {
+            json = await File.ReadAllTextAsync(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Status = $"Couldn't read the file: {ex.Message}";
+            return;
+        }
+
+        var result = PluginSettingsTransfer.Import(_access, _pluginKey, _schema, json);
+        Status = result.Describe();
+        if (result.Succeeded)
+        {
+            foreach (var row in Rows)
+            {
+                row.Refresh();
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -47,7 +163,7 @@ public sealed partial class PluginSettingRowViewModel : ViewModelBase
     private readonly string _pluginKey;
     private readonly PluginSettingDefinition _definition;
     private readonly PluginSettingsAccess _access;
-    private readonly bool _loading;
+    private bool _loading;
 
     public PluginSettingRowViewModel(string pluginKey, PluginSettingDefinition definition, PluginSettingsAccess access)
     {
@@ -56,26 +172,56 @@ public sealed partial class PluginSettingRowViewModel : ViewModelBase
         _access = access;
         ChoiceLabels = definition.Choices.Select(c => c.Label).ToList();
 
+        _platformAllowsEditing = !(IsSecret && !access.Protector.IsAvailable);
+
+        // Locked once when the overlay opens (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md section 4), so a
+        // locked setting doesn't lock itself mid-typing the first time a value is saved. Only Unlock changes it afterwards.
+        _isLocked = access.IsLocked(pluginKey, definition);
+        Unlock = new TwoStepConfirm(() => IsLocked = false, "Unlock", "Confirm unlock?");
+        Load();
+    }
+
+    /// <summary>Re-reads the stored value into the editor in place (after a reset or an import).</summary>
+    public void Refresh() => Load();
+
+    private void Load()
+    {
         _loading = true;
-        string shown = access.GetForEditing(pluginKey, definition, out bool unreadableSecret);
+        string shown = _access.GetForEditing(_pluginKey, _definition, out bool unreadableSecret);
         if (IsToggle)
         {
-            _isOn = string.Equals(shown, "true", StringComparison.OrdinalIgnoreCase);
+            IsOn = string.Equals(shown, "true", StringComparison.OrdinalIgnoreCase);
         }
         else if (IsChoice)
         {
-            _text = definition.Choices.FirstOrDefault(c => c.Value == shown)?.Label ?? shown;
+            Text = _definition.Choices.FirstOrDefault(c => c.Value == shown)?.Label ?? shown;
         }
         else
         {
-            _text = shown;
+            Text = shown;
         }
 
         _loading = false;
 
-        IsEnabled = !(IsSecret && !access.Protector.IsAvailable);
-        _error = InitialProblem(access.GetRaw(pluginKey, definition.Key), unreadableSecret);
+        string? raw = _access.GetRaw(_pluginKey, _definition.Key);
+        HasStored = raw is not null;
+        Error = InitialProblem(raw, unreadableSecret);
     }
+
+    /// <summary>Removes the stored value so the setting falls back to its default. False when locked or when nothing was stored.</summary>
+    public bool ResetValue()
+    {
+        if (IsLocked || !_access.Reset(_pluginKey, _definition.Key))
+        {
+            return false;
+        }
+
+        Load();
+        return true;
+    }
+
+    [RelayCommand]
+    private void Reset() => ResetValue();
 
     public string Key => _definition.Key;
 
@@ -93,8 +239,25 @@ public sealed partial class PluginSettingRowViewModel : ViewModelBase
 
     public bool IsSecret => _definition.Type == PluginSettingType.Secret;
 
-    /// <summary>False only for a secret on a platform with no DPAPI - shown, but not editable.</summary>
-    public bool IsEnabled { get; }
+    private readonly bool _platformAllowsEditing;
+
+    /// <summary>False for a secret on a platform with no DPAPI, and while the setting is locked - shown, but not editable.</summary>
+    public bool IsEnabled => _platformAllowsEditing && !IsLocked;
+
+    /// <summary>Set when the overlay opened with a value stored for a <c>locked</c> setting; cleared only by <see cref="Unlock"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEnabled), nameof(CanReset))]
+    private bool _isLocked;
+
+    /// <summary>Two-step "Unlock" for this overlay session only; nothing about it is persisted.</summary>
+    public TwoStepConfirm Unlock { get; }
+
+    /// <summary>True when a value is stored (so there is something to reset).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanReset))]
+    private bool _hasStored;
+
+    public bool CanReset => HasStored && !IsLocked;
 
     /// <summary>The labels offered by a choice setting (its values are what's stored).</summary>
     public IReadOnlyList<string> ChoiceLabels { get; }
@@ -156,6 +319,7 @@ public sealed partial class PluginSettingRowViewModel : ViewModelBase
         try
         {
             _access.Set(_pluginKey, _definition.Key, raw);
+            HasStored = true;
             Error = null;
         }
         catch (Exception ex)

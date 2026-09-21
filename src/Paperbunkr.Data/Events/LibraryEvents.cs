@@ -64,11 +64,20 @@ public sealed class LibraryEvents
 
     public event Action<ReadingListChangedEvent>? ReadingListChanged;
 
+    /// <summary>
+    /// A reading list's items were added or removed on a context <c>ReadingListManager</c> never covered, so
+    /// the context announced the change itself (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md section 3).
+    /// The text names the list and the counts; the host logs it so whoever wrote the bypass can find it.
+    /// </summary>
+    public event Action<string>? ManagerBypassed;
+
     public void Raise(LibraryScanCompletedEvent e) => Invoke(LibraryScanCompleted, e);
 
     public void Raise(MissingFileConfirmedEvent e) => Invoke(MissingFileConfirmed, e);
 
     public void Raise(ReadingListChangedEvent e) => Invoke(ReadingListChanged, e);
+
+    public void RaiseManagerBypassed(string message) => Invoke(ManagerBypassed, message);
 
     private static void Invoke<T>(Action<T>? handlers, T payload)
     {

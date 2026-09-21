@@ -28,6 +28,9 @@
                                        Foreground="{DynamicResource PbAccentBrush}"
                                        ToolTip.Tip="In progress" AutomationProperties.AccessibilityView="Raw"
                                        IsVisible="{TemplateBinding IsInProgress}" />
+                        <Ellipse Width="9" Height="9" Fill="{DynamicResource PbAccentTextBrush}"
+                                 ToolTip.Tip="Unread" AutomationProperties.AccessibilityView="Raw"
+                                 IsVisible="{TemplateBinding IsUnread}" />
                         <Border CornerRadius="3" Padding="4,0" VerticalAlignment="Center"
                                 Background="{DynamicResource PbAccentBrush}"
                                 IsVisible="{TemplateBinding IsNew}">
@@ -45,7 +48,7 @@
              a semi-transparent amber background (often over busy cover art) was nearly illegible;
              user direction 2026-09-07. -->
         <Setter Property="Background" Value="{DynamicResource PbSurface0Brush}" />
-        <Setter Property="CornerRadius" Value="999" />
+        <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
         <Setter Property="Padding" Value="7,2" />
         <Setter Property="MinWidth" Value="16" />
         <Setter Property="VerticalAlignment" Value="Center" />

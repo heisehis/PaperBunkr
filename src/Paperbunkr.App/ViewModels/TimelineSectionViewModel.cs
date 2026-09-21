@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using Paperbunkr.App.Models;
 
 namespace Paperbunkr.App.ViewModels;
@@ -18,4 +19,9 @@ public sealed class TimelineSectionViewModel
     public bool HasCommonlyCitedRange => !string.IsNullOrEmpty(CommonlyCitedRange);
 
     public ObservableCollection<TimelineIssueCard> Issues { get; } = new();
+
+    /// <summary>True while any issue in this era is unread - the connector node takes the accent colour
+    /// (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #4). Evaluated when the section's template is
+    /// realized, i.e. after <see cref="Issues"/> has been filled and the section added to the timeline.</summary>
+    public bool HasUnread => Issues.Any(i => i.IsUnread);
 }

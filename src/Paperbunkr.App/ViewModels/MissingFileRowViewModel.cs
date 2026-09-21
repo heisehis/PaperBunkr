@@ -11,6 +11,14 @@ namespace Paperbunkr.App.ViewModels;
 /// this row is where that pattern originated, now shared) and Dismiss (acknowledge and stop asking,
 /// without touching the data).
 /// </summary>
+/// <summary>How serious a Library Health row is - drives the row's severity chip (docs/superpowers/
+/// specs/2026-09-21-cosmetics-pitch-design.md #5): Warning is amber, Error is red.</summary>
+public enum HealthSeverity
+{
+    Warning,
+    Error,
+}
+
 public partial class MissingFileRowViewModel : ViewModelBase
 {
     private readonly Func<MissingFileRowViewModel, Task> _onRelink;
@@ -21,9 +29,13 @@ public partial class MissingFileRowViewModel : ViewModelBase
         string displayLabel,
         Func<MissingFileRowViewModel, Task> onRelink,
         Action<MissingFileRowViewModel> onRemove,
-        Action<MissingFileRowViewModel> onDismiss)
+        Action<MissingFileRowViewModel> onDismiss,
+        HealthSeverity severity = HealthSeverity.Warning,
+        string severityLabel = "Missing")
     {
         IssueId = issueId;
+        Severity = severity;
+        SeverityLabel = severityLabel;
         DisplayLabel = displayLabel;
         _onRelink = onRelink;
         _onDismiss = onDismiss;
@@ -33,6 +45,15 @@ public partial class MissingFileRowViewModel : ViewModelBase
     public int IssueId { get; }
 
     public string DisplayLabel { get; }
+
+    /// <summary>Severity chip data - previously baked into <see cref="DisplayLabel"/> as a text suffix.</summary>
+    public HealthSeverity Severity { get; }
+
+    public string SeverityLabel { get; }
+
+    public bool IsError => Severity == HealthSeverity.Error;
+
+    public bool IsWarning => Severity == HealthSeverity.Warning;
 
     public TwoStepConfirm DeleteConfirm { get; }
 

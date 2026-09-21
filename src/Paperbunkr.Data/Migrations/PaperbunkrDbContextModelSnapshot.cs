@@ -254,6 +254,11 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(5);
 
+                    b.Property<bool>("BindingSpine")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("BookReaderAutoHideChrome")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -376,6 +381,11 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("REAL")
                         .HasDefaultValue(0.0);
 
+                    b.Property<int>("DensityPreset")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(1);
+
                     b.Property<bool>("DogEarThumbnails")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -397,6 +407,16 @@ namespace Paperbunkr.Data.Migrations
                         .HasDefaultValue(false);
 
                     b.Property<bool>("FadeInThumbnails")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("GlowTier")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(2);
+
+                    b.Property<bool>("HeroBackdrop")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);
@@ -657,6 +677,11 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("ProgressRing")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("PromptReviewOnFinish")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -670,6 +695,11 @@ namespace Paperbunkr.Data.Migrations
 
                     b.Property<int?>("ReaderMemoryLimitMb")
                         .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ReadingListMosaic")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("ReducedMotion")
                         .HasColumnType("INTEGER");
@@ -706,10 +736,20 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("SelectedFontFamily")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("SeriesAccentColor")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("ShowScrubberOverlay")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("ShowSelectionCheckbox")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("ShowToolTips")
                         .ValueGeneratedOnAdd()
@@ -717,6 +757,11 @@ namespace Paperbunkr.Data.Migrations
                         .HasDefaultValue(false);
 
                     b.Property<bool>("SmoothScrolling")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("SplashAmbientMotion")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);

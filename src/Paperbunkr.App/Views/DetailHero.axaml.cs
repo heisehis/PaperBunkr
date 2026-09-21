@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Paperbunkr.App.Services;
 
 namespace Paperbunkr.App.Views;
 
@@ -41,5 +42,24 @@ public partial class DetailHero : UserControl
     public DetailHero()
     {
         InitializeComponent();
+    }
+
+    /// <summary>Applies the "Hero backdrop" preference (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #8). Opacity, not
+    /// IsVisible, because the backdrop's visibility is already bound to "has a backdrop image". Home's spotlight (<see cref="MutedBackdrop"/>)
+    /// is unaffected - the setting is about the Detail screens.</summary>
+    private void ApplyBackdropSetting()
+        => Backdrop.Opacity = MutedBackdrop || CosmeticThumbnailSettings.HeroBackdrop ? 1 : 0;
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        CosmeticThumbnailSettings.OverlaySettingsChanged += ApplyBackdropSetting;
+        ApplyBackdropSetting();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        CosmeticThumbnailSettings.OverlaySettingsChanged -= ApplyBackdropSetting;
+        base.OnDetachedFromVisualTree(e);
     }
 }

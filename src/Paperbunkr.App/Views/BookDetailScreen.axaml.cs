@@ -12,6 +12,7 @@ public partial class BookDetailScreen : UserControl
     public BookDetailScreen()
     {
         InitializeComponent();
+        DetailCosmetics.Attach(this);
     }
 
     /// <summary>Spatial arrow-key navigation across the series-mode book-card grid

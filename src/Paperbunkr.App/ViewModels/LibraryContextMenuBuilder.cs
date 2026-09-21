@@ -49,8 +49,8 @@ public sealed class LibraryContextMenuBuilder
                 multi ? $"Mark {n} as" : "Mark as",
                 new[]
                 {
-                    ContextMenuEntry.Item("Read", _vm.MarkIssueReadCommand, row.Id),
-                    ContextMenuEntry.Item("Unread", _vm.MarkIssueUnreadCommand, row.Id),
+                    ContextMenuEntry.Item("Read", _vm.MarkIssueReadCommand, row.Id, Symbol.CheckmarkCircle),
+                    ContextMenuEntry.Item("Unread", _vm.MarkIssueUnreadCommand, row.Id, Symbol.Circle),
                 },
                 Symbol.Checkmark),
             ContextMenuEntry.Item("Go to Series", _vm.GoToSeriesCommand, row.SeriesId, Symbol.ArrowForward),
@@ -97,8 +97,8 @@ public sealed class LibraryContextMenuBuilder
                 multi ? $"Mark {n} as" : "Mark as",
                 new[]
                 {
-                    ContextMenuEntry.Item("Read", _vm.MarkIssueReadCommand, row.Id),
-                    ContextMenuEntry.Item("Unread", _vm.MarkIssueUnreadCommand, row.Id),
+                    ContextMenuEntry.Item("Read", _vm.MarkIssueReadCommand, row.Id, Symbol.CheckmarkCircle),
+                    ContextMenuEntry.Item("Unread", _vm.MarkIssueUnreadCommand, row.Id, Symbol.Circle),
                 },
                 Symbol.Checkmark),
             ContextMenuEntry.SubMenu(

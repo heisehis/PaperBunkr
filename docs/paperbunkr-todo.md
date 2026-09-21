@@ -93,6 +93,24 @@ this file itself already did once (see the note below).
 > `LibraryHealthService`), drop-off detection, smart "Up Next" blended queue, reading-stats
 > dashboard refinements (check against shipped Insights/Stats v2 first), best-scan dedup heuristic
 > (extends Duplicate Finder); **medium/local-ML —** full-text dialogue OCR search, semantic
+> **Cosmetics pitch items 8–26 BUILT (2026-09-21, uncommitted; user reviewed it running and signed off the same day):** spec `…-cosmetics-pitch-2-design.md` + plan
+> `…-cosmetics-pitch-2-plan.md`. Slice A (series status chip, unread glyph, placeholder covers, A–Z rail for grouped views), slice B (hero backdrop
+> switch, per-series accent, arc-source brand mark), slice C (empty-state illustrations, menu icon audit, chart hover/contrast/donut sweep, Activity Center
+> rings + grouping, skin-preview tile/chip, density presets). Most items already partly existed; the spec's "Implementation notes" lists what was actually
+> added per item. Also: the tile multi-select checkbox is now opt-in (Ctrl/Shift+click selects). New `AppSettings` columns: `ShowSelectionCheckbox`,
+> `HeroBackdrop`, `SeriesAccentColor`, `DensityPreset`. Verified by unit + headless render tests, then reviewed on screen by the user (spine, ring, checkbox,
+> A-Z rail all iterated on from real screenshots). Chapter closed; the remaining pitch items are the reader/platform ones listed below. Not built from the pitch:
+> #11/#22/#23 (reader), #19 (bookshelf), #24 (taskbar badge), #12/#27 (already shipped).
+>
+> **Cosmetics pitch items 1–7 BUILT (2026-09-21, uncommitted; user reviewed it running and signed off the same day - CLOSED):** spec
+> `docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md` + plan `…-cosmetics-pitch-plan.md`. Binding spine + read-progress
+> ring (one `TileCosmeticsOverlay` on the 4 Poster/Panorama cover templates), glow tiers (`ThemeService.BuildGlowRing`),
+> Library Health severity chips, reading-list 2×2 cover mosaic, Events-timeline connector art, splash ambient dots; five new
+> `AppSettings` columns in migration `AddCosmeticsPitchSettings`. Verified: unit + headless render tests, migration test,
+> full App suite green on the slice-B tree (3275 passed). **Not verified:** how any of it looks on screen. The spec's
+> "Implementation notes" lists where reality differed from the pitch (e.g. Library Health had no text severity chip to
+> reskin; ring is bottom-centre and hover-only). Items 8–27 of the pitch (added 2026-09-21) are untouched.
+>
 > search over descriptions/covers (local embeddings), auto-tagging with confidence (feeds the
 > existing `MetadataProposal` review queue).
 > Every one of these needs its own brainstorm → design spec per this project's `CLAUDE.md`

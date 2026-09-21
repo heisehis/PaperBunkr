@@ -117,10 +117,31 @@ public sealed class AsyncCoverImage
 
     public static string? GetSourceId(Image target) => target.GetValue(SourceIdProperty);
 
+    /// <summary>Shows/hides the sibling <see cref="PlaceholderCoverText"/> (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-
+    /// design.md #18): visible only after an EMPTY decode for this exact image generation, hidden again whenever the image is
+    /// re-pointed. A direct scan of the (small) parent panel - no per-tile binding or subscription.</summary>
+    private static void SetPlaceholder(Image image, bool missing)
+    {
+        if (image.Parent is not Panel panel)
+        {
+            return;
+        }
+
+        foreach (var child in panel.Children)
+        {
+            if (child is PlaceholderCoverText placeholder)
+            {
+                placeholder.SetMissing(missing);
+                return;
+            }
+        }
+    }
+
     private static void Refresh(Image image, string? newStem)
     {
         long generation = image.GetValue(GenerationProperty) + 1;
         image.SetValue(GenerationProperty, generation);
+        SetPlaceholder(image, missing: false);
 
         // A recycled container no longer wants whatever it had queued: take it out of the decode queue.
         if (image.GetValue(TicketProperty) is { } oldTicket)
@@ -232,6 +253,7 @@ public sealed class AsyncCoverImage
         {
             CoverPipelineStats.DecodeWasted();
             CoverPipelineStats.WastedBecauseEmpty();
+            SetPlaceholder(image, missing: true);
             return;
         }
 
@@ -256,9 +278,16 @@ public sealed class AsyncCoverImage
     /// decode came back empty. Internal for direct testing of the generation guard.</summary>
     internal static void Apply(Image image, string stem, long generation, Bitmap? decoded)
     {
-        if (image.GetValue(GenerationProperty) != generation || decoded is null)
+        if (image.GetValue(GenerationProperty) != generation)
         {
             CoverPipelineStats.DecodeWasted();
+            return;
+        }
+
+        if (decoded is null)
+        {
+            CoverPipelineStats.DecodeWasted();
+            SetPlaceholder(image, missing: true);
             return;
         }
 

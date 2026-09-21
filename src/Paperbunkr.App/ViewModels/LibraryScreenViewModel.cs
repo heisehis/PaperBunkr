@@ -1354,6 +1354,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         IssueList.ApplyPrecomputed(result.Rows, result.RowGroups, result.IsGrouped);
 
+        OnPropertyChanged(nameof(ShowAlphabetIndex));
+        OnPropertyChanged(nameof(AlphabetIndex));
         OnPropertyChanged(nameof(HasAnyResults));
         OnPropertyChanged(nameof(ShowEmptyState));
         OnPropertyChanged(nameof(EmptyStateMessage));
@@ -2130,7 +2132,37 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <see cref="IssueList"/>'s sort/group state directly since that's the only one left (see the
     /// constructor's relay for how this stays live).</summary>
     public bool ShowAlphabetIndex =>
-        IssueList.SortField == IssueListSortField.Series && !IssueList.IsGrouped;
+        IssueList.SortField == IssueListSortField.Series && (!IssueList.IsGrouped || GroupsAreLetterBuckets);
+
+    /// <summary>True when the active granularity's groups are the single-letter buckets ("A", "B", ...) - the Alphabetical
+    /// grouping. The rail then jumps to a group header instead of estimating an offset into a flat list (docs/superpowers/specs/
+    /// 2026-09-21-cosmetics-pitch-2-design.md #26).</summary>
+    public bool GroupsAreLetterBuckets => IsSeriesGranularity
+        ? Groups.Count > 0 && Groups.All(g => g.Header.Length == 1)
+        : IssueList.Groups.Count > 0 && IssueList.Groups.All(g => g.Header.Length == 1);
+
+    /// <summary>The rail's 27 letters, with letters that have no items in the current view marked so they can dim. Rebuilt with the view.</summary>
+    public IReadOnlyList<AlphabetIndexEntry> AlphabetIndex
+    {
+        get
+        {
+            if (!ShowAlphabetIndex)
+            {
+                return AlphabetIndexEntry.Build(Array.Empty<string>());
+            }
+
+            if (IsGrouped)
+            {
+                return AlphabetIndexEntry.Build(IsSeriesGranularity
+                    ? Groups.Select(g => g.Header)
+                    : IssueList.Groups.Select(g => g.Header));
+            }
+
+            return AlphabetIndexEntry.Build(IsSeriesGranularity
+                ? Covers.Select(c => c.Name)
+                : IssueList.Rows.Select(r => r.SeriesName));
+        }
+    }
 
     // --- Toolbar chrome (docs/superpowers/specs/2026-08-27-library-browsing-4b-toolbar-rework-
     // design.md §2-§5) - one "View & Sort" tabbed popup replacing the old Filter/Sort/Group/Display

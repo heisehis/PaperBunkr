@@ -888,11 +888,20 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ThemeScheduledLightHour = lightHour;
         TrueBlackAutoHourText = _themeService.GetTrueBlackAutoHour()?.ToString() ?? string.Empty;
         AccentOverrideHexText = _themeService.GetAccentOverrideHex() ?? string.Empty;
+        GlowTierText = GlowTierToText(_themeService.GetGlowTier());
+        DensityText = DensityPresets.NameOf(_themeService.GetDensityPreset());
         _suppressThemeOptionsApply = false;
 
         using var context = _contextFactory();
         var settings = context.GetOrCreateAppSettings();
         _suppressBehaviorApply = true;
+        BindingSpine = settings.BindingSpine;
+        ProgressRing = settings.ProgressRing;
+        ReadingListMosaic = settings.ReadingListMosaic;
+        SplashAmbientMotion = settings.SplashAmbientMotion;
+        ShowSelectionCheckbox = settings.ShowSelectionCheckbox;
+        HeroBackdrop = settings.HeroBackdrop;
+        SeriesAccentColor = settings.SeriesAccentColor;
         OpenLastPage = settings.OpenLastPage;
         AutoNavigateComics = settings.AutoNavigateComics;
         ReverseRtlNavigation = settings.ReverseRtlNavigation;
@@ -1200,6 +1209,112 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         _themeService.ApplyReducedMotion(value);
+    }
+
+    // ===================== Cosmetics (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md) =====================
+
+    /// <summary>Binding-spine texture on Poster/Panorama covers (cosmetics pitch #1).</summary>
+    [ObservableProperty]
+    private bool _bindingSpine = true;
+
+    partial void OnBindingSpineChanged(bool value)
+    {
+        CosmeticThumbnailSettings.BindingSpine = value;
+        PersistBehaviorSetting(s => s.BindingSpine = value);
+    }
+
+    /// <summary>Read-progress ring on Poster/Panorama covers (cosmetics pitch #2).</summary>
+    [ObservableProperty]
+    private bool _progressRing = true;
+
+    partial void OnProgressRingChanged(bool value)
+    {
+        CosmeticThumbnailSettings.ProgressRing = value;
+        PersistBehaviorSetting(s => s.ProgressRing = value);
+    }
+
+    /// <summary>Blurred cover backdrop behind the Detail hero (default on).</summary>
+    [ObservableProperty]
+    private bool _heroBackdrop = true;
+
+    partial void OnHeroBackdropChanged(bool value)
+    {
+        CosmeticThumbnailSettings.HeroBackdrop = value;
+        PersistBehaviorSetting(s => s.HeroBackdrop = value);
+    }
+
+    /// <summary>Tint a Detail screen's accent from the series cover's dominant colour (default off).</summary>
+    [ObservableProperty]
+    private bool _seriesAccentColor;
+
+    partial void OnSeriesAccentColorChanged(bool value)
+    {
+        CosmeticThumbnailSettings.SeriesAccentColor = value;
+        PersistBehaviorSetting(s => s.SeriesAccentColor = value);
+    }
+
+    /// <summary>Hover multi-select checkbox on Library grid tiles (default off - Ctrl/Shift+click selects; selected tiles still show a checked box).</summary>
+    [ObservableProperty]
+    private bool _showSelectionCheckbox;
+
+    partial void OnShowSelectionCheckboxChanged(bool value)
+    {
+        CosmeticThumbnailSettings.ShowSelectionCheckbox = value;
+        PersistBehaviorSetting(s => s.ShowSelectionCheckbox = value);
+    }
+
+    /// <summary>2x2 member-cover mosaic as a reading list's header cover (cosmetics pitch #7). Read when a list is opened.</summary>
+    [ObservableProperty]
+    private bool _readingListMosaic = true;
+
+    partial void OnReadingListMosaicChanged(bool value) => PersistBehaviorSetting(s => s.ReadingListMosaic = value);
+
+    /// <summary>Drifting dots on the splash screen (cosmetics pitch #6). Read at the next launch; Reduced Motion overrides it.</summary>
+    [ObservableProperty]
+    private bool _splashAmbientMotion = true;
+
+    partial void OnSplashAmbientMotionChanged(bool value) => PersistBehaviorSetting(s => s.SplashAmbientMotion = value);
+
+    /// <summary>String projection for <c>controls:SuggestBox</c> - Compact / Comfortable / Spacious (cosmetics pitch 2 #17).</summary>
+    public IReadOnlyList<string> DensityOptionsList => DensityPresets.Names;
+
+    [ObservableProperty]
+    private string _densityText = "Comfortable";
+
+    partial void OnDensityTextChanged(string value)
+    {
+        if (_suppressThemeOptionsApply)
+        {
+            return;
+        }
+
+        _themeService.ApplyDensity(DensityPresets.FromName(value));
+    }
+
+    private static readonly string[] GlowTierOptions = { "Off", "Subtle", "Normal", "Vivid" };
+
+    /// <summary>String projection for <c>controls:SuggestBox</c> (the app-wide SuggestBox convention, same shape as <see cref="ThemeAutoModeOptionsList"/>).</summary>
+    public IReadOnlyList<string> GlowTierOptionsList => GlowTierOptions;
+
+    [ObservableProperty]
+    private string _glowTierText = "Normal";
+
+    partial void OnGlowTierTextChanged(string value)
+    {
+        if (_suppressThemeOptionsApply)
+        {
+            return;
+        }
+
+        _themeService.ApplyGlowTier(GlowTierFromText(value));
+    }
+
+    private static string GlowTierToText(int tier) => GlowTierOptions[ThemeService.NormalizeGlowTier(tier)];
+
+    private static int GlowTierFromText(string? text)
+    {
+        int index = Array.IndexOf(GlowTierOptions, text);
+        return index >= 0 ? index : ThemeService.GlowTierNormal;
     }
 
     // ===================== Theme options (docs/superpowers/specs/2026-09-16-theme-system-design.md
@@ -3329,10 +3444,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             bool confirmedMissing = issue.MissingVerificationCount >= _libraryHealth.ConfirmedMissingThreshold;
             MissingFileItems.Add(new MissingFileRowViewModel(
                 issueId,
-                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}{(confirmedMissing ? " · confirmed missing" : "")}",
+                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}",
                 onRelink: RelinkMissingFile,
                 onRemove: _ => RemoveMissingFile(issueId),
-                onDismiss: _ => DismissMissingFile(issueId)));
+                onDismiss: _ => DismissMissingFile(issueId),
+                severity: confirmedMissing ? HealthSeverity.Error : HealthSeverity.Warning,
+                severityLabel: confirmedMissing ? "Confirmed missing" : "Missing"));
         }
 
         var cutoff = DateTime.UtcNow.AddDays(-RecentlyRemovedRetentionDays);
@@ -3369,10 +3486,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             int issueId = issue.Id;
             EmptyIssueItems.Add(new MissingFileRowViewModel(
                 issueId,
-                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()} · unreadable",
+                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}",
                 onRelink: RelinkEmptyIssue,
                 onRemove: _ => RemoveEmptyIssue(issueId),
-                onDismiss: _ => DismissEmptyIssue(issueId)));
+                onDismiss: _ => DismissEmptyIssue(issueId),
+                severity: HealthSeverity.Error,
+                severityLabel: "Unreadable"));
         }
 
         NotifyLibraryHealthCountsChanged();

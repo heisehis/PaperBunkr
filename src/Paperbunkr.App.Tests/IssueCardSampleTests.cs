@@ -35,8 +35,10 @@ public class IssueCardSampleTests
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
-    public void TileGlyph_UnstartedOrEdgeFraction_IsNone(double fraction)
+    public void TileGlyph_UnstartedOrEdgeFraction_IsUnread(double fraction)
     {
-        Assert.Equal(IssueTileGlyph.None, Card(isRead: false, readFraction: fraction).TileGlyph);
+        // Was None (no badge). Cosmetics pitch 2 #20 gives "not started" its own glyph - the accent unread dot - so the Detail issue list
+        // matches the Library's unread marker; a not-yet-read card at fraction 0 or a not-flagged-read fraction 1 is Unread, not blank.
+        Assert.Equal(IssueTileGlyph.Unread, Card(isRead: false, readFraction: fraction).TileGlyph);
     }
 }

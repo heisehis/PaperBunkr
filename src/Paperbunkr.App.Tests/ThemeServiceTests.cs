@@ -235,6 +235,61 @@ public class ThemeServiceTests : IDisposable
         Assert.Equal(Avalonia.Media.Color.FromArgb(0x99, glow.R, glow.G, glow.B), ring[0].Color);
     }
 
+    /// <summary>docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #3 - Normal must reproduce the
+    /// pre-tier ring exactly; Off is empty; Subtle is thinner and fainter; Vivid is stronger with a halo.</summary>
+    [Fact]
+    public void BuildGlowRing_Tiers_MatchDesign()
+    {
+        var glow = Avalonia.Media.Color.Parse("#66E0995A");
+
+        var normal = ThemeService.BuildGlowRing(glow, ThemeService.GlowTierNormal);
+        Assert.Equal(1, normal.Count);
+        Assert.Equal(4, normal[0].Spread);
+        Assert.Equal(Avalonia.Media.Color.FromArgb(0x99, glow.R, glow.G, glow.B), normal[0].Color);
+
+        Assert.Equal(0, ThemeService.BuildGlowRing(glow, ThemeService.GlowTierOff).Count);
+
+        var subtle = ThemeService.BuildGlowRing(glow, ThemeService.GlowTierSubtle);
+        Assert.Equal(1, subtle.Count);
+        Assert.True(subtle[0].Spread < normal[0].Spread);
+        Assert.True(subtle[0].Color.A < normal[0].Color.A);
+
+        var vivid = ThemeService.BuildGlowRing(glow, ThemeService.GlowTierVivid);
+        Assert.Equal(2, vivid.Count);
+        Assert.True(vivid[0].Color.A > normal[0].Color.A);
+        Assert.True(vivid[1].Blur > 0);
+
+        // Out-of-range values fall back to Normal rather than throwing or hiding the ring.
+        Assert.Equal(normal[0].Spread, ThemeService.BuildGlowRing(glow, 99)[0].Spread);
+    }
+
+    [Fact]
+    public void ApplyGlowTier_RebuildsRingLive_Persists_AndLeavesPulseRingAlone()
+    {
+        var service = CreateService();
+        service.ApplyTheme("matrix");
+
+        try
+        {
+            service.ApplyGlowTier(ThemeService.GlowTierOff);
+
+            var resources = Avalonia.Application.Current!.Resources;
+            Assert.Equal(0, Assert.IsType<Avalonia.Media.BoxShadows>(resources["PbGlowRing"]).Count);
+            // The reader bookmark pulse is feedback, not a hover affordance - it ignores the tier.
+            Assert.Equal(1, Assert.IsType<Avalonia.Media.BoxShadows>(resources["PbGlowPulseRing"]).Count);
+            Assert.Equal(ThemeService.GlowTierOff, service.GetGlowTier());
+
+            service.ApplyGlowTier(ThemeService.GlowTierVivid);
+            Assert.Equal(2, Assert.IsType<Avalonia.Media.BoxShadows>(resources["PbGlowRing"]).Count);
+            Assert.Equal(ThemeService.GlowTierVivid, service.GetGlowTier());
+        }
+        finally
+        {
+            // The tier is process-static; put it back so sibling tests see today's ring.
+            service.ApplyGlowTier(ThemeService.GlowTierNormal);
+        }
+    }
+
     [Fact]
     public void SetTrueBlackDark_On_OverwritesFiveSurfaceTokens_UnderDarkTheme()
     {

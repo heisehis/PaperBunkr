@@ -30,16 +30,16 @@ public sealed class DetailIssueContextMenuBuilder
     {
         IssueCardSample issue => ContextMenuEntry.Compact(new ContextMenuEntry?[]
         {
-            ContextMenuEntry.Item("Edit Properties", _vm.EditIssuePropertiesCommand, issue),
-            ContextMenuEntry.Item("Open in Reader", _vm.OpenIssueInReaderCommand, issue),
-            ContextMenuEntry.Item("Show in Explorer", _vm.RevealIssueCommand, issue, isEnabled: issue.HasFile),
+            ContextMenuEntry.Item("Edit Properties", _vm.EditIssuePropertiesCommand, issue, Symbol.Info),
+            ContextMenuEntry.Item("Open in Reader", _vm.OpenIssueInReaderCommand, issue, Symbol.Open),
+            ContextMenuEntry.Item("Show in Explorer", _vm.RevealIssueCommand, issue, Symbol.FolderOpen, isEnabled: issue.HasFile),
             ContextMenuEntry.Separator,
-            ContextMenuEntry.Item("Mark as Read", _vm.MarkIssueReadCommand, issue),
-            ContextMenuEntry.Item("Mark as Unread", _vm.MarkIssueUnreadCommand, issue),
-            ContextMenuEntry.Item("Quick Rate…", _vm.QuickRateCommand, issue),
+            ContextMenuEntry.Item("Mark as Read", _vm.MarkIssueReadCommand, issue, Symbol.CheckmarkCircle),
+            ContextMenuEntry.Item("Mark as Unread", _vm.MarkIssueUnreadCommand, issue, Symbol.Circle),
+            ContextMenuEntry.Item("Quick Rate…", _vm.QuickRateCommand, issue, Symbol.Star),
             ContextMenuEntry.Separator,
-            ContextMenuEntry.Item("Set Cover…", _vm.ChangeIssueCoverCommand, issue),
-            ContextMenuEntry.Item("Reset Cover", _vm.ResetIssueCoverCommand, issue),
+            ContextMenuEntry.Item("Set Cover…", _vm.ChangeIssueCoverCommand, issue, Symbol.Image),
+            ContextMenuEntry.Item("Reset Cover", _vm.ResetIssueCoverCommand, issue, Symbol.ArrowUndo),
             ContextMenuEntry.Separator,
             ContextMenuEntry.SubMenu(
                 "Plugins",

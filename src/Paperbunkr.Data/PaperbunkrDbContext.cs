@@ -1463,6 +1463,18 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.ShowToolTips).HasDefaultValue(false);
             builder.Property(a => a.NumericRatingThumbnails).HasDefaultValue(true);
             builder.Property(a => a.ExportedListsContainFilenames).HasDefaultValue(false);
+
+            // Cosmetics pitch (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md) - the
+            // defaults keep the pre-pitch look for glow (2 = Normal) and turn the new overlays on.
+            builder.Property(a => a.BindingSpine).HasDefaultValue(true);
+            builder.Property(a => a.ProgressRing).HasDefaultValue(true);
+            builder.Property(a => a.GlowTier).HasDefaultValue(2);
+            builder.Property(a => a.ReadingListMosaic).HasDefaultValue(true);
+            builder.Property(a => a.SplashAmbientMotion).HasDefaultValue(true);
+            builder.Property(a => a.ShowSelectionCheckbox).HasDefaultValue(false);
+            builder.Property(a => a.HeroBackdrop).HasDefaultValue(true);
+            builder.Property(a => a.SeriesAccentColor).HasDefaultValue(false);
+            builder.Property(a => a.DensityPreset).HasDefaultValue(1);
         });
 
         modelBuilder.Entity<VirtualTagDefinition>(builder =>

@@ -17,7 +17,7 @@ namespace Paperbunkr.App.Models;
 /// multiselect-slice3-design.md) - same "was a plain init-only POCO, converted for live-notifying
 /// IsSelected" treatment <see cref="IssueListRow"/> got in Slice 1.
 /// </summary>
-public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard, IVariableWidthTile, ICoverKeyProvider
+public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard, IVariableWidthTile, ICoverKeyProvider, ITileProgressSource, IPlaceholderCoverSource
 {
     /// <summary>Panorama's variable-width virtualizing panel packs rows against this - the same
     /// value the card's DataTemplate binds its own <c>Width</c> to.</summary>
@@ -96,6 +96,12 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
 
     public int UnreadCount { get; init; }
     public bool HasUnread => UnreadCount > 0;
+
+    // --- ITileProgressSource (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #1/#2). ---
+    public string? CoverTitle => Name;
+    public double ReadFraction => IssueCount <= 0 ? 0.0 : Math.Clamp((IssueCount - UnreadCount) / (double)IssueCount, 0.0, 1.0);
+    public bool IsFinished => IssueCount > 0 && UnreadCount <= 0;
+    public bool IsRightToLeft => ReadingDirectionLabel == "RightToLeft";
     public bool Missing { get; init; }
     public required IBrush CoverBrush { get; init; }
 

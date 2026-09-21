@@ -193,7 +193,7 @@
         <Style Selector="Button.continueReading">
             <Setter Property="Width" Value="32" />
             <Setter Property="Height" Value="32" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
             <Setter Property="Background" Value="#B814161B" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Foreground" Value="White" />
@@ -225,8 +225,36 @@
         <Style Selector="Border.cover:pointerover CheckBox.tileSelect">
             <Setter Property="Opacity" Value="1" />
         </Style>
+        <!-- The one unread-dot look for Library issue tiles/rows (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md
+             #20) - was a "●" count pill on Panorama/List and a stroked ellipse on Poster. The thin dark stroke keeps it readable
+             over busy cover art. Same accent dot StatusBadge's Unread variant draws in the Detail lists. -->
+        <Style Selector="Ellipse.unreadDot">
+            <Setter Property="Width" Value="9" />
+            <Setter Property="Height" Value="9" />
+            <Setter Property="Fill" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="Stroke" Value="Black" />
+            <Setter Property="StrokeThickness" Value="1.5" />
+        </Style>
+        <!-- The letter the view is currently scrolled to (set from LibraryScreen.axaml.cs's scroll handler). -->
+        <Style Selector="Button.alphaLetter.current">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="Button.alphaLetter.empty">
+            <Setter Property="Opacity" Value="0.3" />
+            <Setter Property="Cursor" Value="Arrow" />
+        </Style>
         <Style Selector="CheckBox.tileSelect.forceVisible">
             <Setter Property="Opacity" Value="1" />
+        </Style>
+        <!-- "Selection checkbox on tiles" off (Preferences > Appearance; docs/superpowers/specs/2026-09-21-cosmetics-pitch-
+             design.md follow-up): grid-cover checkboxes disappear unless their tile is actually selected, so hovering a
+             cover no longer shows a box beside the read-progress ring, yet a selected tile is still marked. Multi-select is
+             Ctrl/Shift+click either way. RootGrid gets the class from code-behind (LibraryScreen.axaml.cs). Declared after
+             the rules above on purpose: Avalonia resolves equal-priority setters by declaration order. List/Details row
+             checkboxes are not inside Border.cover and are unaffected. -->
+        <Style Selector="Grid.selectionCheckboxOff Border.cover CheckBox.tileSelect:not(:checked)">
+            <Setter Property="IsVisible" Value="False" />
         </Style>
 
         <!-- NumericRatingThumbnails hover-reveal badge (docs/superpowers/specs/2026-09-13-
@@ -312,6 +340,13 @@
     </UserControl.DataTemplates>
 
     <UserControl.Resources>
+        <!-- Accent-tinted scrollbar thumb on hover/drag, Library only (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #26).
+             FluentAvalonia's ScrollBar reads these exact keys (verified in FluentAvalonia.dll; a test guards the names against a theme
+             upgrade). Scoped here, so other screens keep the stock thumb. The resting thumb is left alone: slim and neutral until touched.
+             Colour is a DynamicResource, so it follows the skin. -->
+        <SolidColorBrush x:Key="ScrollBarThumbFillPointerOver" Color="{DynamicResource PbAccentColor}" Opacity="0.85" />
+        <SolidColorBrush x:Key="ScrollBarThumbFillPressed" Color="{DynamicResource PbAccentColor}" />
+
         <DataTemplate x:Key="PanoramaGridItemTemplate" x:DataType="models:IssueListRow">
             <Button Classes="card" Margin="0" Width="{Binding PanoramaCellWidth}"
                     KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
@@ -331,6 +366,8 @@
                                  (or a ratio learned a hair off) fills the card instead of leaving empty
                                  letterbox bands. -->
                             <Image x:Name="PanoramaIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                            <!-- Typographic placeholder (#18): hidden until AsyncCoverImage reports an empty decode for the Image above. -->
+                            <views:PlaceholderCoverText />
                             <!-- DogEarThumbnails hover peek (docs/superpowers/specs/2026-09-13-
                                  preferences-cosmetic-toggles-design.md) - CE's real 2nd-page peek,
                                  clipped to a triangular fold in the bottom-right corner (revised
@@ -347,14 +384,15 @@
                                 </Image.Clip>
                             </Image>
                             <Border Classes="libScrim" />
+                            <!-- Binding spine + read-progress ring (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #1/#2):
+                                 one custom-rendered control, no bindings; hover is pushed in from OnCoverPointerEntered/Exited. -->
+                            <views:TileCosmeticsOverlay />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                                <Border Classes="countPill" IsVisible="{Binding !IsRead}"
-                                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
-                                    <TextBlock Text="●" FontFamily="Consolas,monospace" />
-                                </Border>
+                                <Ellipse Classes="unreadDot" IsVisible="{Binding !IsRead}"
+                                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7" />
                             </Border>
                             <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
-                            <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="999" Padding="6,2"
+                            <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="6,2"
                                     HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7"
                                     ToolTip.Tip="{Binding RemoteSourceName, StringFormat='On {0}'}">
                                 <StackPanel Orientation="Horizontal" Spacing="3">
@@ -367,7 +405,7 @@
                                      skin tokens (docs/superpowers/specs/2026-09-14-library-visual-
                                      redesign-design.md §6): non-skin-reactive before, now reacts to
                                      the active skin like every other Pb*Brush-driven element. -->
-                                <Border IsVisible="{Binding HasPublisher}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="999" Padding="5,2"
+                                <Border IsVisible="{Binding HasPublisher}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="5,2"
                                         HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
                                     <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
                                                         MarkSize="12" Foreground="{DynamicResource PbBadgeTextBrush}" />
@@ -412,7 +450,7 @@
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0"
                     KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
-                <Border Classes="libRow" Margin="4" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="10">
+                <Border Classes="libRow" Margin="4" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="{DynamicResource PbListRowPadding}">
                     <Grid ColumnDefinitions="44,*,Auto">
                         <Panel Grid.Column="0">
                             <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
@@ -435,7 +473,7 @@
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
-                            <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="999" Padding="6,2"
+                            <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="6,2"
                                     HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7"
                                     ToolTip.Tip="{Binding RemoteSourceName, StringFormat='On {0}'}">
                                 <StackPanel Orientation="Horizontal" Spacing="3">
@@ -456,9 +494,7 @@
                                 </Panel>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                                <Border Classes="countPill" IsVisible="{Binding !IsRead}">
-                                    <TextBlock Text="●" FontFamily="Consolas,monospace" />
-                                </Border>
+                                <Ellipse Classes="unreadDot" IsVisible="{Binding !IsRead}" />
                             </Border>
                         </StackPanel>
                     </Grid>
@@ -470,7 +506,7 @@
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0"
                     KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
-                <Border Classes="libRow plain" Margin="4" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="0,3">
+                <Border Classes="libRow plain" Margin="4" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="{DynamicResource PbDetailsRowPadding}">
                 <Grid ColumnDefinitions="52,*">
                     <Panel Grid.Column="0">
                         <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
@@ -614,6 +650,8 @@
                         <Grid>
                             <!-- UniformToFill - see the issue Panorama template's note. -->
                             <Image x:Name="SeriesPanoramaCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                            <!-- Typographic placeholder (#18): hidden until AsyncCoverImage reports an empty decode for the Image above. -->
+                            <views:PlaceholderCoverText />
                             <!-- DogEarThumbnails hover peek (docs/superpowers/specs/2026-09-13-
                                  preferences-cosmetic-toggles-design.md) - sourced from
                                  RepresentativeRow (the same issue CoverKey above is keyed to);
@@ -627,6 +665,7 @@
                                 </Image.Clip>
                             </Image>
                             <Border Classes="libScrim" />
+                            <views:TileCosmeticsOverlay />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border Classes="countPill" IsVisible="{Binding HasUnread}"
                                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
@@ -634,7 +673,7 @@
                                 </Border>
                             </Border>
                             <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
-                            <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="999" Padding="6,2"
+                            <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="6,2"
                                     HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7"
                                     ToolTip.Tip="{Binding RemoteSourceName, StringFormat='On {0}'}">
                                 <StackPanel Orientation="Horizontal" Spacing="3">
@@ -643,7 +682,7 @@
                                 </StackPanel>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                                <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="5,2"
+                                <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="{StaticResource PbRadiusChip}" Padding="5,2"
                                         HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
                                     <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
                                                         MarkSize="12" Foreground="White" />
@@ -692,7 +731,7 @@
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0"
                     KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
-                <Border Classes="libRow" Margin="4" BorderThickness="1" CornerRadius="6" Padding="10">
+                <Border Classes="libRow" Margin="4" BorderThickness="1" CornerRadius="6" Padding="{DynamicResource PbListRowPadding}">
                     <Grid ColumnDefinitions="44,*,Auto">
                         <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
                              navigation-transition-system-design.md) - "series-cover:{SeriesId}". -->
@@ -717,8 +756,10 @@
                             <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <!-- Series status chip (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #10) - hidden for Unknown. -->
+                            <controls:SeriesStatusChip Status="{Binding SeriesStatusLabel}" />
                             <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
-                            <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="999" Padding="6,2"
+                            <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="6,2"
                                     HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7"
                                     ToolTip.Tip="{Binding RemoteSourceName, StringFormat='On {0}'}">
                                 <StackPanel Orientation="Horizontal" Spacing="3">
@@ -753,7 +794,7 @@
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0"
                     KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
-                <Border Classes="libRow plain" Margin="4" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="0,3">
+                <Border Classes="libRow plain" Margin="4" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="{DynamicResource PbDetailsRowPadding}">
                 <Grid ColumnDefinitions="52,*,110,70,70,140">
                     <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
                          transition-system-design.md) - "series-cover:{SeriesId}". -->
@@ -909,6 +950,8 @@
                             PointerEntered="OnCoverPointerEntered" PointerExited="OnCoverPointerExited">
                         <Grid>
                             <Image x:Name="PosterIssueCoverImage" views:AsyncCoverImage.GridMode="True" views:AsyncCoverImage.DecodeWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                            <!-- Typographic placeholder (#18): hidden until AsyncCoverImage reports an empty decode for the Image above. -->
+                            <views:PlaceholderCoverText />
                             <!-- Optional overlay parts are LazyParts (docs/superpowers/specs/2026-09-19-library-scroll-
                                  smoothness-design.md §4): Avalonia builds every control in a template even inside an
                                  IsVisible="False" parent, and the scroll harness priced these parts at ~85 % of a card's
@@ -951,6 +994,7 @@
                                 </controls:LazyPart.ContentTemplate>
                             </controls:LazyPart>
                             <Border Classes="libScrim" />
+                            <views:TileCosmeticsOverlay />
                             <controls:LazyPart>
                                 <controls:LazyPart.IsActive>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
@@ -976,8 +1020,7 @@
                                 </controls:LazyPart.IsActive>
                                 <controls:LazyPart.ContentTemplate>
                                     <DataTemplate x:DataType="models:IssueListRow">
-                                        <Ellipse Width="9" Height="9" Fill="{DynamicResource PbAccentTextBrush}" Stroke="Black" StrokeThickness="1.5"
-                                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7" />
+                                        <Ellipse Classes="unreadDot" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7" />
                                     </DataTemplate>
                                 </controls:LazyPart.ContentTemplate>
                             </controls:LazyPart>
@@ -1052,6 +1095,8 @@
                             PointerEntered="OnCoverPointerEntered" PointerExited="OnCoverPointerExited">
                         <Grid>
                             <Image x:Name="PosterSeriesCoverImage" views:AsyncCoverImage.GridMode="True" views:AsyncCoverImage.DecodeWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                            <!-- Typographic placeholder (#18): hidden until AsyncCoverImage reports an empty decode for the Image above. -->
+                            <views:PlaceholderCoverText />
                             <!-- DogEarThumbnails hover peek (docs/superpowers/specs/2026-09-13-
                                  preferences-cosmetic-toggles-design.md) - see the issue templates'
                                  own copy of this element for the full rationale. Optional overlay parts are
@@ -1077,6 +1122,7 @@
                                 </controls:LazyPart.ContentTemplate>
                             </controls:LazyPart>
                             <Border Classes="libScrim" />
+                            <views:TileCosmeticsOverlay />
                             <controls:LazyPart>
                                 <controls:LazyPart.IsActive>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
@@ -1551,13 +1597,15 @@
         <Border Grid.Row="1" IsVisible="{Binding ShowAlphabetIndex}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
                 Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
                 BorderThickness="1" CornerRadius="10" Padding="2,6">
-            <ItemsControl ItemsSource="{Binding AlphabetIndexLetters}">
+            <ItemsControl x:Name="AlphabetRail" ItemsSource="{Binding AlphabetIndex}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><StackPanel Orientation="Vertical" /></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                        <Button Content="{Binding}" Click="OnAlphabetIndexLetterClick" Tag="{Binding}"
+                    <DataTemplate x:DataType="models:AlphabetIndexEntry">
+                        <!-- Letters with nothing in the current view dim (Classes.empty) and do nothing on click. -->
+                        <Button Classes="alphaLetter" Classes.empty="{Binding !HasItems}"
+                                Content="{Binding Letter}" Click="OnAlphabetIndexLetterClick" Tag="{Binding Letter}"
                                 Background="Transparent" BorderThickness="0" Padding="4,1" FontSize="9.5"
                                 Foreground="{DynamicResource PbTextFaintBrush}" Cursor="Hand"
                                 HorizontalContentAlignment="Center" HorizontalAlignment="Stretch" />

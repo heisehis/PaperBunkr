@@ -9,4 +9,7 @@ public enum StatusBadgeVariant
     Read,
     InProgress,
     New,
+
+    /// <summary>Not started - the accent unread dot (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #20).</summary>
+    Unread,
 }

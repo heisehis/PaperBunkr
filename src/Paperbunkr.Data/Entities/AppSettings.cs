@@ -758,4 +758,60 @@ public class AppSettings
     /// reading-list format is untouched.
     /// </summary>
     public bool ExportedListsContainFilenames { get; set; }
+
+    /// <summary>
+    /// Subtle binding-spine texture on the left edge of Poster/Panorama covers (docs/superpowers/specs/
+    /// 2026-09-21-cosmetics-pitch-design.md #1). A deliberate Paperbunkr addition - ComicRack has no
+    /// equivalent. Default true. Additive column, so an older build sharing this database ignores it.
+    /// </summary>
+    public bool BindingSpine { get; set; } = true;
+
+    /// <summary>
+    /// Read-progress ring on Poster/Panorama covers (hover/focus, plus at rest once a series or issue
+    /// is finished) - cosmetics-pitch design #2. Deliberate addition, no CE equivalent. Default true.
+    /// </summary>
+    public bool ProgressRing { get; set; } = true;
+
+    /// <summary>
+    /// Accent-glow intensity for the shared <c>PbGlowRing</c> hover/focus ring - cosmetics-pitch
+    /// design #3. 0 = Off, 1 = Subtle, 2 = Normal (today's look, the default), 3 = Vivid.
+    /// </summary>
+    public int GlowTier { get; set; } = 2;
+
+    /// <summary>
+    /// 2x2 cover mosaic as a reading list's header cover when it has no arc cover of its own - cosmetics-
+    /// pitch design #7. Deliberate addition, no CE equivalent. Default true.
+    /// </summary>
+    public bool ReadingListMosaic { get; set; } = true;
+
+    /// <summary>
+    /// Slow drifting dots on the splash screen - cosmetics-pitch design #6. Deliberate addition. Default
+    /// true; skipped under Reduced Motion regardless.
+    /// </summary>
+    public bool SplashAmbientMotion { get; set; } = true;
+
+    /// <summary>
+    /// Whether a Library grid tile shows its multi-select checkbox on hover. Default false: multi-select is
+    /// Ctrl/Shift+click, and the hover checkbox crowded the read-progress ring. Tiles that are actually selected
+    /// still show their checked box either way, so selection is never invisible. Deliberate Paperbunkr addition.
+    /// </summary>
+    public bool ShowSelectionCheckbox { get; set; }
+
+    /// <summary>
+    /// Blurred cover backdrop behind the Detail hero (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #8). The backdrop
+    /// itself predates this setting; this is the on/off switch. Default true. Deliberate Paperbunkr addition.
+    /// </summary>
+    public bool HeroBackdrop { get; set; } = true;
+
+    /// <summary>
+    /// Tints a Detail screen's accent (chips, progress, primary button) from the series cover's dominant colour, falling back to the
+    /// skin accent (cosmetics-pitch-2 design #9). Default false - it changes the app's look per screen, so it is opt-in.
+    /// </summary>
+    public bool SeriesAccentColor { get; set; }
+
+    /// <summary>
+    /// UI density preset (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #17): 0 Compact, 1 Comfortable (the default - the app's
+    /// original spacing), 2 Spacious. Scales the Library list/details row padding and the sidebar item padding.
+    /// </summary>
+    public int DensityPreset { get; set; } = 1;
 }

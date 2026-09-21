@@ -187,6 +187,9 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
 
     public ObservableCollection<ActivityJob> RecentJobs { get; } = new();
 
+    /// <summary>The running jobs with a section heading before each group of related work - see <see cref="ActivityJobGrouping"/>. What the drawer's Active tab binds; <see cref="RunningJobs"/> stays the flat source of truth (counts, peek).</summary>
+    public ObservableCollection<object> RunningJobsGrouped { get; } = new();
+
     public ObservableCollection<ActivityAlertViewModel> Alerts { get; } = new();
 
     /// <summary>The peek shows only the newest few finished jobs.</summary>
@@ -210,6 +213,12 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
     private void RebuildProjections()
     {
         SyncList(RunningJobs, _activity.ActiveJobs.Where(j => !j.IsUpkeep));
+        RunningJobsGrouped.Clear();
+        foreach (var item in ActivityJobGrouping.Group(RunningJobs.ToList()))
+        {
+            RunningJobsGrouped.Add(item);
+        }
+
         SyncList(RecentJobs, _activity.RecentJobs);
         SyncList(RecentJobsForPeek, _activity.RecentJobs.Take(3).ToList());
 

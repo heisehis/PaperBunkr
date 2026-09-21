@@ -7,5 +7,6 @@ public partial class DetailScreen : UserControl
     public DetailScreen()
     {
         InitializeComponent();
+        DetailCosmetics.Attach(this);
     }
 }

@@ -90,10 +90,12 @@
                                 <DataTemplate x:DataType="models:DetailMetaBadge">
                                     <Border Classes="heroBadge">
                                         <Panel>
+                                            <!-- Series status: the shared colour + icon chip (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #10). -->
+                                            <controls:SeriesStatusChip Status="{Binding StatusKind}" IsVisible="{Binding IsStatus}" VerticalAlignment="Center" />
                                             <controls:BrandMark Family="{Binding MarkOrDefault}" Value="{Binding MarkValue}" ShowText="True"
                                                                 MarkSize="15" VerticalAlignment="Center" IsVisible="{Binding IsMark}"
                                                                 Foreground="{DynamicResource PbTextBrush}" />
-                                            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" IsVisible="{Binding !IsMark}">
+                                            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" IsVisible="{Binding IsPlain}">
                                                 <fi:SymbolIcon Symbol="{Binding IconGlyph}" FontSize="{StaticResource PbIconSizeXs}"
                                                                Foreground="#CFECE7DB" VerticalAlignment="Center" />
                                                 <TextBlock Text="{Binding Text}" FontSize="12" Foreground="#F0ECE7DB" VerticalAlignment="Center" />
@@ -167,7 +169,7 @@
                 <!-- Tracker progress badge (manga, when linked) -->
                 <Border Grid.Column="2" VerticalAlignment="Bottom" Margin="0,0,0,2"
                         IsVisible="{Binding TrackerProgress, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
-                        CornerRadius="999" BorderThickness="2" BorderBrush="{DynamicResource PbAccentBrush}"
+                        CornerRadius="{StaticResource PbRadiusChip}" BorderThickness="2" BorderBrush="{DynamicResource PbAccentBrush}"
                         Background="#99000000" Padding="14,10" MinWidth="58">
                     <StackPanel HorizontalAlignment="Center">
                         <TextBlock Text="{Binding TrackerProgress.Current}" FontSize="16" FontWeight="Bold"

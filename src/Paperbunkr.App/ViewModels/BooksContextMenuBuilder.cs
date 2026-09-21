@@ -51,7 +51,7 @@ public sealed class BooksContextMenuBuilder
         entries.Add(ContextMenuEntry.Separator);
         entries.Add(ContextMenuEntry.SubMenu(
             "Delete Book…",
-            new[] { ContextMenuEntry.Item("Yes, delete this book", _vm.DeleteBookCommand, card.BookId) },
+            new[] { ContextMenuEntry.Item("Yes, delete this book", _vm.DeleteBookCommand, card.BookId, Symbol.Delete, isDanger: true) },
             Symbol.Delete,
             isDanger: true));
 

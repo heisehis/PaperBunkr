@@ -81,6 +81,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
 
     private SeriesMetaFields _seriesFields = SeriesMetaFields.Empty;
     private bool _seriesComplete;
+    private string? _seriesStatusKind;
     private string _issueCountBadge = string.Empty;
     private string? _unreadBadge;
     private string? _issueSummaryLine;
@@ -107,6 +108,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     {
         _seriesFields = SeriesMetaFields.FromSeries(series);
         _seriesComplete = series.IsComplete;
+        _seriesStatusKind = series.Status.ToString();
         int unread = series.Issues.Count(i => i.LastPageRead is null or 0);
         _issueCountBadge = $"{series.Issues.Count} issue{(series.Issues.Count == 1 ? "" : "s")}";
         _unreadBadge = unread > 0 ? $"{unread} unread" : null;
@@ -126,7 +128,8 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
             f.Publisher, StatusLabel, _seriesComplete, f.Year,
             format:    issueFocused ? issue?.Format      : f.Format,
             ageRating: issueFocused ? issue?.AgeRating   : f.AgeRating,
-            languageIso: issueFocused ? issue?.LanguageISO : f.LanguageIso));
+            languageIso: issueFocused ? issue?.LanguageISO : f.LanguageIso,
+            statusKind: _seriesStatusKind));
             // issueCountLabel/unreadLabel deliberately not passed - Part 4 revision moved them to
             // IssueSummaryLine, a plain-text line rendered separately (see DetailHero.axaml).
         OnPropertyChanged(nameof(IDetailHeaderSource.MetaBadges));

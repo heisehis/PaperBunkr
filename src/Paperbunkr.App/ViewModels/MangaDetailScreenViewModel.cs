@@ -414,7 +414,8 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         // chapter, not off the cover one.
         var f = SeriesMetaFields.FromSeries(series);
         _metaBadges = new DetailMetaBadgeGroup(DetailMetaBadge.Build(f.Publisher, StatusLabel,
-            series.Status == SeriesStatus.Completed, f.Year, f.Format, f.AgeRating, f.LanguageIso));
+            series.Status == SeriesStatus.Completed, f.Year, f.Format, f.AgeRating, f.LanguageIso,
+            statusKind: series.Status.ToString()));
 
         // Plain-text line (Part 4 revision, user direction) - separate row under the badges, above
         // the action buttons, same wording the original MetaLine used.

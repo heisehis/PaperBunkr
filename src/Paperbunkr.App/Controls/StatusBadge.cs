@@ -39,6 +39,10 @@ public class StatusBadge : TemplatedControl
     public static readonly DirectProperty<StatusBadge, bool> IsNewProperty =
         AvaloniaProperty.RegisterDirect<StatusBadge, bool>(nameof(IsNew), o => o._isNew);
 
+    public static readonly DirectProperty<StatusBadge, bool> IsUnreadProperty =
+        AvaloniaProperty.RegisterDirect<StatusBadge, bool>(nameof(IsUnread), o => o._isUnread);
+
+    private bool _isUnread;
     private bool _isRead;
     private bool _isInProgress;
     private bool _isNew;
@@ -63,6 +67,7 @@ public class StatusBadge : TemplatedControl
     public bool IsRead => _isRead;
     public bool IsInProgress => _isInProgress;
     public bool IsNew => _isNew;
+    public bool IsUnread => _isUnread;
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -79,5 +84,6 @@ public class StatusBadge : TemplatedControl
         SetAndRaise(IsReadProperty, ref _isRead, Variant == StatusBadgeVariant.Read);
         SetAndRaise(IsInProgressProperty, ref _isInProgress, Variant == StatusBadgeVariant.InProgress);
         SetAndRaise(IsNewProperty, ref _isNew, Variant == StatusBadgeVariant.New);
+        SetAndRaise(IsUnreadProperty, ref _isUnread, Variant == StatusBadgeVariant.Unread);
     }
 }

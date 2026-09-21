@@ -30,17 +30,39 @@ public static class InsightsChartTheme
 
     public static ScottPlot.Color Muted => Resolve("PbTextMutedColor", "#8b8f9a");
 
-    public static ScottPlot.Color Accent => Resolve("PbAccentColor", "#5b8def");
+    public static ScottPlot.Color Accent => Visible(Resolve("PbAccentColor", "#5b8def"));
 
-    public static ScottPlot.Color Badge => Resolve("PbBadgeColor", "#d7ac4c");
+    public static ScottPlot.Color Badge => Visible(Resolve("PbBadgeColor", "#d7ac4c"));
 
-    public static ScottPlot.Color Success => Resolve("PbSuccessColor", "#5fa889");
+    public static ScottPlot.Color Success => Visible(Resolve("PbSuccessColor", "#5fa889"));
 
-    public static ScottPlot.Color Danger => Resolve("PbDangerColor", "#d96c6c");
+    public static ScottPlot.Color Danger => Visible(Resolve("PbDangerColor", "#d96c6c"));
 
-    public static ScottPlot.Color Blue => Resolve("PbChartBlueColor", "#5b8dbe");
+    public static ScottPlot.Color Blue => Visible(Resolve("PbChartBlueColor", "#5b8dbe"));
 
-    public static ScottPlot.Color Violet => Resolve("PbChartVioletColor", "#9b7ebd");
+    public static ScottPlot.Color Violet => Visible(Resolve("PbChartVioletColor", "#9b7ebd"));
+
+    /// <summary>WCAG 1.4.11's minimum contrast for graphical objects against their background (docs/superpowers/specs/2026-09-21-cosmetics-
+    /// pitch-2-design.md #16).</summary>
+    public const double MinGraphicContrast = 3.0;
+
+    /// <summary>The chart colour, lightened or darkened only if it falls below <see cref="MinGraphicContrast"/> against the skin's background -
+    /// so every categorical colour stays legible in both light and dark skins. A skin whose colours already pass is untouched.</summary>
+    public static ScottPlot.Color Visible(ScottPlot.Color color)
+    {
+        var bg = Application.Current?.TryGetResource("PbBgColor", null, out object? value) == true && value is Avalonia.Media.Color c
+            ? c
+            : Avalonia.Media.Color.FromRgb(0x14, 0x16, 0x1B);
+        return EnsureContrast(color, bg);
+    }
+
+    /// <summary>Pure form of <see cref="Visible"/>, exposed for tests: <paramref name="color"/> nudged until it reaches <see cref="MinGraphicContrast"/> against <paramref name="background"/>.</summary>
+    public static ScottPlot.Color EnsureContrast(ScottPlot.Color color, Avalonia.Media.Color background)
+    {
+        var fg = Avalonia.Media.Color.FromRgb(color.R, color.G, color.B);
+        var adjusted = ThemeService.AdjustForContrast(fg, background, MinGraphicContrast);
+        return adjusted == fg ? color : new ScottPlot.Color(adjusted.R, adjusted.G, adjusted.B, color.A);
+    }
 
     public static ScottPlot.Color Grid => Resolve("PbBorderColor", "#33353d");
 

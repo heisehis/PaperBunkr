@@ -1,3 +1,4 @@
+using FluentIcons.Common;
 using System.Collections.Generic;
 using Paperbunkr.App.ContextMenus;
 
@@ -17,7 +18,7 @@ public sealed class CollectionMemberContextMenuBuilder
     {
         CollectionMemberRowViewModel row => new[]
         {
-            ContextMenuEntry.Item("Remove from Collection", row.RemoveCommand),
+            ContextMenuEntry.Item("Remove from Collection", row.RemoveCommand, icon: Symbol.Dismiss),
         },
         _ => null,
     };

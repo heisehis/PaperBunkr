@@ -550,9 +550,25 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     [ObservableProperty]
     private string? _arcSourceLabel;
 
+    /// <summary>The arc source's display name ("ComicVine", ...) on its own, for the brand mark beside the "via" text (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #14).</summary>
+    [ObservableProperty]
+    private string? _arcSourceName;
+
     /// <summary>Downloaded lazily by <see cref="LoadArcCoverAsync"/> once <see cref="LoadReadingList"/> knows the list has a cover URL - null until then, or if there's no cover/the download failed.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowCoverMosaic))]
     private Bitmap? _arcCoverImage;
+
+    /// <summary>Cover keys for the header mosaic (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #7) - see <see cref="ReadingListCoverMosaic"/>. Empty when the toggle is off or the list has no covers.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowCoverMosaic))]
+    [NotifyPropertyChangedFor(nameof(CoverMosaicColumns))]
+    private IReadOnlyList<string> _coverMosaicKeys = Array.Empty<string>();
+
+    /// <summary>The mosaic only stands in when the list has no arc cover of its own - an explicit or downloaded arc cover always wins.</summary>
+    public bool ShowCoverMosaic => ArcCoverImage is null && CoverMosaicKeys.Count > 0;
+
+    public int CoverMosaicColumns => CoverMosaicKeys.Count > 1 ? 2 : 1;
 
     /// <summary>Staggered row entrance (docs/superpowers/specs/2026-09-12-entrance-animation-v2-
     /// design.md) - set true only when <see cref="LoadReadingList"/> is called with
@@ -604,6 +620,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         FollowArc = IsArcLinked && list.FollowArc;
         _loadingFollowArc = false;
         ArcSourceLabel = IsArcLinked ? $"via {ReadingListSourceRegistry.GetDisplayName(list.Source!)}" : null;
+        ArcSourceName = IsArcLinked ? ReadingListSourceRegistry.GetDisplayName(list.Source!) : null;
 
         ArcCoverImage = ArcCoverImageCache.Get(list.Id);
         if (ArcCoverImage is null && !string.IsNullOrEmpty(list.CoverImageUrl))
@@ -612,6 +629,14 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         var items = list.Items.OrderBy(i => i.SortOrder).ToList();
+
+        CoverMosaicKeys = context.GetOrCreateAppSettings().ReadingListMosaic
+            ? ReadingListCoverMosaic.PickCoverKeys(items
+                .Select(i => i.Issue)
+                .Where(issue => issue is { FilePath: not null })
+                .Select(issue => CoverFingerprint.Stem(issue!.Id, issue.FilePath, issue.FileSize))
+                .ToList())
+            : Array.Empty<string>();
 
         Groups.Clear();
         foreach (var group in items.GroupBy(i => i.GroupLabel ?? string.Empty))

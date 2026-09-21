@@ -7,5 +7,6 @@ public partial class MangaDetailScreen : UserControl
     public MangaDetailScreen()
     {
         InitializeComponent();
+        DetailCosmetics.Attach(this);
     }
 }

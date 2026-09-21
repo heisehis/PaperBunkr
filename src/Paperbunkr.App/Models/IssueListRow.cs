@@ -29,7 +29,7 @@ namespace Paperbunkr.App.Models;
 /// wipe the visible selection.
 /// </para>
 /// </summary>
-public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IVariableWidthTile, ICoverKeyProvider
+public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IVariableWidthTile, ICoverKeyProvider, ITileProgressSource, IPlaceholderCoverSource
 {
     /// <summary>Panorama's variable-width virtualizing panel packs rows against this - the same
     /// value the tile's DataTemplate binds its own <c>Width</c> to.</summary>
@@ -185,6 +185,14 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
     // per-issue row too, and so a per-series card's RepresentativeRow carries them. ---
     public int SeriesIssueCount { get; init; }
     public int SeriesUnreadCount { get; init; }
+
+    // --- ITileProgressSource (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #1/#2).
+    // ReadPercentage is 0-100 (Issue.ReadPercentage(), same scale Home divides by 100). ---
+    /// <summary>Text for the generated placeholder cover (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #18).</summary>
+    public string? CoverTitle => SeriesName;
+    public double ReadFraction => IsRead ? 1.0 : Math.Clamp(ReadPercentage / 100.0, 0.0, 1.0);
+    public bool IsFinished => IsRead;
+    public bool IsRightToLeft => ReadingDirectionLabel == "RightToLeft";
 
     // --- docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md. ---
     public bool? IsFinalIssue { get; init; }

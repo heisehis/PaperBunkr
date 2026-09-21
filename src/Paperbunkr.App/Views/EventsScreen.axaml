@@ -118,6 +118,8 @@
         <!-- ===== Empty state (nothing at all) ===== -->
         <StackPanel Grid.Row="0" Grid.RowSpan="3" Margin="28,40" Spacing="14" HorizontalAlignment="Center" VerticalAlignment="Center"
                     IsVisible="{Binding HasNoEvents}">
+            <!-- Empty-state illustration (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #13). -->
+            <controls:EmptyIllustration Kind="Timeline" HorizontalAlignment="Center" IsVisible="{Binding HasNoContinuities}" />
             <TextBlock Text="Create an event or a continuity to get started" FontSize="13"
                        Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center"
                        IsVisible="{Binding HasNoContinuities}" />
@@ -333,8 +335,13 @@
                 <!-- Event · Primary (members + panels) -->
                 <StackPanel IsVisible="{Binding IsEventSelected}">
                     <StackPanel IsVisible="{Binding IsPrimaryView}">
-                        <TextBlock Text="No members yet — Add issues to get started." FontSize="12.5" Margin="28,8,28,0"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoMembers}" />
+                        <StackPanel Spacing="10" Margin="28,16,28,8" HorizontalAlignment="Center" IsVisible="{Binding HasNoMembers}">
+                            <controls:EmptyIllustration Kind="Stack" HorizontalAlignment="Center" />
+                            <TextBlock Text="No members yet — Add issues to get started." FontSize="12.5" HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <Button Classes="headerAction secondary" Content="＋ Add issues" HorizontalAlignment="Center"
+                                    Command="{Binding ToggleAddIssuesCommand}" />
+                        </StackPanel>
 
                         <Border Margin="16,4,16,6" Background="{DynamicResource PbSurface2Brush}" CornerRadius="5" Padding="8,6"
                                 IsVisible="{Binding AnyEventMembersSelected}">
@@ -558,8 +565,13 @@
                 <!-- Continuity · Primary (series grid) -->
                 <StackPanel IsVisible="{Binding IsContinuitySelected}">
                     <StackPanel IsVisible="{Binding IsPrimaryView}" Margin="24,8,24,0">
-                        <TextBlock Text="No series yet — Add series to get started." FontSize="12.5"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoContinuityMembers}" />
+                        <StackPanel Spacing="10" Margin="0,16,0,8" HorizontalAlignment="Center" IsVisible="{Binding HasNoContinuityMembers}">
+                            <controls:EmptyIllustration Kind="Timeline" HorizontalAlignment="Center" />
+                            <TextBlock Text="No series yet — Add series to get started." FontSize="12.5" HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <Button Classes="headerAction secondary" Content="＋ Add series" HorizontalAlignment="Center"
+                                    Command="{Binding ToggleAddContinuitySeriesCommand}" />
+                        </StackPanel>
 
                         <Border Margin="0,0,0,8" Background="{DynamicResource PbSurface2Brush}" CornerRadius="5" Padding="8,6"
                                 IsVisible="{Binding AnyContinuityMembersSelected}">

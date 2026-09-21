@@ -32,13 +32,38 @@ namespace Paperbunkr.App.Views;
 public partial class SplashWindow : Window
 {
     private readonly bool _reducedMotion;
+    private readonly bool _ambientMotionEnabled;
     private readonly ScaleTransform _logoScale = new(1, 1);
     private readonly CancellationTokenSource _motionCts = new();
     private bool _closing;
 
     public SplashWindow()
-        : this(TryGetReducedMotion())
+        : this(TryGetReducedMotion(), TryGetAmbientMotionEnabled())
     {
+    }
+
+    /// <summary>
+    /// The persisted "Splash ambient motion" preference (docs/superpowers/specs/2026-09-21-cosmetics-pitch-
+    /// design.md #6), read with the same schema-behind-the-model guard as <see cref="TryGetReducedMotion"/> - a
+    /// failed read defaults to the shipped default (on). Bootstrap-crash safe mode always turns it off: that
+    /// launch exists to get a window up with the least possible risk.
+    /// </summary>
+    private static bool TryGetAmbientMotionEnabled()
+    {
+        if (SafeModeState.Active)
+        {
+            return false;
+        }
+
+        try
+        {
+            return new ThemeService().GetSplashAmbientMotion();
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsService.LogMilestone($"Splash: ambient-motion lookup failed ({ex.GetType().Name}) - assuming on.");
+            return true;
+        }
     }
 
     /// <summary>
@@ -63,13 +88,20 @@ public partial class SplashWindow : Window
     }
 
     public SplashWindow(bool reducedMotion)
+        : this(reducedMotion, ambientMotionEnabled: true)
+    {
+    }
+
+    public SplashWindow(bool reducedMotion, bool ambientMotionEnabled)
     {
         _reducedMotion = reducedMotion;
+        _ambientMotionEnabled = ambientMotionEnabled;
         InitializeComponent();
 
         LogoImage.RenderTransform = _logoScale;
 
         var (accent, accentText) = TryGetThemeAccentColors();
+        AmbientDots.DotColor = accent;
         if (GlowBorder.Background is RadialGradientBrush glowBrush && glowBrush.GradientStops.Count == 2)
         {
             glowBrush.GradientStops[0].Color = Color.FromArgb(0x8C, accent.R, accent.G, accent.B);
@@ -125,6 +157,12 @@ public partial class SplashWindow : Window
 
         DiagnosticsService.LogMilestone("Splash: Opened - starting emblem motion.");
         _ = RunMotionAsync(_motionCts.Token);
+
+        // After first paint (Opened), never before - and not at all when the preference is off.
+        if (_ambientMotionEnabled)
+        {
+            AmbientDots.Start();
+        }
     }
 
     private async Task RunMotionAsync(CancellationToken ct)
@@ -239,6 +277,7 @@ public partial class SplashWindow : Window
     {
         _closing = true;
         _motionCts.Cancel();
+        AmbientDots.Stop();
 
         var fade = new Animation
         {

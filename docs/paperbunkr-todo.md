@@ -26,7 +26,7 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
-> **Manual session note (2026-09-20, Remote/server library sharing built on branch `feat/remote-library-sharing`, NOT merged, NOT committed):** design + plan in
+> **Manual session note (2026-09-20, Remote/server library sharing built on branch `feat/remote-library-sharing`; **MERGED to master 2026-09-21 (dcaef82, v0.6.9.0) and confirmed on-screen by the user; branch/worktree removed**):** design + plan in
 > `docs/superpowers/specs/2026-09-19-remote-library-sharing-{design,plan}.md`; all phases P0-P5 implemented. **P0** `PAPERBUNKR_DATA_DIR` (`AppDataPaths`, ~17 paths routed through it).
 > **P1** new `Paperbunkr.Sharing` (Kestrel HTTPS server, PBKDF2 password + session tokens + failed-auth lockout, DPAPI-protected self-signed ECDSA cert, paginated JSON
 > catalog with ETag, pages/covers with Range and `?w=`) and `DbShareCatalogSource` + `ArchivePageSource` (Data/App). **P2** `RemoteSource` + `RemoteSourceId`/`RemoteIssueId`/
@@ -44,6 +44,18 @@ this file itself already did once (see the note below).
 > template upgrade, durable scrape-on-import with retry and a Needs-attention list, Prowlarr/qBittorrent moved to Connections, the ComicVine scraper and review dialogs in core, the organizer with
 > profiles and undo, two off-by-default scheduled tasks, and the plugin refused at load with a "now built in" message). Design + plan: `docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-{design,plan}.md`.
 > **Not verified** against a real ComicVine key, Prowlarr, qBittorrent, or on screen. Merge note: the main tree has an uncommitted spinner change touching the same Preferences views.
+
+> **Manual session note (2026-09-20/21, Metron as a second comic database + weekly pull list - all merged to `master`, unreleased):**
+> Specs: `docs/superpowers/specs/2026-09-20-metron-as-comicvine-alternative-design.md` and `...-weekly-pull-list-design.md` (each has a status section and follow-ups).
+> Built, tested and merged: `ComicProvider` (ComicVine/Metron) per tracked series, want and catalog row (ids renamed `ExternalVolumeId`/`ExternalIssueId`; migration `AddComicProvider`);
+> `MetronClient` behind `IComicProvider` (search, catalog, issue details, releases by store date) with its own 1-minute rate limit and a daily-quota tracker read from Metron's response headers
+> (`MetronQuota`; background work leaves a 10% reserve); a source selector on the series Missing Issues panel, Wanted "Track a series" and the scraper (default under Organize & Scrape, per-run
+> switch in the match dialog, provider-specific match memory); the **weekly pull list** (Wanted -> Releases tab: Metron store-date releases cached, promoted to Upcoming wants for followed series,
+> hide/restore, publisher filter, Activity Center notice; ComicVine as the fallback source; migrations `AddWeeklyPullList`, `AddPullListReleaseHidden`, `AddReleaseListProvider`);
+> arc requests follow a series' own source; `Issue.MetadataSource` (`AddIssueMetadataSource`) so a re-scrape starts on the right source; covers for Metron series; Wanted's Downloads list scrolls.
+> **Verified:** Data (1417), Daemon (197) and the touched App test classes pass, including a migration test that carries Metron's cache over and caught an EF default-value bug; the user then
+> tried it against real Metron, Prowlarr and qBittorrent and confirmed the screens. **Known limits:** a Metron-tracked series is not matched by a ComicVine weekly list; ComicVine's list only
+> looks up 40 publishers per refresh; Cloudflare-protected indexers need the user's own FlareSolverr. **Not done:** books (metadata source or acquisition) - see the Books section.
 
 > **Manual session note (2026-09-19/20, comic acquisition — Mylar-style want-list, slices 1-4 built on branch `feat/comic-acquisition-daemon`, NOT merged or released):**
 > Design: `docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md`; plan and per-step status:

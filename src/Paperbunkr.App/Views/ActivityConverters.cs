@@ -72,7 +72,8 @@ public sealed class ActivityKindIconConverter : IValueConverter
     {
         ActivityJobKind.LibraryScan or ActivityJobKind.BookScan => Symbol.FolderOpen,
         ActivityJobKind.GenerateCovers => Symbol.Image,
-        ActivityJobKind.SyncMetadata or ActivityJobKind.TrackerFetch or ActivityJobKind.Scrape => Symbol.ArrowClockwise,
+        ActivityJobKind.SyncMetadata or ActivityJobKind.TrackerFetch or ActivityJobKind.Scrape or ActivityJobKind.RemoteSync => Symbol.ArrowClockwise,
+        ActivityJobKind.Sharing => Symbol.Share,
         ActivityJobKind.Import => Symbol.ArrowDownload,
         ActivityJobKind.Update => Symbol.CloudArrowUp,
         ActivityJobKind.Migration => Symbol.Layer,

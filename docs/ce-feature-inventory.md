@@ -74,7 +74,7 @@ further triage.
 
 | Item | Decision | Notes |
 |---|---|---|
-| Remote/server library sharing | 🔨 **Build it** | Needs its own brainstorm → design spec before implementation — this is a big enough feature to warrant one, not something to improvise inline. Not yet scheduled. |
+| Remote/server library sharing | ✅ **Built 2026-09-20 (branch `feat/remote-library-sharing`, unmerged, not yet verified on-screen)** — see §F | Design + plan: `docs/superpowers/specs/2026-09-19-remote-library-sharing-{design,plan}.md`. Deliberately NOT CE wire-compatible (CE's WCF/NetTcp channel ships a public private key and skips certificate validation). Not yet scheduled. |
 | `Help > News` RSS reader | ⏸️ **Deferred** | Not simply porting or dropping — repurposing the mechanism (feed subscription + display UI) for something Paperbunkr-relevant is on the table. Needs a real brainstorm on what that would actually be before any code gets written. |
 | GitHub self-updater | ⛔ **Dropped for now** | Revisit once Paperbunkr has an actual release/distribution pipeline of its own. |
 | CE's tabbed/multi-window reading model | Confirmed non-goal | Single-screen rail-nav stands, matching onboarding.md §12's Mihon/Komikku direction. |
@@ -189,13 +189,13 @@ win" — there's no remaining work here.
 **Re-verified 2026-08-23**: CE's own `NetworkManager`/`ComicLibraryClient`/`ComicLibraryServer`/
 `RemoteComicBookProvider` classes are already ported into `Paperbunkr.Engine` (same "ported early,
 dormant until a design wires it up" pattern as other Engine-only code in this project) — but **zero
-references exist anywhere in `Paperbunkr.App`**. The App-layer feature is still entirely unbuilt;
-only the Engine has a head start.
+references existed in `Paperbunkr.App`** at that date. **Update 2026-09-20:** the App-layer feature is now built (branch `feat/remote-library-sharing`, unmerged) on a
+new Paperbunkr-native protocol; those Engine ports stay dormant and unused - CE's WCF channel is not reproduced (see the design spec §3 for why).
 
 | Feature | Status |
 |---|---|
-| Client: connect to another ComicRack instance's shared library over the network | 🔨 decided: build — needs its own design spec first; `Paperbunkr.Engine.NetworkManager`/`ComicLibraryClient` exist as dormant ported CE code, not wired to anything |
-| Server: host this library for other instances to browse (password-protected, per-list sharing) | 🔨 decided: build — needs its own design spec first; `Paperbunkr.Engine.ComicLibraryServer` exists dormant, same as above |
+| Client: connect to another instance's shared library over the network | ✅ built 2026-09-20 (Paperbunkr-native, not CE-compatible) - pinned-fingerprint trust, read-only mirror in the Library, streamed reading; deviations from CE tabulated in the design spec §1 |
+| Server: host this library for other instances to browse (password-protected, per-list sharing) | ✅ built 2026-09-20 - off by default, password required, All / selected Reading Lists, Collections, issue-target Smart Lists; LAN/VPN only |
 | Background job/task monitor for server activity | ✅ shipped (local jobs) — the **Activity Center** (docs/superpowers/specs/2026-09-03-activity-center-design.md): persistent bottom status bar + live indicator → peek popover (tier 1) → drawer with Active/History tabs (tier 2), DB-backed run history (`ActivityRun`), one `IActivityService`/`ActivityService` every background op reports through (scan, covers, sync, import, update, tracker), replaces the old single progress toast. **Remote/server jobs** and the **Scheduled** tab are the deliberate deferrals — they ride on the still-dormant server feature above. |
 | Portable device sync (e-readers) | 🚫 already excluded (§15) |
 
@@ -245,9 +245,8 @@ stale sequencing plan):
 - **Library (§C):** Virtual Tags as a sort/group axis. (Drag-and-drop import + Recent/MRU + Quick
   Open + Saved "Workspaces" all shipped 2026-09-03; filesystem folder browsing mode dropped by
   decision.)
-- **Remote/server (§F):** the entire App-layer feature — Engine-layer CE classes are ported and
-  dormant, but nothing in `Paperbunkr.App` calls them yet. Needs its own design spec before any
-  App-side code.
+- **Remote/server (§F):** built 2026-09-20 on `feat/remote-library-sharing` (unmerged). Read-only browse + stream-read over a Paperbunkr-native
+  HTTPS protocol; the dormant CE ports in `Paperbunkr.Engine` remain unused on purpose. Open: on-screen verification, Library source filter, Books.
 - **App chrome (§H):** Backup manager's scheduled on-startup/on-shutdown triggers (manual
   backup/restore already works).
 - **News-reader repurposing:** still genuinely open-ended, needs its own brainstorm.

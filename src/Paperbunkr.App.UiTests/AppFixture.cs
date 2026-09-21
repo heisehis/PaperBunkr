@@ -20,6 +20,7 @@ namespace Paperbunkr.App.UiTests;
 public sealed class AppFixture : IDisposable
 {
     private readonly string _dbPath;
+    private readonly string _dataDir;
     private Application? _app;
     private UIA3Automation? _automation;
 
@@ -34,6 +35,9 @@ public sealed class AppFixture : IDisposable
     public AppFixture()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_uitest_{Guid.NewGuid():N}.db");
+        // Isolates everything else the exe writes (covers, backups, plugins, logs, ...) too - the DB path
+        // override above only redirects the database file. See AppDataPaths.
+        _dataDir = Path.Combine(Path.GetTempPath(), $"paperbunkr_uitest_data_{Guid.NewGuid():N}");
         Launch();
     }
 
@@ -44,6 +48,7 @@ public sealed class AppFixture : IDisposable
         // Out-of-process redirect for PaperbunkrDbContext.DatabasePathOverride's field initializer
         // - the in-process static setter tests use elsewhere can't reach a separately-launched exe.
         psi.EnvironmentVariables["PAPERBUNKR_DB_PATH"] = _dbPath;
+        psi.EnvironmentVariables["PAPERBUNKR_DATA_DIR"] = _dataDir;
 
         _app = Application.Launch(psi);
         _automation = new UIA3Automation();
@@ -160,6 +165,17 @@ public sealed class AppFixture : IDisposable
             if (File.Exists(_dbPath))
             {
                 File.Delete(_dbPath);
+            }
+        }
+        catch (IOException)
+        {
+        }
+
+        try
+        {
+            if (Directory.Exists(_dataDir))
+            {
+                Directory.Delete(_dataDir, recursive: true);
             }
         }
         catch (IOException)

@@ -33,6 +33,7 @@ public class PreferenceIndexTests
             [PreferencesSection.Plugins] = "PluginsSection.axaml",
             [PreferencesSection.Advanced] = "AdvancedSection.axaml",
             [PreferencesSection.About] = "AboutSection.axaml",
+            [PreferencesSection.Sharing] = "SharingSection.axaml",
         };
 
     private static string PreferencesViewDir([CallerFilePath] string thisFile = "")

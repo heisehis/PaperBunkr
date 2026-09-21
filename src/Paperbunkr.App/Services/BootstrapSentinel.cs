@@ -42,10 +42,7 @@ public static class BootstrapSentinel
     /// <summary>Test-only redirect for <see cref="StatePath"/>. Never set outside a test's own ctor/teardown.</summary>
     internal static string? StatePathOverride { get; set; }
 
-    public static string StatePath => StatePathOverride ?? Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "Paperbunkr",
-        "bootstrap.state");
+    public static string StatePath => StatePathOverride ?? Paperbunkr.Data.AppDataPaths.Combine("bootstrap.state");
 
     /// <summary>
     /// Read the sentinel and decide how this launch should proceed. Never throws - any missing

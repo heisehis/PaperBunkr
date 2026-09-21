@@ -31,6 +31,7 @@ public static class ScheduledTaskCatalog
     public const string FollowArcs = "follow-arcs";
     public const string ComicVineScrape = "comicvine-scrape";
     public const string LibraryOrganize = "library-organize";
+    public const string RemotePageCacheSweep = "remote-page-cache-sweep";
 
     public static IReadOnlyList<ScheduledTaskDescriptor> All { get; } = Build();
 
@@ -274,6 +275,21 @@ public static class ScheduledTaskCatalog
                 handle.Succeed(summary);
                 return summary;
             }),
+
+        // Pages read from remote libraries are cached on disk under a size quota; this is the other bound (docs/superpowers/specs/
+        // 2026-09-19-remote-library-sharing-design.md section 7.3): pages nobody has opened for 30 days go, so the cache can't quietly
+        // hold everything you ever read once.
+        new ScheduledTaskDescriptor(
+            RemotePageCacheSweep, "Clean up remote library pages",
+            "Removes pages of remote libraries you haven't opened in 30 days from this computer. They are downloaded again if you open them.",
+            ActivityJobKind.Other, Priority: 13, SchedulerResourceClass.DiskCpu,
+            TimeSpan.FromDays(7), DefaultEnabled: true, ScheduleMode.Interval,
+            static (handle, ct) => Task.Run(() =>
+            {
+                handle.Report("Checking cached pages…");
+                int removed = Paperbunkr.App.Services.Sharing.PeerPageCache.Shared.SweepExpired();
+                return removed == 0 ? "Nothing to clean up" : $"Removed {removed} page{Plural(removed)}";
+            }, ct)),
     };
 
     public static ScheduledTaskDescriptor? Find(string id)

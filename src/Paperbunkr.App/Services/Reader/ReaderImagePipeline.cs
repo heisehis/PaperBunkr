@@ -173,7 +173,7 @@ public sealed class ReaderImagePipeline : IReaderPageSource
 
     public event Action<int>? BackgroundDecodeCompleted;
 
-    private ReaderImagePipeline(ImageProvider provider, IComicAccessorSession? session, ReaderMemoryBudget budget)
+    private ReaderImagePipeline(ImageProvider provider, IComicAccessorSession? session, ReaderMemoryBudget budget, long? containerStampOverride = null)
     {
         _provider = provider;
         _archiveProvider = provider as ArchiveComicProvider;
@@ -189,6 +189,15 @@ public sealed class ReaderImagePipeline : IReaderPageSource
         catch
         {
             _containerStamp = 0;
+        }
+
+        // A provider with no file behind it (a remote library's issue) has no mtime/size to tell "same book" from "different
+        // book at the same address", so the caller supplies a stamp that is unique to this open. Without it the process-wide
+        // SharedRawCache would serve one open's page bytes to the next - stale content after the host replaces the book, or
+        // after a Relink re-keys the id to a different one.
+        if (containerStampOverride is long stamp)
+        {
+            _containerStamp = stamp;
         }
 
         // Archive pages are addressed by their in-container name; PDF pages (no name) by index-as-
@@ -305,6 +314,20 @@ public sealed class ReaderImagePipeline : IReaderPageSource
 
         return new ReaderImagePipeline(provider, session, ReaderMemoryBudget.Resolve(userMemoryLimitMb));
     }
+
+    /// <summary>
+    /// Opens the pipeline over a provider that isn't a file on disk - a remote library's issue
+    /// (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md section 7.3). The session, if
+    /// any, supplies concurrent page reads exactly as an archive or PDF session does; everything else
+    /// (decode workers, caches, prefetch, strip bands) is the same code path a local file takes.
+    /// </summary>
+    internal static ReaderImagePipeline OpenProvider(ImageProvider provider, IComicAccessorSession? session, int? userMemoryLimitMb = null) =>
+        new(provider, session, ReaderMemoryBudget.Resolve(userMemoryLimitMb), containerStampOverride: NextOpenStamp());
+
+    private static long s_openStamp = DateTime.UtcNow.Ticks;
+
+    /// <summary>Unique for the life of the process (a counter seeded from the clock, so it also can't collide with a real file's mtime^size stamp in practice).</summary>
+    private static long NextOpenStamp() => Interlocked.Increment(ref s_openStamp);
 
     public int PageCount => _provider.Count;
 

@@ -158,7 +158,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
             : new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true, IsEnabled: _continueIssueId is not null, Icon: Symbol.Play),
         new DetailHeroAction(EditButtonLabel, EditCommand, IsEnabled: CanEdit, Icon: Symbol.Edit),
         new DetailHeroAction("Change Cover", Command: null, Icon: Symbol.Image, FlyoutContext: BuildCoverPickerViewModel()),
-    };
+    }.Where(a => !IsRemoteSeries || a.Label != "Change Cover").ToArray();   // a remote series' cover isn't ours to change
 
     /// <summary>
     /// New instance per <see cref="Actions"/> read (docs/superpowers/specs/2026-09-17-reader-save-
@@ -167,7 +167,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     /// cover-bearing issue yet to target.
     /// </summary>
     private CoverPickerViewModel? BuildCoverPickerViewModel() =>
-        _coverIssueId is int issueId ? new CoverPickerViewModel(issueId, _seriesId, ReloadCurrentSeries, FindMangaBakaCoverContext()) : null;
+        !IsRemoteSeries && _coverIssueId is int issueId ? new CoverPickerViewModel(issueId, _seriesId, ReloadCurrentSeries, FindMangaBakaCoverContext()) : null;
 
     /// <summary>
     /// Surfaces the picker's "From External Provider" tab automatically whenever this series is
@@ -278,7 +278,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     /// <summary>Loads the series with the given id from the database and refreshes every bound field.</summary>
     public void LoadSeries(int seriesId)
     {
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals)
             .Include(s => s.Issues).ThenInclude(i => i.Tags)
             .FirstOrDefault(s => s.Id == seriesId);
@@ -286,6 +286,9 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         {
             return;
         }
+
+        // A series mirrored from another library is read-only here (remote-library-sharing design 7.2): hero Edit / Change Cover go away.
+        IsRemoteSeries = series.RemoteSourceId is not null;
 
         _isLoadingSeries = true;
         _seriesId = seriesId;
@@ -419,7 +422,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var enabledVirtualTags = context.VirtualTagDefinitions.Where(t => t.IsEnabled).OrderBy(t => t.SortOrder).ToList();
 
         if (Tabs.SelectedIssueIds.Count == 1)
@@ -499,7 +502,10 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         OnPropertyChanged(nameof(Actions));
     }
 
-    public bool CanEdit => Tabs.SelectedIssueIds.Count > 0;
+    /// <summary>True when this series is a mirror of another library's; editing and cover changes are unavailable.</summary>
+    public bool IsRemoteSeries { get; private set; }
+
+    public bool CanEdit => !IsRemoteSeries && Tabs.SelectedIssueIds.Count > 0;
 
     public string EditButtonLabel => Tabs.SelectedIssueIds.Count switch
     {

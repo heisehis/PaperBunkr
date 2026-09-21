@@ -175,6 +175,17 @@ public class Issue
 
     public string? FilePath { get; set; }
 
+    /// <summary>Non-null for a row mirrored from another instance (see <see cref="RemoteSource"/>). Such rows always have a null <see cref="FilePath"/>.</summary>
+    public int? RemoteSourceId { get; set; }
+
+    public RemoteSource? RemoteSource { get; set; }
+
+    /// <summary>The host's own <see cref="Id"/> for this issue - the mirror key together with <see cref="RemoteSourceId"/>.</summary>
+    public int? RemoteIssueId { get; set; }
+
+    /// <summary>Opaque content identity the host reported for this book (a hash of its file size, modified time and page count). A change means the host replaced the book, so pages cached for it are stale. Null for local rows and for hosts that predate it.</summary>
+    public string? RemoteContentStamp { get; set; }
+
     public DateTime? AddedTime { get; set; }
 
     public DateTime? ReleasedTime { get; set; }

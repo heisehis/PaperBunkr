@@ -17,10 +17,16 @@ public static class StatsResolver
 {
     public static StatsSnapshot Build(PaperbunkrDbContext context, InsightsRange range, DateTime nowUtc)
     {
-        var issues = context.Issues.AsNoTrackingWithIdentityResolution()
+        // Reading activity counts every book you actually read, including ones from remote libraries (docs/superpowers/specs/
+        // 2026-09-19-remote-library-sharing-design.md section 8): their reading events are recorded like any other, and joining
+        // them to issues needs those rows. IgnoreQueryFilters is what lifts the default local-only filter here.
+        // Library-SIZE figures (breakdown, composition, growth, publication years, creators, content ratings) still use only
+        // the local issues - a remote series is not something you own.
+        var readIssues = context.Issues.IgnoreQueryFilters().AsNoTrackingWithIdentityResolution()
             .Include(i => i.Series)
             .Include(i => i.Tags)
             .ToList();
+        var issues = readIssues.Where(i => i.RemoteSourceId == null).ToList();
         var books = context.Books.AsNoTracking()
             .Include(b => b.BookSeries)
             .ToList();
@@ -36,15 +42,15 @@ public static class StatsResolver
         return new StatsSnapshot(
             Range: range,
             GeneratedUtc: nowUtc,
-            Lifetime: ComputeLifetime(issues, books, events),
+            Lifetime: ComputeLifetime(readIssues, books, events),
             ReadingDayStreak: ComputeStreak(events, nowUtc, finishOnly: false),
             FinishStreak: ComputeStreak(events, nowUtc, finishOnly: true),
             FinishedInRange: ComputeFinishedInRange(inRange),
             Pace: ComputePace(inRange, range, nowUtc),
             Breakdown: ComputeBreakdown(issues, books),
             Composition: ComputeComposition(issues, books),
-            Ratings: ComputeRatings(issues),
-            Highlights: ComputeHighlights(issues, events, realSpans, nowUtc),
+            Ratings: ComputeRatings(readIssues),
+            Highlights: ComputeHighlights(readIssues, events, realSpans, nowUtc),
             ReadingActivity: ComputeReadingActivity(realSpans, inRange, range, nowUtc),
             Heatmap: ComputeHeatmap(events),
             LibraryGrowth: ComputeLibraryGrowth(issues, books),

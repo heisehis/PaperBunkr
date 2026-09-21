@@ -15,7 +15,8 @@ internal sealed record LibraryViewInputs(
     bool FilterTrackedOnly,
     bool FilterUnreadOnly,
     bool FilterMissingIssues,
-    IssueListSortGroupSpec Spec);
+    IssueListSortGroupSpec Spec,
+    int? SourceFilter = null);   // null = every library, 0 = this computer only, n = the remote library with source id n
 
 /// <summary>
 /// Plain-list output of <see cref="LibraryViewPipeline.Compute"/>. No <c>ObservableCollection</c> inside,
@@ -99,6 +100,11 @@ internal static class LibraryViewPipeline
             }
 
             if (inputs.FilterTrackedOnly && series.TrackingLinks.Count == 0)
+            {
+                continue;
+            }
+
+            if (inputs.SourceFilter is int source && (source == 0 ? series.RemoteSourceId is not null : series.RemoteSourceId != source))
             {
                 continue;
             }

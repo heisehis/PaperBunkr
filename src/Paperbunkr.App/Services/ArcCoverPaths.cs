@@ -15,8 +15,7 @@ public static class ArcCoverPaths
 
     private static string BuildDefaultDirectory()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "Paperbunkr", "arc-covers");
+        return Paperbunkr.Data.AppDataPaths.Combine("arc-covers");
     }
 
     public static string GetCachePath(int readingListId)

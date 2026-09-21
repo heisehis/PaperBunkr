@@ -86,6 +86,19 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ExternalMediaRelation> ExternalMediaRelations => Set<ExternalMediaRelation>();
 
+    public DbSet<RemoteSource> RemoteSources => Set<RemoteSource>();
+
+    /// <summary>
+    /// When false (the default) every <see cref="Issue"/>/<see cref="Series"/> query sees only local rows -
+    /// the global query filter below hides rows mirrored from another instance (docs/superpowers/specs/
+    /// 2026-09-19-remote-library-sharing-design.md §8). That inverts the exclusion problem: instead of
+    /// patching ~260 query sites so local-only jobs (scan, write-back, health, cover repair, duplicate
+    /// and merge helpers, tracker/arc verification, stats totals, ...) skip remote rows, every job
+    /// skips them <em>unless</em> its context opts in. A view that shows remote content, and the mirror
+    /// sync itself, create their context with <c>PaperbunkrDb.CreateContext(includeRemote: true)</c>.
+    /// </summary>
+    public bool IncludeRemote { get; set; }
+
     public DbSet<ExternalMetadataSnapshot> ExternalMetadataSnapshots => Set<ExternalMetadataSnapshot>();
 
     public DbSet<ExternalRating> ExternalRatings => Set<ExternalRating>();
@@ -1060,6 +1073,39 @@ public class PaperbunkrDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Remote library sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md §7.1).
+        // Brand-new table plus nullable columns on Issues/Series - no backfill; every existing row is local.
+        modelBuilder.Entity<RemoteSource>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.InstanceId).IsRequired();
+            builder.Property(e => e.DisplayName).IsRequired();
+            builder.Property(e => e.Host).IsRequired();
+            builder.Property(e => e.CertFingerprint).IsRequired();
+            builder.HasIndex(e => e.InstanceId).IsUnique();
+        });
+
+        modelBuilder.Entity<Issue>(builder =>
+        {
+            builder.HasQueryFilter(i => IncludeRemote || i.RemoteSourceId == null);
+            builder.HasOne(i => i.RemoteSource)
+                .WithMany()
+                .HasForeignKey(i => i.RemoteSourceId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // SQLite treats NULLs as distinct in a unique index, so local rows (both null) never collide.
+            builder.HasIndex(i => new { i.RemoteSourceId, i.RemoteIssueId }).IsUnique();
+        });
+
+        modelBuilder.Entity<Series>(builder =>
+        {
+            builder.HasQueryFilter(s => IncludeRemote || s.RemoteSourceId == null);
+            builder.HasOne(s => s.RemoteSource)
+                .WithMany()
+                .HasForeignKey(s => s.RemoteSourceId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasIndex(s => new { s.RemoteSourceId, s.RemoteSeriesId }).IsUnique();
+        });
+
         modelBuilder.Entity<ExternalMetadataSnapshot>(builder =>
         {
             builder.HasKey(e => e.Id);
@@ -1549,8 +1595,7 @@ public class PaperbunkrDbContext : DbContext
             return DatabasePathOverride;
         }
 
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string dir = Path.Combine(appData, "Paperbunkr");
+        string dir = AppDataPaths.Root;
         Directory.CreateDirectory(dir);
         return Path.Combine(dir, "paperbunkr.db");
     }

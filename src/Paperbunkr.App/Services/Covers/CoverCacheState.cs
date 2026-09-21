@@ -46,8 +46,7 @@ public sealed record CoverCacheState
 
     private static string BuildDefaultPath()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "Paperbunkr", "cover-cache-state.json");
+        return Paperbunkr.Data.AppDataPaths.Combine("cover-cache-state.json");
     }
 
     public static CoverCacheState Read()

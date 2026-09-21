@@ -24,7 +24,6 @@ public static class ThemePaths
 
     private static string BuildDefaultDirectory(string leaf)
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "Paperbunkr", leaf);
+        return Paperbunkr.Data.AppDataPaths.Combine(leaf);
     }
 }

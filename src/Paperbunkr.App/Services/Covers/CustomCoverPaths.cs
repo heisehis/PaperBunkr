@@ -23,8 +23,7 @@ public static class CustomCoverPaths
 
     private static string BuildDefaultDirectory()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "Paperbunkr", "custom-covers");
+        return Paperbunkr.Data.AppDataPaths.Combine("custom-covers");
     }
 
     public static string GetCachePath(int issueId)

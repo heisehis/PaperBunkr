@@ -27,7 +27,7 @@ public static class RemoteCoverCache
     private static readonly SemaphoreSlim DownloadSlots = new(MaxConcurrentDownloads);
 
     /// <summary>Mutable so tests can redirect to a temp folder.</summary>
-    public static string CacheDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Paperbunkr", "remote-covers");
+    public static string CacheDirectory { get; set; } = Paperbunkr.Data.AppDataPaths.Combine("remote-covers");
 
     /// <summary>Mutable so tests can serve canned bytes without a network.</summary>
     public static HttpClient Http { get; set; } = new() { Timeout = TimeSpan.FromSeconds(15) };

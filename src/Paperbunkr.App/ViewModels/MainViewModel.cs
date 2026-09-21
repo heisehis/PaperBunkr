@@ -337,6 +337,64 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             enqueueMetadataWriteBack: EnqueueMetadataWriteBack);
         Preferences.AttachScheduler(Scheduler);
 
+        // Remote library sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md). Built here like the other
+        // manually-composed services; App.axaml.cs starts serving (if the user turned it on) and syncs the saved remote libraries.
+        // Everything they report goes through Activity, and Preferences → Sharing is their only UI.
+        ShareHost = new Services.Sharing.ShareHostService(
+            new Paperbunkr.Sharing.ShareSettingsStore(Paperbunkr.Data.AppDataPaths.Combine("sharing", "settings.json")),
+            PaperbunkrDb.CreateContext,
+            Activity,
+            Paperbunkr.Data.AppDataPaths.Combine("sharing"));
+        // Reading a remote library's books: pages come through a bounded fetcher and a bounded disk cache, covers are
+        // downloaded into their own directory after each sync, and removing a library purges both caches.
+        PeerPages = Services.Sharing.PeerPageCache.Shared;
+        RemoteLibraries = new Services.Sharing.RemoteLibraryService(
+            PaperbunkrDb.CreateContext,
+            Activity,
+            onSourceRemoved: (sourceId, issueIds) =>
+            {
+                PeerPages.PurgeSource(sourceId);
+                Services.Sharing.PeerCoverPaths.Delete(issueIds);
+                foreach (int id in issueIds)
+                {
+                    CoverImageCache.Invalidate(id);
+                }
+            },
+            afterSync: sourceId => new Services.Sharing.PeerCoverFetcher(PaperbunkrDb.CreateContext, RemoteLibraries!.GetClient).FetchMissingAsync(sourceId),
+            onContentInvalidated: (sourceId, remoteIssueIds) =>
+            {
+                // The book behind these ids changed, so its cached cover is stale too: drop it (the sync that follows re-downloads
+                // whatever is missing). Cover files and the in-memory cache are keyed by the local mirror row's id.
+                using (var context = PaperbunkrDb.CreateContext(includeRemote: true))
+                {
+                    var stale = context.Issues
+                        .Where(i => i.RemoteSourceId == sourceId && (remoteIssueIds == null || (i.RemoteIssueId != null && remoteIssueIds.Contains(i.RemoteIssueId.Value))))
+                        .Select(i => i.Id).ToList();
+                    Services.Sharing.PeerCoverPaths.Delete(stale);
+                    foreach (int localId in stale)
+                    {
+                        CoverImageCache.Invalidate(localId);
+                    }
+                }
+
+                if (remoteIssueIds is null)
+                {
+                    PeerPages.PurgeSource(sourceId);   // relinked: ids were re-keyed, so cached pages belong to other books now
+                    return;
+                }
+
+                foreach (int remoteId in remoteIssueIds)
+                {
+                    PeerPages.PurgeIssue(sourceId, remoteId);
+                }
+            });
+        Reader.RemoteReader = new Services.Sharing.RemoteReaderSource(new Services.Sharing.RemotePageFetcher(RemoteLibraries.GetClient, PeerPages));
+        Preferences.Sharing = new SharingSettingsViewModel(ShareHost, RemoteLibraries, PaperbunkrDb.CreateContext);
+
+        // A synced/changed/removed remote library changes what the Library shows; reload it if it is on screen. Posted:
+        // the event fires from a background sync.
+        RemoteLibraries.MirrorChanged += _ => Avalonia.Threading.Dispatcher.UIThread.Post(() => Library.LoadFromDatabase());
+
         // Real bug, found via manual testing: Reader.CanvasBackgroundBrush/PageMarginMultiplier
         // (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
         // §10) were only ever re-read inside ReaderScreenViewModel.Load - fine for a value read once
@@ -532,6 +590,15 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public Paperbunkr.Daemon.Services.GrabService Grab { get; }
 
     public Services.AcquisitionActivityBridge AcquisitionBridge { get; }
+
+    /// <summary>Serves part of this library to other installs while the app is open (off unless the user turned it on).</summary>
+    public Services.Sharing.ShareHostService ShareHost { get; }
+
+    /// <summary>The saved remote libraries and their local mirror.</summary>
+    public Services.Sharing.RemoteLibraryService RemoteLibraries { get; }
+
+    /// <summary>Bounded on-disk cache of pages read from remote libraries; purged per library on removal and swept by the scheduler.</summary>
+    public Services.Sharing.PeerPageCache PeerPages { get; }
 
     /// <summary>The Wanted screen (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 7).</summary>
     public WantedScreenViewModel Wanted { get; }
@@ -2732,6 +2799,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 else if (link.Payload == "LibraryHealth")
                 {
                     Preferences.GoLibraryHealthCommand.Execute(null);
+                }
+                else if (link.Payload == "Sharing")
+                {
+                    Preferences.GoSharingCommand.Execute(null);
                 }
                 else if (link.Payload == "Acquisition")
                 {

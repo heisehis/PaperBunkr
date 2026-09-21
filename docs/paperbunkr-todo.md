@@ -26,6 +26,20 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-20, Remote/server library sharing built on branch `feat/remote-library-sharing`, NOT merged, NOT committed):** design + plan in
+> `docs/superpowers/specs/2026-09-19-remote-library-sharing-{design,plan}.md`; all phases P0-P5 implemented. **P0** `PAPERBUNKR_DATA_DIR` (`AppDataPaths`, ~17 paths routed through it).
+> **P1** new `Paperbunkr.Sharing` (Kestrel HTTPS server, PBKDF2 password + session tokens + failed-auth lockout, DPAPI-protected self-signed ECDSA cert, paginated JSON
+> catalog with ETag, pages/covers with Range and `?w=`) and `DbShareCatalogSource` + `ArchivePageSource` (Data/App). **P2** `RemoteSource` + `RemoteSourceId`/`RemoteIssueId`/
+> `RemoteSeriesId` (migration `AddRemoteSources`, deliberate no-op `Down()`), pinned-cert `ShareClient`, `RemoteMirrorSync`, `RemoteRelinkReconciler`, and - the key safety
+> decision, a change from the spec's per-site plan - a **global EF query filter** on Issue/Series so every existing job excludes remote rows *by default*; only the Library load,
+> Detail load/selection, and the reader opt in (`includeRemote`), guarded by an allowlist test. **P3** `RemoteImageProvider`/`RemoteAccessorSession` feed the existing
+> `ReaderImagePipeline` (no new reader), bounded `PeerPageCache` (2 GB LRU + 30-day TTL, scheduled sweep task), `RemotePageFetcher` (max 3 in flight, shared in-flight fetches),
+> covers in their own dir. **P4** Preferences -> Sharing (host controls, saved libraries, inline trust/re-trust/relink/remove, mDNS "Find on this network" via
+> `Makaretu.Dns.Multicast.New`), all reporting through the Activity Center. **P5** Windows Public-network warning.
+> **Verified:** unit/integration tests against real in-process hosts (Sharing, Data, App suites - see the final run below), incl. a changed certificate never being accepted silently,
+> Relink preserving reading progress, and reading real pages through the real reader pipeline. **NOT verified:** nothing has been run on-screen with two real instances
+> (use `PAPERBUNKR_DATA_DIR` for the second); Windows Firewall prompt wording; mDNS across real machines. **Known gaps / follow-ups:** Books (EPUB/PDF) not shared; QuickRate on remote books refused; Detail tabs (tracker/external metadata) not gated. **2026-09-21 follow-ups done + tested:** Library source filter + "Remote" tile pill, Insights/Stats count remote reads (size figures stay local), read-only gating (Library command guards, reduced remote menus, Detail hero), content stamp so replaced books drop stale cached pages/covers - see design doc section 13.
+
 > **Manual session note (2026-09-20, Cluster Library Manager into core — branch `feat/clm-into-core`, NOT merged):** all five phases implemented (shared template engine + one-time
 > template upgrade, durable scrape-on-import with retry and a Needs-attention list, Prowlarr/qBittorrent moved to Connections, the ComicVine scraper and review dialogs in core, the organizer with
 > profiles and undo, two off-by-default scheduled tasks, and the plugin refused at load with a "now built in" message). Design + plan: `docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-{design,plan}.md`.

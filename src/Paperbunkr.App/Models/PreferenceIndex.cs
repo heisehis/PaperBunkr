@@ -126,6 +126,13 @@ public static class PreferenceIndex
             new[] { "auto grab", "automatic", "download automatically", "minimum score", "approve" },
             "acquisition.autograb"),
 
+        new(PreferencesSection.Sharing, "Share this library", "Share this library",
+            new[] { "share", "sharing", "server", "host", "network", "lan", "vpn", "password", "port", "certificate", "fingerprint", "remote", "serve", "read-only" },
+            "sharing.host"),
+        new(PreferencesSection.Sharing, "Remote libraries", "Remote libraries",
+            new[] { "remote", "library", "connect", "add", "server", "host", "address", "trust", "fingerprint", "relink", "offline", "sync", "another computer" },
+            "sharing.remote"),
+
         new(PreferencesSection.Advanced, "Rendering", "Rendering",
             new[] { "graphics backend", "gpu", "software renderer", "opengl", "angle", "hardware acceleration" },
             "advanced.rendering"),

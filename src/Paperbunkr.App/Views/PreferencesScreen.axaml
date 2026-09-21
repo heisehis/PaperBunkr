@@ -231,6 +231,14 @@
                                     <TextBlock Text="Acquisition" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsSharingSection}"
+                                    Command="{Binding GoSharingCommand}"
+                                    AutomationProperties.AutomationId="PreferencesSharingNavButton">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="Share" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Sharing" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsPluginsSection}"
                                     Command="{Binding GoPluginsCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
@@ -294,6 +302,10 @@
                 </Panel>
                 <Panel IsVisible="{Binding IsAcquisitionSection}">
                     <pref:AcquisitionSection DataContext="{Binding Acquisition}" />
+                </Panel>
+                <!-- Own view model, set after construction: the wrapper carries the visibility binding, the section the Sharing one. -->
+                <Panel IsVisible="{Binding IsSharingSection}">
+                    <pref:SharingSection DataContext="{Binding Sharing}" />
                 </Panel>
                 <pref:PluginsSection IsVisible="{Binding IsPluginsSection}" />
                 <pref:AdvancedSection IsVisible="{Binding IsAdvancedSection}" />

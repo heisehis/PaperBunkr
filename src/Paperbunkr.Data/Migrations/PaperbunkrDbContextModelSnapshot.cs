@@ -1856,6 +1856,15 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<DateTime?>("ReleasedTime")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("RemoteContentStamp")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("RemoteIssueId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("RemoteSourceId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Review")
                         .HasColumnType("TEXT");
 
@@ -1906,6 +1915,9 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("FilePath");
 
                     b.HasIndex("SeriesId");
+
+                    b.HasIndex("RemoteSourceId", "RemoteIssueId")
+                        .IsUnique();
 
                     b.ToTable("Issues");
                 });
@@ -2575,6 +2587,57 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("ReleaseCandidates");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.RemoteSource", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CertFingerprint")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Host")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("HostChanged")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("InstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsOffline")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastCatalogEtag")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastSyncedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Port")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ProtectedPassword")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InstanceId")
+                        .IsUnique();
+
+                    b.ToTable("RemoteSources");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.RemovedFilePath", b =>
                 {
                     b.Property<int>("Id")
@@ -2722,6 +2785,12 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("Unknown");
 
+                    b.Property<int?>("RemoteSeriesId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("RemoteSourceId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("SortName")
                         .HasColumnType("TEXT");
 
@@ -2743,6 +2812,9 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("CoverIssueId");
 
                     b.HasIndex("Name");
+
+                    b.HasIndex("RemoteSourceId", "RemoteSeriesId")
+                        .IsUnique();
 
                     b.ToTable("Series");
                 });
@@ -3718,11 +3790,18 @@ namespace Paperbunkr.Data.Migrations
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.Issue", b =>
                 {
+                    b.HasOne("Paperbunkr.Data.Entities.RemoteSource", "RemoteSource")
+                        .WithMany()
+                        .HasForeignKey("RemoteSourceId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("Paperbunkr.Data.Entities.Series", "Series")
                         .WithMany("Issues")
                         .HasForeignKey("SeriesId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("RemoteSource");
 
                     b.Navigation("Series");
                 });
@@ -3888,7 +3967,14 @@ namespace Paperbunkr.Data.Migrations
                         .HasForeignKey("CoverIssueId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Paperbunkr.Data.Entities.RemoteSource", "RemoteSource")
+                        .WithMany()
+                        .HasForeignKey("RemoteSourceId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.Navigation("CoverIssue");
+
+                    b.Navigation("RemoteSource");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.SeriesConflict", b =>

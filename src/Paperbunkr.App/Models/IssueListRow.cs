@@ -119,7 +119,14 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
     /// as manga-family.</summary>
     public bool IsMangaFamily => ContentTypeLabel is "Manga" or "Manhua" or "Manhwa";
 
-    public bool HasFile => !string.IsNullOrEmpty(FilePath);
+    /// <summary>True for a book mirrored from another Paperbunkr's shared library (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md section 7.2). It has no local file, but it is readable.</summary>
+    public bool IsRemote { get; init; }
+
+    /// <summary>The remote library's display name, when <see cref="IsRemote"/>.</summary>
+    public string? RemoteSourceName { get; init; }
+
+    /// <summary>"Readable content exists": a local file, or a remote book whose pages the host serves.</summary>
+    public bool HasFile => !string.IsNullOrEmpty(FilePath) || IsRemote;
 
     /// <summary>Cache-file stem for this issue's current file identity - what
     /// <c>CoverImageConverter</c> binds against (docs/superpowers/specs/2026-08-27-cover-thumbnail-
@@ -226,6 +233,8 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
         ReadPercentage = issue.ReadPercentage(),
         OpenCount = issue.OpenCount,
         IsMissing = issue.FileIsMissing,
+        IsRemote = issue.RemoteSourceId is not null,
+        RemoteSourceName = issue.RemoteSource?.DisplayName ?? series.RemoteSource?.DisplayName,
         HasCustomCover = CustomCoverPaths.Exists(issue.Id),
         CoverBrush = SeriesCardSample.CoverBrushFor(series.Name),
         Volume = issue.EffectiveVolume(),

@@ -117,6 +117,12 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     /// <summary>Drives "Show in Explorer"'s IsEnabled (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §1) - false only when every issue in the series is a fileless placeholder.</summary>
     public bool HasFile { get; init; }
 
+    /// <summary>True for a series mirrored from another Paperbunkr's shared library (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md section 7.2).</summary>
+    public bool IsRemote { get; init; }
+
+    /// <summary>The remote library's display name, when <see cref="IsRemote"/>.</summary>
+    public string? RemoteSourceName { get; init; }
+
     /// <summary>
     /// Panorama grid's per-series tile width (docs/superpowers/specs/
     /// 2026-08-09-library-toolbar-design.md Phase A) - computed from the real cover bitmap's
@@ -285,7 +291,11 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
                     Publisher = publisher,
                     PanoramaWidth = ComputePanoramaWidth(aspectRatio),
                 },
-            Sub = $"{series.ContentType} · {series.Issues.Count} issues",
+            Sub = series.RemoteSourceId is null
+                ? $"{series.ContentType} · {series.Issues.Count} issues"
+                : $"{series.ContentType} · {series.Issues.Count} issues · on {series.RemoteSource?.DisplayName ?? "remote library"}",
+            IsRemote = series.RemoteSourceId is not null,
+            RemoteSourceName = series.RemoteSource?.DisplayName,
             Publisher = publisher,
             ContentTypeLabel = series.ContentType.ToString(),
             SeriesStatusLabel = series.Status.ToString(),
@@ -294,7 +304,7 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
             IssueCount = series.Issues.Count,
             UnreadCount = unreadCount,
             Missing = series.Issues.Any(i => i.FileIsMissing),
-            HasFile = series.Issues.Any(i => !string.IsNullOrEmpty(i.FilePath)),
+            HasFile = series.RemoteSourceId is not null || series.Issues.Any(i => !string.IsNullOrEmpty(i.FilePath)),
             CoverBrush = CoverBrushFor(series.Name),
             CoverIssueId = coverIssue?.Id,
             CoverKey = coverIssue is null

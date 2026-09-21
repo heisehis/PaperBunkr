@@ -189,8 +189,13 @@
             <Grid RowDefinitions="Auto,*,Auto" Margin="0,14,0,10">
 
                 <StackPanel Grid.Row="0" Margin="10,0" Spacing="2">
-                    <Border Width="26" Height="26" CornerRadius="6" BorderThickness="1.5"
-                            BorderBrush="{DynamicResource PbAccentBrush}" Margin="0,0,0,12" HorizontalAlignment="Center" />
+                    <!-- App mark. A small pre-scaled copy of Assets/paperbunkr-logo-source.png (96 px, sharp at 3x for a 32 px slot) so the rail
+                         doesn't keep the 1024 px source decoded. Fixed brand colours, not skin-tinted. Decorative: no command or tooltip. 32 + 6 keeps the
+                         38 px this slot has always occupied (26 box + 12 gap), so the rail buttons below don't move. -->
+                    <Image Width="32" Height="32" Margin="0,0,0,6" HorizontalAlignment="Center"
+                           Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-rail.png"
+                           RenderOptions.BitmapInterpolationMode="HighQuality"
+                           AutomationProperties.AccessibilityView="Raw" />
 
                     <Button Classes="rail" Classes.active="{Binding IsHome}"
                             Command="{Binding GoHomeCommand}" ToolTip.Tip="Home"

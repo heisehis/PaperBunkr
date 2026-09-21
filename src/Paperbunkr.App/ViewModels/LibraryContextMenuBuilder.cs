@@ -125,7 +125,7 @@ public sealed class LibraryContextMenuBuilder
                 },
                 Symbol.Library),
             ContextMenuEntry.Separator,
-            ContextMenuEntry.Item(multi ? $"Scrape {n} with ComicVine…" : "Scrape with ComicVine…", _vm.ScrapeWithComicVineCommand, row.Id, Symbol.ArrowDownload),
+            ContextMenuEntry.Item(multi ? $"Scrape {n}…" : "Scrape…", _vm.ScrapeWithComicVineCommand, row.Id, Symbol.ArrowDownload),
             ContextMenuEntry.Item(multi ? $"Organize {n}…" : "Organize…", _vm.OrganizeWithProfileCommand, row.Id, Symbol.FolderArrowRight),
             ContextMenuEntry.Item("Show in Explorer", _vm.RevealIssueCommand, row.Id, Symbol.FolderOpen, isEnabled: row.HasFile),
             _vm.CanWriteMetadataToFiles
@@ -166,7 +166,7 @@ public sealed class LibraryContextMenuBuilder
         var entries = new List<ContextMenuEntry?>
         {
             ContextMenuEntry.Item("Open Series", _vm.SelectCardCommand, card, Symbol.Open),
-            ContextMenuEntry.Item(multi ? $"Scrape {n} series with ComicVine…" : "Scrape with ComicVine…", _vm.ScrapeSeriesWithComicVineCommand, card.SeriesId, Symbol.ArrowDownload),
+            ContextMenuEntry.Item(multi ? $"Scrape {n} series…" : "Scrape…", _vm.ScrapeSeriesWithComicVineCommand, card.SeriesId, Symbol.ArrowDownload),
             ContextMenuEntry.Item(multi ? $"Organize {n} series…" : "Organize…", _vm.OrganizeSeriesWithProfileCommand, card.SeriesId, Symbol.FolderArrowRight),
             ContextMenuEntry.SubMenu(
                 multi ? $"Add {n} to Collection" : "Add to Collection",

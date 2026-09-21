@@ -226,7 +226,7 @@ public static class ScheduledTaskCatalog
         // Every comic with no ComicVine volume link is matched; with "choose the best match automatically" off it skips whatever would have needed a question.
         new ScheduledTaskDescriptor(
             ComicVineScrape, "Scrape unscraped comics with ComicVine",
-            "Matches comics that have no ComicVine details yet, without asking. Comics that need a choice are skipped unless \"Choose the best match automatically\" is on " +
+            "Matches comics that have no details yet (from the source chosen under Organize & Scrape), without asking. Comics that need a choice are skipped unless \"Choose the best match automatically\" is on " +
             "(Preferences → Organize & Scrape). Needs your ComicVine key.",
             ActivityJobKind.Scrape, Priority: 11, SchedulerResourceClass.Network,
             TimeSpan.FromDays(1), DefaultEnabled: false, ScheduleMode.Interval,

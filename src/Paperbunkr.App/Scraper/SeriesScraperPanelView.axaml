@@ -17,15 +17,15 @@
     -->
     <StackPanel Spacing="8">
         <StackPanel Orientation="Horizontal" Spacing="10">
-            <TextBlock Text="ComicVine" FontSize="12.5" FontWeight="SemiBold"
+            <TextBlock Text="Comic details" FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
             <Button Classes="railAdd" Command="{Binding ScrapeCommand}" IsEnabled="{Binding !IsBusy}">
                 <StackPanel Orientation="Horizontal" Spacing="5">
-                    <TextBlock Text="Scrape with ComicVine" VerticalAlignment="Center" />
+                    <TextBlock Text="Scrape" VerticalAlignment="Center" />
                 </StackPanel>
             </Button>
         </StackPanel>
-        <TextBlock Text="{Binding StatusMessage, TargetNullValue='Not scraped yet - Cluster Library Manager handles comic metadata here instead of the generic external-metadata search.'}"
+        <TextBlock Text="{Binding StatusMessage, TargetNullValue='Fills in credits, summary, characters and dates from ComicVine or Metron. The source it starts on is set under Preferences → Organize &amp; Scrape.'}"
                    Foreground="{DynamicResource PbTextFaintBrush}" FontSize="12" TextWrapping="Wrap" />
     </StackPanel>
 </UserControl>

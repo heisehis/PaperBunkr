@@ -121,7 +121,7 @@ public sealed class PluginEngine
     public static IReadOnlyDictionary<string, string> RetiredPluginKeys { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["cluster-library-manager"] = "Now built in: ComicVine scraping and library organizing are part of Paperbunkr itself " +
-            "(right-click comics → Scrape with ComicVine / Organize; settings under Preferences → Organize & Scrape). This plugin is no longer needed and is not loaded; you can remove it.",
+            "(right-click comics → Scrape / Organize; settings under Preferences → Organize & Scrape). This plugin is no longer needed and is not loaded; you can remove it.",
     };
 
     /// <summary>Walks <paramref name="pluginsRoot"/> for <c>plugin.xml</c> manifests, initializing and precompiling every command found. Never throws - a broken plugin is flagged via <see cref="Command.IsBroken"/>, not skipped from discovery, and never aborts loading the rest (docs §2).</summary>

@@ -31,7 +31,7 @@
                     <Border Classes="posterScrim" />
 
                     <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7" Padding="7,2"
-                            CornerRadius="999" Background="{DynamicResource PbBadgeBrush}"
+                            CornerRadius="{StaticResource PbRadiusChip}" Background="{DynamicResource PbBadgeBrush}"
                             IsVisible="{Binding #ThisControl.BadgeText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
                         <TextBlock Text="{Binding #ThisControl.BadgeText}" FontSize="9.5" FontWeight="Bold"
                                    Foreground="{DynamicResource PbBadgeTextBrush}" />

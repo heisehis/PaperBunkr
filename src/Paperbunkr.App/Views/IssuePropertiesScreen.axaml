@@ -63,7 +63,7 @@
         <!-- Read-only tag-value chip (Genre/Tags Details rows, §6) -->
         <Style Selector="Border.valueChip">
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
             <Setter Property="Padding" Value="10,4" />
         </Style>
         <Style Selector="Border.valueChip TextBlock">

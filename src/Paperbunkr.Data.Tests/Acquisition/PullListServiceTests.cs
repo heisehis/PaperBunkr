@@ -89,6 +89,48 @@ public class PullListServiceTests : AcquisitionTestBase
     }
 
     [Fact]
+    public async Task FetchRange_StoresOnlyThatRange_AndLeavesTheRestOfTheCacheAlone()
+    {
+        PullListService.Store(Context, ComicProvider.Metron, new[] { Entry(1, 10, "Spawn", "350", Today), Entry(2, 10, "Spawn", "351", Today.AddDays(7)) }, DateTime.UtcNow);
+        var source = new FakeSource();
+        source.Entries.Add(Entry(3, 11, "Batman", "1", Today.AddDays(70)));
+        source.Series[11] = new PullListSeriesInfo(11, "Batman", "DC Comics", 2016, null);
+
+        int count = await PullListService.FetchRangeAsync(Context, source, Today.AddDays(66), Today.AddDays(72), CancellationToken.None);
+
+        Assert.Equal(1, count);
+        Assert.Equal((Today.AddDays(66), Today.AddDays(72)), source.Window);
+        Assert.Equal(3, Context.PullListReleases.Count());                        // the earlier weeks survive
+        Assert.Equal("DC Comics", Context.ReleaseSeries.Single(m => m.SeriesId == 11).Publisher);
+        Assert.Null(Context.GetOrCreateAcquisitionSettings().PullListRefreshedAt);  // a browsed week is not a refresh
+    }
+
+    [Fact]
+    public async Task FetchRange_DropsCachedReleasesInsideTheRangeThatTheSourceNoLongerReturns()
+    {
+        PullListService.Store(Context, ComicProvider.Metron, new[] { Entry(1, 10, "Spawn", "350", Today.AddDays(70)), Entry(2, 10, "Spawn", "351", Today) }, DateTime.UtcNow);
+        var source = new FakeSource();                                             // nothing that week any more
+
+        await PullListService.FetchRangeAsync(Context, source, Today.AddDays(66), Today.AddDays(72), CancellationToken.None);
+
+        Assert.Equal(2, Assert.Single(Context.PullListReleases).ExternalIssueId);
+    }
+
+    [Fact]
+    public async Task FetchRange_CapsSeriesLookups()
+    {
+        var source = new FakeSource();
+        for (int i = 0; i < 5; i++)
+        {
+            source.Entries.Add(Entry(i + 1, 100 + i, $"Series {i}", "1", Today.AddDays(70)));
+        }
+
+        await PullListService.FetchRangeAsync(Context, source, Today.AddDays(66), Today.AddDays(72), CancellationToken.None, maxSeriesLookups: 2);
+
+        Assert.Equal(2, source.SeriesLookups.Count);
+    }
+
+    [Fact]
     public void Store_DropsReleasesTheSourceNoLongerReturns()
     {
         PullListService.Store(Context, ComicProvider.Metron, new[] { Entry(1, 10, "Spawn", "350", Today), Entry(2, 10, "Spawn", "351", Today.AddDays(7)) }, DateTime.UtcNow);

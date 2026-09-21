@@ -45,7 +45,7 @@ A per-publisher default filter; cover-date (as opposed to store-date) listing; a
 | Daemon cycle hook (twice-daily refresh, alert handling) | Done |
 | Releases tab (filters, Request, Follow) and empty states | Done |
 
-Verified: Data, Daemon and Wanted view-model tests for all of it. Not yet verified: a live fetch against Metron (fixtures only), the Releases tab on screen, and how long a first refresh takes on a real account (up to about 150 series lookups at the background rate of 14 requests a minute, so roughly ten minutes, then cached).
+Verified: Data, Daemon and Wanted view-model tests for all of it, and then live by the user: a real Metron fetch, the Releases tab on screen, the first refresh, and the later follow-ups and gap closers (hide, notice, arcs by source, the daily quota, the recorded scrape source, covers, the ComicVine fallback list).
 
 ### Follow-ups (2026-09-20)
 

@@ -71,6 +71,18 @@ public sealed class ContextMenuHost
         s_state.Add(host, state);
     }
 
+    /// <summary>Shows a menu built from <paramref name="entries"/> under <paramref name="anchor"/> - for a visible "…" button that offers what right-click offers.</summary>
+    public static void ShowMenu(Control anchor, IEnumerable<ContextMenuEntry> entries)
+    {
+        var flyout = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
+        foreach (var item in Build(entries))
+        {
+            flyout.Items.Add(item);
+        }
+
+        flyout.ShowAt(anchor);
+    }
+
     private static void OnPointerReleased(Control host, HostState state, PointerReleasedEventArgs e)
     {
         if (e.InitialPressMouseButton != MouseButton.Right)

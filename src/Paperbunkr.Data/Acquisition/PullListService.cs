@@ -37,7 +37,32 @@ public static class PullListService
         int lookupCap = maxSeriesLookups ?? (provider == ComicProvider.ComicVine ? MaxComicVineSeriesLookupsPerRefresh : MaxSeriesLookupsPerRefresh);
         var entries = await source.GetReleasesAsync(today.Date.AddDays(-DaysBack), today.Date.AddDays(DaysAhead), cancellationToken).ConfigureAwait(false);
         Store(context, provider, entries, DateTime.UtcNow);
+        await LookUpSeriesAsync(context, source, entries, lookupCap, cancellationToken).ConfigureAwait(false);
 
+        context.GetOrCreateAcquisitionSettings().PullListRefreshedAt = DateTime.UtcNow;
+        context.SaveChanges();
+        return entries.Count;
+    }
+
+    /// <summary>Series looked up when a single week is fetched on demand; kept small so browsing the calendar can't spend the request budget.</summary>
+    public const int MaxSeriesLookupsPerWeekFetch = 40;
+
+    /// <summary>
+    /// Fetches one date range the user navigated to (outside the cached window) and stores it without disturbing the rest of the cache. The next scheduled
+    /// refresh replaces the whole cache again. Returns the number of releases found.
+    /// </summary>
+    public static async Task<int> FetchRangeAsync(PaperbunkrDbContext context, IPullListSource source, DateTime from, DateTime to, CancellationToken cancellationToken,
+        int maxSeriesLookups = MaxSeriesLookupsPerWeekFetch)
+    {
+        var entries = await source.GetReleasesAsync(from.Date, to.Date, cancellationToken).ConfigureAwait(false);
+        Store(context, source.Kind, entries, DateTime.UtcNow, from, to);
+        await LookUpSeriesAsync(context, source, entries, maxSeriesLookups, cancellationToken).ConfigureAwait(false);
+        return entries.Count;
+    }
+
+    private static async Task LookUpSeriesAsync(PaperbunkrDbContext context, IPullListSource source, IReadOnlyList<PullListEntry> entries, int lookupCap, CancellationToken cancellationToken)
+    {
+        var provider = source.Kind;
         var followedNames = context.WatchedSeries.Where(w => w.WatchFutureReleases && !w.IsPaused).Select(w => w.Name).ToList();
         var known = context.ReleaseSeries.Where(m => m.Provider == provider).Select(m => m.SeriesId).ToHashSet();
         var unknown = entries
@@ -74,17 +99,14 @@ public static class PullListService
             });
             context.SaveChanges();
         }
-
-        context.GetOrCreateAcquisitionSettings().PullListRefreshedAt = DateTime.UtcNow;
-        context.SaveChanges();
-        return entries.Count;
     }
 
     /// <summary>
     /// Upserts the fetched releases and drops every row the source did not return (aged out of the window, moved by the publisher, or left over from the other source: the
     /// list comes from one source at a time, so switching replaces it).
     /// </summary>
-    public static void Store(PaperbunkrDbContext context, ComicProvider provider, IReadOnlyList<PullListEntry> entries, DateTime nowUtc)
+    public static void Store(PaperbunkrDbContext context, ComicProvider provider, IReadOnlyList<PullListEntry> entries, DateTime nowUtc,
+        DateTime? scopeFrom = null, DateTime? scopeTo = null)
     {
         var existing = context.PullListReleases.ToDictionary(r => (r.Provider, r.ExternalIssueId));
         foreach (var entry in entries)
@@ -106,7 +128,10 @@ public static class PullListService
         }
 
         var fetched = entries.Select(e => e.IssueId).ToHashSet();
-        foreach (var stale in existing.Values.Where(r => r.Provider != provider || !fetched.Contains(r.ExternalIssueId)).ToList())
+
+        // A scoped store (one week fetched on demand) only replaces what lies inside its own dates; the rest of the cache stays.
+        bool InScope(PullListRelease r) => scopeFrom is null || scopeTo is null || (r.StoreDate >= scopeFrom.Value.Date && r.StoreDate <= scopeTo.Value.Date);
+        foreach (var stale in existing.Values.Where(r => r.Provider != provider || (!fetched.Contains(r.ExternalIssueId) && InScope(r))).ToList())
         {
             context.PullListReleases.Remove(stale);
         }

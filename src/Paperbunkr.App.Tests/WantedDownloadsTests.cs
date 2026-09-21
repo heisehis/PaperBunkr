@@ -28,6 +28,9 @@ public class WantedDownloadsTests : IDisposable
     private readonly FakeClient _client = new();
     private readonly ChannelEventPublisher _events = new();
     private bool _clientConfigured = true;
+    private readonly List<(string Message, bool IsError)> _toasts = new();
+
+    private static IEnumerable<QueueIssueViewModel> Issues(WantedScreenViewModel vm) => vm.QueueItems.OfType<QueueIssueViewModel>();
 
     public WantedDownloadsTests()
     {
@@ -47,7 +50,8 @@ public class WantedDownloadsTests : IDisposable
     private WantedScreenViewModel Create() => new(
         NewContext, _ => Task.CompletedTask, _ => { }, () => { }, _ => Task.CompletedTask,
         new GrabService(NewContext, _ => _clientConfigured ? _client : null, _events),
-        _ => new NoComicVine(), post: a => a(), today: () => new DateTime(2026, 9, 19));
+        _ => new NoComicVine(), post: a => a(), today: () => new DateTime(2026, 9, 19),
+        notify: (message, isError) => _toasts.Add((message, isError)));
 
     private sealed class NoComicVine : IComicVineClient
     {
@@ -115,19 +119,36 @@ public class WantedDownloadsTests : IDisposable
 
         vm.Refresh();
 
-        Assert.Equal(new[] { "Spawn #263", "Spawn #262" }, vm.DownloadRows.Select(r => r.Title));    // failures first
-        var failed = vm.DownloadRows[0];
-        Assert.True(failed.IsFailed);
+        var failed = Issues(vm).Single(r => r.IsFailed);
+        Assert.Equal("Spawn #263", failed.Title);
         Assert.False(failed.ShowProgress);
         Assert.Equal("Failed", failed.StatusText);
         Assert.Contains("removed from qBittorrent", failed.Detail);
-        var running = vm.DownloadRows[1];
+        var running = Issues(vm).Single(r => r.IsDownloading);
         Assert.Equal("Downloading", running.StatusText);
         Assert.Equal(40, running.ProgressPercent);
         Assert.Equal("40%", running.ProgressText);
         Assert.Equal("Spawn 262 (1992) cbz", running.Detail);
-        Assert.Equal(3, vm.WantedTabCount);                                                             // one wanted + two downloads
-        Assert.False(vm.HasNoDownloads);
+        Assert.Equal(3, vm.QueueCount);                                                                 // one wanted, one downloading, one failed
+        Assert.Equal(running, Assert.Single(vm.DownloadStrip));                                         // only the one in flight sits in the strip
+        Assert.Equal("Downloading 1 issue", vm.DownloadStripHeading);
+    }
+
+    [Fact]
+    public void ALiveDownloadEvent_AddsSpeedAndTimeLeft_ToTheRow()
+    {
+        Seed();
+        var vm = Create();
+        vm.Refresh();
+        var running = Issues(vm).Single(r => r.IsDownloading);
+
+        vm.ApplyDownloadProgress(new DownloadProgressEvent(running.Id, "Spawn #262", 0.5, 2 * 1024 * 1024, TimeSpan.FromSeconds(100)));
+
+        Assert.Equal("50% · 2.0 MB/s · 2m", running.ProgressText);
+
+        vm.Refresh();                                                                                    // the reload keeps the client's live numbers
+        Assert.Same(running, Issues(vm).Single(r => r.IsDownloading));
+        Assert.Contains("MB/s", running.ProgressText);
     }
 
     [Fact]
@@ -144,9 +165,8 @@ public class WantedDownloadsTests : IDisposable
         var vm = Create();
         vm.Refresh();
 
-        Assert.Empty(vm.WantedRows);
-        Assert.False(vm.HasNoWanted);
-        Assert.Equal("Sent to qBittorrent", Assert.Single(vm.DownloadRows).StatusText);
+        Assert.False(vm.HasNoQueue);
+        Assert.Equal("Sent to qBittorrent", Assert.Single(Issues(vm)).StatusText);
     }
 
     [Fact]
@@ -168,16 +188,16 @@ public class WantedDownloadsTests : IDisposable
         ConfigureClient();
         var vm = Create();
         vm.Refresh();
-        var row = vm.CandidateGroups.Single().Candidates.Single(c => c.Id == ids.GoodCandidate);
+        var row = Issues(vm).Single(r => r.Id == ids.Wanted).Candidates.Single(c => c.Id == ids.GoodCandidate);
 
         await vm.GrabCommand.ExecuteAsync(row);
 
         Assert.Equal(new[] { Magnet('a') }, _client.Added);
-        Assert.Contains("Sent Spawn #261", vm.StatusMessage);
-        Assert.True(vm.HasInfoStatus);
-        Assert.Empty(vm.CandidateGroups);                                    // the alternatives are dropped once one is chosen
-        Assert.Contains(vm.DownloadRows, r => r.Title == "Spawn #261" && r.StatusText == "Sent to qBittorrent");
-        Assert.DoesNotContain(vm.WantedRows, r => r.Title == "Spawn #261");
+        Assert.Contains(_toasts, t => !t.IsError && t.Message.Contains("Sent Spawn #261"));
+        var grabbed = Issues(vm).Single(r => r.Title == "Spawn #261");
+        Assert.Empty(grabbed.Candidates);                                    // the alternatives are dropped once one is chosen
+        Assert.Equal(QueueStage.Downloading, grabbed.Stage);
+        Assert.Equal("Sent to qBittorrent", grabbed.StatusText);
     }
 
     [Fact]
@@ -189,11 +209,10 @@ public class WantedDownloadsTests : IDisposable
         var vm = Create();
         vm.Refresh();
 
-        await vm.GrabCommand.ExecuteAsync(vm.CandidateGroups.Single().Candidates.First(c => c.Id == ids.GoodCandidate));
+        await vm.GrabCommand.ExecuteAsync(Issues(vm).Single(r => r.Id == ids.Wanted).Candidates.First(c => c.Id == ids.GoodCandidate));
 
-        Assert.Equal("qBittorrent rejected the username or password.", vm.StatusMessage);
-        Assert.True(vm.HasErrorStatus);
-        Assert.Equal(2, vm.CandidateGroups.Single().Candidates.Count);
+        Assert.Contains(_toasts, t => t.IsError && t.Message == "qBittorrent rejected the username or password.");
+        Assert.Equal(2, Issues(vm).Single(r => r.Id == ids.Wanted).Candidates.Count);
     }
 
     [Fact]
@@ -204,9 +223,9 @@ public class WantedDownloadsTests : IDisposable
         var vm = Create();
         vm.Refresh();
 
-        await vm.GrabCommand.ExecuteAsync(vm.CandidateGroups.Single().Candidates.First(c => c.Id == ids.GoodCandidate));
+        await vm.GrabCommand.ExecuteAsync(Issues(vm).Single(r => r.Id == ids.Wanted).Candidates.First(c => c.Id == ids.GoodCandidate));
 
-        Assert.Contains("Set up qBittorrent", vm.StatusMessage);
+        Assert.Contains(_toasts, t => t.Message.Contains("Set up qBittorrent"));
     }
 
     [Fact]
@@ -216,9 +235,9 @@ public class WantedDownloadsTests : IDisposable
         var vm = Create();
         vm.Refresh();
 
-        vm.RejectCandidateCommand.Execute(vm.CandidateGroups.Single().Candidates.Single(c => c.Id == ids.BadCandidate));
+        vm.RejectCandidateCommand.Execute(Issues(vm).Single(r => r.Id == ids.Wanted).Candidates.Single(c => c.Id == ids.BadCandidate));
 
-        Assert.Equal("Spawn 261 (1992) cbz", Assert.Single(vm.CandidateGroups.Single().Candidates).Title);
+        Assert.Equal("Spawn 261 (1992) cbz", Assert.Single(Issues(vm).Single(r => r.Id == ids.Wanted).Candidates).Title);
         using var context = NewContext();
         var blocked = Assert.Single(context.ReleaseBlocklist);
         Assert.Equal("Spawn 261 (1992) cbr", blocked.ReleaseName);
@@ -232,10 +251,10 @@ public class WantedDownloadsTests : IDisposable
         var vm = Create();
         vm.Refresh();
 
-        vm.RetryDownloadCommand.Execute(vm.DownloadRows.Single(r => r.IsFailed));
+        vm.RetryDownloadCommand.Execute(Issues(vm).Single(r => r.IsFailed));
 
-        Assert.DoesNotContain(vm.DownloadRows, r => r.IsFailed);
-        Assert.Contains(vm.WantedRows, r => r.Title == "Spawn #263");
+        Assert.DoesNotContain(Issues(vm), r => r.IsFailed);
+        Assert.Contains(Issues(vm), r => r.Title == "Spawn #263" && r.Stage == QueueStage.Wanted);
         using var context = NewContext();
         Assert.Equal(WantedIssueStatus.Wanted, context.WantedIssues.Single(w => w.Id == ids.Failed).Status);
     }
@@ -247,11 +266,11 @@ public class WantedDownloadsTests : IDisposable
         var vm = Create();
         vm.Refresh();
 
-        await vm.CancelDownloadCommand.ExecuteAsync(vm.DownloadRows.Single(r => r.Title == "Spawn #262"));
+        await vm.CancelDownloadCommand.ExecuteAsync(Issues(vm).Single(r => r.Title == "Spawn #262"));
 
         Assert.Equal(new[] { new string('b', 40) }, _client.Removed);
-        Assert.Contains(vm.WantedRows, r => r.Title == "Spawn #262");
-        Assert.DoesNotContain(vm.DownloadRows, r => r.Title == "Spawn #262");
+        Assert.Contains(Issues(vm), r => r.Title == "Spawn #262" && r.Stage == QueueStage.Wanted);
+        Assert.Empty(vm.DownloadStrip);
     }
 }
 

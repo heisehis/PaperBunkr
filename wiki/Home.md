@@ -18,6 +18,7 @@ Your library and settings never leave your machine: no cloud, no account.
 
 - **[The Library](The-Library)** — browsing, searching, sorting, grouping, collections
 - **[Books (EPUB & PDF)](Books-EPUB-and-PDF)** — the separate novels section
+- **[Getting Comics Automatically](Getting-Comics-Automatically)** — a want-list, weekly pull list, Prowlarr and qBittorrent
 - **[Smart Lists](Smart-Lists)** — saved rule-based views
 - **[Reading Lists](Reading-Lists)** — hand-curated and imported (CBL/CSV) lists
 - **[Home Dashboard & Recommendations](Home-Dashboard-and-Recommendations)**

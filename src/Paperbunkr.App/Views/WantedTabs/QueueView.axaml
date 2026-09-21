@@ -1,0 +1,302 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.WantedTabs.QueueView"
+             x:Name="Root"
+             x:DataType="vm:WantedScreenViewModel">
+
+    <UserControl.Styles>
+        <!-- A virtualizing list that owns its scroller: rows are only realized while visible, so thousands of wants stay cheap.
+             (An ItemsControl inside a plain ScrollViewer is measured with infinite height and never virtualizes.) -->
+        <Style Selector="ItemsControl.vlist">
+            <Setter Property="ItemsPanel">
+                <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+            </Setter>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <ItemsPresenter Margin="24,4,24,32" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                    </ScrollViewer>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="TextBlock.wantedCaption">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="LetterSpacing" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+        <Style Selector="Button.pbChip.active">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+        <Style Selector="Button.groupToggle">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <!-- The theme paints hover and press on the button's template part, not on the button, so the fill has to be cleared there (it showed as a square block inside the rounded card). -->
+        <Style Selector="Button.groupToggle:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.groupToggle:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- The Queue (docs/superpowers/specs/2026-09-21-wanted-screen-redesign-design.md 2): banner, downloads strip, stage chips, then one virtualized list of series groups. -->
+    <Grid RowDefinitions="Auto,*">
+
+        <StackPanel Grid.Row="0" Spacing="12" Margin="24,16,24,8" MaxWidth="1100" HorizontalAlignment="Stretch">
+
+            <!-- The one persistent problem worth a banner -->
+            <Border Classes="card" Padding="14,10" IsVisible="{Binding ShowSearchOffBanner}" BorderBrush="{DynamicResource PbAccentBrush}">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
+                    <fi:SymbolIcon Grid.Column="0" Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentBrush}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="Automatic searching is off, so nothing here moves on its own. Turn it on in Acquisition settings." FontSize="12"
+                               Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    <Button Grid.Column="2" Classes="headerAction ghost" Content="Open Acquisition settings" Command="{Binding OpenAcquisitionSettingsCommand}" />
+                    <Button Grid.Column="3" Classes="headerAction ghost" Content="Dismiss" Command="{Binding DismissSearchOffBannerCommand}"
+                            AutomationProperties.Name="Dismiss this notice" />
+                </Grid>
+            </Border>
+
+            <!-- Now downloading -->
+            <Border Classes="card" Padding="14,10" IsVisible="{Binding HasDownloadStrip}">
+                <StackPanel Spacing="8">
+                    <TextBlock Classes="wantedCaption" Text="{Binding DownloadStripHeading}" />
+                    <ItemsControl ItemsSource="{Binding DownloadStrip}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:QueueIssueViewModel">
+                                <Grid ColumnDefinitions="Auto,190,*,Auto,Auto" ColumnSpacing="12" Margin="0,0,0,6">
+                                    <Border Grid.Column="0" Width="22" Height="32" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" Background="{DynamicResource PbSurface2Brush}">
+                                        <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <ProgressBar Grid.Column="2" Minimum="0" Maximum="100" Value="{Binding ProgressPercent}" Height="5" VerticalAlignment="Center"
+                                                 AutomationProperties.Name="Download progress" />
+                                    <TextBlock Grid.Column="3" Text="{Binding ProgressText}" FontSize="11.5" MinWidth="150" TextAlignment="Right"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <Button Grid.Column="4" Classes="headerAction ghost" Content="Cancel"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='Cancel downloading {0}'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).CancelDownloadCommand}" CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="{Binding DownloadStripMoreText}" IsVisible="{Binding HasDownloadStripMore}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Stage chips and sort -->
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <ItemsControl Grid.Column="0" ItemsSource="{Binding QueueChips}" AutomationProperties.Name="Filter the queue by stage">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:QueueChipViewModel">
+                            <Button Classes="pbChip" Classes.active="{Binding IsActive}" IsVisible="{Binding IsVisible}" Padding="11,4" Margin="0,0,6,6"
+                                    Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).SetQueueFilterCommand}" CommandParameter="{Binding}"
+                                    AutomationProperties.Name="{Binding Text}">
+                                <TextBlock Text="{Binding Text}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                    <TextBlock Text="Sort" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                    <controls:SuggestBox IsStrict="True" Width="150" Text="{Binding QueueSortText}" Suggestions="{x:Static vm:WantedScreenViewModel.QueueSortNames}"
+                                         AutomationProperties.Name="Sort the queue" AutomationProperties.AutomationId="WantedQueueSort" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Needs details: bulk actions -->
+            <Grid ColumnDefinitions="*,Auto,Auto" IsVisible="{Binding IsNeedsDetailsFilter}">
+                <TextBlock Grid.Column="0" Classes="wantedCaption" Text="{Binding ScrapeReviewHeading}" VerticalAlignment="Center" IsVisible="{Binding HasScrapeReview}" />
+                <Button Grid.Column="1" Classes="headerAction ghost" Content="Retry all" Command="{Binding RetryAllScrapesCommand}" IsVisible="{Binding HasScrapeReview}"
+                        AutomationProperties.Name="Try again for every issue missing details" />
+                <Button Grid.Column="2" Classes="headerAction ghost" Content="Dismiss all" Command="{Binding DismissAllScrapesCommand}" Margin="6,0,0,0" IsVisible="{Binding HasScrapeReview}"
+                        AutomationProperties.Name="Stop trying for every issue missing details" />
+            </Grid>
+        </StackPanel>
+
+        <Panel Grid.Row="1">
+            <ItemsControl Classes="vlist" ItemsSource="{Binding QueueItems}">
+                <ItemsControl.DataTemplates>
+
+                    <!-- Series group header -->
+                    <DataTemplate DataType="vm:QueueGroupViewModel" x:DataType="vm:QueueGroupViewModel">
+                        <Border Classes="card" Margin="0,10,0,0" Padding="10,8" MaxWidth="1100" HorizontalAlignment="Stretch">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Button Grid.Column="0" Classes="groupToggle"
+                                        AutomationProperties.Name="{Binding Name, StringFormat='Show or hide the issues of {0}'}"
+                                        Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).ToggleGroupCommand}" CommandParameter="{Binding}">
+                                    <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="12">
+                                        <Panel Grid.Column="0" Width="16" VerticalAlignment="Center">
+                                            <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding IsExpanded}" />
+                                            <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !IsExpanded}" />
+                                        </Panel>
+                                        <Border Grid.Column="1" Width="34" Height="50" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" Background="{DynamicResource PbSurface2Brush}">
+                                            <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <StackPanel Grid.Column="2" Spacing="2" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                                                           ToolTip.Tip="{Binding Name}" />
+                                                <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                                <Border Classes="pbChip" Padding="7,1" IsVisible="{Binding IsMetron}" VerticalAlignment="Center">
+                                                    <TextBlock Text="Metron" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Summary}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="12,0,0,0" VerticalAlignment="Center" IsVisible="{Binding CanBulk}">
+                                    <Button Classes="headerAction ghost" Content="I have all"
+                                            AutomationProperties.Name="{Binding Name, StringFormat='I already have the listed issues of {0}'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).IgnoreGroupCommand}" CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Remove all"
+                                            AutomationProperties.Name="{Binding Name, StringFormat='Stop wanting the listed issues of {0}'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RemoveGroupCommand}" CommandParameter="{Binding}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+
+                    <!-- One issue -->
+                    <DataTemplate DataType="vm:QueueIssueViewModel" x:DataType="vm:QueueIssueViewModel">
+                        <Border Classes="card" Margin="20,4,0,0" Padding="10,6" MaxWidth="1080" HorizontalAlignment="Stretch">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12">
+                                <Border Grid.Column="0" Width="30" Height="44" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" VerticalAlignment="Center"
+                                        Background="{DynamicResource PbSurface2Brush}">
+                                    <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="{Binding IssueLabel}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                        <TextBlock Text="{Binding Subtitle}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                   IsVisible="{Binding Subtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    </StackPanel>
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" IsVisible="{Binding ShowProgress}">
+                                        <ProgressBar Grid.Column="0" Minimum="0" Maximum="100" Value="{Binding ProgressPercent}" Height="5" VerticalAlignment="Center"
+                                                     AutomationProperties.Name="Download progress" />
+                                        <TextBlock Grid.Column="1" Text="{Binding ProgressText}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    </Grid>
+                                    <TextBlock Text="{Binding Detail}" FontSize="11.5" TextWrapping="Wrap" IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                               Foreground="{DynamicResource PbTextFaintBrush}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Border Classes="pbChip" Padding="8,2" IsVisible="{Binding IsMetron}">
+                                        <TextBlock Text="Metron" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    </Border>
+                                    <Border Classes="pbChip" Padding="8,2">
+                                        <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{DynamicResource PbAccentBrush}" />
+                                    </Border>
+                                    <Button Classes="pbChip" Padding="9,2" IsVisible="{Binding HasCandidateChip}"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='Show or hide the candidates for {0}'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).ToggleCandidatesCommand}" CommandParameter="{Binding}">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="{Binding CandidateText}" FontSize="11" Foreground="{DynamicResource PbAccentBrush}" VerticalAlignment="Center" />
+                                            <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbAccentBrush}" IsVisible="{Binding !IsExpanded}" />
+                                            <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbAccentBrush}" IsVisible="{Binding IsExpanded}" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Button Classes="headerAction ghost" Content="I have this" IsVisible="{Binding CanEdit}"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='I already have {0}'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).IgnoreCommand}" CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Remove" IsVisible="{Binding CanEdit}"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='Stop wanting {0}'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RemoveCommand}" CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Retry" IsVisible="{Binding IsFailed}"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='Try again for {0}'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RetryDownloadCommand}" CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Cancel" IsVisible="{Binding IsDownloading}"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='Cancel downloading {0}'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).CancelDownloadCommand}" CommandParameter="{Binding}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+
+                    <!-- One release found for the issue above it -->
+                    <DataTemplate DataType="vm:CandidateRowViewModel" x:DataType="vm:CandidateRowViewModel">
+                        <Border Margin="62,2,0,0" Padding="12,6" MaxWidth="1040" HorizontalAlignment="Stretch" CornerRadius="{StaticResource PbRadiusSm}"
+                                Background="{DynamicResource PbSurface2Brush}">
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                                <StackPanel Grid.Column="0" Spacing="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Title}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <Border Grid.Column="1" Classes="pbChip" Padding="8,2" VerticalAlignment="Center" IsVisible="{Binding IsPack}">
+                                    <TextBlock Text="Pack" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                </Border>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Button Classes="headerAction primary" Content="Grab"
+                                            IsVisible="{Binding #Root.((vm:WantedScreenViewModel)DataContext).HasDownloadClient}"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='Send {0} to qBittorrent'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).GrabCommand}" CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Copy link"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='Copy download link for {0}'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).CopyLinkCommand}" CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Reject"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='Never offer {0} again'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RejectCandidateCommand}" CommandParameter="{Binding}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+
+                    <!-- An imported issue missing its ComicVine details -->
+                    <DataTemplate DataType="vm:ScrapeReviewRowViewModel" x:DataType="vm:ScrapeReviewRowViewModel">
+                        <Border Classes="card" Margin="0,6,0,0" Padding="10,6" MaxWidth="1100" HorizontalAlignment="Stretch">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <Border Grid.Column="0" Width="30" Height="44" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" VerticalAlignment="Center"
+                                        Background="{DynamicResource PbSurface2Brush}">
+                                    <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Reason}" FontSize="11.5" TextWrapping="Wrap" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    <TextBlock Text="{Binding Hint}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Button Classes="headerAction ghost" Content="Retry"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='Try again to add details to {0}'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RetryScrapeCommand}" CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Dismiss"
+                                            AutomationProperties.Name="{Binding Title, StringFormat='Stop trying to add details to {0}'}"
+                                            Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).DismissScrapeCommand}" CommandParameter="{Binding}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.DataTemplates>
+            </ItemsControl>
+
+            <!-- Empty state: nothing is queued at all -->
+            <StackPanel IsVisible="{Binding HasNoQueue}" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0" MaxWidth="440">
+                <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXl}" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                <TextBlock Text="Nothing wanted right now" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Center" />
+                <TextBlock Text="Request missing issues from a series' page or a reading list, pick from the Releases shelf, or track a series on the Series tab."
+                           FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" TextAlignment="Center" />
+                <Button Classes="headerAction primary" Content="Track a series" Command="{Binding GoSeriesCommand}" HorizontalAlignment="Center" Margin="0,6,0,0" />
+            </StackPanel>
+
+            <!-- Empty state: things are queued but the chip in use matches none -->
+            <StackPanel IsVisible="{Binding HasNoQueueMatches}" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0" MaxWidth="440">
+                <TextBlock Text="Nothing at this stage" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Center" />
+                <TextBlock Text="Pick another stage above to see the rest of the queue." FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextAlignment="Center" />
+            </StackPanel>
+        </Panel>
+    </Grid>
+</UserControl>

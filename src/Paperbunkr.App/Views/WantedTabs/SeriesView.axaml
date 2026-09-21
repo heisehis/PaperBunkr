@@ -1,0 +1,136 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.WantedTabs.SeriesView"
+             x:Name="Root"
+             x:DataType="vm:WantedScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="ItemsControl.vlist">
+            <Setter Property="ItemsPanel">
+                <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+            </Setter>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <ItemsPresenter Margin="24,4,24,32" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                    </ScrollViewer>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="TextBlock.wantedCaption">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="LetterSpacing" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- The Series tab: what is tracked and followed. "Track a series" is a header button that opens the search in a flyout. -->
+    <Grid RowDefinitions="Auto,*">
+
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="24,16,24,10" MaxWidth="1100" HorizontalAlignment="Stretch">
+            <TextBlock Grid.Column="0" Classes="wantedCaption" Text="TRACKED SERIES" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="headerAction primary" AutomationProperties.AutomationId="WantedTrackSeriesButton" AutomationProperties.Name="Track a series">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" />
+                    <TextBlock Text="Track a series" />
+                </StackPanel>
+                <Button.Flyout>
+                    <Flyout Placement="BottomEdgeAlignedRight">
+                        <StackPanel Width="460" Spacing="10">
+                            <TextBlock Text="Track a series" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                <controls:SuggestBox Grid.Column="0" IsStrict="True" Width="120" Text="{Binding SeriesProviderText}" Suggestions="{x:Static vm:WantedScreenViewModel.ProviderNames}"
+                                                     AutomationProperties.Name="Search source" AutomationProperties.AutomationId="WantedSeriesProviderSelect" />
+                                <TextBox Grid.Column="1" Text="{Binding SeriesSearchText}" Watermark="{Binding SeriesSearchWatermark}"
+                                         AutomationProperties.Name="Search for a series" AutomationProperties.AutomationId="WantedSeriesSearchBox" />
+                                <Button Grid.Column="2" Classes="headerAction primary" Content="Search" Command="{Binding SearchSeriesCommand}" />
+                            </Grid>
+                            <TextBlock IsVisible="{Binding !HasSeriesProviderCredentials}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
+                                       Text="This source needs its login saved under Preferences → Connections." />
+                            <TextBlock IsVisible="{Binding HasSeriesSearchMessage}" Text="{Binding SeriesSearchMessage}" FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
+
+                            <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" IsVisible="{Binding HasSearchResults}">
+                                <ItemsControl ItemsSource="{Binding SearchResults}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:VolumeResultViewModel">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="0,0,0,8">
+                                                <Border Grid.Column="0" Width="30" Height="44" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" VerticalAlignment="Center"
+                                                        Background="{DynamicResource PbSurface2Brush}">
+                                                    <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                </StackPanel>
+                                                <Button Grid.Column="2" Classes="headerAction ghost" Content="Track" IsVisible="{Binding !IsTracked}" VerticalAlignment="Center"
+                                                        AutomationProperties.Name="{Binding Title, StringFormat='Track {0}'}"
+                                                        Command="{Binding $parent[ItemsControl].((vm:WantedScreenViewModel)DataContext).TrackVolumeCommand}" CommandParameter="{Binding}" />
+                                                <TextBlock Grid.Column="2" Text="Tracked" IsVisible="{Binding IsTracked}" VerticalAlignment="Center"
+                                                           FontSize="11.5" Foreground="{DynamicResource PbSuccessBrush}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+        </Grid>
+
+        <Panel Grid.Row="1">
+            <ItemsControl Classes="vlist" ItemsSource="{Binding SeriesRows}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:WatchedSeriesRowViewModel">
+                        <Border Classes="card" Margin="0,0,0,8" Padding="12,8" MaxWidth="1100" HorizontalAlignment="Stretch">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="12">
+                                <Border Grid.Column="0" Width="34" Height="50" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" VerticalAlignment="Center"
+                                        Background="{DynamicResource PbSurface2Brush}">
+                                    <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                        <Border Classes="pbChip" Padding="7,1" IsVisible="{Binding IsMetron}" VerticalAlignment="Center">
+                                            <TextBlock Text="Metron" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}">
+                                        <Run Text="{Binding Subtitle}" /><Run Text="  ·  " /><Run Text="{Binding CountsText}" />
+                                    </TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="Follow" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <ToggleSwitch IsChecked="{Binding WatchFutureReleases}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                  AutomationProperties.Name="Follow this series and request its new issues automatically" />
+                                </StackPanel>
+                                <Button Grid.Column="3" Classes="headerAction ghost" Content="Open" IsVisible="{Binding CanOpen}" VerticalAlignment="Center"
+                                        AutomationProperties.Name="{Binding Name, StringFormat='Open {0}'}"
+                                        Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).OpenSeriesCommand}" CommandParameter="{Binding}" />
+                                <Button Grid.Column="4" Classes="headerAction ghost" VerticalAlignment="Center" Click="OnMoreClick"
+                                        AutomationProperties.Name="{Binding Name, StringFormat='More actions for {0}'}">
+                                    <fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeSm}" />
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <StackPanel IsVisible="{Binding HasNoSeries}" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0" MaxWidth="440">
+                <fi:SymbolIcon Symbol="Folder" FontSize="{StaticResource PbIconSizeXl}" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                <TextBlock Text="No series tracked yet" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Center" />
+                <TextBlock Text="Use Track a series to search for one. Its missing issues then show on its page, and following it requests new issues as they're released."
+                           FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" TextAlignment="Center" />
+            </StackPanel>
+        </Panel>
+    </Grid>
+</UserControl>

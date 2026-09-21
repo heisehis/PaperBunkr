@@ -47,7 +47,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
             <Setter Property="Padding" Value="12,6" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="SemiBold" />

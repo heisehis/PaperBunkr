@@ -28,6 +28,7 @@ public sealed class AcquisitionActivityBridge : IDisposable
     private readonly Func<ActivityLink?> _resultLink;
     private readonly CancellationTokenSource _cts = new();
     private readonly Action? _onWantedChanged;
+    private readonly Action<DownloadProgressEvent>? _onDownloadProgress;
     private IActivityJobHandle? _job;
     private IActivityJobHandle? _downloadJob;
     private int _importedInRun;
@@ -37,9 +38,12 @@ public sealed class AcquisitionActivityBridge : IDisposable
     /// <param name="post">Marshals work onto the UI thread; defaults to the Avalonia dispatcher. Tests pass an inline executor.</param>
     /// <param name="resultLink">The link attached to a finished cycle (the Wanted screen); null until that screen exists.</param>
     /// <param name="onWantedChanged">Called (on the UI thread) whenever a download or import changed what the Wanted screen shows, so it can refresh itself.</param>
-    public AcquisitionActivityBridge(IActivityService activity, ChannelReader<DaemonEvent> reader, Action<Action>? post = null, Func<ActivityLink?>? resultLink = null, Action? onWantedChanged = null)
+    /// <param name="onDownloadProgress">Called (on the UI thread) with each download's live progress, ahead of <paramref name="onWantedChanged"/>.</param>
+    public AcquisitionActivityBridge(IActivityService activity, ChannelReader<DaemonEvent> reader, Action<Action>? post = null, Func<ActivityLink?>? resultLink = null, Action? onWantedChanged = null,
+        Action<DownloadProgressEvent>? onDownloadProgress = null)
     {
         _onWantedChanged = onWantedChanged;
+        _onDownloadProgress = onDownloadProgress;
         _activity = activity;
         _reader = reader;
         _post = post ?? (action => Dispatcher.UIThread.Post(action));
@@ -128,7 +132,8 @@ public sealed class AcquisitionActivityBridge : IDisposable
                 _onWantedChanged?.Invoke();
                 break;
 
-            case DownloadProgressEvent:
+            case DownloadProgressEvent progress:
+                _onDownloadProgress?.Invoke(progress);   // speed and ETA are live-only (not stored), so the screen takes them before it reloads
                 _onWantedChanged?.Invoke();
                 break;
 

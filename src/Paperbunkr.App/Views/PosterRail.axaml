@@ -38,7 +38,7 @@
             <Setter Property="Height" Value="22" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="FontSize" Value="10" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
             <Setter Property="Background" Value="#AA000000" />
             <Setter Property="Foreground" Value="White" />
             <Setter Property="BorderThickness" Value="0" />

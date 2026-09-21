@@ -48,4 +48,4 @@ Automatic cross-provider merging; using `cv_id` to translate a tracked ComicVine
 
 Deviations from section 3: no separate daily counter (Metron's 5,000/day is far above what a personal library uses; the 429 cool-off covers a burst), and `Issue.Volume` still just records the chosen external volume id (which provider it came from is not stored on the issue).
 
-Not merged: lives on branch `feat/metron-provider`. The main tree holds uncommitted copies of the ranker / sort work that the branch already contains, so commit or check those files out before merging. Back up the database before the first launch (new migration). Live check against real Metron is outstanding: the client is verified against fixture JSON modelled on Metron's serializers, not the live API.
+Merged to `master` (2026-09-21). The migration `AddComicProvider` needed a database backup before the first launch. Verified by automated tests, and then live by the user against real Metron (search, tracking, scraping) and on screen.

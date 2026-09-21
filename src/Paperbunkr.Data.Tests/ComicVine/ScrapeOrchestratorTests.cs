@@ -160,6 +160,7 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         Assert.Equal(3, metron.Searches);                                   // the dialog search for book 1, then the automatic and dialog searches for book 2
         using PaperbunkrDbContext context = CreateDbContext();
         Assert.Equal("Metron House", context.Issues.Single(i => i.Id == 2).Publisher);
+        Assert.All(context.Issues.ToList(), i => Assert.Equal(ComicProvider.Metron, i.MetadataSource));      // both books were applied after the switch
         Assert.Equal(0, context.ComicVineMatchMemories.Count(m => m.Provider == ComicProvider.ComicVine));
         Assert.Equal(1, context.ComicVineMatchMemories.Count(m => m.Provider == ComicProvider.Metron));
     }

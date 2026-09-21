@@ -94,8 +94,9 @@ public sealed class ScrapeByIdService(Func<PaperbunkrDbContext> createContext, F
         }
 
         var changed = IssueDetailsApplier.Apply(issue, details, _policy);
-        if (changed.Count > 0)
+        if (changed.Count > 0 || issue.MetadataSource != provider)
         {
+            issue.MetadataSource = provider;
             await write.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 

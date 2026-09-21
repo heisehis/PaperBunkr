@@ -390,6 +390,8 @@ public sealed class ScrapeOrchestrator
             ApplyIssueDetails(tracked, details);
         }
 
+        tracked.MetadataSource = Provider;      // the chosen match came from whichever source the run is on now (the dialog may have switched it)
+
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 

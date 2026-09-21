@@ -43,6 +43,20 @@ public sealed class ScrapeCoordinator(
         return client is null ? null : new ScrapeComicVineAdapter(client, client);
     };
 
+    /// <summary>The source most of <paramref name="books"/> were last scraped from, or <paramref name="fallback"/> when none has a recorded source (ties go to the fallback).</summary>
+    internal static ComicProvider StartingProvider(IReadOnlyList<Issue> books, ComicProvider fallback)
+    {
+        var counts = books.Where(b => b.MetadataSource is not null).GroupBy(b => b.MetadataSource!.Value).Select(g => (Provider: g.Key, Count: g.Count())).ToList();
+        if (counts.Count == 0)
+        {
+            return fallback;
+        }
+
+        int best = counts.Max(c => c.Count);
+        var leaders = counts.Where(c => c.Count == best).Select(c => c.Provider).ToList();
+        return leaders.Contains(fallback) ? fallback : leaders[0];
+    }
+
     public const string NoKeyMessage = "Add your ComicVine API key under Preferences → Connections first.";
 
     public async Task<string> ScrapeIssuesAsync(IReadOnlyList<int> issueIds, bool isInteractive = true, CancellationToken cancellationToken = default, IActivityJobHandle? existingJob = null)
@@ -55,8 +69,10 @@ public sealed class ScrapeCoordinator(
             settings = ScrapeSettings.Load(context);
         }
 
-        // Starts on the default source from Preferences → Organize & Scrape; an interactive run can switch inside the match dialog.
-        var provider = settings.DefaultProvider;
+        // Starts on the source most of these comics were last scraped from (an id from one source means nothing on the other), else the default from
+        // Preferences → Organize & Scrape; an interactive run can switch inside the match dialog. Unattended runs only ever take never-scraped comics,
+        // which have no recorded source, so they use the default.
+        var provider = StartingProvider(books, settings.DefaultProvider);
         var priority = isInteractive ? ComicVineRequestPriority.High : ComicVineRequestPriority.Low;
         var comicVine = _createComicVine(provider, priority);
         if (comicVine is null)

@@ -176,6 +176,47 @@ public sealed class ScrapeOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task The_volume_is_the_series_start_year_never_the_sources_volume_id()
+    {
+        var issue = MakeIssue();
+        issue.Volume = "77691";                                  // what an earlier version wrote: ComicVine's volume id
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchJson, EmptyIssueSearchJson));
+        var orchestrator = new ScrapeOrchestrator(comicVine, new ComicVineMatchMemory(CreateDbContext), new ScrapeSettings { AutoChooseTopMatch = true });
+
+        await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, (_, _, _, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(null), CreateDbContext);
+
+        using PaperbunkrDbContext context = CreateDbContext();
+        Assert.Equal("1990", context.Issues.Single(i => i.Id == 1).Volume);          // VolumeSearchJson's start_year: replaces the id
+    }
+
+    [Fact]
+    public async Task An_unknown_start_year_leaves_the_volume_alone_and_overwrite_off_keeps_a_real_one()
+    {
+        const string noYear = """{"status_code":1,"error":"OK","results":[{"id":1,"name":"Batman","start_year":null,"publisher":{"name":"DC Comics"},"count_of_issues":50,"image":null}]}""";
+        var first = MakeIssue();
+        first.Volume = "2";
+        Seed(first);
+        var orchestrator = new ScrapeOrchestrator(Cv(new FakeHttpMessageHandler(noYear, EmptyIssueSearchJson)), new ComicVineMatchMemory(CreateDbContext), new ScrapeSettings { AutoChooseTopMatch = true });
+        await orchestrator.ScrapeAsync(new[] { first }, isInteractive: true, (_, _, _, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(null), CreateDbContext);
+        using (PaperbunkrDbContext context = CreateDbContext())
+        {
+            Assert.Equal("2", context.Issues.Single(i => i.Id == 1).Volume);          // no year to write: nothing changed
+        }
+
+        var second = new Issue { Id = 2, SeriesId = 1, Number = "4", FilePath = "book2.cbz", Volume = "3" };
+        Seed(second);
+        var keep = new ScrapeOrchestrator(Cv(new FakeHttpMessageHandler(VolumeSearchJson, EmptyIssueSearchJson)), new ComicVineMatchMemory(CreateDbContext),
+            new ScrapeSettings { AutoChooseTopMatch = true, OverwriteExisting = false });
+        second.Series = first.Series;
+        await keep.ScrapeAsync(new[] { second }, isInteractive: true, (_, _, _, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(null), CreateDbContext);
+        using (PaperbunkrDbContext context = CreateDbContext())
+        {
+            Assert.Equal("3", context.Issues.Single(i => i.Id == 2).Volume);          // has a value, overwrite off
+        }
+    }
+
+    [Fact]
     public async Task Interactive_review_applies_whatever_the_user_chose()
     {
         var issue = MakeIssue();

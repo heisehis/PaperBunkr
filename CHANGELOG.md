@@ -41,6 +41,10 @@ All notable changes to Paperbunkr are documented here. Format follows
 - All ComicVine requests now share one rate limit (about one per 1.1 s, 200 an hour), with room held back so
   a background search can never starve what you're doing in the app.
 
+### Fixed
+
+- **Scraping no longer writes a random "volume".** A scrape put the source's internal volume id (a number like 77691) into a comic's Volume field. It now writes the series' start year, as the original ComicVine Scraper did, and leaves Volume alone when the year isn't known. Comics already scraped keep their old value until you scrape them again (*Overwrite existing values* is on by default); the scheduled scrape now decides what is unscraped by the recorded source as well as the volume.
+
 ## [0.6.4-beta] - 2026-09-19
 
 ### Added

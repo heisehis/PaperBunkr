@@ -371,9 +371,15 @@ public sealed class ScrapeOrchestrator
             tracked.Imprint = volume.Publisher;
         }
 
-        if (ShouldWrite(ScrapeField.Volume, tracked.Volume, volume.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+        // The comic's Volume is the series' start year, as in the original ComicVine Scraper (its "volume_year_n": "Volume (start year) of this book", ComicVine having no
+        // volume numbers). It is never the source's volume id - an earlier port wrote that here, which showed up as a random five-digit "volume". Left alone when the year is unknown.
+        if (int.TryParse(volume.StartYear, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int startYear) && startYear > 0)
         {
-            tracked.Volume = volume.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string year = startYear.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (ShouldWrite(ScrapeField.Volume, tracked.Volume, year))
+            {
+                tracked.Volume = year;
+            }
         }
 
         // "Series" here is Paperbunkr's real relational Series.Name, not a per-issue flat string like

@@ -188,13 +188,15 @@ public class ScraperTests : IDisposable
     }
 
     [Fact]
-    public async Task ScrapeUnscraped_OnlyTouchesComicsWithNoVolumeLink()
+    public async Task ScrapeUnscraped_OnlyTouchesComicsWithNeitherAVolumeNorARecordedSource()
     {
         var unscraped = SeedIssue();
         int scraped;
         using (var context = NewContext())
         {
             var issue = new Issue { Series = new Series { Name = "Done" }, Number = "1", FilePath = "C:/x/done.cbz", Volume = "12345" };
+            // scraped from a source that knew no start year: the volume stays empty, but the recorded source says it was scraped
+            context.Issues.Add(new Issue { Series = new Series { Name = "Yearless" }, Number = "1", FilePath = "C:/x/yearless.cbz", MetadataSource = ComicProvider.Metron });
             context.Issues.Add(issue);
             context.SaveChanges();
             scraped = issue.Id;

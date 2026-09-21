@@ -155,7 +155,8 @@ public sealed class ScrapeCoordinator(
         List<int> ids;
         using (var context = createContext())
         {
-            ids = context.Issues.Where(i => string.IsNullOrEmpty(i.Volume) && i.FilePath != null).Select(i => i.Id).ToList();
+            // Never scraped: no recorded source and no volume. (The volume alone can't say, since it is only a year and stays empty when the source doesn't know one.)
+            ids = context.Issues.Where(i => i.MetadataSource == null && string.IsNullOrEmpty(i.Volume) && i.FilePath != null).Select(i => i.Id).ToList();
         }
 
         return ids.Count == 0 ? Task.FromResult("Nothing left to scrape.") : ScrapeIssuesAsync(ids, isInteractive: false, cancellationToken, existingJob);

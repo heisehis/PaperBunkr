@@ -337,6 +337,12 @@ public sealed class MetronClient : IComicProvider, IPullListSource
 
     private async Task<JsonNode> GetAsync(string url, CancellationToken cancellationToken)
     {
+        // Background work leaves the last slice of the day's quota for interactive use; it waits for the reset instead.
+        if (_priority == ComicVineRequestPriority.Low && MetronQuota.BackgroundShouldWait(out var untilReset))
+        {
+            throw new ComicVineException($"Metron's daily limit is nearly used up, so background updates resume in about {Math.Max(1, (int)Math.Ceiling(untilReset.TotalMinutes))} minutes.", 107);
+        }
+
         string body;
         HttpStatusCode status;
         try
@@ -346,6 +352,7 @@ public sealed class MetronClient : IComicProvider, IPullListSource
             request.Headers.UserAgent.ParseAdd("Paperbunkr (comic library manager)");
             using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
             status = response.StatusCode;
+            MetronQuota.Observe(response.Headers);
             body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)

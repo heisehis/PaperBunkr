@@ -1,3 +1,4 @@
+using Paperbunkr.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.ComicVine;
 using Paperbunkr.Data.ReadingLists;
@@ -23,7 +24,7 @@ public static class ArcFollowService
     /// <param name="sourceOverride">Test seam: replaces the registered arc source.</param>
     public static async Task<ArcFollowResult> RunAsync(
         PaperbunkrDbContext context, IComicVineClient? comicVine, CancellationToken cancellationToken,
-        IReadingListSource? sourceOverride = null, Action<int, int>? progress = null)
+        IReadingListSource? sourceOverride = null, Action<int, int>? progress = null, Func<ComicProvider, IComicVineClient?>? clientFor = null)
     {
         var lists = context.ReadingLists
             .Where(l => l.FollowArc && l.Source != null && l.ArcId != null)
@@ -45,9 +46,9 @@ public static class ArcFollowService
                 var refresh = await ArcReadingListBuilder.RefreshAsync(context, list.Id, cancellationToken, sourceOverride).ConfigureAwait(false);
                 added += refresh.AddedCount;
 
-                if (comicVine is not null)
+                if (comicVine is not null || clientFor is not null)
                 {
-                    var result = await ArcRequestService.RequestMissingAsync(context, list.Id, comicVine, cancellationToken).ConfigureAwait(false);
+                    var result = await ArcRequestService.RequestMissingAsync(context, list.Id, comicVine, cancellationToken, clientFor).ConfigureAwait(false);
                     requested += result.Requested;
                     unresolved += result.Unresolved.Count;
                 }

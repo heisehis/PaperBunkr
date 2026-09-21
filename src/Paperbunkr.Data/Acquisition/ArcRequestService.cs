@@ -16,6 +16,10 @@ public sealed record ArcRequestResult(int Requested, int AlreadyTracked, IReadOn
 /// The match is deliberately conservative: an ambiguous volume is reported as unresolved rather than guessed, because a wrong
 /// guess would download the wrong series.
 /// <para>
+/// A series that is already tracked keeps its own source: one tracked on Metron is read through Metron (the arc lists themselves never name a source), and a series
+/// that is not tracked yet is matched on ComicVine, as before.
+/// </para>
+/// <para>
 /// A placeholder always already has a local <see cref="Series"/> (the reading-list matcher creates one), so no series is created
 /// here. A <see cref="WatchedSeries"/> is created with <c>WatchFutureReleases = false</c>: requesting one crossover issue must never
 /// silently subscribe the user to the whole series.
@@ -27,7 +31,8 @@ public static class ArcRequestService
     private static readonly TimeSpan StaleCatalog = TimeSpan.FromHours(6);
 
     /// <summary>Bulk action for an arc-linked list (<c>Source</c> + <c>ArcId</c> set).</summary>
-    public static async Task<ArcRequestResult> RequestMissingAsync(PaperbunkrDbContext context, int readingListId, IComicVineClient comicVine, CancellationToken cancellationToken)
+    public static async Task<ArcRequestResult> RequestMissingAsync(PaperbunkrDbContext context, int readingListId, IComicVineClient? comicVine, CancellationToken cancellationToken,
+        Func<ComicProvider, IComicVineClient?>? clientFor = null)
     {
         var list = context.ReadingLists
             .Include(l => l.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.Series)
@@ -39,14 +44,17 @@ public static class ArcRequestService
         }
 
         var placeholders = list.Items.Select(i => i.Issue).OfType<Issue>().Where(i => i.IsPlaceholder).ToList();
-        return await RequestPlaceholdersAsync(context, placeholders, comicVine, cancellationToken).ConfigureAwait(false);
+        return await RequestPlaceholdersAsync(context, placeholders, comicVine, cancellationToken, clientFor).ConfigureAwait(false);
     }
 
     /// <summary>Requests the given placeholder issues (one, for a per-item Request on any list; many, for a bulk one).</summary>
-    public static async Task<ArcRequestResult> RequestPlaceholdersAsync(PaperbunkrDbContext context, IReadOnlyList<Issue> placeholders, IComicVineClient comicVine, CancellationToken cancellationToken)
+    public static async Task<ArcRequestResult> RequestPlaceholdersAsync(PaperbunkrDbContext context, IReadOnlyList<Issue> placeholders, IComicVineClient? comicVine, CancellationToken cancellationToken,
+        Func<ComicProvider, IComicVineClient?>? clientFor = null)
     {
         int requested = 0, already = 0;
         var unresolved = new List<UnresolvedRequest>();
+
+        IComicVineClient? ClientFor(ComicProvider provider) => clientFor?.Invoke(provider) ?? (provider == ComicProvider.ComicVine ? comicVine : null);
 
         foreach (var group in placeholders.Where(p => p.IsPlaceholder).GroupBy(p => p.SeriesId))
         {
@@ -56,7 +64,7 @@ public static class ArcRequestService
             WatchedSeries? watched;
             try
             {
-                watched = await ResolveWatchedSeriesAsync(context, series, items, comicVine, unresolved, cancellationToken).ConfigureAwait(false);
+                watched = await ResolveWatchedSeriesAsync(context, series, items, ClientFor, unresolved, cancellationToken).ConfigureAwait(false);
             }
             catch (ComicVineException ex) when (ex.ApiStatusCode is not (100 or 107))
             {
@@ -70,7 +78,8 @@ public static class ArcRequestService
                 continue; // ResolveWatchedSeriesAsync already recorded why
             }
 
-            var catalog = await EnsureCatalogAsync(context, watched, comicVine, cancellationToken).ConfigureAwait(false);
+            var client = ClientFor(watched.Provider)!;      // ResolveWatchedSeriesAsync only returns a series whose source can be reached
+            var catalog = await EnsureCatalogAsync(context, watched, client, cancellationToken).ConfigureAwait(false);
             bool refreshedForMissing = false;
 
             foreach (var item in items)
@@ -80,17 +89,17 @@ public static class ArcRequestService
                 if (entry is null && !refreshedForMissing && IsStale(watched))
                 {
                     refreshedForMissing = true;
-                    catalog = await RefreshAsync(context, watched, comicVine, cancellationToken).ConfigureAwait(false);
+                    catalog = await RefreshAsync(context, watched, client, cancellationToken).ConfigureAwait(false);
                     entry = catalog.FirstOrDefault(c => IssueNumbers.Equal(c.IssueNumber, item.Number));
                 }
 
                 if (entry is null)
                 {
-                    unresolved.Add(new UnresolvedRequest(series.Name, item.Number ?? "?", $"Issue not found in the ComicVine volume \"{watched.Name}\" ({watched.StartYear})."));
+                    unresolved.Add(new UnresolvedRequest(series.Name, item.Number ?? "?", $"Issue not found in the {ComicProviderFactory.DisplayName(watched.Provider)} volume \"{watched.Name}\" ({watched.StartYear})."));
                     continue;
                 }
 
-                var existing = context.WantedIssues.FirstOrDefault(w => w.Provider == ComicProvider.ComicVine && w.ExternalIssueId == entry.ExternalIssueId);
+                var existing = context.WantedIssues.FirstOrDefault(w => w.Provider == watched.Provider && w.ExternalIssueId == entry.ExternalIssueId);
                 if (existing is not null && existing.Status is not (WantedIssueStatus.Failed or WantedIssueStatus.Ignored))
                 {
                     already++;
@@ -106,12 +115,26 @@ public static class ArcRequestService
     }
 
     private static async Task<WatchedSeries?> ResolveWatchedSeriesAsync(PaperbunkrDbContext context, Series series, IReadOnlyList<Issue> items,
-        IComicVineClient comicVine, List<UnresolvedRequest> unresolved, CancellationToken cancellationToken)
+        Func<ComicProvider, IComicVineClient?> clientFor, List<UnresolvedRequest> unresolved, CancellationToken cancellationToken)
     {
-        var existing = context.WatchedSeries.FirstOrDefault(w => w.Provider == ComicProvider.ComicVine && w.SeriesId == series.Id);
+        // Already tracked: it keeps the source it was tracked with (ComicVine first when a series is somehow on both).
+        var existing = context.WatchedSeries.Where(w => w.SeriesId == series.Id).OrderBy(w => w.Provider).FirstOrDefault();
         if (existing is not null)
         {
+            if (clientFor(existing.Provider) is null)
+            {
+                unresolved.AddRange(items.Select(i => new UnresolvedRequest(series.Name, i.Number ?? "?", ComicProviderFactory.MissingCredentialsMessage(existing.Provider))));
+                return null;
+            }
+
             return existing;
+        }
+
+        var comicVine = clientFor(ComicProvider.ComicVine);
+        if (comicVine is null)
+        {
+            unresolved.AddRange(items.Select(i => new UnresolvedRequest(series.Name, i.Number ?? "?", "This series isn't tracked yet, and matching it needs your ComicVine API key (Preferences → Connections).")));
+            return null;
         }
 
         var volumes = await comicVine.SearchVolumesAsync(series.Name, cancellationToken).ConfigureAwait(false);

@@ -55,9 +55,7 @@ public partial class BookReaderScreen : UserControl
     {
         if (e is WindowsWebView2EnvironmentRequestedEventArgs winArgs)
         {
-            winArgs.UserDataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Paperbunkr", "WebView2");
+            winArgs.UserDataFolder = Path.Combine(Paperbunkr.Data.AppDataPaths.LocalRoot, "WebView2");
         }
     }
 

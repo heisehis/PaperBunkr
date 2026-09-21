@@ -256,6 +256,12 @@
                         <Button Classes="chipClose" Content="✕" Command="{Binding ClearTrackedFilterCommand}" />
                     </StackPanel>
                 </Border>
+                <Border Classes="chip" Margin="0,0,8,6" IsVisible="{Binding SourceFilter, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{Binding SourceChipLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                        <Button Classes="chipClose" Content="✕" Command="{Binding ClearSourceFilterCommand}" AutomationProperties.Name="Clear library filter" />
+                    </StackPanel>
+                </Border>
                 <Border Classes="chip" Margin="0,0,8,6" IsVisible="{Binding ShowSearchScopeChip}">
                     <StackPanel Orientation="Horizontal" Spacing="4">
                         <TextBlock Text="{Binding SearchScopeChipLabel, StringFormat='Search: {0}'}" FontSize="12"
@@ -342,6 +348,21 @@
                         <TextBlock Grid.Column="0" Text="Tracked series" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                         <ToggleSwitch Grid.Column="1" IsChecked="{Binding FilterTrackedOnly}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.AutomationId="LibraryFilterTrackedOnly" />
                     </Grid>
+                    <!-- Only when at least one remote library is mirrored: which library's books to show. -->
+                    <StackPanel Spacing="2" Margin="0,6,0,0" IsVisible="{Binding HasRemoteSources}">
+                        <TextBlock Text="Library" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <ItemsControl ItemsSource="{Binding SourceOptions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:LibraryScreenViewModel+SourceOption">
+                                    <Button Classes="chipBtn" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                            Content="{Binding Label}" Margin="0,0,0,2"
+                                            Command="{Binding $parent[ItemsControl].((vm:LibraryScreenViewModel)DataContext).SetSourceFilterCommand}"
+                                            CommandParameter="{Binding Id}"
+                                            AutomationProperties.Name="{Binding Label, StringFormat='Show {0}'}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </Popup>

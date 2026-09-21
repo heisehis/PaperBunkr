@@ -353,6 +353,15 @@
                                     <TextBlock Text="●" FontFamily="Consolas,monospace" />
                                 </Border>
                             </Border>
+                            <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
+                            <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="999" Padding="6,2"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7"
+                                    ToolTip.Tip="{Binding RemoteSourceName, StringFormat='On {0}'}">
+                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                    <fi:SymbolIcon Symbol="Globe" FontSize="11" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Remote" FontSize="10.5" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
                                 <!-- Was a hardcoded #B814161B near-black scrim - fixed to the real
                                      skin tokens (docs/superpowers/specs/2026-09-14-library-visual-
@@ -425,6 +434,15 @@
                                        ToolTip.Tip="{Binding SeriesName}" />
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
+                            <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="999" Padding="6,2"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7"
+                                    ToolTip.Tip="{Binding RemoteSourceName, StringFormat='On {0}'}">
+                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                    <fi:SymbolIcon Symbol="Globe" FontSize="11" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Remote" FontSize="10.5" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
                                 <controls:BrandMark IsVisible="{Binding HasPublisher}" Family="Publisher" Value="{Binding Publisher}"
                                                     ShowText="False" MarkSize="14" />
@@ -615,6 +633,15 @@
                                     <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" />
                                 </Border>
                             </Border>
+                            <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
+                            <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="999" Padding="6,2"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7"
+                                    ToolTip.Tip="{Binding RemoteSourceName, StringFormat='On {0}'}">
+                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                    <fi:SymbolIcon Symbol="Globe" FontSize="11" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Remote" FontSize="10.5" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
                                 <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="5,2"
                                         HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
@@ -690,6 +717,15 @@
                             <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
+                            <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="999" Padding="6,2"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7"
+                                    ToolTip.Tip="{Binding RemoteSourceName, StringFormat='On {0}'}">
+                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                    <fi:SymbolIcon Symbol="Globe" FontSize="11" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Remote" FontSize="10.5" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
                                 <controls:BrandMark IsVisible="{Binding HasPublisher}" Family="Publisher" Value="{Binding Publisher}"
                                                     ShowText="False" MarkSize="14" />

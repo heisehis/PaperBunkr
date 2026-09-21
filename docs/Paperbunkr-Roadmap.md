@@ -690,6 +690,10 @@ curated-browse-design.md`. **Not yet committed as of this write-up** — still s
 changes in this working tree.
 
 ### Remote/server library sharing
+> **Built 2026-09-20 on branch `feat/remote-library-sharing` (unmerged, not verified on-screen).** Design + plan:
+> `docs/superpowers/specs/2026-09-19-remote-library-sharing-{design,plan}.md`; the session note in `paperbunkr-todo.md` lists what was verified and the open follow-ups.
+> The paragraph below is the original pre-design note, kept for history.
+
 Client (connect to another instance's shared library) + server (host, password-protected,
 per-list sharing). Substantial subsystem, not named anywhere in the
 original onboarding.md — needs its own brainstorm → design spec before any implementation starts.

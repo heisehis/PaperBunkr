@@ -37,7 +37,11 @@ public static class InsightsResolver
         // AsNoTrackingWithIdentityResolution so every Issue that shares a Series row also shares the
         // same Series CLR instance - the attention tiles group issues by their Series, and plain
         // AsNoTracking would hand each issue its own Series copy (one group per issue).
-        var issues = context.Issues.AsNoTrackingWithIdentityResolution()
+        // "What to read next" includes books from remote libraries you have started (docs/superpowers/specs/2026-09-19-remote-
+        // library-sharing-design.md section 8), so it needs those rows: IgnoreQueryFilters lifts the default local-only filter.
+        // "Gaps" is about what is missing from a collection you own, so it looks at local issues only - a remote series may be
+        // shared incompletely by design and its "missing" numbers are not yours to fill.
+        var issues = context.Issues.IgnoreQueryFilters().AsNoTrackingWithIdentityResolution()
             .Include(i => i.Series)
             .Include(i => i.Tags)
             .ToList();
@@ -48,7 +52,7 @@ public static class InsightsResolver
             Continue: ComputeContinue(issues, events, nowUtc),
             AlmostDone: ComputeAlmostDone(issues),
             DiveIn: ComputeDiveIn(issues, events),
-            Gaps: ComputeGaps(issues));
+            Gaps: ComputeGaps(issues.Where(i => i.RemoteSourceId == null).ToList()));
     }
 
     // --- Reading (what to read next) --------------------------------------------------------

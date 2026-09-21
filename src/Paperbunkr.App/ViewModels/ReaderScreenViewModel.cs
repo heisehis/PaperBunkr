@@ -803,7 +803,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// </summary>
     public void RefreshDisplaySettings()
     {
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var appSettings = context.GetOrCreateAppSettings();
         CanvasBackgroundBrush = ComputeCanvasBackgroundBrush(appSettings.ImageBackgroundMode, appSettings.BackgroundColor, appSettings.BackgroundTexture);
         // Item 1 §1.5 - a page drop-shadow only when a texture background is active (solid Color/
@@ -850,7 +850,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var issue = context.Issues.Find(issueId);
         if (issue is not null)
         {
@@ -875,7 +875,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var issue = context.Issues.Find(issueId);
         if (issue is not null)
         {
@@ -899,9 +899,12 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// (Reading Lists' click-to-read, Home's "Try This Reading List" card); every other caller keeps
     /// today's plain series-order behavior.
     /// </summary>
+    /// <summary>Opens books from remote libraries; set by the shell (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md section 7.3). Null in tests that never read a remote book.</summary>
+    public Services.Sharing.RemoteReaderSource? RemoteReader { get; set; }
+
     public void LoadIssue(int issueId, int? readingListId = null)
     {
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var issue = context.Issues.Include(i => i.Series).Include(i => i.MetadataProposals).FirstOrDefault(i => i.Id == issueId);
         if (issue?.Series is null)
         {
@@ -927,7 +930,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals).OrderBy(s => s.SortName ?? s.Name).FirstOrDefault();
         var issue = series?.Issues.OrderByNumber().FirstOrDefault();
         if (series is not null && issue is not null)
@@ -1157,6 +1160,22 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
                 }
             }
         }
+        else if (issue.RemoteSourceId is not null && RemoteReader is not null)
+        {
+            // A book from a remote library (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md
+            // section 7.3): the same pipeline as a local file, fed page bytes from the host through the bounded
+            // fetcher and disk cache. Progress, bookmarks and overrides below are stored on the client's own row.
+            Services.Reader.ReaderPerfStats.Current.Reset();
+            _decoder = RemoteReader.TryOpen(issue, appSettings.ReaderMemoryLimitMb);
+            if (_decoder is null)
+            {
+                ErrorMessage = "Couldn't open this remote book - its page count isn't known yet. Refresh the remote library and try again.";
+            }
+            else
+            {
+                pageCount = _decoder.PageCount > 0 ? _decoder.PageCount : pageCount;
+            }
+        }
         else
         {
             ErrorMessage = "This issue has no file linked yet.";
@@ -1282,7 +1301,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var series = context.Series.FirstOrDefault(s => s.Id == seriesId);
         if (series is null)
         {
@@ -1325,7 +1344,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var series = context.Series.FirstOrDefault(s => s.Id == seriesId);
         if (series is null)
         {
@@ -1378,7 +1397,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using (var context = PaperbunkrDb.CreateContext())
+        using (var context = PaperbunkrDb.CreateContext(includeRemote: true))
         {
             var series = context.Series.FirstOrDefault(s => s.Id == seriesId);
             if (series is null)
@@ -1408,7 +1427,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var issue = context.Issues.Find(issueId);
         if (issue is not null)
         {
@@ -1427,7 +1446,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var issue = context.Issues.Find(issueId);
         if (issue is not null)
         {
@@ -1449,7 +1468,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     {
         PageTransitionStyle = style;
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         context.GetOrCreateAppSettings().PageTransitionStyle = style;
         context.SaveChanges();
     }
@@ -1631,7 +1650,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var bookmark = new IssueBookmark
         {
             IssueId = issueId,
@@ -1683,7 +1702,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var row = context.IssueBookmarks.Find(bookmark.Id);
         if (row is not null)
         {
@@ -1743,7 +1762,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         bookmark.Label = newLabel;
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var row = context.IssueBookmarks.Find(bookmark.Id);
         if (row is not null)
         {
@@ -1796,7 +1815,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var row = context.IssuePages.FirstOrDefault(p => p.IssueId == issueId && p.PageNumber == pageNumber);
         PageType effectiveType = newType ?? row?.PageType ?? PageType.Story;
         int effectiveRotation = newRotation ?? row?.RotationDegrees ?? 0;
@@ -2241,7 +2260,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         UpdateThumbnailSelection();
         RefreshCurrentPage();
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var issue = context.Issues.FirstOrDefault(i => i.Id == issueId);
         if (issue is not null)
         {
@@ -2372,7 +2391,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         }
 
         _pendingPositionSaveIssueId = null;
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var issue = context.Issues.Find(issueId);
         if (issue is not null)
         {
@@ -2521,7 +2540,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// </summary>
     private void NavigateToAdjacentIssue(bool forward, bool bypassAutoNavigateSetting = false)
     {
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         if (!bypassAutoNavigateSetting && !context.GetOrCreateAppSettings().AutoNavigateComics)
         {
             return;
@@ -2798,7 +2817,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         fromIssue = null!;
         toIssue = null!;
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         if (!bypassAutoNavigateSetting && !context.GetOrCreateAppSettings().AutoNavigateComics)
         {
             return false;
@@ -2827,7 +2846,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         if (!context.GetOrCreateAppSettings().PromptReviewOnFinish)
         {
             return;

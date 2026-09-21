@@ -19,13 +19,11 @@ public static class PluginPaths
 
     private static string BuildDefaultDirectory()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "Paperbunkr", "plugins");
+        return Paperbunkr.Data.AppDataPaths.Combine("plugins");
     }
 
     private static string BuildDefaultStagingDirectory()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "Paperbunkr", "plugin-staging");
+        return Paperbunkr.Data.AppDataPaths.Combine("plugin-staging");
     }
 }

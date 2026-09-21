@@ -16,8 +16,7 @@ public static class CustomBookCoverPaths
 
     private static string BuildDefaultDirectory()
     {
-        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "Paperbunkr", "custom-book-covers");
+        return Paperbunkr.Data.AppDataPaths.Combine("custom-book-covers");
     }
 
     public static string GetCachePath(int bookId)

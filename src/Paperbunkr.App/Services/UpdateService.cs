@@ -52,7 +52,7 @@ public class UpdateService
         // cleanup can remove the file before the user acts, leaving "Restart" to fail against a
         // missing installer. Same %APPDATA%\Paperbunkr\<subfolder> convention this app already uses
         // for backups (BackupService.DefaultBackupLocation) - persistent, not swept by Temp cleanup.
-        TmpDownloadFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Paperbunkr", "updates"),
+        TmpDownloadFilePath = Paperbunkr.Data.AppDataPaths.Combine("updates"),
     };
 
     public Task<UpdateInfo> CheckForUpdatesAsync() => _sparkle.CheckForUpdatesQuietly();

@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Paperbunkr.Engine\Paperbunkr.Engine.csproj" />
+    <ProjectReference Include="..\Paperbunkr.Sharing\Paperbunkr.Sharing.csproj" />
   </ItemGroup>
 
   <!--

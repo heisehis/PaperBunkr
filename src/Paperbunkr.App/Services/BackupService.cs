@@ -106,7 +106,7 @@ public class BackupService
     }
 
     private static string DefaultBackupLocation() =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Paperbunkr", "backups");
+        Paperbunkr.Data.AppDataPaths.Combine("backups");
 
     /// <summary>
     /// Copies the live database file to a timestamped backup, then prunes anything beyond

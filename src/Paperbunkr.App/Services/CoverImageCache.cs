@@ -98,7 +98,23 @@ public static class CoverImageCache
         }
 
         string generated = CoverThumbnailPaths.GetCachePath(idKey);
-        return File.Exists(generated) ? generated : string.Empty;
+        if (File.Exists(generated))
+        {
+            return generated;
+        }
+
+        // A remote library's issue has no file to generate a thumbnail from; its cover is downloaded into its
+        // own directory (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md section 7.4).
+        if (int.TryParse(idKey, NumberStyles.Integer, CultureInfo.InvariantCulture, out int remoteId))
+        {
+            string peer = Sharing.PeerCoverPaths.GetCachePath(remoteId);
+            if (File.Exists(peer))
+            {
+                return peer;
+            }
+        }
+
+        return string.Empty;
     }
 
     /// <summary>Adds <paramref name="decoded"/> under <paramref name="idKey"/> unless another decode

@@ -8,7 +8,7 @@
     <!-- Single source of truth for the release version (docs/superpowers/specs/
          2026-09-01-auto-update-and-changelog-design.md). CI derives the SemVer release tag/appcast
          version from this by dropping the trailing revision segment and appending "-beta". -->
-    <Version>0.6.8.0</Version>
+    <Version>0.6.9.0</Version>
     <!-- We stamp InformationalVersion ourselves in _PbStampBuildMetadata below; turn off the SDK's
          own SourceLink-driven "+<SourceRevisionId>" append so it can't double-stamp. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -127,6 +127,7 @@
     <ProjectReference Include="..\Paperbunkr.Common\Paperbunkr.Common.csproj" />
     <ProjectReference Include="..\Paperbunkr.Engine\Paperbunkr.Engine.csproj" />
     <ProjectReference Include="..\Paperbunkr.Data\Paperbunkr.Data.csproj" />
+    <ProjectReference Include="..\Paperbunkr.Sharing\Paperbunkr.Sharing.csproj" />
     <ProjectReference Include="..\Paperbunkr.Daemon\Paperbunkr.Daemon.csproj" />
     <ProjectReference Include="..\Paperbunkr.Plugins\Paperbunkr.Plugins.csproj" />
     <!-- Needed for the real INativePluginUiEnvironment implementation (docs/superpowers/specs/

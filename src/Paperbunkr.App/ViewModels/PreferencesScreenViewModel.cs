@@ -399,6 +399,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public bool IsOrganizeScrapeSection => ActiveSection == PreferencesSection.OrganizeScrape;
 
+    /// <summary>Preferences → Sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md §9); its own view model, set by the shell after construction (it needs the app-wide sharing services).</summary>
+    public bool IsSharingSection => ActiveSection == PreferencesSection.Sharing;
+
+    [ObservableProperty]
+    private SharingSettingsViewModel? _sharing;
+
     /// <summary>Preferences → Organize &amp; Scrape (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8); its own view model, like <see cref="Acquisition"/>.</summary>
     public OrganizeScrapeSettingsViewModel OrganizeScrape { get; }
 
@@ -768,6 +774,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsConnectionsSection));
         OnPropertyChanged(nameof(IsAcquisitionSection));
         OnPropertyChanged(nameof(IsOrganizeScrapeSection));
+        OnPropertyChanged(nameof(IsSharingSection));
         OnPropertyChanged(nameof(IsPluginsSection));
         OnPropertyChanged(nameof(IsAdvancedSection));
         OnPropertyChanged(nameof(IsAboutSection));
@@ -790,6 +797,17 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     {
         OrganizeScrape.Load();   // pick up a ComicVine key added under Connections since this section was last shown
         ActiveSection = PreferencesSection.OrganizeScrape;
+    }
+
+    [RelayCommand]
+    private void GoSharing()
+    {
+        Sharing?.Load();   // pick up lists created and libraries synced since this section was last shown
+        if (Sharing is { IsHostRunning: true })
+        {
+            _ = Sharing.RefreshNetworkWarningAsync();
+        }
+        ActiveSection = PreferencesSection.Sharing;
     }
 
     [RelayCommand]

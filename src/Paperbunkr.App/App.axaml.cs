@@ -378,6 +378,26 @@ public partial class App : Application
             mainViewModel.AcquisitionBridge.Dispose();
         };
 
+        // Remote library sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md): start serving only if the user
+        // turned it on, and refresh the saved remote libraries quietly. Both report through Activity Center and never throw into startup.
+        _ = System.Threading.Tasks.Task.Run(async () =>
+        {
+            try
+            {
+                await mainViewModel.ShareHost.StartIfEnabledAsync();
+                await mainViewModel.RemoteLibraries.SyncAllAsync(Paperbunkr.Data.Entities.ActivityTrigger.Startup);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsService.LogMilestone($"Remote sharing startup failed: {ex.Message}");
+            }
+        });
+        desktop.Exit += (_, _) =>
+        {
+            System.Threading.Tasks.Task.Run(() => mainViewModel.ShareHost.StopAsync()).Wait(TimeSpan.FromSeconds(3));
+            mainViewModel.RemoteLibraries.Dispose();
+        };
+
         // Auto-backup shutdown trigger (spec §2) - the primary trigger, since it also catches
         // sessions left open all day that never restart. Synchronous and best-effort: a normal
         // checkpoint+file-copy is fast enough not to perceptibly delay exit, and

@@ -5,6 +5,8 @@ All notable changes to Paperbunkr are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.7.0-beta] - 2026-09-21
+
 ### Added
 
 - **Weekly pull list.** Wanted gains a **Releases** tab: every comic Metron lists for the last week and the next four, grouped by week, with a publisher filter and a "followed only" switch. **Request** wants one issue; **Follow** tracks the series and requests its upcoming issues. Releases of series you already follow become **Upcoming** wants on their own, so future issues show up without waiting for ComicVine to list them. It needs your Metron login (Preferences → Connections) and is refreshed in the background about twice a day; "Search now" can refresh it after an hour. The Wanted screen's Downloads list now scrolls on its own. This adds a migration, so back up your database first. You can **Hide** a release you don't want (Show hidden brings it back), and the Activity Center tells you when new releases of followed series were added. Without a Metron login the list comes from ComicVine instead (at a smaller scale, since ComicVine allows far fewer requests). Story-arc requests now work for series tracked on Metron, Metron series show a cover (their first issue's), background Metron requests leave part of the day's quota for you, and a re-scrape starts on the source the comics were scraped from.
@@ -43,6 +45,7 @@ All notable changes to Paperbunkr are documented here. Format follows
 
 ### Fixed
 
+- **Update "Restart" no longer freezes.** Clicking Restart on the update-ready notice left the app hung and never started the installer, because the updater was never told how to close Paperbunkr. It now closes the app cleanly and the installer runs. Builds before this one still have the problem, so install this release by hand once.
 - **Scraping no longer writes a random "volume".** A scrape put the source's internal volume id (a number like 77691) into a comic's Volume field. It now writes the series' start year, as the original ComicVine Scraper did, and leaves Volume alone when the year isn't known. Comics already scraped keep their old value until you scrape them again (*Overwrite existing values* is on by default); the scheduled scrape now decides what is unscraped by the recorded source as well as the volume.
 
 ## [0.6.4-beta] - 2026-09-19

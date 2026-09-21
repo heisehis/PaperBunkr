@@ -37,7 +37,7 @@ public interface IComicVineClient
 /// the UI; interactive lookups use <see cref="ComicVineRequestPriority.High"/>.
 /// </para>
 /// </summary>
-public sealed class ComicVineClient : IComicProvider
+public sealed class ComicVineClient : IComicProvider, IPullListSource
 {
     private const string BaseUrl = "https://comicvine.gamespot.com/api";
     private const int PageSize = 100;
@@ -141,6 +141,60 @@ public sealed class ComicVineClient : IComicProvider
         }
 
         return issues;
+    }
+
+    /// <summary>
+    /// Every issue with a store date in the window, across all volumes (<c>issues?filter=store_date:from|to</c>, 100 a page). It costs one request per 100 issues from ComicVine's
+    /// small hourly budget, so it is the fallback when no Metron login is saved, not the first choice.
+    /// </summary>
+    public async Task<IReadOnlyList<PullListEntry>> GetReleasesAsync(DateTime from, DateTime to, CancellationToken cancellationToken)
+    {
+        var entries = new List<PullListEntry>();
+        int offset = 0;
+
+        for (int page = 0; page < MaxPages; page++)
+        {
+            var url = Url("issues", $"filter=store_date:{from:yyyy-MM-dd}|{to:yyyy-MM-dd}&field_list={IssueFields}&limit={PageSize}&offset={offset}&sort=store_date:asc");
+            var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+
+            var results = root["results"] as JsonArray;
+            if (results is null || results.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var node in results)
+            {
+                if (node is not JsonObject o || o["id"] is null || o["volume"] is not JsonObject volume || volume["id"] is null || ParseDate(o["store_date"]) is not DateTime storeDate)
+                {
+                    continue;
+                }
+
+                entries.Add(new PullListEntry(
+                    o["id"]!.GetValue<int>(),
+                    volume["id"]!.GetValue<int>(),
+                    (volume["name"]?.GetValue<string>() ?? string.Empty).Trim(),
+                    o["issue_number"]?.GetValue<string>()?.Trim() ?? string.Empty,
+                    storeDate,
+                    ParseDate(o["cover_date"]),
+                    ImageUrl(o["image"])));
+            }
+
+            offset += results.Count;
+            int total = root["number_of_total_results"]?.GetValue<int>() ?? 0;
+            if (offset >= total)
+            {
+                break;
+            }
+        }
+
+        return entries;
+    }
+
+    public async Task<PullListSeriesInfo?> GetSeriesInfoAsync(int seriesId, CancellationToken cancellationToken)
+    {
+        var volume = await GetVolumeAsync(seriesId, cancellationToken).ConfigureAwait(false);
+        return volume is null ? null : new PullListSeriesInfo(volume.Id, volume.Name, volume.Publisher, volume.StartYear, ComicVineId: null);
     }
 
     /// <summary>ComicVine's own person-role -> Paperbunkr credit field mapping (CE's <c>cvdb.py</c> person_credits handling, as verified in the plugin this was ported from).</summary>

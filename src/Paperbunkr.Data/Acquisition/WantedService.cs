@@ -142,7 +142,7 @@ public static class WantedService
 
     /// <summary>
     /// Marks a weekly-pull-list release wanted for a tracked series, unless the library already owns that number or the series already has a want for it (from either
-    /// source). The want carries Metron's own ids, so the import-time details lookup asks Metron even when the series was tracked on ComicVine. Returns the new want,
+    /// source). The want carries the listing source's own ids, so the import-time details lookup asks that source even when the series was tracked on the other one. Returns the new want,
     /// or <c>null</c> when there was nothing to add.
     /// </summary>
     public static WantedIssue? RequestFromRelease(PaperbunkrDbContext context, WatchedSeries watched, PullListRelease release)
@@ -153,7 +153,7 @@ public static class WantedService
         }
 
         var sameNumber = context.WantedIssues.Where(w => w.WatchedSeriesId == watched.Id).AsEnumerable().Any(w => IssueNumbers.Equal(w.IssueNumber, release.IssueNumber));
-        var sameId = context.WantedIssues.Any(w => w.Provider == ComicProvider.Metron && w.ExternalIssueId == release.ExternalIssueId);
+        var sameId = context.WantedIssues.Any(w => w.Provider == release.Provider && w.ExternalIssueId == release.ExternalIssueId);
         if (sameNumber || sameId)
         {
             return null;
@@ -162,7 +162,7 @@ public static class WantedService
         var wanted = new WantedIssue
         {
             WatchedSeriesId = watched.Id,
-            Provider = ComicProvider.Metron,
+            Provider = release.Provider,
             ExternalIssueId = release.ExternalIssueId,
             IssueNumber = release.IssueNumber,
             StoreDate = release.StoreDate,

@@ -220,4 +220,40 @@ public class ComicVineClientTests
         Assert.Equal(150, some.Count);                                           // the cap is honoured even when ComicVine has more
         Assert.Equal(2, cappedHandler.Requests.Count);
     }
+
+    [Fact]
+    public async Task GetReleases_FiltersByStoreDate_PagesThroughAll_AndSkipsUndatedRows()
+    {
+        var (client, handler) = Make(request =>
+        {
+            bool second = request.RequestUri!.OriginalString.Contains("offset=2");
+            return (HttpStatusCode.OK, second
+                ? Ok("""[{"id":903,"issue_number":"1","name":null,"store_date":"2026-10-07","cover_date":"2026-11-01","image":null,"volume":{"id":20,"name":"Batman"}}]""", total: 3, offset: 2)
+                : Ok("""
+                    [{"id":901,"issue_number":"350","name":"Endgame","store_date":"2026-09-30","cover_date":"2026-10-01","image":{"medium_url":"http://x/s.jpg"},"volume":{"id":10,"name":"Spawn"}},
+                     {"id":902,"issue_number":"351","name":null,"store_date":null,"cover_date":null,"image":null,"volume":{"id":10,"name":"Spawn"}}]
+                    """, total: 3));
+        });
+
+        var releases = await ((IPullListSource)client).GetReleasesAsync(new DateTime(2026, 9, 23), new DateTime(2026, 10, 21), CancellationToken.None);
+
+        Assert.Equal(new[] { 901, 903 }, releases.Select(r => r.IssueId));                  // 902 has no store date
+        Assert.Equal(new PullListEntry(901, 10, "Spawn", "350", new DateTime(2026, 9, 30), new DateTime(2026, 10, 1), "http://x/s.jpg"), releases[0]);
+        var first = handler.Requests[0].RequestUri!.OriginalString;
+        Assert.Contains("/issues/?api_key=KEY", first);
+        Assert.Contains("filter=store_date:2026-09-23|2026-10-21", first);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(Paperbunkr.Data.Entities.ComicProvider.ComicVine, ((IPullListSource)client).Kind);
+    }
+
+    [Fact]
+    public async Task GetSeriesInfo_ReadsTheVolumesPublisher_WithNoCrossReferenceId()
+    {
+        var handlerJson = """{"status_code":1,"error":"OK","number_of_total_results":1,"offset":0,"results":{"id":10,"name":"Spawn","publisher":{"name":"Image"},"start_year":"1992","count_of_issues":355,"image":null}}""";
+        var (single, _) = Make(_ => (HttpStatusCode.OK, handlerJson));
+
+        var info = await ((IPullListSource)single).GetSeriesInfoAsync(10, CancellationToken.None);
+
+        Assert.Equal(new PullListSeriesInfo(10, "Spawn", "Image", 1992, null), info);
+    }
 }

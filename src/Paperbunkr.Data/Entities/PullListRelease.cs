@@ -9,10 +9,13 @@ public class PullListRelease
 {
     public int Id { get; set; }
 
-    /// <summary>Metron's issue id (a release from another source would need its own provider column; only Metron lists by store date today).</summary>
+    /// <summary>Which source listed this release. The list comes from one source at a time (Metron when its login is saved, else ComicVine); rows saved before ComicVine was an option are Metron's.</summary>
+    public ComicProvider Provider { get; set; } = ComicProvider.Metron;
+
+    /// <summary>The source's issue id.</summary>
     public int ExternalIssueId { get; set; }
 
-    /// <summary>Metron's series id for the release.</summary>
+    /// <summary>The source's series (ComicVine: volume) id for the release.</summary>
     public int SeriesId { get; set; }
 
     public string SeriesName { get; set; } = string.Empty;
@@ -32,11 +35,13 @@ public class PullListRelease
 }
 
 /// <summary>
-/// What Metron says about a series, cached because a release list item doesn't carry it: the publisher (for the Releases filter) and the ComicVine id (to recognise a
-/// release that belongs to a series tracked on ComicVine). Keyed by Metron's series id.
+/// What the list's source says about a series, cached because a release list item doesn't carry it: the publisher (for the Releases filter) and, for Metron, the ComicVine id
+/// (to recognise a release that belongs to a series tracked on ComicVine). Keyed by the source and its series id.
 /// </summary>
-public class MetronSeriesInfo
+public class ReleaseSeriesInfo
 {
+    public ComicProvider Provider { get; set; } = ComicProvider.Metron;
+
     public int SeriesId { get; set; }
 
     public string Name { get; set; } = string.Empty;

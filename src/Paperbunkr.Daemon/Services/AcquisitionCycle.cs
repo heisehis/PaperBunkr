@@ -24,7 +24,8 @@ public sealed class AcquisitionCycle(
     Func<DateTime>? now = null,
     GrabService? grabService = null,
     Func<string, string, IComicVineClient>? createMetron = null,
-    Func<string, string, IPullListSource>? createPullListSource = null)
+    Func<string, string, IPullListSource>? createPullListSource = null,
+    Func<string, IPullListSource>? createComicVinePullList = null)
 {
     public const string NotConfiguredAlert = "acquisition-not-configured";
     public const string IndexerAlert = "acquisition-indexer";
@@ -230,8 +231,9 @@ public sealed class AcquisitionCycle(
     }
 
     /// <summary>
-    /// The weekly pull list: refetched about twice a day (an hour apart at the soonest for "Search now"), and only with a Metron login saved. A failure never stops the cycle - the
-    /// wants already made and the cached list stay as they are.
+    /// The weekly pull list: refetched about twice a day (an hour apart at the soonest for "Search now"). It comes from Metron when its login is saved (it lists by date across all
+    /// publishers); otherwise from ComicVine when its key is saved, at a smaller scale because ComicVine's hourly budget is small; with neither, nothing is fetched. A failure never
+    /// stops the cycle - the wants already made and the cached list stay as they are.
     /// </summary>
     private async Task RefreshPullListAsync(PaperbunkrDbContext context, bool manual, CancellationToken cancellationToken)
     {
@@ -242,24 +244,37 @@ public sealed class AcquisitionCycle(
 
         var user = CredentialStore.Get(context, "Metron", CredentialKind.Username);
         var password = CredentialStore.Get(context, "Metron", CredentialKind.Password);
-        if (string.IsNullOrWhiteSpace(user) || string.IsNullOrEmpty(password))
+        var apiKey = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey);
+
+        IPullListSource source;
+        if (!string.IsNullOrWhiteSpace(user) && !string.IsNullOrEmpty(password))
+        {
+            source = (createPullListSource ?? ((u, p) => new MetronClient(u, p, ComicVineRequestPriority.Low)))(user, password);
+        }
+        else if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            source = (createComicVinePullList ?? (k => new ComicVineClient(k, ComicVineRequestPriority.Low)))(apiKey);
+        }
+        else
         {
             return;
         }
 
-        var source = (createPullListSource ?? ((u, p) => new MetronClient(u, p, ComicVineRequestPriority.Low)))(user, password);
+        var provider = source.Kind;
+        var name = ComicProviderFactory.DisplayName(provider);
+        var alert = provider == ComicProvider.Metron ? MetronAlert : ComicVineAlert;
         try
         {
             await PullListService.RefreshAsync(context, source, _now().Date, cancellationToken).ConfigureAwait(false);
-            events.Publish(new DaemonAlertClearedEvent(MetronAlert));
+            events.Publish(new DaemonAlertClearedEvent(alert));
         }
         catch (ComicVineException ex) when (ex.ApiStatusCode == 100)
         {
-            events.Publish(new DaemonAlertEvent(MetronAlert, DaemonAlertSeverity.Warning, "Metron rejected your login", "Update it in Preferences → Connections."));
+            events.Publish(new DaemonAlertEvent(alert, DaemonAlertSeverity.Warning, provider == ComicProvider.Metron ? "Metron rejected your login" : "ComicVine rejected your API key", "Update it in Preferences → Connections."));
         }
         catch (ComicVineException ex)
         {
-            events.Publish(new DaemonAlertEvent(MetronAlert, DaemonAlertSeverity.Info, "The weekly pull list is paused", ex.Message));
+            events.Publish(new DaemonAlertEvent(alert, DaemonAlertSeverity.Info, $"The weekly pull list ({name}) is paused", ex.Message));
         }
     }
 

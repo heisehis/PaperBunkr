@@ -102,6 +102,7 @@ public sealed partial class WatchedSeriesRowViewModel : ObservableObject
     public int MissingCount { get; init; }
     public int WantedCount { get; init; }
     public bool IsMetron { get; init; }
+    public RemoteCoverSource Cover { get; init; } = new(null);
     public string CountsText => $"{MissingCount} missing · {WantedCount} wanted";
 
     /// <summary>"Follow": request future issues automatically. The initial value is set through the field, so loading never fires <see cref="FollowChanged"/>.</summary>
@@ -314,6 +315,7 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
                 Subtitle = string.Join(" · ", new[] { watched.Publisher, watched.StartYear?.ToString(CultureInfo.InvariantCulture) }.Where(s => !string.IsNullOrEmpty(s))),
                 SeriesId = watched.SeriesId,
                 IsMetron = watched.Provider == ComicProvider.Metron,
+                Cover = new RemoteCoverSource(watched.CoverImageUrl),
                 MissingCount = WantedService.GetMissing(context, watched).Count,
                 WantedCount = context.WantedIssues.Count(w => w.WatchedSeriesId == watched.Id && w.Status == WantedIssueStatus.Wanted),
             };
@@ -527,6 +529,14 @@ public sealed partial class WantedScreenViewModel : ViewModelBase
         {
             // Ranked by name match (there is no local series to compare with here), and more than ComicVine's first 25 by issue count.
             var volumes = await VolumeSearchService.SearchAndRankAsync(_createProvider(provider), query, new LocalSeriesHints(query), cancellationToken);
+            if (provider == ComicProvider.Metron && volumes.Count > 0)
+            {
+                // Metron has no series covers: borrow one from the weekly list's cache where the series is in it.
+                using var coverContext = _createContext();
+                var covers = PullListService.CachedCovers(coverContext, volumes.Take(VolumeResultViewModel.PageSize).Select(r => r.Volume.Id));
+                volumes = volumes.Select(r => covers.TryGetValue(r.Volume.Id, out var url) ? r with { Volume = r.Volume with { ImageUrl = url } } : r).ToList();
+            }
+
             Fill(SearchResults, volumes.Take(VolumeResultViewModel.PageSize).Select((r, i) => new VolumeResultViewModel { Volume = r.Volume, IsTracked = tracked.Contains(r.Volume.Id), IsBestMatch = i == 0 && volumes.Count > 1, Cover = new RemoteCoverSource(r.Volume.ImageUrl) }));
             OnPropertyChanged(nameof(HasSearchResults));
             SetStatus(volumes.Count == 0 ? $"No {ComicProviderFactory.DisplayName(provider)} series found for \"{query}\"." : string.Empty, isError: false);

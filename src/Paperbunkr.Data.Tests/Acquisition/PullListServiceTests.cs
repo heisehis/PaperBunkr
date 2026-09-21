@@ -219,4 +219,37 @@ public class PullListServiceTests : AcquisitionTestBase
         PullListService.Store(Context, new[] { Entry(1, 10, "Spawn", "350", Today.AddDays(9)), Entry(2, 10, "Spawn", "351", Today.AddDays(14)) }, DateTime.UtcNow);
         Assert.True(Context.PullListReleases.Single(r => r.ExternalIssueId == 1).IsHidden);   // a refresh (even a moved date) keeps the choice
     }
+
+    [Fact]
+    public void ASeriesWithoutACover_TakesTheFirstIssuesCover_ButNeverReplacesOneItHas()
+    {
+        var metron = WantedService.TrackVolume(Context, new ComicVineVolume(10, "Spawn", "Image", 1992, 300, null), null, false, ComicProvider.Metron);
+        WantedService.RefreshCatalog(Context, metron, new[]
+        {
+            new ComicVineIssue(2, "2", null, Today.AddDays(-30), null, "https://x/second.jpg", 10),
+            new ComicVineIssue(1, "1", null, Today.AddDays(-60), null, "https://x/first.jpg", 10),
+            new ComicVineIssue(3, "3", null, Today.AddDays(-5), null, null, 10),
+        });
+        Assert.Equal("https://x/first.jpg", metron.CoverImageUrl);                 // the earliest issue stands in for the series
+
+        var comicVine = WantedService.TrackVolume(Context, new ComicVineVolume(20, "Batman", "DC", 2016, 50, "https://cv/volume.jpg"), null, false);
+        WantedService.RefreshCatalog(Context, comicVine, new[] { new ComicVineIssue(9, "1", null, Today, null, "https://cv/issue.jpg", 20) });
+        Assert.Equal("https://cv/volume.jpg", comicVine.CoverImageUrl);            // ComicVine's own volume cover is kept
+    }
+
+    [Fact]
+    public void CachedCovers_GivesTheNewestReleaseCoverPerSeries_AndNothingForSeriesNotInTheList()
+    {
+        Context.PullListReleases.AddRange(
+            new PullListRelease { ExternalIssueId = 1, SeriesId = 10, SeriesName = "Spawn", IssueNumber = "349", StoreDate = Today.AddDays(-7), CoverImageUrl = "https://x/old.jpg" },
+            new PullListRelease { ExternalIssueId = 2, SeriesId = 10, SeriesName = "Spawn", IssueNumber = "350", StoreDate = Today.AddDays(7), CoverImageUrl = "https://x/new.jpg" },
+            new PullListRelease { ExternalIssueId = 3, SeriesId = 11, SeriesName = "Batman", IssueNumber = "1", StoreDate = Today, CoverImageUrl = null });
+        Context.SaveChanges();
+
+        var covers = PullListService.CachedCovers(Context, new[] { 10, 11, 12 });
+
+        Assert.Equal("https://x/new.jpg", covers[10]);
+        Assert.False(covers.ContainsKey(11));                                       // its release has no image
+        Assert.False(covers.ContainsKey(12));                                       // not in the window
+    }
 }

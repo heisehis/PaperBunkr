@@ -105,6 +105,21 @@ public static class PullListService
         context.SaveChanges();
     }
 
+    /// <summary>
+    /// The newest cached release cover for each of the given Metron series (a Metron series has no cover of its own, so search results borrow one from the weekly list
+    /// when the series appears in it; a series that isn't in the window simply gets none - no request is spent looking).
+    /// </summary>
+    public static IReadOnlyDictionary<int, string> CachedCovers(PaperbunkrDbContext context, IEnumerable<int> seriesIds)
+    {
+        var ids = seriesIds.Distinct().ToList();
+        return context.PullListReleases
+            .Where(r => ids.Contains(r.SeriesId) && r.CoverImageUrl != null)
+            .OrderByDescending(r => r.StoreDate)
+            .AsEnumerable()
+            .GroupBy(r => r.SeriesId)
+            .ToDictionary(g => g.Key, g => g.First().CoverImageUrl!);
+    }
+
     /// <summary>The Metron series id a watched series corresponds to: its own id for a Metron series, or the one whose ComicVine id matches for a ComicVine series.</summary>
     public static int? MetronSeriesIdFor(PaperbunkrDbContext context, WatchedSeries watched)
     {

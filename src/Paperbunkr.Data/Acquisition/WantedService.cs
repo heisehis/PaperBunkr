@@ -69,6 +69,13 @@ public static class WantedService
             row.CoverImageUrl = issue.ImageUrl;
         }
 
+        // Metron has no series cover; the first issue's stands in for it (ComicVine volumes already have one, which is kept).
+        if (string.IsNullOrEmpty(watched.CoverImageUrl))
+        {
+            watched.CoverImageUrl = issues.Where(i => !string.IsNullOrEmpty(i.ImageUrl))
+                .OrderBy(i => i.StoreDate ?? i.CoverDate ?? DateTime.MaxValue).Select(i => i.ImageUrl).FirstOrDefault();
+        }
+
         watched.LastRefreshedAt = DateTime.UtcNow;
         context.SaveChanges();
     }

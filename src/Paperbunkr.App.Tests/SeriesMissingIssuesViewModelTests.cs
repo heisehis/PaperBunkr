@@ -499,6 +499,30 @@ public class SeriesMissingIssuesViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task MetronResults_BorrowACoverFromTheWeeklyListsCache_WhenTheSeriesIsInIt()
+    {
+        SetMetronLogin();
+        using (var context = NewContext())
+        {
+            context.PullListReleases.Add(new PullListRelease { ExternalIssueId = 1, SeriesId = 77, SeriesName = "Spawn", IssueNumber = "350", StoreDate = Today.AddDays(3), CoverImageUrl = "https://x/spawn350.jpg" });
+            context.SaveChanges();
+        }
+
+        var metron = new FakeComicVine();
+        metron.Volumes.Add(new ComicVineVolume(77, "Spawn", "Image", 1992, 300, null));
+        metron.Volumes.Add(new ComicVineVolume(78, "Spawn Kills Everyone", "Image", 2018, 3, null));   // not in the list: no cover, no request spent looking
+        var vm = new SeriesMissingIssuesViewModel(NewContext, _ => metron, a => a());
+        vm.Load(_seriesId, "Spawn");
+        vm.ProviderText = "Metron";
+
+        await vm.FindOnComicVineCommand.ExecuteAsync(null);
+
+        var withCover = vm.SearchResults.Single(r => r.Volume.Id == 77);
+        Assert.Equal("https://x/spawn350.jpg", withCover.Volume.ImageUrl);
+        Assert.Null(vm.SearchResults.Single(r => r.Volume.Id == 78).Volume.ImageUrl);
+    }
+
+    [Fact]
     public async Task ChoosingASourceWithoutItsLogin_SaysWhatToAdd_AndMakesNoRequest()
     {
         SetKey();                                           // ComicVine only

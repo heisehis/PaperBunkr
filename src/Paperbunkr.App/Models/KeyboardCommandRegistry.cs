@@ -57,6 +57,7 @@ public static class KeyboardCommandRegistry
     public const string ReaderToggleAutoScroll = "Reader.ToggleAutoScroll";
     public const string ReaderPreviousBookmark = "Reader.PreviousBookmark";
     public const string ReaderNextBookmark = "Reader.NextBookmark";
+    public const string ReaderJumpBack = "Reader.JumpBack";
     public const string ReaderToggleFullscreen = "Reader.ToggleFullscreen";
     public const string ReaderRotateClockwise = "Reader.RotateClockwise";
     public const string ReaderRotateCounterClockwise = "Reader.RotateCounterClockwise";
@@ -94,6 +95,8 @@ public static class KeyboardCommandRegistry
         // for *setting* a bookmark itself (menu/toolbar only), not reproduced here either.
         new(ReaderPreviousBookmark, NavigationGroup, "Previous bookmark", new KeyGesture(Key.PageUp, KeyModifiers.Control), ConflictContext.Always),
         new(ReaderNextBookmark, NavigationGroup, "Next bookmark", new KeyGesture(Key.PageDown, KeyModifiers.Control), ConflictContext.Always),
+        // Paperbunkr-original (2026-09-21 comic reader pitch #10; CE has no jump-back). Browser-style "back" after a big jump.
+        new(ReaderJumpBack, NavigationGroup, "Back to previous position (after a jump)", new KeyGesture(Key.Left, KeyModifiers.Alt), ConflictContext.Always),
         new(ReaderToggleFullscreen, DisplayGroup, "Toggle fullscreen", new KeyGesture(Key.F), ConflictContext.Always),
         new(ReaderRotateClockwise, DisplayGroup, "Rotate clockwise", new KeyGesture(Key.R), ConflictContext.Always),
         new(ReaderRotateCounterClockwise, DisplayGroup, "Rotate counter-clockwise", new KeyGesture(Key.R, KeyModifiers.Shift), ConflictContext.Always),

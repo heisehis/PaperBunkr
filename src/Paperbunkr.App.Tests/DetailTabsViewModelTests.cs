@@ -260,6 +260,50 @@ public class DetailTabsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void LoadSeries_NoSeriesReaderDefaults_ShowsNotSetAndHidesClear()
+    {
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.Equal("Not set", vm.SeriesFitDefaultLabel);
+        Assert.Equal("Not set", vm.SeriesAutoRotateDefaultLabel);
+        Assert.False(vm.HasSeriesFitDefault);
+        Assert.False(vm.HasSeriesAutoRotateDefault);
+    }
+
+    [Fact]
+    public void ClearSeriesReaderDefaults_NullsTheColumns_AndResetsTheLabels()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = context.Series.First(s => s.Id == _seriesId);
+            series.PageFitModeOverride = ImageFitMode.BestFit;
+            series.AutoRotateOverride = false;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        Assert.Equal("Best fit", vm.SeriesFitDefaultLabel);
+        Assert.Equal("Off", vm.SeriesAutoRotateDefaultLabel);
+        Assert.True(vm.HasSeriesFitDefault);
+        Assert.True(vm.HasSeriesAutoRotateDefault);
+
+        vm.ClearSeriesFitDefaultCommand.Execute(null);
+        vm.ClearSeriesAutoRotateDefaultCommand.Execute(null);
+
+        Assert.Equal("Not set", vm.SeriesFitDefaultLabel);
+        Assert.Equal("Not set", vm.SeriesAutoRotateDefaultLabel);
+        Assert.False(vm.HasSeriesFitDefault);
+        Assert.False(vm.HasSeriesAutoRotateDefault);
+        using var reload = new PaperbunkrDbContext(_dbOptions);
+        var reloaded = reload.Series.First(s => s.Id == _seriesId);
+        Assert.Null(reloaded.PageFitModeOverride);
+        Assert.Null(reloaded.AutoRotateOverride);
+    }
+
+    [Fact]
     public void ToggleReadingMode_LeftToRight_FlipsToRightToLeft_AndPersists()
     {
         var vm = CreateViewModel();

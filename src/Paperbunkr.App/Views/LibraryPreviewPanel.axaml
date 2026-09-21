@@ -44,7 +44,7 @@
         </Style>
         <Style Selector="Border.previewChip">
             <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
             <Setter Property="Padding" Value="7,2" />
         </Style>
         <Style Selector="Border.previewChip TextBlock">

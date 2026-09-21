@@ -4,11 +4,13 @@ Paperbunkr can fill in a comic's details from **ComicVine** and can move or copy
 
 ## Before you start
 
-Add your ComicVine API key under **Preferences → Connections**. Every key and password lives there. Scraping without one just tells you where to add it.
+Add your ComicVine API key, a Metron login, or both, under **Preferences → Connections**. Every key and password lives there. Scraping without one just tells you where to add it.
 
-## Scrape with ComicVine
+**Metron** is an alternative to ComicVine. Under **Preferences → Organize & Scrape → Source** choose which one a scrape starts on. The match dialog has a source box too, to switch a single run (its search and issue list follow it). A re-scrape starts on the source most of the chosen comics were scraped from before; scheduled scrapes use the one from Preferences.
 
-Right-click a comic, several comics, or a series and choose **Scrape with ComicVine…**.
+## Scrape
+
+Right-click a comic, several comics, or a series and choose **Scrape…**.
 
 1. Paperbunkr searches ComicVine and ranks the series it finds. You confirm the right one in a dialog (or turn on *Choose the best match automatically* to skip it).
 2. It then shows the ComicVine issue it matched, so you can correct it.
@@ -16,7 +18,7 @@ Right-click a comic, several comics, or a series and choose **Scrape with ComicV
 
 A batch shows one progress header across all of its dialogs, and the whole run is one job in the Activity Center. You can cancel it there.
 
-A comic's series page also has a **ComicVine** panel with a one-click scrape of the whole series. It isn't offered for manga, which use different sources.
+A comic's series page also has a **Comic details** panel (Details → Linking) with a one-click scrape of the whole series. It isn't offered for manga, which use different sources.
 
 ### Options: Preferences → Organize & Scrape
 
@@ -42,7 +44,7 @@ Two tasks in **Preferences → Automation**, both **off** until you turn them on
 - **Scrape unscraped comics with ComicVine** matches comics that have no ComicVine details yet. It never asks anything, so anything that would need a choice is skipped unless *Choose the best match automatically* is on.
 - **Organize library** runs the profile you marked *Use for the scheduled Organize library task*.
 
-Downloaded issues (see Acquisition) get their ComicVine details automatically by the exact issue you asked for; failures and their retries appear under **Wanted → Needs attention**.
+Downloaded issues (see Acquisition) get their ComicVine details automatically by the exact issue you asked for; failures and their retries appear under **Wanted → Queue → Needs details**.
 
 ## If you used the plugin
 

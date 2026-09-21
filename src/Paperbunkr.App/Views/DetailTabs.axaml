@@ -621,6 +621,37 @@
                     </Grid>
                 </Border>
 
+                <!-- SERIES READER DEFAULTS (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-
+                     design.md §2) - set from the Reader's "Apply to series", cleared here. -->
+                <Border Classes="card">
+                    <Grid ColumnDefinitions="*,*">
+                        <StackPanel Grid.Column="0" Margin="0,0,28,0">
+                            <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,4">
+                                <fi:SymbolIcon Symbol="AutoFit" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="SERIES FIT MODE" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="{Binding SeriesFitDefaultLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                <Button Content="Clear" Command="{Binding ClearSeriesFitDefaultCommand}" IsVisible="{Binding HasSeriesFitDefault}"
+                                        Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand" FontSize="12"
+                                        Foreground="{DynamicResource PbTextMutedBrush}" />
+                            </StackPanel>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,4">
+                                <fi:SymbolIcon Symbol="ArrowRotateClockwise" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="SERIES AUTO-ROTATE" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="{Binding SeriesAutoRotateDefaultLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                <Button Content="Clear" Command="{Binding ClearSeriesAutoRotateDefaultCommand}" IsVisible="{Binding HasSeriesAutoRotateDefault}"
+                                        Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand" FontSize="12"
+                                        Foreground="{DynamicResource PbTextMutedBrush}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
                 <!-- CREDITS (docs/superpowers/specs/2026-09-13-details-tab-credits-and-fields-
                      design.md) - fixes the hero band's "full credits ›" link, which previously
                      navigated here to nothing. -->

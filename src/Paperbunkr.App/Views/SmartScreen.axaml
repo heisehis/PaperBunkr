@@ -247,7 +247,7 @@
         <!-- Row 1: pinned stat row - stays visible while row 2 scrolls. -->
         <StackPanel Grid.Row="1">
             <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                    BorderThickness="1" CornerRadius="999" Padding="12,6" HorizontalAlignment="Left" Margin="28,16,28,16">
+                    BorderThickness="1" CornerRadius="{StaticResource PbRadiusChip}" Padding="12,6" HorizontalAlignment="Left" Margin="28,16,28,16">
                 <StackPanel Orientation="Horizontal" Spacing="7">
                     <Ellipse Width="7" Height="7" Fill="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" />
                     <TextBlock FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}">

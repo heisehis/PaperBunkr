@@ -31,6 +31,9 @@ public class WantedScreenViewModelTests : IDisposable
     private int _searchNowCalls;
     private bool _settingsOpened;
     private readonly FakeComicVine _comicVine = new();
+    private readonly List<(string Message, bool IsError)> _toasts = new();
+
+    private static IEnumerable<QueueIssueViewModel> Issues(WantedScreenViewModel vm) => vm.QueueItems.OfType<QueueIssueViewModel>();
 
     public WantedScreenViewModelTests()
     {
@@ -56,7 +59,8 @@ public class WantedScreenViewModelTests : IDisposable
         new GrabService(NewContext, _ => null, new ChannelEventPublisher()),
         _ => _comicVine,
         post: a => a(),
-        today: () => Today);
+        today: () => Today,
+        notify: (message, isError) => _toasts.Add((message, isError)));
 
     private sealed class FakeComicVine : IComicVineClient
     {
@@ -106,38 +110,46 @@ public class WantedScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Refresh_SplitsDueFromUpcoming_AndCountsEachTab()
+    public void Refresh_ListsDueAndUpcomingIssuesInOneQueue_AndCountsEachStage()
     {
         Seed();
         var vm = Create();
 
         vm.Refresh();
 
-        Assert.Equal(new[] { "Spawn #261", "Spawn #262" }, vm.WantedRows.Select(r => r.Title));
-        Assert.Equal("Spawn #263", Assert.Single(vm.UpcomingRows).Title);
-        Assert.Contains("Arrives", vm.UpcomingRows[0].Subtitle);
-        Assert.Equal("Upcoming", vm.UpcomingRows[0].StatusText);
-        Assert.Equal(3, vm.CandidateCount);
-        Assert.False(vm.HasNoWanted);
-        Assert.False(vm.HasNoUpcoming);
+        // The series needs the user (candidates to review), so its group opens on its own.
+        Assert.Equal(new[] { "Spawn #261", "Spawn #262", "Spawn #263" }, Issues(vm).Select(r => r.Title));
+        var upcoming = Issues(vm).Single(r => r.Stage == QueueStage.Upcoming);
+        Assert.Equal("Spawn #263", upcoming.Title);
+        Assert.Contains("Arrives", upcoming.Subtitle);
+        Assert.Equal("Upcoming", upcoming.StatusText);
+        Assert.Equal(3, vm.QueueCount);
+        Assert.Equal(3, Issues(vm).Single(r => r.Title == "Spawn #261").CandidateCount);
+        Assert.Equal(new[] { 3, 2, 1, 1, 0, 0, 0 }, vm.QueueChips.Select(c => c.Count));   // All, Wanted, Upcoming, Has candidates, Downloading, Failed, Needs details
+        Assert.False(vm.HasNoQueue);
     }
 
     [Fact]
-    public void Refresh_ShowsCandidatesBestFirst_WithPacksFlagged()
+    public void Refresh_ShowsCandidatesBestFirst_WithPacksFlagged_UnderTheirIssueWhenExpanded()
     {
         Seed();
         var vm = Create();
         vm.Refresh();
 
-        var group = Assert.Single(vm.CandidateGroups);
-        Assert.Equal("Spawn #261", group.Title);
-        Assert.Equal(new[] { "Spawn 261 (1992) cbz", "Spawn 261 (1992) cbr", "Spawn v1-6" }, group.Candidates.Select(c => c.Title));
-        Assert.Equal("45 MB · 20 seeders · IdxB", group.Candidates[0].Detail);
-        Assert.True(group.Candidates[2].IsPack);
-        Assert.Equal("2.0 GB · 9 seeders", group.Candidates[2].Detail);
-        Assert.Equal(3, vm.WantedRows[0].CandidateCount);
-        Assert.True(vm.WantedRows[0].HasCandidates);
-        Assert.False(vm.WantedRows[1].HasCandidates);
+        var issue = Issues(vm).Single(r => r.Title == "Spawn #261");
+        Assert.Equal(new[] { "Spawn 261 (1992) cbz", "Spawn 261 (1992) cbr", "Spawn v1-6" }, issue.Candidates.Select(c => c.Title));
+        Assert.Equal("45 MB · 20 seeders · IdxB", issue.Candidates[0].Detail);
+        Assert.True(issue.Candidates[2].IsPack);
+        Assert.Equal("2.0 GB · 9 seeders", issue.Candidates[2].Detail);
+        Assert.True(issue.HasCandidateChip);
+        Assert.False(Issues(vm).Single(r => r.Title == "Spawn #262").HasCandidateChip);
+        Assert.DoesNotContain(vm.QueueItems, i => i is CandidateRowViewModel);            // collapsed until asked
+
+        vm.ToggleCandidatesCommand.Execute(issue);
+
+        int at = vm.QueueItems.IndexOf(issue);
+        Assert.Equal(issue.Candidates, vm.QueueItems.Skip(at + 1).Take(3));               // right under the issue, best first
+        Assert.True(issue.IsExpanded);
     }
 
     [Fact]
@@ -163,29 +175,29 @@ public class WantedScreenViewModelTests : IDisposable
         var vm = Create();
         vm.Refresh();
 
-        Assert.True(vm.HasNoWanted);
-        Assert.True(vm.HasNoUpcoming);
-        Assert.True(vm.HasNoCandidates);
+        Assert.True(vm.HasNoQueue);
         Assert.True(vm.HasNoSeries);
-        Assert.False(vm.IsEnabled);                        // so the empty state can point at Acquisition settings
+        Assert.False(vm.IsEnabled);
+        Assert.True(vm.ShowSearchOffBanner);               // the persistent problem worth a banner
+
+        vm.DismissSearchOffBannerCommand.Execute(null);
+        Assert.False(vm.ShowSearchOffBanner);
     }
 
     [Fact]
     public void Tabs_SwitchTheActiveTab()
     {
         var vm = Create();
-        Assert.True(vm.IsWantedTab);
-
-        vm.GoCandidatesCommand.Execute(null);
-        Assert.True(vm.IsCandidatesTab);
-        Assert.False(vm.IsWantedTab);
+        Assert.True(vm.IsQueueTab);
 
         vm.GoSeriesCommand.Execute(null);
         Assert.True(vm.IsSeriesTab);
-        vm.GoUpcomingCommand.Execute(null);
-        Assert.True(vm.IsUpcomingTab);
-        vm.GoWantedCommand.Execute(null);
-        Assert.True(vm.IsWantedTab);
+        Assert.False(vm.IsQueueTab);
+
+        vm.GoReleasesCommand.Execute(null);
+        Assert.True(vm.IsReleasesTab);
+        vm.GoQueueCommand.Execute(null);
+        Assert.True(vm.IsQueueTab);
     }
 
     [Fact]
@@ -195,9 +207,12 @@ public class WantedScreenViewModelTests : IDisposable
         var vm = Create();
         vm.Refresh();
 
-        vm.IgnoreCommand.Execute(vm.WantedRows[0]);
+        vm.IgnoreCommand.Execute(Issues(vm).First(r => r.Title == "Spawn #261"));
 
-        Assert.Equal(new[] { "Spawn #262" }, vm.WantedRows.Select(r => r.Title));
+        Assert.Equal(2, vm.QueueCount);
+        Assert.Empty(Issues(vm));                                          // the candidates went with #261, so the group no longer needs attention and closes
+        vm.ToggleGroupCommand.Execute(vm.QueueItems.OfType<QueueGroupViewModel>().Single());
+        Assert.Equal(new[] { "Spawn #262", "Spawn #263" }, Issues(vm).Select(r => r.Title));
         using var context = NewContext();
         Assert.Equal(WantedIssueStatus.Ignored, context.WantedIssues.Single(w => w.ExternalIssueId == 1).Status);
     }
@@ -209,9 +224,9 @@ public class WantedScreenViewModelTests : IDisposable
         var vm = Create();
         vm.Refresh();
 
-        vm.RemoveCommand.Execute(vm.UpcomingRows[0]);
+        vm.RemoveCommand.Execute(Issues(vm).Single(r => r.Stage == QueueStage.Upcoming));
 
-        Assert.Empty(vm.UpcomingRows);
+        Assert.DoesNotContain(Issues(vm), r => r.Title == "Spawn #263");
         using var context = NewContext();
         Assert.DoesNotContain(context.WantedIssues, w => w.ExternalIssueId == 3);
         var watched = context.WatchedSeries.Single();
@@ -225,10 +240,10 @@ public class WantedScreenViewModelTests : IDisposable
         var vm = Create();
         vm.Refresh();
 
-        await vm.CopyLinkCommand.ExecuteAsync(vm.CandidateGroups[0].Candidates[0]);
+        await vm.CopyLinkCommand.ExecuteAsync(Issues(vm).First(r => r.HasCandidateChip).Candidates[0]);
 
         Assert.Equal(new[] { "magnet:high" }, _copied);
-        Assert.True(vm.HasInfoStatus);
+        Assert.Contains(_toasts, t => !t.IsError && t.Message.StartsWith("Link copied"));
     }
 
     [Fact]
@@ -237,13 +252,13 @@ public class WantedScreenViewModelTests : IDisposable
         var vm = Create();
         vm.Refresh();
         Seed();                                            // a candidate appears "during" the search
-        Assert.True(vm.HasNoWanted);
+        Assert.True(vm.HasNoQueue);
 
         await vm.SearchNowCommand.ExecuteAsync(null);
 
         Assert.Equal(1, _searchNowCalls);
         Assert.False(vm.IsSearching);
-        Assert.False(vm.HasNoWanted);                      // refreshed afterwards
+        Assert.False(vm.HasNoQueue);                       // refreshed afterwards
     }
 
     [Fact]
@@ -285,7 +300,7 @@ public class WantedScreenViewModelTests : IDisposable
 
         using var check = NewContext();
         Assert.True(check.WatchedSeries.Single().WatchFutureReleases);
-        Assert.Contains("Following Spawn", vm.StatusMessage);
+        Assert.Contains(_toasts, t => t.Message.Contains("Following Spawn"));
     }
 
     [Fact]
@@ -294,7 +309,7 @@ public class WantedScreenViewModelTests : IDisposable
         var vm = Create();
         vm.SeriesSearchText = "Spawn";
         await vm.SearchSeriesCommand.ExecuteAsync(null);
-        Assert.True(vm.HasErrorStatus);
+        Assert.True(vm.HasSeriesSearchMessage);            // shown in the flyout, where the user is looking
         Assert.Empty(vm.SearchResults);
 
         using (var context = NewContext())
@@ -341,7 +356,7 @@ public class WantedScreenViewModelTests : IDisposable
         Assert.NotNull(watched.SeriesId);                  // "Boys" matched the local "The Boys"
         Assert.Equal(2, check.CatalogIssues.Count());
         Assert.Equal("Boys", vm.SeriesRows.Single().Name);
-        Assert.Contains("2 of 2 issues missing", vm.StatusMessage);
+        Assert.Contains(_toasts, t => t.Message.Contains("2 of 2 issues missing"));
     }
 
     [Fact]
@@ -357,11 +372,11 @@ public class WantedScreenViewModelTests : IDisposable
         vm.SeriesSearchText = "Spawn";
 
         await vm.SearchSeriesCommand.ExecuteAsync(null);
-        Assert.Equal("ComicVine rejected the API key.", vm.StatusMessage);
-        Assert.True(vm.HasErrorStatus);
+        Assert.Equal("ComicVine rejected the API key.", vm.SeriesSearchMessage);
 
+        vm.SeriesSearchMessage = string.Empty;
         await vm.TrackVolumeCommand.ExecuteAsync(new VolumeResultViewModel { Volume = new ComicVineVolume(1, "X", null, null, 0, null) });
-        Assert.True(vm.HasErrorStatus);
+        Assert.True(vm.HasSeriesSearchMessage);
         using var check = NewContext();
         Assert.Empty(check.WatchedSeries);                  // nothing half-tracked
     }
@@ -469,15 +484,13 @@ public class WantedScreenViewModelTests : IDisposable
 
     /// <summary>A big backfill (an arc, a long-running series) can produce thousands of wants; only the visible rows may be realized.</summary>
     [Fact]
-    public void TheWantedAndUpcomingLists_VirtualizeLongLists()
+    public void TheQueueList_VirtualizesLongLists()
     {
         TestAppBuilder.EnsureInitialized();
         var vm = Create();
         for (int i = 0; i < 3000; i++)
         {
-            var row = new WantedRowViewModel { Id = i, Title = $"Series #{i}", StatusText = "Wanted" };
-            vm.WantedRows.Add(row);
-            vm.UpcomingRows.Add(row);
+            vm.QueueItems.Add(new QueueIssueViewModel { Id = i, WatchedSeriesId = 1, SeriesName = "Series", IssueNumber = i.ToString(), StatusText = "Wanted" });
         }
 
         var view = new WantedScreen { DataContext = vm };
@@ -486,12 +499,8 @@ public class WantedScreenViewModelTests : IDisposable
         window.GetLayoutManager()?.ExecuteLayoutPass();
 
         int RealizedRows() => Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view)
-            .OfType<Avalonia.Controls.TextBlock>().Count(t => t.IsEffectivelyVisible && t.Text is { } x && x.StartsWith("Series #", StringComparison.Ordinal));
+            .OfType<Avalonia.Controls.TextBlock>().Count(t => t.IsEffectivelyVisible && t.Text is { } x && x.StartsWith('#'));
 
         Assert.InRange(RealizedRows(), 1, 100);        // 3000 wants, one screenful realized
-
-        vm.GoUpcomingCommand.Execute(null);
-        window.GetLayoutManager()?.ExecuteLayoutPass();
-        Assert.InRange(RealizedRows(), 1, 100);
     }
 }

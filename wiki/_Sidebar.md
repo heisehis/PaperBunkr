@@ -17,6 +17,7 @@
 - [Story Events & Relations](Story-Events-and-Relations)
 - [Trackers](Trackers)
 - [Scraping & Organizing](Scraping-and-Organizing)
+- [Getting Comics Automatically](Getting-Comics-Automatically)
 
 **Customize**
 - [Metadata & Editing](Metadata-and-Editing)

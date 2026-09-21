@@ -508,6 +508,7 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(s => s.ContentType).HasConversion<string>().HasMaxLength(32);
             builder.Property(s => s.ReadingMode).HasConversion<string>().HasMaxLength(32);
             builder.Property(s => s.PageLayoutMode).HasConversion<string>().HasMaxLength(32);
+            builder.Property(s => s.PageFitModeOverride).HasConversion<string>().HasMaxLength(32);
             // Same enum-as-string HasSentinel treatment as PageTransitionStyle above, even though
             // Unknown is both the CLR default and the desired default here - keeps every enum-as-
             // string column configured identically. HasDefaultValue matters here (unlike Series.

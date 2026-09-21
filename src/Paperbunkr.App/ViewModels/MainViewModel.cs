@@ -157,7 +157,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         AcquisitionBridge = new Services.AcquisitionActivityBridge(
             Activity, AcquisitionEvents.Reader,
             resultLink: () => new ActivityLink(ActivityLinkKind.WantedScreen),
-            onWantedChanged: () => { if (IsWanted) Wanted.Refresh(); });
+            onWantedChanged: () => { if (IsWanted) Wanted.Refresh(); },
+            onDownloadProgress: progress => { if (IsWanted) Wanted.ApplyDownloadProgress(progress); });
         Scraper = new Scraper.ScrapeCoordinator(NativePluginModalHost, Services.PaperbunkrDb.CreateContext, Activity, issueId => MetadataWriteBack.Enqueue(issueId));
         Organizer = new Scraper.OrganizeCoordinator(NativePluginModalHost, Services.PaperbunkrDb.CreateContext, Activity, issueId => MetadataWriteBack.Enqueue(issueId));
         Wanted = new WantedScreenViewModel(
@@ -170,7 +171,21 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 Preferences.GoAcquisitionCommand.Execute(null);
             },
             Services.ClipboardHelper.CopyTextAsync,
-            Grab);
+            Grab,
+            notify: (message, isError) => ShowToast(new ToastRequest(isError ? "Wanted: something went wrong" : "Wanted", message, isError ? ToastSeverity.Error : ToastSeverity.Success)),
+            confirm: (message, confirmLabel) => Dialogs.ConfirmAsync(message, confirmLabel: confirmLabel, isDestructive: true),
+            fetchReleases: async (from, to, cancellationToken) =>
+            {
+                using var context = Services.PaperbunkrDb.CreateContext();
+                var source = Paperbunkr.Data.Acquisition.PullListSourceFactory.Create(context);
+                if (source is null)
+                {
+                    return false;
+                }
+
+                await Paperbunkr.Data.Acquisition.PullListService.FetchRangeAsync(context, source, from, to, cancellationToken);
+                return true;
+            });
         StatusBar = new StatusBarViewModel(Activity, QueryLibraryStats, () => ActivityCenter.TogglePeekCommand.Execute(null));
         Activity.CompletionToastRequested += ShowToast;
 

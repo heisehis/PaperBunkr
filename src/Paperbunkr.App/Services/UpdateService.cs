@@ -1,6 +1,9 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
 using NetSparkleUpdater;
 using NetSparkleUpdater.Enums;
 using NetSparkleUpdater.Events;
@@ -54,6 +57,33 @@ public class UpdateService
         // for backups (BackupService.DefaultBackupLocation) - persistent, not swept by Temp cleanup.
         TmpDownloadFilePath = Paperbunkr.Data.AppDataPaths.Combine("updates"),
     };
+
+    public UpdateService()
+    {
+        // With UIFactory null, NetSparkle's QuitApplication() has nothing to call unless a
+        // CloseApplication handler is registered - it silently does nothing. The hidden installer
+        // script it generates then waits up to 90s for this process to exit before launching the
+        // installer, so without this the "Restart" button froze the app and never ran the installer.
+        _sparkle.CloseApplicationAsync += CloseApplicationAsync;
+    }
+
+    private static Task CloseApplicationAsync()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                // ApplicationShutdown close reason passes through MainWindow's minimize-to-tray and
+                // confirm-before-close interceptors.
+                desktop.Shutdown();
+            }
+            else
+            {
+                Environment.Exit(0);
+            }
+        });
+        return Task.CompletedTask;
+    }
 
     public Task<UpdateInfo> CheckForUpdatesAsync() => _sparkle.CheckForUpdatesQuietly();
 

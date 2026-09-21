@@ -128,6 +128,19 @@ public class ScrapeByIdServiceTests : AcquisitionTestBase
     }
 
     [Fact]
+    public async Task TheIssueRemembersWhichSourceItsDetailsCameFrom()
+    {
+        var (wantedId, issueId) = Seed();
+        Context.WantedIssues.Single(w => w.Id == wantedId).Provider = ComicProvider.Metron;
+        Context.SaveChanges();
+        var source = new FakeSource(id => id == 4321 ? Details() : null);
+
+        await Service(source).ScrapeAsync(wantedId, CancellationToken.None);
+
+        Assert.Equal(ComicProvider.Metron, Context.Issues.AsNoTracking().Single(i => i.Id == issueId).MetadataSource);
+    }
+
+    [Fact]
     public async Task AMissingKey_IsTerminal_AndTellsTheUserWhereToFixIt()
     {
         var (wantedId, _) = Seed();

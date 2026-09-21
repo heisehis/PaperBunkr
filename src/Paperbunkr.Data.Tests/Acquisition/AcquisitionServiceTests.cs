@@ -299,6 +299,40 @@ public class ArcRequestServiceTests : AcquisitionTestBase
     }
 
     [Fact]
+    public async Task ASeriesTrackedOnMetron_IsRequestedThroughMetron_EvenWithoutAComicVineKey()
+    {
+        var list = ArcList(("Spawn", "263", 2016));
+        var local = Context.Series.Single(x => x.Name == "Spawn");
+        WantedService.TrackVolume(Context, Volume(100, "Spawn", 1992), local.Id, watchFutureReleases: false, ComicProvider.Metron);
+        var metron = CvWith((Volume(100, "Spawn", 1992), new[] { "263", "264" }));
+
+        var result = await ArcRequestService.RequestMissingAsync(Context, list.Id, comicVine: null, CancellationToken.None,
+            provider => provider == ComicProvider.Metron ? metron : null);
+
+        Assert.Equal(1, result.Requested);
+        Assert.Empty(result.Unresolved);
+        var wanted = Assert.Single(Context.WantedIssues);
+        Assert.Equal(ComicProvider.Metron, wanted.Provider);
+        Assert.Equal(1, metron.IssueCalls);
+        Assert.Equal(0, metron.SearchCalls);                 // it was already tracked: no search, and never a ComicVine lookup
+    }
+
+    [Fact]
+    public async Task WhenTheSeriesSourceCannotBeReached_TheEntryIsReportedWithWhatToAdd()
+    {
+        var list = ArcList(("Spawn", "263", 2016), ("Batman", "5", 2016));
+        var spawn = Context.Series.Single(x => x.Name == "Spawn");
+        WantedService.TrackVolume(Context, Volume(100, "Spawn", 1992), spawn.Id, watchFutureReleases: false, ComicProvider.Metron);
+
+        var result = await ArcRequestService.RequestMissingAsync(Context, list.Id, comicVine: null, CancellationToken.None, provider => null);
+
+        Assert.Equal(0, result.Requested);
+        Assert.Equal(2, result.Unresolved.Count);
+        Assert.Contains(result.Unresolved, u => u.Series == "Spawn" && u.Reason.Contains("Metron login"));
+        Assert.Contains(result.Unresolved, u => u.Series == "Batman" && u.Reason.Contains("ComicVine API key"));
+    }
+
+    [Fact]
     public async Task RequestMissing_IsIdempotent_AndReportsAlreadyTracked()
     {
         var list = ArcList(("Spawn", "263", 2016));

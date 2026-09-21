@@ -86,7 +86,8 @@ public sealed partial class WantedScreenViewModel
     private void LoadReleases(PaperbunkrDbContext context, DateTime today)
     {
         var releases = context.PullListReleases.AsNoTracking().OrderBy(r => r.StoreDate).ThenBy(r => r.SeriesName).ThenBy(r => r.IssueNumber).ToList();
-        var seriesInfo = context.MetronSeries.AsNoTracking().ToDictionary(m => m.SeriesId);
+        var listProvider = releases.FirstOrDefault()?.Provider ?? ComicProvider.Metron;
+        var seriesInfo = context.ReleaseSeries.AsNoTracking().Where(m => m.Provider == listProvider).ToDictionary(m => m.SeriesId);
         var publishers = seriesInfo.Values.Select(m => m.Publisher).Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!)
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToList();
         ReleasePublisherNames = new[] { AllPublishers }.Concat(publishers).ToList();
@@ -95,7 +96,7 @@ public sealed partial class WantedScreenViewModel
         var followed = new Dictionary<int, WatchedSeries>();
         foreach (var watched in context.WatchedSeries.AsNoTracking().Where(w => w.WatchFutureReleases && !w.IsPaused).ToList())
         {
-            if (PullListService.MetronSeriesIdFor(context, watched) is int metronId)
+            if (PullListService.ListSeriesIdFor(context, watched, listProvider) is int metronId)
             {
                 followed[metronId] = watched;
             }
@@ -104,7 +105,7 @@ public sealed partial class WantedScreenViewModel
         var tracked = new Dictionary<int, WatchedSeries>();
         foreach (var watched in context.WatchedSeries.AsNoTracking().ToList())
         {
-            if (PullListService.MetronSeriesIdFor(context, watched) is int metronId)
+            if (PullListService.ListSeriesIdFor(context, watched, listProvider) is int metronId)
             {
                 tracked[metronId] = watched;
             }
@@ -166,11 +167,11 @@ public sealed partial class WantedScreenViewModel
         Fill(ReleaseWeeks, weeks);
         ReleaseCount = rows.Count;
 
-        var hasMetron = ComicProviderFactory.IsAvailable(context, ComicProvider.Metron);
+        var hasSource = ComicProviderFactory.IsAvailable(context, ComicProvider.Metron) || ComicProviderFactory.IsAvailable(context, ComicProvider.ComicVine);
         ReleasesEmptyText = releases.Count > 0
             ? "Nothing matches these filters."
-            : !hasMetron
-                ? "The weekly pull list comes from Metron. Save your Metron login under Preferences → Connections and it fills in on the next check."
+            : !hasSource
+                ? "The weekly pull list comes from Metron, or from ComicVine when there is no Metron login. Save either under Preferences → Connections and it fills in on the next check."
                 : "Nothing fetched yet. Press Search now, or wait for the next automatic check.";
     }
 
@@ -195,7 +196,7 @@ public sealed partial class WantedScreenViewModel
     /// <summary>The watched series a release belongs to, tracking its Metron series first when the user hasn't yet (its info was cached with the list).</summary>
     private static WatchedSeries TrackForRelease(PaperbunkrDbContext context, PullListRelease release, bool follow)
     {
-        var existing = context.WatchedSeries.AsEnumerable().FirstOrDefault(w => PullListService.MetronSeriesIdFor(context, w) == release.SeriesId);
+        var existing = context.WatchedSeries.AsEnumerable().FirstOrDefault(w => PullListService.ListSeriesIdFor(context, w, release.Provider) == release.SeriesId);
         if (existing is not null)
         {
             if (follow && !existing.WatchFutureReleases)
@@ -206,10 +207,10 @@ public sealed partial class WantedScreenViewModel
             return existing;
         }
 
-        var info = context.MetronSeries.Find(release.SeriesId);
+        var info = context.ReleaseSeries.Find(release.Provider, release.SeriesId);
         var volume = new ComicVineVolume(release.SeriesId, info?.Name ?? release.SeriesName, info?.Publisher, info?.YearBegan, 0, null);
         int? localSeriesId = context.Series.AsEnumerable().FirstOrDefault(s => SeriesNames.Same(s.Name, volume.Name))?.Id;
-        return WantedService.TrackVolume(context, volume, localSeriesId, follow, ComicProvider.Metron);
+        return WantedService.TrackVolume(context, volume, localSeriesId, follow, release.Provider);
     }
 
     [RelayCommand]

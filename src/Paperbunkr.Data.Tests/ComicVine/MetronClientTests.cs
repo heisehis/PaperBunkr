@@ -224,3 +224,89 @@ public class ComicProviderFactoryTests : Acquisition.AcquisitionTestBase
     [InlineData(null, ComicProvider.ComicVine)]
     public void Parse_DefaultsToComicVine(string? text, ComicProvider expected) => Assert.Equal(expected, ComicProviderFactory.Parse(text));
 }
+
+/// <summary>The daily quota is read from Metron's own response headers; background work leaves a reserve for interactive use.</summary>
+[Collection("MetronQuota")]
+public class MetronQuotaTests : IDisposable
+{
+    private static readonly DateTimeOffset Now = new(2026, 9, 21, 12, 0, 0, TimeSpan.Zero);
+
+    public MetronQuotaTests()
+    {
+        MetronQuota.Reset();
+        MetronQuota.Clock = () => Now;
+    }
+
+    public void Dispose()
+    {
+        MetronQuota.Reset();
+        MetronQuota.Clock = () => DateTimeOffset.UtcNow;
+    }
+
+    private sealed class HeaderHandler(int remaining, int limit = 5000, long? reset = null) : HttpMessageHandler
+    {
+        public int Requests { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests++;
+            var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"count":0,"next":null,"results":[]}""") };
+            response.Headers.Add("X-RateLimit-Sustained-Limit", limit.ToString());
+            response.Headers.Add("X-RateLimit-Sustained-Remaining", remaining.ToString());
+            response.Headers.Add("X-RateLimit-Sustained-Reset", (reset ?? Now.AddHours(5).ToUnixTimeSeconds()).ToString());
+            return Task.FromResult(response);
+        }
+    }
+
+    private static MetronClient Client(HttpMessageHandler handler, ComicVineRequestPriority priority) => new("u", "p", priority, new HttpClient(handler));
+
+    [Fact]
+    public async Task BackgroundRequests_StopOnceTheDaysQuotaIsDownToTheReserve_ButInteractiveOnesStillGo()
+    {
+        var handler = new HeaderHandler(remaining: 400, limit: 5000);              // reserve is 10% = 500; 400 is inside it
+        var background = Client(handler, ComicVineRequestPriority.Low);
+        var interactive = Client(handler, ComicVineRequestPriority.High);
+
+        await interactive.GetVolumeIssuesAsync(1, CancellationToken.None);          // any response teaches the counter
+        Assert.True(MetronQuota.BackgroundShouldWait(out var wait));
+        Assert.Equal(TimeSpan.FromHours(5), wait);
+
+        int before = handler.Requests;
+        var ex = await Assert.ThrowsAsync<ComicVineException>(() => background.GetVolumeIssuesAsync(1, CancellationToken.None));
+        Assert.Equal(107, ex.ApiStatusCode);                                        // callers already treat 107 as "pause, try later"
+        Assert.Contains("daily limit", ex.Message);
+        Assert.Equal(before, handler.Requests);                                     // and no request was spent
+
+        await interactive.GetVolumeIssuesAsync(2, CancellationToken.None);          // the reserve exists for exactly this
+        Assert.Equal(before + 1, handler.Requests);
+    }
+
+    [Fact]
+    public async Task PlentyOfQuota_OrAResetWindowThatHasPassed_DoesNotBlockBackgroundWork()
+    {
+        var plenty = new HeaderHandler(remaining: 4000);
+        await Client(plenty, ComicVineRequestPriority.Low).GetVolumeIssuesAsync(1, CancellationToken.None);
+        Assert.False(MetronQuota.BackgroundShouldWait(out _));
+
+        MetronQuota.Reset();
+        var low = new HeaderHandler(remaining: 3, reset: Now.AddHours(-1).ToUnixTimeSeconds());   // the window already rolled over
+        await Client(low, ComicVineRequestPriority.High).GetVolumeIssuesAsync(1, CancellationToken.None);
+        Assert.False(MetronQuota.BackgroundShouldWait(out _));
+
+        MetronQuota.Reset();
+        Assert.False(MetronQuota.BackgroundShouldWait(out _));                      // nothing seen yet: never blocks on a guess
+    }
+
+    [Fact]
+    public async Task TheReserveScalesWithTheAccountsLimit_ASupporterWithAHugeLimitKeepsMoreInHand()
+    {
+        var handler = new HeaderHandler(remaining: 900, limit: 20000);              // 10% of 20,000 = 2,000; 900 is inside it
+        await Client(handler, ComicVineRequestPriority.High).GetVolumeIssuesAsync(1, CancellationToken.None);
+        Assert.True(MetronQuota.BackgroundShouldWait(out _));
+
+        MetronQuota.Reset();
+        var small = new HeaderHandler(remaining: 60, limit: 200);                   // 10% of 200 is 20, but never less than 50: 60 is outside it
+        await Client(small, ComicVineRequestPriority.High).GetVolumeIssuesAsync(1, CancellationToken.None);
+        Assert.False(MetronQuota.BackgroundShouldWait(out _));
+    }
+}

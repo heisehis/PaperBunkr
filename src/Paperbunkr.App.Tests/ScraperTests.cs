@@ -244,4 +244,16 @@ public class ScraperTests : IDisposable
                 (_, _) => Task.FromResult<IReadOnlyList<(ComicVineVolumeSearchResult, double)>>(Array.Empty<(ComicVineVolumeSearchResult, double)>()), _ => { }, loadIssues: _ => Task.FromResult<IReadOnlyList<ComicVineIssueSummary>>(Array.Empty<ComicVineIssueSummary>())),
         }.Content);
     }
+
+    [Fact]
+    public void AReScrapeStartsOnTheSourceMostOfTheComicsCameFrom_ElseTheDefault()
+    {
+        static Issue Book(ComicProvider? source) => new() { MetadataSource = source };
+
+        Assert.Equal(ComicProvider.Metron, ScrapeCoordinator.StartingProvider(new[] { Book(ComicProvider.Metron), Book(ComicProvider.Metron), Book(ComicProvider.ComicVine) }, ComicProvider.ComicVine));
+        Assert.Equal(ComicProvider.ComicVine, ScrapeCoordinator.StartingProvider(new[] { Book(null), Book(null) }, ComicProvider.ComicVine));          // never scraped: the default
+        Assert.Equal(ComicProvider.Metron, ScrapeCoordinator.StartingProvider(new[] { Book(null) }, ComicProvider.Metron));
+        Assert.Equal(ComicProvider.ComicVine, ScrapeCoordinator.StartingProvider(new[] { Book(ComicProvider.Metron), Book(ComicProvider.ComicVine) }, ComicProvider.ComicVine));   // a tie goes to the default
+        Assert.Equal(ComicProvider.Metron, ScrapeCoordinator.StartingProvider(new[] { Book(ComicProvider.Metron), Book(null), Book(null) }, ComicProvider.ComicVine));                // unscraped ones don't outvote a recorded source
+    }
 }

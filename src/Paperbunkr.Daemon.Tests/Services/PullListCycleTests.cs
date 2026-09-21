@@ -13,6 +13,7 @@ public class PullListCycleTests : CycleTestBase
 {
     private sealed class FakeSource : IPullListSource
     {
+        public ComicProvider Kind { get; set; } = ComicProvider.Metron;
         public List<PullListEntry> Entries { get; } = new();
         public int Fetches { get; private set; }
         public ComicVineException? Throw { get; set; }
@@ -136,5 +137,40 @@ public class PullListCycleTests : CycleTestBase
 
         await cycle.RunAsync(manual: true, CancellationToken.None);
         Assert.Empty(Drain().OfType<NewReleasesEvent>());                   // nothing new, nothing said
+    }
+
+    [Fact]
+    public async Task WithoutAMetronLogin_TheListComesFromComicVine_AndWithBothMetronWins()
+    {
+        Configure(comicVineKey: true);
+        var comicVineSource = new FakeSource { Kind = ComicProvider.ComicVine };
+        var metronSource = new FakeSource { Kind = ComicProvider.Metron };
+        var cycle = new AcquisitionCycle(NewContext, (_, _) => Indexer, _ => ComicVine, Events, () => Now,
+            createPullListSource: (_, _) => metronSource, createComicVinePullList: _ => comicVineSource);
+
+        await cycle.RunAsync(manual: true, CancellationToken.None);
+        Assert.Equal((1, 0), (comicVineSource.Fetches, metronSource.Fetches));       // a key alone: ComicVine
+
+        SaveMetronLogin();
+        using (var context = NewContext())
+        {
+            context.GetOrCreateAcquisitionSettings().PullListRefreshedAt = null;     // due again
+            context.SaveChanges();
+        }
+
+        await cycle.RunAsync(manual: true, CancellationToken.None);
+        Assert.Equal((1, 1), (comicVineSource.Fetches, metronSource.Fetches));       // now a Metron login exists: it takes over
+    }
+
+    [Fact]
+    public async Task WithNeitherLogin_NothingIsFetched()
+    {
+        Configure();
+        var comicVineSource = new FakeSource { Kind = ComicProvider.ComicVine };
+        var cycle = new AcquisitionCycle(NewContext, (_, _) => Indexer, _ => ComicVine, Events, () => Now, createComicVinePullList: _ => comicVineSource);
+
+        await cycle.RunAsync(manual: true, CancellationToken.None);
+
+        Assert.Equal(0, comicVineSource.Fetches);
     }
 }

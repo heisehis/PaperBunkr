@@ -1403,6 +1403,13 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>Test seam: the ComicVine client used for "Request missing". Production uses the shared, rate-limited one at foreground priority.</summary>
     internal Func<string, IComicVineClient> CreateComicVine { get; set; } = key => new ComicVineClient(key, ComicVineRequestPriority.High);
 
+    /// <summary>Test seam: the Metron client, for a series that was tracked on Metron. Production builds it from the login saved under Connections.</summary>
+    internal Func<IComicVineClient?> CreateMetron { get; set; } = () =>
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        return ComicProviderFactory.Create(context, ComicProvider.Metron, ComicVineRequestPriority.High);
+    };
+
     /// <summary>
     /// "Request missing issues" (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 8): turns this arc-linked list's
     /// placeholders into wanted issues. Runs as an Activity Center job because matching each series to ComicVine takes a few rate-limited requests.
@@ -1421,7 +1428,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
             return;
         }
 
-        await RequestAsync(listId, "Requesting missing issues", (context, client, ct) => ArcRequestService.RequestMissingAsync(context, listId, client, ct));
+        await RequestAsync(listId, "Requesting missing issues", (context, client, clientFor, ct) => ArcRequestService.RequestMissingAsync(context, listId, client, ct, clientFor));
     }
 
     /// <summary>Per-item Request on a missing (placeholder) row of any list.</summary>
@@ -1432,11 +1439,11 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
             return;
         }
 
-        _ = RequestAsync(listId, $"Requesting {issue.Series?.Name} #{issue.Number}", (context, client, ct) =>
-            ArcRequestService.RequestPlaceholdersAsync(context, new[] { issue }, client, ct));
+        _ = RequestAsync(listId, $"Requesting {issue.Series?.Name} #{issue.Number}", (context, client, clientFor, ct) =>
+            ArcRequestService.RequestPlaceholdersAsync(context, new[] { issue }, client, ct, clientFor));
     }
 
-    private async Task RequestAsync(int listId, string jobTitle, Func<PaperbunkrDbContext, IComicVineClient, CancellationToken, Task<ArcRequestResult>> request)
+    private async Task RequestAsync(int listId, string jobTitle, Func<PaperbunkrDbContext, IComicVineClient?, Func<ComicProvider, IComicVineClient?>, CancellationToken, Task<ArcRequestResult>> request)
     {
         string? key;
         using (var context = PaperbunkrDb.CreateContext())
@@ -1444,17 +1451,21 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
             key = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey);
         }
 
-        if (string.IsNullOrEmpty(key))
+        var metron = CreateMetron();
+        if (string.IsNullOrEmpty(key) && metron is null)
         {
             StatusMessage = "Requesting needs your ComicVine API key - add it under Preferences → Connections.";
             return;
         }
 
+        var comicVine = string.IsNullOrEmpty(key) ? null : CreateComicVine(key);
+        IComicVineClient? ClientFor(ComicProvider provider) => provider == ComicProvider.Metron ? metron : comicVine;
+
         using var job = _activity.StartJob(ActivityJobKind.Acquisition, jobTitle);
         try
         {
             using var context = PaperbunkrDb.CreateContext();
-            var result = await request(context, CreateComicVine(key), job.CancellationToken);
+            var result = await request(context, comicVine, ClientFor, job.CancellationToken);
 
             var summary = DescribeRequestResult(result);
             StatusMessage = summary;

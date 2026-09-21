@@ -42,6 +42,12 @@ public class Issue
     /// </summary>
     public string? Volume { get; set; }
 
+    /// <summary>
+    /// Which database the last scrape took this issue's details from (ComicVine or Metron); null when it was never scraped, or was scraped before this was recorded.
+    /// The scraper starts a re-scrape on the source most of the chosen comics came from, because <see cref="Volume"/> is only an id and means nothing without it.
+    /// </summary>
+    public ComicProvider? MetadataSource { get; set; }
+
     public string? AlternateSeries { get; set; }
 
     public string? AlternateNumber { get; set; }

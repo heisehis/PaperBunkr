@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Paperbunkr.Data;
 
@@ -10,9 +11,11 @@ using Paperbunkr.Data;
 namespace Paperbunkr.Data.Migrations
 {
     [DbContext(typeof(PaperbunkrDbContext))]
-    partial class PaperbunkrDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260921002314_AddIssueMetadataSource")]
+    partial class AddIssueMetadataSource
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -2156,6 +2159,33 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("MetadataProposals");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.MetronSeriesInfo", b =>
+                {
+                    b.Property<int>("SeriesId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ComicVineId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("FetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Publisher")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("YearBegan")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("SeriesId");
+
+                    b.ToTable("MetronSeries");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.PluginCommandState", b =>
                 {
                     b.Property<int>("Id")
@@ -2252,9 +2282,6 @@ namespace Paperbunkr.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("Provider")
-                        .HasColumnType("INTEGER");
-
                     b.Property<int>("SeriesId")
                         .HasColumnType("INTEGER");
 
@@ -2268,10 +2295,10 @@ namespace Paperbunkr.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("StoreDate");
-
-                    b.HasIndex("Provider", "ExternalIssueId")
+                    b.HasIndex("ExternalIssueId")
                         .IsUnique();
+
+                    b.HasIndex("StoreDate");
 
                     b.ToTable("PullListReleases");
                 });
@@ -2552,36 +2579,6 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("WantedIssueId");
 
                     b.ToTable("ReleaseCandidates");
-                });
-
-            modelBuilder.Entity("Paperbunkr.Data.Entities.ReleaseSeriesInfo", b =>
-                {
-                    b.Property<int>("Provider")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("SeriesId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("ComicVineId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("FetchedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Publisher")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("YearBegan")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Provider", "SeriesId");
-
-                    b.ToTable("ReleaseSeries", (string)null);
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.RemovedFilePath", b =>

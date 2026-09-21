@@ -205,7 +205,9 @@ public static class ScheduledTaskCatalog
                     ? null
                     : new Paperbunkr.Data.ComicVine.ComicVineClient(key, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low);
 
-                var result = await Paperbunkr.Data.Acquisition.ArcFollowService.RunAsync(context, comicVine, ct, progress: (done, total) => handle.Report(done, total, $"{done} / {total} arcs"));
+                var metron = Paperbunkr.Data.ComicVine.ComicProviderFactory.Create(context, Paperbunkr.Data.Entities.ComicProvider.Metron, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low);
+                var result = await Paperbunkr.Data.Acquisition.ArcFollowService.RunAsync(context, comicVine, ct, progress: (done, total) => handle.Report(done, total, $"{done} / {total} arcs"),
+                    clientFor: comicVine is null && metron is null ? null : provider => provider == Paperbunkr.Data.Entities.ComicProvider.Metron ? metron : comicVine);
 
                 var parts = new System.Collections.Generic.List<string> { $"{result.ListsChecked} arc{Plural(result.ListsChecked)} checked" };
                 if (result.IssuesAdded > 0) parts.Add($"{result.IssuesAdded} new entr{(result.IssuesAdded == 1 ? "y" : "ies")}");

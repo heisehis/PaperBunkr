@@ -57,9 +57,9 @@ public class WantedReleasesTests : IDisposable
             new PullListRelease { ExternalIssueId = 2, SeriesId = 10, SeriesName = "Spawn", IssueNumber = "350", StoreDate = Today.AddDays(1), FetchedAt = DateTime.UtcNow },
             new PullListRelease { ExternalIssueId = 3, SeriesId = 20, SeriesName = "Batman", IssueNumber = "1", StoreDate = Today.AddDays(8), FetchedAt = DateTime.UtcNow },
             new PullListRelease { ExternalIssueId = 4, SeriesId = 20, SeriesName = "Batman", IssueNumber = "2", StoreDate = Today.AddDays(15), FetchedAt = DateTime.UtcNow });
-        context.MetronSeries.AddRange(
-            new MetronSeriesInfo { SeriesId = 10, Name = "Spawn", Publisher = "Image", YearBegan = 1992, FetchedAt = DateTime.UtcNow },
-            new MetronSeriesInfo { SeriesId = 20, Name = "Batman", Publisher = "DC Comics", YearBegan = 2016, FetchedAt = DateTime.UtcNow });
+        context.ReleaseSeries.AddRange(
+            new ReleaseSeriesInfo { Provider = ComicProvider.Metron, SeriesId = 10, Name = "Spawn", Publisher = "Image", YearBegan = 1992, FetchedAt = DateTime.UtcNow },
+            new ReleaseSeriesInfo { Provider = ComicProvider.Metron, SeriesId = 20, Name = "Batman", Publisher = "DC Comics", YearBegan = 2016, FetchedAt = DateTime.UtcNow });
         context.SaveChanges();
     }
 

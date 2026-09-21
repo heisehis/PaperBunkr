@@ -340,7 +340,7 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
         try
         {
             var hints = BuildHints(query);
-            _ranked = await VolumeSearchService.SearchAndRankAsync(_createProvider(provider), query, hints, cancellationToken);
+            _ranked = WithCachedCovers(provider, await VolumeSearchService.SearchAndRankAsync(_createProvider(provider), query, hints, cancellationToken));
             ShownCount = Math.Min(VolumeResultViewModel.PageSize, _ranked.Count);
             RebuildResults();
 
@@ -361,6 +361,19 @@ public sealed partial class SeriesMissingIssuesViewModel : ViewModelBase
     {
         ShownCount = Math.Min(ShownCount + VolumeResultViewModel.PageSize * 2, _ranked.Count);
         RebuildResults();
+    }
+
+    /// <summary>Metron has no series covers, so its results borrow one from the weekly list's cache when the series is in it.</summary>
+    private IReadOnlyList<RankedVolume> WithCachedCovers(ComicProvider provider, IReadOnlyList<RankedVolume> ranked)
+    {
+        if (provider != ComicProvider.Metron || ranked.Count == 0)
+        {
+            return ranked;
+        }
+
+        using var context = _createContext();
+        var covers = PullListService.CachedCovers(context, ranked.Select(r => r.Volume.Id));
+        return ranked.Select(r => covers.TryGetValue(r.Volume.Id, out var url) && string.IsNullOrEmpty(r.Volume.ImageUrl) ? r with { Volume = r.Volume with { ImageUrl = url } } : r).ToList();
     }
 
     private void RebuildResults()

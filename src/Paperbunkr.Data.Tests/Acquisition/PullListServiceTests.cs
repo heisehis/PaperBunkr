@@ -10,6 +10,7 @@ public class PullListServiceTests : AcquisitionTestBase
 
     private sealed class FakeSource : IPullListSource
     {
+        public ComicProvider Kind { get; set; } = ComicProvider.Metron;
         public List<PullListEntry> Entries { get; } = new();
         public Dictionary<int, PullListSeriesInfo> Series { get; } = new();
         public List<int> SeriesLookups { get; } = new();
@@ -60,8 +61,8 @@ public class PullListServiceTests : AcquisitionTestBase
         Assert.Equal(3, count);
         Assert.Equal((Today.AddDays(-PullListService.DaysBack), Today.AddDays(PullListService.DaysAhead)), source.Window);
         Assert.Equal(3, Context.PullListReleases.Count());
-        Assert.Equal("Image", Context.MetronSeries.Single(m => m.SeriesId == 10).Publisher);
-        Assert.Equal(4321, Context.MetronSeries.Single(m => m.SeriesId == 10).ComicVineId);
+        Assert.Equal("Image", Context.ReleaseSeries.Single(m => m.SeriesId == 10).Publisher);
+        Assert.Equal(4321, Context.ReleaseSeries.Single(m => m.SeriesId == 10).ComicVineId);
         Assert.NotNull(Context.GetOrCreateAcquisitionSettings().PullListRefreshedAt);
 
         await PullListService.RefreshAsync(Context, source, Today, CancellationToken.None);
@@ -84,14 +85,14 @@ public class PullListServiceTests : AcquisitionTestBase
         source.RateLimitAfterLookups = 2;                                         // one more lookup allowed this time, then the limit hits
         await PullListService.RefreshAsync(Context, source, Today, CancellationToken.None);
         Assert.Equal(2, source.SeriesLookups.Count);
-        Assert.Equal(2, Context.MetronSeries.Count());                            // the limited lookup left no half-row behind
+        Assert.Equal(2, Context.ReleaseSeries.Count());                            // the limited lookup left no half-row behind
     }
 
     [Fact]
     public void Store_DropsReleasesTheSourceNoLongerReturns()
     {
-        PullListService.Store(Context, new[] { Entry(1, 10, "Spawn", "350", Today), Entry(2, 10, "Spawn", "351", Today.AddDays(7)) }, DateTime.UtcNow);
-        PullListService.Store(Context, new[] { Entry(2, 10, "Spawn", "351", Today.AddDays(8)) }, DateTime.UtcNow);
+        PullListService.Store(Context, ComicProvider.Metron, new[] { Entry(1, 10, "Spawn", "350", Today), Entry(2, 10, "Spawn", "351", Today.AddDays(7)) }, DateTime.UtcNow);
+        PullListService.Store(Context, ComicProvider.Metron, new[] { Entry(2, 10, "Spawn", "351", Today.AddDays(8)) }, DateTime.UtcNow);
 
         var remaining = Assert.Single(Context.PullListReleases);
         Assert.Equal(2, remaining.ExternalIssueId);
@@ -102,7 +103,7 @@ public class PullListServiceTests : AcquisitionTestBase
     public void AFollowedMetronSeries_GetsItsUpcomingReleasesAsWants_ButNotLastWeeks()
     {
         int watchedId = TrackSpawn(ComicProvider.Metron, 10, follow: true, out _);
-        PullListService.Store(Context, new[]
+        PullListService.Store(Context, ComicProvider.Metron, new[]
         {
             Entry(1, 10, "Spawn", "349", Today.AddDays(-5)),      // already out: shown in the tab, never auto-requested
             Entry(2, 10, "Spawn", "350", Today.AddDays(7)),
@@ -129,10 +130,10 @@ public class PullListServiceTests : AcquisitionTestBase
     public void AFollowedComicVineSeries_IsRecognisedThroughMetronsComicVineId()
     {
         int watchedId = TrackSpawn(ComicProvider.ComicVine, 4321, follow: true, out _);
-        Context.MetronSeries.Add(new MetronSeriesInfo { SeriesId = 10, Name = "Spawn", ComicVineId = 4321, FetchedAt = DateTime.UtcNow });
-        Context.MetronSeries.Add(new MetronSeriesInfo { SeriesId = 12, Name = "Spawn", ComicVineId = 9999, FetchedAt = DateTime.UtcNow });   // a different Spawn
+        Context.ReleaseSeries.Add(new ReleaseSeriesInfo { Provider = ComicProvider.Metron, SeriesId = 10, Name = "Spawn", ComicVineId = 4321, FetchedAt = DateTime.UtcNow });
+        Context.ReleaseSeries.Add(new ReleaseSeriesInfo { Provider = ComicProvider.Metron, SeriesId = 12, Name = "Spawn", ComicVineId = 9999, FetchedAt = DateTime.UtcNow });   // a different Spawn
         Context.SaveChanges();
-        PullListService.Store(Context, new[] { Entry(1, 10, "Spawn", "350", Today.AddDays(7)), Entry(2, 12, "Spawn", "1", Today.AddDays(7)) }, DateTime.UtcNow);
+        PullListService.Store(Context, ComicProvider.Metron, new[] { Entry(1, 10, "Spawn", "350", Today.AddDays(7)), Entry(2, 12, "Spawn", "1", Today.AddDays(7)) }, DateTime.UtcNow);
 
         Assert.Equal(1, PullListService.PromoteFollowedReleases(Context, Today));
 
@@ -150,7 +151,7 @@ public class PullListServiceTests : AcquisitionTestBase
         Context.SaveChanges();
         var watched = Context.WatchedSeries.Single();
         WantedService.Request(Context, watched, new ComicVineIssue(777, "351", null, Today.AddDays(14), null, null, 10));
-        PullListService.Store(Context, new[]
+        PullListService.Store(Context, ComicProvider.Metron, new[]
         {
             Entry(1, 10, "Spawn", "350", Today.AddDays(7)),        // owned
             Entry(2, 10, "Spawn", "351", Today.AddDays(14)),       // already wanted (under a different id)
@@ -206,7 +207,7 @@ public class PullListServiceTests : AcquisitionTestBase
     public void AHiddenRelease_IsNeverRequested_AndStaysHiddenThroughARefresh()
     {
         TrackSpawn(ComicProvider.Metron, 10, follow: true, out _);
-        PullListService.Store(Context, new[] { Entry(1, 10, "Spawn", "350", Today.AddDays(7)), Entry(2, 10, "Spawn", "351", Today.AddDays(14)) }, DateTime.UtcNow);
+        PullListService.Store(Context, ComicProvider.Metron, new[] { Entry(1, 10, "Spawn", "350", Today.AddDays(7)), Entry(2, 10, "Spawn", "351", Today.AddDays(14)) }, DateTime.UtcNow);
         Context.PullListReleases.Single(r => r.ExternalIssueId == 1).IsHidden = true;
         Context.SaveChanges();
 
@@ -216,7 +217,102 @@ public class PullListServiceTests : AcquisitionTestBase
         Assert.Equal("351", wanted.IssueNumber);
         Assert.Equal("Spawn", wanted.WatchedSeries!.Name);                          // loaded, so the caller can name it
 
-        PullListService.Store(Context, new[] { Entry(1, 10, "Spawn", "350", Today.AddDays(9)), Entry(2, 10, "Spawn", "351", Today.AddDays(14)) }, DateTime.UtcNow);
+        PullListService.Store(Context, ComicProvider.Metron, new[] { Entry(1, 10, "Spawn", "350", Today.AddDays(9)), Entry(2, 10, "Spawn", "351", Today.AddDays(14)) }, DateTime.UtcNow);
         Assert.True(Context.PullListReleases.Single(r => r.ExternalIssueId == 1).IsHidden);   // a refresh (even a moved date) keeps the choice
+    }
+
+    [Fact]
+    public void ASeriesWithoutACover_TakesTheFirstIssuesCover_ButNeverReplacesOneItHas()
+    {
+        var metron = WantedService.TrackVolume(Context, new ComicVineVolume(10, "Spawn", "Image", 1992, 300, null), null, false, ComicProvider.Metron);
+        WantedService.RefreshCatalog(Context, metron, new[]
+        {
+            new ComicVineIssue(2, "2", null, Today.AddDays(-30), null, "https://x/second.jpg", 10),
+            new ComicVineIssue(1, "1", null, Today.AddDays(-60), null, "https://x/first.jpg", 10),
+            new ComicVineIssue(3, "3", null, Today.AddDays(-5), null, null, 10),
+        });
+        Assert.Equal("https://x/first.jpg", metron.CoverImageUrl);                 // the earliest issue stands in for the series
+
+        var comicVine = WantedService.TrackVolume(Context, new ComicVineVolume(20, "Batman", "DC", 2016, 50, "https://cv/volume.jpg"), null, false);
+        WantedService.RefreshCatalog(Context, comicVine, new[] { new ComicVineIssue(9, "1", null, Today, null, "https://cv/issue.jpg", 20) });
+        Assert.Equal("https://cv/volume.jpg", comicVine.CoverImageUrl);            // ComicVine's own volume cover is kept
+    }
+
+    [Fact]
+    public void CachedCovers_GivesTheNewestReleaseCoverPerSeries_AndNothingForSeriesNotInTheList()
+    {
+        Context.PullListReleases.AddRange(
+            new PullListRelease { ExternalIssueId = 1, SeriesId = 10, SeriesName = "Spawn", IssueNumber = "349", StoreDate = Today.AddDays(-7), CoverImageUrl = "https://x/old.jpg" },
+            new PullListRelease { ExternalIssueId = 2, SeriesId = 10, SeriesName = "Spawn", IssueNumber = "350", StoreDate = Today.AddDays(7), CoverImageUrl = "https://x/new.jpg" },
+            new PullListRelease { ExternalIssueId = 3, SeriesId = 11, SeriesName = "Batman", IssueNumber = "1", StoreDate = Today, CoverImageUrl = null });
+        Context.SaveChanges();
+
+        var covers = PullListService.CachedCovers(Context, new[] { 10, 11, 12 });
+
+        Assert.Equal("https://x/new.jpg", covers[10]);
+        Assert.False(covers.ContainsKey(11));                                       // its release has no image
+        Assert.False(covers.ContainsKey(12));                                       // not in the window
+    }
+
+    [Fact]
+    public async Task AComicVineList_IsKeptApartFromMetrons_WithItsOwnSeriesInfoAndALowerLookupCap()
+    {
+        PullListService.Store(Context, ComicProvider.Metron, new[] { Entry(1, 10, "Spawn", "350", Today.AddDays(7)) }, DateTime.UtcNow);
+        Context.ReleaseSeries.Add(new ReleaseSeriesInfo { Provider = ComicProvider.Metron, SeriesId = 10, Name = "Spawn", FetchedAt = DateTime.UtcNow });
+        Context.SaveChanges();
+
+        var source = new FakeSource { Kind = ComicProvider.ComicVine };
+        for (int i = 0; i < PullListService.MaxComicVineSeriesLookupsPerRefresh + 15; i++)
+        {
+            source.Entries.Add(Entry(100 + i, 10 + i, $"Series {i:00}", "1", Today.AddDays(7)));      // volume id 10 also exists on ComicVine: a different series
+            source.Series[10 + i] = new PullListSeriesInfo(10 + i, $"Series {i:00}", "DC", 2020, null);
+        }
+
+        await PullListService.RefreshAsync(Context, source, Today, CancellationToken.None);
+
+        Assert.Equal(PullListService.MaxComicVineSeriesLookupsPerRefresh, source.SeriesLookups.Count);   // ComicVine's small budget: far fewer lookups
+        Assert.All(Context.PullListReleases, r => Assert.Equal(ComicProvider.ComicVine, r.Provider));    // switching source replaced Metron's list
+        Assert.Equal(ComicProvider.ComicVine, PullListService.ListProvider(Context));
+        Assert.Contains(Context.ReleaseSeries, m => m.Provider == ComicProvider.Metron && m.SeriesId == 10);   // Metron's cached info is not disturbed
+        Assert.Contains(Context.ReleaseSeries, m => m.Provider == ComicProvider.ComicVine && m.SeriesId == 10);
+    }
+
+    [Fact]
+    public void AFollowedComicVineSeries_IsMatchedByVolumeIdAgainstAComicVineList_AndTheWantIsComicVines()
+    {
+        int watchedId = TrackSpawn(ComicProvider.ComicVine, 4321, follow: true, out _);
+        TrackSpawnOnMetronToo();
+        PullListService.Store(Context, ComicProvider.ComicVine, new[]
+        {
+            Entry(1, 4321, "Spawn", "350", Today.AddDays(7)),
+            Entry(2, 555, "Batman", "1", Today.AddDays(7)),
+        }, DateTime.UtcNow);
+
+        int requested = PullListService.PromoteFollowedReleases(Context, Today);
+
+        Assert.Equal(1, requested);
+        var wanted = Assert.Single(Context.WantedIssues);
+        Assert.Equal(watchedId, wanted.WatchedSeriesId);
+        Assert.Equal(ComicProvider.ComicVine, wanted.Provider);                     // ComicVine's own ids: the catalog and details lookups treat it like any other want
+        Assert.Equal(1, wanted.ExternalIssueId);
+    }
+
+    private void TrackSpawnOnMetronToo()
+    {
+        // A Metron series whose id equals the ComicVine list's series id must NOT be matched: different databases, same number.
+        var other = new Series { Name = "Unrelated" };
+        Context.Series.Add(other);
+        Context.SaveChanges();
+        WantedService.TrackVolume(Context, Volume(4321, "Unrelated"), other.Id, watchFutureReleases: true, ComicProvider.Metron);
+    }
+
+    [Fact]
+    public void AMetronTrackedSeries_IsNotMatchedByAComicVineList()
+    {
+        TrackSpawn(ComicProvider.Metron, 10, follow: true, out _);
+        PullListService.Store(Context, ComicProvider.ComicVine, new[] { Entry(1, 10, "Spawn", "350", Today.AddDays(7)) }, DateTime.UtcNow);
+
+        Assert.Equal(0, PullListService.PromoteFollowedReleases(Context, Today));  // its Metron id says nothing about ComicVine's volume 10
+        Assert.Empty(Context.WantedIssues);
     }
 }

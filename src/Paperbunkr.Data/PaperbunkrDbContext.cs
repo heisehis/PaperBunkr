@@ -96,7 +96,7 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<WatchedSeries> WatchedSeries => Set<WatchedSeries>();
     public DbSet<CatalogIssue> CatalogIssues => Set<CatalogIssue>();
     public DbSet<PullListRelease> PullListReleases => Set<PullListRelease>();
-    public DbSet<MetronSeriesInfo> MetronSeries => Set<MetronSeriesInfo>();
+    public DbSet<ReleaseSeriesInfo> ReleaseSeries => Set<ReleaseSeriesInfo>();
     public DbSet<WantedIssue> WantedIssues => Set<WantedIssue>();
     public DbSet<ReleaseCandidate> ReleaseCandidates => Set<ReleaseCandidate>();
     public DbSet<AcquisitionSettings> AcquisitionSettings => Set<AcquisitionSettings>();
@@ -399,13 +399,16 @@ public class PaperbunkrDbContext : DbContext
             builder.HasKey(r => r.Id);
             builder.Property(r => r.IssueNumber).IsRequired().HasMaxLength(64);
             builder.Property(r => r.SeriesName).IsRequired().HasMaxLength(300);
-            builder.HasIndex(r => r.ExternalIssueId).IsUnique();
+            builder.Property(r => r.Provider).HasConversion<int>();   // no model default: Metron (1) is not the enum's zero value, so a default here would turn every ComicVine (0) row into Metron's
+            builder.HasIndex(r => new { r.Provider, r.ExternalIssueId }).IsUnique();
             builder.HasIndex(r => r.StoreDate);
         });
 
-        modelBuilder.Entity<MetronSeriesInfo>(builder =>
+        modelBuilder.Entity<ReleaseSeriesInfo>(builder =>
         {
-            builder.HasKey(m => m.SeriesId);
+            builder.ToTable("ReleaseSeries");
+            builder.HasKey(m => new { m.Provider, m.SeriesId });
+            builder.Property(m => m.Provider).HasConversion<int>();   // no model default: Metron (1) is not the enum's zero value, so a default here would turn every ComicVine (0) row into Metron's
             builder.Property(m => m.SeriesId).ValueGeneratedNever();
             builder.Property(m => m.Name).IsRequired().HasMaxLength(300);
         });

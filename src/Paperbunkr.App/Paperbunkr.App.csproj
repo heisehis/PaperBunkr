@@ -8,7 +8,7 @@
     <!-- Single source of truth for the release version (docs/superpowers/specs/
          2026-09-01-auto-update-and-changelog-design.md). CI derives the SemVer release tag/appcast
          version from this by dropping the trailing revision segment and appending "-beta". -->
-    <Version>0.7.2.0</Version>
+    <Version>0.7.3.0</Version>
     <!-- We stamp InformationalVersion ourselves in _PbStampBuildMetadata below; turn off the SDK's
          own SourceLink-driven "+<SourceRevisionId>" append so it can't double-stamp. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -78,6 +78,11 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
+    <!-- Sortable-table redesign of the ComicVine review dialogs (docs/superpowers/specs/2026-09-24-
+         scraper-review-tables-and-batch-summary-design.md §1) - CE's real seriesform.py/issueform.py
+         both use a DataGridView with click-to-sort column headers, verified directly against source.
+         First-party Avalonia package, pinned to the same 12.1.1 line as Avalonia itself. -->
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.1.1" />
     <!-- Books reflow reader WebView redesign (docs/superpowers/specs/2026-09-02-books-reflow-reader-
          webview-redesign-design.md) - first-party AvaloniaUI package, Windows uses WebView2
          automatically (matches this app's WinExe/Windows-only build already). 12.0.0 has a fatal

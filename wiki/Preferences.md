@@ -64,8 +64,21 @@ Seven tabs.
 - **Book Folders** — add/remove watched comic folders, toggle **Watch for changes** per
   folder, **Scan Now**, **Generate Covers**, **Sync Metadata**. See
   [Getting Started](Getting-Started).
-- **Migrate from ComicRack CE** — **Migrate…** opens the importer and the Needs Review
-  queue. See [Importing from ComicRack CE](Importing-from-ComicRack-CE).
+- **Migrate from ComicRack CE** — **Migrate…** opens the importer. See
+  [Importing from ComicRack CE](Importing-from-ComicRack-CE).
+- **Library Health** — everything that needs a decision, in three tabs (the one you last used
+  opens next time):
+  - **Overview** — what needs attention, and maintenance: **Verify & Repair Covers**, **Repair
+    Missing Covers**.
+  - **Review** — **Content Type**, **Duplicate Files**, **Series Conflicts** (**Find Similar
+    Series**), **Metadata Proposals**, **Advertisement Pages** and **Reported pages** (pages you
+    reported from the reader). Each says so when nothing needs a decision. Duplicate Files can
+    **Compare** two copies, **Remove extras, keep files**, or **Merge entries that share one file**
+    (when two library entries point at the same file).
+  - **Files** — **Missing Files** (relink, or remove confirmed-missing ones), **Empty Rows**, and
+    **Recently Removed** (restore anything removed here within 30 days), plus how a scan treats
+    missing and manually removed files.
+  The Library navigation item shows a dot while something needs review.
 - **Virtual Tags** — define named computed tags for [Smart Lists](Smart-Lists).
 
 ## Reader
@@ -98,8 +111,8 @@ Seven tabs.
 - **Info panel** — show the summary straight away in the reader's info panel (off: it stays behind
   a Show summary button because summaries can spoil).
 - **Auto-crop** — trim plain white or black scan borders from comic pages (off by default).
-- **Background & Margin** — canvas background (*Auto* app background, or a fixed **color**),
-  optional **margin around the page**.
+- **Background & Margin** — canvas background (*Auto* app background, a fixed **color**, or a
+  **Background texture**, including ComicRack CE's textures), optional **margin around the page**.
 - **Keyboard Shortcuts** — remap every reader command; **Import Layout… / Export
   Layout…**. See [Keyboard Shortcuts](Keyboard-Shortcuts).
 

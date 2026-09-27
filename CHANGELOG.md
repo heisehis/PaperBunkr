@@ -30,9 +30,10 @@ All notable changes to Paperbunkr are documented here. Format follows
 - **Insights: Today, Trends and Recap.** Reading goals with progress and milestone alerts,
   period-over-period changes on the stats, a backlog burn-down chart from a nightly snapshot, a
   year-in-review recap, and "because you finished" recommendations.
-- **Richer Metron and ComicVine data.** Scraping now keeps characters, teams, locations, creators and
-  publishers as linked records with their own detail screens, fills genre, age rating, ISBN/UPC and
-  community rating, and shows the final order cutoff date on Wanted releases.
+- **Richer Metron and ComicVine data.** Scraping now also fills genre, age rating, ISBN/UPC and
+  community rating, records characters, teams, locations, creators and publishers as linked records
+  (groundwork for pages about them, not browsable yet), and shows the final order cutoff date on
+  Wanted releases.
 - **ComicVine scraper, closer to the CE plugin.** An automatic match must also match the cover before
   it is applied. The review dialogs are sortable tables, a failed automatic match falls back to a manual
   search, and a summary appears at the end of a batch.

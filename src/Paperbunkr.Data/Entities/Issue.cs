@@ -48,6 +48,15 @@ public class Issue
     /// </summary>
     public ComicProvider? MetadataSource { get; set; }
 
+    /// <summary>CE's real <c>book.skip_forever()</c> (comicbook.py:109, verified: a Ctrl-held Skip in
+    /// the scrape review dialog writes a magic "CVDBSKIP" tag/note that makes every future scrape,
+    /// interactive or unattended, silently skip the book without even asking again). Paperbunkr uses a
+    /// dedicated column instead of piggybacking on the user-visible Tags/Notes fields (docs/superpowers/
+    /// specs/2026-09-24-comicvine-scraper-fidelity-plan.md Step 16) - <c>ScrapeOrchestrator</c>'s
+    /// own batch loop is the single choke point every scrape path funnels through, so it's checked and
+    /// excluded there regardless of which entry point triggered the run.</summary>
+    public bool ScrapePermanentlySkipped { get; set; }
+
     public string? AlternateSeries { get; set; }
 
     public string? AlternateNumber { get; set; }
@@ -109,7 +118,15 @@ public class Issue
 
     public string? Publisher { get; set; }
 
+    /// <summary>First-class <see cref="Entities.Publisher"/> row resolved from <see cref="Publisher"/> by <c>PublisherResolver</c> (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md). The string above stays the editable source of truth; this is a derived pointer, set null on delete rather than cascading.</summary>
+    public int? PublisherEntityId { get; set; }
+
+    public Publisher? PublisherEntity { get; set; }
+
     public string? Imprint { get; set; }
+
+    /// <summary>Metron's issue-level identifier (isbn/upc pair); <see cref="ISBN"/> above already exists for the former, this is new for the latter (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md).</summary>
+    public string? Upc { get; set; }
 
     public string? Web { get; set; }
 
@@ -177,6 +194,15 @@ public class Issue
     /// <summary>See <see cref="BrightnessOverride"/>.</summary>
     public float? GammaOverride { get; set; }
 
+    /// <summary>
+    /// Per-issue image quality choices (docs/superpowers/specs/2026-09-26-comic-reader-image-quality-design.md). Unlike the four sliders above these are absolute values, not deltas (a switch and a 0-3 step
+    /// are not additive): null means "use the default" (<c>AppSettings.DefaultAutoLevels</c> / <c>DefaultSharpen</c>, with the reader profile laid over it).
+    /// </summary>
+    public bool? AutoLevelsOverride { get; set; }
+
+    /// <summary>See <see cref="AutoLevelsOverride"/>. 0-3, CE's sharpening range.</summary>
+    public int? SharpenOverride { get; set; }
+
     // --- read-state / file fields carried over from ComicBook.cs ---
 
     public string? FilePath { get; set; }
@@ -239,6 +265,9 @@ public class Issue
     public float? Rating { get; set; }
 
     public float? CommunityRating { get; set; }
+
+    /// <summary>How many people rated <see cref="CommunityRating"/> - Metron's <c>rating_count</c> (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md). Null when never scraped from a provider that reports it (ComicVine doesn't).</summary>
+    public int? CommunityRatingCount { get; set; }
 
     public string? ISBN { get; set; }
 

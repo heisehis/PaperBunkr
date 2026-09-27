@@ -40,6 +40,25 @@ public class WhatsNewOverlayViewModelTests
         Assert.Empty(WhatsNewOverlayViewModel.SelectEntriesSince(Entries, "0.3.0.0"));
     }
 
+    [Fact]
+    public void SelectEntriesSince_DropsEmptyEntries()
+    {
+        IReadOnlyList<ChangelogEntry> entries = [new ChangelogEntry("0.4.0-beta", null, ""), .. Entries];
+
+        Assert.Equal(["0.3.0-beta"], WhatsNewOverlayViewModel.SelectEntriesSince(entries, "0.2.0.0").Select(e => e.Version));
+    }
+
+    [Fact]
+    public void Show_RowsCarryParsedGroups_OnlyNewestExpanded()
+    {
+        var vm = new WhatsNewOverlayViewModel(() => { }, () => { });
+        vm.Show(Entries, currentEntryOnly: false);
+
+        Assert.Equal([true, false, false], vm.Rows.Select(r => r.StartExpanded));
+        Assert.All(vm.Rows, r => Assert.False(r.IsCurrent));
+        Assert.Equal(ChangelogTagKind.Fixed, vm.Rows[2].Groups[0].Kind);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

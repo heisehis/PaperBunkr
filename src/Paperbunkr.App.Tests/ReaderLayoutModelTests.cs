@@ -636,4 +636,25 @@ public class ReaderLayoutModelTests
         Assert.True(Math.Abs(scrollJustAfter - scrollJustBefore) < 1.0,
             $"a 0.002px anchor difference produced a {Math.Abs(scrollJustAfter - scrollJustBefore):F3}px scroll discontinuity");
     }
+
+    // --- 25% zoom (docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md section 1) ---
+
+    [Fact]
+    public void ContinuousLayout_At25PercentZoom_KeepsTheVirtualizationWindowBounded()
+    {
+        // 500 webtoon-ish pages, 800x1200 each, in a 1000x800 viewport at 25%: about 4 pages of content fit on screen.
+        var sizes = Enumerable.Range(0, 500).Select(_ => new Size(800, 1200)).ToList();
+
+        var pages = ReaderLayoutModel.ComputeContinuousLayout(sizes, scrollOffset: 100_000, new Size(1000, 800), ReaderLayoutModel.Axis.Vertical, virtualizationRadius: 2, zoom: 0.25);
+
+        Assert.InRange(pages.Count, 1, 20);
+    }
+
+    [Fact]
+    public void PartGrid_BelowFit_IsASingleWholePage()
+    {
+        var grid = PagePartMath.ComputePartGrid(new Size(1000, 800), new PixelSize(800, 1200), 0.25);
+
+        Assert.Equal((1, 1), grid);
+    }
 }

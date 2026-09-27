@@ -327,4 +327,225 @@ public class StatsResolverTests : IDisposable
 
         Assert.Equal(1, Assert.Single(artists).Count);
     }
+
+    // --- Trend: period-over-period deltas + sparklines (design 2026-09-22) -------------------
+
+    [Fact]
+    public void AvgDaysToComplete_NowActuallyRespondsToRange_RegressionForTheBugFoundThisSession()
+    {
+        using var ctx = NewContext();
+        // Outside Days90 (200 days ago), inside Months12 (< 365 days ago): Opened -> Finished, 5 real days.
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Opened, Now.AddDays(-200));
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Finished, Now.AddDays(-195));
+        // Inside both ranges: Opened -> Finished, 2 real days.
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 2, ReadingEventKind.Opened, Now.AddDays(-10));
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 2, ReadingEventKind.Finished, Now.AddDays(-8));
+
+        double days90Avg = StatsResolver.Build(ctx, InsightsRange.Days90, Now).ReadingActivity.AvgDaysToComplete;
+        double months12Avg = StatsResolver.Build(ctx, InsightsRange.Months12, Now).ReadingActivity.AvgDaysToComplete;
+
+        Assert.Equal(2, days90Avg); // only the recent span is in range
+        Assert.Equal(3.5, months12Avg); // both spans average to (5+2)/2
+        Assert.NotEqual(days90Avg, months12Avg); // today (pre-fix) these would be identical
+    }
+
+    [Fact]
+    public void Trend_FinishedAndPace_SamePercentChange_BothPositiveWhenActivityIncreases()
+    {
+        using var ctx = NewContext();
+        // Anchor event at the prior window's own start, satisfies the "enough history" guard.
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Opened, Now.AddDays(-180));
+        // Prior window [-180, -90): 2 finished.
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 2, ReadingEventKind.Finished, Now.AddDays(-100));
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 3, ReadingEventKind.Finished, Now.AddDays(-95));
+        // Current window [-90, 0): 4 finished - double the prior window's count.
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 4, ReadingEventKind.Finished, Now.AddDays(-10));
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 5, ReadingEventKind.Finished, Now.AddDays(-9));
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 6, ReadingEventKind.Finished, Now.AddDays(-8));
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 7, ReadingEventKind.Finished, Now.AddDays(-7));
+
+        var trend = StatsResolver.Build(ctx, InsightsRange.Days90, Now).Trend;
+
+        Assert.NotNull(trend);
+        Assert.NotNull(trend!.FinishedItems);
+        Assert.NotNull(trend.AvgIssuesPerDay);
+        Assert.False(trend.FinishedItems!.ShowNew);
+        Assert.Equal(100, trend.FinishedItems.PercentChange!.Value, precision: 3);
+        Assert.Equal(trend.FinishedItems.PercentChange!.Value, trend.AvgIssuesPerDay!.PercentChange!.Value, precision: 6);
+        Assert.True(trend.FinishedItems.IsGoodDirection);
+        Assert.True(trend.AvgIssuesPerDay.IsGoodDirection);
+    }
+
+    [Fact]
+    public void Trend_ShowsNew_WhenPriorWindowHadNoFinishedEvents()
+    {
+        using var ctx = NewContext();
+        // Anchor: an Opened (not Finished) event exactly at the prior window's start - satisfies the
+        // history guard without contributing to FinishedInRange in either window.
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Opened, Now.AddDays(-180));
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 2, ReadingEventKind.Finished, Now.AddDays(-10));
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 3, ReadingEventKind.Finished, Now.AddDays(-5));
+
+        var finishedTrend = StatsResolver.Build(ctx, InsightsRange.Days90, Now).Trend!.FinishedItems;
+
+        Assert.NotNull(finishedTrend);
+        Assert.True(finishedTrend!.ShowNew);
+        Assert.Null(finishedTrend.PercentChange);
+        Assert.True(finishedTrend.IsGoodDirection);
+    }
+
+    [Fact]
+    public void Trend_TileIsNull_WhenBothWindowsHaveNoActivity()
+    {
+        using var ctx = NewContext();
+        // Only the history-guard anchor - no Finished events anywhere, so both windows are empty.
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Opened, Now.AddDays(-180));
+
+        var trend = StatsResolver.Build(ctx, InsightsRange.Days90, Now).Trend;
+
+        Assert.NotNull(trend); // the guard itself passed (there is history)
+        Assert.Null(trend!.FinishedItems);
+        Assert.Null(trend.AvgIssuesPerDay);
+        Assert.Null(trend.AvgDaysToComplete);
+    }
+
+    [Fact]
+    public void Trend_IsNull_WhenHistoryDoesNotReachBackFarEnoughForAFullPriorWindow()
+    {
+        using var ctx = NewContext();
+        // Everything within the last 20 days; Days30's prior window needs history back to -60.
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Finished, Now.AddDays(-5));
+
+        var trend = StatsResolver.Build(ctx, InsightsRange.Days30, Now).Trend;
+
+        Assert.Null(trend);
+    }
+
+    [Fact]
+    public void Trend_IsNull_ForAllTime_RegardlessOfHistoryDepth()
+    {
+        using var ctx = NewContext();
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Finished, Now.AddDays(-1000));
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 2, ReadingEventKind.Finished, Now.AddDays(-10));
+
+        var trend = StatsResolver.Build(ctx, InsightsRange.AllTime, Now).Trend;
+
+        Assert.Null(trend);
+    }
+
+    [Fact]
+    public void Trend_AvgDaysToComplete_FasterIsGood_EvenThoughPercentChangeIsNegative()
+    {
+        using var ctx = NewContext();
+        // History guard anchor.
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Opened, Now.AddDays(-180));
+        // Prior window: a 10-day journey.
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 2, ReadingEventKind.Opened, Now.AddDays(-150));
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 2, ReadingEventKind.Finished, Now.AddDays(-140));
+        // Current window: a 2-day journey - much faster.
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 3, ReadingEventKind.Opened, Now.AddDays(-15));
+        InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, 3, ReadingEventKind.Finished, Now.AddDays(-13));
+
+        var avgDaysTrend = StatsResolver.Build(ctx, InsightsRange.Days90, Now).Trend!.AvgDaysToComplete;
+
+        Assert.NotNull(avgDaysTrend);
+        Assert.Equal(-80, avgDaysTrend!.PercentChange!.Value, precision: 3);
+        Assert.True(avgDaysTrend.IsGoodDirection); // fewer days is the improvement, despite the negative percent
+    }
+
+    // --- BurnDown: backlog burn-down chart (design 2026-09-22-insights-backlog-burndown) -----
+
+    private static void SeedSnapshot(PaperbunkrDbContext ctx, DateOnly date, int total, int backlog)
+    {
+        ctx.LibrarySnapshots.Add(new LibrarySnapshot { SnapshotDate = date, TotalOwnedComics = total, BacklogComics = backlog });
+        ctx.SaveChanges();
+    }
+
+    [Fact]
+    public void BurnDown_BelowSevenDays_HasEnoughHistoryIsFalse_NoProjection()
+    {
+        using var ctx = NewContext();
+        SeedSnapshot(ctx, new DateOnly(2026, 9, 3), 100, 50);
+        SeedSnapshot(ctx, new DateOnly(2026, 9, 4), 100, 45);
+        SeedSnapshot(ctx, new DateOnly(2026, 9, 5), 100, 40);
+
+        var burnDown = StatsResolver.Build(ctx, InsightsRange.Days90, Now).BurnDown;
+
+        Assert.False(burnDown.HasEnoughHistory);
+        Assert.False(burnDown.IsCleared);
+        Assert.Null(burnDown.ProjectedClearDate);
+        Assert.Null(burnDown.ProjectedPoints);
+    }
+
+    [Fact]
+    public void BurnDown_IsCleared_IgnoresTheSevenDayMinimum()
+    {
+        using var ctx = NewContext();
+        SeedSnapshot(ctx, new DateOnly(2026, 9, 4), 100, 5);
+        SeedSnapshot(ctx, new DateOnly(2026, 9, 5), 100, 0); // latest - cleared, only 2 rows total
+
+        var burnDown = StatsResolver.Build(ctx, InsightsRange.Days90, Now).BurnDown;
+
+        Assert.True(burnDown.IsCleared);
+        Assert.True(burnDown.HasEnoughHistory);
+        Assert.Null(burnDown.ProjectedClearDate);
+    }
+
+    [Fact]
+    public void BurnDown_TrendingDown_ProjectsAClearDateFromTheLatestPoint()
+    {
+        using var ctx = NewContext();
+        var start = new DateOnly(2026, 8, 29);
+        int[] backlog = { 100, 90, 80, 70, 60, 50, 40, 30 }; // perfectly linear, slope -10/day
+        for (int i = 0; i < backlog.Length; i++)
+        {
+            SeedSnapshot(ctx, start.AddDays(i), total: 200, backlog[i]);
+        }
+
+        var burnDown = StatsResolver.Build(ctx, InsightsRange.Days90, Now).BurnDown;
+
+        Assert.True(burnDown.HasEnoughHistory);
+        Assert.False(burnDown.IsCleared);
+        Assert.NotNull(burnDown.ProjectedClearDate);
+        Assert.Equal(new DateOnly(2026, 9, 8), burnDown.ProjectedClearDate); // latest (Sep 5, backlog 30) + 3 days at -10/day
+        Assert.NotNull(burnDown.ProjectedPoints);
+        Assert.Equal(2, burnDown.ProjectedPoints!.Count);
+        Assert.Equal(0, burnDown.ProjectedPoints[1].BacklogCount);
+    }
+
+    [Fact]
+    public void BurnDown_FlatOrGrowing_NoProjection()
+    {
+        using var ctx = NewContext();
+        var start = new DateOnly(2026, 8, 29);
+        for (int i = 0; i < 8; i++)
+        {
+            SeedSnapshot(ctx, start.AddDays(i), total: 200, backlog: 50); // flat
+        }
+
+        var burnDown = StatsResolver.Build(ctx, InsightsRange.Days90, Now).BurnDown;
+
+        Assert.True(burnDown.HasEnoughHistory);
+        Assert.False(burnDown.IsCleared);
+        Assert.Null(burnDown.ProjectedClearDate);
+        Assert.Null(burnDown.ProjectedPoints);
+    }
+
+    [Fact]
+    public void BurnDown_Points_WindowByRange_ButProjection_AlwaysUsesTheLast30Rows()
+    {
+        using var ctx = NewContext();
+        var start = new DateOnly(2026, 7, 27); // 40 days of history, ending 2026-09-04
+        for (int i = 0; i < 40; i++)
+        {
+            SeedSnapshot(ctx, start.AddDays(i), total: 500, backlog: 400 - 10 * i); // perfectly linear throughout
+        }
+
+        var days30 = StatsResolver.Build(ctx, InsightsRange.Days30, Now).BurnDown;
+        var months12 = StatsResolver.Build(ctx, InsightsRange.Months12, Now).BurnDown;
+
+        Assert.True(days30.Points.Count < months12.Points.Count); // Points windows by the selected range
+        Assert.Equal(months12.ProjectedClearDate, days30.ProjectedClearDate); // projection ignores the selected range
+        Assert.Equal(new DateOnly(2026, 9, 5), days30.ProjectedClearDate); // latest (Sep 4, backlog 10) + 1 day at -10/day
+    }
 }

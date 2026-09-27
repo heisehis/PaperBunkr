@@ -168,6 +168,45 @@ public class LibraryFolderScannerTests : IDisposable
     }
 
     [Fact]
+    public async Task ScanAllAsync_ARemovedEntryWhoseFileWasKept_StaysRemoved_EvenWithTheSettingOff()
+    {
+        string path = Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz");
+        CbzFixture.Create(path, pageCount: 1);
+        AddWatchedFolder(_scanRoot);
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            // The setting is off (its default), but this entry was removed with "keep the file": the file is still in the folder, so
+            // without this the very next scan would put the entry straight back.
+            context.RemovedFilePaths.Add(new RemovedFilePath { FilePath = path, RemovedAtUtc = DateTime.UtcNow, KeepFile = true });
+            context.SaveChanges();
+        }
+
+        var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        Assert.Equal(0, result.IssuesAdded);
+        using var verifyContext = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(verifyContext.Issues);
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task ImportNewFilesAsync_ARemovedEntryWhoseFileWasKept_IsNotImportedAgain_EvenWithTheSettingOff()
+    {
+        string path = Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz");
+        CbzFixture.Create(path, pageCount: 1);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.RemovedFilePaths.Add(new RemovedFilePath { FilePath = path, RemovedAtUtc = DateTime.UtcNow, KeepFile = true });
+            context.SaveChanges();
+        }
+
+        var result = await CreateScanner().ImportNewFilesAsync(new[] { path }, new Progress<(int, int)>());
+
+        Assert.Equal(0, result.IssuesAdded);
+    }
+
+    [Fact]
     public async Task ImportNewFilesAsync_DontReimportRemovedFiles_On_SkipsBlacklistedPath()
     {
         string path = Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz");

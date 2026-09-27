@@ -3,36 +3,159 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.7.3-beta] - 2026-09-26
+
+### Added
+
+- **Comic reader: page intelligence.** Deleted pages are skipped (advertisements optionally), a story
+  ending before the ads now counts as finished, and short issues can reach 100%. Press **X** to report
+  a bad page; reports land in Library Health. Advertisement pages can be detected automatically and
+  reviewed before they are tagged.
+- **Comic reader: panels and zoom.** One smooth zoom range from 25% to 400% with a logarithmic slider.
+  **Guided view** (**G**) steps through a page panel by panel, and double-click zooms to the panel under
+  the pointer.
+- **Comic reader: image quality.** CE's auto levels and sharpening, optional auto-crop of page margins
+  with per-page overrides, and smoother scaling when colour filters are on.
+- **Comic reader: reach.** Right and middle clicks no longer turn pages. PageUp/PageDown, Space,
+  media keys and mouse side buttons turn pages, tap-zone layouts work in paged and continuous mode,
+  **Ctrl+K** opens a command palette with go-to-page (**Ctrl+G**), and an Xbox controller works.
+- **Comic reader: profiles.** Named reader profiles (three built in) layered over your defaults, with a
+  per-series choice and a quick switch (**P**).
+- **Comic reader: comfort.** A reading-stats chip (**H**), eye-rest reminders, a scheduled warm tint
+  (**W**), and copying or saving the current page or spread.
+- **Comic reader: info and compare.** An info panel (**I**), a pinned reference page (**Shift+P**), page
+  notes and region clips with Markdown export, and a **Compare** screen for two editions of a comic,
+  side by side or flicker, with Keep A / Keep B.
+- **The next issue opens in the background** during the last pages, so moving on is instant.
+- **Insights: Today, Trends and Recap.** Reading goals with progress and milestone alerts,
+  period-over-period changes on the stats, a backlog burn-down chart from a nightly snapshot, a
+  year-in-review recap, and "because you finished" recommendations.
+- **Richer Metron and ComicVine data.** Scraping now keeps characters, teams, locations, creators and
+  publishers as linked records with their own detail screens, fills genre, age rating, ISBN/UPC and
+  community rating, and shows the final order cutoff date on Wanted releases.
+- **ComicVine scraper, closer to the CE plugin.** An automatic match must also match the cover before
+  it is applied. The review dialogs are sortable tables, a failed automatic match falls back to a manual
+  search, and a summary appears at the end of a batch.
+- **Library Organizer parity** with the Library Organizer 2.1.13 plugin: more template tokens and
+  padding options, excluded folders and nested exclude rules, a live preview while editing a profile,
+  several profiles in one run, and saved run reports.
+- **Role detection** for event and reading-list members (Core, Tie-in and so on), from titles and
+  ComicVine issue names, with suggestions you can accept or dismiss.
+- **Library Health** now holds all the review queues (content type, duplicate files, series
+  conflicts, metadata proposals, ad pages) in Overview / Review / Files tabs, refreshes much faster, and
+  can merge library entries that point at the same file.
+- **"Keep the file" removal** in context menus and duplicate groups, and it is remembered.
+- **CE's publisher icon pack** (about 750 logos, year-aware) and CE's reader background textures.
+- **Library preview panel v2**: a backdrop hero for series, collapsible sections for issues, and an
+  issue rail you can drill into.
+- **Selecting series** in the Library now offers Mark Read, Mark Unread and Add to List for every issue
+  in them.
+- **About has tabs**: Overview, Changelog, and Legal & notices. Overview gains **Copy version info**
+  (for bug reports) and links to the source code, the wiki, issue reporting and releases, plus
+  buttons that open the logs and data folders.
+- **Open-source notices** under About → Legal & notices lists the software, fonts and artwork
+  Paperbunkr includes and their licenses.
+
+### Changed
+
+- **Preferences → Reader and Organize & Scrape** are split into tabs instead of one long scroll.
+- **Library sorting follows CE**: series, titles and story arcs ignore a leading "The" (and CE's other
+  articles) and sort numbers naturally, so "Vol 2" comes before "Vol 10". The A–Z rail agrees.
+- The grid density slider also works in Tiles view, and the View & Sort menu no longer shows a scroll
+  bar; its bottom edge fades when there is more below.
+- The status bar counts issues rather than comics, since the library holds manga too.
+- The privacy notice, terms of use and ComicVine notice were rewritten in plain language and now
+  describe what the app actually does, including the two things on by default: the update check and
+  the daily Wikidata lookup for shared-universe suggestions. The ComicVine notice also covers Metron.
+- Changelog entries read as whole sentences, with bullets, bold text and coloured category tags, in
+  About and in What's New. Legal documents open in a wider viewer with clickable links, a "Last
+  updated" line and Copy text; the license is shown in its original layout.
+- The update notice links to the new version's release notes instead of showing the installed
+  version's.
+
+### Fixed
+
+- **The status bar showed "0 MB"** and the file size, modified and created fields were empty: they were
+  never recorded. They are now read from each file, and filled in for your existing library on the next
+  start.
+- **Dog-ear preview never appeared** on Poster grid covers, and **Fade in thumbnails** never visibly
+  faded. Both work now; the fade matches CE's 300 ms.
+- Series cards said "1 issues".
+- Collection names in the Library sidebar were cut short to make room for hidden buttons, and their
+  counts sat out of line.
+- Continuous scroll no longer jumps at page boundaries, and saving your reading position no longer
+  stutters the reader.
+- Resolving a duplicate that shared its file with the kept entry deleted the file. A removed file
+  no longer comes back at the next scan when you chose to keep it, and a Copy organizer profile that
+  targets a watched folder is refused instead of importing every copy as a duplicate.
+- The organizer: empty values no longer break the path, a comic already in place is left alone, two
+  comics headed for one path no longer collide, Replace uses the Recycle Bin, and values parsed only from
+  the file name are no longer empty in templates.
+- Scraping wrote the imprint into the publisher, missed fractional issue numbers, gave up on a
+  single network error, and kept only the first role of a credit such as "artist".
+- The Comic Book Reading Orders import dropped text between some headings.
+- About no longer shows an empty "Unreleased" entry, and marks the right version as Current between
+  releases. **What's new** in About no longer opens empty.
+- What's New rows no longer show the default toggle-button look.
 
 ## [0.7.0-beta] - 2026-09-21
 
 ### Added
 
-- **Weekly pull list.** Wanted gains a **Releases** tab: every comic Metron lists for the last week and the next four, grouped by week, with a publisher filter and a "followed only" switch. **Request** wants one issue; **Follow** tracks the series and requests its upcoming issues. Releases of series you already follow become **Upcoming** wants on their own, so future issues show up without waiting for ComicVine to list them. It needs your Metron login (Preferences → Connections) and is refreshed in the background about twice a day; "Search now" can refresh it after an hour. The Wanted screen's Downloads list now scrolls on its own. This adds a migration, so back up your database first. You can **Hide** a release you don't want (Show hidden brings it back), and the Activity Center tells you when new releases of followed series were added. Without a Metron login the list comes from ComicVine instead (at a smaller scale, since ComicVine allows far fewer requests). Story-arc requests now work for series tracked on Metron, Metron series show a cover (their first issue's), background Metron requests leave part of the day's quota for you, and a re-scrape starts on the source the comics were scraped from.
-- **Metron as an alternative to ComicVine.** Save your Metron login under Preferences → **Connections** and every place that used ComicVine can use Metron instead, per series: a series' **Missing Issues** search and the Wanted **Track a series** search gain a source selector, tracked series and wants from Metron carry a small **Metron** chip, and the daily refresh, release search and import-time details each go to the series' own source. **Scrape** starts on the source chosen under Preferences → Organize & Scrape (scheduled scrapes always use it) and the match dialog can switch a single run. Nothing is merged between the two: a series belongs to one source. Existing series stay on ComicVine; this adds a migration, so back up your database first.
+- **Weekly pull list.** Wanted gains a **Releases** tab: every comic Metron lists for the last week
+  and the next four, grouped by week, with a publisher filter and a "followed only" switch.
+- **Request** wants one issue; **Follow** tracks the series and requests its upcoming issues.
+  Releases of series you already follow become **Upcoming** wants on their own, so future issues
+  show up without waiting for ComicVine to list them.
+- The pull list needs your Metron login (Preferences → Connections) and is refreshed in the
+  background about twice a day; "Search now" can refresh it after an hour. Without a Metron login it
+  comes from ComicVine instead, at a smaller scale, since ComicVine allows far fewer requests.
+- You can **Hide** a release you don't want (Show hidden brings it back), and the Activity Center
+  tells you when new releases of followed series were added. The Wanted screen's Downloads list now
+  scrolls on its own.
+- Story-arc requests now work for series tracked on Metron, Metron series show a cover (their first
+  issue's), background Metron requests leave part of the day's quota for you, and a re-scrape starts
+  on the source the comics were scraped from. The pull list adds a migration, so back up your
+  database first.
+- **Metron as an alternative to ComicVine.** Save your Metron login under Preferences →
+  **Connections** and every place that used ComicVine can use Metron instead, per series. Nothing is
+  merged between the two: a series belongs to one source, and existing series stay on ComicVine.
+  This adds a migration, so back up your database first.
+- A series' **Missing Issues** search and the Wanted **Track a series** search gain a source
+  selector, and tracked series and wants from Metron carry a small **Metron** chip. The daily
+  refresh, release search and import-time details each go to the series' own source.
+- **Scrape** starts on the source chosen under Preferences → Organize & Scrape (scheduled scrapes
+  always use it), and the match dialog can switch a single run.
 - **Comic acquisition.** A Mylar-style want-list built on your own Prowlarr and qBittorrent.
-  Preferences → **Acquisition** connects Prowlarr and qBittorrent (keys and passwords are stored
-  encrypted), sets how often to check, how to rank results, where finished comics go, and how they are
-  named (a live preview shows the result). The new **Wanted** screen tracks ComicVine series, lists what
-  you're missing and what's coming, follows a series so new issues are requested automatically, and shows
-  the releases Prowlarr found: **Grab** one to send it to qBittorrent, watch its progress, and Paperbunkr
-  imports the finished file into your library (the original keeps seeding), or **Reject** it to never see it
-  again. A series' page gains a **Missing Issues** section with covers and per-issue Request, and reading
-  lists built from a story arc gain **Request missing issues** and **Follow this arc** (a daily task, off
-  until you turn it on under Automation, keeps followed arcs up to date and requests what's new).
+  Preferences → **Acquisition** sets how often to check, how to rank results, where finished comics
+  go, and how they are named (a live preview shows the result).
+- The new **Wanted** screen tracks ComicVine series, lists what you're missing and what's coming,
+  follows a series so new issues are requested automatically, and shows the releases Prowlarr found.
+  **Grab** one to send it to qBittorrent, watch its progress, and Paperbunkr imports the finished
+  file into your library (the original keeps seeding); **Reject** it to never see it again.
   Downloading is manual approval by default; **Download automatically** is a separate opt-in.
-
-- **ComicVine details on downloads.** When an acquired issue is imported, Paperbunkr now fetches its credits, summary, characters and dates from ComicVine by the issue you
-  asked for (no searching, nothing to confirm) and writes them into the file. If it can't, the issue stays in your library as it is, the attempt is recorded, and it is retried
-  on its own; anything that needs you (no ComicVine key, an issue ComicVine no longer has) appears under **Wanted → Needs attention** with Retry and Dismiss, one at a time or all at once.
-  It can be turned off in Preferences → Acquisition.
-
-- **ComicVine scraping and library organizing are built in** (they were the Cluster Library Manager plugin). Right-click comics or a series and choose **Scrape with ComicVine…** to match
-  them (series, then issue, with a progress header and one Activity Center job), or **Organize…** to move or copy files by an organizer profile's templates, with collision handling and
-  **Undo last organize**. A series' page gains a ComicVine panel. Settings and profiles are under **Preferences → Organize & Scrape**; two new tasks under Automation (scrape unscraped comics,
-  organize library) are off until you turn them on. An installed Cluster Library Manager plugin is no longer loaded.
-- Prowlarr and qBittorrent settings now live under **Preferences → Connections** with every other key and password; Acquisition keeps its behavior settings.
+- A series' page gains a **Missing Issues** section with covers and per-issue Request. Reading lists
+  built from a story arc gain **Request missing issues** and **Follow this arc** (a daily task, off
+  until you turn it on under Automation, keeps followed arcs up to date and requests what's new).
+- **ComicVine details on downloads.** When an acquired issue is imported, Paperbunkr fetches its
+  credits, summary, characters and dates from ComicVine by the issue you asked for (no searching,
+  nothing to confirm) and writes them into the file. It can be turned off in Preferences →
+  Acquisition.
+- If fetching those details fails, the issue stays in your library as it is, the attempt is
+  recorded, and it is retried on its own. Anything that needs you (no ComicVine key, an issue
+  ComicVine no longer has) appears under **Wanted → Needs attention** with Retry and Dismiss, one at
+  a time or all at once.
+- **ComicVine scraping and library organizing are built in** (they were the Cluster Library Manager
+  plugin). Right-click comics or a series and choose **Scrape with ComicVine…** to match them
+  (series, then issue, with a progress header and one Activity Center job), or **Organize…** to move
+  or copy files by an organizer profile's templates, with collision handling and **Undo last
+  organize**.
+- A series' page gains a ComicVine panel. Scrape and organize settings and profiles are under
+  **Preferences → Organize & Scrape**; two new tasks under Automation (scrape unscraped comics,
+  organize library) are off until you turn them on. An installed Cluster Library Manager plugin is
+  no longer loaded.
+- Prowlarr and qBittorrent settings now live under **Preferences → Connections** with every other
+  key and password (stored encrypted); Acquisition keeps its behavior settings.
 
 ### Changed
 

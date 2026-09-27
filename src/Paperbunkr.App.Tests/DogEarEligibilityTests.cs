@@ -23,9 +23,11 @@ public class DogEarEligibilityTests
     }
 
     [Fact]
-    public void UnknownPageCount_IsNotEligible()
+    public void UnknownPageCount_IsEligible_TheDecodeDecides()
     {
-        Assert.False(DogEarEligibility.IsEligible(pageCount: null, fileIsMissing: false, hasCustomCover: false));
+        // CE always knows the page count; Paperbunkr only learns it from ComicInfo.xml or a reader visit, so an unknown
+        // count attempts the page-2 decode, which returns nothing for a one-page book (2026-09-26 library audit).
+        Assert.True(DogEarEligibility.IsEligible(pageCount: null, fileIsMissing: false, hasCustomCover: false));
     }
 
     [Fact]

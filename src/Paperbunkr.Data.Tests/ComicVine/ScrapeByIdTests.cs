@@ -10,8 +10,118 @@ public class IssueDetailsApplierTests
 {
     private static ComicVineIssueDetails Details(string? summary = "A story.") => new(
         4321, 91273, "Spawn", "263", "Endgame", "https://cv/263", new ComicVineDatePart(2016, 5, 1), new ComicVineDatePart(2016, 5, 4), summary,
-        new[] { "Endgame Arc" }, new[] { "Spawn", "Sam" }, new[] { "Hellspawn" }, new[] { "Rat City" },
+        new[] { new ComicVineIdName(null, "Endgame Arc") }, new[] { new ComicVineIdName(null, "Spawn"), new ComicVineIdName(null, "Sam") },
+        new[] { new ComicVineIdName(null, "Hellspawn") }, new[] { new ComicVineIdName(null, "Rat City") },
         new[] { new ComicVineCredit("Todd", "Writer"), new ComicVineCredit("Greg", "Colorist"), new ComicVineCredit("Todd", "Writer"), new ComicVineCredit("Nobody", null) });
+
+    [Fact]
+    public void MapsImprintAgeRatingIsbnUpcAndCommunityRating()
+    {
+        var issue = new Issue { Number = "263" };
+        var details = Details() with { Imprint = "Vertigo", AgeRating = "Teen", Isbn = "978-1", Upc = "012345", AverageRating = 4.5, RatingCount = 10 };
+
+        var changed = IssueDetailsApplier.Apply(issue, details, ScrapeFieldPolicy.Default);
+
+        Assert.Equal("Vertigo", issue.Imprint);
+        Assert.Equal("Teen", issue.AgeRating);
+        Assert.Equal("978-1", issue.ISBN);
+        Assert.Equal("012345", issue.Upc);
+        Assert.Equal(4.5f, issue.CommunityRating);
+        Assert.Equal(10, issue.CommunityRatingCount);
+        Assert.Contains(ScrapeField.Imprint, changed);
+        Assert.Contains(ScrapeField.CommunityRating, changed);
+    }
+
+    [Fact]
+    public void GenreIsAdditive_WrittenAsIssueTags_NeverRemovesExisting()
+    {
+        var issue = new Issue { Number = "263" };
+        issue.Tags.Add(new IssueTag { Field = IssueTagField.Genre, Value = "Existing Genre" });
+        var details = Details() with { Genres = new[] { "Superhero", "Existing Genre" } };
+
+        var changed = IssueDetailsApplier.Apply(issue, details, ScrapeFieldPolicy.Default);
+
+        Assert.Equal(2, issue.Tags.Count(t => t.Field == IssueTagField.Genre));
+        Assert.Contains(issue.Tags, t => t.Value == "Existing Genre");
+        Assert.Contains(issue.Tags, t => t.Value == "Superhero");
+        Assert.Contains(ScrapeField.Genre, changed);
+    }
+
+    [Fact]
+    public void ForkFields_MainCharacter_SeriesGroup_ConceptTags_AndStoryArcOrder_AreWritten()
+    {
+        var issue = new Issue { Number = "263" };
+        var details = Details() with { } ;
+        details = details with { StoryArcs = new[] { new ComicVineIdName(1, "Endgame Arc"), new ComicVineIdName(2, "Hell Arc") } };
+        var withConcepts = new ComicVineIssueDetails(
+            details.Id, details.VolumeId, details.VolumeName, details.IssueNumber, details.Title, details.SiteDetailUrl,
+            details.PublishedDate, details.ReleasedDate, details.Summary, details.StoryArcs, details.Characters, details.Teams,
+            details.Locations, details.Credits) { Concepts = new[] { "Time Travel", "time travel", "Resurrection" } };
+
+        var changed = IssueDetailsApplier.Apply(issue, withConcepts, ScrapeFieldPolicy.Default,
+            new StoryArcPositions(new[] { "4", string.Empty }, AlternateCount: 12));
+
+        Assert.Equal("Spawn", issue.MainCharacterOrTeam);                 // the first character
+        Assert.Equal("Endgame Arc, Hell Arc", issue.SeriesGroup);
+        Assert.Equal("4", issue.StoryArcNumber);                          // the arc with no known position is dropped
+        Assert.Equal("4", issue.AlternateNumber);
+        Assert.Equal(12, issue.AlternateCount);
+        Assert.Equal(new[] { "Resurrection", "Time Travel" }, issue.Tags.Where(t => t.Field == IssueTagField.Tags).Select(t => t.Value).OrderBy(v => v));
+        Assert.Contains(ScrapeField.StoryArcOrder, changed);
+        Assert.Contains(ScrapeField.Concepts, changed);
+    }
+
+    [Fact]
+    public void MainCharacterOrTeam_FallsBackToTheFirstTeam_WhenThereAreNoCharacters()
+    {
+        var issue = new Issue { Number = "1" };
+        var noCharacters = Details() with { Characters = Array.Empty<ComicVineIdName>() };
+
+        IssueDetailsApplier.Apply(issue, noCharacters, ScrapeFieldPolicy.Default);
+
+        Assert.Equal("Hellspawn", issue.MainCharacterOrTeam);
+    }
+
+    [Fact]
+    public void ForkFields_AreLeftAlone_WhenTheirTogglesAreOff()
+    {
+        var issue = new Issue { Number = "263" };
+        var policy = new ScrapeFieldPolicy
+        {
+            Enabled = new HashSet<ScrapeField>(Enum.GetValues<ScrapeField>().Except(new[]
+            {
+                ScrapeField.MainCharacterOrTeam, ScrapeField.SeriesGroup, ScrapeField.Concepts, ScrapeField.StoryArcOrder,
+            })),
+        };
+        var details = Details() with { Concepts = new[] { "Time Travel" } };
+
+        IssueDetailsApplier.Apply(issue, details, policy, new StoryArcPositions(new[] { "4" }, 12));
+
+        Assert.Null(issue.MainCharacterOrTeam);
+        Assert.Null(issue.SeriesGroup);
+        Assert.Null(issue.StoryArcNumber);
+        Assert.Null(issue.AlternateCount);
+        Assert.Empty(issue.Tags.Where(t => t.Field == IssueTagField.Tags));
+    }
+
+    [Fact]
+    public void GenreDuplicatedWithinTheSameResponse_IsWrittenOnlyOnce()
+    {
+        // Real-world crash (2026-09-24): ComicVine returning the same genre name twice for one issue
+        // used to add two IssueTag rows with the same (Field, Value), since the old code filtered
+        // details.Genres against a HashSet snapshot taken once before the loop instead of updating it
+        // as each genre was added. The duplicate row then crashed IssuePropertiesScreenViewModel's
+        // ApplyTagRows the next time that issue was opened for editing (ToDictionary on a case-
+        // insensitive duplicate key).
+        var issue = new Issue { Number = "263" };
+        var details = Details() with { Genres = new[] { "Super-Hero", "Super-Hero" } };
+
+        var changed = IssueDetailsApplier.Apply(issue, details, ScrapeFieldPolicy.Default);
+
+        Assert.Single(issue.Tags.Where(t => t.Field == IssueTagField.Genre));
+        Assert.Contains(issue.Tags, t => t.Value == "Super-Hero");
+        Assert.Contains(ScrapeField.Genre, changed);
+    }
 
     [Fact]
     public void FillsEveryPerIssueField_AndReportsWhatChanged()
@@ -94,7 +204,7 @@ public class ScrapeByIdServiceTests : AcquisitionTestBase
 
     private static ComicVineIssueDetails Details() => new(
         4321, 1, "Spawn", "263", "Endgame", null, new ComicVineDatePart(2016, 5, 1), new ComicVineDatePart(null, null, null), "Story",
-        Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), new[] { new ComicVineCredit("Todd", "Writer") });
+        Array.Empty<ComicVineIdName>(), Array.Empty<ComicVineIdName>(), Array.Empty<ComicVineIdName>(), Array.Empty<ComicVineIdName>(), new[] { new ComicVineCredit("Todd", "Writer") });
 
     private (int WantedId, int IssueId) Seed(bool withIssue = true)
     {
@@ -125,6 +235,21 @@ public class ScrapeByIdServiceTests : AcquisitionTestBase
         var saved = Context.Issues.AsNoTracking().Single(i => i.Id == issueId);
         Assert.Equal("Endgame", saved.Title);
         Assert.Equal("Todd", saved.Writer);
+    }
+
+    [Fact]
+    public async Task ScrapeMaterializesTheDerivedCreatorIndex()
+    {
+        // docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md - a scrape must index
+        // Character/Team/Location/Creator/Publisher, not just write the flat Issue string fields.
+        var (wantedId, issueId) = Seed();
+        var source = new FakeSource(id => id == 4321 ? Details() : null);
+
+        await Service(source).ScrapeAsync(wantedId, CancellationToken.None);
+
+        var creator = Context.Creators.Include(c => c.Credits).AsNoTracking().Single();
+        Assert.Equal("Todd", creator.Name);
+        Assert.Contains(creator.Credits, c => c.IssueId == issueId && c.Role == "Writer");
     }
 
     [Fact]

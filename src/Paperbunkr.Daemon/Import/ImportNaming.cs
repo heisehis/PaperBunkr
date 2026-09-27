@@ -74,6 +74,7 @@ public static class ImportNaming
 
         var context = new TemplateContext
         {
+            PadDecimals = false,       // the import grammar never padded or rounded a non-whole number ("1.5"), and existing file names must not change
             Extra = new Dictionary<string, string?>
             {
                 ["volumeyear"] = watched.StartYear?.ToString(CultureInfo.InvariantCulture),

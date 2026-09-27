@@ -601,7 +601,7 @@
                                 <fi:SymbolIcon Symbol="Building" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
                                 <TextBlock Text="PUBLISHER" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
                             </StackPanel>
-                            <pbc:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="True" MarkSize="18"
+                            <pbc:BrandMark Family="Publisher" Value="{Binding Publisher}" Year="{Binding PublisherYear}" ShowText="True" MarkSize="18"
                                            HorizontalAlignment="Left" Foreground="{DynamicResource PbTextBrush}" />
                         </StackPanel>
                         <StackPanel Grid.Column="1">
@@ -624,7 +624,7 @@
                 <!-- SERIES READER DEFAULTS (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-
                      design.md §2) - set from the Reader's "Apply to series", cleared here. -->
                 <Border Classes="card">
-                    <Grid ColumnDefinitions="*,*">
+                    <Grid ColumnDefinitions="*,*,*">
                         <StackPanel Grid.Column="0" Margin="0,0,28,0">
                             <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,4">
                                 <fi:SymbolIcon Symbol="AutoFit" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
@@ -637,7 +637,7 @@
                                         Foreground="{DynamicResource PbTextMutedBrush}" />
                             </StackPanel>
                         </StackPanel>
-                        <StackPanel Grid.Column="1">
+                        <StackPanel Grid.Column="1" Margin="0,0,28,0">
                             <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,4">
                                 <fi:SymbolIcon Symbol="ArrowRotateClockwise" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
                                 <TextBlock Text="SERIES AUTO-ROTATE" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
@@ -645,6 +645,18 @@
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <TextBlock Text="{Binding SeriesAutoRotateDefaultLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                                 <Button Content="Clear" Command="{Binding ClearSeriesAutoRotateDefaultCommand}" IsVisible="{Binding HasSeriesAutoRotateDefault}"
+                                        Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand" FontSize="12"
+                                        Foreground="{DynamicResource PbTextMutedBrush}" />
+                            </StackPanel>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,4">
+                                <fi:SymbolIcon Symbol="Color" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="SERIES READER PROFILE" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="{Binding SeriesProfileLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                <Button Content="Clear" Command="{Binding ClearSeriesProfileCommand}" IsVisible="{Binding HasSeriesProfile}"
                                         Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand" FontSize="12"
                                         Foreground="{DynamicResource PbTextMutedBrush}" />
                             </StackPanel>

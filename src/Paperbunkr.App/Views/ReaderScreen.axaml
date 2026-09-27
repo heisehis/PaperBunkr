@@ -52,6 +52,14 @@
         </Style>
 
         <!-- Chrome cluster small controls - Pb*-token equivalents of the old toolPill/toolIcon/flyoutRow. -->
+        <!-- The pinned reference page rests a little see-through so it never fully hides the page, and solid while hovered. -->
+        <Style Selector="Border#PinPanel">
+            <Setter Property="Opacity" Value="0.88" />
+        </Style>
+        <Style Selector="Border#PinPanel:pointerover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
         <Style Selector="Button.clusterPill">
             <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
@@ -122,6 +130,10 @@
         </Style>
         <Style Selector="Button.pageDot:pointerover">
             <Setter Property="Background" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+        <!-- A page with a note: its dot is tinted (an active page's accent still wins). -->
+        <Style Selector="Button.pageDot.noted">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
         </Style>
         <Style Selector="Button.pageDot.active">
             <Setter Property="Width" Value="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).DotStripActiveItemWidth}" />
@@ -250,6 +262,15 @@
         </Style>
     </UserControl.Styles>
 
+    <UserControl.Resources>
+        <!-- One name in the info panel's characters / teams / locations / genres / tags lists (squircle chip, never an oval pill). -->
+        <DataTemplate x:Key="InfoChipTemplate">
+            <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="8,3" Margin="0,0,4,4">
+                <TextBlock Text="{Binding}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" />
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <Grid Background="{DynamicResource PbSurface1Brush}" PointerMoved="OnReaderPointerMoved" SizeChanged="OnReaderSizeChanged">
 
         <!-- Perf overlay - top-left, above everything, click-through -->
@@ -354,6 +375,39 @@
                               NextBookmarkCommand="{Binding NextBookmarkCommand}"
                               JumpBackGesture="{Binding JumpBackKey}"
                               JumpBackCommand="{Binding JumpBackCommand}"
+                              ReportBadPageGesture="{Binding ReportBadPageKey}"
+                              NextPageGesture="{Binding NextPageKey}"
+                              CommandPaletteGesture="{Binding CommandPaletteKey}"
+                              CommandPaletteCommand="{Binding ToggleCommandPaletteCommand}"
+                              GoToPageGesture="{Binding GoToPageKey}"
+                              NextProfileGesture="{Binding NextProfileKey}"
+                              NextProfileCommand="{Binding NextProfileCommand}"
+                              ToggleSessionHudGesture="{Binding ToggleSessionHudKey}"
+                              ToggleSessionHudCommand="{Binding ToggleSessionHudCommand}"
+                              ToggleWarmShiftGesture="{Binding ToggleWarmShiftKey}"
+                              ToggleWarmShiftCommand="{Binding ToggleWarmShiftCommand}"
+                              GuidedView="{Binding IsGuidedView}"
+                              Panels="{Binding CurrentPagePanels}"
+                              SmartDoubleClickZoom="{Binding SmartDoubleClickZoom}"
+                              EnsurePanelsCommand="{Binding EnsurePanelsCommand}"
+                              ToggleGuidedViewGesture="{Binding ToggleGuidedViewKey}"
+                              ToggleGuidedViewCommand="{Binding ToggleGuidedViewCommand}"
+                              CopyPageGesture="{Binding CopyPageKey}"
+                              CopyPageCommand="{Binding CopyWhatYouSeeCommand}"
+                              Warmth="{Binding Warmth}"
+                              Sharpen="{Binding Sharpen}"
+                              ProcessingVersion="{Binding ImageProcessingVersion}"
+                              ExtraKeyBindings="{Binding ExtraKeyBindings}"
+                              GoToPageCommand="{Binding OpenGoToPageCommand}"
+                              PreviousPageGesture="{Binding PreviousPageKey}"
+                              SpatialTurnsFlipped="{Binding IsSpatialFlipped}"
+                              ExtraMouseButtonsTurnPages="{Binding ExtraMouseButtonsTurnPages}"
+                              PagedTapZoneLayout="{Binding PagedTapZoneLayout}"
+                              PagedTapZoneInvert="{Binding PagedTapZoneInvert}"
+                              ContinuousTapZoneLayout="{Binding ContinuousTapZoneLayout}"
+                              ContinuousTapZoneInvert="{Binding ContinuousTapZoneInvert}"
+                              TapZonesForMouse="{Binding TapZonesForMouse}"
+                              ReportBadPageCommand="{Binding ReportBadPageCommand}"
                               ZoomInGesture="{Binding ZoomInKey}"
                               ZoomInCommand="{Binding ZoomInCommand}"
                               ZoomOutGesture="{Binding ZoomOutKey}"
@@ -365,6 +419,7 @@
                               FitBestGesture="{Binding FitBestKey}"
                               SetFitModeCommand="{Binding SetFitModeCommand}"
                               ZoomLevel="{Binding ZoomLevel}"
+                              MinZoomLevel="0.25"
                               PanOffsetX="{Binding PanOffsetX}"
                               PanOffsetY="{Binding PanOffsetY}"
                               FitMode="{Binding FitMode}"
@@ -387,6 +442,9 @@
                               Gamma="{Binding Gamma}"
                               PageMarginMultiplier="{Binding PageMarginMultiplier}"
                               IsVisible="{Binding !HasError}" />
+
+            <!-- Region clip capture (docs/superpowers/specs/2026-09-26-comic-reader-inreader-reference-design.md #7): drag a rectangle over the page. Takes input only while capture mode is on. -->
+            <views:CaptureOverlay x:Name="ClipOverlay" IsCaptureMode="{Binding IsClipMode}" IsHitTestVisible="{Binding IsClipMode}" Cursor="Cross" ZIndex="12" />
 
             <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="{DynamicResource PbRadiusLg}"
                     Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}"
@@ -457,6 +515,108 @@
                         <TextBlock Text="{Binding JumpBackHint}" VerticalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
                     </StackPanel>
                 </Button>
+            </Border>
+
+            <!-- ============ Reading stats chip (comfort design 1) - session time, pages, pace and time left. A small non-interactive chip in
+                 the bottom-right corner (the one corner no chrome cluster uses; bottom-left was covered by the View cluster) that stays visible when the chrome is hidden, at reduced opacity so it does not compete with the page. ============ -->
+            <Border IsVisible="{Binding IsSessionHudVisible}" IsHitTestVisible="False" Classes="floatingPanel" Padding="10,5" Opacity="0.75"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,16,16"
+                    AutomationProperties.Name="Reading stats">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <fi:SymbolIcon Symbol="Gauge" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock Text="{Binding SessionHudText}" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                </StackPanel>
+            </Border>
+
+            <!-- ============ Tap zone flash (reach design 4) - the layout drawn over the page for a few seconds by the palette's
+                 "Show tap zones". Purely visual, never takes clicks. ============ -->
+            <controls:TapZoneOverlay IsVisible="{Binding IsTapZoneFlashVisible}" IsHitTestVisible="False"
+                                     Layout="{Binding TapZoneFlashLayout}" Invert="{Binding TapZoneFlashInvert}"
+                                     IsRightToLeft="{Binding TapZoneFlashIsRightToLeft}" IsContinuous="{Binding IsContinuousMode}" />
+
+            <!-- ============ Detected panels (panels-and-zoom design 5) - numbered rectangles over the page for a few seconds, from the palette's
+                 "Show detected panels". Purely visual; its geometry is set from the canvas by the code-behind when it opens. ============ -->
+            <controls:PanelDebugOverlay x:Name="PanelFlashOverlay" IsVisible="{Binding IsPanelFlashVisible}" IsHitTestVisible="False" />
+
+            <!-- ============ Command palette / go-to-page (reach design 5) - Ctrl+K / Ctrl+G. In-canvas overlay rather than a Popup
+                 (OverlayPopups is on and the typed digits and letters must never reach PageCanvas); Up/Down/Enter/Esc are handled by
+                 the code-behind's tunnel key handler. ============ -->
+            <Border x:Name="CommandPalette" IsVisible="{Binding Palette.IsOpen}" Classes="floatingPanel" Padding="12"
+                    HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,72,0,0" Width="520"
+                    AutomationProperties.Name="Reader command palette">
+                <StackPanel Spacing="8">
+                    <TextBox x:Name="PaletteQueryBox" Text="{Binding Palette.Query, Mode=TwoWay}" Watermark="{Binding Palette.Placeholder}"
+                             AutomationProperties.Name="Command or page number" />
+                    <ScrollViewer MaxHeight="360" IsVisible="{Binding Palette.HasResults}">
+                        <ItemsControl ItemsSource="{Binding Palette.Results}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ReaderPaletteRow">
+                                    <Button Classes="pillOption" Classes.active="{Binding IsSelected}" HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Stretch" Command="{Binding ExecuteCommand}">
+                                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                                            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Group}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Shortcut}" IsVisible="{Binding HasShortcut}" MinWidth="48" TextAlignment="Right"
+                                                       Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock Text="No matching command" IsVisible="{Binding !Palette.HasResults}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                </StackPanel>
+            </Border>
+
+            <!-- ============ Bad-page reason picker (page intelligence design 4, item #12) - opened by X / the page
+                 context menu. In-canvas overlay rather than a Popup: keys 1-4 and Esc are handled by the code-behind's
+                 tunnel key handler (PageCanvas binds 1-3 to fit modes, so it must not see them while this is open). ============ -->
+            <Border x:Name="ReportPicker" IsVisible="{Binding IsReportPickerOpen}" Classes="floatingPanel" Padding="16"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    AutomationProperties.Name="Report a bad page">
+                <StackPanel Spacing="10" MinWidth="240">
+                    <TextBlock Text="{Binding ReportPickerTitle}" FontWeight="SemiBold" />
+                    <Button Classes="clusterPill" HorizontalAlignment="Stretch" Command="{Binding ReportPageReasonCommand}"
+                            CommandParameter="{x:Static entities:PageReportReason.Corrupt}">
+                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Corrupt or unreadable" /><TextBlock Grid.Column="1" Text="1" Foreground="{DynamicResource PbTextFaintBrush}" /></Grid>
+                    </Button>
+                    <Button Classes="clusterPill" HorizontalAlignment="Stretch" Command="{Binding ReportPageReasonCommand}"
+                            CommandParameter="{x:Static entities:PageReportReason.Blank}">
+                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Blank page" /><TextBlock Grid.Column="1" Text="2" Foreground="{DynamicResource PbTextFaintBrush}" /></Grid>
+                    </Button>
+                    <Button Classes="clusterPill" HorizontalAlignment="Stretch" Command="{Binding ReportPageReasonCommand}"
+                            CommandParameter="{x:Static entities:PageReportReason.LowRes}">
+                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Low resolution" /><TextBlock Grid.Column="1" Text="3" Foreground="{DynamicResource PbTextFaintBrush}" /></Grid>
+                    </Button>
+                    <Button Classes="clusterPill" HorizontalAlignment="Stretch" Command="{Binding ReportPageReasonCommand}"
+                            CommandParameter="{x:Static entities:PageReportReason.Other}">
+                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Something else" /><TextBlock Grid.Column="1" Text="4" Foreground="{DynamicResource PbTextFaintBrush}" /></Grid>
+                    </Button>
+                    <Button Classes="clusterPill" HorizontalAlignment="Stretch" Command="{Binding CancelReportPickerCommand}">
+                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Cancel" /><TextBlock Grid.Column="1" Text="Esc" Foreground="{DynamicResource PbTextFaintBrush}" /></Grid>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- ============ Reported-page chip (item #12) - "Reported page N - Undo", clears itself after a few seconds. ============ -->
+            <Border IsVisible="{Binding HasPageReportChip}" Classes="floatingPanel" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,84">
+                <Button Classes="clusterPill" Command="{Binding UndoPageReportCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <fi:SymbolIcon Symbol="Flag" FontSize="{StaticResource PbIconSizeXs}" />
+                        <TextBlock Text="{Binding PageReportChipLabel}" VerticalAlignment="Center" />
+                        <TextBlock Text="Undo" VerticalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    </StackPanel>
+                </Button>
+            </Border>
+
+            <!-- ============ Skipped-pages hint (page intelligence design 2, item #6) - "Skipped 2 pages" after a
+                 page turn passed over Deleted/Advertisement pages. Informational only, so it never takes clicks. ============ -->
+            <Border IsVisible="{Binding HasSkippedPagesHint}" IsHitTestVisible="False" Classes="floatingPanel" Padding="12,8"
+                    HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,84">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <fi:SymbolIcon Symbol="ArrowNext" FontSize="{StaticResource PbIconSizeXs}" />
+                    <TextBlock Text="{Binding SkippedPagesHint}" VerticalAlignment="Center" />
+                </StackPanel>
             </Border>
 
             <!-- ============ End-of-issue card (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-
@@ -636,9 +796,9 @@
                         <!-- Unified zoom pill (docs/superpowers/specs/2026-09-14-reader-chrome-
                              redesign-design.md §4) - one control tree for paged and continuous mode
                              alike, replacing the old stepper+pill+flyout plus a continuous-mode-only
-                             inline Slider. ZoomLevel's own setter already clamps per-mode (0.5-4.0
-                             continuous, 1.0-MaxZoom paged) - this Slider's Minimum/Maximum is a fixed
-                             superset, not new per-mode bindable surface. -->
+                             inline Slider. ZoomLevel's own setter clamps to one smooth 25%-400% range for both
+                             modes (panels-and-zoom design 1); the Slider is logarithmic (ZoomSlider = log2 of the zoom, -2..2) so 100% sits in the
+                             middle, and there are no preset steps, only "Fit (100%)". -->
                         <Button Classes="clusterPill" Padding="8,6" ToolTip.Tip="Zoom">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" />
@@ -651,16 +811,13 @@
                                             <Button Classes="clusterIcon" Command="{Binding ZoomOutCommand}" ToolTip.Tip="{Binding ZoomOutHint}">
                                                 <fi:SymbolIcon Symbol="Subtract" />
                                             </Button>
-                                            <Slider Width="80" Minimum="0.5" Maximum="4" Value="{Binding ZoomLevel}" VerticalAlignment="Center" />
+                                            <Slider Width="80" Minimum="-2" Maximum="2" SmallChange="0.01" LargeChange="0.25" Value="{Binding ZoomSlider}" VerticalAlignment="Center"
+                                                    AutomationProperties.Name="Zoom" />
                                             <Button Classes="clusterIcon" Command="{Binding ZoomInCommand}" ToolTip.Tip="{Binding ZoomInHint}">
                                                 <fi:SymbolIcon Symbol="Add" />
                                             </Button>
                                         </StackPanel>
-                                        <Button Classes="drawerRow" Content="100%" Command="{Binding SetZoom100Command}" />
-                                        <Button Classes="drawerRow" Content="125%" Command="{Binding SetZoom125Command}" />
-                                        <Button Classes="drawerRow" Content="150%" Command="{Binding SetZoom150Command}" />
-                                        <Button Classes="drawerRow" Content="200%" Command="{Binding SetZoom200Command}" />
-                                        <Button Classes="drawerRow" Content="400%" Command="{Binding SetZoom400Command}" />
+                                        <Button Classes="drawerRow" Content="Fit (100%)" Command="{Binding ResetZoomCommand}" />
                                     </StackPanel>
                                 </Flyout>
                             </Button.Flyout>
@@ -717,7 +874,7 @@
                                          [of] the progress bar", not beside the cursor - Avalonia's
                                          default unset Placement is Pointer-relative, which is why it
                                          was trailing the mouse instead of anchoring above the dot). -->
-                                    <Button Classes="pageDot" Classes.active="{Binding IsSelected}"
+                                    <Button Classes="pageDot" Classes.active="{Binding IsSelected}" Classes.noted="{Binding HasNote}"
                                             Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SelectThumbnailCommand}"
                                             CommandParameter="{Binding}"
                                             ToolTip.Placement="Top" ToolTip.VerticalOffset="6">
@@ -742,6 +899,122 @@
                 </Grid>
             </Border>
 
+            <!-- ============ Info panel (docs/superpowers/specs/2026-09-26-comic-reader-inreader-reference-design.md #28): read-only, slides in from the left, overlays the page ============ -->
+            <Border Classes="floatingPanel readerDrawer" IsVisible="{Binding Info.IsOpen}" ZIndex="20"
+                    HorizontalAlignment="Left" VerticalAlignment="Stretch" Margin="16,64,16,90" Width="330" Padding="14"
+                    AutomationProperties.Name="Issue information">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                        <TextBlock Grid.Column="0" Text="Info" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                        <Button Grid.Column="1" Classes="clusterIcon" Padding="4" Command="{Binding Info.CloseCommand}" ToolTip.Tip="Close (Esc)"
+                                AutomationProperties.Name="Close info panel">
+                            <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                        </Button>
+                    </Grid>
+                    <ScrollViewer Grid.Row="1">
+                        <StackPanel Margin="0,0,10,0" Spacing="8">
+                            <TextBlock Text="{Binding Info.Model.SeriesLine}" FontSize="14" FontWeight="Bold" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="{Binding Info.Model.Title}" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}"
+                                       IsVisible="{Binding Info.Model.Title, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                            <TextBlock Text="{Binding Info.Model.PublisherLine}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                                       IsVisible="{Binding Info.Model.PublisherLine, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                            <TextBlock Text="{Binding Info.Model.RatingLine}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                       IsVisible="{Binding Info.Model.RatingLine, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+
+                            <!-- Where the issue sits in its reading list or event, with previous/next in that order. -->
+                            <StackPanel Spacing="4" IsVisible="{Binding Info.Model.ContextLine, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+                                <TextBlock Text="{Binding Info.Model.ContextLine}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button Classes="clusterPill" Content="Previous" Command="{Binding ContextStripPreviousCommand}" />
+                                    <Button Classes="clusterPill" Content="Next" Command="{Binding ContextStripNextCommand}" />
+                                </StackPanel>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Info.Model.StoryArc, StringFormat='Story arc: {0}'}" FontSize="11.5" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}"
+                                       IsVisible="{Binding Info.Model.StoryArc, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+
+                            <!-- Collapsed by default: a summary can spoil. -->
+                            <StackPanel Spacing="4" IsVisible="{Binding Info.Model.HasSummary}">
+                                <TextBlock Text="SUMMARY" Classes="drawerSectionHeader" />
+                                <Button Classes="drawerRow" Content="Show summary" HorizontalContentAlignment="Center"
+                                        Command="{Binding Info.ShowSummaryCommand}" IsVisible="{Binding Info.IsSummaryCollapsed}" />
+                                <TextBlock Text="{Binding Info.Model.Summary}" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}"
+                                           IsVisible="{Binding Info.IsSummaryExpanded}" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="3" IsVisible="{Binding Info.Model.HasCredits}">
+                                <TextBlock Text="CREDITS" Classes="drawerSectionHeader" />
+                                <ItemsControl ItemsSource="{Binding Info.Model.Credits}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,2">
+                                                <Run Text="{Binding Role}" FontWeight="SemiBold" /><Run Text=": " /><Run Text="{Binding Names}" />
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <StackPanel Spacing="3" IsVisible="{Binding Info.Model.HasCharacters}">
+                                <TextBlock Text="CHARACTERS" Classes="drawerSectionHeader" />
+                                <ItemsControl ItemsSource="{Binding Info.Model.Characters}" ItemTemplate="{StaticResource InfoChipTemplate}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                            <StackPanel Spacing="3" IsVisible="{Binding Info.Model.HasTeams}">
+                                <TextBlock Text="TEAMS" Classes="drawerSectionHeader" />
+                                <ItemsControl ItemsSource="{Binding Info.Model.Teams}" ItemTemplate="{StaticResource InfoChipTemplate}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                            <StackPanel Spacing="3" IsVisible="{Binding Info.Model.HasLocations}">
+                                <TextBlock Text="LOCATIONS" Classes="drawerSectionHeader" />
+                                <ItemsControl ItemsSource="{Binding Info.Model.Locations}" ItemTemplate="{StaticResource InfoChipTemplate}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                            <StackPanel Spacing="3" IsVisible="{Binding Info.Model.HasGenres}">
+                                <TextBlock Text="GENRES" Classes="drawerSectionHeader" />
+                                <ItemsControl ItemsSource="{Binding Info.Model.Genres}" ItemTemplate="{StaticResource InfoChipTemplate}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                            <StackPanel Spacing="3" IsVisible="{Binding Info.Model.HasTags}">
+                                <TextBlock Text="TAGS" Classes="drawerSectionHeader" />
+                                <ItemsControl ItemsSource="{Binding Info.Model.Tags}" ItemTemplate="{StaticResource InfoChipTemplate}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                        <Button Classes="clusterPill" Content="Open details" Command="{Binding OpenInfoDetailsCommand}" />
+                        <Button Classes="clusterPill" Content="Edit properties" Command="{Binding EditInfoPropertiesCommand}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ============ Pinned reference page (docs/superpowers/specs/2026-09-26-comic-reader-inreader-reference-design.md #29): a small floating copy that stays while reading on ============ -->
+            <Border x:Name="PinPanel" Classes="floatingPanel" ZIndex="15" IsVisible="{Binding IsPinShown}" Width="{Binding PinWidth}"
+                    HorizontalAlignment="{Binding PinHorizontalAlignment}" VerticalAlignment="{Binding PinVerticalAlignment}" Margin="{Binding PinMargin}"
+                    Padding="4" Cursor="SizeAll" AutomationProperties.Name="Pinned reference page">
+                <StackPanel Spacing="3">
+                    <Grid>
+                        <Image Source="{Binding PinnedImage}" Stretch="Uniform" />
+                        <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2">
+                            <Button Classes="clusterIcon" Padding="3" Command="{Binding CyclePinSizeCommand}" ToolTip.Tip="Change size (or use the mouse wheel)"
+                                    AutomationProperties.Name="Change the pinned page size">
+                                <fi:SymbolIcon Symbol="ArrowMaximize" FontSize="{StaticResource PbIconSizeXs}" />
+                            </Button>
+                            <Button Classes="clusterIcon" Padding="3" Command="{Binding UnpinPageCommand}" ToolTip.Tip="Unpin"
+                                    AutomationProperties.Name="Unpin the reference page">
+                                <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Text="{Binding PinnedCaption}" FontSize="10.5" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextMutedBrush}" />
+                </StackPanel>
+            </Border>
+
             <!-- ============ Drawer - Page/Adjust/Transition/Bookmarks, does not idle-fade ============ -->
             <Border Classes="floatingPanel readerDrawer" IsVisible="{Binding IsDrawerOpen}"
                     HorizontalAlignment="Right" VerticalAlignment="Stretch" Margin="16" Width="230" Padding="14">
@@ -762,6 +1035,41 @@
                     </Grid>
                     <ScrollViewer Grid.Row="1">
                     <StackPanel Margin="0,0,10,0">
+                        <!-- Reader profile (profiles design 3): a named bundle of display settings, switched for this visit only; the
+                             flyout also saves the current look and points the series or every series at a profile. -->
+                        <TextBlock Classes="drawerSectionHeader" Text="PROFILE" />
+                        <Button Classes="clusterPill" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="8,5" Margin="0,0,0,6"
+                                ToolTip.Tip="Switch reader profile" AutomationProperties.Name="Reader profile">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                <TextBlock Text="{Binding ActiveProfileName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <fi:SymbolIcon Grid.Column="1" Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" />
+                            </Grid>
+                            <Button.Flyout>
+                                <Flyout Placement="Left">
+                                    <StackPanel Width="210" Spacing="4">
+                                        <ItemsControl ItemsSource="{Binding Profiles}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ReaderProfileRow">
+                                                    <Button Classes="drawerRow" Classes.active="{Binding IsActive}" Command="{Binding SelectCommand}"
+                                                            HorizontalContentAlignment="Left" Content="{Binding Name}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Border Height="1" Margin="0,4" Background="{DynamicResource PbBorderBrush}" />
+                                        <Button Classes="drawerRow" HorizontalContentAlignment="Left" Content="Save current look as new profile…" Command="{Binding SaveCurrentAsProfileCommand}" />
+                                        <Button Classes="drawerRow" HorizontalContentAlignment="Left" IsVisible="{Binding CanUpdateActiveProfile}"
+                                                Content="{Binding ActiveProfileName, StringFormat='Update “{0}” with current look'}" Command="{Binding UpdateActiveProfileCommand}" />
+                                        <Button Classes="drawerRow" HorizontalContentAlignment="Left" Content="Use for this series" Command="{Binding UseProfileForSeriesCommand}"
+                                                ToolTip.Tip="Open every issue of this series with the profile shown above" />
+                                        <Button Classes="drawerRow" HorizontalContentAlignment="Left" Content="Use as my default" Command="{Binding UseProfileAsDefaultCommand}"
+                                                ToolTip.Tip="Open every series that has no profile of its own with the profile shown above" />
+                                        <Button Classes="drawerRow" HorizontalContentAlignment="Left" Content="Clear this series' profile" IsVisible="{Binding HasSeriesProfile}"
+                                                Command="{Binding ClearSeriesProfileCommand}" />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+
                         <!-- Fit/zoom fold in here once the View cluster has collapsed (below ~720px window width). -->
                         <StackPanel IsVisible="{Binding IsViewClusterCollapsed}">
                             <TextBlock Classes="drawerSectionHeader" Text="VIEW" />
@@ -805,16 +1113,13 @@
                                                 <Button Classes="clusterIcon" Command="{Binding ZoomOutCommand}">
                                                     <fi:SymbolIcon Symbol="Subtract" />
                                                 </Button>
-                                                <Slider Width="80" Minimum="0.5" Maximum="4" Value="{Binding ZoomLevel}" VerticalAlignment="Center" />
+                                                <Slider Width="80" Minimum="-2" Maximum="2" SmallChange="0.01" LargeChange="0.25" Value="{Binding ZoomSlider}" VerticalAlignment="Center"
+                                                        AutomationProperties.Name="Zoom" />
                                                 <Button Classes="clusterIcon" Command="{Binding ZoomInCommand}">
                                                     <fi:SymbolIcon Symbol="Add" />
                                                 </Button>
                                             </StackPanel>
-                                            <Button Classes="drawerRow" Content="100%" Command="{Binding SetZoom100Command}" />
-                                            <Button Classes="drawerRow" Content="125%" Command="{Binding SetZoom125Command}" />
-                                            <Button Classes="drawerRow" Content="150%" Command="{Binding SetZoom150Command}" />
-                                            <Button Classes="drawerRow" Content="200%" Command="{Binding SetZoom200Command}" />
-                                            <Button Classes="drawerRow" Content="400%" Command="{Binding SetZoom400Command}" />
+                                            <Button Classes="drawerRow" Content="Fit (100%)" Command="{Binding ResetZoomCommand}" />
                                         </StackPanel>
                                     </Flyout>
                                 </Button.Flyout>
@@ -827,7 +1132,7 @@
                              drawerRow toggles. Double-page cell keeps its existing paged-mode-only
                              visibility; UniformGrid still reserves its cell when hidden, which is fine
                              here (Auto-rotate simply sits alone in that row in continuous mode). -->
-                        <UniformGrid Columns="2" Rows="2" Margin="0,0,0,6">
+                        <UniformGrid Columns="2" Margin="0,0,0,6">
                             <Button Classes="drawerRow" Command="{Binding RotateClockwiseCommand}" ToolTip.Tip="{Binding RotateClockwiseHint}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="ArrowRotateClockwise" FontSize="{StaticResource PbIconSizeXs}" />
@@ -851,6 +1156,28 @@
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="Library" FontSize="{StaticResource PbIconSizeXs}" />
                                     <TextBlock Text="Auto-rotate to series" VerticalAlignment="Center" FontSize="11.5" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="drawerRow" Classes.active="{Binding IsGuidedView}"
+                                    Command="{Binding ToggleGuidedViewCommand}" IsVisible="{Binding !IsContinuousMode}"
+                                    ToolTip.Tip="Step through the page panel by panel (G)">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <fi:SymbolIcon Symbol="Grid" FontSize="{StaticResource PbIconSizeXs}" />
+                                    <TextBlock Text="Guided view" VerticalAlignment="Center" FontSize="11.5" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="drawerRow" Classes.active="{Binding Info.IsOpen}"
+                                    Command="{Binding ToggleInfoPanelCommand}" ToolTip.Tip="Summary, credits, characters and story arc (I)">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <fi:SymbolIcon Symbol="Info" FontSize="{StaticResource PbIconSizeXs}" />
+                                    <TextBlock Text="Info" VerticalAlignment="Center" FontSize="11.5" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="drawerRow" Classes.active="{Binding HasPin}"
+                                    Command="{Binding PinCurrentPageCommand}" ToolTip.Tip="Keep this page as a small reference while you read on (Shift+P)">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <fi:SymbolIcon Symbol="Pin" FontSize="{StaticResource PbIconSizeXs}" />
+                                    <TextBlock Text="Pin page" VerticalAlignment="Center" FontSize="11.5" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="drawerRow" Classes.active="{Binding IsDoublePageMode}"
@@ -902,8 +1229,66 @@
                                 <TextBlock Text="{Binding Gamma, StringFormat='Gamma: {0:F0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <Slider Minimum="-100" Maximum="100" Value="{Binding Gamma}" />
                             </StackPanel>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding Sharpen, StringFormat='Sharpen: {0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <Slider Minimum="0" Maximum="3" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding Sharpen}" AutomationProperties.Name="Sharpen" />
+                            </StackPanel>
+                            <Button Classes="drawerRow" Classes.active="{Binding AutoLevels}" Command="{Binding ToggleAutoLevelsCommand}"
+                                    Content="Auto levels (washed-out scans)" HorizontalContentAlignment="Center" />
                             <Button Classes="drawerRow" Content="Reset to defaults" Command="{Binding ResetAdjustmentCommand}"
                                     HorizontalContentAlignment="Center" />
+                        </StackPanel>
+
+                        <!-- Page notes and region clips (docs/superpowers/specs/2026-09-26-comic-reader-inreader-reference-design.md #7). -->
+                        <Button Classes="drawerRow" Command="{Binding ToggleNotesSectionCommand}" Padding="0" Margin="0,14,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsNotesSectionExpanded}" />
+                                <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !IsNotesSectionExpanded}" />
+                                <TextBlock Text="NOTES" Classes="drawerSectionHeader" Margin="0" />
+                            </StackPanel>
+                        </Button>
+                        <StackPanel Spacing="8" IsVisible="{Binding IsNotesSectionExpanded}" Margin="0,6,0,0">
+                            <TextBox x:Name="NoteBox" Text="{Binding NoteDraft}" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="2000" MinHeight="64" MaxHeight="140"
+                                     Watermark="A note for this page" AutomationProperties.Name="Note for this page" />
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Classes="clusterPill" Content="Save note" Command="{Binding SaveNoteCommand}" />
+                                <Button Classes="clusterPill" Content="Delete" Command="{Binding DeleteNoteCommand}" IsVisible="{Binding HasCurrentNote}" />
+                            </StackPanel>
+                            <Button Classes="drawerRow" Classes.active="{Binding IsClipMode}" Command="{Binding ToggleClipModeCommand}"
+                                    ToolTip.Tip="Drag a rectangle over the page to keep it as a picture (Ctrl+Shift+C)">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <fi:SymbolIcon Symbol="Crop" FontSize="{StaticResource PbIconSizeXs}" />
+                                    <TextBlock Text="Clip a region" VerticalAlignment="Center" FontSize="11.5" />
+                                </StackPanel>
+                            </Button>
+                            <ItemsControl ItemsSource="{Binding NoteItems}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:NoteListItem">
+                                        <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="6" Margin="0,0,0,4">
+                                            <StackPanel Spacing="3">
+                                                <Button Classes="drawerRow" Padding="2" HorizontalContentAlignment="Left"
+                                                        Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).GoToNoteItemCommand}" CommandParameter="{Binding}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Text="{Binding PageLabel}" FontWeight="SemiBold" FontSize="11.5" />
+                                                        <TextBlock Text="{Binding KindLabel}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <Image Source="{Binding Thumbnail}" IsVisible="{Binding IsClip}" MaxHeight="90" Stretch="Uniform" />
+                                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}"
+                                                           IsVisible="{Binding !IsClip}" />
+                                                <TextBox Text="{Binding Text}" IsVisible="{Binding IsClip}" Watermark="Caption" FontSize="11.5" MaxLength="200"
+                                                         LostFocus="OnClipCaptionLostFocus" AutomationProperties.Name="Clip caption" />
+                                                <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsClip}">
+                                                    <Button Classes="clusterPill" Content="Copy" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).CopyClipCommand}" CommandParameter="{Binding}" />
+                                                    <Button Classes="clusterPill" Content="Save…" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SaveClipCommand}" CommandParameter="{Binding}" />
+                                                    <Button Classes="clusterPill" Content="Delete" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).DeleteClipCommand}" CommandParameter="{Binding}" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Classes="drawerRow" Content="Export notes and clips…" Command="{Binding ExportNotesCommand}" IsVisible="{Binding HasNoteItems}" HorizontalContentAlignment="Center" />
                         </StackPanel>
 
                         <!-- Collapsed to one row (docs/superpowers/specs/2026-09-14-reader-chrome-

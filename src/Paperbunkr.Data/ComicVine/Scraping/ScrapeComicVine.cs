@@ -35,6 +35,16 @@ public interface IScrapeComicVine
     Task<IReadOnlyList<ComicVineIssueSummary>> SearchIssuesAsync(int volumeId, int page = 1, CancellationToken cancellationToken = default);
 
     Task<ComicVineIssueDetails?> GetIssueDetailsAsync(int issueId, CancellationToken cancellationToken = default);
+
+    /// <summary>Every issue of a story arc with its dates, for reading-order positions. Empty for a source with no such data (Metron), so those fields simply stay unwritten.</summary>
+    Task<IReadOnlyList<StoryArcIssue>> GetStoryArcIssuesAsync(int storyArcId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<StoryArcIssue>>(Array.Empty<StoryArcIssue>());
+}
+
+/// <summary>A source that can list a story arc's issues with their dates (ComicVine).</summary>
+public interface IStoryArcSource
+{
+    Task<IReadOnlyList<StoryArcIssue>> GetStoryArcIssuesAsync(int storyArcId, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -51,9 +61,14 @@ public sealed class ScrapeComicVineAdapter(IComicVineClient client, IComicVineIs
             return Array.Empty<ComicVineVolumeSearchResult>();
         }
 
-        var volumes = await client.SearchVolumesAsync(query, cancellationToken).ConfigureAwait(false);
+        var volumes = await client.SearchVolumesFuzzyAsync(query, cancellationToken).ConfigureAwait(false);
         return volumes.Select(v => new ComicVineVolumeSearchResult(v.Id, v.Name, v.StartYear?.ToString(System.Globalization.CultureInfo.InvariantCulture), v.Publisher, v.CountOfIssues, v.ImageUrl)).ToList();
     }
+
+    public Task<IReadOnlyList<StoryArcIssue>> GetStoryArcIssuesAsync(int storyArcId, CancellationToken cancellationToken = default) =>
+        client is IStoryArcSource source
+            ? source.GetStoryArcIssuesAsync(storyArcId, cancellationToken)
+            : Task.FromResult<IReadOnlyList<StoryArcIssue>>(Array.Empty<StoryArcIssue>());
 
     public async Task<ComicVineVolumeDetails?> GetVolumeDetailsAsync(int volumeId, CancellationToken cancellationToken = default)
     {

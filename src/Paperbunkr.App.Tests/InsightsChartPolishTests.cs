@@ -102,4 +102,35 @@ public class InsightsChartPolishTests
 
         Assert.Equal(1.0, donut.SweepProgress);
     }
+
+    // --- TrendSparkline (docs/superpowers/specs/2026-09-22-insights-period-over-period-deltas-design.md) ----
+    // Same treatment as the CategoryDonut/EmptyIllustration checks above - construction/state/Measure only,
+    // no headless render pipeline (this codebase never invokes Control.Render(DrawingContext) directly in tests).
+
+    [Fact]
+    public void Sparkline_MeasuresToAFixedHeight_RegardlessOfPointCount()
+    {
+        var sparkline = new TrendSparkline { Data = new[] { 1.0, 5.0, 3.0 } };
+
+        sparkline.Measure(new Avalonia.Size(200, 200));
+
+        Assert.Equal(20, sparkline.DesiredSize.Height);
+    }
+
+    [Fact]
+    public void Sparkline_DefaultsToAnEmptyDataSeries()
+    {
+        var sparkline = new TrendSparkline();
+
+        Assert.Empty(sparkline.Data);
+    }
+
+    [Fact]
+    public void Sparkline_DataProperty_RoundTrips()
+    {
+        var points = new[] { 1.0, 5.0, 3.0 };
+        var sparkline = new TrendSparkline { Data = points };
+
+        Assert.Same(points, sparkline.Data);
+    }
 }

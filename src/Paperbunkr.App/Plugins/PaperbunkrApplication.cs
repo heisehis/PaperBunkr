@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Reflection;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
@@ -13,6 +14,7 @@ using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 using Paperbunkr.Plugins.Automation;
 
 namespace Paperbunkr.App.Plugins;
@@ -227,27 +229,38 @@ public sealed class PaperbunkrApplication : IApplication
         return GetBook(issue.Id);
     }
 
-    public byte[]? GetComicPublisherIcon(Issue issue) => RasterizeMark(MarkResolver.Instance.ResolvePublisher(issue.Publisher));
+    public byte[]? GetComicPublisherIcon(Issue issue) =>
+        RasterizeMark(MarkResolver.Instance.ResolvePublisher(issue.Publisher, issue.EffectiveYear(), issue.Month));
 
     /// <summary>Mirrors CE's own imprint-icon fallback: resolve Imprint first, fall back to Publisher.</summary>
     public byte[]? GetComicImprintIcon(Issue issue)
     {
-        var imprintMark = MarkResolver.Instance.ResolvePublisher(issue.Imprint);
-        return imprintMark.Kind is MarkKind.SvgAsset or MarkKind.Flag
+        int? year = issue.EffectiveYear();
+        var imprintMark = MarkResolver.Instance.ResolvePublisher(issue.Imprint, year, issue.Month);
+        return imprintMark.Kind is MarkKind.SvgAsset or MarkKind.Flag or MarkKind.Raster
             ? RasterizeMark(imprintMark)
-            : RasterizeMark(MarkResolver.Instance.ResolvePublisher(issue.Publisher));
+            : RasterizeMark(MarkResolver.Instance.ResolvePublisher(issue.Publisher, year, issue.Month));
     }
 
     public byte[]? GetComicAgeRatingIcon(Issue issue) => RasterizeMark(MarkResolver.Instance.ResolveAgeRating(issue.AgeRating));
 
     public byte[]? GetComicFormatIcon(Issue issue) => RasterizeMark(MarkResolver.Instance.ResolveFormat(issue.Format));
 
-    /// <summary>Only <see cref="MarkKind.SvgAsset"/>/<see cref="MarkKind.Flag"/> have a bundled
+    /// <summary>Only <see cref="MarkKind.SvgAsset"/>/<see cref="MarkKind.Flag"/>/<see cref="MarkKind.Raster"/> have a bundled
     /// image to rasterize - <see cref="MarkKind.LetterMark"/>/<see cref="MarkKind.Glyph"/>/
     /// <see cref="MarkKind.Text"/>/<see cref="MarkKind.None"/> return null, same as CE returning
     /// nothing when it has no real brand icon for a value.</summary>
     private static byte[]? RasterizeMark(MarkSpec spec)
     {
+        // A CE publisher raster is already an image file - hand its bytes over untouched.
+        if (spec is { Kind: MarkKind.Raster, AssetPath: { } rasterPath })
+        {
+            using Stream source = AssetLoader.Open(new Uri(rasterPath));
+            using var copy = new MemoryStream();
+            source.CopyTo(copy);
+            return copy.ToArray();
+        }
+
         if (spec.Kind is not (MarkKind.SvgAsset or MarkKind.Flag) || spec.AssetPath is not { } path)
         {
             return null;

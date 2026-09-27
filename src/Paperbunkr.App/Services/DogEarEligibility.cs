@@ -10,6 +10,9 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public static class DogEarEligibility
 {
+    /// <remarks>Deviation: CE requires <c>PageCount &gt; 1</c> because CE always knows the count; Paperbunkr only
+    /// learns it from ComicInfo.xml or a reader visit, so an unknown (null) count is eligible and the page-2 decode
+    /// decides - it returns nothing for a one-page book (2026-09-26 library audit).</remarks>
     public static bool IsEligible(int? pageCount, bool fileIsMissing, bool hasCustomCover) =>
-        pageCount is > 1 && !fileIsMissing && !hasCustomCover;
+        pageCount is (null or > 1) && !fileIsMissing && !hasCustomCover;
 }

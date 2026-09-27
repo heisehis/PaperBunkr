@@ -96,6 +96,71 @@ public class StatsScreenViewModelTests : IDisposable
         Assert.Equal(1, vm.Snapshot!.FinishedInRange.Items);
     }
 
+    [Fact]
+    public void FinishedTrend_PopulatesFromSnapshot_AndClearsForAllTime()
+    {
+        // 2026-09-05 clock (NewVm): Days90's prior window needs history back to 2026-03-08.
+        using (var ctx = PaperbunkrDb.CreateContext())
+        {
+            ctx.ReadingEvents.Add(new ReadingEvent { ItemType = ReadingItemType.Comic, ItemId = 1, Kind = ReadingEventKind.Opened, TimestampUtc = new DateTime(2026, 3, 8, 0, 0, 0, DateTimeKind.Utc) });
+            ctx.ReadingEvents.Add(new ReadingEvent { ItemType = ReadingItemType.Comic, ItemId = 2, Kind = ReadingEventKind.Finished, TimestampUtc = new DateTime(2026, 8, 26, 0, 0, 0, DateTimeKind.Utc) });
+            ctx.SaveChanges();
+        }
+
+        var vm = NewVm();
+        vm.Refresh();
+
+        Assert.NotNull(vm.FinishedTrend);
+        Assert.True(vm.FinishedTrend!.IsUp);
+        Assert.Equal("new", vm.FinishedTrend.Text); // prior window had no Finished events at all
+
+        vm.Range = InsightsRange.AllTime;
+        Assert.Null(vm.FinishedTrend);
+        Assert.Null(vm.PaceTrend);
+        Assert.Null(vm.AvgToFinishTrend);
+    }
+
+    [Fact]
+    public void BurnDown_ExposesStatusText_AcrossClearedAndEmptyStates()
+    {
+        var vm = NewVm();
+        vm.Refresh();
+        Assert.False(vm.HasBurnDownData); // no LibrarySnapshot rows at all yet
+        Assert.Equal(string.Empty, vm.BurnDownStatusText);
+
+        using (var ctx = PaperbunkrDb.CreateContext())
+        {
+            ctx.LibrarySnapshots.Add(new LibrarySnapshot { SnapshotDate = new DateOnly(2026, 9, 4), TotalOwnedComics = 10, BacklogComics = 2 });
+            ctx.LibrarySnapshots.Add(new LibrarySnapshot { SnapshotDate = new DateOnly(2026, 9, 5), TotalOwnedComics = 10, BacklogComics = 0 });
+            ctx.SaveChanges();
+        }
+
+        vm.Range = InsightsRange.Days30; // forces a rebuild against the fresh rows
+        Assert.True(vm.HasBurnDownData);
+        Assert.Equal("No backlog - all caught up", vm.BurnDownStatusText);
+    }
+
+    [Fact]
+    public void SelectedTrendsGroup_DefaultsToActivity_AndSwitchingUpdatesOptionsAndBooleans()
+    {
+        var vm = NewVm();
+
+        Assert.Equal(TrendsGroup.Activity, vm.SelectedTrendsGroup);
+        Assert.True(vm.IsActivityGroupSelected);
+        Assert.False(vm.IsCompositionGroupSelected);
+        Assert.False(vm.IsTopListsGroupSelected);
+        Assert.True(Assert.Single(vm.TrendsGroupOptions, o => o.Value == TrendsGroup.Activity).IsActive);
+
+        vm.SetTrendsGroupCommand.Execute(TrendsGroup.Composition);
+
+        Assert.Equal(TrendsGroup.Composition, vm.SelectedTrendsGroup);
+        Assert.False(vm.IsActivityGroupSelected);
+        Assert.True(vm.IsCompositionGroupSelected);
+        Assert.False(vm.IsTopListsGroupSelected);
+        Assert.True(Assert.Single(vm.TrendsGroupOptions, o => o.Value == TrendsGroup.Composition).IsActive);
+        Assert.False(Assert.Single(vm.TrendsGroupOptions, o => o.Value == TrendsGroup.Activity).IsActive);
+    }
+
     private sealed class FakeRecorder : IReadingEventRecorder
     {
         public event Action? ReadingEventRecorded;

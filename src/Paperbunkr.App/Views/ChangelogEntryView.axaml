@@ -1,0 +1,129 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:services="using:Paperbunkr.App.Services"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="200"
+             x:Class="Paperbunkr.App.Views.ChangelogEntryView"
+             x:DataType="services:ChangelogRow">
+
+    <!-- One changelog version (docs/superpowers/specs/2026-09-26-about-polish-design.md §3), shared by Preferences → About and the
+         What's New overlay so both look the same. The header is a ToggleButton stripped of its Fluent chrome (including the accent
+         fill Fluent gives a checked ToggleButton) so it reads as a row; the styles live here, not in AboutSection, so What's New gets
+         them too. Category tags are coloured by kind from theme brushes, and always print the category word, so colour is never the
+         only signal. -->
+    <UserControl.Styles>
+        <Style Selector="ToggleButton.changelogExpandHeader">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="ToggleButton.changelogExpandHeader /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ToggleButton.changelogExpandHeader:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ToggleButton.changelogExpandHeader:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+        <Style Selector="ToggleButton.changelogExpandHeader:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        </Style>
+
+        <Style Selector="fi|SymbolIcon.changelogChevron">
+            <Setter Property="RenderTransform" Value="rotate(0deg)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="fi|SymbolIcon.changelogChevron.expanded">
+            <Setter Property="RenderTransform" Value="rotate(90deg)" />
+        </Style>
+
+        <Style Selector="Border.currentBadge">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
+            <Setter Property="Padding" Value="8,2" />
+        </Style>
+
+        <Style Selector="Border.changelogTag">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
+            <Setter Property="Padding" Value="8,2" />
+        </Style>
+        <Style Selector="Border.changelogTag TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Border.changelogTag.added">
+            <Setter Property="Background" Value="{DynamicResource PbSuccessSoftBrush}" />
+        </Style>
+        <Style Selector="Border.changelogTag.added TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbSuccessBrush}" />
+        </Style>
+        <Style Selector="Border.changelogTag.changed">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        </Style>
+        <Style Selector="Border.changelogTag.changed TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <Style Selector="Border.changelogTag.fixed">
+            <Setter Property="Background" Value="{DynamicResource PbBadgeSoftBrush}" />
+        </Style>
+        <Style Selector="Border.changelogTag.fixed TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeBrush}" />
+        </Style>
+        <Style Selector="Border.changelogTag.removed">
+            <Setter Property="Background" Value="{DynamicResource PbDangerSoftBrush}" />
+        </Style>
+        <Style Selector="Border.changelogTag.removed TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel>
+        <ToggleButton Name="ExpandToggle" Classes="changelogExpandHeader"
+                      IsChecked="{Binding StartExpanded, Mode=OneTime}"
+                      AutomationProperties.Name="{Binding Entry.Version, StringFormat='Version {0}'}">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                <fi:SymbolIcon Grid.Column="0" Symbol="ChevronRight" FontSize="14"
+                               Classes="changelogChevron" Classes.expanded="{Binding #ExpandToggle.IsChecked}"
+                               Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding Entry.Version}" FontWeight="SemiBold" FontSize="13.5"
+                           Foreground="{DynamicResource PbTextBrush}" Margin="10,0,10,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="{Binding Entry.Date}" FontSize="12"
+                           Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                <Border Grid.Column="4" Classes="currentBadge" IsVisible="{Binding IsCurrent}" VerticalAlignment="Center">
+                    <TextBlock Text="Current" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                </Border>
+            </Grid>
+        </ToggleButton>
+
+        <ItemsControl IsVisible="{Binding #ExpandToggle.IsChecked}" ItemsSource="{Binding Groups}" Margin="32,6,8,10">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="services:ChangelogBodyGroup">
+                    <StackPanel Spacing="7" Margin="0,0,0,12">
+                        <Border Classes="changelogTag" HorizontalAlignment="Left"
+                                Classes.added="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static services:ChangelogTagKind.Added}}"
+                                Classes.changed="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static services:ChangelogTagKind.Changed}}"
+                                Classes.fixed="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static services:ChangelogTagKind.Fixed}}"
+                                Classes.removed="{Binding IsRemovalOrSecurity}"
+                                IsVisible="{Binding Category, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <TextBlock Text="{Binding Category}" FontSize="11" FontWeight="SemiBold" />
+                        </Border>
+                        <controls:MarkdownView Blocks="{Binding Blocks}" BaseFontSize="12.5" BodyBrushKey="PbTextMutedBrush"
+                                               LinkCommand="{x:Static services:ExternalLinks.OpenWebCommand}" />
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

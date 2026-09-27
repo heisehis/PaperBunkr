@@ -183,6 +183,7 @@
                         <MenuFlyout>
                             <MenuItem Header="Edit details…"
                                       Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenEditEventDialogCommand}" />
+                            <MenuItem Header="Detect roles" Command="{Binding DetectRolesCommand}" />
                             <MenuItem Header="Delete event" Command="{Binding DeleteActiveEventCommand}" />
                         </MenuFlyout>
                     </Button.Flyout>
@@ -375,9 +376,22 @@
                                                 <TextBlock Text="{Binding TitleLine}" FontSize="13.5" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
                                                 <TextBlock Text="{Binding SeriesLine}" FontSize="11" Margin="0,1,0,0" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
-                                            <Border Grid.Column="4" Classes="pbChip" Padding="8,3" VerticalAlignment="Center" Margin="8,0,0,0">
-                                                <TextBlock Text="{Binding RoleChipLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                            </Border>
+                                            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0,0,0">
+                                                <Border Classes="pbChip" Padding="8,3" ToolTip.Tip="{Binding RoleReasonText}">
+                                                    <TextBlock Text="{Binding RoleChipLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                </Border>
+                                                <!-- a role detection is not sure enough to apply on its own: accept or dismiss it -->
+                                                <Border Classes="pbChip" Padding="8,2" IsVisible="{Binding HasRoleSuggestion}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Text="{Binding SuggestionText}" FontSize="10" FontStyle="Italic" MaxWidth="240" TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" ToolTip.Tip="{Binding SuggestionText}" />
+                                                        <Button Classes="headerAction ghost" Content="Accept" Padding="6,1" FontSize="10"
+                                                                Command="{Binding AcceptSuggestionCommand}" AutomationProperties.Name="Accept the suggested role" />
+                                                        <Button Classes="headerAction ghost" Content="Dismiss" Padding="6,1" FontSize="10"
+                                                                Command="{Binding DismissSuggestionCommand}" AutomationProperties.Name="Dismiss the suggested role" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
                                             <Button Grid.Column="5" Classes="rowManage headerAction ghost" Padding="7,2" Margin="8,0,0,0" VerticalAlignment="Center" ToolTip.Tip="More">
                                                 <fi:SymbolIcon Symbol="MoreVertical" FontSize="{StaticResource PbIconSizeSm}" />
                                                 <Button.Flyout>
@@ -390,6 +404,7 @@
                                                             <MenuItem Header="Optional" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.Optional}" />
                                                             <MenuItem Header="Aftermath" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.Aftermath}" />
                                                         </MenuItem>
+                                                        <MenuItem Header="Clear detected role" Command="{Binding ClearAutoRoleCommand}" IsVisible="{Binding IsAutoRole}" />
                                                         <Separator />
                                                         <MenuItem Header="Move up" Command="{Binding MoveUpCommand}" />
                                                         <MenuItem Header="Move down" Command="{Binding MoveDownCommand}" />
@@ -645,6 +660,7 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+
                     </StackPanel>
 
                     <!-- Continuity · Timeline -->

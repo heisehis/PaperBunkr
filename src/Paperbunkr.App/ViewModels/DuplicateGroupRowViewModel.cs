@@ -18,16 +18,22 @@ public partial class DuplicateGroupRowViewModel : ViewModelBase
 {
     private readonly Action<DuplicateGroupRowViewModel> _onResolve;
     private readonly Action<DuplicateGroupRowViewModel> _onDismiss;
+    private readonly Action<DuplicateGroupRowViewModel>? _onResolveKeepFiles;
+    private readonly Action<DuplicateGroupRowViewModel>? _onCompare;
 
     public DuplicateGroupRowViewModel(
         string groupLabel,
         IReadOnlyList<Issue> members,
         Action<DuplicateGroupRowViewModel> onResolve,
-        Action<DuplicateGroupRowViewModel> onDismiss)
+        Action<DuplicateGroupRowViewModel> onDismiss,
+        Action<DuplicateGroupRowViewModel>? onResolveKeepFiles = null,
+        Action<DuplicateGroupRowViewModel>? onCompare = null)
     {
+        _onCompare = onCompare;
         GroupLabel = groupLabel;
         _onResolve = onResolve;
         _onDismiss = onDismiss;
+        _onResolveKeepFiles = onResolveKeepFiles;
 
         string groupKey = Guid.NewGuid().ToString();
         Candidates = new ObservableCollection<DuplicateCandidateViewModel>(
@@ -49,6 +55,18 @@ public partial class DuplicateGroupRowViewModel : ViewModelBase
 
     [RelayCommand]
     private void Resolve() => _onResolve(this);
+
+    /// <summary>Resolves the group by removing the other entries from the library but leaving every file where it is.</summary>
+    [RelayCommand]
+    private void ResolveKeepFiles() => _onResolveKeepFiles?.Invoke(this);
+
+    public bool CanResolveKeepFiles => _onResolveKeepFiles is not null;
+
+    /// <summary>Opens the Compare screen for the copy marked to keep against the others (docs/superpowers/specs/2026-09-26-comic-reader-compare-design.md #11).</summary>
+    [RelayCommand]
+    private void Compare() => _onCompare?.Invoke(this);
+
+    public bool CanCompare => _onCompare is not null;
 
     [RelayCommand]
     private void Dismiss() => _onDismiss(this);

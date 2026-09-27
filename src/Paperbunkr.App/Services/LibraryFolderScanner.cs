@@ -181,9 +181,12 @@ public class LibraryFolderScanner
         // extra query cost. Applies to both ScanAll and ImportNewFilesAsync (live-watch), unlike
         // AutoRemoveMissingOnScan below which is Scan-Now-only - "don't bring this back" should hold
         // regardless of how the file was rediscovered.
-        var removedPaths = appSettings.DontReimportRemovedFiles
-            ? new HashSet<string>(context.RemovedFilePaths.Select(r => r.FilePath), StringComparer.OrdinalIgnoreCase)
-            : null;
+        // Paths of entries removed WITH "keep the file" are always honoured (the file is still there, so without this the next scan would
+        // re-add the entry at once); paths of deleted files only while the setting is on.
+        bool honourAllRemoved = appSettings.DontReimportRemovedFiles;
+        var removedPaths = new HashSet<string>(
+            context.RemovedFilePaths.Where(r => honourAllRemoved || r.KeepFile).Select(r => r.FilePath),
+            StringComparer.OrdinalIgnoreCase);
 
         // Loaded once and updated in-memory as new series are created within this run, so multiple
         // new issues for the same not-yet-existing series in one scan land on the same Series row
@@ -290,6 +293,7 @@ public class LibraryFolderScanner
                     FilePath = file,
                     AddedTime = DateTime.UtcNow,
                 };
+                Paperbunkr.Data.Library.IssueFileStats.TryApply(issue);
 
                 if (embeddedInfo is not null)
                 {

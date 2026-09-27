@@ -10,4 +10,13 @@ public enum NavigationEntryKind
     Issue,
     Book,
     BookSeries,
+
+    // Added docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md - all five share one
+    // ScreenKey ("metadataEntity") and one ViewModel/View pair; this is what ReplayEntry uses to know
+    // which ComicMetadataEntityKind to reload, not a separate screen per kind.
+    Character,
+    Team,
+    Location,
+    Creator,
+    Publisher,
 }

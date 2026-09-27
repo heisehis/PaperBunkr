@@ -14,6 +14,7 @@ using cYo.Projects.ComicRack.Engine.IO.Provider;
 using cYo.Projects.ComicRack.Engine.IO.Provider.Readers;
 using cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive;
 using Paperbunkr.App.Views;
+using Paperbunkr.Data.Entities;
 using SkiaSharp;
 using AvaloniaBitmap = Avalonia.Media.Imaging.Bitmap;
 
@@ -42,7 +43,7 @@ namespace Paperbunkr.App.Services.Reader;
 /// decode-time average shows headroom, holds tight when decode is the bottleneck.</item>
 /// </list>
 /// </summary>
-public sealed class ReaderImagePipeline : IReaderPageSource
+public sealed class ReaderImagePipeline : IReaderPageSource, IReaderPageProcessing
 {
     private const int ThumbnailLongestEdge = 200;
     private const int BackFringe = 2;
@@ -349,14 +350,115 @@ public sealed class ReaderImagePipeline : IReaderPageSource
 
     public void SetViewportWidth(int width) => _viewportWidth = Math.Max(1, width);
 
-    private PageId DisplayId(int index) => new(_container, _containerStamp, index, PageTier.Display);
+    /// <summary>The width future display-tier decodes downsample to (<see cref="int.MaxValue"/> until <see cref="SetViewportWidth"/> is first called). The next-issue stager copies it onto the pipeline it stages.</summary>
+    internal int ViewportWidth => _viewportWidth;
+
+    private PageId DisplayId(int index) => new(_container, _containerStamp, index, PageTier.Display, PageVariant(index));
     private PageId ThumbId(int index) => new(_container, _containerStamp, index, PageTier.Thumbnail);
+
+    /// <summary>The compressed-bytes tier is keyed without a variant: processing changes the decoded pixels, never the file's bytes.</summary>
+    private PageId RawId(int index) => new(_container, _containerStamp, index, PageTier.Display);
+
+    // --- Page processing (auto-levels, auto-crop) --------------------------------
+
+    private volatile PageProcessingSettings _processingSettings = PageProcessingSettings.Off;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(int Index, int Variant), PageProcessingResult> _processed = new();
+
+    private sealed record PageProcessingSettings(PageProcessingOptions Options, IReadOnlyDictionary<int, PageCropMode> CropOverrides)
+    {
+        public static readonly PageProcessingSettings Off = new(PageProcessingOptions.None, new Dictionary<int, PageCropMode>());
+    }
+
+    public PageProcessingOptions Processing => _processingSettings.Options;
+
+    public void SetProcessing(PageProcessingOptions options, IReadOnlyDictionary<int, PageCropMode>? cropOverrides)
+    {
+        _processingSettings = new PageProcessingSettings(options, cropOverrides is null ? new Dictionary<int, PageCropMode>() : new Dictionary<int, PageCropMode>(cropOverrides));
+        _processed.Clear();
+
+        // Pages cached under another processing are dead weight now (never found again): drop them so they do not crowd the byte budget.
+        lock (_sync)
+        {
+            foreach (var key in _displayCache.GetKeys())
+            {
+                if (key.Variant != PageVariant(key.Index))
+                {
+                    _displayCache.RemoveItem(key);
+                }
+            }
+        }
+    }
+
+    public PageCropRect? DetectCrop(int pageIndex)
+    {
+        byte[]? bytes = ReadRawBytes(pageIndex);
+        using AvaloniaBitmap decoded = PageDecodeCore.TryDecodeBytes(bytes) ?? PageDecodeCore.Decode(_provider, pageIndex);
+        using var image = SkiaBitmapConverter.ToSkImage(decoded);
+        using var page = SKBitmap.FromImage(image);
+        return page is null ? null : PageCropDetector.Detect(PageLumaGrid.From(page));
+    }
+
+    /// <summary>Whether the page is cropped: its own override if it has one, else the setting.</summary>
+    private bool CropsPage(int index)
+    {
+        var settings = _processingSettings;
+        return settings.CropOverrides.TryGetValue(index, out var mode) && mode != PageCropMode.Auto
+            ? mode == PageCropMode.Always
+            : settings.Options.AutoCrop;
+    }
+
+    /// <summary>Which processing the display-tier bitmap of a page gets: bit 0 auto-levels, bit 1 auto-crop. Part of the cache identity, so a setting or override change decodes the page again.</summary>
+    internal int PageVariant(int index) => (_processingSettings.Options.AutoLevels ? 1 : 0) | (CropsPage(index) ? 2 : 0);
+
+    /// <summary>
+    /// Applies auto-crop and auto-levels to a freshly decoded page. Returns <paramref name="decoded"/> itself when there is nothing to do (the caller keeps ownership of it), else a new bitmap (the caller
+    /// disposes <paramref name="decoded"/> if it is its own private intermediate). What was decided is remembered per page and variant so the detail tier crops and stretches exactly the same way. Webtoon
+    /// strips are left alone: they have no scan borders and decode in bands.
+    /// </summary>
+    private AvaloniaBitmap ProcessDecoded(AvaloniaBitmap decoded, int index)
+    {
+        int variant = PageVariant(index);
+        if (variant == 0 || IsStrip(index))
+        {
+            return decoded;
+        }
+
+        try
+        {
+            using var image = SkiaBitmapConverter.ToSkImage(decoded);
+            using var page = SKBitmap.FromImage(image);
+            if (page is null)
+            {
+                return decoded;
+            }
+
+            var settings = _processingSettings;
+            if (!_processed.TryGetValue((index, variant), out var result))
+            {
+                result = PageImageProcessor.Analyze(page, settings.Options.AutoLevels, CropsPage(index));
+                _processed[(index, variant)] = result;
+            }
+
+            if (result.IsNothing)
+            {
+                return decoded;
+            }
+
+            using var processed = PageImageProcessor.Apply(page, result);
+            return SkiaBitmapConverter.ToImmutableBitmap(processed);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Processing is a nicety: a page that cannot be analysed is shown as it is.
+            return decoded;
+        }
+    }
 
     // --- Raw compressed bytes ------------------------------------------------
 
     private byte[]? ReadRawBytes(int index)
     {
-        var id = DisplayId(index); // raw tier is keyed the same as display; distinct cache instance
+        var id = RawId(index); // raw tier is keyed the same as display (without the processing variant); distinct cache instance
         using (var cached = SharedRawCache.LockItem(id, (Func<PageId, RawPageBytes>)null!))
         {
             if (cached?.Item is { } hit)
@@ -383,14 +485,14 @@ public sealed class ReaderImagePipeline : IReaderPageSource
                     bytes = _session.ReadEntryBytes(name);
                     if (bytes is not null)
                     {
-                        ReaderPerfStats.Current.RecordSessionRead();
+                        Stats.RecordSessionRead();
                     }
                 }
 
                 if (bytes is null)
                 {
                     bytes = _provider.GetByteImage(index);
-                    ReaderPerfStats.Current.RecordArchiveRead();
+                    Stats.RecordArchiveRead();
                 }
             }
         }
@@ -417,6 +519,14 @@ public sealed class ReaderImagePipeline : IReaderPageSource
 
         AvaloniaBitmap decoded = PageDecodeCore.TryDecodeBytes(bytes)
                                  ?? PageDecodeCore.Decode(_provider, index); // GDI fallback (WebP/HEIF/JXL/JP2/DjVu)
+
+        // Auto-crop and auto-levels work on the full-size decode, before the downscale (the downscale then sees only the part that will be shown).
+        var processed = ProcessDecoded(decoded, index);
+        if (!ReferenceEquals(processed, decoded))
+        {
+            decoded.Dispose();
+            decoded = processed;
+        }
 
         AvaloniaBitmap display = Downsample(decoded, _viewportWidth);
         if (!ReferenceEquals(display, decoded))
@@ -557,12 +667,12 @@ public sealed class ReaderImagePipeline : IReaderPageSource
         var hit = PeekBitmap(_displayCache, id);
         if (hit is not null)
         {
-            ReaderPerfStats.Current.RecordCacheHit();
+            Stats.RecordCacheHit();
             return hit;
         }
 
-        ReaderPerfStats.Current.RecordCacheMiss();
-        ReaderPerfStats.Current.RecordSynchronousDecode();
+        Stats.RecordCacheMiss();
+        Stats.RecordSynchronousDecode();
         ReaderBitmap decoded = DecodeDisplayTier(pageIndex);
         return StoreBitmap(_displayCache, id, decoded);
     }
@@ -592,8 +702,19 @@ public sealed class ReaderImagePipeline : IReaderPageSource
         ReserveDetailBudget(pageIndex, targetSize);
 
         byte[]? bytes = ReadRawBytes(pageIndex);
-        using AvaloniaBitmap native = PageDecodeCore.TryDecodeBytes(bytes) ?? PageDecodeCore.Decode(_provider, pageIndex);
-        return native.CreateScaledBitmap(targetSize, BitmapInterpolationMode.HighQuality);
+        using AvaloniaBitmap decodedNative = PageDecodeCore.TryDecodeBytes(bytes) ?? PageDecodeCore.Decode(_provider, pageIndex);
+        var native = ProcessDecoded(decodedNative, pageIndex);   // the same crop and levels the display tier got
+        try
+        {
+            return native.CreateScaledBitmap(targetSize, BitmapInterpolationMode.HighQuality);
+        }
+        finally
+        {
+            if (!ReferenceEquals(native, decodedNative))
+            {
+                native.Dispose();
+            }
+        }
     }
 
     public void ReleaseDetail() => ReleaseDetailBudget();
@@ -650,16 +771,51 @@ public sealed class ReaderImagePipeline : IReaderPageSource
         }
     }
 
+    /// <summary>Whether this pipeline feeds the process-wide <see cref="ReaderPerfStats.Current"/> overlay numbers. False while the pipeline is only staged for the next issue (design 2026-09-25 A), so it cannot pollute the numbers of the book being read.</summary>
+    internal bool RecordStats { get; set; } = true;
+
+    private static readonly ReaderPerfStats DiscardedStats = new();
+
+    private ReaderPerfStats Stats => RecordStats ? ReaderPerfStats.Current : DiscardedStats;
+
+    /// <summary>
+    /// Pages whose first lookup since entering the window has already been counted (guarded by <see cref="_sync"/>). The continuous
+    /// canvas peeks every visible page every frame; counting each peek made the hit ratio meaningless, so a page is counted once -
+    /// hit = it was ready the first time anything looked, miss = it was not (design 2026-09-25 B5).
+    /// </summary>
+    private readonly HashSet<int> _lookedUp = new();
+
+    /// <summary>Timestamp (<see cref="Stopwatch.GetTimestamp"/>) at which a page entered the window, for decode-latency metrics; guarded by <see cref="_sync"/>.</summary>
+    private readonly Dictionary<int, long> _windowEntryTimestamps = new();
+
+    /// <summary>Forgets per-page metric state for pages outside [<paramref name="low"/>, <paramref name="high"/>]. Caller holds <see cref="_sync"/>.</summary>
+    private void PruneMetricState(int low, int high)
+    {
+        _lookedUp.RemoveWhere(i => i < low || i > high);
+        if (_windowEntryTimestamps.Count > 0)
+        {
+            foreach (int page in _windowEntryTimestamps.Keys.Where(i => i < low || i > high).ToList())
+            {
+                _windowEntryTimestamps.Remove(page);
+            }
+        }
+    }
+
     public AvaloniaBitmap? TryGetCachedPage(int pageIndex)
     {
         var hit = PeekBitmap(_displayCache, DisplayId(pageIndex));
-        if (hit is not null)
+        bool first;
+        lock (_sync) { first = _lookedUp.Add(pageIndex); }
+        if (first)
         {
-            ReaderPerfStats.Current.RecordCacheHit();
-        }
-        else
-        {
-            ReaderPerfStats.Current.RecordCacheMiss();
+            if (hit is not null)
+            {
+                Stats.RecordCacheHit();
+            }
+            else
+            {
+                Stats.RecordCacheMiss();
+            }
         }
         return hit;
     }
@@ -742,7 +898,80 @@ public sealed class ReaderImagePipeline : IReaderPageSource
     /// <summary>Test seam (design §12.4): fires at the end of each debounced <see cref="RecomputeFringe"/> pass.</summary>
     internal Action? OnFringeRecomputed { get; set; }
 
-    public void SetVirtualizationWindow(int minIndex, int maxIndex)
+    /// <summary>Interval of the low-priority fringe pass while a continuous scroll is ongoing (design 2026-09-25 B3). A trailing debounce never fired mid-scroll: every frame (16 ms) re-armed a 30 ms timer.</summary>
+    private const int FringeThrottleMs = 100;
+
+    /// <summary>1 while a throttled fringe pass is already scheduled; the pass clears it. Only the sustained-scroll path uses it.</summary>
+    private int _fringeThrottleArmed;
+
+    /// <summary>How many pages beyond the layout radius, in the scroll direction, are decoded at high priority.</summary>
+    private const int ScrollLookAheadExtra = 1;
+
+    public void SetVirtualizationWindow(int minIndex, int maxIndex) => SetVirtualizationWindowCore(minIndex, maxIndex, null);
+
+    public void SetVirtualizationWindow(int minIndex, int maxIndex, ScrollWindowHint hint) => SetVirtualizationWindowCore(minIndex, maxIndex, hint);
+
+    /// <summary>
+    /// The order in which a window's pages are queued for high-priority decode. Without a hint (paged mode) it is simply ascending. With
+    /// one, the pages actually on screen come first, nearest the visible centre first; then the pages beyond them in the scroll direction
+    /// (nearest first, plus <see cref="ScrollLookAheadExtra"/> more), then the ones behind. FIFO decode means this order is the decode order.
+    /// </summary>
+    internal static IReadOnlyList<int> OrderWindow(int minIndex, int maxIndex, int pageCount, ScrollWindowHint? hint)
+    {
+        var order = new List<int>();
+        if (hint is not { } h)
+        {
+            for (int i = minIndex; i <= maxIndex; i++)
+            {
+                order.Add(i);
+            }
+
+            return order;
+        }
+
+        int visibleMin = Math.Clamp(h.VisibleMin, minIndex, maxIndex);
+        int visibleMax = Math.Clamp(h.VisibleMax, visibleMin, maxIndex);
+        double centre = (visibleMin + visibleMax) / 2.0;
+        int direction = Math.Sign(h.Direction);
+
+        var visible = new List<int>();
+        for (int i = visibleMin; i <= visibleMax; i++)
+        {
+            visible.Add(i);
+        }
+
+        // Nearest the centre first; on a tie the one in the scroll direction wins.
+        visible.Sort((a, b) =>
+        {
+            int byDistance = Math.Abs(a - centre).CompareTo(Math.Abs(b - centre));
+            return byDistance != 0 ? byDistance : direction >= 0 ? a.CompareTo(b) : b.CompareTo(a);
+        });
+        order.AddRange(visible);
+
+        var ahead = new List<int>();
+        var behind = new List<int>();
+        if (direction >= 0)
+        {
+            for (int i = visibleMax + 1; i <= maxIndex; i++) { ahead.Add(i); }
+            for (int i = visibleMin - 1; i >= minIndex; i--) { behind.Add(i); }
+            if (direction > 0)
+            {
+                for (int extra = 1; extra <= ScrollLookAheadExtra && maxIndex + extra < pageCount; extra++) { ahead.Add(maxIndex + extra); }
+            }
+        }
+        else
+        {
+            for (int i = visibleMin - 1; i >= minIndex; i--) { ahead.Add(i); }
+            for (int i = visibleMax + 1; i <= maxIndex; i++) { behind.Add(i); }
+            for (int extra = 1; extra <= ScrollLookAheadExtra && minIndex - extra >= 0; extra++) { ahead.Add(minIndex - extra); }
+        }
+
+        order.AddRange(ahead);
+        order.AddRange(behind);
+        return order;
+    }
+
+    private void SetVirtualizationWindowCore(int minIndex, int maxIndex, ScrollWindowHint? hint)
     {
         minIndex = Math.Max(0, minIndex);
         maxIndex = Math.Min(PageCount - 1, maxIndex);
@@ -784,6 +1013,14 @@ public sealed class ReaderImagePipeline : IReaderPageSource
                 }
             }
             EvictStripSessionsAndBandsOutside(safeMin, safeMax);
+            PruneMetricState(safeMin, safeMax);
+
+            // Decode-latency clock for every page of the requested window (design 2026-09-25 B5); a page already stamped keeps its earlier time.
+            long enteredAt = Stopwatch.GetTimestamp();
+            for (int i = minIndex; i <= maxIndex; i++)
+            {
+                _windowEntryTimestamps.TryAdd(i, enteredAt);
+            }
 
             // The window gates ProcessQueuedRequest; the high-priority requests enqueued just below
             // must be in it. The debounced pass narrows it to the precise fringe.
@@ -794,8 +1031,8 @@ public sealed class ReaderImagePipeline : IReaderPageSource
             _enqueued.RemoveWhere(r => r.PageIndex < safeMin || r.PageIndex > safeMax);
         }
 
-        // Immediate: the page(s) actually on screen, high priority, every call.
-        for (int i = minIndex; i <= maxIndex; i++)
+        // Immediate: the page(s) actually on screen, high priority, every call - visible pages first when the caller says which they are.
+        foreach (int i in OrderWindow(minIndex, maxIndex, PageCount, hint))
         {
             // A page already known to be a bandable strip is routed through SetStripBandWindow
             // instead (design §4.2) - PageCanvas calls that separately with the actual visible
@@ -818,8 +1055,20 @@ public sealed class ReaderImagePipeline : IReaderPageSource
             }
         }
 
-        // Debounced: the low-priority fringe recompute + enqueue.
-        _fringeTimer.Change(FringeDebounceMs, System.Threading.Timeout.Infinite);
+        // The low-priority fringe recompute + enqueue. Paged mode keeps the trailing debounce (a burst of rapid flips should enqueue once, for
+        // the final page). A continuous scroll that is still going uses a throttle instead: the debounce is re-armed every frame and so never
+        // fired until the scroll paused, starving the fringe exactly when it was needed.
+        if (hint is { SustainedScroll: true })
+        {
+            if (System.Threading.Interlocked.Exchange(ref _fringeThrottleArmed, 1) == 0)
+            {
+                _fringeTimer.Change(FringeThrottleMs, System.Threading.Timeout.Infinite);
+            }
+        }
+        else
+        {
+            _fringeTimer.Change(FringeDebounceMs, System.Threading.Timeout.Infinite);
+        }
     }
 
     /// <summary>Whether a page should skip the ordinary whole-page request and be left to <see cref="SetStripBandWindow"/> instead (design §4.2) - true only once it's known both to be a strip (<see cref="_stripVerdict"/>) *and* actually bandable (<see cref="_stripBandable"/>, not yet known = assume yes, since it hasn't failed).</summary>
@@ -896,6 +1145,7 @@ public sealed class ReaderImagePipeline : IReaderPageSource
             return;
         }
 
+        System.Threading.Interlocked.Exchange(ref _fringeThrottleArmed, 0);
         DrainPendingDispose();
 
         int minIndex, maxIndex, fringeMin, fringeMax;
@@ -921,6 +1171,7 @@ public sealed class ReaderImagePipeline : IReaderPageSource
                 }
             }
             EvictStripSessionsAndBandsOutside(fringeMin, fringeMax);
+            PruneMetricState(fringeMin, fringeMax);
 
             _window.Clear();
             for (int i = fringeMin; i <= fringeMax; i++)
@@ -1237,7 +1488,7 @@ public sealed class ReaderImagePipeline : IReaderPageSource
 
         DrainPendingDispose();
         OnBeforeBackgroundDecode?.Invoke(pageIndex);
-        ReaderPerfStats.Current.RecordBackgroundDecode();
+        Stats.RecordBackgroundDecode();
 
         var entry = GetOrCreateStripSession(pageIndex);
         if (entry is null)
@@ -1343,7 +1594,7 @@ public sealed class ReaderImagePipeline : IReaderPageSource
 
         DrainPendingDispose();
         OnBeforeBackgroundDecode?.Invoke(pageIndex);
-        ReaderPerfStats.Current.RecordBackgroundDecode();
+        Stats.RecordBackgroundDecode();
 
         ReaderBitmap decoded;
         try
@@ -1378,6 +1629,11 @@ public sealed class ReaderImagePipeline : IReaderPageSource
             else
             {
                 decoded.Dispose();
+            }
+
+            if (landed && _windowEntryTimestamps.Remove(pageIndex, out long enteredAt))
+            {
+                Stats.RecordDecodeLatencyMs(Stopwatch.GetElapsedTime(enteredAt).TotalMilliseconds);
             }
         }
 

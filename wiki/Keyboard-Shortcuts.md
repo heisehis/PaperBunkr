@@ -32,6 +32,8 @@ page-turn is Left/Right instead of CE's PageUp/Alt+Left).
 |---|---|---|
 | Page back (spatial left) | `←` | paged, not zoomed |
 | Page forward (spatial right) | `→` | paged, not zoomed |
+| Next page (reading order) | `PageDown`, `Space`, media next-track | paged modes |
+| Previous page (reading order) | `PageUp`, `Shift+Space`, media previous-track | paged modes |
 | Pan left / right / up / down | `←` `→` `↑` `↓` | paged, zoomed in |
 | Scroll left / right / up / down | `←` `→` `↑` `↓` | continuous modes |
 | Scroll up / down a page | `PageUp` / `PageDown` | continuous modes |
@@ -39,12 +41,15 @@ page-turn is Left/Right instead of CE's PageUp/Alt+Left).
 | Toggle auto-scroll | `S` | continuous modes |
 | Previous bookmark | `Ctrl+PageUp` | always |
 | Next bookmark | `Ctrl+PageDown` | always |
+| Report a bad page | `X` | always |
+| Reader command palette | `Ctrl+K` | always |
+| Go to page… | `Ctrl+G` | always |
 
 ### Zoom & Fit
 
 | Action | Default |
 |---|---|
-| Zoom in | `Z` |
+| Zoom in (about 10% a press) | `Z` |
 | Zoom out | `Shift+Z` |
 | Fit: Original size | `1` |
 | Fit: Fit all | `2` |
@@ -59,6 +64,14 @@ page-turn is Left/Right instead of CE's PageUp/Alt+Left).
 | Toggle fullscreen | `F` |
 | Rotate clockwise | `R` |
 | Rotate counter-clockwise | `Shift+R` |
+| Next reader profile | `P` |
+| Toggle reading stats | `H` |
+| Toggle warm tint | `W` |
+| Toggle guided panel view | `G` |
+| Toggle the info panel | `I` |
+| Pin this page as a reference | `Shift+P` |
+| Clip a region of this page | `Ctrl+Shift+C` |
+| Copy page (or spread) | `Ctrl+C` |
 
 ### Remapping
 

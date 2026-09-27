@@ -143,7 +143,7 @@ public class KeyBindingServiceTests : IDisposable
         service.ResetToDefaults();
 
         var all = service.GetAllBindings();
-        Assert.All(all, b => Assert.Equal([b.Command.DefaultGesture], b.Keys));
+        Assert.All(all, b => Assert.Equal(b.Command.AllDefaults, b.Keys));
     }
 
     [Fact]

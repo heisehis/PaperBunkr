@@ -6,7 +6,7 @@ using Paperbunkr.Data.ReadingLists.Sources;
 namespace Paperbunkr.Data.ReadingLists;
 
 /// <summary>Result of <see cref="ArcReadingListBuilder.RefreshAsync"/> - shown to the user via the screen's existing <c>StatusMessage</c> (docs/superpowers/specs/2026-08-22-cbl-manager-arc-lookup-design.md §4).</summary>
-public sealed record ArcRefreshResult(ReadingList List, int AddedCount, int ReplacedPlaceholderCount, int StillMissingCount);
+public sealed record ArcRefreshResult(ReadingList List, int AddedCount, int ReplacedPlaceholderCount, int StillMissingCount, RoleDetectionSummary? Roles = null);
 
 /// <summary>
 /// Create-from-arc and Refresh (docs/superpowers/specs/2026-08-22-cbl-manager-arc-lookup-design.md
@@ -41,11 +41,18 @@ public static class ArcReadingListBuilder
         };
 
         int sortOrder = 0;
+        var created = new List<(ArcIssue Arc, Issue Issue, ReadingListItem Item)>();
         foreach (var arcIssue in arcIssues)
         {
             var issue = ResolveArcIssue(context, arcIssue);
-            list.Items.Add(new ReadingListItem { IssueId = issue.Id, SortOrder = sortOrder++ });
+            var item = new ReadingListItem { IssueId = issue.Id, SortOrder = sortOrder++ };
+            list.Items.Add(item);
+            created.Add((arcIssue, issue, item));
         }
+
+        // Roles the source's own words (or the issues' titles and formats) make certain are applied as automatic; weaker guesses wait as
+        // suggestions. The user's own edits are never touched (docs/superpowers/specs/2026-09-25-reading-list-role-detection-design.md).
+        DetectRoles(created.Select(c => (c.Arc, c.Issue, c.Item)).ToList());
 
         context.ReadingLists.Add(list);
         ReadingListManager.RecordCreatedWithItems(context, list);
@@ -96,6 +103,7 @@ public static class ArcReadingListBuilder
         var removedIssueIds = new List<int>();
         bool reordered = false;
 
+        var detectable = new List<(ArcIssue Arc, Issue Issue, ReadingListItem Item)>();
         foreach (var arcIssue in arcIssues)
         {
             var resolved = ResolveArcIssue(context, arcIssue);
@@ -118,14 +126,20 @@ public static class ArcReadingListBuilder
                 }
 
                 existingItem.SortOrder = sortOrder++;
+                detectable.Add((arcIssue, resolved, existingItem));
             }
             else
             {
-                context.ReadingListItems.Add(new ReadingListItem { ReadingListId = list.Id, IssueId = resolved.Id, SortOrder = sortOrder++ });
+                var newItem = new ReadingListItem { ReadingListId = list.Id, IssueId = resolved.Id, SortOrder = sortOrder++ };
+                context.ReadingListItems.Add(newItem);
                 addedCount++;
                 addedIssueIds.Add(resolved.Id);
+                detectable.Add((arcIssue, resolved, newItem));
             }
         }
+
+        // Refresh never overwrites a role the user set: detection only fills an empty/automatic slot, otherwise it leaves a suggestion.
+        var roles = DetectRoles(detectable);
 
         int replacedPlaceholderCount = 0;
         foreach (var oldItem in list.Items.Where(i => !keptIssueIds.Contains(i.IssueId)).ToList())
@@ -181,7 +195,21 @@ public static class ArcReadingListBuilder
             .Include(i => i.Issue)
             .Count(i => i.ReadingListId == list.Id && i.Issue!.IsPlaceholder);
 
-        return new ArcRefreshResult(list, addedCount, replacedPlaceholderCount, stillMissingCount);
+        return new ArcRefreshResult(list, addedCount, replacedPlaceholderCount, stillMissingCount, roles);
+    }
+
+    private static RoleDetectionSummary DetectRoles(IReadOnlyList<(ArcIssue Arc, Issue Issue, ReadingListItem Item)> members)
+    {
+        string? dominant = MemberRoleDetector.DominantSeries(members.Select(m => m.Arc.Series));
+        var summary = RoleDetectionSummary.Empty;
+        for (int position = 0; position < members.Count; position++)
+        {
+            var (arc, issue, item) = members[position];
+            var suggestion = MemberRoleDetection.Suggest(issue, arc.Series, arc.Annotation, dominant, position, members.Count, arc.Title, arc.Summary);
+            summary += MemberRoleDetection.Tally(MemberRoleApplier.Apply(item, suggestion));
+        }
+
+        return summary;
     }
 
     private static Issue ResolveArcIssue(PaperbunkrDbContext context, ArcIssue arcIssue)

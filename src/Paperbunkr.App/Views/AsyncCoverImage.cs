@@ -175,12 +175,9 @@ public sealed class AsyncCoverImage
         if (CoverImageCache.TryGetCached(stem, out var cached))
         {
             CoverPipelineStats.CacheHit();
-            // A cache hit is always instant - no fade, matching CE (FadeInThumbnails only gates a
-            // genuine new load, below). Clear any transition a prior fade attached to this recycled
-            // Image so this Opacity assignment doesn't itself animate.
-            image.Transitions = null;
-            image.Opacity = 1;
-            image.Source = cached;
+            // A cache hit still fades the first time this cover appears (CE fades per item on its first
+            // valid image, memory-cached or not) - see Paint.
+            Paint(image, stem, cached);
             if (cached is not null && CoverFingerprint.TryGetId(stem, out int cachedId))
             {
                 CoverAspectRatioStore.Report(cachedId, cached.PixelSize.Width, cached.PixelSize.Height);
@@ -216,9 +213,7 @@ public sealed class AsyncCoverImage
         if (GridCoverCache.Shared.TryGet(stem, bucket, out var cached))
         {
             CoverPipelineStats.CacheHit();
-            image.Transitions = null;
-            image.Opacity = 1;
-            image.Source = cached;
+            Paint(image, stem, cached);
             if (cached is not null && CoverFingerprint.TryGetId(stem, out int cachedId))
             {
                 CoverAspectRatioStore.Report(cachedId, cached.PixelSize.Width, cached.PixelSize.Height);
@@ -266,12 +261,54 @@ public sealed class AsyncCoverImage
     /// toggles-design.md) - CE's <c>FadeInThumbnails</c>, ~120ms matching this codebase's existing
     /// <c>CheckBox.tileSelect</c> hover-fade idiom (<c>LibraryScreen.axaml</c>). Shared instance since
     /// <see cref="Transitions"/> only needs its property/duration/easing set once per <see cref="Image"/>.</summary>
-    private static readonly TimeSpan FadeDuration = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan FadeDuration = TimeSpan.FromMilliseconds(300);
 
     private static Transitions BuildFadeTransitions() => new()
     {
-        new DoubleTransition { Property = Visual.OpacityProperty, Duration = FadeDuration, Easing = new CubicEaseOut() },
+        new DoubleTransition { Property = Visual.OpacityProperty, Duration = FadeDuration, Easing = new LinearEasing() },
     };
+
+    /// <summary>Covers already faded in this session. CE fades an item once, on its first valid image, and keeps the
+    /// item while the view lives; Paperbunkr's virtualized cards are recycled, so without this every card scrolled
+    /// back into view would fade again. UI thread only.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> s_fadedStems = new(StringComparer.Ordinal);
+
+    private static bool s_fadeWasOn;
+
+    /// <summary>
+    /// Paints a cover, fading it in (CE <c>ThumbnailViewItem.Animate</c>: opacity 0 -> 1 over 300 ms) the first time
+    /// this cover is shown while <c>FadeInThumbnails</c> is on - whether it came from disk or a memory cache. The
+    /// previous code faded only genuine disk loads, which the prefetching grid cache made almost never happen, and set
+    /// Opacity 0 then 1 in one tick with the transition already attached, so the "fade" animated 1 -> 1 (2026-09-26
+    /// library audit: "I enable it and don't see it work"). Here the 0 is set with no transition attached, then the
+    /// transition is attached and the 1 animates from 0.
+    /// </summary>
+    private static void Paint(Image image, string stem, Bitmap? source)
+    {
+        image.Transitions = null;
+
+        bool fadeOn = CosmeticThumbnailSettings.FadeInThumbnails
+            && !(Application.Current is not null && Controls.MotionTokens.IsReducedMotion());
+        if (fadeOn && !s_fadeWasOn)
+        {
+            // Just switched on: fade everything again, so the change is visible right away.
+            s_fadedStems.Clear();
+        }
+
+        s_fadeWasOn = fadeOn;
+
+        if (fadeOn && source is not null && s_fadedStems.Add(stem))
+        {
+            image.Opacity = 0;
+            image.Source = source;
+            image.Transitions = BuildFadeTransitions();
+            image.Opacity = 1;
+            return;
+        }
+
+        image.Opacity = 1;
+        image.Source = source;
+    }
 
     /// <summary>Paints <paramref name="decoded"/> onto <paramref name="image"/> unless its container
     /// has since been recycled to a different issue (<paramref name="generation"/> stale) or the
@@ -299,21 +336,7 @@ public sealed class AsyncCoverImage
 
     private static void PaintNewlyDecoded(Image image, string stem, Bitmap source)
     {
-        // CE only fades a genuine first load, never a cache-hit repaint (OnSourceIdChanged's own
-        // cache-hit branch above never calls this method). Attach the transition once, before the
-        // 0->1 flip, so the transition system actually animates the change rather than snapping.
-        if (CosmeticThumbnailSettings.FadeInThumbnails)
-        {
-            image.Transitions ??= BuildFadeTransitions();
-            image.Opacity = 0;
-            image.Source = source;
-            image.Opacity = 1;
-        }
-        else
-        {
-            image.Source = source;
-            image.Opacity = 1;
-        }
+        Paint(image, stem, source);
 
         if (CoverFingerprint.TryGetId(stem, out int decodedId))
         {

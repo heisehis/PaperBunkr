@@ -189,12 +189,14 @@ public class RemoteRowIsolationTests : IDisposable
         var allowed = new[]
         {
             "PaperbunkrDb.cs", "PaperbunkrDbContext.cs",
-            "LibraryScreenViewModel.cs", "DetailScreenViewModel.cs", "MangaDetailScreenViewModel.cs", "ReaderScreenViewModel.cs",
+            "LibraryScreenViewModel.cs", "DetailScreenViewModel.cs", "MangaDetailScreenViewModel.cs", "ReaderScreenViewModel.cs", "ReaderScreenViewModel.Profiles.cs", "ReaderScreenViewModel.ImageQuality.cs", "ReaderScreenViewModel.Notes.cs", "ReaderScreenViewModel.Clips.cs",
             // Not opt-in sites: these are the mirror machinery, which *refuses* a context that has not opted in (their exception
             // messages and docs say "IncludeRemote = true", which is what the scan matches).
             "RemoteMirrorSync.cs", "RemoteRelinkReconciler.cs",
             // Reading activity/"what to read next" deliberately include remote books; see RemoteReadingStatsTests for what stays local-only.
             "InsightsResolver.cs", "StatsResolver.cs",
+            // Year-in-review recap: same read-only (no-tracking) reading-history join as StatsResolver, reviewed 2026-09-27.
+            "RecapResolver.cs",
             // Drops the stale covers of replaced remote books (looks their mirror rows up by remote id).
             "MainViewModel.cs",
         }.OrderBy(n => n).ToList();

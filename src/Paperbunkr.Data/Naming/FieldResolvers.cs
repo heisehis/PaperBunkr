@@ -34,7 +34,9 @@ public sealed record SeriesAggregate(
     int? EndYear,
     int? EndMonth,
     string? FirstIssueNumber,
-    string? LastIssueNumber);
+    string? LastIssueNumber,
+    Issue? LastBook = null,
+    IReadOnlyList<Issue>? Books = null);
 
 /// <summary>
 /// Everything a naming-template evaluation needs beyond the one <see cref="Issue"/> being named -
@@ -57,13 +59,29 @@ public sealed class TemplateContext
     /// counter every time.</summary>
     public SeriesAggregate? Aggregate { get; set; }
 
+    /// <summary>Every library book of the current issue's series (same volume and publisher) - what a <c>(separator)(series)</c>
+    /// multi-value token draws its values from. Set per issue like <see cref="Aggregate"/>; null resolves to just the issue itself.</summary>
+    public IReadOnlyList<Issue>? SeriesBooks { get; set; }
+
     public IReadOnlyDictionary<int, string>? MonthNames { get; init; }
+
+    /// <summary>Per-token text to use when the token resolves empty (the plugin's <c>EmptyData</c>, `lobookmover.py:1441`) - inserted
+    /// without the group's prefix and postfix, exactly as the plugin does. Keys are token names, compared case-insensitively.</summary>
+    public IReadOnlyDictionary<string, string>? EmptyData { get; init; }
+
+    /// <summary>Names of the tokens that resolved to nothing while the current issue was evaluated - what "skip books with empty required
+    /// fields" checks. The caller clears it between issues.</summary>
+    public List<string> EmptyTokens { get; } = new();
 
     /// <summary>
     /// Values a caller supplies for tokens an <see cref="Issue"/> cannot answer (the acquisition importer's <c>volumeyear</c>, and the downloaded
     /// file's own name for <c>filename</c>). Keys are token names; a missing key resolves to empty like any other absent field.
     /// </summary>
     public IReadOnlyDictionary<string, string?>? Extra { get; init; }
+
+    /// <summary>Pad the whole part of a decimal issue number (7.5 becomes 07.5) - what the Library Organizer plugin does, and the default.
+    /// The acquisition importer turns it off: its own grammar never padded or rounded a non-whole number, and its names must not change.</summary>
+    public bool PadDecimals { get; init; } = true;
 
     /// <summary>CE's <c>insert_counter</c> (`lobookmover.py:1633`, verified): the FIRST call in this
     /// context's lifetime seeds the counter at <paramref name="start"/> and returns it as-is; every
@@ -100,13 +118,12 @@ public static class FieldResolvers
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
-    /// CE's real `template_to_field` has ~50 entries (`lobookmover.py:1199`, verified against the
-    /// extracted plugin source). Only the fields confirmed to have a real Paperbunkr equivalent are
-    /// implemented here - an unsupported token name throws <see cref="NotSupportedException"/> at
-    /// evaluation time (see <see cref="TemplateEvaluator"/>) rather than silently resolving to an empty
-    /// string, so a template author discovers an unsupported token immediately instead of getting a
-    /// silently wrong path - a deliberate Paperbunkr deviation from CE's own "leave the raw token text
-    /// in place" behavior for an unrecognized name, not an oversight.
+    /// The Library Organizer 2.1.13 plugin's `template_to_field` has 57 entries (`lobookmover.py:1199`); every one of them is
+    /// present here (checked against the extracted plugin source during the 2026-09-25 audit; `Custom` is handled in
+    /// <see cref="TemplateEvaluator"/> rather than in this table). An unknown token name throws
+    /// <see cref="NotSupportedException"/> at evaluation time rather than silently resolving to an empty string - a deliberate
+    /// deviation from the plugin, which leaves the raw token text in the path (`lobookmover.py:1380`) and so mangles the folder name.
+    /// <see cref="TemplateValidator"/> reports the problem when a profile is saved; at run time only the affected book fails.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, TokenFieldResolver> ByName = Build();
 
@@ -121,18 +138,18 @@ public static class FieldResolvers
             // without its extension (the acquisition importer's only use).
             ["volumeyear"] = (_, _, context) => ExtraValue(context, "volumeyear"),
             ["filename"] = (_, _, context) => ExtraValue(context, "filename"),
-            ["number"] = (issue, args, _) => PadNumeric(issue.EffectiveNumber(), args),
-            ["count"] = (issue, args, _) => PadNumeric(issue.EffectiveCount()?.ToString(CultureInfo.InvariantCulture), args),
-            ["year"] = (issue, args, _) => PadNumeric(issue.EffectiveYear()?.ToString(CultureInfo.InvariantCulture), args),
+            ["number"] = (issue, args, context) => PadNumeric(issue.EffectiveNumber(), args, context, b => b.EffectiveNumber()),
+            ["count"] = (issue, args, context) => PadNumeric(issue.EffectiveCount()?.ToString(CultureInfo.InvariantCulture), args, context, b => b.EffectiveCount()?.ToString(CultureInfo.InvariantCulture)),
+            ["year"] = (issue, args, context) => PadNumeric(issue.EffectiveYear()?.ToString(CultureInfo.InvariantCulture), args, context, b => b.EffectiveYear()?.ToString(CultureInfo.InvariantCulture)),
 
             // CE's real split (`lobookmover.py:1521`, verified): the UNPADDED "month" token is actually
             // the LOCALIZED MONTH NAME (`insert_month_as_name`, via the profile's own Months table), not
             // a number - a prior pass had this backwards (numeric "month", no "month#" at all). "month#"
             // is the one that's the plain/padded numeric month.
             ["month"] = (issue, _, context) => MonthName(issue.Month, context),
-            ["month#"] = (issue, args, _) => PadNumeric(issue.Month?.ToString(CultureInfo.InvariantCulture), args),
+            ["month#"] = (issue, args, context) => PadNumeric(issue.Month?.ToString(CultureInfo.InvariantCulture), args, context, b => b.Month?.ToString(CultureInfo.InvariantCulture)),
 
-            ["Day"] = (issue, args, _) => PadNumeric(issue.Day?.ToString(CultureInfo.InvariantCulture), args),
+            ["Day"] = (issue, args, context) => PadNumeric(issue.Day?.ToString(CultureInfo.InvariantCulture), args, context, b => b.Day?.ToString(CultureInfo.InvariantCulture)),
             ["volume"] = (issue, _, _) => issue.EffectiveVolume(),
             ["title"] = (issue, _, _) => issue.EffectiveTitle(),
             ["format"] = (issue, _, _) => issue.EffectiveFormat(),
@@ -156,7 +173,7 @@ public static class FieldResolvers
             ["scaninfo"] = (issue, _, _) => issue.ScanInformation,
             ["altSeries"] = (issue, _, _) => issue.AlternateSeries,
             ["altNumber"] = (issue, _, _) => issue.AlternateNumber,
-            ["altCount"] = (issue, args, _) => PadNumeric(issue.AlternateCount?.ToString(CultureInfo.InvariantCulture), args),
+            ["altCount"] = (issue, args, context) => PadNumeric(issue.AlternateCount?.ToString(CultureInfo.InvariantCulture), args, context, b => b.AlternateCount?.ToString(CultureInfo.InvariantCulture)),
             ["Rating"] = (issue, _, _) => issue.Rating?.ToString("0.##", CultureInfo.InvariantCulture),
             ["CommunityRating"] = (issue, _, _) => issue.CommunityRating?.ToString("0.##", CultureInfo.InvariantCulture),
             ["manga"] = (issue, args, _) => YesNo(issue.Series?.ContentType == ContentType.Manga, args),
@@ -164,11 +181,10 @@ public static class FieldResolvers
             ["genre"] = (issue, args, _) => JoinTags(issue, IssueTagField.Genre, args),
             ["tags"] = (issue, args, _) => JoinTags(issue, IssueTagField.Tags, args),
 
-            // Real Issue.ReleasedTime/AddedTime DateTime? fields. CE's own exact rendering format for a
-            // bare date token isn't verified from source this session (insert_formated_datetime takes a
-            // caller-supplied .NET format string as its OWN arg, which our args-string already threads
-            // through the same way), so this formats as a plain ISO "yyyy-MM-dd" when no format arg is
-            // given - a defensible, documented default, not a claimed CE-verified default.
+            // Real Issue.ReleasedTime/AddedTime DateTime? fields. With a format arg this is the plugin's own
+            // (`insert_formated_datetime`, lobookmover.py:1728). Without one the plugin calls DateTime.ToString() - a
+            // culture-dependent "9/25/2026 12:00:00 AM" whose slashes and colons its own sanitizer then mangles - so this
+            // deliberately renders ISO "yyyy-MM-dd" instead (a Paperbunkr deviation, chosen for stable, sortable names).
             ["ReleasedDate"] = (issue, args, _) => FormatDate(issue.ReleasedTime, args),
             ["AddedDate"] = (issue, args, _) => FormatDate(issue.AddedTime, args),
 
@@ -191,7 +207,7 @@ public static class FieldResolvers
             ["first"] = (issue, args, context) =>
             {
                 string innerField = ExtractParenSegments(args).FirstOrDefault() ?? string.Empty;
-                if (!ByName.TryGetValue(innerField, out TokenFieldResolver? innerResolver))
+                if (!TryFindFieldResolver(innerField, out TokenFieldResolver? innerResolver))
                 {
                     throw new NotSupportedException($"<first(...)>'s inner field '{innerField}' is not a supported naming template token.");
                 }
@@ -306,34 +322,55 @@ public static class FieldResolvers
     public static string? ResolveCustom(Issue issue, string key) =>
         issue.CustomValues.FirstOrDefault(c => string.Equals(c.Name, key, StringComparison.OrdinalIgnoreCase))?.Value;
 
-    /// <summary>`&lt;number2&gt;` = left-pad to 2 digits (design doc §5: "a bare digit-count arg, not
-    /// printf-style `{Issue:000}`"). Only pads when the value parses as a plain non-negative integer;
-    /// otherwise (e.g. an annotated issue number like "1A") returns it unchanged rather than guessing
-    /// at partial-numeric padding rules CE itself handles with more nuance (auto-detecting width from
-    /// the series' last issue) that this pass doesn't replicate - a per-issue resolver has no access
-    /// to "the rest of the series" to auto-detect a width from.</summary>
-    private static string? PadNumeric(string? value, string args)
+    /// <summary>The plugin's number padding (`lobookmover.py:1524-1551, 1973-1998`). A digit arg pads the whole part to that width
+    /// (`&lt;number2&gt;`: 3 becomes 03); decimals keep their fraction (7.5 becomes 07.5) and negatives keep their sign (-3 becomes -03).
+    /// An arg of <c>0</c> pads to the width of the same field on the series' LAST book (`&lt;number0&gt;`: issue 5 of a 120-issue run
+    /// becomes 005). A value that is not a plain number ("1A", "Annual 1") is returned as it is.</summary>
+    private static string? PadNumeric(string? value, string args, TemplateContext? context, Func<Issue, string?> lastBookValue)
     {
-        if (string.IsNullOrEmpty(value) || !int.TryParse(args, out int width) || width <= 0)
+        if (string.IsNullOrEmpty(value) || !int.TryParse(args, NumberStyles.None, CultureInfo.InvariantCulture, out int width))
         {
             return value;
         }
 
-        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)
-            ? number.ToString(CultureInfo.InvariantCulture).PadLeft(width, '0')
-            : value;
+        if (width == 0)
+        {
+            string? last = context?.Aggregate?.LastBook is { } lastBook ? lastBookValue(lastBook) : null;
+            width = last?.Length ?? 0;
+        }
+
+        return PadDigits(value, width, context?.PadDecimals ?? true);
     }
 
-    /// <summary>CE's yes/no token args: `(text)` for the "Yes" case, `(text)(!)` for the "No" case
-    /// (design doc §5) - args here is the raw paren-args string as captured by the parser (e.g.
-    /// `(Yes)` or `(Yes)(!)`), parsed minimally: the first parenthesised segment is the "true" text
-    /// (default "Yes"), a second literal `(!)` segment is the "false" text (default "No").</summary>
+    /// <summary>Explicit-width-only padding (the first/last issue number tokens, which the plugin does not auto-size).</summary>
+    private static string? PadNumeric(string? value, string args) =>
+        string.IsNullOrEmpty(value) || !int.TryParse(args, NumberStyles.None, CultureInfo.InvariantCulture, out int width) ? value : PadDigits(value, width);
+
+    private static readonly Regex PlainNumberRegex = new(@"^(?<sign>-?)(?<whole>\d+)(?<fraction>\.\d+)?$", RegexOptions.Compiled);
+
+    private static string PadDigits(string value, int width, bool padDecimals = true)
+    {
+        Match match = PlainNumberRegex.Match(value);
+        if (!match.Success || width <= 0 || (!padDecimals && match.Groups["fraction"].Success))
+        {
+            return value;
+        }
+
+        return match.Groups["sign"].Value + match.Groups["whole"].Value.PadLeft(width, '0') + match.Groups["fraction"].Value;
+    }
+
+    /// <summary>The plugin's yes/no tokens (`lobookmover.py:1546-1581`): <c>(text)</c> yields the text only when the value is Yes,
+    /// <c>(text)(!)</c> only when it is No, and anything else yields nothing. With no args the value itself is shown.</summary>
     private static string YesNo(bool value, string args)
     {
         List<string> segments = ExtractParenSegments(args);
-        string trueText = segments.Count > 0 ? segments[0] : "Yes";
-        string falseText = segments.Count > 1 ? segments[1] : "No";
-        return value ? trueText : falseText;
+        if (segments.Count == 0)
+        {
+            return value ? "Yes" : "No";
+        }
+
+        bool wantsNo = segments.Count > 1 && segments[1] == "!";
+        return wantsNo != value ? segments[0] : string.Empty;
     }
 
     private static List<string> ExtractParenSegments(string args)
@@ -367,14 +404,112 @@ public static class FieldResolvers
     }
 
     /// <summary>Multi-value join for a real Paperbunkr collection field (<see cref="Issue.Tags"/>,
-    /// filtered by <see cref="IssueTagField"/>) - CE's grammar carries `(separator)(series|issue)`
-    /// args on these tokens (design doc §5); the separator is the first paren segment, default ", "
-    /// if none given. The second arg (series-vs-issue scope) has no meaning for a per-issue resolver
-    /// evaluating one book at a time, so it's accepted but ignored.</summary>
+    /// filtered by <see cref="IssueTagField"/>) - one arg is the separator (default ", "). The two-arg form is handled
+    /// earlier by <see cref="TryResolveMultiValue"/>.</summary>
     private static string JoinTags(Issue issue, IssueTagField field, string args)
     {
         List<string> segments = ExtractParenSegments(args);
         string separator = segments.Count > 0 ? segments[0] : ", ";
         return string.Join(separator, issue.Tags.Where(t => t.Field == field).Select(t => t.Value));
+    }
+
+    private static IEnumerable<string> SplitList(string? csv) =>
+        (csv ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    /// <summary>Token names whose value is a list, with how to read that list from an issue. The plugin treats ANY field given two
+    /// args as a list (`lobookmover.py:1500`); these are the list-valued fields Paperbunkr has.</summary>
+    private static readonly IReadOnlyDictionary<string, Func<Issue, IEnumerable<string>>> MultiValueSources =
+        new Dictionary<string, Func<Issue, IEnumerable<string>>>(StringComparer.Ordinal)
+        {
+            ["writer"] = i => SplitList(i.Writer),
+            ["penciller"] = i => SplitList(i.Penciller),
+            ["inker"] = i => SplitList(i.Inker),
+            ["colorist"] = i => SplitList(i.Colorist),
+            ["letterer"] = i => SplitList(i.Letterer),
+            ["coverartist"] = i => SplitList(i.CoverArtist),
+            ["editor"] = i => SplitList(i.Editor),
+            ["characters"] = i => SplitList(i.Characters),
+            ["teams"] = i => SplitList(i.Teams),
+            ["locations"] = i => SplitList(i.Locations),
+            ["storyarc"] = i => SplitList(i.StoryArc),
+            ["seriesgroup"] = i => SplitList(i.SeriesGroup),
+            ["genre"] = i => i.Tags.Where(t => t.Field == IssueTagField.Genre).Select(t => t.Value),
+            ["tags"] = i => i.Tags.Where(t => t.Field == IssueTagField.Tags).Select(t => t.Value),
+        };
+
+    /// <summary>True when <paramref name="name"/> with these args is the <c>(separator)(issue|series)</c> multi-value form.
+    /// <c>issue</c> joins this issue's own values. <c>series</c> joins the values of EVERY issue of the series (each value once,
+    /// first-seen order) and uses that same text for every issue, so a whole series lands in one folder instead of splitting by
+    /// each issue's own credits. The plugin asks the user which values to keep through a dialog; here the choice is the template's
+    /// (issue or series), which is what makes an unattended run possible.</summary>
+    public static bool TryResolveMultiValue(string name, string args, Issue issue, TemplateContext? context, out string? result)
+    {
+        result = null;
+        List<string> segments = ExtractParenSegments(args);
+        if (segments.Count != 2 || !MultiValueSources.TryGetValue(name, out Func<Issue, IEnumerable<string>>? source))
+        {
+            return false;
+        }
+
+        string separator = segments[0];
+        switch (segments[1])
+        {
+            case "issue":
+                result = string.Join(separator, source(issue));
+                return true;
+            case "series":
+                IEnumerable<Issue> books = context?.SeriesBooks is { Count: > 0 } seriesBooks ? seriesBooks : new[] { issue };
+                result = string.Join(separator, books.SelectMany(source).Distinct(StringComparer.Ordinal));
+                return true;
+            default:
+                throw new NotSupportedException($"<{name}(...)(...)>: the second argument must be 'issue' or 'series', not '{segments[1]}'.");
+        }
+    }
+
+    /// <summary>The plugin's field names as its editor writes them ("Series", "Cover Artist", "Story Arc"...) mapped to this engine's
+    /// token names - what <c>first(Series)</c> receives from templates authored in the plugin (`locommon.py:57-160`).</summary>
+    private static readonly IReadOnlyDictionary<string, string> FieldAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Added Date"] = "AddedDate", ["Age Rating"] = "ageRating", ["Alternate Count"] = "altCount", ["Alternate Number"] = "altNumber",
+        ["Alternate Series"] = "altSeries", ["Characters"] = "characters", ["Colorist"] = "colorist", ["Count"] = "count",
+        ["Cover Artist"] = "coverartist", ["Day"] = "Day", ["Editor"] = "editor", ["End Year"] = "EndYear", ["End Month"] = "EndMonth",
+        ["Format"] = "format", ["Genre"] = "genre", ["Imprint"] = "imprint", ["Inker"] = "inker", ["Language"] = "language",
+        ["Letterer"] = "letterer", ["Locations"] = "locations", ["Main Character Or Team"] = "maincharacter", ["Manga"] = "manga",
+        ["Month"] = "month", ["Number"] = "number", ["Penciller"] = "penciller", ["Publisher"] = "publisher", ["Rating"] = "Rating",
+        ["Released Date"] = "ReleasedDate", ["Scan Information"] = "scaninfo", ["Series"] = "series", ["Series Complete"] = "seriesComplete",
+        ["Series Group"] = "seriesgroup", ["Start Month"] = "startmonth", ["Start Year"] = "startyear", ["Story Arc"] = "storyarc",
+        ["Tags"] = "tags", ["Teams"] = "teams", ["Title"] = "title", ["Volume"] = "volume", ["Writer"] = "writer", ["Year"] = "year",
+        // The plugin's internal field names, which it accepts as well.
+        ["ShadowSeries"] = "series", ["ShadowNumber"] = "number", ["ShadowCount"] = "count", ["ShadowFormat"] = "format",
+        ["ShadowTitle"] = "title", ["ShadowVolume"] = "volume", ["ShadowYear"] = "year", ["LanguageISO"] = "language",
+        ["MainCharacterOrTeam"] = "maincharacter", ["StoryArc"] = "storyarc", ["SeriesGroup"] = "seriesgroup",
+        ["ScanInformation"] = "scaninfo", ["AlternateSeries"] = "altSeries", ["AlternateNumber"] = "altNumber", ["AlternateCount"] = "altCount",
+        ["CoverArtist"] = "coverartist", ["AgeRating"] = "ageRating",
+    };
+
+    /// <summary>A token name as this engine spells it, or as the plugin's editor does ("Series", "ShadowSeries"), in any case.</summary>
+    private static bool TryFindFieldResolver(string name, out TokenFieldResolver? resolver)
+    {
+        if (ByName.TryGetValue(name, out resolver))
+        {
+            return true;
+        }
+
+        if (FieldAliases.TryGetValue(name, out string? alias) && ByName.TryGetValue(alias, out resolver))
+        {
+            return true;
+        }
+
+        foreach (KeyValuePair<string, TokenFieldResolver> entry in ByName)
+        {
+            if (string.Equals(entry.Key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                resolver = entry.Value;
+                return true;
+            }
+        }
+
+        resolver = null;
+        return false;
     }
 }

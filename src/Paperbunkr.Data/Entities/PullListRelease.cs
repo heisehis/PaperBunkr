@@ -26,6 +26,13 @@ public class PullListRelease
 
     public DateTime? CoverDate { get; set; }
 
+    /// <summary>
+    /// Final order cutoff - the date shops must lock in orders by, distinct from <see cref="StoreDate"/>
+    /// (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md). Metron-only; null for
+    /// ComicVine-sourced releases and for rows fetched before this field existed.
+    /// </summary>
+    public DateTime? FocDate { get; set; }
+
     public string? CoverImageUrl { get; set; }
 
     public DateTime FetchedAt { get; set; }

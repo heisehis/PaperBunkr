@@ -72,7 +72,7 @@ public class ReadingListSourceParsingTests
     }
 
     [Fact]
-    public void ComicBookReadingOrders_DropsBlueAnnotationSpansEntirely()
+    public void ComicBookReadingOrders_BlueAnnotationSpansAreNotIssues()
     {
         string html = "<span style=\"color: #0000ff;\">Takes place during Absolute Power #3</span><p>Real Series #1</p>";
         var issues = ComicBookReadingOrdersSource.ParseIssuesFromHtml(html);

@@ -78,9 +78,26 @@ Seven tabs.
 - **Display** — default fit mode, double-page spread default, **auto-rotate landscape
   pages**, **high quality page display** (smoother scaling, more CPU), **page transition**
   style, whether jumping animates.
-- **Zoom & Navigation** — **reset zoom when turning the page**, mouse-wheel zoom speed.
+- **Zoom & Navigation** — **reset zoom when turning the page**, **skip pages tagged Deleted**
+  (on) and **Advertisement** (off) when turning the page, **pre-open the next issue** (on;
+  opens the next file in the background near the end of an issue so continuing is instant, which
+  reads it ahead of time - turn it off on a spinning disk or on battery), mouse-wheel zoom speed.
+- **Panels & Zoom** — **start in guided view** (step through a page panel by panel) and **smart
+  double-click zoom** (on: zoom to the panel under the pointer; off: the plain 200%).
+- **Tap Zones & Input** — which parts of the page a tap or click turns the page from, separately
+  for paged and continuous reading (*Default* keeps the classic behaviour; *L-shaped*, *Kindle-like*,
+  *Edge*, *Right and left* and *Disabled* follow Mihon's layouts), an **invert** option for
+  left-handed use, whether the **mouse** uses the zones, whether the **mouse side buttons** turn
+  pages, and whether a **game controller** drives the reader. Live previews show each layout.
+- **Comfort** — the **reading stats chip** default, **eye-rest reminders** (interval 10-60
+  minutes) and the **warm tint** (start and end time, strength).
+- **Profiles** — the **default profile** and the list of reader profiles (rename, delete,
+  reorder; the built-in ones are read-only). Profiles are captured from the reader's drawer.
 - **Image Adjustment** — default brightness / contrast / saturation / gamma for every
-  book (the reader toolbar adjusts further per book).
+  book (the reader toolbar adjusts further per book), plus **Auto levels** and **Sharpen** (0-3).
+- **Info panel** — show the summary straight away in the reader's info panel (off: it stays behind
+  a Show summary button because summaries can spoil).
+- **Auto-crop** — trim plain white or black scan borders from comic pages (off by default).
 - **Background & Margin** — canvas background (*Auto* app background, or a fixed **color**),
   optional **margin around the page**.
 - **Keyboard Shortcuts** — remap every reader command; **Import Layout… / Export
@@ -111,5 +128,15 @@ Manage installed plugins — see [Plugins](Plugins).
 
 ## About
 
-- **Updates** — current version, **Check for Updates**, and a toggle for checking on startup.
-- **Changelog** — every release's notes, right in the app.
+The header shows your version and build. **Copy version info** puts the version, build, Windows
+and .NET versions on the clipboard, ready to paste into a bug report. Below it are three tabs:
+
+- **Overview** — **What's new** for this release, **Check now** for updates, and the toggle for
+  checking on startup. The Project group links to the source code, this wiki, issue reporting and
+  the releases page, and its **Logs** and **Data** buttons open the folders where Paperbunkr keeps
+  its logs and your database.
+- **Changelog** — every release's notes, newest first. The version you're running is marked
+  **Current** and opens expanded.
+- **Legal & notices** — the license, the privacy notice (what stays on your computer and what can
+  leave it), the terms of use, the ComicVine & Metron notice, and the open-source notices. Each
+  opens in a reader with clickable links and a **Copy text** button.

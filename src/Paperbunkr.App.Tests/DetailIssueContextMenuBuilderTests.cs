@@ -67,6 +67,21 @@ public class DetailIssueContextMenuBuilderTests : IDisposable
     }
 
     [Fact]
+    public void Build_IssueCard_WithScrapeIssuesWired_IncludesScrapeEntry()
+    {
+        var vm = CreateViewModel();
+        vm.ScrapeIssues = _ => Task.FromResult("done");
+        var builder = new DetailIssueContextMenuBuilder(vm);
+        var issue = new IssueCardSample { Id = 1, Title = "#1", CoverBrush = Brushes.Gray };
+
+        var entries = builder.Build(issue);
+
+        var scrapeEntry = entries!.Single(e => e.Header == "Scrape…");
+        Assert.Same(vm.ScrapeIssueCommand, scrapeEntry.Command);
+        Assert.Same(issue, scrapeEntry.CommandParameter);
+    }
+
+    [Fact]
     public void Build_IssueCardWithNoFile_ShowInExplorerIsDisabled()
     {
         var builder = new DetailIssueContextMenuBuilder(CreateViewModel());

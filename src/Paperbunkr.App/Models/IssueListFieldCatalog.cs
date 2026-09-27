@@ -39,8 +39,8 @@ public static class IssueListFieldCatalog
     {
         [IssueListSortField.Number] = new(IssueListSortField.Number, "Number", SortStrategies.IssueNumber()),
         [IssueListSortField.Series] = new(IssueListSortField.Series, "Series",
-            Combine(SortStrategies.CaseInsensitiveString(r => r.SeriesName), SortStrategies.IssueNumber())),
-        [IssueListSortField.Title] = new(IssueListSortField.Title, "Title", SortStrategies.CaseInsensitiveString(r => r.Title)),
+            Combine(SortStrategies.NaturalString(r => r.SeriesName, ignoreArticles: true), SortStrategies.IssueNumber())),
+        [IssueListSortField.Title] = new(IssueListSortField.Title, "Title", SortStrategies.NaturalString(r => r.Title, ignoreArticles: true)),
         [IssueListSortField.Writer] = new(IssueListSortField.Writer, "Writer", SortStrategies.CaseInsensitiveString(r => r.Writer)),
         [IssueListSortField.Publisher] = new(IssueListSortField.Publisher, "Publisher", SortStrategies.CaseInsensitiveString(r => r.Publisher)),
         [IssueListSortField.Genre] = new(IssueListSortField.Genre, "Genre", SortStrategies.CaseInsensitiveString(r => r.Genre)),
@@ -92,19 +92,19 @@ public static class IssueListFieldCatalog
         // covering ~15 real mini-series) - grouping by Series alone can't split that apart, since
         // all 51 issues share it; Story Arc/Series Group are CE's real per-story fields for exactly
         // this anthology/imprint pattern.
-        [IssueListSortField.StoryArc] = new(IssueListSortField.StoryArc, "Story Arc", SortStrategies.CaseInsensitiveString(r => r.StoryArc)),
-        [IssueListSortField.SeriesGroup] = new(IssueListSortField.SeriesGroup, "Series Group", SortStrategies.CaseInsensitiveString(r => r.SeriesGroup)),
+        [IssueListSortField.StoryArc] = new(IssueListSortField.StoryArc, "Story Arc", SortStrategies.NaturalString(r => r.StoryArc, ignoreArticles: true)),
+        [IssueListSortField.SeriesGroup] = new(IssueListSortField.SeriesGroup, "Series Group", SortStrategies.NaturalString(r => r.SeriesGroup, ignoreArticles: true)),
         // Sortable but not groupable, matching CE's own column table precedent (id 9 File Path and
         // id 43 Bookmark Count both have no grouper in CE).
-        [IssueListSortField.FilePath] = new(IssueListSortField.FilePath, "File Path", SortStrategies.CaseInsensitiveString(r => r.FilePath)),
+        [IssueListSortField.FilePath] = new(IssueListSortField.FilePath, "File Path", SortStrategies.NaturalString(r => r.FilePath, ignoreArticles: false)),
         [IssueListSortField.BookmarkCount] = new(IssueListSortField.BookmarkCount, "Bookmark Count", (a, b) => a.BookmarkCount.CompareTo(b.BookmarkCount)),
-        [IssueListSortField.FileName] = new(IssueListSortField.FileName, "File Name", SortStrategies.CaseInsensitiveString(r => r.FileName)),
-        [IssueListSortField.FileDirectory] = new(IssueListSortField.FileDirectory, "File Directory", SortStrategies.CaseInsensitiveString(r => r.FileDirectory)),
+        [IssueListSortField.FileName] = new(IssueListSortField.FileName, "File Name", SortStrategies.NaturalString(r => r.FileName, ignoreArticles: false)),
+        [IssueListSortField.FileDirectory] = new(IssueListSortField.FileDirectory, "File Directory", SortStrategies.NaturalString(r => r.FileDirectory, ignoreArticles: false)),
         [IssueListSortField.FileModified] = new(IssueListSortField.FileModified, "File Modified", SortStrategies.Date(r => r.FileModifiedTime)),
         [IssueListSortField.FileCreated] = new(IssueListSortField.FileCreated, "File Created", SortStrategies.Date(r => r.FileCreationTime)),
         [IssueListSortField.FileFormat] = new(IssueListSortField.FileFormat, "File Format", SortStrategies.CaseInsensitiveString(r => r.FileFormat)),
         [IssueListSortField.Count] = new(IssueListSortField.Count, "Count", SortStrategies.Numeric(r => r.Count)),
-        [IssueListSortField.AlternateSeries] = new(IssueListSortField.AlternateSeries, "Alternate Series", SortStrategies.CaseInsensitiveString(r => r.AlternateSeries)),
+        [IssueListSortField.AlternateSeries] = new(IssueListSortField.AlternateSeries, "Alternate Series", SortStrategies.NaturalString(r => r.AlternateSeries, ignoreArticles: true)),
         [IssueListSortField.AlternateNumber] = new(IssueListSortField.AlternateNumber, "Alternate Number", SortStrategies.CaseInsensitiveString(r => r.AlternateNumber)),
         [IssueListSortField.AlternateCount] = new(IssueListSortField.AlternateCount, "Alternate Count", SortStrategies.Numeric(r => r.AlternateCount)),
         [IssueListSortField.Month] = new(IssueListSortField.Month, "Month", SortStrategies.Numeric(r => r.Month)),
@@ -311,7 +311,7 @@ public static class IssueListFieldCatalog
                 ? ea.CompareTo(eb)
                 : string.Compare(a, b, StringComparison.OrdinalIgnoreCase)),
         [IssueListGroupField.Alphabetical] = new(IssueListGroupField.Alphabetical, "Alphabetical",
-            r => r.SeriesName.Length > 0 && char.IsAsciiLetter(r.SeriesName[0]) ? char.ToUpperInvariant(r.SeriesName[0]).ToString() : "#",
+            r => AlphabetIndexEntry.LetterFor(r.SeriesName),
             (a, b) => string.Compare(a, b, StringComparison.OrdinalIgnoreCase)),
         [IssueListGroupField.SeriesIssueCount] = MakeGroup(IssueListGroupField.SeriesIssueCount, "Issue Count", GroupStrategies.NumericBucket(r => r.SeriesIssueCount)),
 

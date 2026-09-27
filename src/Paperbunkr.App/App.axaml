@@ -15,6 +15,32 @@
                   every real startup well before the main window shows. -->
 
     <Application.Resources>
+      <ResourceDictionary>
+        <ResourceDictionary.MergedDictionaries>
+            <!-- DataGrid's own control theme (docs/superpowers/specs/2026-09-24-scraper-review-tables-
+                 and-batch-summary-design.md §1). NOT Avalonia.Controls.DataGrid's own bundled
+                 Themes/Fluent.xaml - that one targets Avalonia's CORE <FluentTheme/>, and
+                 FluentAvalonia's own docs are explicit that running FluentAvaloniaTheme alongside core
+                 FluentTheme is unsupported (see FluentAvaloniaTheme's own comment below); a live
+                 community report (github.com/amwx/FluentAvalonia issue #30) confirms mixing them for
+                 DataGrid specifically causes unresolved-resource/binding-exception failures.
+                 FluentAvaloniaUI ships its own DataGrid styling instead - confirmed two ways, not just
+                 trusted from a search result: (1) directly inspecting this exact package version's DLL
+                 for its embedded avares:// resource manifest (FluentAvalonia.dll v3.1.0 contains
+                 Styling/ControlThemes/BasicControls/DataGrid/{DataGridStyles,DataGridCellStyles,
+                 DataGridColumnHeaderStyles,DataGridRowStyles,DataGridRowHeaderStyles,
+                 DataGridRowGroupHeaderStyles}.axaml); (2) AVLN2000 itself, when an initial
+                 <StyleInclude> attempt (the wrong host element) reported this resource's real type as
+                 Avalonia.Controls.ResourceDictionary, confirming ResourceInclude/MergedDictionaries
+                 (here) rather than Styles is the correct XAML host - and a follow-up AVLN3000/"Dots
+                 aren't allowed in type names" pair once actually pinning down the right structural
+                 placement relative to this file's own pre-existing bare resource entries below. Column
+                 bindings inside a DataGrid are always reflection bindings, even in this otherwise
+                 compiled-bindings app (confirmed Avalonia limitation, isolated to the DataGrid views
+                 that use it). NOT verified on screen - flag if the tables render unstyled. -->
+            <ResourceInclude Source="avares://FluentAvalonia/Styling/ControlThemes/BasicControls/DataGrid/DataGridStyles.axaml" />
+        </ResourceDictionary.MergedDictionaries>
+
         <!-- Design tokens from the Claude Design "Paperbunkr App" wireframe (project 43c40b25).
              These are the app's own visual identity, distinct from the installable .crpck skin
              system in docs/onboarding.md §13 - skins theme content chrome, not this shell. -->
@@ -207,6 +233,7 @@
              ApplyFontResource sets that live (it's what "no override" now resolves to; see that
              file's DefaultFontFamily field for why it's set in code, not XAML). -->
         <FontFamily x:Key="PbDisplayFontFamily">avares://Paperbunkr.App/Assets/Fonts/#Bebas Neue</FontFamily>
+      </ResourceDictionary>
     </Application.Resources>
 
     <Application.DataTemplates>

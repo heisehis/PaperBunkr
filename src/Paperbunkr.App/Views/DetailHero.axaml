@@ -92,7 +92,7 @@
                                         <Panel>
                                             <!-- Series status: the shared colour + icon chip (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #10). -->
                                             <controls:SeriesStatusChip Status="{Binding StatusKind}" IsVisible="{Binding IsStatus}" VerticalAlignment="Center" />
-                                            <controls:BrandMark Family="{Binding MarkOrDefault}" Value="{Binding MarkValue}" ShowText="True"
+                                            <controls:BrandMark Family="{Binding MarkOrDefault}" Value="{Binding MarkValue}" Year="{Binding MarkYear}" ShowText="True"
                                                                 MarkSize="15" VerticalAlignment="Center" IsVisible="{Binding IsMark}"
                                                                 Foreground="{DynamicResource PbTextBrush}" />
                                             <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" IsVisible="{Binding IsPlain}">

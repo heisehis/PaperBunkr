@@ -1,72 +1,34 @@
 using System;
-using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Services;
 
 namespace Paperbunkr.App.ViewModels;
 
-public enum MigrationOverlayMode
-{
-    Migrate,
-    Review,
-}
-
 /// <summary>
-/// Owns the migration overlay's two panels (docs/superpowers/specs/2026-08-06-migration-ux-design.md
-/// §B/§C): the Locate-&gt;...-&gt;Results migration flow (<see cref="Migration"/>) and the persistent
-/// Needs Review queue (<see cref="NeedsReview"/>). <see cref="Open"/> decides which one to show -
-/// Review if anything is pending, Migrate (freshly reset) otherwise - so reopening after a
-/// completed migration lands on outstanding review items instead of restarting at Locate.
+/// Owns the migration overlay's Locate-&gt;...-&gt;Results flow (docs/superpowers/specs/2026-08-06-migration-ux-design.md
+/// §B). The persistent Needs Review queue that used to be this overlay's second tab now lives in Preferences →
+/// Library → Library Health (docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md); this
+/// VM only holds the shared <see cref="NeedsReviewViewModel"/> so a finished migration can refresh it, and relays
+/// the Results screen's "Review in Library Health" button.
 /// </summary>
 public partial class MigrationOverlayViewModel : ViewModelBase
 {
-    public MigrationOverlayViewModel(IFilePickerService filePicker, Action<int> onOpenSeriesDetail, bool loadOnConstruction = true)
+    private readonly Action _onReviewInLibraryHealth;
+
+    public MigrationOverlayViewModel(IFilePickerService filePicker, NeedsReviewViewModel needsReview, Action onReviewInLibraryHealth)
     {
-        NeedsReview = new NeedsReviewViewModel(onOpenSeriesDetail, loadOnConstruction);
-        Migration = new MigrationViewModel(filePicker, onCompleted: () => NeedsReview.Refresh());
+        _onReviewInLibraryHealth = onReviewInLibraryHealth;
+        Migration = new MigrationViewModel(filePicker, onCompleted: () => _ = needsReview.RefreshAsync());
     }
 
     public MigrationViewModel Migration { get; }
 
-    public NeedsReviewViewModel NeedsReview { get; }
-
-    [ObservableProperty]
-    private MigrationOverlayMode _mode = MigrationOverlayMode.Migrate;
-
-    public bool IsMigrateMode => Mode == MigrationOverlayMode.Migrate;
-    public bool IsReviewMode => Mode == MigrationOverlayMode.Review;
-
-    partial void OnModeChanged(MigrationOverlayMode value)
-    {
-        OnPropertyChanged(nameof(IsMigrateMode));
-        OnPropertyChanged(nameof(IsReviewMode));
-    }
-
-    public void Open()
-    {
-        NeedsReview.Refresh();
-        if (NeedsReview.HasPendingItems)
-        {
-            Mode = MigrationOverlayMode.Review;
-        }
-        else
-        {
-            Migration.ResetToLocate();
-            Mode = MigrationOverlayMode.Migrate;
-        }
-    }
+    /// <summary>Always starts a fresh Locate step - reopening after a completed migration no longer lands on review items, that queue has its own home now.</summary>
+    public void Open() => Migration.ResetToLocate();
 
     [RelayCommand]
-    private void SwitchToReview()
-    {
-        NeedsReview.Refresh();
-        Mode = MigrationOverlayMode.Review;
-    }
+    private void ReviewInLibraryHealth() => _onReviewInLibraryHealth();
 
     [RelayCommand]
-    private void SwitchToMigrate()
-    {
-        Migration.ResetToLocate();
-        Mode = MigrationOverlayMode.Migrate;
-    }
+    private void SwitchToMigrate() => Migration.ResetToLocate();
 }

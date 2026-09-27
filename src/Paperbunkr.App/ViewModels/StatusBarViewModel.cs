@@ -62,7 +62,8 @@ public sealed partial class StatusBarViewModel : ViewModelBase
             try
             {
                 var (comics, bytes) = _libraryStatsProvider();
-                string text = $"{comics:N0} comic{(comics == 1 ? "" : "s")} · {FormatBytes(bytes)}";
+                // "issue", not "comic" - the total spans manga/manhwa/manhua too (2026-09-26 library audit).
+                string text = $"{comics:N0} issue{(comics == 1 ? "" : "s")} · {FormatBytes(bytes)}";
                 Avalonia.Threading.Dispatcher.UIThread.Post(() => ContextText = text);
             }
             catch

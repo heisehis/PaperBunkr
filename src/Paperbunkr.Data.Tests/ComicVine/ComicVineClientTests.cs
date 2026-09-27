@@ -126,11 +126,61 @@ public class ComicVineClientTests
     [Fact]
     public async Task HttpFailure_AndGarbageBody_BothBecomeComicVineException()
     {
-        var (failing, _) = Make(_ => (HttpStatusCode.InternalServerError, "boom"));
-        await Assert.ThrowsAsync<ComicVineException>(() => failing.SearchVolumesAsync("x", CancellationToken.None));
+        ComicVineClient.RetryDelay = TimeSpan.Zero;   // both paths now retry once - keep the test fast
+        try
+        {
+            var (failing, failingHandler) = Make(_ => (HttpStatusCode.InternalServerError, "boom"));
+            await Assert.ThrowsAsync<ComicVineException>(() => failing.SearchVolumesAsync("x", CancellationToken.None));
+            Assert.Equal(2, failingHandler.Requests.Count);   // retried once, then gave up
 
-        var (garbage, _) = Make(_ => (HttpStatusCode.OK, "<html>not json</html>"));
-        await Assert.ThrowsAsync<ComicVineException>(() => garbage.SearchVolumesAsync("x", CancellationToken.None));
+            var (garbage, garbageHandler) = Make(_ => (HttpStatusCode.OK, "<html>not json</html>"));
+            await Assert.ThrowsAsync<ComicVineException>(() => garbage.SearchVolumesAsync("x", CancellationToken.None));
+            Assert.Equal(2, garbageHandler.Requests.Count);
+        }
+        finally
+        {
+            ComicVineClient.RetryDelay = TimeSpan.FromMilliseconds(2500);
+        }
+    }
+
+    [Fact]
+    public async Task GetAsync_RetriesOnceOnTransientFailure_ThenSucceeds()
+    {
+        // docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md §2.2 - CE's real
+        // __get_dom retries the whole request exactly once after a flat 2.5s sleep on any transport/
+        // parse-level failure. Verified here with a stateful handler: fails the first call, succeeds
+        // the second.
+        ComicVineClient.RetryDelay = TimeSpan.Zero;
+        try
+        {
+            int calls = 0;
+            var (client, handler) = Make(_ =>
+            {
+                calls++;
+                return calls == 1 ? (HttpStatusCode.InternalServerError, "boom") : (HttpStatusCode.OK, Ok("[]", 0));
+            });
+
+            var volumes = await client.SearchVolumesAsync("x", CancellationToken.None);
+
+            Assert.Empty(volumes);
+            Assert.Equal(2, handler.Requests.Count);
+        }
+        finally
+        {
+            ComicVineClient.RetryDelay = TimeSpan.FromMilliseconds(2500);
+        }
+    }
+
+    [Fact]
+    public async Task GetAsync_ANonOneStatusCode_IsNotRetried_ItsARealAnswer()
+    {
+        // A well-formed response with a non-1 status_code (e.g. a rejected key) is an API-level answer,
+        // not a transport failure - it must not consume the retry budget.
+        var (client, handler) = Make(_ => (HttpStatusCode.OK, """{"status_code":100,"error":"Invalid API Key","results":[]}"""));
+
+        await Assert.ThrowsAsync<ComicVineException>(() => client.SearchVolumesAsync("x", CancellationToken.None));
+
+        Assert.Single(handler.Requests);
     }
 
     [Fact]
@@ -154,9 +204,9 @@ public class ComicVineClientTests
         var (client, handler) = Make(_ => (HttpStatusCode.OK, Ok("""
             {"id":4321,"name":"Endgame","issue_number":"263","site_detail_url":"https://cv/263","cover_date":"2016-05-01","store_date":"2016-05-04 00:00:00",
              "description":"<p>Al &amp; Jim <b>fight</b>.</p>","volume":{"id":91273,"name":"Spawn"},
-             "story_arc_credits":[{"name":"Endgame Arc"}],"character_credits":[{"name":"Spawn"},{"name":"Sam"}],
-             "team_credits":[],"location_credits":[{"name":"Rat City"}],
-             "person_credits":[{"name":"Todd","role":"writer, artist"},{"name":"Greg","role":"colorer"},{"name":"Nobody","role":"tea boy"}]}
+             "story_arc_credits":[{"id":501,"name":"Endgame Arc"}],"character_credits":[{"id":601,"name":"Spawn"},{"id":602,"name":"Sam"}],
+             "team_credits":[],"location_credits":[{"id":701,"name":"Rat City"}],
+             "person_credits":[{"id":801,"name":"Todd","role":"writer, artist"},{"id":802,"name":"Greg","role":"colorer"},{"id":803,"name":"Nobody","role":"tea boy"}]}
             """, 1)));
 
         var details = await ((IComicVineIssueDetailsSource)client).GetIssueDetailsAsync(4321, CancellationToken.None);
@@ -170,13 +220,18 @@ public class ComicVineClientTests
         Assert.Equal(new ComicVineDatePart(2016, 5, 1), details.PublishedDate);
         Assert.Equal(new ComicVineDatePart(2016, 5, 4), details.ReleasedDate);
         Assert.Equal("Al & Jim fight .", details.Summary);
-        Assert.Equal(new[] { "Endgame Arc" }, details.StoryArcs);
-        Assert.Equal(new[] { "Spawn", "Sam" }, details.Characters);
+        Assert.Equal(new[] { new ComicVineIdName(501, "Endgame Arc") }, details.StoryArcs);
+        Assert.Equal(new[] { new ComicVineIdName(601, "Spawn"), new ComicVineIdName(602, "Sam") }, details.Characters);
         Assert.Empty(details.Teams);
-        Assert.Equal(new[] { "Rat City" }, details.Locations);
-        Assert.Equal(new ComicVineCredit("Todd", "Writer"), details.Credits[0]);
-        Assert.Equal(new ComicVineCredit("Greg", "Colorist"), details.Credits[1]);
-        Assert.Null(details.Credits[2].Field);                                    // a role with no Paperbunkr equivalent is kept, unmapped
+        Assert.Equal(new[] { new ComicVineIdName(701, "Rat City") }, details.Locations);
+        // "writer, artist" -> Writer AND (Penciller + Inker from "artist" fanning out to both,
+        // cvdb.py:663-667 verified) - three credit rows for Todd, not one.
+        Assert.Equal(3, details.Credits.Count(c => c.Name == "Todd"));
+        Assert.Contains(new ComicVineCredit("Todd", "Writer", CreatorExternalId: 801), details.Credits);
+        Assert.Contains(new ComicVineCredit("Todd", "Penciller", CreatorExternalId: 801), details.Credits);
+        Assert.Contains(new ComicVineCredit("Todd", "Inker", CreatorExternalId: 801), details.Credits);
+        Assert.Contains(new ComicVineCredit("Greg", "Colorist", CreatorExternalId: 802), details.Credits);
+        Assert.Contains(details.Credits, c => c.Name == "Nobody" && c.Field is null);   // a role with no Paperbunkr equivalent is kept, unmapped
         Assert.Contains("/issue/4000-4321/", handler.Requests[0].RequestUri!.OriginalString);
     }
 

@@ -31,9 +31,11 @@ public sealed class ScrapeCoordinator(
     Func<PaperbunkrDbContext> createContext,
     IActivityService activity,
     Action<int> enqueueWriteBack,
-    Func<ComicProvider, ComicVineRequestPriority, IScrapeComicVine?>? createComicVine = null)
+    Func<ComicProvider, ComicVineRequestPriority, IScrapeComicVine?>? createComicVine = null,
+    Func<int, string?>? getCoverPath = null)
 {
     private readonly Func<ComicProvider, ComicVineRequestPriority, IScrapeComicVine?> _createComicVine = createComicVine ?? CreateDefaultComicVine(createContext);
+    private readonly Func<int, string?> _getCoverPath = getCoverPath ?? CoverThumbnailService.GetEffectiveCoverPath;
 
     /// <summary>The real client for a source (shared rate-limited HTTP) using the login saved under Connections, or <c>null</c> when there is none.</summary>
     public static Func<ComicProvider, ComicVineRequestPriority, IScrapeComicVine?> CreateDefaultComicVine(Func<PaperbunkrDbContext> createContext) => (provider, priority) =>
@@ -86,39 +88,51 @@ public sealed class ScrapeCoordinator(
         }
 
         var orchestrator = new ScrapeOrchestrator(comicVine, new ComicVineMatchMemory(createContext, provider), settings, provider,
-            switchTo => _createComicVine(switchTo, priority) is { } source ? (source, new ComicVineMatchMemory(createContext, switchTo)) : null);
+            switchTo => _createComicVine(switchTo, priority) is { } source ? (source, new ComicVineMatchMemory(createContext, switchTo)) : null,
+            getCoverPath: _getCoverPath);
         // A scheduled task already has its own Activity Center job; it lends it here so one run is one job, and settles it itself.
+        string? jobTitle = existingJob is null && books.Count == 1
+            ? $"Scraping {await ScrapeOrchestrator.ResolveBookLabelAsync(books[0], createContext, cancellationToken).ConfigureAwait(true)}"
+            : null;
         using var owned = existingJob is null
-            ? activity.StartJob(ActivityJobKind.Scrape, books.Count == 1 ? $"Scraping {BookLabel(books[0])}" : $"Scraping {books.Count} comics",
+            ? activity.StartJob(ActivityJobKind.Scrape, jobTitle ?? $"Scraping {books.Count} comics",
                 cancellable: true, trigger: isInteractive ? ActivityTrigger.Manual : ActivityTrigger.Scheduled)
             : null;
         var job = existingJob ?? owned!;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, job.CancellationToken);
 
-        int applied;
+        ScrapeBatchResult result;
         try
         {
             if (!isInteractive)
             {
-                applied = await orchestrator.ScrapeAsync(books, isInteractive: false, interactiveReview: null, createContext, linked.Token,
-                    onProgress: (total, index, issue) => job.Report(index, total, BookLabel(issue))).ConfigureAwait(false);
+                result = await orchestrator.ScrapeAsync(books, isInteractive: false, interactiveReview: null, createContext, linked.Token,
+                    onProgress: (phase, total, index, issue, bookLabel) => job.Report(index, total, bookLabel)).ConfigureAwait(false);
             }
             else
             {
                 var header = new ScrapeBatchHeaderViewModel(books.Count, linked.Cancel);
-                using var batch = modalHost.BeginBatch(new ScrapeBatchHeaderView { DataContext = header });
-                applied = await orchestrator.ScrapeAsync(
-                    books,
-                    isInteractive: true,
-                    (label, query, candidates, search, ct) => ShowMatchReviewAsync(orchestrator, label, query, candidates, search),
-                    createContext,
-                    linked.Token,
-                    onProgress: (total, index, issue) =>
-                    {
-                        header.ReportProgress(total, index, BookLabel(issue), ThumbnailBytes(issue));
-                        job.Report(index, total, BookLabel(issue));
-                    },
-                    interactiveIssueReview: (label, volume, issues, autoMatched, ct) => ShowIssueReviewAsync(label, issues, autoMatched)).ConfigureAwait(false);
+                using (var batch = modalHost.BeginBatch(new ScrapeBatchHeaderView { DataContext = header }))
+                {
+                    result = await orchestrator.ScrapeAsync(
+                        books,
+                        isInteractive: true,
+                        (label, query, candidates, search, ct) => ShowMatchReviewAsync(orchestrator, settings, label, query, candidates, search),
+                        createContext,
+                        linked.Token,
+                        onProgress: (phase, total, index, issue, bookLabel) =>
+                        {
+                            header.ReportProgress(phase, total, index, bookLabel, ThumbnailBytes(issue));
+                            job.Report(index, total, bookLabel);
+                        },
+                        interactiveIssueReview: (label, volume, issues, autoMatched, ct) => ShowIssueReviewAsync(orchestrator, settings, label, issues, autoMatched)).ConfigureAwait(false);
+                }
+
+                // CE's real FinishForm (docs/superpowers/specs/2026-09-24-scraper-review-tables-and-
+                // batch-summary-design.md §3.2) - a separate modal shown once the batch header/progress
+                // UI has closed, not layered above it. Never shown for an unattended run, matching the
+                // headless-automation gate every other modal in this scraper already respects.
+                await ShowBatchSummaryAsync(result).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
@@ -132,8 +146,35 @@ public sealed class ScrapeCoordinator(
             enqueueWriteBack(id);
         }
 
-        var summary = $"Applied a {ComicProviderFactory.DisplayName(orchestrator.Provider)} match to {applied} of {books.Count} comic{(books.Count == 1 ? string.Empty : "s")}.";
-        owned?.Succeed(summary, itemsProcessed: applied, itemsFailed: books.Count - applied);
+        // The real breakdown (docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md
+        // §4.1), not just the old bare "applied to N of M" - only the non-zero buckets beyond Applied
+        // are named, so a clean run still reads as the simple sentence it always did.
+        var parts = new List<string> { $"Applied a {ComicProviderFactory.DisplayName(orchestrator.Provider)} match to {result.Applied} of {books.Count} comic{(books.Count == 1 ? string.Empty : "s")}." };
+        if (result.SkippedByUser > 0) parts.Add($"{result.SkippedByUser} skipped.");
+        if (result.NoMatchFound > 0) parts.Add($"{result.NoMatchFound} no match found.");
+        if (result.Failed > 0) parts.Add($"{result.Failed} failed.");
+        // Write-back is off by default and otherwise silent - a scrape that applied metadata but never
+        // touched the .cbz files looked, to the user, like the write step had just never reported back.
+        if (result.Applied > 0)
+        {
+            using var settingsContext = createContext();
+            var app = settingsContext.GetOrCreateAppSettings();
+            if (!app.WriteMetadataToFiles)
+            {
+                parts.Add("Not written into the comic files - turn on Preferences → Advanced → Comic file metadata.");
+            }
+            else if (!app.WriteMetadataAutomatically)
+            {
+                parts.Add("Not written into the comic files yet - use Write Now… under Preferences → Advanced, or turn on automatic writing.");
+            }
+            else
+            {
+                parts.Add("Writing ComicInfo.xml into the comic files now - a second notice follows when that finishes.");
+            }
+        }
+
+        var summary = string.Join(" ", parts);
+        owned?.Succeed(summary, itemsProcessed: result.Applied, itemsFailed: result.Failed);
         return summary;
     }
 
@@ -162,20 +203,35 @@ public sealed class ScrapeCoordinator(
         return ids.Count == 0 ? Task.FromResult("Nothing left to scrape.") : ScrapeIssuesAsync(ids, isInteractive: false, cancellationToken, existingJob);
     }
 
-    /// <summary>Shown when a series' Detail page asks for the scrape panel: not for the manga family, whose sources are different.</summary>
-    public Control? CreateSeriesPanel(Series series)
+    /// <summary>Shown when a series' Detail page asks for the scrape panel: not for the manga family, whose sources are different.
+    /// <paramref name="onScraped"/> fires once the batch actually finishes (whether it applied to
+    /// anything or not) - the panel itself has no way to refresh the Issues tab's tiles it lives
+    /// beside, so without this callback every field the scrape just wrote stayed invisible until the
+    /// user navigated away from Detail and back (the panel's own "Applied a match to N of M" status
+    /// text was the only visible sign anything happened at all). Optional so every pre-existing
+    /// caller/test that doesn't pass it keeps today's exact behavior.</summary>
+    public Control? CreateSeriesPanel(Series series, Action? onScraped = null)
     {
         if (series.ContentType is ContentType.Manga or ContentType.Manhua or ContentType.Manhwa)
         {
             return null;
         }
 
-        return new SeriesScraperPanelView { DataContext = new SeriesScraperPanelViewModel(series.Name, () => ScrapeSeriesAsync(series.Id)) };
+        return new SeriesScraperPanelView
+        {
+            DataContext = new SeriesScraperPanelViewModel(series.Name, async () =>
+            {
+                string result = await ScrapeSeriesAsync(series.Id).ConfigureAwait(true);
+                onScraped?.Invoke();
+                return result;
+            }),
+        };
     }
 
     // The dialogs use a plain data fetch for the issue list: nesting a second modal inside the first crashed the original plugin when the queued modal was cancelled.
     private Task<ComicVineVolumeSearchResult?> ShowMatchReviewAsync(
         ScrapeOrchestrator orchestrator,
+        ScrapeSettings settings,
         string bookLabel,
         string initialQuery,
         IReadOnlyList<(ComicVineVolumeSearchResult Volume, double Score)> initialCandidates,
@@ -183,16 +239,37 @@ public sealed class ScrapeCoordinator(
         modalHost.ShowAsync<ComicVineVolumeSearchResult?>(resolve => new ComicVineMatchReviewDialogView
         {
             DataContext = new ComicVineMatchReviewDialogViewModel(bookLabel, initialQuery, initialCandidates, search, resolve, loadIssues: volumeId => orchestrator.LoadIssuesAsync(volumeId),
-                provider: orchestrator.Provider, switchProvider: orchestrator.TrySwitchProvider),
+                provider: orchestrator.Provider, switchProvider: orchestrator.TrySwitchProvider,
+                forceSeriesArt: settings.ForceSeriesArt, showCovers: settings.ShowCovers, findIssueCoverUrl: orchestrator.FindIssueCoverUrlAsync,
+                markPermanentlySkipped: () => MarkPermanentlySkipped(orchestrator.CurrentIssueId)),
         });
 
-    private Task<ComicVineIssueReviewResult> ShowIssueReviewAsync(string bookLabel, IReadOnlyList<ComicVineIssueSummary> issues, ComicVineIssueSummary? autoMatched) =>
+    private Task<ComicVineIssueReviewResult> ShowIssueReviewAsync(ScrapeOrchestrator orchestrator, ScrapeSettings settings, string bookLabel, IReadOnlyList<ComicVineIssueSummary> issues, ComicVineIssueSummary? autoMatched) =>
         modalHost.ShowAsync<ComicVineIssueReviewResult>(resolve => new ComicVineIssueReviewDialogView
         {
-            DataContext = new ComicVineIssueReviewDialogViewModel(bookLabel, issues, autoMatched, readOnlyPeek: false, resolve),
+            DataContext = new ComicVineIssueReviewDialogViewModel(bookLabel, issues, autoMatched, readOnlyPeek: false, resolve, settings.ShowCovers,
+                markPermanentlySkipped: () => MarkPermanentlySkipped(orchestrator.CurrentIssueId)),
         });
 
-    private static string BookLabel(Issue issue) => $"{issue.Series?.Name} #{issue.EffectiveNumber()}";
+    private Task<bool> ShowBatchSummaryAsync(ScrapeBatchResult result) =>
+        modalHost.ShowAsync<bool>(resolve => new ScrapeBatchSummaryDialogView
+        {
+            DataContext = new ScrapeBatchSummaryDialogViewModel(result, () => resolve(true)),
+        });
+
+    /// <summary>Durable "never auto-match this book again" marker (docs/superpowers/specs/2026-09-24-
+    /// comicvine-scraper-fidelity-plan.md Step 16) - CE's real <c>book.skip_forever()</c>. Synchronous
+    /// and best-effort: a failed write here shouldn't crash the dialog resolution it's called from.</summary>
+    private void MarkPermanentlySkipped(int issueId)
+    {
+        using var context = createContext();
+        var issue = context.Issues.Find(issueId);
+        if (issue is not null)
+        {
+            issue.ScrapePermanentlySkipped = true;
+            context.SaveChanges();
+        }
+    }
 
     private static byte[]? ThumbnailBytes(Issue issue)
     {

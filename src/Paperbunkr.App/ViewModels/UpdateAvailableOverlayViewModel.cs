@@ -31,18 +31,24 @@ public partial class UpdateAvailableOverlayViewModel : ViewModelBase
     [ObservableProperty]
     private AppCastItem? _info;
 
-    [ObservableProperty]
-    private string? _changelogBody;
-
     public string VersionText => Info is null ? string.Empty : $"v{Info.Version}";
 
+    /// <summary>
+    /// The offered version's GitHub release page. The overlay links here instead of showing notes: the bundled CHANGELOG.md is the
+    /// installed version's and the appcast carries none (docs/superpowers/specs/2026-09-26-about-polish-design.md §4).
+    /// </summary>
+    public string? ReleaseNotesUrl => Info?.Version is { Length: > 0 } version ? ProjectLinks.ReleaseNotes(version) : null;
+
     /// <summary>Set by <see cref="MainViewModel"/>'s startup check right before opening this overlay.</summary>
-    public void Show(AppCastItem info, string? changelogBody)
+    public void Show(AppCastItem info)
     {
         Info = info;
-        ChangelogBody = changelogBody;
         OnPropertyChanged(nameof(VersionText));
+        OnPropertyChanged(nameof(ReleaseNotesUrl));
     }
+
+    [RelayCommand]
+    private void OpenReleaseNotes() => ExternalLinks.TryOpenWeb(ReleaseNotesUrl);
 
     [RelayCommand]
     private async Task Download()

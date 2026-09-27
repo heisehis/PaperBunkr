@@ -48,6 +48,11 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
         </Style>
+        <!-- The Fluent button template paints its own grey pointer-over/pressed background, which showed as a box behind the
+             poster title (and a frame in the row gutters) under the glow ring. Cards signal hover/focus with the ring only. -->
+        <Style Selector="Button.card:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.card:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
         <Style Selector="Border.cover">
             <Setter Property="CornerRadius" Value="7" />
             <Setter Property="BorderThickness" Value="1" />
@@ -405,11 +410,8 @@
                                      skin tokens (docs/superpowers/specs/2026-09-14-library-visual-
                                      redesign-design.md §6): non-skin-reactive before, now reacts to
                                      the active skin like every other Pb*Brush-driven element. -->
-                                <Border IsVisible="{Binding HasPublisher}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="5,2"
-                                        HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
-                                    <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
-                                                        MarkSize="12" Foreground="{DynamicResource PbBadgeTextBrush}" />
-                                </Border>
+                                <controls:BrandMark Classes="coverLogo" IsVisible="{Binding HasPublisher}"
+                                                    Family="Publisher" Value="{Binding Publisher}" Year="{Binding Year}" Month="{Binding Month}" ShowText="False" />
                             </Border>
                             <!-- Rating moved bottom-left (was language - now shown in the preview panel
                                  + hover tooltip instead, docs/superpowers/specs/2026-09-14-library-
@@ -482,7 +484,7 @@
                                 </StackPanel>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                                <controls:BrandMark IsVisible="{Binding HasPublisher}" Family="Publisher" Value="{Binding Publisher}"
+                                <controls:BrandMark IsVisible="{Binding HasPublisher}" Family="Publisher" Value="{Binding Publisher}" Year="{Binding Year}" Month="{Binding Month}"
                                                     ShowText="False" MarkSize="14" />
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
@@ -585,7 +587,7 @@
                                 </controls:LazyPart.IsActive>
                                 <controls:LazyPart.ContentTemplate>
                                     <DataTemplate x:DataType="models:IssueListRow">
-                            <controls:BrandMark Family="Publisher" Value="{Binding Publisher}"
+                            <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" Year="{Binding Year}" Month="{Binding Month}"
                                                 ShowText="False" MarkSize="14" />
                                     </DataTemplate>
                                 </controls:LazyPart.ContentTemplate>
@@ -682,11 +684,8 @@
                                 </StackPanel>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                                <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="{StaticResource PbRadiusChip}" Padding="5,2"
-                                        HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
-                                    <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
-                                                        MarkSize="12" Foreground="White" />
-                                </Border>
+                                <controls:BrandMark Classes="coverLogo" IsVisible="{Binding HasPublisher}"
+                                                    Family="Publisher" Value="{Binding Publisher}" Year="{Binding PublisherYear}" ShowText="False" />
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
                                 <Button Classes="continueReading" IsVisible="{Binding HasContinueReading}"
@@ -768,7 +767,7 @@
                                 </StackPanel>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                                <controls:BrandMark IsVisible="{Binding HasPublisher}" Family="Publisher" Value="{Binding Publisher}"
+                                <controls:BrandMark IsVisible="{Binding HasPublisher}" Family="Publisher" Value="{Binding Publisher}" Year="{Binding PublisherYear}"
                                                     ShowText="False" MarkSize="14" />
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
@@ -817,7 +816,7 @@
                                Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                     <TextBlock Grid.Column="4" Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="12"
                                Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                    <controls:BrandMark Grid.Column="5" Family="Publisher" Value="{Binding Publisher}" ShowText="True"
+                    <controls:BrandMark Grid.Column="5" Family="Publisher" Value="{Binding Publisher}" Year="{Binding PublisherYear}" ShowText="True"
                                         MarkSize="13" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
                 </Grid>
                 </Border>
@@ -863,7 +862,7 @@
                                 </controls:LazyPart.IsActive>
                                 <controls:LazyPart.ContentTemplate>
                                     <DataTemplate x:DataType="models:SeriesCardSample">
-                            <controls:BrandMark Family="Publisher" Value="{Binding Publisher}"
+                            <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" Year="{Binding PublisherYear}"
                                                 ShowText="False" MarkSize="14" />
                                     </DataTemplate>
                                 </controls:LazyPart.ContentTemplate>
@@ -1004,10 +1003,8 @@
                                 </controls:LazyPart.IsActive>
                                 <controls:LazyPart.ContentTemplate>
                                     <DataTemplate x:DataType="models:IssueListRow">
-                                        <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
-                                            <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
-                                                                MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
-                                        </Border>
+                                        <controls:BrandMark Classes="coverLogo"
+                                                            Family="Publisher" Value="{Binding Publisher}" Year="{Binding Year}" Month="{Binding Month}" ShowText="False" />
                                     </DataTemplate>
                                 </controls:LazyPart.ContentTemplate>
                             </controls:LazyPart>
@@ -1065,7 +1062,8 @@
                             </controls:LazyPart>
                         </Grid>
                     </Border>
-                    <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1"
+                    <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1" ClipToBounds="True"
+                                Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterTitleTextHeight}"
                                 IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EffectiveShowTileTitles}">
                         <TextBlock Text="{Binding SeriesName}" FontSize="12" FontWeight="SemiBold"
                                    Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
@@ -1132,10 +1130,8 @@
                                 </controls:LazyPart.IsActive>
                                 <controls:LazyPart.ContentTemplate>
                                     <DataTemplate x:DataType="models:SeriesCardSample">
-                                        <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
-                                            <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
-                                                                MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
-                                        </Border>
+                                        <controls:BrandMark Classes="coverLogo"
+                                                            Family="Publisher" Value="{Binding Publisher}" Year="{Binding PublisherYear}" ShowText="False" />
                                     </DataTemplate>
                                 </controls:LazyPart.ContentTemplate>
                             </controls:LazyPart>
@@ -1212,7 +1208,8 @@
                             </controls:LazyPart>
                         </Grid>
                     </Border>
-                    <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1"
+                    <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1" ClipToBounds="True"
+                                Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterTitleTextHeight}"
                                 IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EffectiveShowTileTitles}">
                         <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
                                    Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
@@ -1249,7 +1246,11 @@
                             <Border Classes="libScrim" />
                         </Grid>
                     </Border>
-                    <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1">
+                    <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1" ClipToBounds="True"
+                                Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterTitleTextHeight}"
+                                IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EffectiveShowTileTitles}">
+                        <!-- Follows "Show titles" like the other poster tiles: the panel's ItemHeight (PosterCardHeight) drops the
+                             title row when titles are off, so an always-visible title here overlapped the next row. -->
                         <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold"
                                    Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
                                    ToolTip.Tip="{Binding Title}" />
@@ -1278,7 +1279,7 @@
                  LibraryScreen.axaml.cs (a GridLength can't bind directly to a double VM property).
                  ColumnDefinition doesn't get an auto-generated code-behind field for x:Name the way
                  Controls do, so it's accessed via RootGrid.ColumnDefinitions[2] instead. -->
-            <ColumnDefinition Width="320" MinWidth="260" MaxWidth="480" />
+            <ColumnDefinition Width="320" MinWidth="280" MaxWidth="480" />
         </Grid.ColumnDefinitions>
 
         <!-- ============ Toolbar (extracted to Views/LibraryToolbar.axaml, 4b §1) ============ -->

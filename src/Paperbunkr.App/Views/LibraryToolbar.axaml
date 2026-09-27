@@ -284,29 +284,34 @@
         <!-- ============ Selection second row ============ -->
         <Border IsVisible="{Binding HasAnySelection}" Padding="24,10"
                 Background="{DynamicResource PbAccentSoftBrush}" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="0,1,0,1">
-            <Panel>
-                <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding HasSelection}" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding SelectionCount, StringFormat='{}{0} selected'}" FontSize="13" FontWeight="SemiBold"
-                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                    <Button Classes="selAction" Command="{Binding BulkEditSelectionCommand}" Content="Bulk Edit" />
-                    <Button x:Name="LibraryPluginsButton" Classes="selAction" Classes.open="{Binding IsLibraryPluginMenuOpen}"
-                            Command="{Binding ToggleLibraryPluginMenuCommand}" Content="Plugins ▾"
-                            IsVisible="{Binding HasLibraryPluginCommands}" />
-                    <Button Classes="selAction" Command="{Binding MarkSelectionReadCommand}" Content="Mark Read" />
-                    <Button Classes="selAction" Command="{Binding MarkSelectionUnreadCommand}" Content="Mark Unread" />
-                    <Button x:Name="AddToListButton" Classes="selAction" Classes.open="{Binding IsAddToListOpen}"
-                            Command="{Binding ToggleAddToListCommand}" Content="Add to List ▾" />
-                    <Button Classes="selAction" Command="{Binding DeleteSelectionCommand}" Content="Delete" />
-                    <Button Classes="selAction" Command="{Binding ClearSelectionCommand}" Content="Clear" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding HasSeriesSelection}" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding SeriesSelectionCount, StringFormat='{}{0} series selected'}" FontSize="13" FontWeight="SemiBold"
-                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                    <Button Classes="selAction" Command="{Binding BulkEditSeriesSelectionCommand}" Content="Bulk Edit" />
-                    <Button Classes="selAction" Command="{Binding DeleteSeriesSelectionCommand}" Content="Delete" />
-                    <Button Classes="selAction" Command="{Binding ClearSeriesSelectionCommand}" Content="Clear" />
-                </StackPanel>
-            </Panel>
+            <!-- One bar for both selection kinds: Mark Read/Unread and Add to List are shared (a series selection acts on
+                 every issue of the selected series - LibraryScreenViewModel.SelectionBarIssueIds); count, Bulk Edit, Delete
+                 and Clear swap per kind. Plugins stays issue-only (its hook takes issue selections). -->
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <TextBlock Text="{Binding SelectionCount, StringFormat='{}{0} selected'}" FontSize="13" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" IsVisible="{Binding HasSelection}" />
+                <TextBlock Text="{Binding SeriesSelectionCount, StringFormat='{}{0} series selected'}" FontSize="13" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" IsVisible="{Binding !HasSelection}" />
+                <Button Classes="selAction" Command="{Binding BulkEditSelectionCommand}" Content="Bulk Edit" IsVisible="{Binding HasSelection}" />
+                <Button Classes="selAction" Command="{Binding BulkEditSeriesSelectionCommand}" Content="Bulk Edit" IsVisible="{Binding !HasSelection}" />
+                <Button x:Name="LibraryPluginsButton" Classes="selAction" Classes.open="{Binding IsLibraryPluginMenuOpen}"
+                        Command="{Binding ToggleLibraryPluginMenuCommand}" Content="Plugins ▾">
+                    <Button.IsVisible>
+                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                            <Binding Path="HasSelection" />
+                            <Binding Path="HasLibraryPluginCommands" />
+                        </MultiBinding>
+                    </Button.IsVisible>
+                </Button>
+                <Button Classes="selAction" Command="{Binding MarkSelectionReadCommand}" Content="Mark Read" />
+                <Button Classes="selAction" Command="{Binding MarkSelectionUnreadCommand}" Content="Mark Unread" />
+                <Button x:Name="AddToListButton" Classes="selAction" Classes.open="{Binding IsAddToListOpen}"
+                        Command="{Binding ToggleAddToListCommand}" Content="Add to List ▾" />
+                <Button Classes="selAction" Command="{Binding DeleteSelectionCommand}" Content="Delete" IsVisible="{Binding HasSelection}" />
+                <Button Classes="selAction" Command="{Binding DeleteSeriesSelectionCommand}" Content="Delete" IsVisible="{Binding !HasSelection}" />
+                <Button Classes="selAction" Command="{Binding ClearSelectionCommand}" Content="Clear" IsVisible="{Binding HasSelection}" />
+                <Button Classes="selAction" Command="{Binding ClearSeriesSelectionCommand}" Content="Clear" IsVisible="{Binding !HasSelection}" />
+            </StackPanel>
         </Border>
 
         <!-- ============ Popups ============ -->
@@ -427,7 +432,11 @@
                                 AutomationProperties.AutomationId="LibraryViewSortTab_Group" />
                     </StackPanel>
 
-                    <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <!-- No visible scroll bar (it took a column and ran alongside the checkboxes); the wheel and keyboard
+                         still scroll, and the bottom edge fades out while more settings sit below the fold
+                         (LibraryToolbar.axaml.cs OnViewSortScrollChanged) - 2026-09-26 library audit. -->
+                    <ScrollViewer x:Name="ViewSortScroll" MaxHeight="420" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Hidden"
+                                  ScrollChanged="OnViewSortScrollChanged">
                       <Panel>
                         <!-- View tab -->
                         <StackPanel Spacing="1" IsVisible="{Binding IsViewTabActive}">
@@ -459,39 +468,42 @@
                             <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
 
                             <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0" IsVisible="{Binding IsPosterGrid}">
-                                <TextBlock Grid.Column="0" Text="Show titles" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <TextBlock Grid.Column="0" Text="Show titles" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding ShowTileTitles}" AutomationProperties.AutomationId="LibraryShowTitlesToggle" />
                             </Grid>
                             <TextBlock Classes="dropdownRow" Text="Grid density" Foreground="{DynamicResource PbTextBrush}" Margin="0,6,0,0"
-                                       IsVisible="{Binding IsPosterGrid}" />
-                            <Slider Minimum="0.6" Maximum="1.6" Value="{Binding GridDensity}" IsVisible="{Binding IsPosterGrid}" />
+                                       IsVisible="{Binding IsGridDensityScope}" />
+                            <Slider Minimum="0.6" Maximum="1.6" Value="{Binding GridDensity}" IsVisible="{Binding IsGridDensityScope}"
+                                    AutomationProperties.Name="Grid density" />
 
                             <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
 
                             <TextBlock Classes="dropdownRow" Text="Overlay" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
-                            <Grid ColumnDefinitions="*,Auto">
+                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsOverlayBadgeScope}">
                                 <TextBlock Grid.Column="0" Text="Unread badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding ShowUnreadBadge}" />
                             </Grid>
-                            <Grid ColumnDefinitions="*,Auto">
+                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsOverlayBadgeScope}">
                                 <TextBlock Grid.Column="0" Text="Publisher badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding ShowPublisherBadge}" />
                             </Grid>
-                            <!-- "Language badge" here now only controls List/Tiles' own inline
+                            <!-- Each row below is visible only in the view modes whose templates honour it (the Is*Scope
+                                 properties on LibraryScreenViewModel) - a toggle that silently did nothing read as broken.
+                                 "Language badge" here now only controls List/Tiles' own inline
                                  language icon (docs/superpowers/specs/2026-09-14-library-visual-
                                  redesign-design.md §5 removed the CORNER version from Poster/Panorama
                                  tiles specifically - List/Tiles' inline display next to the publisher
                                  mark was never part of that corner-contention problem, so it's
                                  untouched and this toggle still does real work for it). -->
-                            <Grid ColumnDefinitions="*,Auto">
+                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsLanguageBadgeScope}">
                                 <TextBlock Grid.Column="0" Text="Language badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding ShowLanguageBadge}" />
                             </Grid>
-                            <Grid ColumnDefinitions="*,Auto">
+                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsLanguageBadgeScope}">
                                 <TextBlock Grid.Column="0" Text="Show language flag" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding UseLanguageIcon}" />
                             </Grid>
-                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsSeriesGranularity}">
+                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsContinueReadingScope}">
                                 <TextBlock Grid.Column="0" Text="Continue reading button" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding ShowContinueReadingButton}" />
                             </Grid>
@@ -507,7 +519,7 @@
                                 <TextBlock Grid.Column="0" Text="Dog-ear preview" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding DogEarThumbnails}" />
                             </Grid>
-                            <Grid ColumnDefinitions="*,Auto">
+                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsCoverOverlayScope}">
                                 <TextBlock Grid.Column="0" Text="Tooltips" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding ShowToolTips}" />
                             </Grid>
@@ -516,7 +528,7 @@
                                 <TextBlock Grid.Column="0" Text="Smooth scrolling" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding SmoothScrolling}" />
                             </Grid>
-                            <Grid ColumnDefinitions="*,Auto">
+                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsCoverOverlayScope}">
                                 <TextBlock Grid.Column="0" Text="Numeric rating badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding NumericRatingThumbnails}" />
                             </Grid>

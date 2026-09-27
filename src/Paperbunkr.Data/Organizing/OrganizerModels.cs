@@ -31,10 +31,27 @@ public enum CollisionResolution
     Skip,
 }
 
-/// <summary>One book's computed source/destination pair from <see cref="LibraryOrganizerService.PlanAsync"/>.</summary>
-public sealed record PlannedMove(Issue Issue, string SourcePath, string DestinationPath, bool IsCollision);
+/// <summary>One book's computed source/destination pair from <see cref="LibraryOrganizerService.PlanAsync"/>.
+/// <see cref="IsAlreadyInPlace"/> means the destination is exactly where the file already is (nothing to do);
+/// <see cref="Problem"/> means this book could not be planned (a bad template token, an empty file name...) and
+/// is reported as a failure of that one book instead of aborting the batch. <see cref="SkipReason"/> means the book was deliberately
+/// left alone (a required field is empty) and is reported as skipped.</summary>
+public sealed record PlannedMove(
+    Issue Issue,
+    string SourcePath,
+    string DestinationPath,
+    bool IsCollision,
+    bool IsAlreadyInPlace = false,
+    string? Problem = null,
+    string? SkipReason = null);
 
 public sealed record OrganizePlan(IReadOnlyList<PlannedMove> Moves);
+
+/// <summary>One profile's part of a multi-profile run: the profile and what it would do.</summary>
+public sealed record ProfilePlan(OrganizerProfile Profile, OrganizePlan Plan);
+
+/// <summary>One profile's part of a finished multi-profile run.</summary>
+public sealed record ProfileResult(OrganizerProfile Profile, OrganizeResult Result);
 
 /// <summary>Per-item outcome of <see cref="LibraryOrganizerService.ExecuteAsync"/> - never a single
 /// batch-wide success/failure (design doc §6's "failure isolation, per-item" rule).</summary>
@@ -43,6 +60,12 @@ public sealed class OrganizeResult
     public List<PlannedMove> Succeeded { get; } = new();
     public List<PlannedMove> Skipped { get; } = new();
     public List<(PlannedMove Move, string Error)> Failed { get; } = new();
+
+    /// <summary>Books whose file already sits at the calculated path - nothing was done, nothing was logged for undo, no write-back is wanted.</summary>
+    public List<PlannedMove> AlreadyInPlace { get; } = new();
+
+    /// <summary>Library entries whose file was replaced by another book's file (the old file went to the Recycle Bin); they were left without a file rather than pointing at someone else's.</summary>
+    public List<int> ReplacedIssueIds { get; } = new();
 }
 
 /// <summary>Outcome of <see cref="LibraryOrganizerService.UndoLastOrganizeAsync"/> - the "Undo last

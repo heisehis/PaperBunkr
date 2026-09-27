@@ -13,201 +13,188 @@
              x:Class="Paperbunkr.App.Views.Preferences.AboutSection"
              x:DataType="vm:PreferencesScreenViewModel">
 
-    <UserControl.Styles>
-        <!-- About redesign (docs/superpowers/specs/2026-09-07-about-redesign-design.md) - the
-             changelog accordion's header is a ToggleButton stripped of its default chrome so it
-             reads as a plain row, not a checkbox-shaped control. No prior ToggleButton usage exists
-             elsewhere in this codebase to mirror, so this reset is scoped to this file. -->
-        <Style Selector="ToggleButton.changelogExpandHeader">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="ToggleButton.changelogExpandHeader:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="Transparent" />
-        </Style>
-        <Style Selector="fi|SymbolIcon.changelogChevron">
-            <Setter Property="RenderTransform" Value="rotate(0deg)" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="fi|SymbolIcon.changelogChevron.expanded">
-            <Setter Property="RenderTransform" Value="rotate(90deg)" />
-        </Style>
-        <Style Selector="Border.changelogCurrentBadge">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
-            <Setter Property="Padding" Value="8,2" />
-        </Style>
-        <Style Selector="Border.changelogCategoryTag">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
-            <Setter Property="Padding" Value="7,2" />
-        </Style>
-    </UserControl.Styles>
+    <!-- About (docs/superpowers/specs/2026-09-26-about-polish-design.md §5): an identity header, then Overview / Changelog /
+         Legal & notices tabs on the shared SettingsTabStrip, one ScrollViewer per tab like the Reader section (a nested
+         ScrollViewer inside one shared scroller would fight for the wheel). Each group's Tag is a PreferenceIndex anchor naming
+         its tab, so a search hit or the "What's New" toast lands on the right one. -->
+    <Panel Name="AboutRoot">
+        <Grid RowDefinitions="Auto,Auto,*" Margin="28,20,0,0">
 
-    <Panel>
-    <ScrollViewer>
-        <StackPanel Name="Root" Margin="28,20,28,40" Spacing="20">
-
-        <!-- Identity header (docs/superpowers/specs/2026-09-07-about-redesign-design.md §Architecture 1) -->
-        <StackPanel Orientation="Horizontal" Spacing="14">
-            <Image Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png" Width="48" Height="48" />
-            <StackPanel VerticalAlignment="Center" Spacing="2">
-                <TextBlock Text="Paperbunkr" Classes="pbTextHeading" />
-                <TextBlock FontSize="13" Foreground="{DynamicResource PbTextFaintBrush}">
-                    <Run Text="Version " /><Run Text="{Binding CurrentVersion}" /><Run Text=" · Comic and manga library" />
-                </TextBlock>
-            </StackPanel>
-        </StackPanel>
-
-        <!-- Updates (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) -->
-        <StackPanel Tag="about.updates">
-            <TextBlock Classes="settingsGroupCaption" Text="UPDATES" />
-            <pref:SettingsRow Icon="Tag" Title="Version">
-                <pref:SettingsRow.SettingsContent>
-                    <StackPanel HorizontalAlignment="Right" Spacing="1">
-                        <TextBlock Text="{Binding CurrentVersion}" FontSize="13" FontFamily="Consolas,monospace"
-                                   HorizontalAlignment="Right"
-                                   Foreground="{DynamicResource PbTextBrush}" />
-                        <TextBlock Text="{Binding BuildLabel, StringFormat='build {0}'}" FontSize="11"
-                                   FontFamily="Consolas,monospace" HorizontalAlignment="Right"
-                                   IsVisible="{Binding BuildLabel, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+            <!-- Identity header: the version appears here once (Q9). -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,28,16">
+                <Image Grid.Column="0" Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png" Width="56" Height="56"
+                       VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3" Margin="16,0,12,0">
+                    <TextBlock Text="Paperbunkr" Classes="pbTextHeading" />
+                    <SelectableTextBlock Text="{Binding AboutVersionLine}" FontSize="12.5" TextWrapping="Wrap"
+                                         Foreground="{DynamicResource PbTextFaintBrush}" />
+                </StackPanel>
+                <Button Grid.Column="2" Classes="headerAction ghost" VerticalAlignment="Center"
+                        Command="{Binding CopyVersionInfoCommand}"
+                        ToolTip.Tip="Copies the version, build, Windows and .NET versions for a bug report"
+                        AutomationProperties.AutomationId="AboutCopyVersionInfo">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Panel>
+                            <fi:SymbolIcon Symbol="Copy" FontSize="{StaticResource PbIconSizeSm}" IsVisible="{Binding !VersionInfoCopied}" />
+                            <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeSm}" IsVisible="{Binding VersionInfoCopied}"
+                                           Foreground="{DynamicResource PbSuccessBrush}" />
+                        </Panel>
+                        <Panel>
+                            <TextBlock Text="Copy version info" IsVisible="{Binding !VersionInfoCopied}" />
+                            <TextBlock Text="Copied" IsVisible="{Binding VersionInfoCopied}" />
+                        </Panel>
                     </StackPanel>
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="Sparkle" Title="What's new"
-                               Description="Highlights from this release">
-                <pref:SettingsRow.SettingsContent>
-                    <Button Classes="headerAction ghost" Command="{Binding OpenWhatsNewCommand}" Content="View"
-                            AutomationProperties.AutomationId="AboutWhatsNew" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="ArrowSync" Title="Check for updates"
-                               Description="{Binding UpdateCheckResultText}">
-                <pref:SettingsRow.SettingsContent>
-                    <Button Classes="headerAction primary" Command="{Binding CheckForUpdatesCommand}" Content="Check Now" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="ArrowClockwise" Title="Check for updates on startup">
-                <pref:SettingsRow.SettingsContent>
-                    <ToggleSwitch IsChecked="{Binding CheckForUpdatesOnStartup}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-        </StackPanel>
+                </Button>
+            </Grid>
 
-        <!-- Changelog (docs/superpowers/specs/2026-09-07-about-redesign-design.md §Architecture 3) -
-             per-version accordion, current version expanded by default with a "Current" badge, any
-             number can be open at once. Category tags parsed from Body's "### Added" sub-headings
-             at the view layer only - ChangelogParser/ChangelogEntry (shared with the
-             update-available overlay) are untouched. -->
-        <Border Classes="groupBox" Tag="about.changelog">
-            <StackPanel>
-                <Border Classes="groupHeader">
-                    <TextBlock Text="Changelog" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                </Border>
-                <ItemsControl ItemsSource="{Binding ChangelogEntries}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="services:ChangelogEntry">
-                            <StackPanel Margin="14,6">
-                                <ToggleButton Name="ExpandToggle" Classes="changelogExpandHeader">
-                                    <ToggleButton.IsChecked>
-                                        <MultiBinding Converter="{x:Static views:VersionEqualsCurrentConverter.Instance}" Mode="OneTime">
-                                            <Binding Path="Version" />
-                                            <Binding Path="#Root.((vm:PreferencesScreenViewModel)DataContext).CurrentVersion" />
-                                        </MultiBinding>
-                                    </ToggleButton.IsChecked>
-                                    <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
-                                        <fi:SymbolIcon Grid.Column="0" Symbol="ChevronRight" FontSize="14"
-                                                       Classes="changelogChevron" Classes.expanded="{Binding $parent[ToggleButton].IsChecked}"
-                                                       Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Version}" FontWeight="Bold" FontSize="13"
-                                                   Foreground="{DynamicResource PbTextBrush}" Margin="8,0" VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="2" Text="{Binding Date}" FontSize="11.5"
-                                                   Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                        <Border Grid.Column="4" Classes="changelogCurrentBadge">
-                                            <Border.IsVisible>
-                                                <MultiBinding Converter="{x:Static views:VersionEqualsCurrentConverter.Instance}">
-                                                    <Binding Path="Version" />
-                                                    <Binding Path="#Root.((vm:PreferencesScreenViewModel)DataContext).CurrentVersion" />
-                                                </MultiBinding>
-                                            </Border.IsVisible>
-                                            <TextBlock Text="Current" FontSize="11" Foreground="{DynamicResource PbAccentBrush}" />
-                                        </Border>
-                                    </Grid>
-                                </ToggleButton>
-                                <StackPanel IsVisible="{Binding #ExpandToggle.IsChecked}" Margin="22,8,0,0" Spacing="8">
-                                    <ItemsControl ItemsSource="{Binding Body, Converter={x:Static views:ChangelogBodyToGroupsConverter.Instance}}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="services:ChangelogBodyGroup">
-                                                <StackPanel Spacing="4" Margin="0,0,0,4">
-                                                    <Border Classes="changelogCategoryTag" HorizontalAlignment="Left"
-                                                            IsVisible="{Binding Category, Converter={x:Static ObjectConverters.IsNotNull}}">
-                                                        <TextBlock Text="{Binding Category}" FontSize="11" Foreground="{DynamicResource PbAccentBrush}" />
-                                                    </Border>
-                                                    <ItemsControl ItemsSource="{Binding Lines}">
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate x:DataType="x:String">
-                                                                <TextBlock Text="{Binding}" FontSize="12.5" TextWrapping="Wrap"
-                                                                           Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2" />
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </Border>
+            <pref:SettingsTabStrip Grid.Row="1" Margin="0,0,28,0" Tabs="{Binding AboutTabs}" AutomationProperties.Name="About tabs" />
 
-        <!-- Legal (docs/superpowers/specs/2026-09-07-about-redesign-design.md §Architecture 2) -
-             SettingsRow-per-document, opening the in-app viewer below instead of shelling out. -->
-        <StackPanel Tag="about.legal">
-            <TextBlock Classes="settingsGroupCaption" Text="LEGAL" />
-            <pref:SettingsRow Icon="DocumentText" Title="License"
-                               Description="AGPLv3, the terms this project is released under">
-                <pref:SettingsRow.SettingsContent>
-                    <Button Classes="headerAction ghost" Command="{Binding OpenLegalDocumentCommand}" CommandParameter="LICENSE" Content="Open" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="Shield" Title="Privacy notice"
-                               Description="What stays local and what leaves your machine">
-                <pref:SettingsRow.SettingsContent>
-                    <Button Classes="headerAction ghost" Command="{Binding OpenLegalDocumentCommand}" CommandParameter="PRIVACY.md" Content="Open" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="DocumentText" Title="Terms of use"
-                               Description="Community contribution and usage terms">
-                <pref:SettingsRow.SettingsContent>
-                    <Button Classes="headerAction ghost" Command="{Binding OpenLegalDocumentCommand}" CommandParameter="TERMS.md" Content="Open" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="Warning" Title="ComicVine API notice"
-                               Description="Bring-your-own-key rules and rate limits for the ComicVine integration">
-                <pref:SettingsRow.SettingsContent>
-                    <Button Classes="headerAction ghost" Command="{Binding OpenLegalDocumentCommand}" CommandParameter="COMICVINE_NOTICE.md" Content="Open" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-        </StackPanel>
-    </StackPanel>
-    </ScrollViewer>
+            <Panel Grid.Row="2">
 
-    <controls:OverlayShell IsOpen="{Binding IsLegalDocumentViewerOpen}"
-                            CloseCommand="{Binding CloseLegalDocumentViewerCommand}"
-                            ShowCloseButton="False">
-        <views:LegalDocumentViewerOverlay />
-    </controls:OverlayShell>
+                <!-- OVERVIEW -->
+                <ScrollViewer IsVisible="{Binding AboutTabs.SelectedKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=overview}">
+                    <StackPanel Margin="0,16,28,40" Spacing="20">
+
+                        <StackPanel Tag="about.updates">
+                            <TextBlock Classes="settingsGroupCaption" Text="UPDATES" />
+                            <pref:SettingsRow Icon="Sparkle" Title="What's new" Description="Highlights from this release">
+                                <pref:SettingsRow.SettingsContent>
+                                    <Button Classes="headerAction ghost" Command="{Binding OpenWhatsNewCommand}" Content="View"
+                                            AutomationProperties.AutomationId="AboutWhatsNew" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="ArrowSync" Title="Check for updates"
+                                              Description="{Binding UpdateCheckResultText, TargetNullValue='New versions are published as GitHub releases.'}">
+                                <pref:SettingsRow.SettingsContent>
+                                    <Button Classes="headerAction primary" Command="{Binding CheckForUpdatesCommand}" Content="Check now" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="ArrowClockwise" Title="Check for updates on startup"
+                                              Description="Asks GitHub whether a newer version exists. Nothing is downloaded without asking.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <ToggleSwitch IsChecked="{Binding CheckForUpdatesOnStartup}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                        </StackPanel>
+
+                        <StackPanel Tag="about.project">
+                            <TextBlock Classes="settingsGroupCaption" Text="PROJECT" />
+                            <pref:SettingsRow Icon="Code" Title="Source code" Description="Paperbunkr on GitHub">
+                                <pref:SettingsRow.SettingsContent>
+                                    <Button Classes="headerAction ghost" Command="{Binding OpenProjectLinkCommand}"
+                                            CommandParameter="{x:Static services:ProjectLinks.Repository}" ToolTip.Tip="{x:Static services:ProjectLinks.Repository}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="Open" />
+                                            <fi:SymbolIcon Symbol="Open" FontSize="12" />
+                                        </StackPanel>
+                                    </Button>
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="BookQuestionMark" Title="Wiki" Description="How-to guides for every screen">
+                                <pref:SettingsRow.SettingsContent>
+                                    <Button Classes="headerAction ghost" Command="{Binding OpenProjectLinkCommand}"
+                                            CommandParameter="{x:Static services:ProjectLinks.Wiki}" ToolTip.Tip="{x:Static services:ProjectLinks.Wiki}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="Open" />
+                                            <fi:SymbolIcon Symbol="Open" FontSize="12" />
+                                        </StackPanel>
+                                    </Button>
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="Bug" Title="Report an issue"
+                                              Description="Opens a bug report or feature request on GitHub. Copy version info above first.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <Button Classes="headerAction ghost" Command="{Binding OpenProjectLinkCommand}"
+                                            CommandParameter="{x:Static services:ProjectLinks.NewIssue}" ToolTip.Tip="{x:Static services:ProjectLinks.NewIssue}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="Open" />
+                                            <fi:SymbolIcon Symbol="Open" FontSize="12" />
+                                        </StackPanel>
+                                    </Button>
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="Tag" Title="Releases" Description="Every version, with installers and release notes">
+                                <pref:SettingsRow.SettingsContent>
+                                    <Button Classes="headerAction ghost" Command="{Binding OpenProjectLinkCommand}"
+                                            CommandParameter="{x:Static services:ProjectLinks.Releases}" ToolTip.Tip="{x:Static services:ProjectLinks.Releases}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="Open" />
+                                            <fi:SymbolIcon Symbol="Open" FontSize="12" />
+                                        </StackPanel>
+                                    </Button>
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="Folder" Title="Logs and data"
+                                              Description="Logs holds startup and crash logs. Data holds your database, covers, backups and plugins.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button Classes="headerAction ghost" Content="Logs" Command="{Binding OpenLogsFolderCommand}"
+                                                AutomationProperties.AutomationId="AboutOpenLogsFolder" />
+                                        <Button Classes="headerAction ghost" Content="Data" Command="{Binding OpenDataFolderCommand}"
+                                                AutomationProperties.AutomationId="AboutOpenDataFolder" />
+                                    </StackPanel>
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- CHANGELOG: the same ChangelogEntryView What's New uses; empty [Unreleased] entries are hidden, and the running
+                     version's entry (or the newest one before it) is marked Current and starts expanded. -->
+                <ScrollViewer IsVisible="{Binding AboutTabs.SelectedKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=changelog}">
+                    <!-- Capped at a comfortable reading width: changelog bullets are long sentences. -->
+                    <StackPanel Margin="0,16,28,40" MaxWidth="860" HorizontalAlignment="Left" Tag="about.changelog">
+                        <ItemsControl ItemsSource="{Binding ChangelogRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="services:ChangelogRow">
+                                    <views:ChangelogEntryView Margin="0,0,0,2" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="No changelog is bundled with this build." FontSize="12.5"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !HasChangelog}" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- LEGAL & NOTICES: each row opens the in-app viewer below. -->
+                <ScrollViewer IsVisible="{Binding AboutTabs.SelectedKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=legal}">
+                    <StackPanel Margin="0,16,28,40" Spacing="20">
+                        <StackPanel Tag="about.legal">
+                            <TextBlock Classes="settingsGroupCaption" Text="DOCUMENTS" />
+                            <ItemsControl ItemsSource="{Binding LegalDocumentList}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="services:LegalDocument">
+                                        <pref:SettingsRow Icon="{Binding Icon}" Title="{Binding Title}" Description="{Binding Description}">
+                                            <pref:SettingsRow.SettingsContent>
+                                                <Button Classes="headerAction ghost" Content="Read"
+                                                        Command="{Binding #AboutRoot.((vm:PreferencesScreenViewModel)DataContext).OpenLegalDocumentCommand}"
+                                                        CommandParameter="{Binding FileName}"
+                                                        AutomationProperties.Name="{Binding Title, StringFormat='Read {0}'}" />
+                                            </pref:SettingsRow.SettingsContent>
+                                        </pref:SettingsRow>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="settingsGroupCaption" Text="BUILT WITH" />
+                            <TextBlock FontSize="12.5" TextWrapping="Wrap" LineHeight="19" Foreground="{DynamicResource PbTextMutedBrush}"
+                                       Text="Avalonia, FluentAvalonia, CommunityToolkit.Mvvm, Entity Framework Core and SQLite, Fluent System Icons, ScottPlot, Svg.Skia and NetSparkle, among others listed in Open-source notices." />
+                            <TextBlock FontSize="12.5" TextWrapping="Wrap" LineHeight="19" Foreground="{DynamicResource PbTextMutedBrush}"
+                                       Text="Metadata comes from ComicVine, Metron, AniList, MangaDex, MangaBaka and Wikidata, each under its own terms." />
+                            <TextBlock FontSize="12.5" TextWrapping="Wrap" LineHeight="19" Foreground="{DynamicResource PbTextMutedBrush}"
+                                       Text="Inspired by ComicRack and ComicRack Community Edition." />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Panel>
+        </Grid>
+
+        <controls:OverlayShell IsOpen="{Binding IsLegalDocumentViewerOpen}"
+                               CloseCommand="{Binding CloseLegalDocumentViewerCommand}"
+                               ShowCloseButton="False">
+            <views:LegalDocumentViewerOverlay />
+        </controls:OverlayShell>
     </Panel>
 </UserControl>

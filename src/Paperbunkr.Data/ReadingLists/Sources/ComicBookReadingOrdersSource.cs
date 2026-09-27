@@ -64,20 +64,36 @@ public sealed class ComicBookReadingOrdersSource : IReadingListSource
         html = Regex.Replace(html, @"<style[^>]*>.*?</style>", string.Empty, RegexOptions.Singleline);
         html = Regex.Replace(html, @"<script[^>]*>.*?</script>", string.Empty, RegexOptions.Singleline);
 
-        // A blue span is a comment/annotation ("Takes place during X"), never an issue - drop it
-        // entirely before line-splitting.
-        html = Regex.Replace(html, @"<span style=""color:\s*#0000ff;?"">.*?</span>", string.Empty, RegexOptions.Singleline);
+        // A blue span is a comment/annotation ("Takes place during X"), never an issue. It is kept as a marker line: it describes the
+        // issue that FOLLOWS it, and role detection reads it ("Tie-In", "Prelude"). Section headings (h2-h6; h1 is the page title, which
+        // would label the whole arc) are kept the same way and apply to every issue until the next heading.
+        html = Regex.Replace(html, @"<span style=""color:\s*#0000ff;?"">(.*?)</span>", m => "\n" + NoteMarker + StripTags(m.Groups[1].Value) + "\n", RegexOptions.Singleline);
+        html = Regex.Replace(html, @"<h[2-6][^>]*>(.*?)</h[2-6]>", m => "\n" + HeadingMarker + StripTags(m.Groups[1].Value) + "\n", RegexOptions.Singleline | RegexOptions.IgnoreCase);
 
-        html = Regex.Replace(html,
-            @"</p>|<br\s*/?>|</h[1-6]>|</strong>|</b>|<span style=""color:",
-            "\n<span style=\"color:",
-            RegexOptions.IgnoreCase);
+        // Every boundary becomes a newline. (This used to substitute an unclosed `<span style="color:` for `</p>`/`<br>`, which the tag
+        // strip below then closed at the NEXT `>` - swallowing any text between two such boundaries.)
+        html = Regex.Replace(html, @"</p>|<br\s*/?>|</h[1-6]>|</strong>|</b>", "\n", RegexOptions.IgnoreCase);
+        html = Regex.Replace(html, @"<span style=""color:", "\n<span style=\"color:", RegexOptions.IgnoreCase);
         html = Regex.Replace(html, "<[^>]+>", string.Empty);
 
         var result = new List<ArcIssue>();
+        string? section = null;
+        string? pendingNote = null;
         foreach (string line in html.Split('\n'))
         {
             string text = WebUtility.HtmlDecode(line).Trim();
+            if (text.StartsWith(HeadingMarker, StringComparison.Ordinal))
+            {
+                section = text[HeadingMarker.Length..].Trim();
+                continue;
+            }
+
+            if (text.StartsWith(NoteMarker, StringComparison.Ordinal))
+            {
+                pendingNote = text[NoteMarker.Length..].Trim();
+                continue;
+            }
+
             var issueMatch = Regex.Match(text, @"^(?<series>.+?)\s+#(?<number>\d+[A-Za-z]?)\b(?<rest>.*)$");
             if (!issueMatch.Success)
             {
@@ -91,11 +107,20 @@ public sealed class ComicBookReadingOrdersSource : IReadingListSource
                 int.TryParse(yearMatch.Groups[1].Value, out year);
             }
 
-            result.Add(new ArcIssue(issueMatch.Groups["series"].Value.Trim(), issueMatch.Groups["number"].Value, year, CoverImageUrl: null));
+            string? annotation = string.Join(" | ", new[] { section, pendingNote }.Where(part => !string.IsNullOrWhiteSpace(part)));
+            pendingNote = null;
+            result.Add(new ArcIssue(issueMatch.Groups["series"].Value.Trim(), issueMatch.Groups["number"].Value, year, CoverImageUrl: null,
+                Annotation: annotation.Length == 0 ? null : annotation));
         }
 
         return result;
     }
+
+    private const string NoteMarker = "@@NOTE@@";
+
+    private const string HeadingMarker = "@@HEAD@@";
+
+    private static string StripTags(string html) => WebUtility.HtmlDecode(Regex.Replace(html, "<[^>]+>", string.Empty)).Trim();
 
     public async Task<ArcOverviewInfo?> GetArcOverviewAsync(string arcId, CancellationToken cancellationToken)
     {

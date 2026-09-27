@@ -4,6 +4,7 @@ using Avalonia.Media.Immutable;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Reader;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
@@ -368,6 +369,2084 @@ public class ReaderScreenViewModelTests : IDisposable
     public void JumpBack_IsARegisteredRemappableCommand()
     {
         Assert.Contains(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderJumpBack);
+    }
+
+    // ===== Panels & zoom (docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md) =====
+
+    private static readonly Paperbunkr.App.Services.Reader.Panels.PagePanels TwoPanels = new(
+        [new Paperbunkr.App.Services.Reader.Panels.PanelRect(0.05, 0.05, 0.9, 0.42), new Paperbunkr.App.Services.Reader.Panels.PanelRect(0.05, 0.53, 0.9, 0.42)], true);
+
+    private static void WaitFor(Func<bool> condition)
+    {
+        for (int i = 0; i < 300 && !condition(); i++)
+        {
+            TestDispatcher.Drain();
+            Thread.Sleep(10);
+        }
+
+        TestDispatcher.Drain();
+    }
+
+    [Fact]
+    public void GuidedView_IsOffByDefault_AndTogglesInPagedMode()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            Assert.False(vm.IsGuidedView);
+
+            vm.ToggleGuidedViewCommand.Execute(null);
+            Assert.True(vm.IsGuidedView);
+
+            vm.ToggleGuidedViewCommand.Execute(null);
+            Assert.False(vm.IsGuidedView);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void GuidedView_RefusesInContinuousMode_AndInDoublePageLayout_WithAToast()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            var toasts = new List<ToastRequest>();
+            vm.ToastRequested += toasts.Add;
+            vm.LoadIssue(CreateLongIssue());
+            vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+
+            vm.ToggleGuidedViewCommand.Execute(null);
+
+            Assert.False(vm.IsGuidedView);
+            Assert.Equal("Guided view is for paged reading", Assert.Single(toasts).Title);
+
+            vm.SetReadingModeCommand.Execute(ReadingMode.LeftToRight);
+            SetSeriesPageLayoutMode(PageLayoutMode.Double);
+            vm.RefreshDisplaySettings();
+            toasts.Clear();
+
+            vm.ToggleGuidedViewCommand.Execute(null);
+
+            Assert.False(vm.IsGuidedView);
+            Assert.Equal("Guided view needs single-page layout", Assert.Single(toasts).Title);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void GuidedView_DetectsThePanelsOfThePageOnScreen_InTheBackground()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { PanelAnalyzer = (_, _) => TwoPanels };
+            vm.LoadIssue(CreateLongIssue());
+            Assert.Null(vm.CurrentPagePanels);
+
+            vm.ToggleGuidedViewCommand.Execute(null);
+            WaitFor(() => vm.CurrentPagePanels is not null);
+
+            Assert.Same(TwoPanels, vm.CurrentPagePanels);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void GuidedView_PanelsAreClearedOnPageChange_AndCachedForPagesSeenBefore()
+    {
+        try
+        {
+            int calls = 0;
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { PanelAnalyzer = (_, _) => { Interlocked.Increment(ref calls); return TwoPanels; } };
+            vm.LoadIssue(CreateLongIssue());
+            vm.ToggleGuidedViewCommand.Execute(null);
+            WaitFor(() => vm.CurrentPagePanels is not null);
+            Assert.Equal(1, calls);
+
+            vm.GoToPage(1);
+            Assert.Null(vm.CurrentPagePanels);                       // the old page's panels never sit on the new page
+            WaitFor(() => vm.CurrentPagePanels is not null);
+            Assert.Equal(2, calls);
+
+            vm.GoToPage(0);                                          // seen before: straight from the cache, no new analysis
+            Assert.NotNull(vm.CurrentPagePanels);
+            Assert.Equal(2, calls);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void GuidedView_ALateResultForAPageLeftBehind_IsDropped()
+    {
+        try
+        {
+            using var release = new SemaphoreSlim(0);
+            var slow = new Paperbunkr.App.Services.Reader.Panels.PagePanels([new Paperbunkr.App.Services.Reader.Panels.PanelRect(0, 0, 0.5, 0.5), new Paperbunkr.App.Services.Reader.Panels.PanelRect(0.5, 0.5, 0.5, 0.5)], true);
+            int call = 0;
+            var vm = new ReaderScreenViewModel(goBack: () => { })
+            {
+                PanelAnalyzer = (_, _) =>
+                {
+                    if (Interlocked.Increment(ref call) == 1)
+                    {
+                        release.Wait(TimeSpan.FromSeconds(20));   // page 1's analysis is slow
+                        return slow;
+                    }
+
+                    return TwoPanels;
+                },
+            };
+            vm.LoadIssue(CreateLongIssue());
+            vm.ToggleGuidedViewCommand.Execute(null);
+
+            vm.GoToPage(1);                                          // page 2 is now on screen; page 1's result is still pending
+            WaitFor(() => vm.CurrentPagePanels is not null);
+            Assert.Same(TwoPanels, vm.CurrentPagePanels);
+
+            release.Release();
+            WaitFor(() => false);
+            Thread.Sleep(100);
+            TestDispatcher.Drain();
+
+            Assert.Same(TwoPanels, vm.CurrentPagePanels);            // the late page-1 result did not replace page 2's
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void EnsurePanels_DetectsOnDemand_WhenGuidedViewIsOff()
+    {
+        try
+        {
+            int calls = 0;
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { PanelAnalyzer = (_, _) => { calls++; return TwoPanels; } };
+            vm.LoadIssue(CreateLongIssue());
+            Assert.Null(vm.CurrentPagePanels);
+            Assert.Equal(0, calls);                                  // nothing is analysed just for turning pages
+
+            vm.EnsurePanelsCommand.Execute(null);
+            vm.EnsurePanelsCommand.Execute(null);
+
+            Assert.Same(TwoPanels, vm.CurrentPagePanels);
+            Assert.Equal(1, calls);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void GuidedView_PassesTheReadingDirectionToTheDetector()
+    {
+        try
+        {
+            bool? sawRtl = null;
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { PanelAnalyzer = (_, rtl) => { sawRtl = rtl; return TwoPanels; } };
+            vm.LoadIssue(CreateLongIssue());
+            vm.SetReadingModeCommand.Execute(ReadingMode.RightToLeft);
+            vm.ToggleGuidedViewCommand.Execute(null);
+            WaitFor(() => vm.CurrentPagePanels is not null);
+
+            Assert.True(sawRtl);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void GuidedViewOnOpen_And_SmartDoubleClick_ComeFromSettings_AndProfiles()
+    {
+        try
+        {
+            SetComfortSettings(s => { s.GuidedViewOnOpen = true; s.SmartDoubleClickZoom = false; });
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+
+            vm.LoadIssue(CreateLongIssue());
+
+            Assert.True(vm.IsGuidedView);
+            Assert.False(vm.SmartDoubleClickZoom);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void GuidedViewOnOpen_ASessionProfileCanSwitchItOn()
+    {
+        try
+        {
+            int profile = CreateProfile("Panels", new ReaderProfileState(GuidedView: true));
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            Assert.False(vm.IsGuidedView);
+
+            vm.ApplySessionProfile(profile, "Panels");
+
+            Assert.True(vm.IsGuidedView);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void GuidedView_APreferencesChange_DoesNotUndoAVisitsOwnToggle()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            vm.ToggleGuidedViewCommand.Execute(null);
+            Assert.True(vm.IsGuidedView);
+
+            vm.RefreshDisplaySettings();                             // an unrelated Preferences change
+
+            Assert.True(vm.IsGuidedView);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void GuidedView_IsARegisteredRemappableCommand_PagedOnly()
+    {
+        var command = Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderToggleGuidedView);
+        Assert.Equal(new KeyGesture(Key.G), command.DefaultGesture);
+        Assert.Equal(ConflictContext.Paged, command.Context);
+    }
+
+    [Fact]
+    public void Palette_OffersGuidedView()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            var entry = Assert.Single(vm.BuildPaletteEntries(), e => e.Title == "Guided view (panel by panel)");
+            Assert.Equal("G", entry.Shortcut);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    // ===== Comfort (docs/superpowers/specs/2026-09-25-comic-reader-comfort-design.md) =====
+
+    private static void SetComfortSettings(Action<AppSettings> apply)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        apply(context.GetOrCreateAppSettings());
+        context.SaveChanges();
+    }
+
+    [Fact]
+    public void Hud_StartsHidden_ThenShowsSessionStatsOnceThereIsEnoughData()
+    {
+        try
+        {
+            SetComfortSettings(s => s.ShowSessionHud = true);
+            var now = new DateTime(2026, 9, 25, 20, 0, 0);
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { NowProvider = () => now };
+            vm.LoadIssue(CreateLongIssue());
+            Assert.True(vm.IsSessionHudVisible);
+            vm.SetUserPresent(true);
+            vm.OnSessionTick(null, EventArgs.Empty);   // the first tick only sets the clock going
+
+            vm.GoToPage(1);
+            vm.GoToPage(2);
+            vm.GoToPage(3);
+            for (int i = 0; i < 14; i++)               // a little over two active minutes
+            {
+                now = now.AddSeconds(10);
+                vm.NoteReaderInput();
+                vm.OnSessionTick(null, EventArgs.Empty);
+            }
+
+            Assert.Matches(@"^\d+ min · \d+ pages · \d+\.\d/min · ", vm.SessionHudText);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void Hud_ToggleCommand_FlipsItForTheVisit_AndPreferencesSetTheDefault()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            Assert.False(vm.IsSessionHudVisible);
+
+            vm.ToggleSessionHudCommand.Execute(null);
+            Assert.True(vm.IsSessionHudVisible);
+            Assert.NotEmpty(vm.SessionHudText);
+
+            SetComfortSettings(s => s.ShowSessionHud = true);
+            vm.RefreshDisplaySettings();
+            Assert.True(vm.IsSessionHudVisible);
+
+            SetComfortSettings(s => s.ShowSessionHud = false);
+            vm.RefreshDisplaySettings();
+            Assert.False(vm.IsSessionHudVisible);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void Hud_IsRegisteredAsARemappableCommand_WithTheDefaultKeys()
+    {
+        Assert.Equal(new KeyGesture(Key.H), Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderToggleSessionHud).DefaultGesture);
+        Assert.Equal(new KeyGesture(Key.W), Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderToggleWarmShift).DefaultGesture);
+        Assert.Equal(new KeyGesture(Key.C, KeyModifiers.Control), Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderCopyPage).DefaultGesture);
+    }
+
+    [Fact]
+    public void Nudge_RaisesOneActionableToastAfterTheInterval_AndSnoozeClosesIt()
+    {
+        try
+        {
+            SetComfortSettings(s => { s.BreakNudgesEnabled = true; s.BreakNudgeIntervalMinutes = 10; });
+            var now = new DateTime(2026, 9, 25, 20, 0, 0);
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { NowProvider = () => now };
+            var shown = new List<ToastRequest>();
+            var closed = new List<ToastRequest>();
+            vm.ToastRequested += shown.Add;
+            vm.ToastCloseRequested += closed.Add;
+            vm.LoadIssue(CreateLongIssue());
+            vm.SetUserPresent(true);
+            vm.OnSessionTick(null, EventArgs.Empty);
+
+            for (int i = 0; i < 61; i++)                // 10 minutes and 10 seconds of steady reading
+            {
+                now = now.AddSeconds(10);
+                vm.NoteReaderInput();
+                vm.OnSessionTick(null, EventArgs.Empty);
+            }
+
+            var nudge = Assert.Single(shown, t => t.Title == "Time for a break");
+            var action = Assert.Single(nudge.Actions!);
+            Assert.Equal("Snooze 10 min", action.Label);
+
+            action.Command.Execute(null);
+
+            Assert.Same(nudge, Assert.Single(closed));
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void Nudge_IsOffByDefault_AndNeverFiresWhileTheUserIsAway()
+    {
+        try
+        {
+            var now = new DateTime(2026, 9, 25, 20, 0, 0);
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { NowProvider = () => now };
+            var shown = new List<ToastRequest>();
+            vm.ToastRequested += shown.Add;
+            vm.LoadIssue(CreateLongIssue());
+            vm.SetUserPresent(true);
+            for (int i = 0; i < 200; i++)               // long past any interval, but the nudges are off
+            {
+                now = now.AddSeconds(10);
+                vm.NoteReaderInput();
+                vm.OnSessionTick(null, EventArgs.Empty);
+            }
+
+            Assert.DoesNotContain(shown, t => t.Title == "Time for a break");
+
+            SetComfortSettings(s => { s.BreakNudgesEnabled = true; s.BreakNudgeIntervalMinutes = 10; });
+            vm.RefreshDisplaySettings();
+            vm.SetUserPresent(false);
+            for (int i = 0; i < 200; i++)
+            {
+                now = now.AddSeconds(10);
+                vm.OnSessionTick(null, EventArgs.Empty);
+            }
+
+            Assert.DoesNotContain(shown, t => t.Title == "Time for a break");
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void Nudge_AnOpenToastIsClosedWhenTheReaderIsLeft()
+    {
+        try
+        {
+            SetComfortSettings(s => { s.BreakNudgesEnabled = true; s.BreakNudgeIntervalMinutes = 10; });
+            var now = new DateTime(2026, 9, 25, 20, 0, 0);
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { NowProvider = () => now };
+            var closed = new List<ToastRequest>();
+            vm.ToastCloseRequested += closed.Add;
+            vm.LoadIssue(CreateLongIssue());
+            vm.SetUserPresent(true);
+            vm.OnSessionTick(null, EventArgs.Empty);
+            for (int i = 0; i < 61; i++)
+            {
+                now = now.AddSeconds(10);
+                vm.NoteReaderInput();
+                vm.OnSessionTick(null, EventArgs.Empty);
+            }
+
+            vm.GoBackCommand.Execute(null);
+
+            Assert.Single(closed);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void WarmShift_FollowsTheSchedule_AndTheToggleForcesItForTheVisit()
+    {
+        try
+        {
+            SetComfortSettings(s => { s.WarmShiftEnabled = true; s.WarmShiftStartMinutes = 21 * 60; s.WarmShiftEndMinutes = 7 * 60; s.WarmShiftStrength = 50; });
+            var now = new DateTime(2026, 9, 25, 22, 0, 0);
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { NowProvider = () => now };
+            var toasts = new List<ToastRequest>();
+            vm.ToastRequested += toasts.Add;
+            vm.LoadIssue(CreateLongIssue());
+            Assert.Equal(0.5, vm.Warmth, 6);
+
+            now = new DateTime(2026, 9, 26, 12, 0, 0);
+            vm.OnSessionTick(null, EventArgs.Empty);
+            Assert.Equal(0, vm.Warmth);
+
+            vm.ToggleWarmShiftCommand.Execute(null);      // noon, forced on
+            Assert.Equal(0.5, vm.Warmth, 6);
+            Assert.Equal("Warm tint on", toasts[^1].Title);
+
+            vm.ToggleWarmShiftCommand.Execute(null);
+            Assert.Equal(0, vm.Warmth);
+            Assert.Equal("Warm tint off", toasts[^1].Title);
+
+            vm.ToggleWarmShiftCommand.Execute(null);
+            vm.GoBackCommand.Execute(null);               // leaving drops the override
+            Assert.Equal(0, vm.Warmth);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void WarmShift_IsOffByDefault()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { NowProvider = () => new DateTime(2026, 9, 25, 23, 0, 0) };
+            vm.LoadIssue(CreateLongIssue());
+
+            Assert.Equal(0, vm.Warmth);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void WarmShift_ASessionProfileCanSwitchItOnAndSetItsStrength()
+    {
+        try
+        {
+            int profile = CreateProfile("Cosy", new ReaderProfileState(WarmShiftEnabled: true, WarmShiftStrength: 80));
+            SetComfortSettings(s => { s.WarmShiftStartMinutes = 0; s.WarmShiftEndMinutes = 1439; });
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { NowProvider = () => new DateTime(2026, 9, 25, 12, 0, 0) };
+            vm.LoadIssue(CreateLongIssue());
+            Assert.Equal(0, vm.Warmth);
+
+            vm.ApplySessionProfile(profile, "Cosy");
+
+            Assert.Equal(0.8, vm.Warmth, 6);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public async Task CopyPage_HandsTheDecodedPageToTheClipboard_AndToasts()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            Avalonia.Media.Imaging.Bitmap? copied = null;
+            vm.BitmapClipboardWriter = bitmap =>
+            {
+                copied = bitmap;
+                return Task.FromResult(true);
+            };
+            var toasts = new List<ToastRequest>();
+            vm.ToastRequested += toasts.Add;
+            vm.LoadIssue(CreateLongIssue());
+
+            await vm.CopyPageCommand.ExecuteAsync(null);
+
+            Assert.NotNull(copied);
+            Assert.Equal(64, copied!.PixelSize.Width);
+            Assert.Equal(96, copied.PixelSize.Height);
+            var toast = Assert.Single(toasts);
+            Assert.Equal("Page copied", toast.Title);
+            Assert.Equal("Page 1", toast.Message);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public async Task CopyPage_ReportsAnError_WhenTheClipboardIsUnavailable()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { BitmapClipboardWriter = _ => Task.FromResult(false) };
+            var toasts = new List<ToastRequest>();
+            vm.ToastRequested += toasts.Add;
+            vm.LoadIssue(CreateLongIssue());
+
+            await vm.CopyPageCommand.ExecuteAsync(null);
+
+            Assert.Equal(ToastSeverity.Error, Assert.Single(toasts).Severity);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public async Task CopyWhatYouSee_CopiesTheStitchedSpreadWhenAPairIsShowing_AndThePageOtherwise()
+    {
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        var sizes = new List<Avalonia.PixelSize>();
+        var titles = new List<string>();
+        vm.BitmapClipboardWriter = bitmap =>
+        {
+            sizes.Add(bitmap.PixelSize);
+            return Task.FromResult(true);
+        };
+        vm.ToastRequested += t => titles.Add(t.Title);
+        vm.LoadIssue(_issue3Id);
+
+        await vm.CopyWhatYouSeeCommand.ExecuteAsync(null);      // the cover is alone
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[1]);
+        Assert.True(vm.IsSpreadShowing);
+        await vm.CopyWhatYouSeeCommand.ExecuteAsync(null);      // pages 2+3 as a pair
+        await vm.CopyPageCommand.ExecuteAsync(null);            // explicitly just page 2
+
+        Assert.Equal(new Avalonia.PixelSize(64, 96), sizes[0]);
+        Assert.Equal(new Avalonia.PixelSize(128, 96), sizes[1]);
+        Assert.Equal(new Avalonia.PixelSize(64, 96), sizes[2]);
+        Assert.Equal(["Page copied", "Spread copied", "Page copied"], titles);
+    }
+
+    [Fact]
+    public void ContextMenu_OffersSpreadItemsOnlyWhileASpreadIsShowing()
+    {
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue3Id);
+        var builder = new ReaderPageContextMenuBuilder(vm);
+
+        var solo = builder.Build(null)!.Select(e => e.Header).ToList();
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[1]);
+        var paired = builder.Build(null)!.Select(e => e.Header).ToList();
+
+        Assert.Contains("Copy Page", solo);
+        Assert.DoesNotContain("Copy Spread", solo);
+        Assert.DoesNotContain("Save Spread as PNG…", solo);
+        Assert.Contains("Copy Spread", paired);
+        Assert.Contains("Save Spread as PNG…", paired);
+        Assert.Contains("Save Spread as JPEG…", paired);
+        Assert.Contains("Save Page as PNG…", paired);
+    }
+
+    [Fact]
+    public void Palette_OffersTheComfortAndCopyEntries()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            var titles = vm.BuildPaletteEntries().Select(e => e.Title).ToList();
+
+            Assert.Contains("Copy page", titles);
+            Assert.Contains("Toggle reading stats", titles);
+            Assert.Contains("Toggle warm tint", titles);
+            Assert.DoesNotContain("Copy spread", titles);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    // ===== Profiles (docs/superpowers/specs/2026-09-25-comic-reader-profiles-design.md) =====
+
+    private static int CreateProfile(string name, ReaderProfileState state) =>
+        new WorkspaceService().Create(WorkspaceScreen.Reader, name, ReaderProfileStateJson.Serialize(state)).Id;
+
+    private void PointSeriesAtProfile(int? profileId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.Series.Find(_seriesId)!.ReaderProfileId = profileId;
+        context.SaveChanges();
+    }
+
+    [Fact]
+    public void Load_AppliesTheSeriesProfile_UnderTheSeriesAndIssueOverrides()
+    {
+        try
+        {
+            int profile = CreateProfile("Night", new ReaderProfileState(FitMode: ImageFitMode.FitHeight, Brightness: 10, ImageBackgroundMode: ImageBackgroundMode.Color, BackgroundColor: "#101010", PageMarginEnabled: true, PageMarginPercentWidth: 0.2));
+            PointSeriesAtProfile(profile);
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+
+            vm.LoadIssue(CreateLongIssue());
+
+            Assert.Equal("Night", vm.ActiveProfileName);
+            Assert.Equal(ImageFitMode.FitHeight, vm.FitMode);
+            Assert.Equal(10, vm.Brightness);
+            Assert.Equal(0.8, vm.PageMarginMultiplier, 3);
+
+            // The series' own fit override still beats a pointer profile.
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                context.Series.Find(_seriesId)!.PageFitModeOverride = ImageFitMode.FitWidth;
+                context.SaveChanges();
+            }
+
+            vm.LoadIssue(vm.LoadedIssue!.Id);
+            Assert.Equal(ImageFitMode.FitWidth, vm.FitMode);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void SessionProfile_WinsOverSeriesOverrides_WithoutWritingAnyRow()
+    {
+        try
+        {
+            int profile = CreateProfile("Webtoon-ish", new ReaderProfileState(FitMode: ImageFitMode.FitHeight, Brightness: 12, Contrast: -4));
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                context.Series.Find(_seriesId)!.PageFitModeOverride = ImageFitMode.FitWidth;
+                context.SaveChanges();
+            }
+
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            Assert.Equal(ImageFitMode.FitWidth, vm.FitMode);
+
+            vm.ApplySessionProfile(profile, "Webtoon-ish");
+
+            Assert.Equal(ImageFitMode.FitHeight, vm.FitMode);
+            Assert.Equal(12, vm.Brightness);
+            Assert.Equal(-4, vm.Contrast);
+            Assert.Equal("Webtoon-ish", vm.ActiveProfileName);
+            using var context2 = PaperbunkrDb.CreateContext();
+            var issue = context2.Issues.Find(vm.LoadedIssue!.Id)!;
+            Assert.Null(issue.PageFitModeOverride);
+            Assert.Null(issue.BrightnessOverride);
+            Assert.Null(issue.ContrastOverride);
+            Assert.Equal(ImageFitMode.FitWidth, context2.Series.Find(_seriesId)!.PageFitModeOverride);
+            Assert.Null(context2.Series.Find(_seriesId)!.ReaderProfileId);
+            Assert.Null(context2.GetOrCreateAppSettings().DefaultReaderProfileId);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void SessionProfile_SurvivesLoadingAnotherIssue_AndIsClearedByGoBack()
+    {
+        try
+        {
+            int profile = CreateProfile("Night", new ReaderProfileState(Brightness: 15));
+            bool wentBack = false;
+            var vm = new ReaderScreenViewModel(goBack: () => wentBack = true);
+            vm.LoadIssue(CreateLongIssue());
+            vm.ApplySessionProfile(profile, "Night");
+
+            vm.LoadIssue(_issue1Id);
+            Assert.Equal("Night", vm.ActiveProfileName);
+            Assert.Equal(15, vm.Brightness);
+
+            vm.GoBackCommand.Execute(null);
+            Assert.True(wentBack);
+
+            vm.LoadIssue(_issue1Id);
+            Assert.Equal("Standard", vm.ActiveProfileName);
+            Assert.Equal(0, vm.Brightness);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void StandardSession_IgnoresTheSeriesPointer_AndRestoresPlainValues()
+    {
+        try
+        {
+            int profile = CreateProfile("Night", new ReaderProfileState(Brightness: 15));
+            PointSeriesAtProfile(profile);
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            Assert.Equal(15, vm.Brightness);
+
+            vm.ApplySessionProfile(ReaderProfileSelector.StandardSessionId, "Standard");
+
+            Assert.Equal("Standard", vm.ActiveProfileName);
+            Assert.Equal(0, vm.Brightness);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void ManualAdjustment_AfterASwitch_StillWritesTheIssueOverride_AsADeltaOverTheProfile()
+    {
+        try
+        {
+            int profile = CreateProfile("Night", new ReaderProfileState(Brightness: 10));
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            vm.ApplySessionProfile(profile, "Night");
+
+            vm.Brightness = 25;
+
+            using var context = PaperbunkrDb.CreateContext();
+            Assert.Equal(15f, context.Issues.Find(vm.LoadedIssue!.Id)!.BrightnessOverride);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void SessionProfile_TapZoneChange_ShowsTheZonesBriefly_AndToasts()
+    {
+        try
+        {
+            int profile = CreateProfile("Zoned", new ReaderProfileState(PagedTapZoneLayout: TapZoneLayout.LShaped));
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            var toasts = new List<ToastRequest>();
+            vm.ToastRequested += toasts.Add;
+            vm.LoadIssue(CreateLongIssue());
+
+            vm.ApplySessionProfile(profile, "Zoned");
+
+            Assert.Equal(TapZoneLayout.LShaped, vm.PagedTapZoneLayout);
+            Assert.True(vm.IsTapZoneFlashVisible);
+            Assert.Equal("Profile: Zoned", Assert.Single(toasts).Title);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void NextProfile_CyclesStandardThenEachProfile_ThenBackToStandard()
+    {
+        try
+        {
+            new WorkspaceService().EnsureBuiltInsSeeded();
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            var seen = new List<string>();
+
+            for (int i = 0; i < 5; i++)
+            {
+                vm.NextProfileCommand.Execute(null);
+                seen.Add(vm.ActiveProfileName);
+            }
+
+            Assert.Equal(["Manga night", "Webtoon", "Tablet", "Standard", "Manga night"], seen);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void SaveCurrentAsProfile_CapturesTheLiveLook_AndSwitchesToIt()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            vm.FitMode = ImageFitMode.FitHeight;
+            vm.Brightness = 7;
+
+            vm.SaveCurrentAsProfileNamed("Mine");
+
+            Assert.Equal("Mine", vm.ActiveProfileName);
+            Assert.True(vm.CanUpdateActiveProfile);
+            var row = Assert.Single(new WorkspaceService().List(WorkspaceScreen.Reader), r => r.Name == "Mine");
+            var state = ReaderProfileStateJson.Deserialize(row.StateJson);
+            Assert.Equal(ImageFitMode.FitHeight, state.FitMode);
+            Assert.Equal(7, state.Brightness);
+            Assert.NotNull(state.ImageBackgroundMode);
+            Assert.NotNull(state.PagedTapZoneLayout);
+
+            // Saving under the same name updates rather than duplicating.
+            vm.Brightness = 9;
+            vm.SaveCurrentAsProfileNamed("mine");
+            Assert.Single(new WorkspaceService().List(WorkspaceScreen.Reader), r => r.Name == "Mine");
+            Assert.Equal(9, ReaderProfileStateJson.Deserialize(new WorkspaceService().List(WorkspaceScreen.Reader).Single(r => r.Name == "Mine").StateJson).Brightness);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void UpdateActiveProfile_IsOnlyForUserProfiles()
+    {
+        try
+        {
+            new WorkspaceService().EnsureBuiltInsSeeded();
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            vm.NextProfileCommand.Execute(null);      // a built-in
+            Assert.False(vm.CanUpdateActiveProfile);
+
+            vm.Brightness = 33;
+            vm.UpdateActiveProfileCommand.Execute(null);
+
+            var builtIn = new WorkspaceService().List(WorkspaceScreen.Reader).First(r => r.Name == vm.ActiveProfileName);
+            Assert.NotEqual(33, ReaderProfileStateJson.Deserialize(builtIn.StateJson).Brightness);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void UseProfileForSeries_AndAsDefault_WriteThePointers_AndClearSeriesProfileRemovesIt()
+    {
+        try
+        {
+            int profile = CreateProfile("Night", new ReaderProfileState(Brightness: 15));
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            vm.ApplySessionProfile(profile, "Night");
+
+            vm.UseProfileForSeriesCommand.Execute(null);
+            vm.UseProfileAsDefaultCommand.Execute(null);
+
+            Assert.True(vm.HasSeriesProfile);
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                Assert.Equal(profile, context.Series.Find(_seriesId)!.ReaderProfileId);
+                Assert.Equal(profile, context.GetOrCreateAppSettings().DefaultReaderProfileId);
+            }
+
+            vm.ClearSeriesProfileCommand.Execute(null);
+
+            Assert.False(vm.HasSeriesProfile);
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                Assert.Null(context.Series.Find(_seriesId)!.ReaderProfileId);
+            }
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void DefaultProfile_AppliesToASeriesWithNoPointer()
+    {
+        try
+        {
+            int profile = CreateProfile("Night", new ReaderProfileState(Brightness: 15));
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                context.GetOrCreateAppSettings().DefaultReaderProfileId = profile;
+                context.SaveChanges();
+            }
+
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            Assert.Equal("Night", vm.ActiveProfileName);
+            Assert.Equal(15, vm.Brightness);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void DeletedProfilePointer_FallsBackToPlainSettings()
+    {
+        try
+        {
+            PointSeriesAtProfile(9999);
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+
+            vm.LoadIssue(CreateLongIssue());
+
+            Assert.Equal("Standard", vm.ActiveProfileName);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void ProfileList_HoldsStandardFirst_AndMarksTheActiveOne()
+    {
+        try
+        {
+            new WorkspaceService().EnsureBuiltInsSeeded();
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            Assert.Equal(["Standard", "Manga night", "Webtoon", "Tablet"], vm.Profiles.Select(r => r.Name));
+            Assert.True(vm.Profiles[0].IsActive);
+
+            vm.Profiles[2].SelectCommand.Execute(null);
+
+            Assert.Equal("Webtoon", vm.ActiveProfileName);
+            Assert.True(vm.Profiles[2].IsActive);
+            Assert.False(vm.Profiles[0].IsActive);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void NextProfile_IsARegisteredRemappableCommand()
+    {
+        var command = Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderNextProfile);
+        Assert.Equal(new KeyGesture(Key.P), command.DefaultGesture);
+    }
+
+    // ===== Reach (docs/superpowers/specs/2026-09-25-comic-reader-reach-design.md) =====
+
+    [Fact]
+    public void Palette_GoToPage_JumpsThroughTheJumpPath_AndShowsTheBackChip()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            vm.Palette.OpenGoToPage();
+            vm.Palette.Query = "page 11";
+            vm.Palette.ExecuteSelectedCommand.Execute(null);
+            TestDispatcher.Drain(); // the entry runs one dispatcher tick after the palette closes
+
+            Assert.False(vm.Palette.IsOpen);
+            Assert.Equal("PAGE 11 / 12", vm.PageLabel);
+            Assert.True(vm.HasJumpBack);
+            Assert.Equal("Back to page 1", vm.JumpBackLabel);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void Palette_EntriesCoverTheReadingActions_WithCurrentShortcuts()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            var entries = vm.BuildPaletteEntries();
+
+            Assert.Contains(entries, e => e.Title == "Toggle fullscreen" && e.Shortcut == "F");
+            Assert.Contains(entries, e => e.Title == "Next page" && e.Shortcut == "PageDown");
+            Assert.Contains(entries, e => e.Title == "Show tap zones");
+            Assert.Contains(entries, e => e.Title == "Rate this issue…");
+            Assert.Contains(entries, e => e.Title == "Go to page…");
+            Assert.Contains(entries, e => e.Title.StartsWith("Reading mode: Right to Left"));
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void Palette_ToggleCommandPalette_OpensAndCloses()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            vm.ToggleCommandPaletteCommand.Execute(null);
+            Assert.True(vm.Palette.IsOpen);
+            vm.ToggleCommandPaletteCommand.Execute(null);
+            Assert.False(vm.Palette.IsOpen);
+
+            vm.OpenGoToPageCommand.Execute(null);
+            Assert.True(vm.Palette.IsGoToPageMode);
+            vm.OpenGoToPageCommand.Execute(null);
+            Assert.False(vm.Palette.IsOpen);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void PaletteAndGoToPage_AreRegisteredRemappableCommands()
+    {
+        var palette = Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderCommandPalette);
+        Assert.Equal(new KeyGesture(Key.K, KeyModifiers.Control), palette.DefaultGesture);
+        var goTo = Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderGoToPage);
+        Assert.Equal(new KeyGesture(Key.G, KeyModifiers.Control), goTo.DefaultGesture);
+    }
+
+    [Fact]
+    public void Load_ReadsTheReadingOrderKeys_AndTheDefaultInputSettings()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            Assert.Equal([new KeyGesture(Key.PageDown), new KeyGesture(Key.Space), new KeyGesture(Key.MediaNextTrack)], vm.NextPageKey);
+            Assert.Equal([new KeyGesture(Key.PageUp), new KeyGesture(Key.Space, KeyModifiers.Shift), new KeyGesture(Key.MediaPreviousTrack)], vm.PreviousPageKey);
+            Assert.True(vm.ExtraMouseButtonsTurnPages);
+            Assert.True(vm.TapZonesForMouse);
+            Assert.Equal(TapZoneLayout.Default, vm.PagedTapZoneLayout);
+            Assert.Equal(TapZoneLayout.Disabled, vm.ContinuousTapZoneLayout);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void RefreshDisplaySettings_PicksUpTapZoneChangesMadeInPreferences()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                var settings = context.GetOrCreateAppSettings();
+                settings.PagedTapZoneLayout = TapZoneLayout.Edge;
+                settings.PagedTapZoneInvert = TapZoneInvert.Horizontal;
+                settings.ExtraMouseButtonsTurnPages = false;
+                context.SaveChanges();
+            }
+
+            vm.RefreshDisplaySettings();
+
+            Assert.Equal(TapZoneLayout.Edge, vm.PagedTapZoneLayout);
+            Assert.Equal(TapZoneInvert.Horizontal, vm.PagedTapZoneInvert);
+            Assert.False(vm.ExtraMouseButtonsTurnPages);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void ShowTapZoneFlash_ShowsTheActiveLayout_AndExpires()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            vm.ShowTapZoneFlash();
+
+            Assert.True(vm.IsTapZoneFlashVisible);
+            Assert.Equal(vm.PagedTapZoneLayout, vm.TapZoneFlashLayout);
+
+            vm.OnTapZoneFlashExpired(null, EventArgs.Empty);
+
+            Assert.False(vm.IsTapZoneFlashVisible);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    // ===== Page skipping (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md 2) =====
+
+    private static void TagPages(int issueId, PageType type, params int[] pages)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        foreach (int page in pages)
+        {
+            context.IssuePages.Add(new IssuePage { IssueId = issueId, PageNumber = page, PageType = type });
+        }
+
+        context.SaveChanges();
+    }
+
+    private static void SetSkipSettings(bool deleted, bool advertisements)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var settings = context.GetOrCreateAppSettings();
+        settings.SkipDeletedPages = deleted;
+        settings.SkipAdvertisementPages = advertisements;
+        context.SaveChanges();
+    }
+
+    private ReaderScreenViewModel OpenLongIssueWithTags(PageType type, params int[] pages)
+    {
+        int issueId = CreateLongIssue();
+        TagPages(issueId, type, pages);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(issueId);
+        return vm;
+    }
+
+    [Fact]
+    public void NextPage_SkipsADeletedPage_ByDefault_AndShowsTheHint()
+    {
+        try
+        {
+            var vm = OpenLongIssueWithTags(PageType.Deleted, 1);
+
+            vm.NextPageCommand.Execute(null);
+
+            Assert.Equal("PAGE 3 / 12", vm.PageLabel);
+            Assert.True(vm.HasSkippedPagesHint);
+            Assert.Equal("Skipped 1 page", vm.SkippedPagesHint);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void NextPage_SkipsARunOfDeletedPages_AndCountsThem()
+    {
+        try
+        {
+            var vm = OpenLongIssueWithTags(PageType.Deleted, 1, 2, 3);
+
+            vm.NextPageCommand.Execute(null);
+
+            Assert.Equal("PAGE 5 / 12", vm.PageLabel);
+            Assert.Equal("Skipped 3 pages", vm.SkippedPagesHint);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void NextPage_DoesNotSkipAdvertisements_ByDefault()
+    {
+        try
+        {
+            var vm = OpenLongIssueWithTags(PageType.Advertisement, 1);
+
+            vm.NextPageCommand.Execute(null);
+
+            Assert.Equal("PAGE 2 / 12", vm.PageLabel);
+            Assert.False(vm.HasSkippedPagesHint);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void NextPage_SkipsAdvertisements_WhenTheSettingIsOn()
+    {
+        try
+        {
+            SetSkipSettings(deleted: true, advertisements: true);
+            var vm = OpenLongIssueWithTags(PageType.Advertisement, 1);
+
+            vm.NextPageCommand.Execute(null);
+
+            Assert.Equal("PAGE 3 / 12", vm.PageLabel);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void NextPage_DeletedSkippingOff_LandsOnTheDeletedPage()
+    {
+        try
+        {
+            SetSkipSettings(deleted: false, advertisements: false);
+            var vm = OpenLongIssueWithTags(PageType.Deleted, 1);
+
+            vm.NextPageCommand.Execute(null);
+
+            Assert.Equal("PAGE 2 / 12", vm.PageLabel);
+            Assert.False(vm.HasSkippedPagesHint);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void PreviousPage_SkipsBackwardOverDeletedPages()
+    {
+        try
+        {
+            var vm = OpenLongIssueWithTags(PageType.Deleted, 3);
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[4]);
+            Assert.Equal("PAGE 5 / 12", vm.PageLabel);
+
+            vm.PreviousPageCommand.Execute(null);
+
+            Assert.Equal("PAGE 3 / 12", vm.PageLabel);
+            Assert.Equal("Skipped 1 page", vm.SkippedPagesHint);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void NextPage_EveryPageAheadSkippable_ShowsTheEndCard_AndStaysPut()
+    {
+        try
+        {
+            var vm = OpenLongIssueWithTags(PageType.Deleted, 10, 11);
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[9]);
+
+            vm.NextPageCommand.Execute(null);
+
+            Assert.Equal(ChapterTransitionState.EndCard, vm.ChapterTransitionState);
+            Assert.Equal("PAGE 10 / 12", vm.PageLabel);
+            Assert.False(vm.HasSkippedPagesHint);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void PreviousPage_EveryPageBehindSkippable_DoesNotMove()
+    {
+        try
+        {
+            var vm = OpenLongIssueWithTags(PageType.Deleted, 0, 1);
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[2]);
+
+            vm.PreviousPageCommand.Execute(null);
+
+            Assert.Equal("PAGE 3 / 12", vm.PageLabel);
+            Assert.False(vm.HasSkippedPagesHint);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void ThumbnailJump_LandsOnASkippablePage_WithoutSkipping()
+    {
+        try
+        {
+            var vm = OpenLongIssueWithTags(PageType.Deleted, 3);
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[3]);
+
+            Assert.Equal("PAGE 4 / 12", vm.PageLabel);
+            Assert.False(vm.HasSkippedPagesHint);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void SkippedPagesHint_ClearsOnExpiry_AndOnTheNextPageTurn()
+    {
+        try
+        {
+            var vm = OpenLongIssueWithTags(PageType.Deleted, 1, 5);
+
+            vm.NextPageCommand.Execute(null);
+            Assert.True(vm.HasSkippedPagesHint);
+            vm.OnSkippedPagesHintExpired(null, EventArgs.Empty);
+            Assert.False(vm.HasSkippedPagesHint);
+            Assert.Null(vm.SkippedPagesHint);
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[0]);
+            vm.NextPageCommand.Execute(null);
+            Assert.True(vm.HasSkippedPagesHint);
+            vm.NextPageCommand.Execute(null);
+            Assert.False(vm.HasSkippedPagesHint);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void RetaggingAPage_TakesEffectOnTheNextTurn_WithoutReloading()
+    {
+        try
+        {
+            var vm = OpenLongIssueWithTags(PageType.Deleted, 9);
+
+            vm.SetPageTypeDeletedCommand.Execute(vm.Thumbnails[1]);
+            vm.NextPageCommand.Execute(null);
+
+            Assert.Equal("PAGE 3 / 12", vm.PageLabel);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    // ===== Continuous-scroll boundary cost (docs/superpowers/specs/2026-09-25-comic-reader-performance-design.md B1/B2) =====
+
+    private static int CountCollectionChanges(ReaderScreenViewModel vm, Action action)
+    {
+        int changes = 0;
+        void Handler(object? s, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => changes++;
+        vm.Thumbnails.CollectionChanged += Handler;
+        try
+        {
+            action();
+        }
+        finally
+        {
+            vm.Thumbnails.CollectionChanged -= Handler;
+        }
+
+        return changes;
+    }
+
+    private static void AssertExactlyOneSelected(ReaderScreenViewModel vm, int expectedIndex)
+    {
+        for (int i = 0; i < vm.Thumbnails.Count; i++)
+        {
+            Assert.Equal(i == expectedIndex, vm.Thumbnails[i].IsSelected);
+        }
+    }
+
+    [Fact]
+    public void PageTurn_ReplacesAtMostTwoThumbnails_AndKeepsExactlyOneSelected()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            int changes = CountCollectionChanges(vm, () => vm.NextPageCommand.Execute(null));
+
+            Assert.InRange(changes, 1, 2);
+            AssertExactlyOneSelected(vm, 1);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void ContinuousBoundary_ReplacesAtMostTwoThumbnails()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+
+            int changes = CountCollectionChanges(vm, () => vm.CurrentContinuousPageIndex = 4);
+
+            Assert.InRange(changes, 1, 2);
+            AssertExactlyOneSelected(vm, 4);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void ThumbnailJump_ReplacesAtMostTwoThumbnails()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+
+            int changes = CountCollectionChanges(vm, () => vm.SelectThumbnailCommand.Execute(vm.Thumbnails[9]));
+
+            Assert.InRange(changes, 1, 2);
+            AssertExactlyOneSelected(vm, 9);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    private static void PumpUntil(Func<bool> condition)
+    {
+        for (int i = 0; i < 200 && !condition(); i++)
+        {
+            TestDispatcher.Drain();
+            if (!condition())
+            {
+                Thread.Sleep(15);
+            }
+        }
+    }
+
+    [Fact]
+    public void DebouncedPositionSave_WritesOffTheUiThread_AndCompletesBackOnIt()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+
+            int callingThread = Environment.CurrentManagedThreadId;
+            var writes = new System.Collections.Concurrent.ConcurrentQueue<(int Issue, int Value, int Thread)>();
+            vm.PositionWriter = (issue, value) => writes.Enqueue((issue, value, Environment.CurrentManagedThreadId));
+
+            vm.CurrentContinuousPageIndex = 3;
+            vm.FlushPendingPositionSaveInBackground();
+            PumpUntil(() => !vm.PositionSaveInFlight && !writes.IsEmpty);
+
+            var write = Assert.Single(writes);
+            Assert.Equal(3, write.Value);
+            Assert.NotEqual(callingThread, write.Thread);
+            Assert.False(vm.PositionSaveInFlight);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void DebouncedPositionSave_WhileAWriteIsRunning_CoalescesToTheNewestPosition()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(CreateLongIssue());
+            vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+
+            using var gate = new ManualResetEventSlim(false);
+            using var started = new ManualResetEventSlim(false);
+            var values = new System.Collections.Concurrent.ConcurrentQueue<int>();
+            vm.PositionWriter = (_, value) =>
+            {
+                values.Enqueue(value);
+                started.Set();
+                gate.Wait(TimeSpan.FromSeconds(5));
+            };
+
+            vm.CurrentContinuousPageIndex = 2;
+            vm.FlushPendingPositionSaveInBackground();
+            Assert.True(started.Wait(TimeSpan.FromSeconds(5)));
+
+            vm.CurrentContinuousPageIndex = 3;
+            vm.FlushPendingPositionSaveInBackground(); // in flight: nothing new starts
+            vm.CurrentContinuousPageIndex = 5;
+            vm.FlushPendingPositionSaveInBackground();
+            Assert.Single(values);
+
+            gate.Set();
+            PumpUntil(() => values.Count >= 2 && !vm.PositionSaveInFlight);
+
+            Assert.Equal(new[] { 2, 5 }, values.ToArray());
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void DebouncedPositionSave_AtTheStoryEnd_StoresTheLastPage()
+    {
+        try
+        {
+            int issueId = CreateLongIssue();
+            TagPages(issueId, PageType.Advertisement, 10, 11);
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(issueId);
+            vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+            var values = new System.Collections.Concurrent.ConcurrentQueue<int>();
+            vm.PositionWriter = (_, value) => values.Enqueue(value);
+
+            vm.CurrentContinuousPageIndex = 9; // the story end: pages 10 and 11 are ads
+            vm.FlushPendingPositionSaveInBackground();
+            PumpUntil(() => !vm.PositionSaveInFlight && !values.IsEmpty);
+
+            Assert.Equal(11, Assert.Single(values));
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void SynchronousFlush_StillWritesImmediately()
+    {
+        try
+        {
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            int issueId = CreateLongIssue();
+            vm.LoadIssue(issueId);
+            vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+
+            vm.CurrentContinuousPageIndex = 6;
+            vm.FlushPendingPositionSave();
+
+            Assert.Equal(6, PersistedLastPageRead(issueId));
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    // ===== Next-issue pre-open (docs/superpowers/specs/2026-09-25-comic-reader-performance-design.md A) =====
+
+    /// <summary>A 12-page issue numbered 1.5, so series order is 0, 1, 1.5, 2: its next issue is the 2-page issue 2.</summary>
+    private int CreateLongIssueBeforeIssue2()
+    {
+        _longIssuePath = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_vm_long_{Guid.NewGuid():N}.cbz");
+        CbzFixture.Create(_longIssuePath, pageCount: 12);
+        using var context = PaperbunkrDb.CreateContext();
+        var issue = new Issue { SeriesId = _seriesId, Number = "1.5", FilePath = _longIssuePath };
+        context.Issues.Add(issue);
+        context.SaveChanges();
+        return issue.Id;
+    }
+
+    private static void SetPreOpenNextIssue(bool value)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().PreOpenNextIssue = value;
+        context.SaveChanges();
+    }
+
+    private static Services.Reader.NextIssueStager NewStager(Func<string, int?, Services.Reader.ReaderImagePipeline?>? open = null) =>
+        new(ReaderScreenViewModel.ResolveStagingTarget, open);
+
+    [Fact]
+    public async Task Staging_ShortIssue_StagesTheNextIssueOnLoad()
+    {
+        using var stager = NewStager();
+        var vm = new ReaderScreenViewModel(goBack: () => { }) { NextIssueStager = stager };
+
+        vm.LoadIssue(_issue1Id); // 3 pages: position 0 is already within the last 3
+        await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(60));
+
+        Assert.Equal(_issue2Id, stager.StagedIssueId);
+    }
+
+    [Fact]
+    public async Task Staging_LongIssue_OnlyInTheLastThreePages_AndDropsWhenReadingBackOut()
+    {
+        try
+        {
+            using var stager = NewStager();
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { NextIssueStager = stager };
+
+            vm.LoadIssue(CreateLongIssueBeforeIssue2());
+            await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(60));
+            Assert.False(stager.HasStaged); // page 1 of 12: far from the end
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[8]); // 3 pages remain after page 9: hysteresis band, still nothing
+            await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(60));
+            Assert.False(stager.HasStaged);
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[9]); // 2 remain: the last 3 pages
+            await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(60));
+            Assert.Equal(_issue2Id, stager.StagedIssueId);
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[2]); // back out of the end zone
+            Assert.False(stager.HasStaged);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public async Task Staging_ContinuousScroll_StagesAtTheEndToo()
+    {
+        try
+        {
+            using var stager = NewStager();
+            var vm = new ReaderScreenViewModel(goBack: () => { }) { NextIssueStager = stager };
+            vm.LoadIssue(CreateLongIssueBeforeIssue2());
+            vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+            await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(60));
+            Assert.False(stager.HasStaged);
+
+            vm.CurrentContinuousPageIndex = 10;
+            await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(60));
+
+            Assert.Equal(_issue2Id, stager.StagedIssueId);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public async Task Load_OfTheStagedIssue_AdoptsTheStagedPipeline()
+    {
+        Services.Reader.ReaderImagePipeline? opened = null;
+        using var stager = NewStager((path, limit) => opened = Services.Reader.ReaderImagePipeline.TryOpen(path, limit));
+        var vm = new ReaderScreenViewModel(goBack: () => { }) { NextIssueStager = stager };
+        vm.LoadIssue(_issue1Id);
+        await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(60));
+        Assert.NotNull(opened);
+
+        vm.LoadIssue(_issue2Id);
+
+        Assert.Same(opened, vm.Decoder);
+        Assert.True(opened!.RecordStats);
+        Assert.False(stager.HasStaged);
+    }
+
+    [Fact]
+    public async Task Load_OfAnotherIssue_DiscardsTheStagedPipeline()
+    {
+        Services.Reader.ReaderImagePipeline? opened = null;
+        using var stager = NewStager((path, limit) => opened = Services.Reader.ReaderImagePipeline.TryOpen(path, limit));
+        var vm = new ReaderScreenViewModel(goBack: () => { }) { NextIssueStager = stager };
+        vm.LoadIssue(_issue1Id);
+        await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(60));
+
+        vm.LoadIssue(_issue3Id);
+
+        Assert.False(stager.HasStaged);
+        Assert.NotSame(opened, vm.Decoder);
+    }
+
+    [Fact]
+    public async Task PreOpenNextIssueOff_NeverStages()
+    {
+        SetPreOpenNextIssue(false);
+        using var stager = NewStager();
+        var vm = new ReaderScreenViewModel(goBack: () => { }) { NextIssueStager = stager };
+
+        vm.LoadIssue(_issue1Id);
+        await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(60));
+
+        Assert.False(stager.HasStaged);
+    }
+
+    [Fact]
+    public async Task TurningThePreOpenSettingOff_WhileReading_DropsTheStagedIssue()
+    {
+        using var stager = NewStager();
+        var vm = new ReaderScreenViewModel(goBack: () => { }) { NextIssueStager = stager };
+        vm.LoadIssue(_issue1Id);
+        await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(60));
+        Assert.True(stager.HasStaged);
+
+        SetPreOpenNextIssue(false);
+        vm.RefreshDisplaySettings();
+
+        Assert.False(stager.HasStaged);
+    }
+
+    [Fact]
+    public async Task GoingBack_DiscardsTheStagedIssue()
+    {
+        using var stager = NewStager();
+        var vm = new ReaderScreenViewModel(goBack: () => { }) { NextIssueStager = stager };
+        vm.LoadIssue(_issue1Id);
+        await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(60));
+        Assert.True(stager.HasStaged);
+
+        vm.GoBackCommand.Execute(null);
+
+        Assert.False(stager.HasStaged);
+    }
+
+    [Fact]
+    public async Task TheLastIssueOfASeries_HasNothingToStage()
+    {
+        using var stager = NewStager();
+        var vm = new ReaderScreenViewModel(goBack: () => { }) { NextIssueStager = stager };
+
+        vm.LoadIssue(_issue2Id); // issue 2 is the last in series order
+        await stager.PendingWork.WaitAsync(TimeSpan.FromSeconds(60));
+
+        Assert.False(stager.HasStaged);
+    }
+
+    [Fact]
+    public void WithoutAStager_NothingIsStagedAndNothingBreaks()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Null(vm.NextIssueStager);
+    }
+
+    // ===== Bad-page report (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md 4) =====
+
+    private static System.Collections.Generic.List<PageReport> Reports()
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        return context.PageReports.OrderBy(r => r.PageNumber).ToList();
+    }
+
+    [Fact]
+    public void ReportBadPage_OpensThePickerForTheCurrentPage_AndWritesNothingYet()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+
+        vm.ReportBadPageCommand.Execute(null);
+
+        Assert.True(vm.IsReportPickerOpen);
+        Assert.Equal("Report page 2", vm.ReportPickerTitle);
+        Assert.Empty(Reports());
+    }
+
+    [Fact]
+    public void ReportBadPage_FromAThumbnail_TargetsThatPage()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ReportBadPageCommand.Execute(vm.Thumbnails[2]);
+
+        Assert.Equal("Report page 3", vm.ReportPickerTitle);
+    }
+
+    [Fact]
+    public void ChoosingAReason_WritesTheReport_ClosesThePicker_AndShowsTheUndoChip()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ReportBadPageCommand.Execute(vm.Thumbnails[1]);
+
+        vm.ReportPageReasonCommand.Execute(PageReportReason.Blank);
+
+        var report = Assert.Single(Reports());
+        Assert.Equal(_issue1Id, report.IssueId);
+        Assert.Equal(1, report.PageNumber);
+        Assert.Equal(PageReportReason.Blank, report.Reason);
+        Assert.False(vm.IsReportPickerOpen);
+        Assert.True(vm.HasPageReportChip);
+        Assert.Equal("Reported page 2", vm.PageReportChipLabel);
+    }
+
+    [Fact]
+    public void CancellingThePicker_WritesNothing()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ReportBadPageCommand.Execute(null);
+
+        vm.CancelReportPickerCommand.Execute(null);
+
+        Assert.False(vm.IsReportPickerOpen);
+        Assert.False(vm.HasPageReportChip);
+        Assert.Empty(Reports());
+    }
+
+    [Fact]
+    public void ReportingTheSamePageTwice_UpdatesTheReason()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ReportBadPageCommand.Execute(null);
+        vm.ReportPageReasonCommand.Execute(PageReportReason.Blank);
+        vm.ReportBadPageCommand.Execute(null);
+        vm.ReportPageReasonCommand.Execute(PageReportReason.Corrupt);
+
+        Assert.Equal(PageReportReason.Corrupt, Assert.Single(Reports()).Reason);
+    }
+
+    [Fact]
+    public void UndoingAReport_RemovesIt_AndClearsTheChip()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ReportBadPageCommand.Execute(null);
+        vm.ReportPageReasonCommand.Execute(PageReportReason.LowRes);
+
+        vm.UndoPageReportCommand.Execute(null);
+
+        Assert.Empty(Reports());
+        Assert.False(vm.HasPageReportChip);
+    }
+
+    [Fact]
+    public void ReportChip_ClearsOnExpiry_WithoutRemovingTheReport()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ReportBadPageCommand.Execute(null);
+        vm.ReportPageReasonCommand.Execute(PageReportReason.Other);
+
+        vm.OnPageReportChipExpired(null, EventArgs.Empty);
+
+        Assert.False(vm.HasPageReportChip);
+        Assert.Single(Reports());
+    }
+
+    [Fact]
+    public void ReportPageReason_WithoutAnOpenPicker_DoesNothing()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ReportPageReasonCommand.Execute(PageReportReason.Corrupt);
+
+        Assert.Empty(Reports());
+    }
+
+    [Fact]
+    public void LoadingAnotherIssue_ClosesAnOpenPickerAndChip()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ReportBadPageCommand.Execute(null);
+        vm.ReportPageReasonCommand.Execute(PageReportReason.Blank);
+        vm.ReportBadPageCommand.Execute(null);
+
+        vm.LoadIssue(_issue2Id);
+
+        Assert.False(vm.IsReportPickerOpen);
+        Assert.False(vm.HasPageReportChip);
+    }
+
+    [Fact]
+    public void ReportBadPage_IsARegisteredRemappableCommand_BoundToX()
+    {
+        var command = Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderReportBadPage);
+        Assert.Equal(Key.X, command.DefaultGesture.Key);
+        Assert.Equal(KeyModifiers.None, command.DefaultGesture.KeyModifiers);
+    }
+
+    // ===== Story-end finish (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md 3) =====
+
+    private static int? PersistedLastPageRead(int issueId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        return context.Issues.Find(issueId)!.LastPageRead;
+    }
+
+    private ReaderScreenViewModel OpenLongIssueForFinishTests(RecordingReadingEventRecorder recorder, PageType type, int[] taggedPages, out int issueId)
+    {
+        issueId = CreateLongIssue();
+        TagPages(issueId, type, taggedPages);
+        var vm = new ReaderScreenViewModel(() => { }, new KeyBindingService(), recorder);
+        vm.LoadIssue(issueId);
+        return vm;
+    }
+
+    [Fact]
+    public void StoryEnd_BeforeTrailingAds_ReachingItMarksTheIssueRead_AndRecordsFinishedOnce()
+    {
+        try
+        {
+            var recorder = new RecordingReadingEventRecorder();
+            var vm = OpenLongIssueForFinishTests(recorder, PageType.Advertisement, [10, 11], out int issueId);
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[9]);
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[8]);
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[9]);
+
+            Assert.Equal(11, PersistedLastPageRead(issueId));
+            Assert.Single(recorder.Calls, c => c.Kind == "Finished" && c.ItemId == issueId);
+            Assert.Equal("PAGE 10 / 12", vm.PageLabel); // the reader itself stays where the user is
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void StoryEnd_NotYetReached_KeepsTheRealPosition()
+    {
+        try
+        {
+            var recorder = new RecordingReadingEventRecorder();
+            var vm = OpenLongIssueForFinishTests(recorder, PageType.Advertisement, [10, 11], out int issueId);
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[8]);
+
+            Assert.Equal(8, PersistedLastPageRead(issueId));
+            Assert.DoesNotContain(recorder.Calls, c => c.Kind == "Finished");
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void StoryEnd_IsTheLastPage_WritesTheNormalPosition()
+    {
+        try
+        {
+            var recorder = new RecordingReadingEventRecorder();
+            var vm = OpenLongIssueForFinishTests(recorder, PageType.Advertisement, [3], out int issueId);
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[11]);
+
+            Assert.Equal(11, PersistedLastPageRead(issueId));
+            Assert.Single(recorder.Calls, c => c.Kind == "Finished");
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void StoryEnd_MovesWhenAPageIsRetaggedInTheReader()
+    {
+        try
+        {
+            var recorder = new RecordingReadingEventRecorder();
+            var vm = OpenLongIssueForFinishTests(recorder, PageType.Advertisement, [10, 11], out int issueId);
+
+            vm.SetPageTypeAdvertisementCommand.Execute(vm.Thumbnails[9]); // story end is now page index 8
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[8]);
+
+            Assert.Equal(11, PersistedLastPageRead(issueId));
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void StoryEnd_EveryPageTagged_FallsBackToTheLastPage()
+    {
+        try
+        {
+            var recorder = new RecordingReadingEventRecorder();
+            var vm = OpenLongIssueForFinishTests(recorder, PageType.Deleted, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], out int issueId);
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[5]);
+
+            Assert.Equal(5, PersistedLastPageRead(issueId));
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void Finished_IsRecordedAtTheLastPageOfAShortIssue_UsingTheCeFormula()
+    {
+        var recorder = new RecordingReadingEventRecorder();
+        var vm = new ReaderScreenViewModel(() => { }, new KeyBindingService(), recorder);
+        vm.LoadIssue(_issue1Id); // 3 pages: 2/3 = 66% under the old 0-based formula, 100% under CE's
+
+        vm.NextPageCommand.Execute(null);
+        Assert.DoesNotContain(recorder.Calls, c => c.Kind == "Finished");
+
+        vm.NextPageCommand.Execute(null);
+        Assert.Contains(recorder.Calls, c => c.Kind == "Finished" && c.ItemId == _issue1Id);
     }
 
     // ===== Context strip (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-design.md 4) =====
@@ -1195,7 +3274,7 @@ public class ReaderScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void ZoomLevel_InContinuousMode_ClampsBelow0Point5To0Point5()
+    public void ZoomLevel_InContinuousMode_ClampsBelow25Percent()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
@@ -1203,11 +3282,11 @@ public class ReaderScreenViewModelTests : IDisposable
 
         vm.ZoomLevel = 0.1;
 
-        Assert.Equal(0.5, vm.ZoomLevel);
+        Assert.Equal(0.25, vm.ZoomLevel);
     }
 
     [Fact]
-    public void ZoomLevel_ReClampsToPagedFloor_WhenSwitchingBackFromContinuousMode()
+    public void ZoomLevel_UsesTheSameSmoothRange_InPagedAndContinuousMode()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
@@ -1216,20 +3295,88 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal(0.5, vm.ZoomLevel);
 
         vm.SetReadingModeCommand.Execute(ReadingMode.LeftToRight);
-        vm.ZoomLevel = 0.5; // setter re-evaluates the now-paged floor (1.0, not 0.5)
+        vm.ZoomLevel = 0.5;
 
-        Assert.Equal(1.0, vm.ZoomLevel);
+        Assert.Equal(0.5, vm.ZoomLevel);   // one range for both modes (design 2026-09-25 panels-and-zoom section 1)
     }
 
     [Fact]
-    public void ZoomLevel_ClampsBelowMin_To1()
+    public void ZoomLevel_ClampsBelowMin_To25Percent()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
 
         vm.ZoomLevel = 0.2;
 
-        Assert.Equal(1.0, vm.ZoomLevel);
+        Assert.Equal(0.25, vm.ZoomLevel);
+    }
+
+    [Theory]
+    [InlineData(0.25)]
+    [InlineData(0.37)]
+    [InlineData(0.5)]
+    [InlineData(1.0)]
+    [InlineData(1.333)]
+    [InlineData(2.718)]
+    [InlineData(3.99)]
+    [InlineData(4.0)]
+    public void ZoomLevel_AcceptsEveryValueInTheRange_WithNoSnapping(double zoom)
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ZoomLevel = zoom;
+
+        Assert.Equal(zoom, vm.ZoomLevel);
+    }
+
+    [Fact]
+    public void ZoomLevel_AtOrBelow100Percent_ZeroesThePan_AboveItDoesNot()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ZoomLevel = 2.5;
+        vm.PanOffsetX = 40;
+        vm.PanOffsetY = -25;
+
+        vm.ZoomLevel = 1.8;
+        Assert.Equal(40, vm.PanOffsetX);
+
+        vm.ZoomLevel = 0.6;
+        Assert.Equal(0, vm.PanOffsetX);
+        Assert.Equal(0, vm.PanOffsetY);
+    }
+
+    [Theory]
+    [InlineData(0.25, -2.0)]
+    [InlineData(0.5, -1.0)]
+    [InlineData(1.0, 0.0)]
+    [InlineData(2.0, 1.0)]
+    [InlineData(4.0, 2.0)]
+    public void ZoomSlider_IsTheLogOfTheZoom_AndRoundTrips(double zoom, double slider)
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ZoomLevel = zoom;
+
+        Assert.Equal(slider, vm.ZoomSlider, 6);
+
+        vm.ZoomLevel = 1.0;
+        vm.ZoomSlider = slider;
+        Assert.Equal(zoom, vm.ZoomLevel, 6);
+    }
+
+    [Fact]
+    public void ZoomSlider_RaisesPropertyChanged_WhenTheZoomChanges()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        vm.ZoomLevel = 2.0;
+
+        Assert.Contains(nameof(vm.ZoomSlider), changed);
     }
 
     [Fact]
@@ -2502,33 +4649,42 @@ public class ReaderScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void ZoomPresetCommands_SetExpectedZoomLevels()
+    public void ResetZoomCommand_ReturnsToFit_AndItIsTheOnlyPresetLeft()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
+        vm.ZoomLevel = 3.1;
 
-        vm.SetZoom150Command.Execute(null);
-        Assert.Equal(1.5, vm.ZoomLevel);
+        vm.ResetZoomCommand.Execute(null);
 
-        vm.SetZoom400Command.Execute(null);
-        Assert.Equal(4.0, vm.ZoomLevel);
-
-        vm.SetZoom100Command.Execute(null);
         Assert.Equal(1.0, vm.ZoomLevel);
+        Assert.DoesNotContain(vm.GetType().GetProperties(), p => p.Name.StartsWith("SetZoom"));
     }
 
     [Fact]
-    public void ZoomInZoomOutCommands_StepAndClamp()
+    public void ZoomInZoomOutCommands_AreProportionalSteps_AndClampAtTheRangeEnds()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
 
         vm.ZoomInCommand.Execute(null);
-        Assert.Equal(1.25, vm.ZoomLevel);
+        Assert.Equal(1.1, vm.ZoomLevel, 6);
 
         vm.ZoomOutCommand.Execute(null);
-        vm.ZoomOutCommand.Execute(null);
-        Assert.Equal(1.0, vm.ZoomLevel); // clamped at MinZoom, doesn't go below
+        Assert.Equal(1.0, vm.ZoomLevel, 6);
+
+        for (int i = 0; i < 60; i++)
+        {
+            vm.ZoomOutCommand.Execute(null);
+        }
+
+        Assert.Equal(0.25, vm.ZoomLevel);
+        for (int i = 0; i < 80; i++)
+        {
+            vm.ZoomInCommand.Execute(null);
+        }
+
+        Assert.Equal(4.0, vm.ZoomLevel);
     }
 
     [Fact]

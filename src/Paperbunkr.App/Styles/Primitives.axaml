@@ -141,6 +141,15 @@
         <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
     </Style>
 
+    <!-- A link inside MarkdownView's running text (docs/superpowers/specs/2026-09-26-about-polish-design.md §2): the control sets
+         its own accent foreground and underline, so this only strips the Fluent button chrome on hover/press and dims on press. -->
+    <Style Selector="Button.mdLink:pointerover /template/ ContentPresenter, Button.mdLink:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.mdLink:pressed">
+        <Setter Property="Opacity" Value="0.7" />
+    </Style>
+
     <!-- Chip/pill - generalizes the pattern already established in Views/DetailPills.axaml. Two
          separate selectors (not a comma-list) since Border and Button share no common base type
          with Background/BorderBrush/CornerRadius/Padding declared on it. -->
@@ -277,6 +286,37 @@
     </Style>
     <Style Selector="Border.posterTile.shelfCard:focus-visible">
         <Setter Property="RenderTransform" Value="scale(1.02)" />
+    </Style>
+
+    <!-- Insights Today-tab hero row (docs/superpowers/specs/2026-09-23-insights-redesign-design.md) -
+         the three actionable "needs your attention" tiles (goal, continue-reading, recommendation).
+         Same glow-tier hover/focus language as Border.posterCover above, applied directly to the card
+         itself (not a nested cover Border) since these tiles mix cover art with text/numerals rather
+         than being pure cover-forward cards. Deliberately its own class rather than reusing
+         posterTile/shelfCard - those are chromed/sized for grid cards elsewhere (Home/Library), not a
+         3-across hero row - but the BoxShadow itself is never transitioned, for the same reason
+         documented on Border.posterCover above (animating it tears the ring mid-transition).
+         Deliberately NOT Focusable itself in the two tiles that hold a real Button (Continue,
+         Recommendation) - the Button is the actual interactive element and already gets Avalonia's
+         own default focus ring, so making the wrapping Border focusable too would add a second,
+         inert tab-stop (review-checklist accessibility catch, 2026-09-23: focus must land only on
+         genuinely interactive elements). The :pointerover rule below still applies while hovering the
+         inner Button, since pointerover naturally reaches ancestors; :focus-visible is kept here only
+         for a future heroTile that's directly clickable with no nested control. -->
+    <Style Selector="Border.heroTile">
+        <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="Padding" Value="14" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000" />
+    </Style>
+    <Style Selector="Border.heroTile:pointerover">
+        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 2 #66E0995A" />
+    </Style>
+    <Style Selector="Border.heroTile:focus-visible">
+        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 2 #66E0995A" />
     </Style>
 
     <!-- Poster cover scrim (docs/superpowers/specs/2026-08-27-library-browsing-4a-poster-grid-

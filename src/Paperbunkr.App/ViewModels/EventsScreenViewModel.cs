@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.ReadingLists;
 using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
@@ -425,6 +426,7 @@ public partial class EventsScreenViewModel : ViewModelBase
             foreach (var m in context.EventMemberships.Where(x => ids.Contains(x.Id)))
             {
                 m.Role = BulkRole.Role;
+                MemberRoleApplier.MarkUserSet(m);
             }
 
             context.SaveChanges();
@@ -433,6 +435,36 @@ public partial class EventsScreenViewModel : ViewModelBase
         EventMemberSelection.Clear();
         RaiseEventSelectionState();
         LoadEvent(eventId);
+    }
+
+    /// <summary>The "Detect roles" action: runs role detection over every member of the open event. Roles it is sure of are applied and
+    /// marked automatic (only where the role is itself automatic); everything else - including every member that already existed, whose
+    /// Core role is indistinguishable from a choice - is offered as a suggestion. Reported through the Activity Center.</summary>
+    [RelayCommand]
+    private void DetectRoles()
+    {
+        if (_activeEventId is not int eventId)
+        {
+            return;
+        }
+
+        using var job = _activity.StartJob(ActivityJobKind.Other, "Detecting roles in this event");
+        try
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            var summary = MemberRoleDetection.DetectForEvent(context, eventId);
+            job.Succeed(summary.ToString(), itemsProcessed: summary.Applied + summary.Suggested);
+            _notify("Roles detected", summary.ToString());
+        }
+        catch (Exception ex)
+        {
+            job.Fail($"Role detection failed: {ex.Message}", ex: ex);
+            _notify("Role detection failed", ex.Message);
+            return;
+        }
+
+        // Reload after the click has finished routing (the rows being rebuilt include the control that raised it).
+        Dispatcher.UIThread.Post(() => LoadEvent(eventId));
     }
 
     public void LoadEvent(int storyEventId)
@@ -639,6 +671,7 @@ public partial class EventsScreenViewModel : ViewModelBase
         if (member is not null)
         {
             member.Role = row.SelectedRole;
+            MemberRoleApplier.CopyState(row.Member, member);      // role source / reason / pending suggestion, as the row now shows them
             context.SaveChanges();
         }
     }
@@ -725,6 +758,7 @@ public partial class EventsScreenViewModel : ViewModelBase
         if (summary is not null)
         {
             DetailView = EventsDetailView.Primary;
+
             LoadEvent(summary.Id);
         }
     }

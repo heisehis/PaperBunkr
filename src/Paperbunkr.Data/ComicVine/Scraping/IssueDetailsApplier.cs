@@ -10,7 +10,8 @@ namespace Paperbunkr.Data.ComicVine.Scraping;
 public static class IssueDetailsApplier
 {
     /// <summary>Applies the details; returns the fields that actually changed (empty when nothing did). The caller saves.</summary>
-    public static IReadOnlyList<ScrapeField> Apply(Issue issue, ComicVineIssueDetails details, ScrapeFieldPolicy policy)
+    /// <param name="arcPositions">This issue's reading-order positions, when the caller computed them (the scraper does, from ComicVine's per-arc issue lists); null leaves StoryArcOrder untouched.</param>
+    public static IReadOnlyList<ScrapeField> Apply(Issue issue, ComicVineIssueDetails details, ScrapeFieldPolicy policy, StoryArcPositions? arcPositions = null)
     {
         var changed = new List<ScrapeField>();
 
@@ -29,10 +30,71 @@ public static class IssueDetailsApplier
         Text(ScrapeField.Webpage, issue.Web, details.SiteDetailUrl, v => issue.Web = v);
 
         // ComicVine's story_arc_credits is what CE's "crossovers" toggle writes; there is no separate story-arc toggle in the matrix.
-        Text(ScrapeField.Crossovers, issue.StoryArc, JoinOrNull(details.StoryArcs), v => issue.StoryArc = v);
-        Text(ScrapeField.Characters, issue.Characters, JoinOrNull(details.Characters), v => issue.Characters = v);
-        Text(ScrapeField.Teams, issue.Teams, JoinOrNull(details.Teams), v => issue.Teams = v);
-        Text(ScrapeField.Locations, issue.Locations, JoinOrNull(details.Locations), v => issue.Locations = v);
+        Text(ScrapeField.Crossovers, issue.StoryArc, JoinOrNull(details.StoryArcs.Select(a => a.Name)), v => issue.StoryArc = v);
+        Text(ScrapeField.Characters, issue.Characters, JoinOrNull(details.Characters.Select(c => c.Name)), v => issue.Characters = v);
+        Text(ScrapeField.Teams, issue.Teams, JoinOrNull(details.Teams.Select(t => t.Name)), v => issue.Teams = v);
+        Text(ScrapeField.Locations, issue.Locations, JoinOrNull(details.Locations.Select(l => l.Name)), v => issue.Locations = v);
+        Text(ScrapeField.AgeRating, issue.AgeRating, details.AgeRating, v => issue.AgeRating = v);
+        Text(ScrapeField.Isbn, issue.ISBN, details.Isbn, v => issue.ISBN = v);
+        Text(ScrapeField.Upc, issue.Upc, details.Upc, v => issue.Upc = v);
+        Text(ScrapeField.Imprint, issue.Imprint, details.Imprint, v => issue.Imprint = v);
+
+        // Fork fields (2026-09-25). Main character/team is the fork's own heuristic: the first
+        // character, else the first team. Series Group mirrors the arc names, as in the fork -
+        // ComicVine has no separate "event" resource to source it from.
+        string? mainCharacterOrTeam = details.Characters.Count > 0 ? details.Characters[0].Name : details.Teams.Count > 0 ? details.Teams[0].Name : null;
+        Text(ScrapeField.MainCharacterOrTeam, issue.MainCharacterOrTeam, mainCharacterOrTeam, v => issue.MainCharacterOrTeam = v);
+        Text(ScrapeField.SeriesGroup, issue.SeriesGroup, JoinOrNull(details.StoryArcs.Select(a => a.Name)), v => issue.SeriesGroup = v);
+
+        if (arcPositions is not null && !arcPositions.IsEmpty)
+        {
+            // One toggle for all three, like the fork's single "Story Arc Order" checkbox. Empty
+            // entries (an arc whose position couldn't be found) are dropped from the list.
+            string? positions = JoinOrNull(arcPositions.Numbers.Where(n => n.Length > 0));
+            bool wroteAny = false;
+            if (policy.ShouldWrite(ScrapeField.StoryArcOrder, !string.IsNullOrEmpty(issue.StoryArcNumber), positions is not null) && issue.StoryArcNumber != positions)
+            {
+                issue.StoryArcNumber = positions;
+                wroteAny = true;
+            }
+
+            if (policy.ShouldWrite(ScrapeField.StoryArcOrder, !string.IsNullOrEmpty(issue.AlternateNumber), positions is not null) && issue.AlternateNumber != positions)
+            {
+                issue.AlternateNumber = positions;
+                wroteAny = true;
+            }
+
+            if (policy.ShouldWrite(ScrapeField.StoryArcOrder, issue.AlternateCount.HasValue, arcPositions.AlternateCount.HasValue) && issue.AlternateCount != arcPositions.AlternateCount)
+            {
+                issue.AlternateCount = arcPositions.AlternateCount;
+                wroteAny = true;
+            }
+
+            if (wroteAny)
+            {
+                changed.Add(ScrapeField.StoryArcOrder);
+            }
+        }
+
+        // Concepts become additive Tags, like Genre below - never removes a tag already there.
+        if (policy.Enabled.Contains(ScrapeField.Concepts) && details.Concepts.Count > 0)
+        {
+            var existingTags = issue.Tags
+                .Where(t => t.Field == IssueTagField.Tags)
+                .Select(t => t.Value)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var concept in details.Concepts)
+            {
+                if (!existingTags.Add(concept))
+                {
+                    continue;
+                }
+
+                issue.Tags.Add(new IssueTag { IssueId = issue.Id, Field = IssueTagField.Tags, Value = concept, Category = "Uncategorized" });
+                changed.Add(ScrapeField.Concepts);
+            }
+        }
 
         // One toggle governs the whole published date (year, month, day together), as in CE.
         if (policy.ShouldWrite(ScrapeField.Published, issue.Year.HasValue, details.PublishedDate.Year.HasValue)
@@ -51,6 +113,18 @@ public static class IssueDetailsApplier
             changed.Add(ScrapeField.Released);
         }
 
+        // Metron's community rating (average_rating/rating_count) - a secondary "community says" data
+        // point alongside the user's own Rating, distinct from it (docs/superpowers/specs/2026-09-23-
+        // metron-api-utilization-design.md). ComicVine never populates AverageRating, so this is a no-op
+        // for that provider (IgnoreBlankValues already covers it).
+        float? newRating = details.AverageRating is double avg ? (float)avg : null;
+        if (policy.ShouldWrite(ScrapeField.CommunityRating, issue.CommunityRating.HasValue, newRating.HasValue) && issue.CommunityRating != newRating)
+        {
+            issue.CommunityRating = newRating;
+            issue.CommunityRatingCount = details.RatingCount;
+            changed.Add(ScrapeField.CommunityRating);
+        }
+
         Credit(ScrapeField.Writer, "Writer", issue.Writer, v => issue.Writer = v);
         Credit(ScrapeField.Penciller, "Penciller", issue.Penciller, v => issue.Penciller = v);
         Credit(ScrapeField.Inker, "Inker", issue.Inker, v => issue.Inker = v);
@@ -58,6 +132,38 @@ public static class IssueDetailsApplier
         Credit(ScrapeField.Letterer, "Letterer", issue.Letterer, v => issue.Letterer = v);
         Credit(ScrapeField.CoverArtist, "CoverArtist", issue.CoverArtist, v => issue.CoverArtist = v);
         Credit(ScrapeField.Editor, "Editor", issue.Editor, v => issue.Editor = v);
+        Credit(ScrapeField.Translator, "Translator", issue.Translator, v => issue.Translator = v);
+
+        // Genre is additive, not a Text() overwrite - a provider's genre list only ever adds
+        // IssueTag rows, never removes ones the user (or another provider) already added
+        // (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md - Series.Genre's own
+        // doc comment pointed at a since-removed Issue.Genre field; IssueTag is the real, current
+        // home for genre data).
+        if (policy.Enabled.Contains(ScrapeField.Genre) && details.Genres.Count > 0)
+        {
+            var existingGenres = issue.Tags
+                .Where(t => t.Field == IssueTagField.Genre)
+                .Select(t => t.Value)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // HashSet.Add both checks and records in one step, so a provider response that itself
+            // repeats a genre (confirmed live: ComicVine can return the same genre name twice for one
+            // issue) only ever adds it once - the old .Where(!existingGenres.Contains) filtered every
+            // duplicate against the same pre-loop snapshot, so a repeated genre passed the filter twice
+            // and produced two IssueTag rows with the same (IssueId, Field, Value), which then crashed
+            // IssuePropertiesScreenViewModel.ApplyTagRows's ToDictionary the next time that issue was
+            // opened for editing ("An item with the same key has already been added").
+            foreach (var genre in details.Genres)
+            {
+                if (!existingGenres.Add(genre))
+                {
+                    continue;
+                }
+
+                issue.Tags.Add(new IssueTag { IssueId = issue.Id, Field = IssueTagField.Genre, Value = genre, Category = "Genre" });
+                changed.Add(ScrapeField.Genre);
+            }
+        }
 
         return changed;
 

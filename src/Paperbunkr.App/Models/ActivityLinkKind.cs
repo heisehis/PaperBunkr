@@ -17,7 +17,7 @@ public enum ActivityLinkKind
     /// <summary>Open the update-available overlay / changelog.</summary>
     UpdateChangelog,
 
-    /// <summary>Open the CE migration review overlay.</summary>
+    /// <summary>Legacy: used to open the CE migration overlay's Needs Review tab. That queue now lives in Library Health, so this lands there (docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md); new alerts use <see cref="Preferences"/> with payload "LibraryHealth".</summary>
     MigrationReview,
 
     /// <summary>Open Preferences (payload = optional tab key).</summary>

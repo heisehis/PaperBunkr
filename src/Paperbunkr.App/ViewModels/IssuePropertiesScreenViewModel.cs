@@ -17,6 +17,7 @@ using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.CeMigration;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.ReadingLists;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Plugins;
 
@@ -264,10 +265,9 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
             storyEvent.MetronArcId ??= candidate.MetronArcId;
             context.SaveChanges();
 
-            foreach (var member in candidate.Members.OrderBy(m => m.Position ?? int.MaxValue).ThenBy(m => m.Issue.Year ?? int.MaxValue))
-            {
-                EventMembershipResolver.AddMember(context, storyEvent.Id, member.Issue.Id, EventMembershipRole.Core);
-            }
+            MemberRoleDetection.AddDetectedMembers(
+                context, storyEvent.Id,
+                candidate.Members.OrderBy(m => m.Position ?? int.MaxValue).ThenBy(m => m.Issue.Year ?? int.MaxValue).Select(m => m.Issue.Id).ToList());
 
             linked++;
         }
@@ -677,7 +677,15 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     /// </summary>
     private static void ApplyTagRows(Issue issue, IReadOnlyList<TagEditRowViewModel> rows, IssueTagField field)
     {
-        var byValue = issue.Tags.Where(t => t.Field == field).ToDictionary(t => t.Value, StringComparer.OrdinalIgnoreCase);
+        // GroupBy, not ToDictionary: IssueTag.Value has no DB uniqueness constraint, so a row set that
+        // already has two case-insensitively-equal values for this field (a stale duplicate written
+        // before the scraper's own genre-loop bug was fixed, or from any other path that adds tags
+        // without re-checking what's already there) must not crash Save() - it just means one of the
+        // duplicates doesn't get this row's edit applied, same as any other row whose value doesn't
+        // survive the diff.
+        var byValue = issue.Tags.Where(t => t.Field == field)
+            .GroupBy(t => t.Value, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
         {
             if (byValue.TryGetValue(row.Value, out var tag))

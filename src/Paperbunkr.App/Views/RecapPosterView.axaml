@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             x:Class="Paperbunkr.App.Views.RecapPosterView"
+             x:DataType="vm:RecapPosterDisplayModel"
+             Width="1080" Height="1920">
+
+    <!--
+        Purpose-built export-only layout (docs/superpowers/specs/2026-09-23-insights-year-in-review-recap-
+        design.md's Export section) - distinct from the in-app paged slide viewer on the Recap tab. Never
+        shown to the user directly: InsightsScreen's code-behind instantiates this, adds it to a hidden host
+        panel so RenderTargetBitmap has a real attached control to render, then removes it. Fixed portrait
+        size matches a standard shareable "story" aspect ratio. All colors use the app's normal skin
+        DynamicResource brushes - not a fixed palette - so the exported poster matches whatever skin is
+        active, same as the in-app slides.
+    -->
+    <Border Background="{DynamicResource PbSurface1Brush}" Padding="64">
+        <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10">
+                <TextBlock Foreground="{DynamicResource PbTextMutedBrush}" FontSize="32" FontWeight="SemiBold"
+                           Text="{Binding Year, StringFormat='{}{0} READING RECAP'}" />
+                <TextBlock Foreground="{DynamicResource PbTextMutedBrush}" FontSize="32" FontWeight="SemiBold"
+                           Text="(SO FAR)" IsVisible="{Binding IsCurrentYear}" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="1" Margin="0,40,0,60" Spacing="8"
+                        DataContext="{Binding Headline}" x:DataType="vm:RecapTile">
+                <TextBlock Text="{Binding Label}" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource PbAccentBrush}" />
+                <TextBlock Text="{Binding Value}" FontSize="180" FontWeight="Black" Foreground="{DynamicResource PbTextBrush}" />
+            </StackPanel>
+
+            <ItemsControl Grid.Row="2" ItemsSource="{Binding GridTiles}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:RecapTile">
+                        <Border Background="{DynamicResource PbSurface2Brush}" CornerRadius="{DynamicResource PbRadius}"
+                                Margin="0,0,16,16" Padding="24">
+                            <StackPanel Spacing="6" Orientation="Horizontal">
+                                <views:CoverThumb Width="46" Height="64" VerticalAlignment="Top" CoverKey="{Binding CoverKey}"
+                                                   IsVisible="{Binding CoverKey, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="{Binding Label}" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    <TextBlock Text="{Binding Value}" FontSize="40" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center" Margin="0,40,0,0">
+                <Image Width="48" Height="48" Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-rail.png"
+                       RenderOptions.BitmapInterpolationMode="HighQuality" AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock Text="paperbunkr" FontSize="28" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+
+        </Grid>
+    </Border>
+</UserControl>

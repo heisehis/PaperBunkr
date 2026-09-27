@@ -193,7 +193,13 @@ public partial class NewReadingListViewModel : ViewModelBase
         int sortOrder = 0;
         foreach (var member in storyEvent.Members.OrderBy(m => m.Position))
         {
-            list.Items.Add(new ReadingListItem { IssueId = member.IssueId, SortOrder = sortOrder++, Role = member.Role });
+            list.Items.Add(new ReadingListItem
+            {
+                IssueId = member.IssueId, SortOrder = sortOrder++, Role = member.Role,
+                // A detected role stays labelled as detected when it is copied onto the list; a null source (older members) stays the user's.
+                RoleSource = member.RoleSource, RoleReason = member.RoleReason,
+                SuggestedRole = member.SuggestedRole, SuggestedReason = member.SuggestedReason, RoleSuggestionDismissed = member.RoleSuggestionDismissed,
+            });
         }
 
         context.ReadingLists.Add(list);

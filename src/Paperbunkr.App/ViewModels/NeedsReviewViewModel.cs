@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
@@ -15,12 +17,14 @@ using Paperbunkr.Data.SmartLists;
 namespace Paperbunkr.App.ViewModels;
 
 /// <summary>
-/// The persistent Needs Review queue (docs/onboarding.md §14 step 5,
-/// docs/superpowers/specs/2026-08-06-migration-ux-design.md §C). Three live sections - Content
-/// Type and Missing Files are derived queries (nothing to persist; an item drops off once the
-/// underlying data changes), Series Conflicts is the one section backed by a stored
-/// <see cref="SeriesConflict"/> row, since "is this the same series?" isn't a field predicate the
-/// other two sections' live-query approach can express.
+/// The persistent review queues (docs/onboarding.md §14 step 5,
+/// docs/superpowers/specs/2026-08-06-migration-ux-design.md §C): Content Type, Duplicate Files, Series
+/// Conflicts, Metadata Proposals and Advertisement Pages. Hosted by Preferences → Library → Library Health
+/// (docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md) - it used to live in the CE
+/// migration overlay's "Needs Review" tab. Content Type and Duplicate Files are derived queries (nothing to
+/// persist; an item drops off once the underlying data changes); Series Conflicts, Metadata Proposals and Ad
+/// Pages are backed by stored rows, since "is this the same series?" isn't a field predicate the live-query
+/// approach can express.
 /// </summary>
 public partial class NeedsReviewViewModel : ViewModelBase
 {
@@ -31,45 +35,182 @@ public partial class NeedsReviewViewModel : ViewModelBase
         _onOpenSeriesDetail = onOpenSeriesDetail;
         ContentTypeItems = new ObservableCollection<SeriesReviewItem>();
         SeriesConflicts = new ObservableCollection<SeriesConflictRowViewModel>();
-        MetadataProposalItems = new ObservableCollection<MetadataProposalRowViewModel>();
+        PendingProposalGroups = new ObservableCollection<ProposalGroupViewModel>();
+        AppliedProposalGroups = new ObservableCollection<ProposalGroupViewModel>();
         DuplicateGroupItems = new ObservableCollection<DuplicateGroupRowViewModel>();
+        AdPageGroupItems = new ObservableCollection<AdPageGroupRowViewModel>();
 
-        // Production passes false. Refresh() runs four DB passes including SmartList evaluation
-        // (a near-full-library scan) - ~1s+ on the UI thread during the frozen-splash startup
-        // window. It's re-run whenever it actually matters: MigrationOverlayViewModel.Open(), the
-        // live folder-watch handler, and GoPreferences() (for the Libraries-tab pending badge).
+        // List-wide actions for the two stored queues that only had per-row / per-group buttons. Both change data in bulk
+        // (Accept writes tags / moves issues between series, Reject is remembered for good), so they use the app's inline
+        // two-step confirm (first click arms for 3 s, second commits) instead of a modal.
+        AcceptAllProposalsConfirm = new TwoStepConfirm(() => AcceptProposals(MetadataProposalStatus.Pending, null), "Accept All", "Confirm accept all?");
+        RejectAllProposalsConfirm = new TwoStepConfirm(() => RejectProposals(MetadataProposalStatus.Pending, null), "Reject All", "Confirm reject all?");
+        AcceptAllAdPagesConfirm = new TwoStepConfirm(() => ResolveAllAdPages(accept: true), "Accept All", "Confirm accept all?");
+        RejectAllAdPagesConfirm = new TwoStepConfirm(() => ResolveAllAdPages(accept: false), "Reject All", "Confirm reject all?");
+        RejectAllAppliedConfirm = new TwoStepConfirm(() => RejectProposals(MetadataProposalStatus.Accepted, null), "Reject All Applied", "Confirm reject all?");
+
+        // Production passes false: nothing is loaded until someone asks. It is re-run when it actually matters -
+        // migration completion, the live folder-watch handler and GoPreferences() (which hosts the queues and their
+        // pending badges), all through RefreshAsync so the database work stays off the UI thread.
         if (loadOnConstruction)
         {
             Refresh();
         }
     }
 
+    /// <summary>The five queues, so an action can refresh only the one it changed (docs/superpowers/specs/2026-09-26-library-health-subtabs-design.md).</summary>
+    public enum Queue
+    {
+        ContentType,
+        SeriesConflicts,
+        Proposals,
+        Duplicates,
+        AdPages,
+    }
+
+    private int _refreshTicket;
+
+    /// <summary>True while a <see cref="RefreshAsync"/> is computing. The previous result stays on screen meanwhile.</summary>
+    [ObservableProperty]
+    private bool _isRefreshing;
+
+    /// <summary>False until the first refresh has finished - counts show "…" until then instead of a misleading 0.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AreCountsLoading), nameof(PendingCountLabel), nameof(DuplicateCountLabel), nameof(ConflictCountLabel),
+        nameof(ContentTypeCountLabel), nameof(AdPageCountLabel), nameof(ProposalSummaryLabel))]
+    private bool _hasLoaded;
+
+    public bool AreCountsLoading => !HasLoaded;
+
+    /// <summary>A count as text, or "…" until the first refresh has finished (a 0 shown before that would be a lie).</summary>
+    private string CountLabel(int count) => HasLoaded ? count.ToString("N0") : "…";
+
+    public string PendingCountLabel => CountLabel(PendingCount);
+
+    public string DuplicateCountLabel => CountLabel(DuplicateGroupItems.Count);
+
+    public string ConflictCountLabel => CountLabel(SeriesConflicts.Count);
+
+    public string ContentTypeCountLabel => CountLabel(ContentTypeItems.Count);
+
+    public string AdPageCountLabel => CountLabel(AdPageGroupItems.Sum(g => g.Pages.Count));
+
+    /// <summary>Accept every pending Metadata Proposal at once. Applied ones are untouched.</summary>
+    public TwoStepConfirm AcceptAllProposalsConfirm { get; }
+
+    /// <summary>Reject every pending Metadata Proposal at once. Applied ones are untouched - they have their own bulk actions below.</summary>
+    public TwoStepConfirm RejectAllProposalsConfirm { get; }
+
+    /// <summary>
+    /// Discard everything the Automatic policy applied on its own (all groups): each proposal becomes Rejected, and a
+    /// series-scoped one also writes its field back to the value it had before. Destructive, so two-step.
+    /// </summary>
+    public TwoStepConfirm RejectAllAppliedConfirm { get; }
+
+    /// <summary>Accept every pending ad-page proposal across all groups.</summary>
+    public TwoStepConfirm AcceptAllAdPagesConfirm { get; }
+
+    /// <summary>Reject every pending ad-page proposal across all groups (each is remembered so it is never proposed again).</summary>
+    public TwoStepConfirm RejectAllAdPagesConfirm { get; }
+
     public ObservableCollection<SeriesReviewItem> ContentTypeItems { get; }
 
     public ObservableCollection<SeriesConflictRowViewModel> SeriesConflicts { get; }
 
-    public ObservableCollection<MetadataProposalRowViewModel> MetadataProposalItems { get; }
+    /// <summary>
+    /// Proposals still waiting on a human (<see cref="MetadataProposalStatus.Pending"/>), bucketed by field and source - the
+    /// only proposals that count toward <see cref="HasPendingItems"/>/<see cref="PendingCount"/>. A bucket only loads its
+    /// rows when it is expanded.
+    /// </summary>
+    public ObservableCollection<ProposalGroupViewModel> PendingProposalGroups { get; }
+
+    /// <summary>Total pending proposals across all groups.</summary>
+    public int PendingProposalCount => PendingProposalGroups.Sum(g => g.Count);
+
+    /// <summary>
+    /// Proposals the default Automatic policy already applied (<see cref="MetadataProposalStatus.Accepted"/>) that nobody
+    /// has reviewed yet (<see cref="MetadataProposal.ReviewedAt"/> is null), bucketed by field and source. On a big
+    /// library that is thousands of rows, so the list is a few buckets with a count and bulk Accept / Reject each, and a
+    /// bucket only builds its rows when it is expanded.
+    /// </summary>
+    public ObservableCollection<ProposalGroupViewModel> AppliedProposalGroups { get; }
+
+    /// <summary>Total unreviewed applied proposals across all groups.</summary>
+    public int AppliedProposalCount => AppliedProposalGroups.Sum(g => g.Count);
+
+    public string AppliedProposalCountLabel => AppliedProposalCount == 1 ? "1 proposal" : $"{AppliedProposalCount:N0} proposals";
 
     public ObservableCollection<DuplicateGroupRowViewModel> DuplicateGroupItems { get; }
+
+    /// <summary>Pages the ad-detection scan thinks are advertisements, grouped by the ad they matched (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md §5). Nothing is applied until accepted.</summary>
+    public ObservableCollection<AdPageGroupRowViewModel> AdPageGroupItems { get; }
 
     public bool HasContentTypeItems => ContentTypeItems.Count > 0;
 
     public bool HasSeriesConflictItems => SeriesConflicts.Count > 0;
 
-    public bool HasMetadataProposalItems => MetadataProposalItems.Count > 0;
+    public bool HasPendingProposalItems => PendingProposalGroups.Count > 0;
+
+    /// <summary>True when there is anything to show in the Metadata Proposals section - pending or applied.</summary>
+    public bool HasAnyProposalItems => HasPendingProposalItems || HasAppliedProposalItems;
+
+    /// <summary>"0 pending · 1,814 applied" for the section header, or "…" until the first refresh has finished.</summary>
+    public string ProposalSummaryLabel => HasLoaded ? $"{PendingProposalCount:N0} pending · {AppliedProposalCount:N0} applied" : "…";
+
+    /// <summary>"1 proposal" / "1,204 proposals".</summary>
+    public string PendingProposalCountLabel => PendingProposalCount == 1 ? "1 proposal" : $"{PendingProposalCount:N0} proposals";
+
+    public bool HasAppliedProposalItems => AppliedProposalGroups.Count > 0;
 
     public bool HasDuplicateFileItems => DuplicateGroupItems.Count > 0;
 
-    /// <summary>Missing Files moved to Preferences → Library Health (docs/superpowers/specs/2026-09-06-missing-files-library-health-design.md) - deliberately not part of this formula any more.</summary>
-    public bool HasPendingItems => HasContentTypeItems || HasSeriesConflictItems || HasMetadataProposalItems || HasDuplicateFileItems;
+    public bool HasAdPageItems => AdPageGroupItems.Count > 0;
+
+    /// <summary>
+    /// Missing Files is deliberately not part of this (it has its own count in Library Health's stat tiles), and
+    /// neither are Applied proposals (audit history). Everything else here is a queue that needs a decision.
+    /// </summary>
+    public bool HasPendingItems => PendingCount > 0;
+
+    /// <summary>
+    /// How many things are waiting on a decision, for Library Health's "Needs review · N" chip: series with an unknown
+    /// content type, series conflicts, pending proposals, duplicate groups (one per group, not per file) and ad pages
+    /// (one per page).
+    /// </summary>
+    public int PendingCount =>
+        ContentTypeItems.Count
+        + SeriesConflicts.Count
+        + PendingProposalCount
+        + DuplicateGroupItems.Count
+        + AdPageGroupItems.Sum(g => g.Pages.Count);
+
+    [ObservableProperty]
+    private bool _isAppliedProposalsExpanded;
+
+    [RelayCommand]
+    private void ToggleAppliedProposalsExpanded() => IsAppliedProposalsExpanded = !IsAppliedProposalsExpanded;
 
     private void NotifyCountsChanged()
     {
         OnPropertyChanged(nameof(HasContentTypeItems));
         OnPropertyChanged(nameof(HasSeriesConflictItems));
-        OnPropertyChanged(nameof(HasMetadataProposalItems));
+        OnPropertyChanged(nameof(HasPendingProposalItems));
+        OnPropertyChanged(nameof(PendingProposalCount));
+        OnPropertyChanged(nameof(PendingProposalCountLabel));
+        OnPropertyChanged(nameof(HasAppliedProposalItems));
+        OnPropertyChanged(nameof(AppliedProposalCount));
+        OnPropertyChanged(nameof(AppliedProposalCountLabel));
         OnPropertyChanged(nameof(HasDuplicateFileItems));
+        OnPropertyChanged(nameof(HasAdPageItems));
+        OnPropertyChanged(nameof(PendingCount));
         OnPropertyChanged(nameof(HasPendingItems));
+        OnPropertyChanged(nameof(PendingCountLabel));
+        OnPropertyChanged(nameof(DuplicateCountLabel));
+        OnPropertyChanged(nameof(ConflictCountLabel));
+        OnPropertyChanged(nameof(ContentTypeCountLabel));
+        OnPropertyChanged(nameof(AdPageCountLabel));
+        OnPropertyChanged(nameof(HasAnyProposalItems));
+        OnPropertyChanged(nameof(ProposalSummaryLabel));
     }
 
     [RelayCommand]
@@ -96,48 +237,286 @@ public partial class NeedsReviewViewModel : ViewModelBase
             ApplyResolveDuplicateGroup(group);
         }
 
-        Refresh();
+        Refresh(Queue.Duplicates);
     }
 
-    public void Refresh()
+    /// <summary>
+    /// Hides every currently-listed duplicate group without touching any file (sets <c>DuplicateAcknowledged</c> on every
+    /// member) - the bulk form of a group's own Dismiss. A group reappears if a new file later joins it.
+    /// </summary>
+    [RelayCommand]
+    private void DismissAllDuplicateGroups()
     {
-        using var context = PaperbunkrDb.CreateContext();
+        var issueIds = DuplicateGroupItems.SelectMany(g => g.IssueIds).ToList();
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            foreach (var issue in context.Issues.Where(i => issueIds.Contains(i.Id)))
+            {
+                issue.DuplicateAcknowledged = true;
+            }
 
-        RefreshContentTypeItems(context);
-        RefreshSeriesConflicts(context);
-        RefreshMetadataProposalItems(context);
-        RefreshDuplicateFileItems(context);
+            context.SaveChanges();
+        }
+
+        Refresh(Queue.Duplicates);
+    }
+
+    /// <summary>What the last "Merge entries that share one file" did, or null.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDuplicateStatusMessage))]
+    private string? _duplicateStatusMessage;
+
+    public bool HasDuplicateStatusMessage => !string.IsNullOrEmpty(DuplicateStatusMessage);
+
+    /// <summary>Folds library entries that point at the very same file into one, touching no files. Two entries for one file make every
+    /// duplicate resolution risky (removing one used to send the shared file to the Recycle Bin), so this is the first thing to run.</summary>
+    [RelayCommand]
+    private void MergeSamePathEntries()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            DuplicateStatusMessage = SamePathEntryMerger.Merge(context).ToString();
+        }
+
+        Refresh(Queue.Duplicates);
+    }
+
+    /// <summary>Reloads every queue synchronously. Tests and small callers use this; the UI uses <see cref="RefreshAsync"/>.</summary>
+    public void Refresh() => RefreshCore(null);
+
+    /// <summary>Reloads just the queue an action changed (the others cannot have moved), synchronously.</summary>
+    public void Refresh(Queue queue) => RefreshCore(queue);
+
+    private void RefreshCore(Queue? only)
+    {
+        Interlocked.Increment(ref _refreshTicket); // any refresh still in flight is now stale
+        List<Action> applies;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            applies = Load(context, only);
+        }
+
+        Apply(applies);
+
+        // A refresh that was still in flight is stale now and will not clear the flag itself (it only does so while it is the
+        // newest), so this one has to.
+        IsRefreshing = false;
+    }
+
+    /// <summary>
+    /// Reloads every queue with the database work on a background thread and the collection swap back on the UI thread. The
+    /// previous result stays on screen while it runs (<see cref="IsRefreshing"/>), and a result superseded by a newer refresh
+    /// is dropped. A failure keeps the previous result. This is what opening Preferences, a folder-watch event and a
+    /// finished migration call.
+    /// </summary>
+    public async Task RefreshAsync()
+    {
+        // The collection swap must run on the UI thread, and the code after the await only does if this started there (a
+        // folder-watch callback may not have). Hop over first instead of assuming.
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(RefreshAsync);
+            return;
+        }
+
+        int ticket = Interlocked.Increment(ref _refreshTicket);
+        IsRefreshing = true;
+        try
+        {
+            var applies = await Task.Run(() =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                return Load(context, null);
+            });
+
+            if (ticket == Volatile.Read(ref _refreshTicket))
+            {
+                Apply(applies);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Needs Review refresh failed, keeping the previous result: {ex}");
+        }
+        finally
+        {
+            if (ticket == Volatile.Read(ref _refreshTicket))
+            {
+                IsRefreshing = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The database half of a refresh: reads what the requested queues need and returns, per queue, the step that swaps its
+    /// collection. Nothing here touches a bound collection, so it is safe on any thread.
+    /// </summary>
+    private List<Action> Load(PaperbunkrDbContext context, Queue? only)
+    {
+        var applies = new List<Action>();
+        if (only is null or Queue.ContentType)
+        {
+            applies.Add(LoadContentTypeItems(context));
+        }
+
+        if (only is null or Queue.SeriesConflicts)
+        {
+            applies.Add(LoadSeriesConflicts(context));
+        }
+
+        if (only is null or Queue.Proposals)
+        {
+            applies.Add(LoadMetadataProposalGroups(context));
+        }
+
+        if (only is null or Queue.Duplicates)
+        {
+            applies.Add(LoadDuplicateFileItems(context));
+        }
+
+        if (only is null or Queue.AdPages)
+        {
+            applies.Add(LoadAdPageItems(context));
+        }
+
+        return applies;
+    }
+
+    private void Apply(List<Action> applies)
+    {
+        foreach (var apply in applies)
+        {
+            apply();
+        }
+
+        HasLoaded = true;
         NotifyCountsChanged();
     }
 
-    private void RefreshContentTypeItems(PaperbunkrDbContext context)
+    /// <summary>
+    /// Pending <see cref="AdPageProposal"/>s from the ad-detection scan, one group per matched ad (docs/superpowers/
+    /// specs/2026-09-21-comic-reader-page-intelligence-design.md §5). Like Metadata Proposals it is a stored queue;
+    /// accepting writes a normal Advertisement page tag, rejecting remembers the page so it is never proposed again.
+    /// </summary>
+    private Action LoadAdPageItems(PaperbunkrDbContext context)
     {
-        // Reuses the existing SmartList field/query machinery (same mechanism the "Missing Files"
-        // system smart list uses for IsMissing) rather than a bespoke Series query.
-        var transient = new SmartList
-        {
-            RootGroup = new SmartListConditionGroup
-            {
-                Conditions =
-                {
-                    new() { Field = SmartListField.ContentType, Operator = SmartListOperator.Is, Value = ContentType.Unknown.ToString() },
-                },
-            },
-        };
+        var groupRows = new List<(AdPageGroupRowViewModel Row, string? SourcePath, int SourcePage)>();
 
-        var seriesNeedingReview = SmartListQueryBuilder.Build(context, transient)
-            .Select(i => i.Series)
-            .Where(s => s is not null)
-            .Select(s => s!)
-            .DistinctBy(s => s.Id)
-            .OrderBy(s => s.Name)
+        var proposals = context.AdPageProposals
+            .Include(p => p.Issue).ThenInclude(i => i!.Series)
+            .Include(p => p.MatchedAdHash)
+            .Where(p => p.Status == AdPageProposalStatus.Pending)
+            .OrderBy(p => p.MatchedAdHashId).ThenBy(p => p.Issue!.Series!.Name).ThenBy(p => p.IssueId).ThenBy(p => p.PageNumber)
             .ToList();
 
-        ContentTypeItems.Clear();
-        foreach (var series in seriesNeedingReview)
+        foreach (var group in proposals.GroupBy(p => p.MatchedAdHashId))
         {
-            ContentTypeItems.Add(new SeriesReviewItem { SeriesId = series.Id, SeriesName = series.Name });
+            var ad = group.First().MatchedAdHash;
+            string? sourcePath = null;
+            string sourceLabel = "Ad from a removed issue";
+            if (ad?.SourceIssueId is int sourceIssueId && ad.SourcePageNumber is int sourcePage)
+            {
+                var source = context.Issues.Include(i => i.Series).FirstOrDefault(i => i.Id == sourceIssueId);
+                if (source is not null)
+                {
+                    sourcePath = source.FilePath;
+                    sourceLabel = $"{source.Series?.Name ?? "Unknown"} #{source.EffectiveNumber() ?? "?"} · page {sourcePage + 1}";
+                }
+            }
+
+            var pages = group.Select(p => new AdPageProposalRowViewModel(
+                p.Id,
+                p.IssueId,
+                p.PageNumber,
+                $"{p.Issue?.Series?.Name ?? "Unknown"} #{p.Issue?.EffectiveNumber() ?? "?"} · page {p.PageNumber + 1}",
+                p.Distance,
+                onAccept: r => ResolveAdPage(r.ProposalId, accept: true),
+                onReject: r => ResolveAdPage(r.ProposalId, accept: false))).ToList();
+
+            var groupRow = new AdPageGroupRowViewModel(
+                group.Key,
+                sourceLabel,
+                pages,
+                onAcceptAll: g => ResolveAdPages(g.ProposalIds, accept: true),
+                onRejectAll: g => ResolveAdPages(g.ProposalIds, accept: false));
+            groupRows.Add((groupRow, sourcePath, ad?.SourcePageNumber ?? 0));
         }
+
+        return () =>
+        {
+            AdPageGroupItems.Clear();
+            foreach (var (row, sourcePath, sourcePage) in groupRows)
+            {
+                AdPageGroupItems.Add(row);
+                LoadAdThumbnail(row, sourcePath, sourcePage);
+            }
+        };
+    }
+
+    /// <summary>Decodes the ad's source page off the UI thread and hands the bitmap back to the row. Best-effort: no source file, no thumbnail.</summary>
+    private static void LoadAdThumbnail(AdPageGroupRowViewModel row, string? sourcePath, int sourcePage)
+    {
+        if (string.IsNullOrEmpty(sourcePath))
+        {
+            return;
+        }
+
+        _ = Task.Run(() =>
+        {
+            var bitmap = Paperbunkr.App.Services.AdDetection.AdPageThumbnailLoader.Load(sourcePath, sourcePage);
+            if (bitmap is not null)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => row.Thumbnail = bitmap);
+            }
+        });
+    }
+
+    private void ResolveAdPage(int proposalId, bool accept) => ResolveAdPages(new[] { proposalId }, accept);
+
+    private void ResolveAllAdPages(bool accept) => ResolveAdPages(AdPageGroupItems.SelectMany(g => g.ProposalIds).ToList(), accept);
+
+    /// <summary>
+    /// Accept/Reject for one page or a whole group. The list refresh is deferred one dispatcher tick: this runs from a
+    /// Button inside a row of <see cref="AdPageGroupItems"/> (or a page inside one), and clearing that collection
+    /// synchronously would detach the clicking control mid-route (CLAUDE.md "routed event" gotcha). <see cref="Refresh"/>
+    /// makes its own fresh context, so nothing from this method's context is captured.
+    /// </summary>
+    private void ResolveAdPages(IReadOnlyList<int> proposalIds, bool accept)
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            if (accept)
+            {
+                AdPageProposalResolver.AcceptAll(context, proposalIds);
+            }
+            else
+            {
+                AdPageProposalResolver.RejectAll(context, proposalIds);
+            }
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => Refresh(Queue.AdPages));
+    }
+
+    private Action LoadContentTypeItems(PaperbunkrDbContext context)
+    {
+        // The smart-list field this used to evaluate is just Series.ContentType (SmartListCatalog: i.Series?.ContentType), but
+        // going through SmartListQueryBuilder.Build loaded every issue with Series, MetadataProposals and Tags first (430-1,060 ms
+        // on a 3,650-issue library). Same set, direct: series of unknown content type that have at least one issue.
+        var seriesNeedingReview = context.Series.AsNoTracking()
+            .Where(s => s.ContentType == ContentType.Unknown && s.Issues.Any())
+            .OrderBy(s => s.Name)
+            .Select(s => new SeriesReviewItem { SeriesId = s.Id, SeriesName = s.Name })
+            .ToList();
+
+        return () =>
+        {
+            ContentTypeItems.Clear();
+            foreach (var item in seriesNeedingReview)
+            {
+                ContentTypeItems.Add(item);
+            }
+        };
     }
 
     /// <summary>
@@ -146,76 +525,119 @@ public partial class NeedsReviewViewModel : ViewModelBase
     /// previously dismissed stays hidden, but if a new file later joins that same cluster it
     /// reappears showing every member (acknowledged or not) so the user has full context again,
     /// rather than a confusing partial view.
+    /// <para>
+    /// The clustering (<c>BuildDuplicateGroups</c>, a linear hash pass, 11-65 ms) is unchanged. What was slow was loading
+    /// every issue as a tracked entity with <c>Include(Series)</c> (460-1,270 ms on a 3,650-issue library), so this loads a
+    /// no-tracking projection of just the fields the grouping and the rows read (54-190 ms) plus one <c>Id -&gt; Name</c>
+    /// lookup for the label. Proposals were never included here, so the effective values are the raw ones, as before.
+    /// </para>
     /// </summary>
-    private void RefreshDuplicateFileItems(PaperbunkrDbContext context)
+    private Action LoadDuplicateFileItems(PaperbunkrDbContext context)
     {
-        DuplicateGroupItems.Clear();
+        var issues = context.Issues.AsNoTracking()
+            .Where(i => !i.IsPlaceholder)
+            .Select(i => new Issue
+            {
+                Id = i.Id,
+                SeriesId = i.SeriesId,
+                Format = i.Format,
+                Count = i.Count,
+                Number = i.Number,
+                Volume = i.Volume,
+                Year = i.Year,
+                LanguageISO = i.LanguageISO,
+                Month = i.Month,
+                Day = i.Day,
+                FilePath = i.FilePath,
+                FileSize = i.FileSize,
+                FileIsMissing = i.FileIsMissing,
+                AddedTime = i.AddedTime,
+                DuplicateAcknowledged = i.DuplicateAcknowledged,
+            })
+            .ToList();
+        var seriesNames = context.Series.AsNoTracking().Select(s => new { s.Id, s.Name }).ToDictionary(s => s.Id, s => s.Name);
 
-        var issues = context.Issues.Include(i => i.Series).Where(i => !i.IsPlaceholder).ToList();
-        var groups = SmartListQueryBuilder.BuildDuplicateGroups(issues)
-            .Where(g => g.Any(i => !i.DuplicateAcknowledged));
+        var rows = SmartListQueryBuilder.BuildDuplicateGroups(issues)
+            .Where(g => g.Any(i => !i.DuplicateAcknowledged))
+            .Select(members =>
+            {
+                var first = members[0];
+                string label = $"{seriesNames.GetValueOrDefault(first.SeriesId) ?? "Unknown"} #{first.EffectiveNumber()} · {members.Count} copies";
+                return new DuplicateGroupRowViewModel(label, members, onResolve: ResolveDuplicateGroup, onDismiss: DismissDuplicateGroup, onResolveKeepFiles: ResolveDuplicateGroupKeepFiles, onCompare: CompareDuplicateGroup);
+            })
+            .ToList();
 
-        foreach (var members in groups)
+        return () =>
         {
-            var first = members[0];
-            string label = $"{first.Series?.Name ?? "Unknown"} #{first.EffectiveNumber()} · {members.Count} copies";
-            DuplicateGroupItems.Add(new DuplicateGroupRowViewModel(label, members, onResolve: ResolveDuplicateGroup, onDismiss: DismissDuplicateGroup));
-        }
+            DuplicateGroupItems.Clear();
+            foreach (var row in rows)
+            {
+                DuplicateGroupItems.Add(row);
+            }
+        };
     }
 
     private void ResolveDuplicateGroup(DuplicateGroupRowViewModel group)
     {
         ApplyResolveDuplicateGroup(group);
-        Refresh();
+        Refresh(Queue.Duplicates);
     }
 
     /// <summary>Deletes every non-kept candidate via <see cref="LibraryDeletionHelper"/> (Recycle Bin, cross-reference cleanup) without refreshing - shared by the single-group Resolve action and the bulk "Keep Largest in All Groups" action, which refreshes once after applying every group.</summary>
-    private void ApplyResolveDuplicateGroup(DuplicateGroupRowViewModel group)
+    private void ResolveDuplicateGroupKeepFiles(DuplicateGroupRowViewModel group)
     {
-        using var context = PaperbunkrDb.CreateContext();
-        foreach (int issueId in group.NonKeptIssueIds)
-        {
-            var issue = context.Issues.Find(issueId);
-            if (issue is not null)
-            {
-                LibraryDeletionHelper.RemoveIssue(context, issue);
-            }
-        }
-
-        context.SaveChanges();
+        ApplyResolveDuplicateGroup(group, deleteFile: false);
+        Refresh(Queue.Duplicates);
     }
+
+    private void ApplyResolveDuplicateGroup(DuplicateGroupRowViewModel group, bool deleteFile = true) =>
+        DuplicateGroupResolver.RemoveIssues(group.NonKeptIssueIds, deleteFile);
 
     private void DismissDuplicateGroup(DuplicateGroupRowViewModel group)
     {
-        using var context = PaperbunkrDb.CreateContext();
-        foreach (var issue in context.Issues.Where(i => group.IssueIds.Contains(i.Id)))
-        {
-            issue.DuplicateAcknowledged = true;
-        }
-
-        context.SaveChanges();
-        Refresh();
+        DuplicateGroupResolver.Acknowledge(group.IssueIds);
+        Refresh(Queue.Duplicates);
     }
 
-    private void RefreshSeriesConflicts(PaperbunkrDbContext outerContext)
-    {
-        SeriesConflicts.Clear();
+    /// <summary>Raised with the copy marked to keep and the others when a group's Compare button is pressed; the shell opens the Compare screen (docs/superpowers/specs/2026-09-26-comic-reader-compare-design.md #11).</summary>
+    public event Action<int, IReadOnlyList<int>>? CompareRequested;
 
-        var pending = outerContext.SeriesConflicts
+    private void CompareDuplicateGroup(DuplicateGroupRowViewModel group)
+    {
+        int keep = group.Candidates.FirstOrDefault(c => c.IsKeep)?.IssueId ?? group.IssueIds[0];
+        var others = group.IssueIds.Where(id => id != keep).ToList();
+        if (others.Count > 0)
+        {
+            CompareRequested?.Invoke(keep, others);
+        }
+    }
+
+    private Action LoadSeriesConflicts(PaperbunkrDbContext outerContext)
+    {
+        var pending = outerContext.SeriesConflicts.AsNoTracking()
             .Where(c => c.Status == SeriesConflictStatus.Pending)
             .OrderByDescending(c => c.DetectedAt)
             .ToList();
 
-        foreach (var conflict in pending)
+        var rows = pending.Select(conflict =>
         {
             int conflictId = conflict.Id;
-            SeriesConflicts.Add(new SeriesConflictRowViewModel(
+            return new SeriesConflictRowViewModel(
                 conflict.IncomingName,
                 conflict.MatchedName,
                 conflict.Similarity,
                 onMerge: _ => ResolveConflict(conflictId, merge: true),
-                onKeepSeparate: _ => ResolveConflict(conflictId, merge: false)));
-        }
+                onKeepSeparate: _ => ResolveConflict(conflictId, merge: false));
+        }).ToList();
+
+        return () =>
+        {
+            SeriesConflicts.Clear();
+            foreach (var row in rows)
+            {
+                SeriesConflicts.Add(row);
+            }
+        };
     }
 
     private void ResolveConflict(int conflictId, bool merge)
@@ -253,42 +675,215 @@ public partial class NeedsReviewViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Lists <see cref="MetadataProposalStatus.Pending"/> AND <see cref="MetadataProposalStatus.Accepted"/>
-    /// rows - unlike the other three sections, an Accepted proposal isn't "resolved" the way a
-    /// merged/kept-separate conflict is; it's "applied but still auditable/correctable" under the
-    /// default Automatic policy (docs/superpowers/specs/2026-08-17-metadata-model-phase2a-metadata-
-    /// proposals-design.md). Rejected/Ignored rows drop off, same as a resolved conflict does.
+    /// Buckets the proposals into <see cref="PendingProposalGroups"/> (<see cref="MetadataProposalStatus.Pending"/>) and
+    /// <see cref="AppliedProposalGroups"/> (unreviewed <see cref="MetadataProposalStatus.Accepted"/> ones), each with a
+    /// single <c>GROUP BY</c> and no rows loaded until a group is expanded. Unlike the other sections, an Accepted proposal
+    /// isn't "resolved" the way a merged/kept-separate conflict is; it's "applied but still auditable/correctable" under the
+    /// default Automatic policy (docs/superpowers/specs/2026-08-17-metadata-model-phase2a-metadata-proposals-design.md)
+    /// until someone reviews it (<see cref="MetadataProposal.ReviewedAt"/>). Rejected/Ignored rows drop off, same as a
+    /// resolved conflict does.
     /// </summary>
-    private void RefreshMetadataProposalItems(PaperbunkrDbContext context)
+    private Action LoadMetadataProposalGroups(PaperbunkrDbContext context)
     {
-        MetadataProposalItems.Clear();
+        var pending = LoadProposalGroups(context, MetadataProposalStatus.Pending);
+        var applied = LoadProposalGroups(context, MetadataProposalStatus.Accepted);
 
-        var proposals = context.MetadataProposals
-            .Include(p => p.Issue).ThenInclude(i => i!.Series)
-            .Include(p => p.Issue).ThenInclude(i => i!.MetadataProposals)
-            .Include(p => p.Series)
-            .Where(p => p.Status == MetadataProposalStatus.Pending || p.Status == MetadataProposalStatus.Accepted)
-            .OrderByDescending(p => p.CreatedAt)
+        return () =>
+        {
+            PendingProposalGroups.Clear();
+            foreach (var group in pending)
+            {
+                PendingProposalGroups.Add(group);
+            }
+
+            AppliedProposalGroups.Clear();
+            foreach (var group in applied)
+            {
+                AppliedProposalGroups.Add(group);
+            }
+        };
+    }
+
+    private List<ProposalGroupViewModel> LoadProposalGroups(PaperbunkrDbContext context, MetadataProposalStatus status)
+    {
+        var groups = ProposalsIn(context, status, null)
+            .GroupBy(p => new { p.Field, p.Source, p.ProviderKey })
+            .Select(g => new { g.Key.Field, g.Key.Source, g.Key.ProviderKey, Count = g.Count() })
             .ToList();
 
-        foreach (var proposal in proposals)
+        return groups
+            .OrderByDescending(g => g.Count).ThenBy(g => g.Field).ThenBy(g => g.Source)
+            .Select(g => new ProposalGroupViewModel(
+                status,
+                g.Field,
+                g.Source,
+                g.ProviderKey,
+                g.Count,
+                loadRows: LoadProposalGroupRows,
+                onAcceptAll: group => AcceptProposals(group.Status, group),
+                onRejectAll: group => RejectProposals(group.Status, group)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// The proposals of one kind, optionally narrowed to one group's field + source (+ provider). "Pending" means status
+    /// Pending; anything else means the unreviewed applied ones (Accepted with no <see cref="MetadataProposal.ReviewedAt"/>).
+    /// </summary>
+    private static IQueryable<MetadataProposal> ProposalsIn(PaperbunkrDbContext context, MetadataProposalStatus status, ProposalGroupViewModel? group)
+    {
+        IQueryable<MetadataProposal> query = status == MetadataProposalStatus.Pending
+            ? context.MetadataProposals.Where(p => p.Status == MetadataProposalStatus.Pending)
+            : context.MetadataProposals.Where(p => p.Status == MetadataProposalStatus.Accepted && p.ReviewedAt == null);
+        if (group is not null)
         {
-            int proposalId = proposal.Id;
-            // Series-scoped rows (Summary/Status/Genre, docs/superpowers/specs/2026-08-23-apply-
-            // from-provider-design.md) have no issue to name - just the series itself.
-            string label = proposal.SeriesId is not null
-                ? proposal.Series?.Name ?? "Unknown"
-                : $"{proposal.Issue?.Series?.Name ?? "Unknown"} #{proposal.Issue?.EffectiveNumber() ?? "?"}";
-            MetadataProposalItems.Add(new MetadataProposalRowViewModel(
-                label,
-                proposal.Field.ToString(),
-                proposal.CurrentValue,
-                proposal.ProposedValue,
-                proposal.Source.ToString(),
-                isAlreadyAccepted: proposal.Status == MetadataProposalStatus.Accepted,
-                onAccept: _ => ResolveProposal(proposalId, accept: true),
-                onReject: _ => ResolveProposal(proposalId, accept: false)));
+            var field = group.Field;
+            var source = group.Source;
+            var provider = group.Provider;
+            query = query.Where(p => p.Field == field && p.Source == source && p.ProviderKey == provider);
         }
+
+        return query;
+    }
+
+    /// <summary>Builds the rows of a group being expanded: its latest <see cref="ProposalGroupViewModel.RowLimit"/> proposals.</summary>
+    private IReadOnlyList<MetadataProposalRowViewModel> LoadProposalGroupRows(ProposalGroupViewModel group)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var proposals = ProposalsIn(context, group.Status, group)
+            .Include(p => p.Issue).ThenInclude(i => i!.Series)
+            .Include(p => p.Series)
+            .OrderByDescending(p => p.CreatedAt)
+            .Take(ProposalGroupViewModel.RowLimit)
+            .ToList();
+        bool isApplied = group.Status != MetadataProposalStatus.Pending;
+        return proposals.Select(p => CreateProposalRow(p, isApplied, group)).ToList();
+    }
+
+    private MetadataProposalRowViewModel CreateProposalRow(MetadataProposal proposal, bool isApplied, ProposalGroupViewModel? group)
+    {
+        int proposalId = proposal.Id;
+        // Series-scoped rows (Summary/Status/Genre, docs/superpowers/specs/2026-08-23-apply-
+        // from-provider-design.md) have no issue to name - just the series itself.
+        string label = proposal.SeriesId is not null
+            ? proposal.Series?.Name ?? "Unknown"
+            : $"{proposal.Issue?.Series?.Name ?? "Unknown"} #{proposal.Issue?.EffectiveNumber() ?? "?"}";
+        return new MetadataProposalRowViewModel(
+            label,
+            proposal.Field.ToString(),
+            proposal.CurrentValue,
+            proposal.ProposedValue,
+            proposal.Source.ToString(),
+            isAlreadyAccepted: isApplied,
+            onAccept: _ =>
+            {
+                ResolveProposal(proposalId, accept: true);
+                group?.NotifyRowResolved();
+                NotifyProposalCountsChanged();
+            },
+            onReject: _ =>
+            {
+                ResolveProposal(proposalId, accept: false);
+                group?.NotifyRowResolved();
+                NotifyProposalCountsChanged();
+            });
+    }
+
+    private void NotifyProposalCountsChanged()
+    {
+        OnPropertyChanged(nameof(HasPendingProposalItems));
+        OnPropertyChanged(nameof(PendingProposalCount));
+        OnPropertyChanged(nameof(PendingProposalCountLabel));
+        OnPropertyChanged(nameof(HasAppliedProposalItems));
+        OnPropertyChanged(nameof(AppliedProposalCount));
+        OnPropertyChanged(nameof(AppliedProposalCountLabel));
+        OnPropertyChanged(nameof(PendingCount));
+        OnPropertyChanged(nameof(HasPendingItems));
+        OnPropertyChanged(nameof(PendingCountLabel));
+        OnPropertyChanged(nameof(HasAnyProposalItems));
+        OnPropertyChanged(nameof(ProposalSummaryLabel));
+    }
+
+    /// <summary>"Accept All" on the Applied section: keep every unreviewed applied proposal and take them all out of the list. One <c>UPDATE</c>, no rows loaded.</summary>
+    [RelayCommand]
+    private void AcceptAllApplied() => AcceptProposals(MetadataProposalStatus.Accepted, null);
+
+    /// <summary>
+    /// Accept every proposal of a kind (or one group's). Applied ones are already in effect, so accepting them only marks them
+    /// reviewed - one <c>UPDATE</c>. Pending ones become Accepted and reviewed; a Series-field proposal also moves the issue,
+    /// so those go through <see cref="ResolveProposal"/> one by one on a fresh context each (a series emptied by one move can't
+    /// leave a stale entity behind for the next) and the rest are one <c>UPDATE</c>.
+    /// </summary>
+    private void AcceptProposals(MetadataProposalStatus status, ProposalGroupViewModel? group)
+    {
+        DateTime? now = DateTime.UtcNow;
+        var writeTimeIds = new List<int>();
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            if (status == MetadataProposalStatus.Pending)
+            {
+                writeTimeIds = ProposalsIn(context, status, group).Where(p => p.Field == MetadataProposalField.Series).Select(p => p.Id).ToList();
+                ProposalsIn(context, status, group)
+                    .Where(p => p.Field != MetadataProposalField.Series)
+                    .ExecuteUpdate(s => s
+                        .SetProperty(p => p.Status, MetadataProposalStatus.Accepted)
+                        .SetProperty(p => p.ResolvedAt, now)
+                        .SetProperty(p => p.ReviewedAt, now));
+            }
+            else
+            {
+                ProposalsIn(context, status, group).ExecuteUpdate(s => s.SetProperty(p => p.ReviewedAt, now));
+            }
+        }
+
+        foreach (int id in writeTimeIds)
+        {
+            ResolveProposal(id, accept: true);
+        }
+
+        FinishProposalBulkAction(status, group);
+    }
+
+    /// <summary>
+    /// Reject every proposal of a kind (or one group's). Plain Issue-scoped ones are one <c>UPDATE</c>; series-scoped ones
+    /// also write their field back to the pre-proposal value, so they go through <see cref="ResolveProposal"/> one by one.
+    /// </summary>
+    private void RejectProposals(MetadataProposalStatus status, ProposalGroupViewModel? group)
+    {
+        DateTime? now = DateTime.UtcNow;
+        List<int> writeTimeIds;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            writeTimeIds = ProposalsIn(context, status, group).Where(p => p.SeriesId != null).Select(p => p.Id).ToList();
+            ProposalsIn(context, status, group)
+                .Where(p => p.SeriesId == null)
+                .ExecuteUpdate(s => s.SetProperty(p => p.Status, MetadataProposalStatus.Rejected).SetProperty(p => p.ResolvedAt, now));
+        }
+
+        foreach (int id in writeTimeIds)
+        {
+            ResolveProposal(id, accept: false);
+        }
+
+        FinishProposalBulkAction(status, group);
+    }
+
+    /// <summary>
+    /// After a bulk action on proposals. Deferred a tick: it runs from a Button inside the group's own row (or the section
+    /// header), and removing that row synchronously would detach the clicking control mid-route (CLAUDE.md "routed event" gotcha).
+    /// </summary>
+    private void FinishProposalBulkAction(MetadataProposalStatus status, ProposalGroupViewModel? group)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (group is null)
+            {
+                Refresh(Queue.Proposals);
+                return;
+            }
+
+            (status == MetadataProposalStatus.Pending ? PendingProposalGroups : AppliedProposalGroups).Remove(group);
+            NotifyProposalCountsChanged();
+        });
     }
 
     /// <summary>
@@ -305,8 +900,23 @@ public partial class NeedsReviewViewModel : ViewModelBase
             return;
         }
 
+        // Accepting an already-applied proposal changes nothing but the review mark: it is applied already (and for a Series-field
+        // one the issue has already moved), so re-running that would be pointless at best. Marking it reviewed is what makes the
+        // per-row Accept durable - before ReviewedAt it flipped to "Accepted" on screen and came straight back on the next refresh.
+        if (accept && proposal.Status == MetadataProposalStatus.Accepted)
+        {
+            proposal.ReviewedAt = DateTime.UtcNow;
+            context.SaveChanges();
+            return;
+        }
+
         proposal.Status = accept ? MetadataProposalStatus.Accepted : MetadataProposalStatus.Rejected;
         proposal.ResolvedAt = DateTime.UtcNow;
+        if (accept)
+        {
+            proposal.ReviewedAt = proposal.ResolvedAt;
+        }
+
         context.SaveChanges();
 
         // Series is write-time, not read-time like every other field (docs/superpowers/specs/

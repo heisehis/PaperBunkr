@@ -13,52 +13,17 @@
 
     <!--
         The "What's New" overlay (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-
-        design.md, Decisions 5-6). On the shared FirstLookShell. Changelog rendering reuses the
-        exact converter + category styles the Preferences → About accordion uses
-        (ChangelogBodyToGroupsConverter, changelogCategoryTag) - one renderer, not two.
+        design.md, Decisions 5-6). On the shared FirstLookShell. Each version is the same
+        ChangelogEntryView the Preferences → About changelog uses (docs/superpowers/specs/
+        2026-09-26-about-polish-design.md §3) - one renderer and one set of styles, not two.
     -->
     <controls:FirstLookShell Title="What's new" Subtitle="{Binding HeaderText}">
 
-        <ScrollViewer MaxHeight="340" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
             <ItemsControl ItemsSource="{Binding Rows}">
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:WhatsNewEntryRow">
-                        <StackPanel Margin="0,0,0,4">
-                            <ToggleButton Name="ExpandToggle" Classes="changelogExpandHeader"
-                                          IsChecked="{Binding StartExpanded, Mode=OneTime}">
-                                <Grid ColumnDefinitions="Auto,Auto,Auto,*">
-                                    <fi:SymbolIcon Grid.Column="0" Symbol="ChevronRight" FontSize="14"
-                                                   Classes="changelogChevron" Classes.expanded="{Binding $parent[ToggleButton].IsChecked}"
-                                                   Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Entry.Version}" FontWeight="Bold" FontSize="13"
-                                               Foreground="{DynamicResource PbTextBrush}" Margin="8,0" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{Binding Entry.Date}" FontSize="11.5"
-                                               Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                </Grid>
-                            </ToggleButton>
-                            <StackPanel IsVisible="{Binding #ExpandToggle.IsChecked}" Margin="22,8,0,10" Spacing="8">
-                                <ItemsControl ItemsSource="{Binding Entry.Body, Converter={x:Static views:ChangelogBodyToGroupsConverter.Instance}}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="services:ChangelogBodyGroup">
-                                            <StackPanel Spacing="4" Margin="0,0,0,4">
-                                                <Border Classes="changelogCategoryTag" HorizontalAlignment="Left"
-                                                        IsVisible="{Binding Category, Converter={x:Static ObjectConverters.IsNotNull}}">
-                                                    <TextBlock Text="{Binding Category}" FontSize="11" Foreground="{DynamicResource PbAccentBrush}" />
-                                                </Border>
-                                                <ItemsControl ItemsSource="{Binding Lines}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="x:String">
-                                                            <TextBlock Text="{Binding}" FontSize="12.5" TextWrapping="Wrap"
-                                                                       Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2" />
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </StackPanel>
+                    <DataTemplate x:DataType="services:ChangelogRow">
+                        <views:ChangelogEntryView Margin="0,0,0,2" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

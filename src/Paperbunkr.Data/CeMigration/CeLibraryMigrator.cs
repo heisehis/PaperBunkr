@@ -464,6 +464,11 @@ public class CeLibraryMigrator
         issue.OpenedTime = book.OpenedTime != DateTime.MinValue ? book.OpenedTime : null;
         issue.LastPageRead = book.LastPageRead;
         issue.FileIsMissing = book.FileIsMissing;
+        // CE's own cached file properties (-1 / MinValue = never read), then the live file wins when reachable.
+        issue.FileSize = book.FileSize > 0 ? book.FileSize : null;
+        issue.FileModifiedTime = book.FileModifiedTime != DateTime.MinValue ? book.FileModifiedTime : null;
+        issue.FileCreationTime = book.FileCreationTime != DateTime.MinValue ? book.FileCreationTime : null;
+        Paperbunkr.Data.Library.IssueFileStats.TryApply(issue);
         issue.CustomThumbnailKey = NullIfEmpty(book.CustomThumbnailKey);
 
         // CE's per-issue SeriesComplete flag ("this issue is the one that completes the series") -

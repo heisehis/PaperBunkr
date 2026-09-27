@@ -9,7 +9,7 @@ namespace Paperbunkr.App.Models;
 /// screen-icons-and-glyphs-design.md Part 4). Either a FluentIcons glyph + text
 /// (<see cref="Icon"/>) or a resolved brand/metadata <see cref="BrandMark"/> (<see cref="Mark"/>).
 /// </summary>
-public sealed record DetailMetaBadge(string Text, Symbol? Icon = null, MarkFamily? Mark = null, string? MarkValue = null, string? StatusKind = null)
+public sealed record DetailMetaBadge(string Text, Symbol? Icon = null, MarkFamily? Mark = null, string? MarkValue = null, string? StatusKind = null, int? MarkYear = null)
 {
     public bool IsMark => Mark is not null;
 
@@ -41,7 +41,8 @@ public sealed record DetailMetaBadge(string Text, Symbol? Icon = null, MarkFamil
 
         if (!string.IsNullOrWhiteSpace(publisher))
         {
-            list.Add(new DetailMetaBadge(string.Empty, Mark: MarkFamily.Publisher, MarkValue: publisher));
+            list.Add(new DetailMetaBadge(string.Empty, Mark: MarkFamily.Publisher, MarkValue: publisher,
+                MarkYear: int.TryParse(year, out int publisherYear) ? publisherYear : null));
         }
 
         if (!string.IsNullOrWhiteSpace(statusLabel))

@@ -213,6 +213,7 @@
                             <MenuItem Header="Link story event…" Command="{Binding ToggleLinkStoryEventCommand}" />
                             <MenuItem Header="Build from a story arc…" Command="{Binding ToggleArcSearchCommand}" />
                             <MenuItem Header="Refresh from source" Command="{Binding RefreshArcListCommand}" IsVisible="{Binding IsArcLinked}" />
+                            <MenuItem Header="Detect roles" Command="{Binding DetectRolesCommand}" />
                             <MenuItem Header="Request missing issues" Command="{Binding RequestMissingFromArcCommand}" IsVisible="{Binding IsArcLinked}" />
                             <MenuItem Header="Follow this arc" ToggleType="CheckBox" IsChecked="{Binding FollowArc, Mode=TwoWay}" IsVisible="{Binding IsArcLinked}" />
                             <Separator />
@@ -512,10 +513,23 @@
 
                                                         <!-- role: chip at rest (when set), compact picker on hover -->
                                                         <Panel Grid.Column="5" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="40">
-                                                            <Border Classes="pbChip" Padding="8,3" HorizontalAlignment="Left"
-                                                                    IsVisible="{Binding HasRole}">
-                                                                <TextBlock Text="{Binding RoleChipLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                            </Border>
+                                                            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Left">
+                                                                <Border Classes="pbChip" Padding="8,3" IsVisible="{Binding HasRole}"
+                                                                        ToolTip.Tip="{Binding RoleReasonText}">
+                                                                    <TextBlock Text="{Binding RoleChipLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                                </Border>
+                                                                <!-- a role detection is not sure enough to apply on its own: accept or dismiss it -->
+                                                                <Border Classes="pbChip" Padding="8,2" IsVisible="{Binding HasRoleSuggestion}">
+                                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                        <TextBlock Text="{Binding SuggestionText}" FontSize="10" FontStyle="Italic" MaxWidth="240" TextTrimming="CharacterEllipsis"
+                                                                                   VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" ToolTip.Tip="{Binding SuggestionText}" />
+                                                                        <Button Classes="headerAction ghost" Content="Accept" Padding="6,1" FontSize="10"
+                                                                                Command="{Binding AcceptSuggestionCommand}" AutomationProperties.Name="Accept the suggested role" />
+                                                                        <Button Classes="headerAction ghost" Content="Dismiss" Padding="6,1" FontSize="10"
+                                                                                Command="{Binding DismissSuggestionCommand}" AutomationProperties.Name="Dismiss the suggested role" />
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </StackPanel>
                                                             <controls:SuggestBox Classes="rowManage" IsStrict="True"
                                                                       Suggestions="{Binding RoleOptionNames}" Text="{Binding SelectedRoleOptionText}"
                                                                       FontSize="10.5" MinWidth="104" Watermark="Role" HorizontalAlignment="Left"
@@ -550,6 +564,7 @@
                                                                     <MenuItem Header="Mark as read" Command="{Binding ToggleReadCommand}" IsVisible="{Binding !IsRead}" />
                                                                     <MenuItem Header="Mark as unread" Command="{Binding ToggleReadCommand}" IsVisible="{Binding IsRead}" />
                                                                     <MenuItem Header="Add a note" Command="{Binding BeginNoteCommand}" />
+                                                                    <MenuItem Header="Clear detected role" Command="{Binding ClearAutoRoleCommand}" IsVisible="{Binding IsAutoRole}" />
                                                                     <Separator />
                                                                     <MenuItem Header="Move up" Command="{Binding MoveUpCommand}" />
                                                                     <MenuItem Header="Move down" Command="{Binding MoveDownCommand}" />

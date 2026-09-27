@@ -23,27 +23,30 @@ public static class IssueMetadataExtensions
     /// </summary>
     public const double ReadThresholdPercent = 95;
 
-    /// <summary>0-100, clamped. 0 when <see cref="Issue.PageCount"/> is null/0 (nothing to divide by) rather than throwing or returning NaN.</summary>
+    /// <summary>
+    /// CE's own formula (<c>ComicBook.ReadPercentage</c>, verified 2026-09-21 for comic reader pitch slice
+    /// B): 0 when <see cref="Issue.LastPageRead"/> is null/0 or <see cref="Issue.PageCount"/> is null/0
+    /// (nothing to divide by), otherwise <c>(LastPageRead+1)*100/PageCount</c> clamped to 1..100. The
+    /// <c>+1</c> matters: <see cref="Issue.LastPageRead"/> is a 0-based index, so without it an issue under
+    /// 20 pages could never reach <see cref="ReadThresholdPercent"/> at its last page.
+    /// </summary>
     public static double ReadPercentage(this Issue issue)
     {
-        if (issue.PageCount is not > 0)
+        if (issue.LastPageRead is not > 0 || issue.PageCount is not > 0)
         {
             return 0;
         }
 
-        double raw = 100.0 * (issue.LastPageRead ?? 0) / issue.PageCount.Value;
-        return double.Clamp(raw, 0, 100);
+        double raw = 100.0 * (issue.LastPageRead.Value + 1) / issue.PageCount.Value;
+        return double.Clamp(raw, 1, 100);
     }
 
     public static bool HasBeenRead(this Issue issue) => issue.ReadPercentage() >= ReadThresholdPercent;
 
-    public static bool IsUnread(this Issue issue) => issue.ReadPercentage() == 0;
+    /// <summary>CE: unread means the reader never moved past page 0 (<c>LastPageRead &lt;= 0</c>), independent of whether <see cref="Issue.PageCount"/> is known.</summary>
+    public static bool IsUnread(this Issue issue) => issue.LastPageRead is not > 0;
 
-    public static bool IsInProgress(this Issue issue)
-    {
-        double pct = issue.ReadPercentage();
-        return pct > 0 && pct < ReadThresholdPercent;
-    }
+    public static bool IsInProgress(this Issue issue) => !issue.IsUnread() && issue.ReadPercentage() < ReadThresholdPercent;
 
     // --- Metadata Proposal effective-value resolvers (docs/superpowers/specs/2026-08-17-metadata-
     // model-phase2a-metadata-proposals-design.md) - Paperbunkr's real replacement for CE's

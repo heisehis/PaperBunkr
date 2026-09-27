@@ -36,7 +36,10 @@ public static class VolumeMatchRanker
         var candidate = new ComicVineVolumeSearchResult(
             volume.Id, volume.Name, volume.StartYear?.ToString(System.Globalization.CultureInfo.InvariantCulture), volume.Publisher, volume.CountOfIssues, volume.ImageUrl);
 
-        double score = MatchScoreCalculator.Compute(hints.Name, bookFormat: null, hints.HighestIssueNumber, hints.Year, candidate, wasPreviouslyChosenForSimilarBook: false, currentYear);
+        double score = MatchScoreCalculator.Compute(
+            hints.Name, bookFormat: null,
+            hints.HighestIssueNumber?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            hints.Year, candidate, wasPreviouslyChosenForSimilarBook: false, currentYear);
 
         if (!string.IsNullOrWhiteSpace(hints.Publisher) && !string.IsNullOrWhiteSpace(volume.Publisher)
             && string.Equals(hints.Publisher.Trim(), volume.Publisher.Trim(), StringComparison.OrdinalIgnoreCase))

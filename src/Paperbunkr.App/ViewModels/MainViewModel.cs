@@ -224,27 +224,55 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         PdfReader = new PdfPageReaderScreenViewModel(NavigateBack, ReadingEvents);
         Detail = new DetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
         MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
+        MetadataEntityDetail = new MetadataEntityDetailScreenViewModel(NavigateBack, GoDetailForSeries, GoReaderForIssue);
         Paperbunkr.App.Scraper.ScheduledCoordinators.Scraper = Scraper;
         Paperbunkr.App.Scraper.ScheduledCoordinators.Organizer = Organizer;
         Library.ScrapeIssues = ids => Scraper.ScrapeIssuesAsync(ids);
         Library.OrganizeIssues = ids => Organizer.OrganizeIssuesAsync(ids);
-        Detail.Tabs.ScraperPanelFactory = Scraper.CreateSeriesPanel;
+        // Reloads the currently-loaded series afterward (same role as Library.RefreshAfterScrape),
+        // deferred a dispatcher tick for the same reason LibraryScreenViewModel's own equivalent is -
+        // ReloadCurrentSeries clears and repopulates the Issues/IssueGroups/Specials collections the
+        // right-clicked tile itself lives in. The whole-series panel (ScraperPanelFactory) needs this
+        // exactly as much as the single-issue context-menu action (ScrapeIssues) does - it used to have
+        // no completion callback at all, so every field a whole-series scrape wrote stayed invisible on
+        // the Issues tab's tiles until the user navigated away from Detail and back.
+        Detail.Tabs.ScraperPanelFactory = series => Scraper.CreateSeriesPanel(series, () => Avalonia.Threading.Dispatcher.UIThread.Post(Detail.ReloadCurrentSeries));
+        Detail.Tabs.ScrapeIssues = async ids =>
+        {
+            var result = await Scraper.ScrapeIssuesAsync(ids).ConfigureAwait(true);
+            Avalonia.Threading.Dispatcher.UIThread.Post(Detail.ReloadCurrentSeries);
+            return result;
+        };
         var keyBindingService = new KeyBindingService();
         Reader = new ReaderScreenViewModel(NavigateBack, keyBindingService, ReadingEvents, TrackerAutoSync);
+        Reader.PageAdSeeder = new Services.AdDetection.AdHashSeeder();
+        Reader.EnableNextIssueStaging();
         // "Ask me to rate a comic when I finish it" (docs/superpowers/specs/2026-09-04-behavior-
         // settings-batch2-design.md §3.3) - the reader raises this at the true end of a book when
         // AppSettings.PromptReviewOnFinish is on; reuse the same Quick Rate overlay the Library /
         // Detail right-click item opens.
         Reader.ReviewPromptRequested += OpenQuickRateOverlay;
+        Reader.ToastRequested += ShowToast;
+        Reader.ToastCloseRequested += CloseToast;
+        Reader.OpenDetailsRequested += GoDetailForSeries;
+        Reader.EditPropertiesRequested += GoIssuePropertiesForIssue;
+        Reader.PromptForName = PromptWorkspaceName;
+        Compare = new CompareScreenViewModel(NavigateBack, ShowToast, Dialogs);
+        Library.CompareRequested += GoCompare;
+
         IssueProperties = new IssuePropertiesScreenViewModel(CloseIssuePropertiesOverlayAndReload, ShowToast, enqueueMetadataWriteBack: id => EnqueueMetadataWriteBack(id));
         BulkIssueProperties = new BulkIssuePropertiesScreenViewModel(CloseBulkIssuePropertiesOverlayAndReload, ShowToast, enqueueMetadataWriteBack: id => EnqueueMetadataWriteBack(id));
         BulkSeriesProperties = new BulkSeriesPropertiesScreenViewModel(CloseBulkSeriesPropertiesOverlayAndReload, id => EnqueueMetadataWriteBack(id));
         Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook, loadOnConstruction: false);
         Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, activity: Activity, loadOnConstruction: false, trackerAutoSync: TrackerAutoSync);
         Events = new EventsScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast, activity: Activity, loadOnConstruction: false);
-        Insights = new InsightsScreenViewModel(GoReaderForIssue, GoDetailForSeries, GoLibraryWithSearch, ReadingEvents);
+        Insights = new InsightsScreenViewModel(GoReaderForIssue, GoDetailForSeries, GoLibraryWithSearch, OpenNewGoalDialog, Dialogs, ReadingEvents, activity: Activity);
         Plugin = new PluginScreenViewModel(new FilePickerService(), Dialogs);
-        Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview, loadOnConstruction: false);
+        // The review queues (docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md) - owned here,
+        // hosted by Preferences → Library → Library Health; the migration overlay only gets it to refresh after a run.
+        NeedsReview = new NeedsReviewViewModel(OpenSeriesDetailFromReview, loadOnConstruction: false);
+        Migration = new MigrationOverlayViewModel(new FilePickerService(), NeedsReview, ReviewInLibraryHealth);
+        NeedsReview.CompareRequested += GoCompare;
         // First-run onboarding (docs/superpowers/specs/2026-08-31-first-run-onboarding-design.md) -
         // constructed here like every other overlay VM; LiveFolderWatch.Reload/OpenMigrationOverlay
         // are the same callbacks Preferences already reuses for the identical folder-add/migration
@@ -264,13 +292,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         CollectionProperties = new CollectionPropertiesScreenViewModel(CloseCollectionPropertiesOverlay);
         NewReadingList = new NewReadingListViewModel(new FilePickerService(), OnNewReadingListCreated, CloseNewReadingListDialog);
         NewEventOrContinuity = new NewEventOrContinuityViewModel(OnEventOrContinuityCreated, CloseNewEventDialog);
+        GoalEditor = new GoalEditorViewModel(OnGoalCreated, CloseNewGoalDialog);
         QuickRate = new QuickRateScreenViewModel(CloseQuickRateOverlay, id => EnqueueMetadataWriteBack(id));
         DesignShowcase = new DesignShowcaseScreenViewModel();
 
         // Live folder-watch scanning (docs/superpowers/specs/
         // 2026-08-23-live-folder-watch-scanning-design.md) - constructed here alongside the app's
         // other manually-composed services (this codebase has no DI container). Its "already-open
-        // UI should refresh" responsibility is just re-running Migration.NeedsReview's live query -
+        // UI should refresh" responsibility is just re-running NeedsReview's live query -
         // Library itself already reloads its data on every navigation (an earlier real bug fix), so
         // no separate push-refresh is needed there.
         LiveFolderWatch = new LiveFolderWatchService(
@@ -290,7 +319,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 _upkeep.SetActive("Reacting to a watched-folder change");
                 _upkeepIdleTimer.Stop();
                 _upkeepIdleTimer.Start();
-                Migration.NeedsReview.Refresh();
+                _ = NeedsReview.RefreshAsync();
             },
             onFilesMissing: count => Activity.RaiseAlert(new ActivityAlert
             {
@@ -300,7 +329,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                     ? "A watched file disappeared from disk."
                     : $"{count} watched files disappeared from disk.",
                 ActionLabel = "Review",
-                ActionLink = new ActivityLink(ActivityLinkKind.Preferences, "LibraryHealth"),
+                ActionLink = new ActivityLink(ActivityLinkKind.Preferences, "LibraryHealth/Files"),
                 DedupeKey = "missing-files",
             }),
             onFilesImported: ids => DuplicateAlertHelper.RaiseIfAny(Activity, ids));
@@ -323,7 +352,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                         ? $"{repair.Reconnected} comic{(repair.Reconnected == 1 ? "" : "s")} reconnected after a metadata write-back issue; {repair.NeedsManualReview} still need a manual relink."
                         : $"{repair.Reconnected} comic{(repair.Reconnected == 1 ? "" : "s")} reconnected to {(repair.Reconnected == 1 ? "its file" : "their files")} after a metadata write-back issue.",
                     ActionLabel = repair.NeedsManualReview > 0 ? "Review" : null,
-                    ActionLink = repair.NeedsManualReview > 0 ? new ActivityLink(ActivityLinkKind.Preferences, "LibraryHealth") : null,
+                    ActionLink = repair.NeedsManualReview > 0 ? new ActivityLink(ActivityLinkKind.Preferences, "LibraryHealth/Files") : null,
                     DedupeKey = "library-path-repair",
                 });
             }
@@ -333,6 +362,25 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             // Best-effort self-heal - never block startup on it.
         }
 
+        // One-time backfill of FileSize/FileModifiedTime/FileCreationTime for issues catalogued
+        // before the scanner populated them (idempotent - only touches rows with no FileSize yet).
+        // Off the UI thread: it stats every file, and a large library is thousands of them.
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                using var statsContext = PaperbunkrDb.CreateContext();
+                if (Paperbunkr.Data.Library.IssueFileStats.BackfillMissing(statsContext) > 0)
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => StatusBar.RefreshLibraryStats(force: true));
+                }
+            }
+            catch
+            {
+                // Best-effort - a later launch retries whatever this one missed.
+            }
+        });
+
         Preferences = new PreferencesScreenViewModel(
             themeService,
             new FilePickerService(),
@@ -341,7 +389,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             new BackupService(),
             keyBindingService,
             ShowToast,
-            Migration,
+            NeedsReview,
             Plugin,
             OpenMigrationOverlay,
             Activity,
@@ -349,7 +397,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             LiveFolderWatch.Reload,
             OpenDesignShowcaseOverlay,
             _updateService,
-            enqueueMetadataWriteBack: EnqueueMetadataWriteBack);
+            enqueueMetadataWriteBack: EnqueueMetadataWriteBack,
+            openIssueAtPage: GoReaderForIssueAtPage);
         Preferences.AttachScheduler(Scheduler);
 
         // Remote library sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md). Built here like the other
@@ -419,6 +468,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // Load happened to run. Wired the same way as the toast plumbing above - Preferences raises a
         // plain event, the Reader refreshes its own snapshot in response, no shared mutable state.
         Preferences.ReaderDisplaySettingsChanged += Reader.RefreshDisplaySettings;
+        Preferences.PromptForName = PromptWorkspaceName;
+        Reader.ProfilesChanged += Preferences.RefreshReaderProfiles;
+        Preferences.ReaderProfilesChanged += Reader.RefreshProfiles;
         Preferences.WhatsNewRequested += OpenWhatsNewOverlayCurrentOnly;
 
         using (var context = PaperbunkrDb.CreateContext())
@@ -546,7 +598,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public PdfPageReaderScreenViewModel PdfReader { get; }
     public DetailScreenViewModel Detail { get; }
     public MangaDetailScreenViewModel MangaDetail { get; }
+    public MetadataEntityDetailScreenViewModel MetadataEntityDetail { get; }
     public ReaderScreenViewModel Reader { get; }
+
+    /// <summary>The two-edition Compare screen (docs/superpowers/specs/2026-09-26-comic-reader-compare-design.md #11).</summary>
+    public CompareScreenViewModel Compare { get; }
     public IssuePropertiesScreenViewModel IssueProperties { get; }
     public BulkIssuePropertiesScreenViewModel BulkIssueProperties { get; }
 
@@ -558,6 +614,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public PluginScreenViewModel Plugin { get; }
     public PreferencesScreenViewModel Preferences { get; }
     public MigrationOverlayViewModel Migration { get; }
+
+    /// <summary>The review queues (Content Type, Duplicate Files, Series Conflicts, Metadata Proposals, Ad Pages) - the same instance Preferences hosts in Library Health.</summary>
+    public NeedsReviewViewModel NeedsReview { get; }
     /// <summary>Backs the single shared confirm-dialog OverlayShell mounted in MainWindow.axaml -
     /// drive it through <see cref="Dialogs"/>, never directly (docs/superpowers/specs/2026-09-06-
     /// feedback-notification-system-design.md §2).</summary>
@@ -577,6 +636,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public CollectionPropertiesScreenViewModel CollectionProperties { get; }
     public NewReadingListViewModel NewReadingList { get; }
     public NewEventOrContinuityViewModel NewEventOrContinuity { get; }
+
+    /// <summary>The create-goal overlay's own view-model (docs/superpowers/specs/2026-09-23-insights-
+    /// reading-goals-design.md), opened from the Insights screen's "+ Add goal" tile.</summary>
+    public GoalEditorViewModel GoalEditor { get; }
     public QuickRateScreenViewModel QuickRate { get; }
     public WorkspaceNameViewModel WorkspaceName { get; }
     public QuickOpenViewModel QuickOpen { get; }
@@ -709,6 +772,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private bool _isNewEventDialogOpen;
 
     [ObservableProperty]
+    private bool _isNewGoalDialogOpen;
+
+    [ObservableProperty]
     private bool _isBookPropertiesOverlayOpen;
 
     partial void OnIsBookPropertiesOverlayOpenChanged(bool value) => OnPropertyChanged(nameof(IsBookProperties));
@@ -800,7 +866,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         "reader" => Reader,
         "bookReader" => BookReader,
         "pdfReader" => PdfReader,
+        "compare" => Compare,
         "bookDetail" => BookDetail,
+        "metadataEntity" => MetadataEntityDetail,
         _ => null,
     };
 
@@ -834,6 +902,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public bool IsWanted => CurrentScreen == "wanted";
     public bool IsPreferences => CurrentScreen == "preferences";
     public bool IsReader => CurrentScreen == "reader";
+    public bool IsCompare => CurrentScreen == "compare";
 
     /// <summary>
     /// True on any of the three reading screens (comic <see cref="IsReader"/>, <see cref="IsBookReader"/>,
@@ -843,7 +912,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// rail binding to <c>Reader.IsFullscreen</c>, which only hid chrome in the comic reader's
     /// fullscreen mode.
     /// </summary>
-    public bool IsInReader => IsReader || IsBookReader || IsPdfReader;
+    public bool IsInReader => IsReader || IsBookReader || IsPdfReader || IsCompare;
 
     /// <summary>Alias, not a distinct concept - kept so <see cref="Escape"/>/<see cref="TryLeaveCurrentEditor"/>
     /// didn't need renaming when this stopped being <see cref="CurrentScreen"/>-backed.</summary>
@@ -957,6 +1026,12 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // non-reader-to-non-reader navigation is a few redundant DynamicResource writes, not a
         // correctness issue.
         _themeService.SetTrueBlackReaderSuspend(value is "reader" or "bookReader" or "pdfReader");
+        if (value != "compare" && Compare is { IsOpen: true })
+        {
+            Compare.Dispose();   // both editions' files are released whichever way the screen was left
+        }
+
+        OnPropertyChanged(nameof(IsCompare));
 
         OnPropertyChanged(nameof(ActiveScreenContent));
         OnPropertyChanged(nameof(ActiveDrillDownContent));
@@ -1099,10 +1174,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void GoPreferences() => TryLeaveCurrentEditor(() =>
     {
         Preferences.EnsureLoaded();
-        // Keep the Libraries-tab "needs review" badge (LibrarySection.axaml, bound to
-        // Migration.NeedsReview.HasPendingItems) current - NeedsReview no longer refreshes in its
+        // Library Health hosts the review queues and the Library nav dot binds their pending count
+        // (LibrarySection.axaml / PreferencesScreen.axaml) - NeedsReview no longer refreshes in its
         // constructor (that was ~1s of the frozen-splash startup window).
-        Migration.NeedsReview.Refresh();
+        _ = NeedsReview.RefreshAsync();
         CurrentScreen = "preferences";
         ResetHistoryRoot("preferences");
     });
@@ -1173,10 +1248,31 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         Library.LoadFromDatabase();
     }
 
-    private void OpenSeriesDetailFromReview(int seriesId)
+    private void OpenSeriesDetailFromReview(int seriesId) => GoDetailForSeries(seriesId);
+
+    /// <summary>The migration Results screen's "Review in Library Health" button and the legacy <see cref="ActivityLinkKind.MigrationReview"/> link - closes the overlay if it's open and lands on the Library Health card.</summary>
+    private void ReviewInLibraryHealth()
     {
-        IsMigrationOverlayOpen = false;
-        GoDetailForSeries(seriesId);
+        if (IsMigrationOverlayOpen)
+        {
+            CloseMigrationOverlay();
+        }
+
+        GoPreferencesCommand.Execute(null);
+        Preferences.OpenLibraryHealth(LibraryHealthTab.Review);
+    }
+
+    /// <summary>
+    /// Opens Library Health for an <see cref="ActivityLinkKind.Preferences"/> payload: <c>LibraryHealth</c> (the remembered tab),
+    /// <c>LibraryHealth/Files</c>, <c>LibraryHealth/Review</c> or <c>LibraryHealth/Review/Duplicates</c> (tab, then a section key).
+    /// An unknown tab or section falls back to the plain card.
+    /// </summary>
+    private void OpenLibraryHealthFromPayload(string payload)
+    {
+        var parts = payload.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        LibraryHealthTab? tab = parts.Length > 1 && Enum.TryParse<LibraryHealthTab>(parts[1], ignoreCase: true, out var parsed) ? parsed : null;
+        string? section = parts.Length > 2 ? parts[2] : null;
+        Preferences.OpenLibraryHealth(tab, section);
     }
 
     /// <summary>First-run welcome screen (docs/superpowers/specs/2026-08-31-first-run-onboarding-
@@ -1291,7 +1387,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         IsIssuePropertiesOverlayOpen || IsBulkIssuePropertiesOverlayOpen || IsBulkSeriesPropertiesOverlayOpen
         || IsBookPropertiesOverlayOpen || IsBulkBookPropertiesOverlayOpen || IsBookSeriesPropertiesOverlayOpen
         || IsReadingListPropertiesOverlayOpen || IsCollectionPropertiesOverlayOpen || IsWorkspaceNameOverlayOpen
-        || IsNewReadingListDialogOpen || IsNewEventDialogOpen || IsMigrationOverlayOpen || IsQuickRateOverlayOpen
+        || IsNewReadingListDialogOpen || IsNewEventDialogOpen || IsNewGoalDialogOpen || IsMigrationOverlayOpen || IsQuickRateOverlayOpen
         || IsWelcomeOverlayOpen || IsWelcomeTourOverlayOpen || IsWhatsNewOverlayOpen;
 
     /// <summary>Ctrl+P (docs/superpowers/specs/2026-09-03-quick-open-command-palette-design.md) - opens
@@ -1471,6 +1567,24 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     [RelayCommand]
     private void CloseNewEventDialog() => IsNewEventDialogOpen = false;
+
+    /// <summary>"+ Add goal" tile on the Insights screen's Overview tab (docs/superpowers/specs/
+    /// 2026-09-23-insights-reading-goals-design.md).</summary>
+    [RelayCommand]
+    private void OpenNewGoalDialog()
+    {
+        GoalEditor.Reset();
+        IsNewGoalDialogOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseNewGoalDialog() => IsNewGoalDialogOpen = false;
+
+    private void OnGoalCreated()
+    {
+        IsNewGoalDialogOpen = false;
+        Insights.Goals.Refresh();
+    }
 
     private void OnEventOrContinuityCreated(NewEventOrContinuityViewModel.Kind kind, int id)
     {
@@ -1847,20 +1961,27 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// context isn't part of <see cref="NavigationEntry"/>) - an acceptable simplification, low-risk
     /// since it only affects Reader's own "up/down next in list" affordance while paging back through
     /// history, not the page content itself.</summary>
-    private void NavigateToReaderCore(int issueId, int? readingListId)
+    private void NavigateToReaderCore(int issueId, int? readingListId, int? startPage = null, int? storyEventId = null)
     {
         _currentReaderIssueId = issueId;
         if (readingListId is int listId)
         {
-            Reader.LoadIssue(issueId, listId);
+            Reader.LoadIssue(issueId, listId, startPage);
         }
         else
         {
-            Reader.LoadIssue(issueId);
+            Reader.LoadIssue(issueId, startPage: startPage, storyEventId: storyEventId);
         }
 
         CurrentScreen = "reader";
     }
+
+    /// <summary>Library Health's "Open in reader" for a reported page (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md §4) - opens the issue on that 0-based page without touching the saved reading position.</summary>
+    private void GoReaderForIssueAtPage(int issueId, int pageNumber) => RunDrill(DrillTransitionKind.Push, $"issue-cover:{issueId}", () =>
+    {
+        NavigateToReaderCore(issueId, readingListId: null, startPage: pageNumber);
+        PushHistory(new NavigationEntry("reader", NavigationEntryKind.Issue, issueId, Reader.IssueTitle));
+    });
 
     /// <summary>Plugin-facing entry point for <c>Paperbunkr.Plugins.Automation.IOpenBooksManager.Open</c> (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §4) - same navigation as <see cref="GoReaderForIssue"/>, just reachable from outside this ViewModel.</summary>
     public void OpenReaderForPlugin(int issueId) => GoReaderForIssue(issueId);
@@ -1887,6 +2008,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         NavigateToReaderCore(issueId, readingListId);
         PushHistory(new NavigationEntry("reader", NavigationEntryKind.Issue, issueId, Reader.IssueTitle));
     });
+
 
     /// <summary>Book Details entry point (docs/superpowers/specs/2026-08-27-book-details-screen-
     /// design.md) - the Books grid card click lands here now, not straight in the reader.</summary>
@@ -1918,6 +2040,52 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         BookDetail.LoadSeries(bookSeriesId);
         CurrentScreen = "bookDetail";
     }
+
+    /// <summary>Character/Team/Location/Creator/Publisher entry point (docs/superpowers/specs/2026-09-
+    /// 23-metron-api-utilization-design.md) - one shared screen/history entry for all five kinds, see
+    /// <see cref="MetadataEntityDetailScreenViewModel"/>'s own doc comment for why.</summary>
+    private void GoMetadataEntityDetail(ComicMetadataEntityKind kind, int entityId) => RunDrill(DrillTransitionKind.Push, sharedKey: null, () =>
+    {
+        NavigateToMetadataEntityDetailCore(kind, entityId);
+        PushHistory(new NavigationEntry("metadataEntity", ToNavigationEntryKind(kind), entityId, MetadataEntityDetail.Name));
+    });
+
+    private void NavigateToMetadataEntityDetailCore(ComicMetadataEntityKind kind, int entityId)
+    {
+        MetadataEntityDetail.Load(kind, entityId);
+        CurrentScreen = "metadataEntity";
+    }
+
+    private static NavigationEntryKind ToNavigationEntryKind(ComicMetadataEntityKind kind) => kind switch
+    {
+        ComicMetadataEntityKind.Character => NavigationEntryKind.Character,
+        ComicMetadataEntityKind.Team => NavigationEntryKind.Team,
+        ComicMetadataEntityKind.Location => NavigationEntryKind.Location,
+        ComicMetadataEntityKind.Creator => NavigationEntryKind.Creator,
+        ComicMetadataEntityKind.Publisher => NavigationEntryKind.Publisher,
+        _ => NavigationEntryKind.Character,
+    };
+
+    private static ComicMetadataEntityKind ToComicMetadataEntityKind(NavigationEntryKind kind) => kind switch
+    {
+        NavigationEntryKind.Team => ComicMetadataEntityKind.Team,
+        NavigationEntryKind.Location => ComicMetadataEntityKind.Location,
+        NavigationEntryKind.Creator => ComicMetadataEntityKind.Creator,
+        NavigationEntryKind.Publisher => ComicMetadataEntityKind.Publisher,
+        _ => ComicMetadataEntityKind.Character,
+    };
+
+    /// <summary>Opens the Compare screen for <paramref name="issueAId"/> against <paramref name="otherIds"/> (a duplicate group offers each in turn). Stays where it is, with a toast, when a file cannot be compared.</summary>
+    private void GoCompare(int issueAId, IReadOnlyList<int> otherIds) => RunDrill(DrillTransitionKind.Push, sharedKey: null, () =>
+    {
+        if (!Compare.Open(issueAId, otherIds))
+        {
+            return;
+        }
+
+        CurrentScreen = "compare";
+        PushHistory(new NavigationEntry("compare", NavigationEntryKind.Issue, issueAId, "Compare", otherIds.FirstOrDefault(id => id != issueAId)));
+    });
 
     private void GoBookReaderForBook(int bookId, BookFormat format) => GoBookReaderForBook(bookId, format, null);
 
@@ -2036,7 +2204,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
         using var context = PaperbunkrDb.CreateContext();
         var settings = context.GetOrCreateAppSettings();
-        settings.LastScreenKey = CurrentScreen;
+        settings.LastScreenKey = CurrentScreen == "compare" ? "library" : CurrentScreen;
         settings.LastScreenEntityId = entityId;
         context.SaveChanges();
     }
@@ -2094,11 +2262,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // of which check found it. Not a replacement for the overlay below - additive.
         PreferencesScreenViewModel.RaiseUpdateAvailableAlert(Activity, info.Updates[0].Version.ToString());
 
-        var entries = ChangelogParser.LoadBundledEntries();
-        string? changelogBody = entries.Count > 0 ? entries[0].Body : null;
+        // No changelog excerpt: the bundled CHANGELOG.md is the installed version's, and the appcast carries no release notes, so the
+        // overlay links to the offered version's release page instead (docs/superpowers/specs/2026-09-26-about-polish-design.md §4).
         Dispatcher.UIThread.Post(() =>
         {
-            Update.Show(info.Updates[0], changelogBody);
+            Update.Show(info.Updates[0]);
             IsUpdateAvailableOverlayOpen = true;
         });
     }
@@ -2213,13 +2381,15 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// link and the Preferences → About button.</summary>
     public void OpenWhatsNewOverlayCurrentOnly()
     {
-        var entries = ChangelogParser.LoadBundledEntries();
-        if (entries.Count == 0)
+        // Not entries[0]: that is usually an empty "[Unreleased]" heading, and between releases the running version has no heading
+        // of its own yet (docs/superpowers/specs/2026-09-26-about-polish-design.md §3).
+        var current = ChangelogSelection.Current(ChangelogParser.LoadBundledEntries(), ReleaseVersion.Current);
+        if (current is null)
         {
             return;
         }
 
-        WhatsNew.Show([entries[0]], currentEntryOnly: true);
+        WhatsNew.Show([current], currentEntryOnly: true);
         IsWhatsNewOverlayOpen = true;
     }
 
@@ -2339,11 +2509,26 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 }
 
                 break;
+            case "compare":
+                // Back/Forward into a compare replays the pair; if a file is gone by now the toast says so and the library shows instead.
+                if (entry.SecondaryEntityId is int other && Compare.Open(entry.EntityId, [other]))
+                {
+                    CurrentScreen = "compare";
+                }
+                else
+                {
+                    GoToRootScreen(_navigationHistory.RootScreenKey, sharedKey: null);
+                }
+
+                break;
             case "bookReader":
                 NavigateToBookReaderCore(entry.EntityId, BookFormat.Epub, startAt: null);
                 break;
             case "pdfReader":
                 NavigateToBookReaderCore(entry.EntityId, BookFormat.Pdf, startAt: null);
+                break;
+            case "metadataEntity":
+                NavigateToMetadataEntityDetailCore(ToComicMetadataEntityKind(entry.Kind), entry.EntityId);
                 break;
         }
     }
@@ -2721,6 +2906,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         {
             CloseNewEventDialog();
         }
+        else if (IsNewGoalDialogOpen)
+        {
+            CloseNewGoalDialog();
+        }
         else if (IsReadingListPropertiesOverlayOpen)
         {
             ReadingListProperties.CancelCommand.Execute(null);
@@ -2774,6 +2963,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         {
             Library.CloseAddIssueCommand.Execute(null);
         }
+        else if (IsCompare)
+        {
+            Compare.Close();
+        }
+        else if (IsReader && Reader.IsClipMode)
+        {
+            Reader.ToggleClipModeCommand.Execute(null);
+        }
+        else if (IsReader && Reader.Info.IsOpen)
+        {
+            // The reader's info panel (docs/superpowers/specs/2026-09-26-comic-reader-inreader-reference-design.md #28).
+            Reader.Info.Close();
+        }
         else if (Preferences.IsLegalDocumentViewerOpen)
         {
             Preferences.CloseLegalDocumentViewerCommand.Execute(null);
@@ -2803,7 +3005,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
                 break;
             case ActivityLinkKind.MigrationReview:
-                OpenMigrationOverlay();
+                // The queue moved out of the migration overlay (docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md).
+                ReviewInLibraryHealth();
                 break;
             case ActivityLinkKind.Preferences:
                 GoPreferencesCommand.Execute(null);
@@ -2811,9 +3014,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 {
                     Preferences.GoAutomationCommand.Execute(null);
                 }
-                else if (link.Payload == "LibraryHealth")
+                else if (link.Payload is { } healthPayload && healthPayload.StartsWith("LibraryHealth", StringComparison.Ordinal))
                 {
-                    Preferences.GoLibraryHealthCommand.Execute(null);
+                    OpenLibraryHealthFromPayload(healthPayload);
                 }
                 else if (link.Payload == "Sharing")
                 {

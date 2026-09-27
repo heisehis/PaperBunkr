@@ -108,6 +108,9 @@ public class WantedQueueTests : IDisposable
 
         using (var context = NewContext())
         {
+            // Both pinned: WantedService.Request stamps DateTime.UtcNow, so leaving Zed's real-clock stamp made this
+            // test start failing once the real date passed Today + 5 (2026-09-24).
+            context.WantedIssues.Single(w => w.Id == zed["1"]).CreatedAt = Today;
             context.WantedIssues.Single(w => w.Id == aardvark["1"]).CreatedAt = Today.AddDays(5);
             context.SaveChanges();
         }

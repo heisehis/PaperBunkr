@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="40"
+             x:Class="Paperbunkr.App.Views.Preferences.SettingsTabStrip">
+
+    <!-- Tab strip under a Preferences section's title (docs/superpowers/specs/2026-09-26-preferences-reader-organize-tabs-design.md).
+         Same look as the Library Health / folder-management Button.segTab pair (selected = Surface3 fill, semibold), on a real
+         TabStrip so screen readers get tab roles and the arrow keys move between tabs. Pb* tokens only, so skins apply.
+         These styles are scoped to this control, so the bare TabStripItem selector touches nothing else. -->
+    <UserControl.Styles>
+        <Style Selector="TabStripItem">
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="TabStripItem:pointerover">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="TabStripItem:selected">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <!-- The stock selected-item underline pipe: the fill above already marks the selection. -->
+        <Style Selector="TabStripItem:selected /template/ Border#PART_SelectedPipe">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
+        <TabStrip x:Name="PART_Strip" AutomationProperties.Name="Section tabs">
+            <TabStrip.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </TabStrip.ItemsPanel>
+            <TabStrip.ItemTemplate>
+                <DataTemplate x:DataType="models:SettingsTabItem">
+                    <TextBlock Text="{Binding Title}" />
+                </DataTemplate>
+            </TabStrip.ItemTemplate>
+        </TabStrip>
+    </Border>
+</UserControl>

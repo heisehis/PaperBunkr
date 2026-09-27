@@ -213,6 +213,9 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     public ObservableCollection<RelationSearchResult> RelationSearchResults { get; } = new();
 
     public string Publisher { get; private set; } = "Unknown";
+
+    /// <summary>The series' earliest release year, for the era-specific publisher logo.</summary>
+    public int? PublisherYear { get; private set; }
     public string ReadingModeLabel { get; private set; } = "Left to Right";
 
     // --- Details tab: full credits + additional metadata fields (docs/superpowers/specs/2026-09-
@@ -261,6 +264,17 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>The built-in ComicVine scrape panel for a series (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8). Set by the shell; a series it declines (manga) falls through to any plugin panel.</summary>
     public Func<Series, Avalonia.Controls.Control?>? ScraperPanelFactory { get; set; }
 
+    /// <summary>Host hook for a single issue tile's "Scrape…" right-click entry - mirrors
+    /// <c>LibraryScreenViewModel.ScrapeIssues</c>, same underlying <c>ScrapeCoordinator.ScrapeIssuesAsync</c>.
+    /// Set by the shell for the Western comic Detail screen only; never wired for the manga host
+    /// (<see cref="IsMangaDetailHost"/>) since ComicVine scraping doesn't cover manga - the Issues tab
+    /// itself is already hidden there (<see cref="ShowIssuesTab"/>), so this stays unreachable rather
+    /// than needing its own extra gate.</summary>
+    public Func<IReadOnlyList<int>, Task<string>>? ScrapeIssues { get; set; }
+
+    /// <summary>Gates the issue-tile context menu's "Scrape…" entry (<see cref="DetailIssueContextMenuBuilder"/>) - same shape as <see cref="HasLibraryPluginCommands"/>.</summary>
+    public bool CanScrapeIssues => ScrapeIssues is not null;
+
     public bool HasComicScraperDetailView => ComicScraperDetailView is not null;
 
     public void LoadSeries(Series series)
@@ -298,10 +312,13 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         }
 
         _seriesId = series.Id;
-        Publisher = SeriesMetaFields.FromSeries(series).Publisher ?? "Unknown";
+        SeriesMetaFields seriesFields = SeriesMetaFields.FromSeries(series);
+        Publisher = seriesFields.Publisher ?? "Unknown";
+        PublisherYear = seriesFields.YearValue;
         SetReadingModeLabel(series.ReadingMode);
         SetSeriesReaderDefaults(series);
         OnPropertyChanged(nameof(Publisher));
+        OnPropertyChanged(nameof(PublisherYear));
 
         RefreshCreditRoles(series.Issues);
         RefreshAdditionalDetails(series.Issues);
@@ -2152,8 +2169,30 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private bool _hasSeriesAutoRotateDefault;
 
+    /// <summary>The reader profile this series opens with (docs/superpowers/specs/2026-09-25-comic-reader-profiles-design.md section 3), set from the reader's drawer and cleared here.</summary>
+    [ObservableProperty]
+    private string _seriesProfileLabel = "Not set";
+
+    [ObservableProperty]
+    private bool _hasSeriesProfile;
+
     private void SetSeriesReaderDefaults(Series series)
     {
+        HasSeriesProfile = series.ReaderProfileId is not null;
+        if (series.ReaderProfileId is int profileId)
+        {
+            using var profileContext = _contextFactory();
+            string? name = profileContext.Workspaces
+                .Where(w => w.Id == profileId && w.Screen == WorkspaceScreen.Reader)
+                .Select(w => w.Name)
+                .FirstOrDefault();
+            SeriesProfileLabel = name ?? "Deleted profile";
+        }
+        else
+        {
+            SeriesProfileLabel = "Not set";
+        }
+
         HasSeriesFitDefault = series.PageFitModeOverride is not null;
         SeriesFitDefaultLabel = series.PageFitModeOverride switch
         {
@@ -2178,6 +2217,12 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     private void ClearSeriesFitDefault()
     {
         UpdateSeriesReaderDefaults(series => series.PageFitModeOverride = null);
+    }
+
+    [RelayCommand]
+    private void ClearSeriesProfile()
+    {
+        UpdateSeriesReaderDefaults(series => series.ReaderProfileId = null);
     }
 
     [RelayCommand]
@@ -2442,6 +2487,26 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         {
             _goToBulkProperties(ids);
         }
+    }
+
+    /// <summary>
+    /// Right-click "Scrape…" - same selection-union shape as <see cref="EditIssueProperties"/> above,
+    /// so right-clicking a lone unselected tile still just scrapes that one issue. Delegates the real
+    /// work to <see cref="ScrapeIssues"/> (the shell's <c>ScrapeCoordinator</c>), same as
+    /// <c>LibraryScreenViewModel.ScrapeWithComicVine</c>; the shell's own wiring also reloads this
+    /// series afterward so the tile(s) reflect whatever the scrape just wrote, matching
+    /// <c>LibraryScreenViewModel.RefreshAfterScrape</c>'s role there.
+    /// </summary>
+    [RelayCommand]
+    private async Task ScrapeIssue(IssueCardSample issue)
+    {
+        if (ScrapeIssues is null)
+        {
+            return;
+        }
+
+        var ids = _selection.UnionForAction(issue.Id);
+        await ScrapeIssues(ids).ConfigureAwait(true);
     }
 
     /// <summary>

@@ -1,6 +1,8 @@
 using System;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Media;
 using Paperbunkr.App.ViewModels;
 
 namespace Paperbunkr.App.Views;
@@ -42,6 +44,32 @@ public partial class LibraryToolbar : UserControl
     private void OnSearchBoxLostFocus(object? sender, FocusChangedEventArgs e)
     {
         (DataContext as LibraryScreenViewModel)?.OnSearchBoxLostFocus();
+    }
+
+    /// <summary>Bottom-edge fade on the View &amp; Sort popup: a 0-1 opacity mask ending transparent, applied only while
+    /// content remains below the viewport. Raised for offset, extent and viewport changes alike, so switching tabs or view
+    /// modes (which hides/shows rows) updates it too. An OpacityMask rather than a coloured gradient overlay, so it needs no
+    /// skin colour and works on every theme.</summary>
+    private static readonly IBrush ViewSortFadeMask = new LinearGradientBrush
+    {
+        StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+        EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+        GradientStops =
+        {
+            new GradientStop(Colors.Black, 0.82),
+            new GradientStop(Colors.Transparent, 1.0),
+        },
+    }.ToImmutable();
+
+    private void OnViewSortScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        if (sender is not ScrollViewer scroller)
+        {
+            return;
+        }
+
+        bool moreBelow = scroller.Offset.Y + scroller.Viewport.Height < scroller.Extent.Height - 1;
+        scroller.OpacityMask = moreBelow ? ViewSortFadeMask : null;
     }
 
     private void OnSearchBoxKeyDown(object? sender, KeyEventArgs e)

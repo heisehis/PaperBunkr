@@ -14,6 +14,9 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public static class DuplicateAlertHelper
 {
+    /// <summary>The Activity link payload for the alert's Review button: Library Health, Review tab, Duplicate Files open (docs/superpowers/specs/2026-09-26-library-health-subtabs-design.md).</summary>
+    public const string DuplicateAlertPayload = "LibraryHealth/Review/Duplicates";
+
     public static void RaiseIfAny(IActivityService activity, IReadOnlyList<int> addedIssueIds)
     {
         if (addedIssueIds.Count == 0)
@@ -40,7 +43,7 @@ public static class DuplicateAlertHelper
                 ? "A newly-added file may duplicate something already in your library."
                 : $"{matchingGroups} newly-added files may duplicate something already in your library.",
             ActionLabel = "Review",
-            ActionLink = new ActivityLink(ActivityLinkKind.MigrationReview),
+            ActionLink = new ActivityLink(ActivityLinkKind.Preferences, DuplicateAlertPayload),
             DedupeKey = "duplicate-files",
         });
     }

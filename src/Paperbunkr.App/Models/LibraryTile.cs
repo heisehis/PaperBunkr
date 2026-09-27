@@ -68,7 +68,7 @@ public sealed class LibraryTile
             Kind = LibraryTileKind.Series,
             TargetId = series.Id,
             Title = series.Name,
-            Subtitle = $"{series.ContentType} · {series.Issues.Count} issues",
+            Subtitle = $"{series.ContentType} · {SeriesCardSample.FormatIssueCount(series.Issues.Count)}",
             CoverBrush = SeriesCardSample.CoverBrushFor(series.Name),
             CoverIssueId = CoverIssueFor(series)?.Id,
             CoverKey = CoverIssueFor(series) is { } coverIssue

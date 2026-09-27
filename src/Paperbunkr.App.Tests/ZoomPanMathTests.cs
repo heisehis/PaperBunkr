@@ -13,7 +13,7 @@ namespace Paperbunkr.App.Tests;
 public class ZoomPanMathTests
 {
     [Fact]
-    public void ClampZoom_BelowMin_ClampsToMin() => Assert.Equal(ZoomPanMath.MinZoom, ZoomPanMath.ClampZoom(0.5));
+    public void ClampZoom_BelowMin_ClampsToMin() => Assert.Equal(ZoomPanMath.MinZoom, ZoomPanMath.ClampZoom(0.1));
 
     [Fact]
     public void ClampZoom_AboveMax_ClampsToMax() => Assert.Equal(ZoomPanMath.MaxZoom, ZoomPanMath.ClampZoom(10));
@@ -22,9 +22,9 @@ public class ZoomPanMathTests
     public void ClampZoom_WithinRange_Unchanged() => Assert.Equal(2.5, ZoomPanMath.ClampZoom(2.5));
 
     [Fact]
-    public void ClampPan_AtMinZoom_AlwaysZero_RegardlessOfProposedOffset()
+    public void ClampPan_AtFitZoom_AlwaysZero_RegardlessOfProposedOffset()
     {
-        var (x, y) = ZoomPanMath.ClampPan(new Size(400, 300), new PixelSize(400, 300), ZoomPanMath.MinZoom, 500, -500);
+        var (x, y) = ZoomPanMath.ClampPan(new Size(400, 300), new PixelSize(400, 300), ZoomPanMath.FitZoom, 500, -500);
 
         Assert.Equal(0, x);
         Assert.Equal(0, y);
@@ -308,4 +308,80 @@ public class ZoomPanMathTests
 
         return new Point((cursor.X - imageLeft) / displayedW, (cursor.Y - imageTop) / displayedH);
     }
+
+    // --- Smooth 25%-400% range (docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md section 1) ---
+
+    [Fact]
+    public void Range_IsTwentyFivePercentToFourHundred_WithFitAtOneHundred()
+    {
+        Assert.Equal(0.25, ZoomPanMath.MinZoom);
+        Assert.Equal(1.0, ZoomPanMath.FitZoom);
+        Assert.Equal(4.0, ZoomPanMath.MaxZoom);
+    }
+
+    [Theory]
+    [InlineData(0.25, -2.0)]
+    [InlineData(0.5, -1.0)]
+    [InlineData(1.0, 0.0)]
+    [InlineData(2.0, 1.0)]
+    [InlineData(4.0, 2.0)]
+    public void Slider_IsLogarithmic_WithOneHundredPercentInTheMiddle(double zoom, double slider)
+    {
+        Assert.Equal(slider, ZoomPanMath.ZoomToSlider(zoom), 9);
+        Assert.Equal(zoom, ZoomPanMath.SliderToZoom(slider), 9);
+        Assert.Equal((ZoomPanMath.SliderMin + ZoomPanMath.SliderMax) / 2, ZoomPanMath.ZoomToSlider(ZoomPanMath.FitZoom));
+    }
+
+    [Fact]
+    public void Slider_ClampsOutOfRangeValues()
+    {
+        Assert.Equal(ZoomPanMath.SliderMin, ZoomPanMath.ZoomToSlider(0.01));
+        Assert.Equal(ZoomPanMath.SliderMax, ZoomPanMath.ZoomToSlider(50));
+        Assert.Equal(ZoomPanMath.MinZoom, ZoomPanMath.SliderToZoom(-9), 9);
+        Assert.Equal(ZoomPanMath.MaxZoom, ZoomPanMath.SliderToZoom(9), 9);
+    }
+
+    [Fact]
+    public void Slider_EveryPositionMapsToADistinctZoom_NoSteps()
+    {
+        double previous = 0;
+        for (double v = ZoomPanMath.SliderMin; v <= ZoomPanMath.SliderMax + 1e-9; v += 0.01)
+        {
+            double zoom = ZoomPanMath.SliderToZoom(v);
+            Assert.True(zoom > previous);
+            previous = zoom;
+        }
+    }
+
+    [Fact]
+    public void WheelZoomFactor_IsProportional_AndSymmetric()
+    {
+        double up = ZoomPanMath.WheelZoomFactor(1);
+        double down = ZoomPanMath.WheelZoomFactor(-1);
+
+        Assert.True(up > 1);
+        Assert.Equal(1.0, up * down, 9);
+        Assert.Equal(up * up, ZoomPanMath.WheelZoomFactor(2), 9);   // two notches = two proportional steps, not an additive jump
+        Assert.Equal(1.0, ZoomPanMath.WheelZoomFactor(0));
+    }
+
+    [Theory]
+    [InlineData(1.0, true)]
+    [InlineData(1.0005, true)]
+    [InlineData(1.01, false)]
+    [InlineData(0.5, false)]
+    public void IsFit_MeansWithinAHairOfOneHundredPercent(double zoom, bool expected) => Assert.Equal(expected, ZoomPanMath.IsFit(zoom));
+
+    [Fact]
+    public void ClampPan_BelowFit_IsAlwaysZero()
+    {
+        var (x, y) = ZoomPanMath.ClampPan(new Size(400, 300), new PixelSize(400, 300), 0.4, 80, -60);
+
+        Assert.Equal(0, x);
+        Assert.Equal(0, y);
+    }
+
+    [Fact]
+    public void HasOverflow_BelowFit_IsFalse() =>
+        Assert.False(ZoomPanMath.HasOverflow(new Size(400, 300), new PixelSize(400, 300), 0.25));
 }

@@ -112,6 +112,31 @@ public class IssuePropertiesScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Save_ToleratesPreExistingCaseInsensitiveDuplicateTagRows()
+    {
+        // Real-world crash (2026-09-24): a genre-writing bug elsewhere (IssueDetailsApplier, since
+        // fixed) could leave two IssueTag rows with the same Field/Value differing only by case - there
+        // is no DB uniqueness constraint to stop it. Save() used to crash with "An item with the same
+        // key has already been added" (ArgumentException from ApplyTagRows' own ToDictionary) the
+        // moment a user opened that issue's editor and clicked Save; it must tolerate the corrupted
+        // state instead of crashing on it.
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var issue = context.Issues.First(i => i.Id == _issueId);
+            issue.Tags.Add(new IssueTag { IssueId = _issueId, Field = IssueTagField.Genre, Value = "Super-Hero", Category = "Genre" });
+            issue.Tags.Add(new IssueTag { IssueId = _issueId, Field = IssueTagField.Genre, Value = "super-hero", Category = "Genre" });
+            context.SaveChanges();
+        }
+
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId);
+
+        var exception = Record.Exception(() => vm.SaveCommand.Execute(null));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
     public void Save_RoundTripsBookAge_AndReDerivesCharacterIndex()
     {
         var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));

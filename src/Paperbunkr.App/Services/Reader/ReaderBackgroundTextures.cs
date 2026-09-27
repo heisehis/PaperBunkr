@@ -16,18 +16,39 @@ namespace Paperbunkr.App.Services.Reader;
 public sealed record ReaderBackgroundTexture(string Id, string DisplayName, Uri AssetUri);
 
 /// <summary>
-/// Catalog + decoded-bitmap cache for the 3 bundled reader background textures (docs/superpowers/
-/// specs/2026-09-10-reader-backlog-batch-b-design.md Item 1). The single source of truth for both
+/// Catalog + decoded-bitmap cache for the bundled reader background textures (docs/superpowers/
+/// specs/2026-09-10-reader-backlog-batch-b-design.md Item 1; grown from 3 to 16 by docs/superpowers/
+/// specs/2026-09-25-publisher-icons-and-reader-textures-design.md §B). The single source of truth for both
 /// the Preferences swatch picker and <see cref="ViewModels.ReaderScreenViewModel"/>'s brush builder.
 /// Bundled-only in v1 - no user file picker (a named deviation from CE, which also supports one).
 /// </summary>
 public static class ReaderBackgroundTextures
 {
+    private static ReaderBackgroundTexture Entry(string id, string name, string file) =>
+        new(id, name, new Uri("avares://Paperbunkr.App/Assets/Textures/" + file));
+
+    /// <summary>The 3 generated seamless textures first (<c>neutral-dark</c> stays the fallback),
+    /// then CE's <c>Backgrounds</c> set. CE's <c>Black [S]</c> is deliberately absent - it is one
+    /// spotlight vignette, not a tile (tiled it shows four hot spots) - and CE's <c>Papers</c> are
+    /// its separate paper-overlay feature, still deferred.</summary>
     public static readonly IReadOnlyList<ReaderBackgroundTexture> All =
     [
-        new("neutral-dark", "Neutral dark", new Uri("avares://Paperbunkr.App/Assets/Textures/neutral-dark.png")),
-        new("carbon",       "Carbon",       new Uri("avares://Paperbunkr.App/Assets/Textures/carbon.png")),
-        new("linen",        "Linen",        new Uri("avares://Paperbunkr.App/Assets/Textures/linen.png")),
+        Entry("neutral-dark",    "Neutral dark",    "neutral-dark.png"),
+        Entry("carbon",          "Carbon",          "carbon.png"),
+        Entry("linen",           "Linen",           "linen.png"),
+        Entry("brick-wall",      "Brick wall",      "BrickWall.jpg"),
+        Entry("brushed-metal",   "Brushed metal",   "BrushedMetal.jpg"),
+        Entry("brushed-metal-2", "Brushed metal 2", "BrushedMetal2.jpg"),
+        Entry("ceramic",         "Ceramic",         "Ceramic.jpg"),
+        Entry("ceramic-2",       "Ceramic 2",       "Ceramic2.jpg"),
+        Entry("chalkboard",      "Chalkboard",      "ChalkBoard.jpg"),
+        Entry("circles",         "Circles",         "Circles.jpg"),
+        Entry("glass",           "Glass",           "Glass.jpg"),
+        Entry("grass",           "Grass",           "Grass.jpg"),
+        Entry("light-wood",      "Light wood",      "LightWood.jpg"),
+        Entry("orange-metal",    "Orange metal",    "OrangeMetal.jpg"),
+        Entry("plank-wood",      "Plank wood",      "PlankWood.jpg"),
+        Entry("sketch",          "Sketch",          "Sketch.jpg"),
     ];
 
     /// <summary>Matches an id to its catalog entry; null, empty or unknown ids fall back to <see cref="All"/>'s first entry.</summary>

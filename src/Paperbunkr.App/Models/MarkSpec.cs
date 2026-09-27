@@ -24,6 +24,11 @@ public enum MarkKind
 
     /// <summary>A bundled country flag SVG under <c>Assets/Marks/Flags/</c>.</summary>
     Flag,
+
+    /// <summary>A bundled PNG/JPG publisher logo under <c>Assets/Icons/Publishers/</c> (CE's icon
+    /// pack) - drawn as-is on a contrast plate, never tinted (docs/superpowers/specs/2026-09-25-
+    /// publisher-icons-and-reader-textures-design.md §A3).</summary>
+    Raster,
 }
 
 /// <summary>

@@ -19,7 +19,8 @@ public enum PageTier
 /// last-write-ticks-plus-length, so a file replaced on disk mid-session (rare, but Library Health
 /// tracks it) never serves a stale decode.
 /// </summary>
-public readonly record struct PageId(string Container, long ContainerStamp, int Index, PageTier Tier);
+/// <param name="Variant">Which processing the cached bitmap went through (auto-levels, auto-crop; <see cref="ReaderImagePipeline.PageVariant"/>), so a page decoded one way is never served when another is wanted. 0 = unprocessed.</param>
+public readonly record struct PageId(string Container, long ContainerStamp, int Index, PageTier Tier, int Variant = 0);
 
 /// <summary>
 /// Identity for one decoded band of a webtoon-strip page (docs/superpowers/specs/2026-09-09-reader-

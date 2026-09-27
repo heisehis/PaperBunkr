@@ -20,4 +20,9 @@ public class RemovedFilePath
     public string FilePath { get; set; } = "";
 
     public DateTime RemovedAtUtc { get; set; }
+
+    /// <summary>The entry was removed from the library but its FILE was deliberately kept. Such a path is always ignored by the scanner - otherwise
+    /// the next scan would find the file still sitting in a library folder and put the entry straight back. (Paths of deleted files are
+    /// only ignored while <see cref="AppSettings.DontReimportRemovedFiles"/> is on.)</summary>
+    public bool KeepFile { get; set; }
 }

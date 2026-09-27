@@ -112,6 +112,20 @@ public sealed class CategoryDonut : Control
     public override void Render(DrawingContext context)
     {
         var slices = Slices.Where(s => s.Count > 0).ToList();
+        if (slices.Count > CategoricalBrushKeys.Length)
+        {
+            // Cap at the palette size, folding the smallest tail into "Other" rather than wrapping
+            // colors around (CategoricalBrushKeys[i % Length] below would otherwise give two visually
+            // different categories the exact same ring color). Found building the Content rating
+            // donut, 2026-09-24 - up to 9 categories against this control's 6-color palette; Reading
+            // state/Media type never hit this path since neither exceeds 6.
+            var ordered = slices.OrderByDescending(s => s.Count).ToList();
+            var kept = ordered.Take(CategoricalBrushKeys.Length - 1).ToList();
+            int otherCount = ordered.Skip(CategoricalBrushKeys.Length - 1).Sum(s => s.Count);
+            kept.Add(new CompositionSlice("Other", otherCount));
+            slices = kept;
+        }
+
         double total = slices.Sum(s => (double)s.Count);
         double size = Math.Min(Bounds.Width, Bounds.Height);
         if (size <= 0)

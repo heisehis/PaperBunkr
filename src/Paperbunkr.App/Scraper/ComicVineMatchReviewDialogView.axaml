@@ -107,48 +107,31 @@
                    FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
 
         <Grid ColumnDefinitions="*,160">
-            <!-- Padding (not just the outer Margin below) so the scrollbar has its own lane instead
-                 of sitting flush against row text - grilling follow-up, 2026-09-13: with zero
-                 padding the default ScrollBar rendered as a bare unstyled sliver touching the text,
-                 reading as a stray misaligned line rather than a scrollbar. -->
-            <ScrollViewer Grid.Column="0" MaxHeight="260" Margin="0,0,16,0" Padding="0,0,10,0">
-                <ItemsControl ItemsSource="{Binding Candidates}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ComicVineMatchCandidateViewModel">
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Best match" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
-                                           IsVisible="{Binding IsTopMatch}" Margin="0,0,0,2" />
-                                <TextBlock Text="Other results" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
-                                           IsVisible="{Binding IsFirstOtherResult}" Margin="0,8,0,2" />
-                                <Border CornerRadius="6" Padding="10,8" Classes.selected="{Binding IsSelected}">
-                                    <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                            Background="Transparent" BorderThickness="0" Padding="0"
-                                            Command="{Binding SelectCommand}">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <!-- Explicit right margin, not just relying on the `*`
-                                                 column's own leftover space - a long title fills
-                                                 nearly the whole row, leaving the score with no
-                                                 breathing room before it otherwise (found live: title
-                                                 and "score N" rendered touching, no gap). -->
-                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                                <TextBlock Text="{Binding DisplayLabel}" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}" />
-                                                <TextBlock Text="{Binding IssueCountLabel}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
-                                                           IsVisible="{Binding IssueCountLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                                            </StackPanel>
-                                            <TextBlock Grid.Column="1" Text="{Binding Score, StringFormat='score {0:0}'}"
-                                                       FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Top" />
-                                        </Grid>
-                                    </Button>
-                                </Border>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+            <!-- Real sortable table (docs/superpowers/specs/2026-09-24-scraper-review-tables-and-
+                 batch-summary-design.md §1.1) - CE's own seriesform.py shape, verified: a DataGridView
+                 with Series/Year/Issues/Publisher columns, AllowUserToOrderColumns=True (click-to-sort
+                 headers), defaulting to its own hidden Match column descending. Score stays visible
+                 here (Paperbunkr's own existing deviation from CE, which hides it) and is itself
+                 sortable like every other column. DataGrid column bindings are always reflection
+                 bindings even in this compiled-bindings app (confirmed Avalonia limitation, isolated
+                 to this one control) - x:DataType on a column's own template isn't supported. -->
+            <DataGrid Grid.Column="0" Margin="0,0,16,0" MaxHeight="260"
+                      ItemsSource="{Binding Candidates}" SelectedItem="{Binding SelectedCandidate, Mode=TwoWay}"
+                      AutoGenerateColumns="False" CanUserSortColumns="True" CanUserResizeColumns="True" CanUserReorderColumns="True"
+                      IsReadOnly="True" SelectionMode="Single" GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                      Background="Transparent" BorderThickness="0" RowBackground="Transparent">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Series" Binding="{Binding Volume.Name}" Width="*" />
+                    <DataGridTextColumn Header="Year" Binding="{Binding Volume.StartYear}" Width="Auto" />
+                    <DataGridTextColumn Header="Issues" Binding="{Binding IssueCountLabel}" Width="Auto" />
+                    <DataGridTextColumn Header="Publisher" Binding="{Binding Volume.Publisher}" Width="Auto" />
+                    <DataGridTextColumn Header="Score" Binding="{Binding Score, StringFormat={}{0:0}}" Width="Auto" />
+                </DataGrid.Columns>
+            </DataGrid>
 
             <StackPanel Grid.Column="1" Spacing="8" HorizontalAlignment="Center">
-                <Border Width="140" Height="210" CornerRadius="6" Background="{DynamicResource PbSurface2Brush}">
-                    <Image Stretch="Uniform" vm:RemoteCoverImage.SourceUrl="{Binding SelectedCandidate.CoverImageUrl}" />
+                <Border Width="140" Height="210" CornerRadius="6" Background="{DynamicResource PbSurface2Brush}" IsVisible="{Binding ShowCovers}">
+                    <Image Stretch="Uniform" vm:RemoteCoverImage.SourceUrl="{Binding ResolvedCoverImageUrl}" />
                 </Border>
                 <TextBlock Text="{Binding SelectedCandidate.Volume.Name}" FontSize="12" Foreground="{DynamicResource PbTextBrush}"
                            TextAlignment="Center" TextWrapping="Wrap" />
@@ -163,7 +146,16 @@
         </Grid>
 
         <Grid ColumnDefinitions="*,Auto,Auto">
-            <Button Grid.Column="1" Content="Skip this book" Classes="secondary" Command="{Binding SkipCommand}" Margin="0,0,8,0" />
+            <!-- Ctrl-held Skip (docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-plan.md
+                 Step 16, CE's real seriesform.py affordance, verified) - PointerPressed instead of a
+                 plain Command=, same established pattern as LibraryScreen's own ctrl/shift-click
+                 multi-select handlers, so the modifier key at click time decides plain vs permanent
+                 skip. PointerMoved/PointerExited separately track hover-while-Ctrl-held for the label. -->
+            <Button Grid.Column="1"
+                    Content="{Binding SkipLabel}"
+                    Classes="secondary" Margin="0,0,8,0"
+                    PointerPressed="OnSkipPointerPressed" PointerMoved="OnSkipPointerMoved" PointerExited="OnSkipPointerExited"
+                    KeyDown="OnSkipKeyDown" />
             <Button Grid.Column="2" Content="OK" Classes="primary" Command="{Binding ConfirmCommand}" />
         </Grid>
     </StackPanel>

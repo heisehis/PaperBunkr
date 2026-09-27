@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.Json;
 using Paperbunkr.Data.Entities;
 
@@ -25,10 +26,40 @@ public sealed class ScrapeSettings
     /// <summary>Which source scrapes use unless the match dialog switches one run to the other. Scheduled (unattended) scrapes always use this one.</summary>
     public ComicProvider DefaultProvider { get; set; } = ComicProvider.ComicVine;
 
-    public HashSet<ScrapeField> EnabledScrapeFields { get; set; } = new(Enum.GetValues<ScrapeField>());
+    /// <summary>
+    /// CE's <c>update_rating_b</c> defaults <b>off</b> (configuration.py:62) - it costs an extra API
+    /// call CE never made by default. Everything else defaults on. Fixed docs/superpowers/specs/
+    /// 2026-09-24-comicvine-scraper-fidelity-design.md §1.3 - this previously defaulted on along with
+    /// every other field.
+    /// </summary>
+    public HashSet<ScrapeField> EnabledScrapeFields { get; set; } =
+        new(Enum.GetValues<ScrapeField>().Where(f => f != ScrapeField.CommunityRating));
+
+    /// <summary>Which generation of the field list <see cref="EnabledScrapeFields"/> was saved against; 0 for a row saved before this existed. See <see cref="Load"/>.</summary>
+    public int FieldSetVersion { get; set; }
+
+    private const int CurrentFieldSetVersion = 1;
+
+    private static readonly ScrapeField[] FieldsAddedAfterVersion0 =
+        [ScrapeField.Count, ScrapeField.MainCharacterOrTeam, ScrapeField.Concepts, ScrapeField.SeriesGroup, ScrapeField.StoryArcOrder];
 
     /// <summary>Checked before the static imprint table, so a user's own mapping always wins (CE's <c>IMPRINT=X--&gt;Y</c> lines).</summary>
     public Dictionary<string, string> ImprintOverrides { get; set; } = new();
+
+    /// <summary>CE's <c>convert_imprints_b</c> (default true): resolve a recognized imprint to its parent publisher. When false, the raw imprint name is written to Publisher unchanged instead, and Imprint is left alone - CE's actual off-behavior (comicbook.py:464-466), not just "do nothing".</summary>
+    public bool ConvertImprints { get; set; } = true;
+
+    /// <summary>CE's <c>force_series_art_b</c>: always show the series/volume cover in the review dialog rather than falling back to the specific issue's own cover.</summary>
+    public bool ForceSeriesArt { get; set; } = true;
+
+    /// <summary>CE's <c>show_covers_b</c>: show cover thumbnails in the review dialogs. False hides them (a real "scrape faster on a slow connection" toggle CE had).</summary>
+    public bool ShowCovers { get; set; } = true;
+
+    /// <summary>CE's <c>scrape_delay_n</c> (default 1000ms, clamp 2000-3,600,000ms per CE's own 2-3600 <i>second</i> range): a proactive pause between books in a batch, separate from the per-HTTP-request rate limiter.</summary>
+    public int ScrapeDelayMs { get; set; } = 1000;
+
+    /// <summary>CE's <c>publisher_aliases_sm</c> (<c>PUBLISHER_ALIAS=X--&gt;Y</c>): applied to both the resolved publisher and imprint strings after imprint resolution - distinct from <see cref="ImprintOverrides"/>.</summary>
+    public Dictionary<string, string> PublisherAliases { get; set; } = new();
 
     /// <summary>CE's <c>IGNORE_BEFORE_YEAR</c>; null is the same as CE's default (nothing is excluded).</summary>
     public int? IgnoreVolumesBeforeYear { get; set; }
@@ -69,7 +100,21 @@ public sealed class ScrapeSettings
 
         try
         {
-            return JsonSerializer.Deserialize<ScrapeSettings>(row.Json, Json) ?? new ScrapeSettings();
+            var loaded = JsonSerializer.Deserialize<ScrapeSettings>(row.Json, Json) ?? new ScrapeSettings();
+            if (loaded.FieldSetVersion < CurrentFieldSetVersion)
+            {
+                // A saved set only lists the fields that existed when it was saved, so a field added
+                // later would silently stay off for every existing user. Turn each on once, by default
+                // (they can still switch any off - Save stamps the current version).
+                foreach (var field in FieldsAddedAfterVersion0)
+                {
+                    loaded.EnabledScrapeFields.Add(field);
+                }
+
+                loaded.FieldSetVersion = CurrentFieldSetVersion;
+            }
+
+            return loaded;
         }
         catch (JsonException)
         {
@@ -86,6 +131,7 @@ public sealed class ScrapeSettings
             context.ScrapeSettingsRows.Add(row);
         }
 
+        FieldSetVersion = CurrentFieldSetVersion;
         row.Json = JsonSerializer.Serialize(this, Json);
         context.SaveChanges();
     }

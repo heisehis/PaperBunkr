@@ -128,6 +128,8 @@ public sealed class LibraryContextMenuBuilder
             ContextMenuEntry.Item(multi ? $"Scrape {n}…" : "Scrape…", _vm.ScrapeWithComicVineCommand, row.Id, Symbol.ArrowDownload),
             ContextMenuEntry.Item(multi ? $"Organize {n}…" : "Organize…", _vm.OrganizeWithProfileCommand, row.Id, Symbol.FolderArrowRight),
             ContextMenuEntry.Item("Show in Explorer", _vm.RevealIssueCommand, row.Id, Symbol.FolderOpen, isEnabled: row.HasFile),
+            // Exactly two selected: put the two files side by side (docs/superpowers/specs/2026-09-26-comic-reader-compare-design.md #11).
+            multi && n == 2 ? ContextMenuEntry.Item("Compare files…", _vm.CompareSelectedIssuesCommand, row.Id, Symbol.ArrowSwap) : null,
             _vm.CanWriteMetadataToFiles
                 ? ContextMenuEntry.Item(multi ? $"Write metadata to {n} files" : "Write metadata to file", _vm.WriteIssueMetadataToFilesCommand, row.Id, Symbol.Save, isEnabled: row.HasFile)
                 : null,
@@ -144,6 +146,7 @@ public sealed class LibraryContextMenuBuilder
                 multi ? $"Delete{plural}…" : "Delete…",
                 new[]
                 {
+                    ContextMenuEntry.Item(_vm.RemoveKeepFileLabel, _vm.RemoveIssueKeepFileCommand, row.Id),
                     ContextMenuEntry.Item(_vm.DeleteConfirmLabel, _vm.DeleteIssueCommand, row.Id),
                 },
                 Symbol.Delete,
@@ -190,6 +193,7 @@ public sealed class LibraryContextMenuBuilder
                 multi ? $"Delete {n} Series…" : "Delete Series…",
                 new[]
                 {
+                    ContextMenuEntry.Item(_vm.RemoveSeriesKeepFilesLabel, _vm.RemoveSeriesKeepFilesCommand, card.SeriesId),
                     ContextMenuEntry.Item(_vm.DeleteSeriesConfirmLabel, _vm.DeleteSeriesCommand, card.SeriesId),
                 },
                 Symbol.Delete,
@@ -228,6 +232,53 @@ public sealed class LibraryContextMenuBuilder
 
         yield return ContextMenuEntry.Item("New List…", _vm.CreateReadingListAndAddIssueCommand, issueId);
     }
+
+    /// <summary>
+    /// The preview panel's "⋯" overflow (docs/superpowers/specs/2026-09-26-library-preview-panel-v2-design.md §2/§3): the
+    /// rarely used actions, so the pinned bar stays one row wide at 280 px. Remote books get no collection / reveal entries,
+    /// for the same reason <see cref="BuildRemoteIssueMenu"/> omits them.
+    /// </summary>
+    public IReadOnlyList<ContextMenuEntry> BuildPreviewOverflow(object? target)
+    {
+        var entries = new List<ContextMenuEntry?>();
+        switch (target)
+        {
+            case IssueListRow row:
+                entries.Add(ContextMenuEntry.Item("Go to Series", _vm.GoToSeriesCommand, row.SeriesId, Symbol.ArrowForward));
+                if (!row.IsRemote)
+                {
+                    entries.Add(ContextMenuEntry.SubMenu("Add to Collection", CollectionChildren(row.Id, _vm.AddIssueToCollectionCommand, _vm.CreateCollectionAndAddIssueCommand), Symbol.CollectionsAdd));
+                    if (row.HasFile)
+                    {
+                        entries.Add(ContextMenuEntry.Item("Reveal in Explorer", _vm.RevealIssueCommand, row.Id, Symbol.FolderOpen));
+                    }
+                }
+
+                break;
+            case SeriesCardSample card:
+                entries.Add(ContextMenuEntry.Item("Open series page", _vm.GoToSeriesCommand, card.SeriesId, Symbol.ArrowForward));
+                if (!card.IsRemote)
+                {
+                    entries.Add(ContextMenuEntry.SubMenu("Add to Collection", CollectionChildren(card.SeriesId, _vm.AddSeriesToCollectionCommand, _vm.CreateCollectionAndAddSeriesCommand), Symbol.CollectionsAdd));
+                    if (card.HasFile)
+                    {
+                        entries.Add(ContextMenuEntry.Item("Reveal in Explorer", _vm.RevealSeriesCommand, card, Symbol.FolderOpen));
+                    }
+                }
+
+                break;
+        }
+
+        return ContextMenuEntry.Compact(entries);
+    }
+
+    /// <summary>The preview panel's own "Add to Collection" button: just the collection list (existing collections + "New collection…").</summary>
+    public IReadOnlyList<ContextMenuEntry> BuildPreviewCollectionMenu(object? target) => target switch
+    {
+        IssueListRow row => ContextMenuEntry.Compact(CollectionChildren(row.Id, _vm.AddIssueToCollectionCommand, _vm.CreateCollectionAndAddIssueCommand).ToList()),
+        SeriesCardSample card => ContextMenuEntry.Compact(CollectionChildren(card.SeriesId, _vm.AddSeriesToCollectionCommand, _vm.CreateCollectionAndAddSeriesCommand).ToList()),
+        _ => System.Array.Empty<ContextMenuEntry>(),
+    };
 
     /// <summary>Shared "Add to Collection ▸" child list for an issue or series target - one item per
     /// existing collection (command/parameter shape differs per target type, so the caller passes

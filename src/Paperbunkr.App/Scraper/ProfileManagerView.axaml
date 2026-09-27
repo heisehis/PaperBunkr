@@ -64,6 +64,45 @@
         </Style>
     </UserControl.Styles>
 
+    <UserControl.DataTemplates>
+        <!-- One exclude group. Child groups render through this same template (no ItemTemplate on the inner ItemsControl), so groups nest to any depth. -->
+        <DataTemplate DataType="vm:ExcludeGroupViewModel" x:DataType="vm:ExcludeGroupViewModel">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,6">
+                <StackPanel Spacing="6">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Skip a book that matches" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <controls:SuggestBox IsStrict="True" Text="{Binding ModeText}" Suggestions="{x:Static vm:ExcludeGroupViewModel.ModeNames}" Width="90" />
+                        <TextBlock Text="of these:" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <Button Content="Remove group" Classes="secondary" Command="{Binding RemoveCommand}" IsVisible="{Binding !IsRoot}" />
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding Conditions}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ExcludeConditionRowViewModel">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <controls:SuggestBox IsStrict="True" Text="{Binding FieldText}" Suggestions="{x:Static vm:ExcludeConditionRowViewModel.FieldNames}" Width="150" />
+                                    <controls:SuggestBox IsStrict="True" Text="{Binding OperatorText}" Suggestions="{x:Static vm:ExcludeConditionRowViewModel.OperatorNames}" Width="150" />
+                                    <TextBox Text="{Binding Value}" Watermark="Value" Width="140" />
+                                    <CheckBox Content="Not" IsChecked="{Binding Not}" />
+                                    <Button Content="Remove" Classes="secondary" Command="{Binding RemoveCommand}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ItemsControl ItemsSource="{Binding Groups}" Margin="12,0,0,0" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Add condition" Classes="secondary" Command="{Binding AddConditionCommand}" />
+                        <Button Content="Add group" Classes="secondary" Command="{Binding AddGroupCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+
     <Grid ColumnDefinitions="200,*" Margin="4">
         <StackPanel Grid.Column="0" Spacing="10">
             <Border Classes="card">
@@ -111,6 +150,9 @@
                         <TextBox Text="{Binding Selected.FolderTemplate}" AcceptsReturn="False" />
                         <TextBlock Text="File template" Classes="fieldLabel" />
                         <TextBox Text="{Binding Selected.FileTemplate}" AcceptsReturn="False" />
+                        <CheckBox Content="Move files into the folders the folder template describes" IsChecked="{Binding Selected.UseFolder}" Margin="0,4,0,0" />
+                        <CheckBox Content="Rename files with the file template" IsChecked="{Binding Selected.UseFileName}" />
+                        <TextBlock Text="Turn one off to only rename in place, or only move. Templates are checked when you save." Classes="hint" />
                         <TextBlock Text="Insert token into folder / file template:" Classes="hint" Margin="0,4,0,0" />
                         <ItemsControl ItemsSource="{Binding InsertableTokens}">
                             <ItemsControl.ItemsPanel>
@@ -136,6 +178,29 @@
 
                 <Border Classes="card">
                     <StackPanel Spacing="8">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Preview" Classes="cardHeader" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Content="Refresh" Classes="secondary" Command="{Binding RefreshPreviewCommand}"
+                                    AutomationProperties.Name="Refresh the preview" />
+                        </Grid>
+                        <TextBlock Text="A few comics from your library, run through the settings above as you edit. Nothing is moved. Exclude rules are not applied here." Classes="hint" />
+                        <TextBlock Text="{Binding PreviewMessage}" Classes="hint" IsVisible="{Binding HasPreviewMessage}" />
+                        <ItemsControl ItemsSource="{Binding PreviewRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PreviewRowViewModel">
+                                    <StackPanel Margin="0,0,0,6" Spacing="1">
+                                        <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="Medium" Foreground="{DynamicResource PbTextBrush}" />
+                                        <TextBlock Text="{Binding Text}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding IsNotProblem}" />
+                                        <TextBlock Text="{Binding Text}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource PbDangerBrush}" IsVisible="{Binding IsProblem}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
                         <TextBlock Text="Behavior" Classes="cardHeader" />
                         <TextBlock Text="Mode" Classes="fieldLabel" />
                         <controls:SuggestBox IsStrict="True" Text="{Binding Selected.ModeText}" Suggestions="{x:Static vm:OrganizerProfileRowViewModel.ModeNames}" HorizontalAlignment="Stretch" />
@@ -148,30 +213,28 @@
 
                 <Border Classes="card">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="Exclude from organizing when" Classes="cardHeader" />
-                        <TextBlock Text="Books matching every condition below (ANDed) are skipped. No conditions means nothing is excluded." Classes="hint" />
-                        <ItemsControl ItemsSource="{Binding Selected.ExcludeConditions}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Spacing="6" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:ExcludeConditionRowViewModel">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <controls:SuggestBox IsStrict="True" Text="{Binding FieldText}" Suggestions="{x:Static vm:ExcludeConditionRowViewModel.FieldNames}" Width="150" />
-                                        <controls:SuggestBox IsStrict="True" Text="{Binding OperatorText}" Suggestions="{x:Static vm:ExcludeConditionRowViewModel.OperatorNames}" Width="150" />
-                                        <TextBox Text="{Binding Value}" Watermark="Value" Width="140" />
-                                        <CheckBox Content="Not" IsChecked="{Binding Not}" />
-                                        <Button Content="Remove" Classes="secondary" Command="{Binding RemoveCommand}" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <Button Content="Add condition" Classes="secondary" Command="{Binding AddExcludeConditionCommand}" HorizontalAlignment="Left" />
+                        <TextBlock Text="When a value is missing" Classes="cardHeader" />
+                        <TextBlock Text="Folder name for an empty folder part" Classes="fieldLabel" />
+                        <TextBox Text="{Binding Selected.EmptyFolder}" Watermark="Blank leaves the part out of the path" />
+                        <TextBlock Text="Text to use when a token is empty (one token=text per line, e.g. publisher=Unknown)" Classes="fieldLabel" Margin="0,4,0,0" />
+                        <TextBox Text="{Binding Selected.EmptyDataText}" AcceptsReturn="True" Height="70" />
+                        <CheckBox Content="Leave a book where it is when one of these tokens is empty" IsChecked="{Binding Selected.FailEmptyValues}" Margin="0,4,0,0" />
+                        <TextBox Text="{Binding Selected.FailedFieldsText}" Watermark="series, number" IsEnabled="{Binding Selected.FailEmptyValues}" />
                     </StackPanel>
                 </Border>
 
+                <Border Classes="card">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Exclude from organizing when" Classes="cardHeader" />
+                        <TextBlock Text="A book that matches the rule below is left where it is. Groups can hold other groups (all of / any of), to any depth. No conditions means nothing is excluded." Classes="hint" />
+                        <ContentControl Content="{Binding Selected.RootGroup}" />
+                        <TextBlock Text="Never organize books inside these folders (one per line)" Classes="fieldLabel" Margin="0,4,0,0" />
+                        <TextBox Text="{Binding Selected.ExcludeFoldersText}" AcceptsReturn="True" Height="60" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="{Binding SaveStatusMessage}" Foreground="{DynamicResource PbDangerBrush}" TextWrapping="Wrap"
+                           IsVisible="{Binding SaveStatusMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                 <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                     <Button Content="Delete" Classes="destructive" Command="{Binding DeleteSelectedCommand}" />
                     <Button Content="Save" Classes="primary" Command="{Binding SaveSelectedCommand}" />

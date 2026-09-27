@@ -3,22 +3,32 @@
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:fi="using:FluentIcons.Avalonia.Fluent"
+             xmlns:conv="using:Avalonia.Data.Converters"
              x:Class="Paperbunkr.App.Views.LibraryPreviewPanel"
              x:DataType="vm:LibraryScreenViewModel">
     <!--
-    Live preview panel (docs/superpowers/specs/2026-09-14-library-visual-redesign-design.md §4).
-    Four mutually-exclusive states gated by the VM's own computed booleans; updates on card focus
-    (LibraryScreen.axaml.cs's OnCardGotFocus) rather than selection, since Selection/SeriesSelection
-    are pure multi-select sets with no "current/primary" concept. Cover rendering mirrors the exact
-    Border.Background=CoverBrush + AsyncCoverImage.SourceId pattern every grid template already uses.
+    Live preview panel (docs/superpowers/specs/2026-09-26-library-preview-panel-v2-design.md, which replaces the content/styling
+    of 2026-09-14-library-visual-redesign-design.md §4). Four mutually-exclusive states gated by the VM's own computed booleans;
+    updates on card focus (LibraryScreen.axaml.cs's OnCardGotFocus), not selection - Selection/SeriesSelection are pure
+    multi-select sets with no "current" item. The series and issue states each are: a scrolling region + a PINNED action bar
+    outside the scroller (actions can never be clipped), under an optional multi-select strip.
+
+    Two nested elements wherever a state needs both an IsVisible bound to the VM and a DataContext switched to the item: putting
+    both on one element makes IsVisible resolve against the new DataContext (AVLN2000).
     -->
     <UserControl.Styles>
-        <Style Selector="TextBlock.previewTitle">
+        <Style Selector="TextBlock.heroTitle">
+            <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
+            <Setter Property="FontSize" Value="30" />
+            <Setter Property="LineHeight" Value="30" />
             <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
         </Style>
         <Style Selector="TextBlock.previewMeta">
             <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="TextBlock.previewSynopsis">
@@ -27,124 +37,417 @@
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
         </Style>
-        <Style Selector="Border.previewCover">
+        <Style Selector="TextBlock.kvKey">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+        <Style Selector="TextBlock.kvValue">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+        <Style Selector="Border.heroCover">
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
             <Setter Property="ClipToBounds" Value="True" />
-            <Setter Property="Height" Value="220" />
-        </Style>
-        <Style Selector="Button.previewAction">
-            <Setter Property="Padding" Value="10,6" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Width" Value="118" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
         </Style>
         <Style Selector="StackPanel.previewChips">
             <Setter Property="Orientation" Value="Horizontal" />
             <Setter Property="Spacing" Value="6" />
         </Style>
+        <Style Selector="WrapPanel.previewChips">
+            <Setter Property="Orientation" Value="Horizontal" />
+        </Style>
         <Style Selector="Border.previewChip">
             <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
-            <Setter Property="Padding" Value="7,2" />
+            <Setter Property="Padding" Value="7,1" />
+            <Setter Property="Margin" Value="0,0,6,6" />
+        </Style>
+        <Style Selector="Border.previewChip.accent">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
         <Style Selector="Border.previewChip TextBlock">
             <Setter Property="FontSize" Value="10.5" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
-        <!-- Scoped to this panel only (Avalonia styles apply within their defining control's visual
-             tree) - Detail screens' own PosterRail usages stay Tab-reachable, per the design doc's
-             §4 focus-order note: Tab-cycling here should reach this panel's own action buttons
-             without stepping through every issue-cover card in the rail first; mouse clicks are
-             unaffected, IsTabStop only gates keyboard Tab traversal. -->
+        <Style Selector="Border.previewChip.accent TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <Style Selector="Border.progressTrack">
+            <Setter Property="Height" Value="4" />
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+        <Style Selector="ProgressBar.previewProgress">
+            <Setter Property="Height" Value="4" />
+            <Setter Property="MinHeight" Value="4" />
+            <Setter Property="Minimum" Value="0" />
+            <Setter Property="Maximum" Value="1" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+
+        <!-- Section header: uppercase overline + hairline + chevron. Collapsible ones are Buttons that toggle the persisted set. -->
+        <Style Selector="Button.sectionHeader">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0,14,0,6" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.sectionHeader:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="TextBlock.sectionTitle">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.sectionRule">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Background" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="8,0" />
+        </Style>
+        <Style Selector="TextBlock.sectionChevron">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Text" Value="▸" />
+        </Style>
+        <Style Selector="TextBlock.sectionChevron.open">
+            <Setter Property="Text" Value="▾" />
+        </Style>
+        <Style Selector="TextBlock.sectionHint">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <Style Selector="Button.previewAction">
+            <Setter Property="Padding" Value="11,6" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <Style Selector="Button.previewAction.primary">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBgBrush}" />
+        </Style>
+        <Style Selector="Button.previewAction.ghost">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.backLink">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="16,10,16,0" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+
+        <!-- Scoped to this panel only: keeps the panel's own action buttons the Tab targets instead of every rail cover. -->
         <Style Selector="views|PosterRail Button.railCard">
             <Setter Property="IsTabStop" Value="False" />
         </Style>
+        <!-- The rail's overlay horizontal scrollbar drew over the "#1" labels; leave it its own strip below them. -->
+        <Style Selector="views|PosterRail ScrollViewer > StackPanel">
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
     </UserControl.Styles>
 
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <Grid Margin="16">
+    <Grid RowDefinitions="Auto,*" Background="{DynamicResource PbBgBrush}">
+
+        <!-- ============ Multi-select strip: the panel keeps showing the focused item, and says so ============ -->
+        <Border Grid.Row="0" IsVisible="{Binding ShowPreviewSelectionStrip}" Background="{DynamicResource PbAccentSoftBrush}"
+                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="16,6">
+            <TextBlock Text="{Binding PreviewSelectionStripText}" FontSize="11" Foreground="{DynamicResource PbAccentTextBrush}" />
+        </Border>
+
+        <Panel Grid.Row="1">
 
             <!-- ================= Idle state ================= -->
-            <StackPanel IsVisible="{Binding ShowIdlePreview}" VerticalAlignment="Center" Spacing="8" Margin="0,60,0,0">
+            <StackPanel IsVisible="{Binding ShowIdlePreview}" VerticalAlignment="Center" Spacing="8" Margin="16,0">
                 <fi:SymbolIcon Symbol="Library" FontSize="28" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="Select a series or issue to preview" Classes="pbTextCaption" TextAlignment="Center" TextWrapping="Wrap" />
             </StackPanel>
 
             <!-- ================= No-results state ================= -->
-            <StackPanel IsVisible="{Binding ShowNoResultsPreview}" VerticalAlignment="Center" Spacing="8" Margin="0,60,0,0">
+            <StackPanel IsVisible="{Binding ShowNoResultsPreview}" VerticalAlignment="Center" Spacing="8" Margin="16,0">
                 <fi:SymbolIcon Symbol="SearchInfo" FontSize="28" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
                 <TextBlock Text="No results for this search" Classes="pbTextCaption" TextAlignment="Center" TextWrapping="Wrap" />
             </StackPanel>
 
-            <!-- ================= Series preview ================= -->
-            <StackPanel IsVisible="{Binding ShowSeriesPreview}" Spacing="12">
-                <StackPanel Spacing="12" DataContext="{Binding PreviewSeries}" x:DataType="models:SeriesCardSample">
-                    <Border Classes="previewCover" Background="{Binding CoverBrush}">
-                        <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
-                    </Border>
-                    <TextBlock Text="{Binding Name}" Classes="previewTitle pbTextHeading" />
-                    <TextBlock Classes="previewMeta">
-                        <Run Text="{Binding IssueCountLabel}" /><Run Text=" · " /><Run Text="{Binding UnreadCount}" /><Run Text=" unread" />
-                    </TextBlock>
-                    <StackPanel Classes="previewChips">
-                        <Border Classes="previewChip" IsVisible="{Binding HasPublisher}"><TextBlock Text="{Binding Publisher}" /></Border>
-                        <Border Classes="previewChip" IsVisible="{Binding HasLanguage}"><TextBlock Text="{Binding LanguageIso}" /></Border>
-                    </StackPanel>
-                    <TextBlock Text="{Binding RepresentativeRow.SummaryExcerpt}" Classes="previewSynopsis"
-                               IsVisible="{Binding RepresentativeRow.HasSummaryExcerpt}" />
-                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0" IsVisible="{Binding HasContinueReading}">
-                        <Button Classes="previewAction" Content="▶ Continue"
-                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
-                                CommandParameter="{Binding}" />
-                    </StackPanel>
-                </StackPanel>
+            <!-- ================= Series state (hero layout) ================= -->
+            <Grid IsVisible="{Binding ShowSeriesPreview}" RowDefinitions="*,Auto">
+                <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <Panel x:Name="SeriesHero" DataContext="{Binding PreviewSeries}" x:DataType="models:SeriesCardSample">
+                            <Border Height="150" VerticalAlignment="Top" ClipToBounds="True" Background="{Binding CoverBrush}">
+                                <Panel>
+                                    <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" Opacity="0.55">
+                                        <Image.Effect>
+                                            <BlurEffect Radius="28" />
+                                        </Image.Effect>
+                                    </Image>
+                                    <Border>
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                                <GradientStop Color="Transparent" Offset="0" />
+                                                <GradientStop Color="{DynamicResource PbBgColor}" Offset="1" />
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                </Panel>
+                            </Border>
+                            <Grid ColumnDefinitions="Auto,*" Margin="16,68,16,0">
+                                <Border Grid.Column="0" Classes="heroCover" Height="{Binding HeroCoverHeight}" Background="{Binding CoverBrush}">
+                                    <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="Uniform" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,2" VerticalAlignment="Bottom" Spacing="3">
+                                    <TextBlock Text="{Binding Name}" Classes="heroTitle" />
+                                    <TextBlock Classes="previewMeta">
+                                        <Run Text="{Binding IssueCountLabel}" /><Run Text=" · " /><Run Text="{Binding UnreadCount}" /><Run Text=" unread" />
+                                    </TextBlock>
+                                </StackPanel>
+                            </Grid>
+                        </Panel>
 
-                <TextBlock Text="Issues" Classes="pbTextCaption" Margin="0,4,0,0"
-                           IsVisible="{Binding !!PreviewSeriesIssueRail.Count}" />
-                <views:PosterRail ItemsSource="{Binding PreviewSeriesIssueRail}"
-                                  ClickCommand="{Binding IssueList.OpenIssueCommand}"
-                                  IsVisible="{Binding !!PreviewSeriesIssueRail.Count}" />
-            </StackPanel>
+                        <StackPanel Margin="16,12,16,16" DataContext="{Binding PreviewSeries}" x:DataType="models:SeriesCardSample">
+                            <WrapPanel Classes="previewChips">
+                                <Border Classes="previewChip accent"><TextBlock Text="{Binding ContentTypeLabel}" /></Border>
+                                <Border Classes="previewChip" IsVisible="{Binding HasPublisher}"><TextBlock Text="{Binding Publisher}" /></Border>
+                                <Border Classes="previewChip" IsVisible="{Binding HasLanguage}"><TextBlock Text="{Binding LanguageIso}" /></Border>
+                                <controls:SeriesStatusChip Status="{Binding SeriesStatusLabel}" Margin="0,0,6,6" />
+                                <Border Classes="previewChip" IsVisible="{Binding IsRightToLeft}"><TextBlock Text="Right to left" /></Border>
+                            </WrapPanel>
+                            <ProgressBar Classes="previewProgress" Value="{Binding ReadFraction}" />
+                            <TextBlock Text="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PreviewSeriesReadLabel}"
+                                       Classes="previewMeta" FontSize="11" Margin="0,4,0,0" />
 
-            <!-- ================= Issue preview ================= -->
-            <!-- Two nested elements, not one: IsVisible must bind against the VM (outer), while
-                 DataContext switches to PreviewIssue (inner) - putting both on the same element
-                 makes IsVisible resolve against the new DataContext instead (AVLN2000). -->
-            <StackPanel IsVisible="{Binding ShowIssuePreview}">
-                <StackPanel Spacing="12" DataContext="{Binding PreviewIssue}" x:DataType="models:IssueListRow">
-                    <Border Classes="previewCover" Background="{Binding CoverBrush}">
-                        <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
-                    </Border>
-                    <TextBlock Text="{Binding SeriesName}" Classes="previewTitle pbTextHeading" />
-                    <TextBlock Text="{Binding Number, StringFormat='#{0}'}" Classes="previewMeta" />
-                    <StackPanel Classes="previewChips">
-                        <Border Classes="previewChip" IsVisible="{Binding HasPublisher}"><TextBlock Text="{Binding Publisher}" /></Border>
-                        <Border Classes="previewChip" IsVisible="{Binding HasLanguage}"><TextBlock Text="{Binding LanguageIso}" /></Border>
-                        <Border Classes="previewChip" IsVisible="{Binding HasRating}"><TextBlock Text="{Binding Rating, StringFormat='★ {0:0.0}'}" /></Border>
-                        <Border Classes="previewChip" IsVisible="{Binding IsRead}"><TextBlock Text="Read" /></Border>
-                        <Border Classes="previewChip" IsVisible="{Binding !IsRead}"><TextBlock Text="Unread" /></Border>
+                            <StackPanel IsVisible="{Binding RepresentativeRow.HasSummaryExcerpt}">
+                                <Border Height="14" />
+                                <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,6">
+                                    <TextBlock Text="ABOUT" Classes="sectionTitle" />
+                                    <Border Grid.Column="1" Classes="sectionRule" />
+                                </Grid>
+                                <TextBlock Text="{Binding RepresentativeRow.SummaryExcerpt}" Classes="previewSynopsis" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Margin="16,0,16,16" IsVisible="{Binding !!PreviewSeriesIssueRail.Count}">
+                            <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,8">
+                                <TextBlock Text="ISSUES" Classes="sectionTitle" />
+                                <Border Grid.Column="1" Classes="sectionRule" />
+                            </Grid>
+                            <views:PosterRail x:Name="IssueRail" ItemsSource="{Binding PreviewSeriesIssueRail}"
+                                              ClickCommand="{Binding DrillIntoIssueCommand}" />
+                        </StackPanel>
+
+                        <StackPanel Margin="16,0,16,20" DataContext="{Binding PreviewSeries}" x:DataType="models:SeriesCardSample" IsVisible="{Binding HasDetails}">
+                            <Button Classes="sectionHeader" Padding="0,0,0,6"
+                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TogglePreviewSectionCommand}"
+                                    CommandParameter="details">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Text="DETAILS" Classes="sectionTitle" />
+                                    <Border Grid.Column="1" Classes="sectionRule" />
+                                    <TextBlock Grid.Column="2" Classes="sectionChevron"
+                                               Classes.open="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IsPreviewDetailsOpen}" />
+                                </Grid>
+                            </Button>
+                            <TextBlock Text="{Binding DetailsHint}" Classes="sectionHint" ToolTip.Tip="{Binding DetailsHint}"
+                                       IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IsPreviewDetailsCollapsed}" />
+                            <StackPanel Spacing="4" IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IsPreviewDetailsOpen}">
+                                <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasTotalSize}">
+                                    <TextBlock Text="Total size" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding TotalSizeLabel}" Classes="kvValue" />
+                                </Grid>
+                                <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasLastOpened}">
+                                    <TextBlock Text="Last opened" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding LastOpenedLabel}" Classes="kvValue" />
+                                </Grid>
+                                <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasLastAdded}">
+                                    <TextBlock Text="Last added" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding LastAddedLabel}" Classes="kvValue" />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
                     </StackPanel>
-                    <TextBlock Text="{Binding WriterAndPenciller}" Classes="previewMeta" IsVisible="{Binding HasWriterAndPenciller}" />
-                    <TextBlock Text="{Binding FileSizeDisplay}" Classes="previewMeta" IsVisible="{Binding HasFileSizeDisplay}" />
-                    <TextBlock Text="{Binding Format}" Classes="previewMeta" IsVisible="{Binding HasFormat}" />
+                </ScrollViewer>
 
-                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                        <Button Classes="previewAction" Content="▶ Read"
-                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                                CommandParameter="{Binding}" />
-                        <Button Classes="previewAction" Content="Mark unread" IsVisible="{Binding IsRead}"
-                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueUnreadCommand}"
-                                CommandParameter="{Binding Id}" />
-                        <Button Classes="previewAction" Content="Mark read" IsVisible="{Binding !IsRead}"
-                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueReadCommand}"
-                                CommandParameter="{Binding Id}" />
-                        <Button Classes="previewAction" Content="Edit metadata"
-                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EditIssuePropertiesCommand}"
-                                CommandParameter="{Binding Id}" />
+                <!-- Pinned action bar (outside the scroller). Add to Collection / overflow open shared MenuFlyouts from code-behind. -->
+                <Border Grid.Row="1" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="16,10">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Button Classes="previewAction primary" Content="{Binding PreviewSeriesPrimaryLabel}" Command="{Binding PreviewSeriesPrimaryCommand}" />
+                        <Button Classes="previewAction" Content="Mark all read" Command="{Binding MarkPreviewSeriesReadCommand}"
+                                IsVisible="{Binding !PreviewSeries.IsFinished}" />
+                        <Button Classes="previewAction" Content="Mark all unread" Command="{Binding MarkPreviewSeriesUnreadCommand}"
+                                IsVisible="{Binding PreviewSeries.IsFinished}" />
+                        <Button Classes="previewAction ghost" MinWidth="36" MinHeight="32" Click="OnAddToCollectionClick" AutomationProperties.Name="Add to collection">
+                            <fi:SymbolIcon Symbol="CollectionsAdd" FontSize="15" />
+                        </Button>
+                        <Button Classes="previewAction ghost" MinWidth="36" MinHeight="32" Content="⋯" Click="OnOverflowClick" AutomationProperties.Name="More actions" />
                     </StackPanel>
-                </StackPanel>
-            </StackPanel>
+                </Border>
+            </Grid>
 
-        </Grid>
-    </ScrollViewer>
+            <!-- ================= Issue state (collapsible sections) ================= -->
+            <Grid IsVisible="{Binding ShowIssuePreview}" RowDefinitions="*,Auto">
+                <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <Button Classes="backLink" Content="{Binding PreviewBackLabel}" Command="{Binding ClearPreviewDrillCommand}"
+                                IsVisible="{Binding HasPreviewDrill}" />
+
+                        <Panel x:Name="IssueHero" DataContext="{Binding ActivePreviewIssue}" x:DataType="models:IssueListRow">
+                            <Border Height="150" VerticalAlignment="Top" ClipToBounds="True" Background="{Binding CoverBrush}">
+                                <Panel>
+                                    <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" Opacity="0.55">
+                                        <Image.Effect>
+                                            <BlurEffect Radius="28" />
+                                        </Image.Effect>
+                                    </Image>
+                                    <Border>
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                                <GradientStop Color="Transparent" Offset="0" />
+                                                <GradientStop Color="{DynamicResource PbBgColor}" Offset="1" />
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                </Panel>
+                            </Border>
+                            <Grid ColumnDefinitions="Auto,*" Margin="16,68,16,0">
+                                <Border Grid.Column="0" Classes="heroCover" Height="{Binding HeroCoverHeight}" Background="{Binding CoverBrush}">
+                                    <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="Uniform" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,2" VerticalAlignment="Bottom" Spacing="3">
+                                    <TextBlock Text="{Binding SeriesName}" Classes="heroTitle" />
+                                    <TextBlock Text="{Binding PreviewSubtitle}" Classes="previewMeta" />
+                                    <TextBlock Text="{Binding PreviewDateAndPages}" Classes="previewMeta" FontSize="11" />
+                                </StackPanel>
+                            </Grid>
+                        </Panel>
+
+                        <StackPanel Margin="16,12,16,20" DataContext="{Binding ActivePreviewIssue}" x:DataType="models:IssueListRow">
+                            <WrapPanel Classes="previewChips">
+                                <Border Classes="previewChip accent" IsVisible="{Binding !IsRead}"><TextBlock Text="Unread" /></Border>
+                                <Border Classes="previewChip accent" IsVisible="{Binding IsRead}"><TextBlock Text="Read" /></Border>
+                                <Border Classes="previewChip" IsVisible="{Binding HasPublisher}"><TextBlock Text="{Binding Publisher}" /></Border>
+                                <Border Classes="previewChip" IsVisible="{Binding HasLanguage}"><TextBlock Text="{Binding LanguageIso}" /></Border>
+                                <Border Classes="previewChip" IsVisible="{Binding HasAgeRating}"><TextBlock Text="{Binding AgeRating}" /></Border>
+                                <Border Classes="previewChip" IsVisible="{Binding HasRating}"><TextBlock Text="{Binding Rating, StringFormat='★ {0:0.0}'}" /></Border>
+                            </WrapPanel>
+                            <ProgressBar Classes="previewProgress" Value="{Binding ReadFraction}" />
+
+                            <!-- Summary (always open) -->
+                            <StackPanel IsVisible="{Binding HasSummary}">
+                                <Grid ColumnDefinitions="Auto,*" Margin="0,14,0,6">
+                                    <TextBlock Text="SUMMARY" Classes="sectionTitle" />
+                                    <Border Grid.Column="1" Classes="sectionRule" />
+                                </Grid>
+                                <TextBlock Text="{Binding Summary}" Classes="previewSynopsis" />
+                            </StackPanel>
+
+                            <!-- Credits (open by default) -->
+                            <StackPanel IsVisible="{Binding HasCredits}">
+                                <Button Classes="sectionHeader"
+                                        Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TogglePreviewSectionCommand}"
+                                        CommandParameter="credits">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Text="CREDITS" Classes="sectionTitle" />
+                                        <Border Grid.Column="1" Classes="sectionRule" />
+                                        <TextBlock Grid.Column="2" Classes="sectionChevron"
+                                                   Classes.open="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IsPreviewCreditsOpen}" />
+                                    </Grid>
+                                </Button>
+                                <StackPanel Spacing="4" IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IsPreviewCreditsOpen}">
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasWriter}"><TextBlock Text="Writer" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding Writer}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasPenciller}"><TextBlock Text="Penciller" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding Penciller}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasInker}"><TextBlock Text="Inker" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding Inker}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasColorist}"><TextBlock Text="Colorist" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding Colorist}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasLetterer}"><TextBlock Text="Letterer" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding Letterer}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasCoverArtist}"><TextBlock Text="Cover" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding CoverArtist}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasEditor}"><TextBlock Text="Editor" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding Editor}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasTranslator}"><TextBlock Text="Translator" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding Translator}" Classes="kvValue" /></Grid>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Story (collapsed by default) -->
+                            <StackPanel IsVisible="{Binding HasStory}">
+                                <Button Classes="sectionHeader"
+                                        Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TogglePreviewSectionCommand}"
+                                        CommandParameter="story">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Text="STORY" Classes="sectionTitle" />
+                                        <Border Grid.Column="1" Classes="sectionRule" />
+                                        <TextBlock Grid.Column="2" Classes="sectionChevron"
+                                                   Classes.open="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IsPreviewStoryOpen}" />
+                                    </Grid>
+                                </Button>
+                                <TextBlock Text="{Binding StoryHint}" Classes="sectionHint" ToolTip.Tip="{Binding StoryHint}"
+                                           IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IsPreviewStoryCollapsed}" />
+                                <StackPanel Spacing="4" IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IsPreviewStoryOpen}">
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasStoryArc}"><TextBlock Text="Story arc" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding StoryArc}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasCharacters}"><TextBlock Text="Characters" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding Characters}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasTeams}"><TextBlock Text="Teams" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding Teams}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasLocations}"><TextBlock Text="Locations" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding Locations}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasGenre}"><TextBlock Text="Genre" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding Genre}" Classes="kvValue" /></Grid>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- File (collapsed by default) -->
+                            <StackPanel IsVisible="{Binding HasFileSection}">
+                                <Button Classes="sectionHeader"
+                                        Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TogglePreviewSectionCommand}"
+                                        CommandParameter="file">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Text="FILE" Classes="sectionTitle" />
+                                        <Border Grid.Column="1" Classes="sectionRule" />
+                                        <TextBlock Grid.Column="2" Classes="sectionChevron"
+                                                   Classes.open="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IsPreviewFileOpen}" />
+                                    </Grid>
+                                </Button>
+                                <TextBlock Text="{Binding FileHint}" Classes="sectionHint" ToolTip.Tip="{Binding FileHint}"
+                                           IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IsPreviewFileCollapsed}" />
+                                <StackPanel Spacing="4" IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IsPreviewFileOpen}">
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding PreviewFormat, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Format" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding PreviewFormat}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasPageCount}"><TextBlock Text="Pages" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding PageCountDisplay}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasFileSizeDisplay}"><TextBlock Text="Size" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding FileSizeDisplay}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasReleaseDate}"><TextBlock Text="Released" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding ReleaseDisplay}" Classes="kvValue" /></Grid>
+                                    <Grid ColumnDefinitions="92,*" IsVisible="{Binding HasFileName}"><TextBlock Text="File name" Classes="kvKey" /><TextBlock Grid.Column="1" Text="{Binding FileName}" Classes="kvValue" /></Grid>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Grid.Row="1" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="16,10">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Button Classes="previewAction primary" Content="▶ Read"
+                                Command="{Binding IssueList.OpenIssueCommand}" CommandParameter="{Binding ActivePreviewIssue}" />
+                        <Button Classes="previewAction" Content="Mark unread" IsVisible="{Binding ActivePreviewIssue.IsRead}"
+                                Command="{Binding MarkPreviewIssueUnreadCommand}" CommandParameter="{Binding ActivePreviewIssue.Id}" />
+                        <Button Classes="previewAction" Content="Mark read" IsVisible="{Binding !ActivePreviewIssue.IsRead}"
+                                Command="{Binding MarkPreviewIssueReadCommand}" CommandParameter="{Binding ActivePreviewIssue.Id}" />
+                        <Button Classes="previewAction ghost" Content="Edit"
+                                Command="{Binding EditIssuePropertiesCommand}" CommandParameter="{Binding ActivePreviewIssue.Id}" />
+                        <Button Classes="previewAction ghost" MinWidth="36" MinHeight="32" Content="⋯" Click="OnOverflowClick" AutomationProperties.Name="More actions" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+        </Panel>
+    </Grid>
 </UserControl>

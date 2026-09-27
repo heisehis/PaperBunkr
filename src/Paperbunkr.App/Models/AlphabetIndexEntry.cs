@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using cYo.Common.Text;
 
 namespace Paperbunkr.App.Models;
 
@@ -14,10 +15,13 @@ public sealed record AlphabetIndexEntry(string Letter, bool HasItems)
     private static readonly string[] AllLetters =
         Enumerable.Range('A', 26).Select(c => ((char)c).ToString()).Append("#").ToArray();
 
-    /// <summary>The letter bucket a name falls in: "A".."Z", or "#" for digits, symbols and blanks.</summary>
+    /// <summary>The letter bucket a name falls in: "A".."Z", or "#" for digits, symbols and blanks. Skips a leading article
+    /// ("The Flash" is F) - the same CE article list the Series sort ignores (<c>SortStrategies.NaturalString</c>), so the rail,
+    /// the Alphabetical group and the sort order all agree on where a series lives.</summary>
     public static string LetterFor(string? name)
     {
-        string trimmed = (name ?? string.Empty).TrimStart();
+        string trimmed = (name ?? string.Empty).Trim();
+        trimmed = trimmed[trimmed.IndexAfterArticle()..].TrimStart();
         char first = trimmed.Length > 0 ? char.ToUpperInvariant(trimmed[0]) : '\0';
         return char.IsAsciiLetter(first) ? first.ToString() : "#";
     }

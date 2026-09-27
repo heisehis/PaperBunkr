@@ -166,6 +166,22 @@ public class DuplicateFilesReviewTests : IDisposable
         Assert.All(verifyContext.Issues, i => Assert.Equal(50_000_000, i.FileSize));
     }
 
+    [Fact]
+    public void DismissAllDuplicateGroupsCommand_HidesEveryGroup_TouchesNoFile()
+    {
+        SeedDuplicatePair(number: "12");
+        SeedDuplicatePair(number: "13");
+        var vm = CreateViewModel();
+        Assert.Equal(2, vm.DuplicateGroupItems.Count);
+
+        vm.DismissAllDuplicateGroupsCommand.Execute(null);
+
+        Assert.False(vm.HasDuplicateFileItems);
+        using var verifyContext = OpenContext();
+        Assert.Equal(4, verifyContext.Issues.Count()); // dismissing never removes a row
+        Assert.All(verifyContext.Issues, i => Assert.True(i.DuplicateAcknowledged));
+    }
+
     private sealed class NoOpFilePicker : IFilePickerService
     {
         public Task<string?> PickOpenFileAsync(string title, string extension, string extensionLabel) => Task.FromResult<string?>(null);

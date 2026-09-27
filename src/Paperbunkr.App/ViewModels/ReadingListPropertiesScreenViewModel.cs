@@ -242,7 +242,12 @@ public partial class ReadingListPropertiesScreenViewModel : ViewModelBase
     /// <summary>Applies each row's edited Category/Weight onto the matching post-diff ReadingListTag - same "rename resets Category/Weight" tradeoff as the Issue Properties Editor's identical helper.</summary>
     private static void ApplyTagRows(ReadingList list, IReadOnlyList<TagEditRowViewModel> rows)
     {
-        var byValue = list.Tags.ToDictionary(t => t.Value, StringComparer.OrdinalIgnoreCase);
+        // GroupBy, not ToDictionary - same defensive reasoning as the Issue Properties Editor's
+        // identical helper: ReadingListTag.Value has no DB uniqueness constraint either, so a
+        // pre-existing case-insensitive duplicate must not crash Save().
+        var byValue = list.Tags
+            .GroupBy(t => t.Value, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
         {
             if (byValue.TryGetValue(row.Value, out var tag))

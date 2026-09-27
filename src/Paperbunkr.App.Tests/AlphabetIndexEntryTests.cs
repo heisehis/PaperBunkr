@@ -13,6 +13,10 @@ public class AlphabetIndexEntryTests
     [InlineData("", "#")]
     [InlineData(null, "#")]
     [InlineData("Émile", "#")]            // non-ASCII letters share the # bucket, same as the click handler's rule
+    [InlineData("The Flash", "F")]        // CE's leading-article skip, matching the Series sort (2026-09-26 library audit)
+    [InlineData("L'Incal", "I")]
+    [InlineData("The", "T")]              // an article alone is a name, not a prefix
+    [InlineData("Theory of Everything", "T")]
     public void LetterFor_UsesTheClickHandlersBucketRule(string? name, string expected)
         => Assert.Equal(expected, AlphabetIndexEntry.LetterFor(name));
 

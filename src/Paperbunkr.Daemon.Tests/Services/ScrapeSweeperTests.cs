@@ -50,7 +50,7 @@ public class ScrapeSweeperTests : IDisposable
 
     private static ComicVineIssueDetails Details() => new(
         1, 1, "Spawn", "263", "Endgame", null, new ComicVineDatePart(2016, 5, 1), new ComicVineDatePart(null, null, null), "Story",
-        Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(), new[] { new ComicVineCredit("Todd", "Writer") });
+        Array.Empty<ComicVineIdName>(), Array.Empty<ComicVineIdName>(), Array.Empty<ComicVineIdName>(), Array.Empty<ComicVineIdName>(), new[] { new ComicVineCredit("Todd", "Writer") });
 
     private ScrapeSweeper Sweeper() =>
         new(NewContext, new ScrapeByIdService(NewContext, _ => new Source(this)), new Recorder(_events), _writeBacks.Add, () => _now);

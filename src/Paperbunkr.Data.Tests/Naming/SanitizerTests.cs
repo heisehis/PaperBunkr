@@ -36,4 +36,20 @@ public sealed class SanitizerTests
         string result = Sanitizer.SanitizePath("DC Comics/Batman: The Dark Knight/Batman #1?");
         Assert.Equal(Path.Combine("DC Comics", "Batman - The Dark Knight", "Batman #1"), result);
     }
+
+    [Fact]
+    public void SanitizePath_drops_empty_segments_so_the_path_is_never_rooted_or_doubled()
+    {
+        // A missing publisher/imprint leaves the template's own literal separators behind.
+        Assert.Equal(Path.Combine("Batman", "Batman #1"), Sanitizer.SanitizePath("\\Batman\\Batman #1"));
+        Assert.Equal(Path.Combine("Pub", "Series"), Sanitizer.SanitizePath("Pub\\Series"));
+        Assert.Equal(string.Empty, Sanitizer.SanitizePath("\\\\"));
+    }
+
+    [Fact]
+    public void SanitizePath_strips_leading_dots_so_a_segment_is_never_dot_or_dotdot_or_hidden()
+    {
+        Assert.Equal(Path.Combine("hack", "Sign"), Sanitizer.SanitizePath(".hack/Sign"));
+        Assert.Equal("Series", Sanitizer.SanitizePath("../Series/.."));
+    }
 }

@@ -160,8 +160,8 @@ public sealed class PaperbunkrApplicationTests : IDisposable
     [Fact]
     public void GetComicPublisherIcon_ResolvesToALetterMarkOnly_ReturnsNull()
     {
-        int seriesId = AddSeries("Vertigo Series");
-        int issueId = AddIssue(seriesId, "1", publisher: "Vertigo");
+        int seriesId = AddSeries("DSTLRY Series");
+        int issueId = AddIssue(seriesId, "1", publisher: "DSTLRY");
         var app = new PaperbunkrApplication(new MainViewModel());
         var issue = app.GetBook(issueId)!;
 

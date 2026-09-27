@@ -46,5 +46,17 @@ public static class KeyOptions
         new KeyOption(new KeyGesture(Key.D4), "4"),
         new KeyOption(new KeyGesture(Key.D5), "5"),
         new KeyOption(new KeyGesture(Key.S), "S"),
+        new KeyOption(new KeyGesture(Key.Space), "Space"),
+        new KeyOption(new KeyGesture(Key.Space, KeyModifiers.Shift), "Shift+Space"),
+        new KeyOption(new KeyGesture(Key.MediaNextTrack), "Media Next Track"),
+        new KeyOption(new KeyGesture(Key.MediaPreviousTrack), "Media Previous Track"),
+        new KeyOption(new KeyGesture(Key.MediaPlayPause), "Media Play/Pause"),
+        new KeyOption(new KeyGesture(Key.K, KeyModifiers.Control), "Ctrl+K"),
+        new KeyOption(new KeyGesture(Key.G, KeyModifiers.Control), "Ctrl+G"),
+        new KeyOption(new KeyGesture(Key.C, KeyModifiers.Control), "Ctrl+C"),
+        new KeyOption(new KeyGesture(Key.H), "H"),
+        new KeyOption(new KeyGesture(Key.G), "G"),
+        new KeyOption(new KeyGesture(Key.P), "P"),
+        new KeyOption(new KeyGesture(Key.W), "W"),
     ];
 }

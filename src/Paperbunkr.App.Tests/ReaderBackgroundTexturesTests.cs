@@ -13,11 +13,27 @@ namespace Paperbunkr.App.Tests;
 public class ReaderBackgroundTexturesTests
 {
     [Fact]
-    public void All_HasThreeUniqueIds()
+    public void All_HasSixteenUniqueIds_WithTheOriginalThreeFirst()
     {
-        Assert.Equal(3, ReaderBackgroundTextures.All.Count);
-        Assert.Equal(3, ReaderBackgroundTextures.All.Select(t => t.Id).Distinct().Count());
-        Assert.Equal("neutral-dark", ReaderBackgroundTextures.All[0].Id);
+        Assert.Equal(16, ReaderBackgroundTextures.All.Count);
+        Assert.Equal(16, ReaderBackgroundTextures.All.Select(t => t.Id).Distinct().Count());
+        Assert.Equal(["neutral-dark", "carbon", "linen"], ReaderBackgroundTextures.All.Take(3).Select(t => t.Id));
+    }
+
+    [Fact]
+    public void EveryCatalogEntry_HasABundledAssetThatDecodes()
+    {
+        foreach (var texture in ReaderBackgroundTextures.All)
+        {
+            Assert.True(Avalonia.Platform.AssetLoader.Exists(texture.AssetUri), texture.Id);
+            Assert.NotNull(ReaderBackgroundTextures.LoadBitmap(texture.Id));
+        }
+    }
+
+    [Fact]
+    public void BlackVignette_IsNotInTheCatalog_BecauseItDoesNotTile()
+    {
+        Assert.DoesNotContain(ReaderBackgroundTextures.All, t => t.AssetUri.ToString().Contains("Black"));
     }
 
     [Theory]

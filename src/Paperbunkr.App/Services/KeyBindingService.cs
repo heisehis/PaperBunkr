@@ -37,7 +37,7 @@ public class KeyBindingService
     /// <summary>
     /// Every gesture bound to <paramref name="commandId"/> (docs/superpowers/specs/2026-09-07-
     /// keyboard-shortcuts-redesign-design.md) - zero stored rows means "never customized", which
-    /// returns the registry default as the sole entry; one or more stored rows are authoritative and
+    /// returns the registry default (plus any <see cref="KeyboardCommandDescriptor.AdditionalDefaults"/>); one or more stored rows are authoritative and
     /// the registry default is not implicitly included alongside them.
     /// </summary>
     public IReadOnlyList<KeyGesture> GetKeys(PaperbunkrDbContext context, string commandId)
@@ -46,7 +46,7 @@ public class KeyBindingService
         var stored = context.KeyBindings.Where(k => k.CommandId == commandId).Select(k => k.Key).ToList();
         if (stored.Count == 0)
         {
-            return [descriptor.DefaultGesture];
+            return descriptor.AllDefaults;
         }
 
         var parsed = new List<KeyGesture>();
@@ -64,7 +64,7 @@ public class KeyBindingService
             }
         }
 
-        return parsed.Count > 0 ? parsed : [descriptor.DefaultGesture];
+        return parsed.Count > 0 ? parsed : descriptor.AllDefaults;
     }
 
     /// <summary>No-ops if <paramref name="commandId"/> already has a row for this exact gesture (mirrors the unique index on (CommandId, Key)).</summary>

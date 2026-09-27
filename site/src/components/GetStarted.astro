@@ -1,0 +1,100 @@
+---
+import { REPO_URL, WIKI_URL } from '../lib/content';
+import { formatDate, formatSize, getLatestRelease, RELEASES_URL } from '../lib/release';
+
+const release = await getLatestRelease();
+const downloadUrl = release.installer?.url ?? `${RELEASES_URL}/latest`;
+
+const steps = [
+  { title: 'Install', text: 'Run the installer. It bundles its own .NET runtime, so there is nothing else to set up.' },
+  { title: 'Add your folders', text: 'Point PaperBunkr at your comics and books. It scans them and builds a library database on your machine.' },
+  { title: 'Or import from CE', text: 'Coming from ComicRack? Bring over your series, issues, read state and metadata from Preferences → Library.' },
+];
+---
+<section class="section" id="download" aria-labelledby="download-title">
+  <div class="wrap grid">
+    <div data-reveal>
+      <div class="section-head">
+        <p class="kicker">Get started</p>
+        <h2 id="download-title">Three steps from download to reading</h2>
+      </div>
+      <ol>
+        {steps.map((step, index) => (
+          <li>
+            <span class="n" aria-hidden="true">{index + 1}</span>
+            <div>
+              <h3>{step.title}</h3>
+              <p>{step.text}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <p class="more">
+        Guides for every screen are in the <a href={WIKI_URL}>wiki</a>.
+        To build from source, see the <a href={`${REPO_URL}#readme`}>README</a>.
+      </p>
+    </div>
+
+    <aside class="release" aria-labelledby="release-title" data-reveal>
+      <p class="kicker">Latest release</p>
+      <h3 id="release-title">{release.tag ? `v${release.version}` : 'Latest beta'}</h3>
+      {release.publishedAt && <p class="date">Released {formatDate(release.publishedAt)}</p>}
+      {release.highlights.length > 0 && (
+        <ul>
+          {release.highlights.map((highlight) => <li>{highlight}</li>)}
+        </ul>
+      )}
+      <a class="btn btn-primary" href={downloadUrl}>
+        Download{release.installer && <span class="btn-note">{formatSize(release.installer.sizeBytes)}</span>}
+      </a>
+      <p class="links">
+        <a href={release.htmlUrl}>Full release notes</a>
+        <a href={RELEASES_URL}>All releases</a>
+      </p>
+      <p class="note">Beta software from a solo developer. Expect rough edges, and please report them.</p>
+    </aside>
+  </div>
+</section>
+
+<style>
+  .grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: 64px; align-items: start; }
+  ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  ol li { display: flex; gap: 18px; padding: 20px 22px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-m); }
+  .n {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: var(--radius-s);
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    padding-top: 3px;
+  }
+  ol h3 { font-size: 1.5rem; letter-spacing: 0.03em; margin-bottom: 4px; }
+  ol p { margin: 0; color: var(--muted); font-size: 0.97rem; }
+  .more { color: var(--muted); margin: 24px 0 0; }
+
+  .release {
+    position: sticky;
+    top: 96px;
+    padding: 28px;
+    border-radius: var(--radius-l);
+    background: linear-gradient(180deg, rgba(201, 128, 63, 0.1), transparent 60%), var(--panel);
+    border: 1px solid var(--line-strong);
+  }
+  .release h3 { font-size: 3rem; margin: 8px 0 4px; }
+  .date { color: var(--faint); margin: 0 0 16px; font-size: 0.93rem; }
+  .release ul { list-style: none; margin: 0 0 22px; padding: 0; }
+  .release li { padding: 8px 0; border-top: 1px solid var(--line); font-size: 0.97rem; }
+  .release .btn { width: 100%; justify-content: center; }
+  .links { display: flex; gap: 20px; margin: 16px 0 0; font-size: 0.95rem; }
+  .note { color: var(--faint); font-size: 0.86rem; margin: 18px 0 0; }
+
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+    .release { position: static; }
+  }
+</style>

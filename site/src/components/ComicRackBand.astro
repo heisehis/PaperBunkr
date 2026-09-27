@@ -1,0 +1,59 @@
+---
+import { comicRackPoints, WIKI_URL } from '../lib/content';
+---
+<section class="band" id="comicrack" aria-labelledby="comicrack-title">
+  <div class="wrap grid">
+    <div class="lead" data-reveal>
+      <p class="kicker">Coming from ComicRack CE?</p>
+      <h2 id="comicrack-title">Bring your whole library with you</h2>
+      <p>
+        PaperBunkr started as a ground-up rewrite of ComicRack, checked against Community Edition's own
+        source for the behaviour that matters. Point it at your <code>ComicDb.xml</code> and it does the rest.
+      </p>
+      <a class="btn btn-secondary" href={`${WIKI_URL}/Importing-from-ComicRack-CE`}>Read the import guide</a>
+    </div>
+    <ul>
+      {comicRackPoints.map((point) => (
+        <li data-reveal>
+          <h3>{point.title}</h3>
+          <p>{point.detail}</p>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>
+
+<style>
+  .band {
+    padding: 112px 0;
+    background:
+      radial-gradient(700px 400px at 100% 0%, rgba(201, 128, 63, 0.12), transparent 70%),
+      var(--bg-raised);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 64px; align-items: start; }
+  .lead h2 { font-size: clamp(2.6rem, 5vw, 3.6rem); margin: 10px 0 16px; }
+  .lead p { color: var(--muted); margin: 0 0 28px; }
+  code {
+    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    font-size: 0.88em;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 1px 6px;
+    color: var(--text);
+  }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  li { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 22px; }
+  h3 { font-size: 1.55rem; letter-spacing: 0.03em; margin-bottom: 8px; line-height: 1.05; }
+  li p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+  @media (max-width: 900px) {
+    .band { padding: 76px 0; }
+    .grid { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+  }
+  @media (max-width: 560px) {
+    ul { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>

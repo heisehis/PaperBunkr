@@ -70,6 +70,6 @@ provider-sourced synopsis.
 
 ## Getting edits back into your files
 
-**Preferences → Libraries → Sync Metadata** re-reads files into the database. Writing the
+**Preferences → Library → Sync Metadata** re-reads files into the database. Writing the
 database back out to `ComicInfo.xml` is limited in the current alpha — keep external
 backups if your `ComicInfo.xml` files matter to you.

@@ -59,7 +59,7 @@ Seven tabs.
 
 - **Minimize to tray** (closing the window minimizes to tray while on)
 
-## Libraries
+## Library
 
 - **Book Folders** — add/remove watched comic folders, toggle **Watch for changes** per
   folder, **Scan Now**, **Generate Covers**, **Sync Metadata**. See

@@ -41,7 +41,7 @@ Set backup frequency/retention in **Preferences → Advanced → Backup Manager*
 
 ## Scanning problems
 
-- **Files not showing up:** confirm the folder is listed in **Preferences → Libraries →
+- **Files not showing up:** confirm the folder is listed in **Preferences → Library →
   Book Folders**, then **Scan Now**. EPUB/novel PDFs go in the **Books** section's own
   folder list instead.
 - **Changes on disk not picked up:** turn on **Watch for changes** for that folder, or
@@ -59,8 +59,9 @@ Set backup frequency/retention in **Preferences → Advanced → Backup Manager*
 - **Slow scrolling / high memory in webtoon mode:** turn off **high quality page display**
   in **Preferences → Reader → Display**; very large libraries of huge scans are demanding
   on the current alpha.
-- **Missing file when opening:** the file moved or was deleted — **Relink…** it from the
-  migration **Needs Review** queue, or the *Missing Files* Smart List.
+- **Missing file when opening:** the file moved or was deleted — **Relink** it from
+  **Preferences → Library → Library Health → Files → Missing Files**, or the *Missing Files*
+  Smart List.
 
 ## Migration didn't find my CE library
 

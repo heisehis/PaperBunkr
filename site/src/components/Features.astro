@@ -1,0 +1,16 @@
+---
+import ThemeRow from './ThemeRow.astro';
+import Gallery from './Gallery.astro';
+import { themes } from '../lib/content';
+---
+<section class="section" id="features" aria-labelledby="features-title">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <p class="kicker">What it does</p>
+      <h2 id="features-title">A library manager and a reader, not just a viewer</h2>
+      <p>Everything runs on your own machine against your own files. Here is what that covers today.</p>
+    </div>
+    {themes.map((theme, index) => <ThemeRow theme={theme} flip={index % 2 === 1} />)}
+    <Gallery />
+  </div>
+</section>

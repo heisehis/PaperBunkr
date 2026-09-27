@@ -1,0 +1,28 @@
+---
+import Base from '../layouts/Base.astro';
+import Nav from '../components/Nav.astro';
+import Hero from '../components/Hero.astro';
+import FactStrip from '../components/FactStrip.astro';
+import Features from '../components/Features.astro';
+import ComicRackBand from '../components/ComicRackBand.astro';
+import GetStarted from '../components/GetStarted.astro';
+import Footer from '../components/Footer.astro';
+import Lightbox from '../components/Lightbox.astro';
+import Reveal from '../components/Reveal.astro';
+---
+<Base
+  title="PaperBunkr: a local-first comic, manga and book reader for Windows"
+  description="PaperBunkr is a free, open-source comic, manga and book library and reader for Windows. It reads CBZ, CBR, PDF, EPUB, FB2 and MOBI, imports ComicRack CE libraries, and keeps everything on your own machine."
+>
+  <Nav />
+  <main id="main">
+    <Hero />
+    <FactStrip />
+    <Features />
+    <ComicRackBand />
+    <GetStarted />
+  </main>
+  <Footer />
+  <Lightbox />
+  <Reveal />
+</Base>

@@ -5,7 +5,7 @@ This walks you from a fresh install to a browsable library.
 ## 1. Point PaperBunkr at your comics
 
 1. Open **Preferences** (bottom of the left navigation rail).
-2. Go to the **Libraries** tab.
+2. Go to the **Library** tab.
 3. Under **Book Folders**, click **Add Folder…** and pick the folder that holds your
    `.cbz` / `.cbr` / `.pdf` files. Sub-folders are included.
 4. Add as many folders as you like.

@@ -143,13 +143,13 @@ as soon as you reach its last real story page.
 
 **Reporting a bad page.** Press **X** (or right-click the page → *Report Bad Page…*), pick a
 reason (corrupt, blank, low resolution, other; keys **1–4**, **Esc** cancels) and a "Reported
-page N · Undo" note appears. Reports collect under **Preferences → Libraries → Library Health →
-Reported pages**, where you can open the page, tag it Deleted, or dismiss the report.
+page N · Undo" note appears. Reports collect under **Preferences → Library → Library Health →
+Review → Reported pages**, where you can open the page, tag it Deleted, or dismiss the report.
 
 **Finding ads automatically.** Each time you tag a page Advertisement, PaperBunkr remembers what
 it looks like. The **Detect advertisement pages** task (Preferences → Automation, off by default;
 use *Run now* to scan straight away) compares the first three and last ten pages of your comics
-with those ads and lists look-alikes under **Needs Review → Advertisement Pages**, grouped by the
+with those ads and lists look-alikes under **Library Health → Review → Advertisement Pages**, grouped by the
 ad they match. Nothing is tagged until you accept: **Accept all** / **Reject all** per group, or
 open a group to decide page by page. A page you reject is never suggested again, and removing the
 Advertisement tag from the page an ad came from forgets that ad.

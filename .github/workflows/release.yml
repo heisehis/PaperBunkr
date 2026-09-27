@@ -133,3 +133,18 @@ jobs:
             installer/Output/PaperbunkrSetup-${{ steps.version.outputs.version }}.exe
             appcast.xml
             appcast.xml.signature
+
+  # The landing page (site/) shows the latest version, date and installer link, read from the GitHub
+  # API when it's built, so it has to be rebuilt once this release exists. A release created with
+  # GITHUB_TOKEN can't trigger a `release: published` workflow, but it may dispatch one; running it
+  # on master keeps the github-pages environment's branch rule satisfied.
+  refresh-site:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Rebuild the landing page
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run site.yml --repo "${{ github.repository }}" --ref master

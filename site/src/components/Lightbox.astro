@@ -1,0 +1,85 @@
+---
+// One shared <dialog> for every [data-lightbox] link. Without JS the links still open the
+// full-size image directly; with JS they open it here instead.
+---
+<dialog class="lightbox" aria-label="Screenshot">
+  <button class="close" type="button" aria-label="Close">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+  </button>
+  <figure>
+    <img alt="" />
+    <figcaption></figcaption>
+  </figure>
+</dialog>
+
+<script>
+  const dialog = document.querySelector<HTMLDialogElement>('dialog.lightbox');
+  const image = dialog?.querySelector('img');
+  const caption = dialog?.querySelector('figcaption');
+
+  if (dialog && image && caption && typeof dialog.showModal === 'function') {
+    let opener: HTMLElement | null = null;
+
+    document.querySelectorAll<HTMLAnchorElement>('a[data-lightbox]').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0) return;
+        event.preventDefault();
+        opener = link;
+        image.src = link.href;
+        image.alt = link.dataset.caption ?? '';
+        caption.textContent = link.dataset.caption ?? '';
+        dialog.showModal();
+      });
+    });
+
+    // showModal() already traps focus and closes on Esc; clicks on the backdrop close it too.
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog || (event.target as HTMLElement).closest('.close')) dialog.close();
+    });
+    dialog.addEventListener('close', () => {
+      image.removeAttribute('src');
+      opener?.focus();
+    });
+  }
+</script>
+
+<style>
+  .lightbox {
+    width: min(1400px, 94vw);
+    max-width: none;
+    max-height: 92vh;
+    padding: 0;
+    border: none;
+    background: transparent;
+    overflow: visible;
+  }
+  .lightbox::backdrop { background: rgba(5, 5, 6, 0.88); backdrop-filter: blur(4px); }
+  figure { margin: 0; }
+  img {
+    width: 100%;
+    max-height: 84vh;
+    object-fit: contain;
+    border-radius: var(--radius-m);
+    box-shadow: 0 0 0 1px var(--line), 0 30px 90px rgba(0, 0, 0, 0.7);
+    background: var(--bg);
+  }
+  figcaption { color: var(--muted); text-align: center; margin-top: 12px; font-size: 0.95rem; }
+  .close {
+    position: absolute;
+    top: -52px;
+    right: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: var(--radius-s);
+    border: 1px solid var(--line-strong);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+  }
+  .close svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  @media (max-width: 640px) {
+    .close { top: auto; bottom: -54px; right: 50%; transform: translateX(50%); }
+  }
+</style>

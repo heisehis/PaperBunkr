@@ -1,0 +1,54 @@
+---
+import { getImage, Picture } from 'astro:assets';
+import { gallery } from '../lib/content';
+
+const shots = await Promise.all(
+  gallery.map(async (shot) => ({
+    ...shot,
+    full: await getImage({ src: shot.image, format: 'webp', width: shot.image.width }),
+  })),
+);
+---
+<div class="gallery" data-reveal>
+  <h3>A closer look</h3>
+  <ul>
+    {shots.map((shot) => (
+      <li>
+        <a href={shot.full.src} data-lightbox data-caption={shot.caption}>
+          <Picture
+            src={shot.image}
+            formats={['avif', 'webp']}
+            fallbackFormat="webp"
+            widths={[480, 720, 1366]}
+            sizes="(max-width: 640px) 100vw, 540px"
+            alt={shot.alt}
+            loading="lazy"
+          />
+        </a>
+        <p>{shot.caption}</p>
+      </li>
+    ))}
+  </ul>
+</div>
+
+<style>
+  .gallery { margin-top: 120px; }
+  h3 { font-size: clamp(2rem, 3.6vw, 2.6rem); margin-bottom: 24px; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 24px; }
+  a {
+    display: block;
+    border-radius: var(--radius-m);
+    overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--line);
+    cursor: zoom-in;
+  }
+  a :global(img) { width: 100%; transition: transform 0.4s ease; }
+  a:hover :global(img) { transform: scale(1.015); }
+  p { margin: 12px 0 0; color: var(--muted); font-size: 0.95rem; }
+
+  @media (max-width: 900px) { .gallery { margin-top: 80px; } }
+  @media (max-width: 640px) { ul { grid-template-columns: minmax(0, 1fr); } }
+  @media (prefers-reduced-motion: reduce) {
+    a :global(img), a:hover :global(img) { transition: none; transform: none; }
+  }
+</style>

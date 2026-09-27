@@ -1,0 +1,87 @@
+---
+import { Picture } from 'astro:assets';
+import homeShot from '../assets/shots/home.png';
+import { REPO_URL } from '../lib/content';
+import { formatSize, getLatestRelease, RELEASES_URL } from '../lib/release';
+
+const release = await getLatestRelease();
+const downloadUrl = release.installer?.url ?? `${RELEASES_URL}/latest`;
+const downloadNote = release.installer
+  ? `v${release.version} · ${formatSize(release.installer.sizeBytes)}`
+  : 'latest release';
+---
+<section class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div class="copy">
+      <p class="kicker">Free · Windows · {release.tag ? `v${release.version}` : 'Beta'}</p>
+      <h1>Your comics.<br />Your machine.</h1>
+      <p class="lede">
+        PaperBunkr is a local-first library and reader for comics, manga and books, built from the
+        ground up as a successor to ComicRack. Your library lives on your computer: no cloud, no account.
+      </p>
+      <div class="actions">
+        <a class="btn btn-primary" href={downloadUrl}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14" /></svg>
+          Download for Windows <span class="btn-note">{downloadNote}</span>
+        </a>
+        <a class="btn btn-secondary" href={REPO_URL}>
+          <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z" /></svg>
+          View on GitHub
+        </a>
+      </div>
+      <p class="meta">Windows 10 or later · self-contained installer · updates itself</p>
+    </div>
+
+    <div class="shot">
+      <Picture
+        src={homeShot}
+        formats={['avif', 'webp']}
+        fallbackFormat="webp"
+        widths={[680, 1024, 1366]}
+        sizes="(max-width: 900px) 100vw, 60vw"
+        alt="PaperBunkr's Home screen: a featured Venom issue, library search and a Continue Reading row of covers"
+        loading="eager"
+        fetchpriority="high"
+      />
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    overflow: hidden;
+    padding: 96px 0 120px;
+    background:
+      radial-gradient(900px 480px at 12% -12%, var(--glow-red), transparent 70%),
+      radial-gradient(700px 420px at 95% 105%, rgba(201, 128, 63, 0.16), transparent 70%),
+      var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 56px;
+    align-items: center;
+  }
+  h1 { font-size: clamp(3.4rem, 6vw, 5.4rem); margin: 14px 0 22px; }
+  .lede { color: var(--muted); font-size: 1.15rem; max-width: 34rem; margin: 0; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+  .meta { color: var(--faint); font-size: 0.88rem; margin: 18px 0 0; }
+
+  .shot { perspective: 1600px; margin-right: -120px; }
+  .shot :global(img) {
+    width: 100%;
+    border-radius: var(--radius-m);
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--line);
+    transform: rotateY(-14deg) rotateX(4deg);
+    transform-origin: left center;
+  }
+
+  @media (max-width: 900px) {
+    .hero { padding: 64px 0 72px; }
+    .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 44px; }
+    .shot { perspective: none; margin-right: 0; }
+    .shot :global(img) { transform: none; }
+  }
+</style>

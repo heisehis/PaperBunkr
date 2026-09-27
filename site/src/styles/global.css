@@ -1,0 +1,137 @@
+/* Brand tokens mirror the app's own palette (PbAccentColor #C9803F, PbAccentTextColor #E0995A)
+   and type (Bebas Neue display, Source Serif 4 body). The site is dark-only, like the app. */
+:root {
+  --bg: #0b0b0d;
+  --bg-raised: #100f0e;
+  --panel: #141210;
+  --panel-2: #1b1815;
+  --line: #2a2723;
+  --line-strong: #3a352f;
+  --text: #ece6dd;
+  --muted: #b0a89c;
+  --faint: #857d72;
+  --accent: #c9803f;
+  --accent-hover: #d68f4e;
+  --accent-text: #e0995a;
+  --accent-soft: rgba(201, 128, 63, 0.16);
+  --on-accent: #160e06;
+  --glow-red: rgba(140, 40, 40, 0.45);
+
+  --font-display: 'Bebas Neue', 'Arial Narrow', Impact, sans-serif;
+  --font-body: 'Source Serif 4 Variable', Georgia, 'Times New Roman', serif;
+
+  --radius-s: 8px;
+  --radius-m: 12px;
+  --radius-l: 16px;
+  --wrap: 1120px;
+  --gutter: 24px;
+
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+img { max-width: 100%; height: auto; display: block; }
+
+a { color: var(--accent-text); text-underline-offset: 3px; }
+a:hover { color: var(--text); }
+
+:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.015em;
+  line-height: 0.95;
+  margin: 0;
+}
+
+.wrap {
+  width: 100%;
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+.kicker {
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+  margin: 0;
+}
+
+.section { padding: 112px 0; }
+.section-head { max-width: 640px; margin-bottom: 56px; }
+.section-head h2 { font-size: clamp(2.6rem, 5vw, 3.6rem); margin: 10px 0 14px; }
+.section-head p { color: var(--muted); margin: 0; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 20px;
+  border-radius: var(--radius-s);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover { background: var(--accent-hover); color: var(--on-accent); }
+.btn-secondary { border-color: var(--line-strong); color: var(--text); background: rgba(255, 255, 255, 0.02); }
+.btn-secondary:hover { border-color: var(--accent); color: var(--text); }
+.btn .btn-note { font-weight: 400; opacity: 0.75; font-size: 0.88rem; }
+
+.skip-link {
+  position: absolute;
+  left: 16px;
+  top: -60px;
+  z-index: 100;
+  background: var(--accent);
+  color: var(--on-accent);
+  padding: 10px 14px;
+  border-radius: var(--radius-s);
+  font-weight: 600;
+}
+.skip-link:focus { top: 12px; }
+
+/* Scroll reveal: only armed once JS has confirmed motion is welcome (see Reveal.astro). */
+.reveal-ready [data-reveal] {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.reveal-ready [data-reveal].is-visible { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .btn, .btn:hover { transition: none; transform: none; }
+}
+
+@media (max-width: 640px) {
+  :root { --gutter: 16px; }
+  .section { padding: 76px 0; }
+  .section-head { margin-bottom: 36px; }
+}

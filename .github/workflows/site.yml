@@ -1,0 +1,60 @@
+name: Site
+
+# Builds the landing page in site/ (Astro) and publishes it to GitHub Pages
+# (docs/superpowers/specs/2026-09-27-landing-site-redesign-design.md).
+#
+# The page reads the latest release from the GitHub API at build time, so it has to be rebuilt
+# after every release. release.yml does that by dispatching this workflow on master: a release
+# created with GITHUB_TOKEN can't trigger a `release: published` workflow, and calling this one as a
+# reusable workflow would run it on the release tag, which the github-pages environment rejects.
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'site/**'
+      - '.github/workflows/site.yml'
+  pull_request:
+    paths:
+      - 'site/**'
+      - '.github/workflows/site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; a newer run supersedes a queued one, but never cancels one mid-deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Type-checks, builds and uploads site/dist as the Pages artifact. A failed release lookup
+      # fails the build (CI is set), which leaves the last good deploy live instead of shipping a
+      # page with stale or missing release data.
+      - uses: withastro/action@v6
+        with:
+          path: site
+          node-version: 22
+          package-manager: npm
+          build-cmd: npm run check && npm run build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASTRO_TELEMETRY_DISABLED: '1'
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

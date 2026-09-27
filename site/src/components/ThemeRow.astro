@@ -1,0 +1,104 @@
+---
+import { getImage, Picture } from 'astro:assets';
+import type { Theme } from '../lib/content';
+
+interface Props {
+  theme: Theme;
+  flip: boolean;
+}
+
+const { theme, flip } = Astro.props;
+// The link target doubles as the no-JS fallback and the lightbox's full-size source.
+const full = await getImage({ src: theme.image, format: 'webp', width: theme.image.width });
+---
+<article class:list={['row', { flip }]} id={theme.id} data-reveal>
+  <a class="shot" href={full.src} data-lightbox data-caption={theme.alt}>
+    <Picture
+      src={theme.image}
+      formats={['avif', 'webp']}
+      fallbackFormat="webp"
+      widths={[560, 840, 1366]}
+      sizes="(max-width: 900px) 100vw, 640px"
+      alt={theme.alt}
+      loading="lazy"
+    />
+    <span class="zoom" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
+    </span>
+  </a>
+  <div class="text">
+    <p class="kicker">{theme.number} · {theme.label}</p>
+    <h3>{theme.title}</h3>
+    <p class="intro">{theme.intro}</p>
+    <ul>
+      {theme.points.map((point) => <li>{point}</li>)}
+    </ul>
+  </div>
+</article>
+
+<style>
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 64px;
+    align-items: center;
+  }
+  .row + .row { margin-top: 120px; }
+  .flip .shot { order: 2; }
+
+  .shot {
+    position: relative;
+    display: block;
+    border-radius: var(--radius-m);
+    overflow: hidden;
+    box-shadow: 0 28px 70px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--line);
+    cursor: zoom-in;
+  }
+  .shot :global(img) { width: 100%; transition: transform 0.4s ease; }
+  .shot:hover :global(img) { transform: scale(1.015); }
+  .zoom {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-s);
+    background: rgba(11, 11, 13, 0.75);
+    color: var(--text);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  .zoom svg { width: 18px; height: 18px; }
+  .shot:hover .zoom, .shot:focus-visible .zoom { opacity: 1; }
+
+  h3 { font-size: clamp(2.2rem, 4vw, 3rem); margin: 10px 0 12px; }
+  .intro { color: var(--muted); margin: 0 0 18px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li {
+    position: relative;
+    padding: 9px 0 9px 22px;
+    border-top: 1px solid var(--line);
+    font-size: 0.99rem;
+  }
+  li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 1.05em;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+
+  @media (max-width: 900px) {
+    .row { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+    .row + .row { margin-top: 80px; }
+    .flip .shot { order: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .shot :global(img), .shot:hover :global(img) { transition: none; transform: none; }
+  }
+</style>

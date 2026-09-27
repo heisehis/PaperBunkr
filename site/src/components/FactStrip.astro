@@ -1,0 +1,39 @@
+---
+import { facts } from '../lib/content';
+---
+<section class="facts" aria-label="At a glance">
+  <ul class="wrap">
+    {facts.map((fact) => (
+      <li data-reveal>
+        <strong>{fact.title}</strong>
+        <span>{fact.detail}</span>
+      </li>
+    ))}
+  </ul>
+</section>
+
+<style>
+  .facts { background: var(--bg-raised); border-bottom: 1px solid var(--line); }
+  ul {
+    list-style: none;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  li { padding: 28px 24px; border-left: 1px solid var(--line); }
+  li:first-child { border-left: none; padding-left: 0; }
+  strong { display: block; font-family: var(--font-display); font-weight: 400; font-size: 1.6rem; letter-spacing: 0.03em; line-height: 1.1; }
+  span { color: var(--muted); font-size: 0.95rem; }
+
+  @media (max-width: 900px) {
+    ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    li { border-left: none; padding: 22px 0; border-top: 1px solid var(--line); }
+    li:nth-child(-n + 2) { border-top: none; }
+    li:nth-child(even) { padding-left: 20px; }
+  }
+  @media (max-width: 480px) {
+    ul { grid-template-columns: minmax(0, 1fr); }
+    li:nth-child(even) { padding-left: 0; }
+    li:nth-child(2) { border-top: 1px solid var(--line); }
+  }
+</style>

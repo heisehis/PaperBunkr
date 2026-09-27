@@ -12,20 +12,22 @@ Add your ComicVine API key, a Metron login, or both, under **Preferences → Con
 
 Right-click a comic, several comics, or a series and choose **Scrape…**.
 
-1. Paperbunkr searches ComicVine and ranks the series it finds. You confirm the right one in a dialog (or turn on *Choose the best match automatically* to skip it).
+1. Paperbunkr searches ComicVine and ranks the series it finds. You confirm the right one in a dialog (or turn on *Choose the best match automatically* to skip it). The series and issue dialogs are tables like the ComicRack CE plugin's: click a column header to sort.
 2. It then shows the ComicVine issue it matched, so you can correct it.
-3. The details (credits, summary, characters, dates, and more) are written into your library, and the files are queued for tag write-back if you have that on.
+3. The details (credits, summary, characters, teams, locations, dates, and more) are written into your library, and the files are queued for tag write-back if you have that on.
 
-A batch shows one progress header across all of its dialogs, and the whole run is one job in the Activity Center. You can cancel it there.
+An **automatic** match is only applied when the comic's cover also matches the one the source has, as in the CE plugin. When the covers don't agree, or no match is confident enough, you are asked instead: the dialog opens so you can search by hand and pick. In a scheduled scrape, which never asks, that comic is skipped and noted.
 
+A batch shows one progress header across all of its dialogs, and the whole run is one job in the Activity Center. You can cancel it there. At the end a **summary** lists what was scraped, skipped and failed, and why.
 A comic's series page also has a **Comic details** panel (Details → Linking) with a one-click scrape of the whole series. It isn't offered for manga, which use different sources.
 
 ### Options: Preferences → Organize & Scrape
 
 - Choose the best match automatically, and confirm the issue too.
 - Overwrite existing values, or only fill in what is empty. Never blank a field.
-- Which fields a scrape may write.
-- Filters that drop unlikely results before scoring: years, publishers, words to leave out of searches, imprint to parent-publisher mappings, and a cap on results considered.
+- Which fields a scrape may write; **Resolve imprints to their parent publisher** and publisher aliases.
+- **Show cover thumbnails** and **Show the series art** in the dialogs (off scrapes faster on a slow connection), and a **Delay between comics**.
+- Filters that drop unlikely results before scoring: years, publishers, words to leave out of searches, and a cap on results considered.
 
 ## Organize
 

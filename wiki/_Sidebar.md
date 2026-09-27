@@ -14,6 +14,7 @@
 - [Smart Lists](Smart-Lists)
 - [Reading Lists](Reading-Lists)
 - [Home Dashboard & Recommendations](Home-Dashboard-and-Recommendations)
+- [Insights](Insights)
 - [Story Events & Relations](Story-Events-and-Relations)
 - [Trackers](Trackers)
 - [Scraping & Organizing](Scraping-and-Organizing)

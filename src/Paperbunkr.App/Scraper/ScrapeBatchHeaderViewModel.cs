@@ -29,12 +29,26 @@ public sealed partial class ScrapeBatchHeaderViewModel : ObservableObject
     private int _currentIndex;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProgressLabel))]
+    private ScrapePhase _phase = ScrapePhase.Single;
+
+    [ObservableProperty]
     private string _currentBookLabel = string.Empty;
 
     [ObservableProperty]
     private Bitmap? _currentCover;
 
-    public string ProgressLabel => $"Book {CurrentIndex} of {Total}";
+    /// <summary>Two labeled phases (docs/superpowers/specs, 2026-09-25 grilling round - the
+    /// Recommended option): a two-phase auto-choose run gets its own distinct label per phase instead
+    /// of one continuous counter, since CE's own single growing "Book X of N" (its own worklist
+    /// literally lengthens as books get deferred) would look like a glitch here - the total visibly
+    /// shrinking back down when the Reviewing phase starts its own separate count.</summary>
+    public string ProgressLabel => Phase switch
+    {
+        ScrapePhase.AutoMatching => $"Auto-matching {CurrentIndex} of {Total}",
+        ScrapePhase.Reviewing => $"Reviewing {CurrentIndex} of {Total}",
+        _ => $"Book {CurrentIndex} of {Total}",
+    };
 
     public ScrapeBatchHeaderViewModel(int total, Action onCancel)
     {
@@ -47,8 +61,9 @@ public sealed partial class ScrapeBatchHeaderViewModel : ObservableObject
     /// dialog step) with that book's own local cover bytes from <c>IApplication.GetComicThumbnail</c>.
     /// A decode failure (or null bytes - no thumbnail cached yet) just leaves <see cref="CurrentCover"/>
     /// null, same resilience as everywhere else this plugin touches ComicVine's own remote covers.</summary>
-    public void ReportProgress(int total, int index, string bookLabel, byte[]? coverBytes)
+    public void ReportProgress(ScrapePhase phase, int total, int index, string bookLabel, byte[]? coverBytes)
     {
+        Phase = phase;
         Total = total;
         CurrentIndex = index;
         CurrentBookLabel = bookLabel;

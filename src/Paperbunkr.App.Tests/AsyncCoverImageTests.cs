@@ -164,18 +164,26 @@ public class AsyncCoverImageTests : IDisposable
     }
 
     [Fact]
-    public void SettingSourceId_ToAnAlreadyCachedCover_NeverFades_EvenWhenFadeInThumbnailsIsOn()
+    public void SettingSourceId_ToAnAlreadyCachedCover_FadesTheFirstTimeOnly()
     {
+        // CE fades an item on its first valid image whether or not it was memory-cached (ThumbnailViewItem.Animate).
+        // Paperbunkr used to skip the fade on every cache hit, and the prefetching grid cache made nearly every paint
+        // a hit, so the toggle looked dead (2026-09-26 library audit). A recycled card showing the same cover again
+        // must not re-fade.
         CosmeticThumbnailSettings.FadeInThumbnails = true;
         CbzFixture.Create(_cbzPath, pageCount: 1);
         new CoverThumbnailService().TryGenerateThumbnail(issueId: 607, _cbzPath, fileSize: 1);
         string stem = CoverFingerprint.Stem(607, _cbzPath, 1);
         CoverImageCache.Get(stem); // warm the in-memory cache
 
-        var image = new Image();
-        AsyncCoverImage.SetSourceId(image, stem); // cache hit - must be instant, never fade
+        var first = new Image();
+        AsyncCoverImage.SetSourceId(first, stem);
+        var recycled = new Image();
+        AsyncCoverImage.SetSourceId(recycled, stem);
 
-        Assert.Null(image.Transitions);
-        Assert.Equal(1, image.Opacity);
+        Assert.NotNull(first.Transitions);
+        Assert.Equal(1, first.Opacity); // the target; the transition animates the visual from 0
+        Assert.Null(recycled.Transitions);
+        Assert.Equal(1, recycled.Opacity);
     }
 }

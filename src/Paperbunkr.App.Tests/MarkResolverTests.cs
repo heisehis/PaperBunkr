@@ -54,10 +54,74 @@ public class MarkResolverTests
     [Fact]
     public void ResolvePublisher_KnownButNoAsset_IsColouredLetterMark()
     {
-        var spec = _r.ResolvePublisher("Vertigo");
+        // DSTLRY is in publisher-aliases.tsv but has neither a curated SVG nor a file in the CE pack.
+        var spec = _r.ResolvePublisher("DSTLRY");
         Assert.Equal(MarkKind.LetterMark, spec.Kind);
-        Assert.Equal("V", spec.Text);
+        Assert.Equal("D", spec.Text);
         Assert.NotNull(spec.Background);
+    }
+
+    // --- CE publisher raster pack (docs/superpowers/specs/2026-09-25-publisher-icons-and-reader-
+    //     textures-design.md §A2) ---
+
+    [Fact]
+    public void ResolvePublisher_NotInTableButInThePack_IsARaster()
+    {
+        var spec = _r.ResolvePublisher("Ablaze");
+        Assert.Equal(MarkKind.Raster, spec.Kind);
+        Assert.Contains("Ablaze", spec.AssetPath);
+    }
+
+    [Fact]
+    public void ResolvePublisher_HashAliasFilename_ResolvesAndOpens()
+    {
+        // "12bis#12 Bis.png" - the '#' must survive the avares URI round-trip.
+        var spec = _r.ResolvePublisher("12 Bis");
+        Assert.Equal(MarkKind.Raster, spec.Kind);
+        using var stream = Avalonia.Platform.AssetLoader.Open(new Uri(spec.AssetPath!));
+        Assert.True(stream.Length > 0);
+    }
+
+    [Fact]
+    public void ResolvePublisher_CuratedSvgStillWins_WhenThereIsNoYear()
+    {
+        Assert.Equal(MarkKind.SvgAsset, _r.ResolvePublisher("Marvel").Kind);
+        Assert.Equal(MarkKind.SvgAsset, _r.ResolvePublisher("DC Comics").Kind);
+    }
+
+    [Theory]
+    [InlineData(1975, "DC Comics(1974-1976)")]
+    [InlineData(1990, "DC Comics(1977-2004)")]
+    [InlineData(2012, "DC Comics(2011-2016)")]
+    public void ResolvePublisher_WithAYear_PicksThatErasLogoOverTheSvg(int year, string fileStem)
+    {
+        var spec = _r.ResolvePublisher("DC Comics", year);
+        Assert.Equal(MarkKind.Raster, spec.Kind);
+        Assert.Contains(fileStem, Uri.UnescapeDataString(spec.AssetPath!));
+    }
+
+    [Fact]
+    public void ResolvePublisher_DecemberTwentyTwentyFour_PicksTheNewDcLogo()
+    {
+        var december = _r.ResolvePublisher("DC Comics", 2024, 12);
+        var november = _r.ResolvePublisher("DC Comics", 2024, 11);
+        Assert.Contains("DC Comics(2024_12)", Uri.UnescapeDataString(december.AssetPath!));
+        Assert.Contains("DC Comics(2016-2024_11)", Uri.UnescapeDataString(november.AssetPath!));
+    }
+
+    [Fact]
+    public void ResolvePublisher_YearOutsideEveryEra_FallsBackToTheCuratedSvg()
+    {
+        Assert.Equal(MarkKind.SvgAsset, _r.ResolvePublisher("DC Comics", 1800).Kind);
+    }
+
+    [Fact]
+    public void ResolvePublisher_DatedOnlyPublisher_WithoutAYear_StillGetsARasterNotAChip()
+    {
+        // The pack only has a dated "(2019 - 2021)" file for this one: no year -> newest era, not plain text.
+        var spec = _r.ResolvePublisher("Comic Kairakuten BEAST");
+        Assert.Equal(MarkKind.Raster, spec.Kind);
+        Assert.Equal(MarkKind.Raster, _r.ResolvePublisher("Comic Kairakuten BEAST", 2020).Kind);
     }
 
     [Fact]

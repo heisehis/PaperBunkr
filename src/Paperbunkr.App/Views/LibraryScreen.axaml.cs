@@ -174,7 +174,7 @@ public partial class LibraryScreen : UserControl
             // the real width when it goes true, or hiding the panel leaves dead reserved space
             // (real bug caught on-screen, not just in review).
             var previewColumn = RootGrid.ColumnDefinitions[2];
-            const double previewColumnMinWidth = 260;
+            const double previewColumnMinWidth = 280;
 
             void SyncPreviewColumnWidth()
             {
@@ -457,6 +457,10 @@ public partial class LibraryScreen : UserControl
             return;
         }
 
+        // Focusing a grid card always returns the panel to following the grid, even when it is the card already previewed
+        // (the property setters below would not fire for an unchanged value).
+        vm.ClearPreviewDrill();
+
         switch (item)
         {
             case IssueListRow row:
@@ -565,6 +569,16 @@ public partial class LibraryScreen : UserControl
         var peekImage = FindDogEarPeekImage(coverBorder);
         if (peekImage is null)
         {
+            // The Poster peek's LazyPart activates from the border's IsPointerOver binding; if that hasn't
+            // propagated yet when PointerEntered runs, look again once the current input event has finished.
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (coverBorder.IsPointerOver && ReferenceEquals(ResolvePeekRow(coverBorder.DataContext), row)
+                    && FindDogEarPeekImage(coverBorder) is not null)
+                {
+                    TryShowDogEarPeek(coverBorder, row);
+                }
+            });
             return;
         }
 
@@ -675,8 +689,14 @@ public partial class LibraryScreen : UserControl
         }
     }
 
+    /// <summary>The peek Image is a direct child of the cover Grid in the Panorama templates, but inside a
+    /// <see cref="Controls.LazyPart"/> in the Poster ones (docs/superpowers/specs/2026-09-19-library-scroll-
+    /// smoothness-design.md §4). Looking only at direct children found nothing on Poster cards, so the dog-ear
+    /// never showed there - the 2026-09-26 library audit's "I enable it and don't see it work".</summary>
     private static Image? FindDogEarPeekImage(Border coverBorder) =>
-        (coverBorder.Child as Grid)?.Children.OfType<Image>()
+        (coverBorder.Child as Grid)?.Children
+            .Select(child => child is Controls.LazyPart part ? part.Child : child)
+            .OfType<Image>()
             .FirstOrDefault(i => i.Name is "PanoramaDogEarImage" or "PosterDogEarImage"
                 or "SeriesPanoramaDogEarImage" or "PosterSeriesDogEarImage");
 
@@ -900,10 +920,8 @@ public partial class LibraryScreen : UserControl
     {
         for (int i = 0; i < items.Count; i++)
         {
-            string name = selectName(items[i]).TrimStart();
-            char first = name.Length > 0 ? char.ToUpperInvariant(name[0]) : '\0';
-            bool matches = letter == "#" ? !char.IsAsciiLetter(first) : first == letter[0];
-            if (matches)
+            // Same bucket rule as the rail's own letters and the Alphabetical group (skips "The ").
+            if (AlphabetIndexEntry.LetterFor(selectName(items[i])) == letter)
             {
                 return i;
             }

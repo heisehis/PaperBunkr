@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="46" d:DesignHeight="64"
+             x:Class="Paperbunkr.App.Views.CoverThumb"
+             x:Name="ThisControl">
+
+    <!--
+        Small shared cover-art thumbnail (docs/superpowers/specs/2026-09-23-insights-redesign-design.md
+        §"CoverThumb") used anywhere Insights names a specific series/issue/book - Today hero tiles,
+        Today list rows, Collection health gaps, Recap slides/poster cells. Two sizes in practice
+        (46x64 "hero", 28x40 "row") - the consumer just sets Width/Height directly on the instance,
+        same as any other Avalonia control, rather than this control inventing its own size enum.
+        Internal bindings go through #ThisControl (this control's own x:Name), matching PosterTile's
+        established convention, since DataContext here is whatever the consumer sets it to.
+    -->
+    <Border CornerRadius="{DynamicResource PbRadius}" ClipToBounds="True"
+            Background="{DynamicResource PbSurface2Brush}">
+        <Image Stretch="UniformToFill"
+               views:AsyncCoverImage.SourceId="{Binding #ThisControl.CoverKey}" />
+    </Border>
+</UserControl>

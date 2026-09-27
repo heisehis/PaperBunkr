@@ -472,6 +472,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _gridCoverFit = settings.LibraryGridCoverFit;
         _isLibraryPreviewPanelVisible = settings.IsLibraryPreviewPanelVisible;
         _libraryPreviewPanelWidth = settings.LibraryPreviewPanelWidth;
+        _collapsedPreviewSections = ParseCollapsedSections(settings.LibraryPreviewCollapsedSections);
         _gridDensity = settings.LibraryGridDensity;
         _showTileTitles = settings.LibraryShowTileTitles;
         _showUnreadBadge = settings.LibraryShowUnreadBadge;
@@ -929,6 +930,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(ShowAlphabetIndex));
         RaiseChipAndEmptyState();
         RaisePreviewGranularityChanged();
+        RaiseToggleScopesChanged();
         SaveLibrarySettings();
     }
 
@@ -1353,6 +1355,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         IssueList.ApplyPrecomputed(result.Rows, result.RowGroups, result.IsGrouped);
+        ReResolvePreview();
 
         OnPropertyChanged(nameof(ShowAlphabetIndex));
         OnPropertyChanged(nameof(AlphabetIndex));
@@ -3013,7 +3016,44 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     /// <summary>Action bar's "Mark as Read" button - marks the whole current selection.</summary>
     [RelayCommand]
-    private void MarkSelectionRead() => MarkIssuesRead(Selection.SelectedIds.ToList());
+    private void MarkSelectionRead() => MarkIssuesRead(SelectionBarIssueIds());
+
+    /// <summary>
+    /// The issues the selection bar's shared actions (Mark Read/Unread, Add to List) act on: the issue selection, or - in
+    /// series-card mode - every issue of every selected series, in on-screen card order then issue-number order. Before the
+    /// 2026-09-26 library audit the series bar offered only Bulk Edit/Delete/Clear, so "mark these 5 series read" meant
+    /// opening each one.
+    /// </summary>
+    internal IReadOnlyList<int> SelectionBarIssueIds()
+    {
+        if (Selection.Count > 0)
+        {
+            return Selection.SelectedIds.ToList();
+        }
+
+        var seriesIds = SeriesSelection.SelectedIds.ToList();
+        if (seriesIds.Count == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        // Remote series' rows are included, matching MarkIssuesRead's own includeRemote context.
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
+        var issues = context.Issues.Where(i => seriesIds.Contains(i.SeriesId)).ToList();
+        var seriesOrder = new Dictionary<int, int>();
+        for (int index = 0; index < Covers.Count; index++)
+        {
+            seriesOrder.TryAdd(Covers[index].SeriesId, index);
+        }
+
+        return issues
+            .OrderBy(i => seriesOrder.GetValueOrDefault(i.SeriesId, int.MaxValue))
+            .ThenBy(i => i.SeriesId)
+            .ThenBy(i => i.NumberSortKey() ?? float.MaxValue)
+            .ThenBy(i => i.Id)
+            .Select(i => i.Id)
+            .ToList();
+    }
 
     private void MarkIssuesRead(IReadOnlyList<int> issueIds)
     {
@@ -3052,7 +3092,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     /// <summary>Action bar's "Mark as Unread" button - marks the whole current selection.</summary>
     [RelayCommand]
-    private void MarkSelectionUnread() => MarkIssuesUnread(Selection.SelectedIds.ToList());
+    private void MarkSelectionUnread() => MarkIssuesUnread(SelectionBarIssueIds());
 
     private void MarkIssuesUnread(IReadOnlyList<int> issueIds)
     {
@@ -3095,7 +3135,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             return;
         }
 
-        AddIssuesToReadingList(context, list, Selection.SelectedIds.ToList());
+        AddIssuesToReadingList(context, list, SelectionBarIssueIds());
         context.SaveChanges();
 
         // Deferred for the same reason as SelectSuggestion above: this command runs from a row
@@ -3237,7 +3277,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         // this, the item inserts below violated their FK constraint against an unpersisted Id 0).
         context.SaveChanges();
 
-        AddIssuesToReadingList(context, list, Selection.SelectedIds.ToList());
+        AddIssuesToReadingList(context, list, SelectionBarIssueIds());
         context.SaveChanges();
 
         // Deferred for the same reason as SelectSuggestion above: this command runs from the
@@ -3308,7 +3348,12 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [RelayCommand]
     private void DeleteSelection() => DeleteIssues(Selection.SelectedIds.ToList());
 
-    private void DeleteIssues(IReadOnlyList<int> issueIds)
+    /// <summary>The "keep the file" alternative to <see cref="DeleteIssueCommand"/>: the entry leaves the library, the file stays exactly where it
+    /// is, and the scanner is told not to bring it back.</summary>
+    [RelayCommand]
+    private void RemoveIssueKeepFile(int issueId) => DeleteIssues(Selection.UnionForAction(issueId), deleteFile: false);
+
+    private void DeleteIssues(IReadOnlyList<int> issueIds, bool deleteFile = true)
     {
         issueIds = LocalIssuesOnly(issueIds);
         using var context = PaperbunkrDb.CreateContext();
@@ -3320,7 +3365,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 continue;
             }
 
-            LibraryDeletionHelper.RemoveIssue(context, issue);
+            LibraryDeletionHelper.RemoveIssue(context, issue, deleteFile);
         }
 
         context.SaveChanges();
@@ -3434,6 +3479,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// action bar, since the two selections are tracked independently.</summary>
     public bool HasAnySelection => HasSelection || HasSeriesSelection;
 
+    public string RemoveKeepFileLabel => SelectionCount > 1 ? $"Remove {SelectionCount} from the library, keep the files" : "Remove from the library, keep the file";
+
     public string DeleteConfirmLabel => SelectionCount > 1 ? $"Yes, delete {SelectionCount} issues" : "Yes, delete this issue";
 
     partial void OnSelectionCountChanged(int value)
@@ -3441,6 +3488,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(HasAnySelection));
         OnPropertyChanged(nameof(DeleteConfirmLabel));
+        OnPropertyChanged(nameof(RemoveKeepFileLabel));
+        RaisePreviewSelectionStrip();
     }
 
     /// <summary>Series-granularity counterpart to <see cref="ToggleIssueSelection"/> - same
@@ -3481,6 +3530,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     public bool HasSeriesSelection => SeriesSelectionCount > 0;
 
+    public string RemoveSeriesKeepFilesLabel => SeriesSelectionCount > 1 ? $"Remove {SeriesSelectionCount} series from the library, keep the files" : "Remove from the library, keep the files";
+
     public string DeleteSeriesConfirmLabel => SeriesSelectionCount > 1 ? $"Yes, delete {SeriesSelectionCount} series" : "Yes, delete this series";
 
     partial void OnSeriesSelectionCountChanged(int value)
@@ -3488,6 +3539,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(HasSeriesSelection));
         OnPropertyChanged(nameof(HasAnySelection));
         OnPropertyChanged(nameof(DeleteSeriesConfirmLabel));
+        OnPropertyChanged(nameof(RemoveSeriesKeepFilesLabel));
+        RaisePreviewSelectionStrip();
     }
 
     /// <summary>Action bar's "Bulk Edit" button (series granularity) - opens
@@ -3550,7 +3603,11 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [RelayCommand]
     private void DeleteSeries(int seriesId) => DeleteSeriesList(SeriesSelection.UnionForAction(seriesId));
 
-    private void DeleteSeriesList(IReadOnlyList<int> seriesIds)
+    /// <summary>The "keep the files" alternative to <see cref="DeleteSeriesCommand"/>: the series and its entries leave the library, every file stays.</summary>
+    [RelayCommand]
+    private void RemoveSeriesKeepFiles(int seriesId) => DeleteSeriesList(SeriesSelection.UnionForAction(seriesId), deleteFile: false);
+
+    private void DeleteSeriesList(IReadOnlyList<int> seriesIds, bool deleteFile = true)
     {
         seriesIds = LocalSeriesOnly(seriesIds);
         using var context = PaperbunkrDb.CreateContext();
@@ -3562,7 +3619,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 continue;
             }
 
-            LibraryDeletionHelper.RemoveSeries(context, series);
+            LibraryDeletionHelper.RemoveSeries(context, series, deleteFile);
         }
 
         context.SaveChanges();
@@ -3767,7 +3824,36 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// toggles-design.md) - mirrors CE's own <c>DisplayType != ItemViewMode.Detail</c> exclusion;
     /// List/DetailsTable don't get the hover peek. Was <c>IsPosterOrPanoramaGrid</c> before the
     /// Poster/Panorama/Tiles modes merged into one <see cref="LibraryViewMode.PosterGrid"/> mode.</summary>
-    public bool IsGridDogEarScope => IsGridView;
+    public bool IsGridDogEarScope => IsCoverOverlayScope;
+
+    // View & Sort toggles are shown only in the view modes whose templates honour them, so none of them looks broken by doing nothing.
+
+    /// <summary>Dog-ear, numeric rating and hover tooltips live on the Poster/Panorama cover templates only.</summary>
+    public bool IsCoverOverlayScope => IsPosterGrid || IsPanoramaGrid;
+
+    /// <summary>Unread/publisher badges exist in every template except the Details table (which has columns instead).</summary>
+    public bool IsOverlayBadgeScope => !IsDetailsTableView;
+
+    /// <summary>The inline language badge/flag is in the List and Tiles templates only (spec 2026-09-14 §5 moved it off grid covers).</summary>
+    public bool IsLanguageBadgeScope => IsListView || IsTilesView;
+
+    /// <summary>The Continue-reading button is on the series Poster, Panorama and Tiles templates.</summary>
+    public bool IsContinueReadingScope => IsSeriesGranularity && (IsPosterGrid || IsPanoramaGrid || IsTilesView);
+
+    /// <summary>Grid density drives the Poster card size and the Tiles thumbnail/card size (<see cref="TilesThumbWidth"/>);
+    /// Panorama's height is fixed by design (<see cref="PanoramaCardHeight"/>). The slider was Poster-only until the
+    /// 2026-09-26 library audit, which left Tiles with a live density setting and no way to change it.</summary>
+    public bool IsGridDensityScope => IsPosterGrid || IsTilesView;
+
+    private void RaiseToggleScopesChanged()
+    {
+        OnPropertyChanged(nameof(IsGridDensityScope));
+        OnPropertyChanged(nameof(IsGridDogEarScope));
+        OnPropertyChanged(nameof(IsCoverOverlayScope));
+        OnPropertyChanged(nameof(IsOverlayBadgeScope));
+        OnPropertyChanged(nameof(IsLanguageBadgeScope));
+        OnPropertyChanged(nameof(IsContinueReadingScope));
+    }
 
     /// <summary>Live preview panel column visibility (docs/superpowers/specs/2026-09-14-library-
     /// visual-redesign-design.md §2/§4) - hidden unconditionally in <see cref="IsDetailsTableView"/>
@@ -3805,6 +3891,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(IsPanoramaGrid));
         OnPropertyChanged(nameof(IsTilesView));
         OnPropertyChanged(nameof(DisplayModeLabel));
+        RaiseToggleScopesChanged();
         SaveLibrarySettings();
         GridCoverFitChanged?.Invoke();
     }
@@ -3822,6 +3909,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(IsListView));
         OnPropertyChanged(nameof(IsDetailsTableView));
         OnPropertyChanged(nameof(ShowPreviewPanelColumn));
+        RaiseToggleScopesChanged();
     }
 
     /// <summary>Raised wherever <see cref="_activeCollectionHasNonSeriesMembers"/> is recomputed (every <see cref="RebuildView"/>) - the view-mode grids above all depend on it via <see cref="IsCollectionView"/>.</summary>
@@ -3919,8 +4007,207 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [ObservableProperty]
     private SeriesCardSample? _previewSeries;
 
-    public bool ShowSeriesPreview => IsSeriesGranularity && PreviewSeries is not null;
-    public bool ShowIssuePreview => IsIssueGranularity && PreviewIssue is not null;
+    /// <summary>
+    /// An issue the user clicked in the series preview's issue rail (docs/superpowers/specs/2026-09-26-library-preview-panel-v2-
+    /// design.md §5). While set the panel shows that issue's preview (with a back link) whichever granularity is active; any
+    /// grid focus change clears it, so the panel goes back to following the grid.
+    /// </summary>
+    [ObservableProperty]
+    private IssueListRow? _previewDrillIssue;
+
+    public bool ShowSeriesPreview => PreviewDrillIssue is null && IsSeriesGranularity && PreviewSeries is not null;
+    public bool ShowIssuePreview => PreviewDrillIssue is not null || (IsIssueGranularity && PreviewIssue is not null);
+
+    /// <summary>The issue the issue state renders: the drilled-into one, else the focused one.</summary>
+    public IssueListRow? ActivePreviewIssue => PreviewDrillIssue ?? PreviewIssue;
+
+    public bool HasPreviewDrill => PreviewDrillIssue is not null;
+
+    /// <summary>Text of the issue state's back link, e.g. "← Silk".</summary>
+    public string PreviewBackLabel => PreviewSeries is { } series ? $"← {series.Name}" : "← Back";
+
+    partial void OnPreviewDrillIssueChanged(IssueListRow? value) => RaisePreviewStateChanged();
+
+    /// <summary>Rail click: swap the panel to that issue's preview.</summary>
+    [RelayCommand]
+    private void DrillIntoIssue(IssueListRow? row)
+    {
+        if (row is not null)
+        {
+            PreviewDrillIssue = row;
+        }
+    }
+
+    /// <summary>Back link, and any grid focus change (<see cref="Views.LibraryScreen"/>'s card-focus handler).</summary>
+    [RelayCommand]
+    public void ClearPreviewDrill() => PreviewDrillIssue = null;
+
+    private void RaisePreviewStateChanged()
+    {
+        OnPropertyChanged(nameof(ShowSeriesPreview));
+        OnPropertyChanged(nameof(ShowIssuePreview));
+        OnPropertyChanged(nameof(ShowIdlePreview));
+        OnPropertyChanged(nameof(ActivePreviewIssue));
+        OnPropertyChanged(nameof(HasPreviewDrill));
+        OnPropertyChanged(nameof(PreviewBackLabel));
+    }
+
+    /// <summary>True while <see cref="ReResolvePreview"/> swaps the preview objects for their reloaded twins, so that swap does not count as a focus change.</summary>
+    private bool _reResolvingPreview;
+
+    /// <summary>
+    /// After a reload every row/card is a new object (their state is init-only), so the previewed ones would show stale read state and
+    /// stale counts. Re-point them at the reloaded twin by id; if the item is no longer in the current results the old object stays,
+    /// as before.
+    /// </summary>
+    private void ReResolvePreview()
+    {
+        if (PreviewIssue is null && PreviewSeries is null && PreviewDrillIssue is null)
+        {
+            return;
+        }
+
+        _reResolvingPreview = true;
+        try
+        {
+            IssueListRow? Fresh(IssueListRow? old) =>
+                old is null ? null : IssueList.Rows.FirstOrDefault(r => r.Id == old.Id)
+                    ?? IssueList.Groups.SelectMany(g => g.Items).FirstOrDefault(r => r.Id == old.Id)
+                    ?? old;
+
+            PreviewIssue = Fresh(PreviewIssue);
+            PreviewDrillIssue = Fresh(PreviewDrillIssue);
+            if (PreviewSeries is { } series)
+            {
+                PreviewSeries = GetOrderedVisibleSeriesCards().FirstOrDefault(c => c.SeriesId == series.SeriesId) ?? series;
+            }
+        }
+        finally
+        {
+            _reResolvingPreview = false;
+        }
+    }
+
+    /// <summary>
+    /// Every issue of a series for the preview panel, whatever search/filter is active. <see cref="IssueList"/>.Rows only holds the issues that
+    /// match the current search or Unread/Missing filter, so building the rail (or "Mark all read") from it would silently cover just the matches
+    /// while the panel's own counts (from the series card) speak about the whole series. Uses the cached projection's unfiltered rows; falls back to
+    /// the visible rows before a projection exists.
+    /// </summary>
+    private IReadOnlyList<IssueListRow> PreviewSeriesRows(int seriesId)
+    {
+        if (_projection is { } projection)
+        {
+            foreach (var entry in projection.Entries)
+            {
+                if (entry.Series.Id == seriesId)
+                {
+                    return entry.IssueRows;
+                }
+            }
+        }
+
+        return IssueList.Rows.Where(r => r.SeriesId == seriesId).ToList();
+    }
+
+    /// <summary>The preview's series-state facts the view binds directly (kept here so they are unit-testable).</summary>
+    public string PreviewSeriesReadLabel => PreviewSeries is { } s ? $"{s.IssueCount - s.UnreadCount} of {s.IssueCount} read" : string.Empty;
+
+    /// <summary>"Continue #N"-style primary label: Continue when reading has started, "Read from start" when nothing is read.</summary>
+    public string PreviewSeriesPrimaryLabel =>
+        PreviewSeries is { } s && s.HasContinueReading && s.UnreadCount < s.IssueCount ? "▶ Continue" : "▶ Read";
+
+    /// <summary>Series primary action: the continue-reading issue, else the first issue by number.</summary>
+    [RelayCommand]
+    private void PreviewSeriesPrimary()
+    {
+        if (PreviewSeries is not { } series)
+        {
+            return;
+        }
+
+        int? issueId = series.ContinueReadingIssueId
+            ?? PreviewSeriesRows(series.SeriesId).OrderBy(r => r.NumberSortKey ?? float.MaxValue).Select(r => (int?)r.Id).FirstOrDefault();
+        if (issueId is int id)
+        {
+            _goReaderForIssue(id);
+        }
+    }
+
+    /// <summary>
+    /// Panel buttons act on exactly the previewed item. The tile commands (<see cref="MarkIssueReadCommand"/> etc.) route through
+    /// <c>Selection.UnionForAction</c> and would also mark an unrelated multi-selection.
+    /// </summary>
+    [RelayCommand]
+    private void MarkPreviewIssueRead(int issueId) => MarkIssuesRead(new[] { issueId });
+
+    [RelayCommand]
+    private void MarkPreviewIssueUnread(int issueId) => MarkIssuesUnread(new[] { issueId });
+
+    [RelayCommand]
+    private void MarkPreviewSeriesRead() => MarkIssuesRead(PreviewSeriesIssueIds());
+
+    [RelayCommand]
+    private void MarkPreviewSeriesUnread() => MarkIssuesUnread(PreviewSeriesIssueIds());
+
+    private List<int> PreviewSeriesIssueIds() =>
+        PreviewSeries is { } series ? PreviewSeriesRows(series.SeriesId).Select(r => r.Id).ToList() : new List<int>();
+
+    /// <summary>The multi-select strip (design §7): the panel keeps showing the focused item, and says so.</summary>
+    public bool ShowPreviewSelectionStrip => PreviewSelectedCount > 1;
+
+    private int PreviewSelectedCount => IsSeriesGranularity ? SeriesSelectionCount : SelectionCount;
+
+    public string PreviewSelectionStripText => $"{PreviewSelectedCount} selected · showing focused";
+
+    private void RaisePreviewSelectionStrip()
+    {
+        OnPropertyChanged(nameof(ShowPreviewSelectionStrip));
+        OnPropertyChanged(nameof(PreviewSelectionStripText));
+    }
+
+    // ---- Collapsible sections (design §6): one persisted set of collapsed keys shared by the series and issue states. ----
+
+    private HashSet<string> _collapsedPreviewSections = new(StringComparer.Ordinal);
+
+    public bool IsPreviewCreditsOpen => !_collapsedPreviewSections.Contains("credits");
+    public bool IsPreviewStoryOpen => !_collapsedPreviewSections.Contains("story");
+    public bool IsPreviewFileOpen => !_collapsedPreviewSections.Contains("file");
+    public bool IsPreviewDetailsOpen => !_collapsedPreviewSections.Contains("details");
+    public bool IsPreviewStoryCollapsed => !IsPreviewStoryOpen;
+    public bool IsPreviewFileCollapsed => !IsPreviewFileOpen;
+    public bool IsPreviewDetailsCollapsed => !IsPreviewDetailsOpen;
+
+    [RelayCommand]
+    private void TogglePreviewSection(string key)
+    {
+        if (!_collapsedPreviewSections.Remove(key))
+        {
+            _collapsedPreviewSections.Add(key);
+        }
+
+        RaisePreviewSectionsChanged();
+
+        // Its own write, not SaveLibrarySettings(): that one also drops the active workspace's label, and folding a
+        // section is not a change to what the Library shows.
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().LibraryPreviewCollapsedSections = string.Join(',', _collapsedPreviewSections.OrderBy(k => k, StringComparer.Ordinal));
+        context.SaveChanges();
+    }
+
+    private void RaisePreviewSectionsChanged()
+    {
+        OnPropertyChanged(nameof(IsPreviewCreditsOpen));
+        OnPropertyChanged(nameof(IsPreviewStoryOpen));
+        OnPropertyChanged(nameof(IsPreviewFileOpen));
+        OnPropertyChanged(nameof(IsPreviewDetailsOpen));
+        OnPropertyChanged(nameof(IsPreviewStoryCollapsed));
+        OnPropertyChanged(nameof(IsPreviewFileCollapsed));
+        OnPropertyChanged(nameof(IsPreviewDetailsCollapsed));
+    }
+
+    private static HashSet<string> ParseCollapsedSections(string? text) =>
+        new((text ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), StringComparer.Ordinal);
 
     /// <summary>Reuses the grid's own empty-state signal rather than re-deriving "zero results"
     /// independently - if the grid has nothing to show (any reason: search, filters, or a genuinely
@@ -3931,14 +4218,24 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     partial void OnPreviewIssueChanged(IssueListRow? value)
     {
-        OnPropertyChanged(nameof(ShowIssuePreview));
-        OnPropertyChanged(nameof(ShowIdlePreview));
+        if (!_reResolvingPreview)
+        {
+            PreviewDrillIssue = null;
+        }
+
+        RaisePreviewStateChanged();
     }
 
     partial void OnPreviewSeriesChanged(SeriesCardSample? value)
     {
-        OnPropertyChanged(nameof(ShowSeriesPreview));
-        OnPropertyChanged(nameof(ShowIdlePreview));
+        if (!_reResolvingPreview)
+        {
+            PreviewDrillIssue = null;
+        }
+
+        RaisePreviewStateChanged();
+        OnPropertyChanged(nameof(PreviewSeriesReadLabel));
+        OnPropertyChanged(nameof(PreviewSeriesPrimaryLabel));
 
         PreviewSeriesIssueRail.Clear();
         if (value is not null)
@@ -3948,8 +4245,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             // Series granularity just displays Covers/Groups instead, the row data is still there),
             // with covers already resolved - filtering it is a plain in-memory operation, no fresh
             // DB round-trip or cover-resolution work needed for the rail.
-            foreach (var row in IssueList.Rows
-                .Where(r => r.SeriesId == value.SeriesId)
+            foreach (var row in PreviewSeriesRows(value.SeriesId)
                 .OrderBy(r => r.NumberSortKey ?? float.MaxValue))
             {
                 PreviewSeriesIssueRail.Add(new PosterRailItem
@@ -3957,6 +4253,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                     Id = row.Id,
                     Name = row.Number is { Length: > 0 } number ? $"#{number}" : row.Title,
                     CoverBrush = row.CoverBrush,
+                    CoverKey = row.CoverKey,
+                    IsRead = row.IsRead,
                     Payload = row,
                 });
             }
@@ -3973,9 +4271,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// behaves (see <see cref="RaiseCollectionViewChanged"/>'s sibling raises).</summary>
     private void RaisePreviewGranularityChanged()
     {
-        OnPropertyChanged(nameof(ShowSeriesPreview));
-        OnPropertyChanged(nameof(ShowIssuePreview));
-        OnPropertyChanged(nameof(ShowIdlePreview));
+        RaisePreviewStateChanged();
+        RaisePreviewSelectionStrip();
     }
 
     private double _gridDensity = 1.0;
@@ -4013,7 +4310,19 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>Poster-grid tile title row height reserved in <see cref="PosterCardHeight"/> when
     /// titles show, so the <c>VirtualizingWrapPanel</c>'s <c>ItemHeight</c> is right in both toggle
     /// states (the old <c>ComfortableGrid</c> overflowed its box with the text row).</summary>
-    private const double PosterTitleRowHeight = 34;
+    /// <summary>
+    /// The poster card's title row: its StackPanel is pinned to <see cref="PosterTitleTextHeight"/> plus an 8 px top margin, so the
+    /// row is the same height whatever the theme's font. It used to be a 34 px allowance against a real ~40 px row, and together with
+    /// the uncounted cover gutter below that made each card ~21 px shorter than its content: the star row squeezed the cover upward by
+    /// ~10 px, pushing the hover/focus ring's top edge outside the card, where only a full-window redraw (the Matrix rain) painted it.
+    /// </summary>
+    private const double PosterTitleRowHeight = 42;
+
+    /// <summary>Height of the title StackPanel itself (bound by the templates); 8 px of <see cref="PosterTitleRowHeight"/> is its top margin.</summary>
+    public double PosterTitleTextHeight => PosterTitleRowHeight - 8;
+
+    /// <summary>Border.posterCover's permanent ring gutter, Margin="5,10,5,5" in LibraryScreen.axaml: 10 top + 5 bottom.</summary>
+    private const double PosterCoverGutterVertical = 15;
 
     /// <summary>Below this card width the title line is too cramped to read, so it auto-hides
     /// regardless of <see cref="ShowTileTitles"/> (docs/superpowers/specs/2026-08-27-library-
@@ -4027,7 +4336,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     /// <summary>Cover box + a fixed title-row allowance when titles show - what the
     /// <c>VirtualizingWrapPanel</c>'s <c>ItemHeight</c> binds so it reserves the right space.</summary>
-    public double PosterCardHeight => PosterCoverHeight + (EffectiveShowTileTitles ? PosterTitleRowHeight : 0);
+    public double PosterCardHeight => PosterCoverHeight + PosterCoverGutterVertical + (EffectiveShowTileTitles ? PosterTitleRowHeight : 0);
 
     /// <summary>Permanent 4px-per-side gutter the Tiles/List/Details row Borders carry inside their
     /// Button (LibraryScreen.axaml, Border.libRow Margin="4") so the 4px hover/focus ring is drawn

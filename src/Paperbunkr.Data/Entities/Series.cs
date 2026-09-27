@@ -42,6 +42,13 @@ public class Series
     public bool? AutoRotateOverride { get; set; }
 
     /// <summary>
+    /// The reader profile (a <see cref="Workspace"/> row of <see cref="WorkspaceScreen.Reader"/>) this series opens with (docs/superpowers/specs/2026-09-25-comic-reader-profiles-design.md
+    /// section 1). A plain id, not a foreign key: a deleted profile just falls through to <see cref="AppSettings.DefaultReaderProfileId"/> and then to plain settings, the way
+    /// <c>AppSettings.LibrarySortVirtualTagId</c> falls back. Written by the reader's "Use for this series", cleared from the detail screens.
+    /// </summary>
+    public int? ReaderProfileId { get; set; }
+
+    /// <summary>
     /// Real source of truth as of docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-
     /// metadata-design.md - has no CE precedent at all (a deliberate new feature, not parity).
     /// </summary>
@@ -68,6 +75,11 @@ public class Series
 
     /// <summary>Populated once at CE-migration time. Not the current source of truth for filtering/display — see <see cref="Issue.Publisher"/>.</summary>
     public string? Publisher { get; set; }
+
+    /// <summary>First-class <see cref="Entities.Publisher"/> row resolved from <see cref="Publisher"/> by <c>PublisherResolver</c> (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md). The string above stays the editable source of truth; this is a derived pointer, set null on delete rather than cascading.</summary>
+    public int? PublisherEntityId { get; set; }
+
+    public Publisher? PublisherEntity { get; set; }
 
     /// <summary>Populated once at CE-migration time. Not the current source of truth for filtering/display — see <see cref="Issue.Genre"/>.</summary>
     public string? Genre { get; set; }

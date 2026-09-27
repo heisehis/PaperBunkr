@@ -166,6 +166,69 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
 
     public bool HasSummaryExcerpt => !string.IsNullOrEmpty(SummaryExcerpt);
 
+    // ---- Library preview panel display strings (docs/superpowers/specs/2026-09-26-library-preview-panel-v2-design.md §3) ----
+
+    public bool HasSummary => !string.IsNullOrWhiteSpace(Summary);
+
+    /// <summary>"#7 · Sinister Dealings" - number and title, whichever exist.</summary>
+    public string PreviewSubtitle => string.Join(" · ", new[]
+    {
+        string.IsNullOrWhiteSpace(Number) ? null : $"#{Number}",
+        string.IsNullOrWhiteSpace(Title) || string.Equals(Title, SeriesName, StringComparison.OrdinalIgnoreCase) ? null : Title,
+    }.Where(s => s is not null));
+
+    /// <summary>"Mar 2026 · 32 pages" - release date (else year) and page count, whichever exist.</summary>
+    public string PreviewDateAndPages => string.Join(" · ", new[]
+    {
+        ReleasedTime is { } released ? released.ToString("MMM yyyy", System.Globalization.CultureInfo.CurrentCulture) : Year?.ToString(),
+        PageCount is > 0 ? $"{PageCount} pages" : null,
+    }.Where(s => !string.IsNullOrEmpty(s)));
+
+    public bool HasAgeRating => !string.IsNullOrWhiteSpace(AgeRating);
+
+    public bool HasCredits => !string.IsNullOrWhiteSpace(Writer) || !string.IsNullOrWhiteSpace(Penciller) || !string.IsNullOrWhiteSpace(Inker)
+        || !string.IsNullOrWhiteSpace(Colorist) || !string.IsNullOrWhiteSpace(Letterer) || !string.IsNullOrWhiteSpace(CoverArtist)
+        || !string.IsNullOrWhiteSpace(Editor) || !string.IsNullOrWhiteSpace(Translator);
+
+    public bool HasWriter => !string.IsNullOrWhiteSpace(Writer);
+    public bool HasPenciller => !string.IsNullOrWhiteSpace(Penciller);
+    public bool HasInker => !string.IsNullOrWhiteSpace(Inker);
+    public bool HasColorist => !string.IsNullOrWhiteSpace(Colorist);
+    public bool HasLetterer => !string.IsNullOrWhiteSpace(Letterer);
+    public bool HasCoverArtist => !string.IsNullOrWhiteSpace(CoverArtist);
+    public bool HasEditor => !string.IsNullOrWhiteSpace(Editor);
+    public bool HasTranslator => !string.IsNullOrWhiteSpace(Translator);
+
+    public bool HasStoryArc => !string.IsNullOrWhiteSpace(StoryArc);
+    public bool HasCharacters => !string.IsNullOrWhiteSpace(Characters);
+    public bool HasTeams => !string.IsNullOrWhiteSpace(Teams);
+    public bool HasLocations => !string.IsNullOrWhiteSpace(Locations);
+    public bool HasGenre => !string.IsNullOrWhiteSpace(Genre);
+
+    public bool HasStory => HasStoryArc || HasCharacters || HasTeams || HasLocations || HasGenre;
+
+    /// <summary>One-line hint shown while Story is collapsed: the arc, else the first few characters.</summary>
+    public string? StoryHint => HasStoryArc ? StoryArc : HasCharacters ? Characters : Genre;
+
+    /// <summary>The file's container format (CBZ, PDF…), falling back to the metadata Format.</summary>
+    public string? PreviewFormat => !string.IsNullOrWhiteSpace(FileFormat) ? FileFormat : Format;
+
+    public bool HasFileSection => HasFileSizeDisplay || !string.IsNullOrWhiteSpace(PreviewFormat) || !string.IsNullOrWhiteSpace(FileName);
+
+    /// <summary>One-line hint shown while File is collapsed: "CBZ · 84 MB · Silk 007.cbz".</summary>
+    public string FileHint => string.Join(" · ", new[] { PreviewFormat, FileSizeDisplay, FileName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    public bool HasFileName => !string.IsNullOrWhiteSpace(FileName);
+
+    public bool HasPageCount => PageCount is > 0;
+
+    /// <summary>"32" - the pages line of the File section.</summary>
+    public string? PageCountDisplay => PageCount?.ToString();
+
+    public bool HasReleaseDate => ReleasedTime is not null || Year is not null;
+
+    public string? ReleaseDisplay => ReleasedTime is { } released ? released.ToString("d MMM yyyy", System.Globalization.CultureInfo.CurrentCulture) : Year?.ToString();
+
     public string? FileSizeDisplay => IssueListFieldCatalog.FormatFileSize(FileSize);
 
     public bool HasFileSizeDisplay => !string.IsNullOrEmpty(FileSizeDisplay);
@@ -179,6 +242,9 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
 
     /// <summary>Full cell width - cover plus the ring gutter each side (see <see cref="SeriesCardSample.PanoramaRingGutter"/>).</summary>
     public double PanoramaCellWidth => PanoramaWidth + (2 * SeriesCardSample.PanoramaRingGutter);
+
+    /// <summary>Preview panel hero cover height at <see cref="SeriesCardSample.HeroCoverWidth"/>, from this cover's own aspect ratio.</summary>
+    public double HeroCoverHeight => PanoramaWidth > 0 ? SeriesCardSample.HeroCoverWidth * SeriesCardSample.PanoramaHeight / PanoramaWidth : SeriesCardSample.HeroCoverWidth * 1.5;
 
     // --- Series-level aggregates (2026-09-03 sort/group pool unification) - the issue's own
     // series' totals, so IssueListSortField.SeriesIssueCount / SeriesUnreadCount resolve on a

@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Models;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
+using Paperbunkr.Data.ReadingLists;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -158,13 +159,70 @@ public partial class ReadingListItemRowViewModel : ViewModelBase, Models.ISelect
     partial void OnSelectedRoleChanged(EventMembershipRole? value)
     {
         Item.Role = value;
+        MemberRoleApplier.MarkUserSet(Item);            // a role chosen here is the user's own, never replaced by detection
+        RaiseRoleStateChanged();
         _onFieldChanged(this);
     }
 
     /// <summary>A role is set - drives the small read-only chip shown on the row.</summary>
     public bool HasRole => SelectedRole is not null;
 
-    public string RoleChipLabel => SelectedRoleOption?.Label ?? string.Empty;
+    /// <summary>The role, with a small "auto" marker when detection (not the user) chose it.</summary>
+    public string RoleChipLabel => (SelectedRoleOption?.Label ?? string.Empty) + (IsAutoRole ? " · auto" : string.Empty);
+
+    /// <summary>The role was applied by role detection and may be cleared or replaced.</summary>
+    public bool IsAutoRole => Item.RoleSource == RoleAssignmentSource.Auto;
+
+    /// <summary>Tooltip for the role chip: why detection chose it.</summary>
+    public string? RoleReasonText => Item.RoleReason is { Length: > 0 } reason ? $"Detected automatically: {reason}" : null;
+
+    /// <summary>Detection has a role in mind that it was not sure enough to apply (or that differs from the user's own).</summary>
+    public bool HasRoleSuggestion => Item.SuggestedRole is not null;
+
+    public string SuggestionText => Item.SuggestedRole is { } role
+        ? $"Suggested: {RoleOptions.First(o => o.Role == role).Label} ({Item.SuggestedReason})"
+        : string.Empty;
+
+    private void RaiseRoleStateChanged()
+    {
+        OnPropertyChanged(nameof(IsAutoRole));
+        OnPropertyChanged(nameof(HasRole));
+        OnPropertyChanged(nameof(RoleChipLabel));
+        OnPropertyChanged(nameof(RoleReasonText));
+        OnPropertyChanged(nameof(HasRoleSuggestion));
+        OnPropertyChanged(nameof(SuggestionText));
+    }
+
+    /// <summary>Takes the suggested role as the user's own choice.</summary>
+    [RelayCommand]
+    private void AcceptSuggestion()
+    {
+        if (Item.SuggestedRole is { } role)
+        {
+            SelectedRoleOption = RoleOptions.First(o => o.Role == role);        // the change handler marks it user-set and saves
+        }
+    }
+
+    /// <summary>Rejects the suggestion; detection does not raise it again for this item.</summary>
+    [RelayCommand]
+    private void DismissSuggestion()
+    {
+        MemberRoleApplier.Dismiss(Item);
+        RaiseRoleStateChanged();
+        _onFieldChanged(this);
+    }
+
+    /// <summary>Drops an automatically detected role; detection does not put it back.</summary>
+    [RelayCommand]
+    private void ClearAutoRole()
+    {
+        if (MemberRoleApplier.ClearAuto(Item))
+        {
+            SelectedRoleOption = null;
+            RaiseRoleStateChanged();
+            _onFieldChanged(this);
+        }
+    }
 
     /// <summary>Toggled from the row's ⋯ menu "Add a note" - reveals the inline note editor.</summary>
     [ObservableProperty]

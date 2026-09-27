@@ -21,6 +21,16 @@ public sealed class PosterRailItem
 
     public Bitmap? CoverImage { get; init; }
 
+    /// <summary>
+    /// Cover-cache key for an issue cover (<see cref="ICoverKeyProvider"/>'s key). When set the rail loads the cover through
+    /// <c>AsyncCoverImage</c> like every grid tile does, instead of needing a decoded <see cref="CoverImage"/> (Library preview panel,
+    /// docs/superpowers/specs/2026-09-26-library-preview-panel-v2-design.md §4). Detail-screen rails leave it null.
+    /// </summary>
+    public string? CoverKey { get; init; }
+
+    /// <summary>Draws a small check on the cover and dims it (the Library preview panel's issue rail).</summary>
+    public bool IsRead { get; init; }
+
     /// <summary>The source sample (e.g. <c>RelatedSeriesSample</c>) - passed to Remove/click commands unchanged.</summary>
     public object? Payload { get; init; }
 }

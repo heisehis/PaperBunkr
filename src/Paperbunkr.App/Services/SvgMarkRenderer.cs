@@ -26,6 +26,16 @@ public static class SvgMarkRenderer
 {
     private static readonly ConcurrentDictionary<string, Bitmap?> Cache = new();
 
+    // The contrast plate each rendered bitmap needs (see PublisherIconBitmaps.ClassifyPlate) - measured
+    // once, from the pixels already in hand while rendering, and read back by BrandMark when a call
+    // site asks for guaranteed contrast (publisher logos laid directly on cover art).
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Bitmap, object> Plates = new();
+
+    /// <summary>The plate a bitmap from <see cref="Render"/> needs; <see cref="IconPlate.None"/> for
+    /// a bitmap this renderer did not produce.</summary>
+    public static IconPlate PlateOf(Bitmap? bitmap) =>
+        bitmap is not null && Plates.TryGetValue(bitmap, out object? plate) ? (IconPlate)plate : IconPlate.None;
+
     /// <summary>Rasterises <paramref name="avaresPath"/> into a bitmap fitted (aspect-preserving)
     /// so its <em>height</em> is <paramref name="targetHeight"/> px, with width following the
     /// SVG's own aspect - marks are always displayed by <c>Image.Height</c>, so a wide publisher
@@ -44,6 +54,26 @@ public static class SvgMarkRenderer
 
         string key = $"{avaresPath}|{targetHeight}|{(tint is { } c ? c.ToUInt32() : 0u)}";
         return Cache.GetOrAdd(key, _ => RenderUncached(avaresPath, targetHeight, tint));
+    }
+
+    /// <summary>Premultiplied BGRA bytes → unpremultiplied colours → <see cref="PublisherIconBitmaps.ClassifyPlate"/>.</summary>
+    private static IconPlate ClassifyBgraPremul(byte[] bgra)
+    {
+        var pixels = new SKColor[bgra.Length / 4];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            byte b = bgra[i * 4], g = bgra[i * 4 + 1], r = bgra[i * 4 + 2], a = bgra[i * 4 + 3];
+            if (a is > 0 and < 255)
+            {
+                r = (byte)Math.Min(255, r * 255 / a);
+                g = (byte)Math.Min(255, g * 255 / a);
+                b = (byte)Math.Min(255, b * 255 / a);
+            }
+
+            pixels[i] = new SKColor(r, g, b, a);
+        }
+
+        return PublisherIconBitmaps.ClassifyPlate(pixels);
     }
 
     private static Bitmap? RenderUncached(string avaresPath, int targetHeight, Color? tint)
@@ -113,6 +143,7 @@ public static class SvgMarkRenderer
                 Marshal.Copy(pixelBytes, 0, fb.Address, pixelBytes.Length);
             }
 
+            Plates.Add(writeable, ClassifyBgraPremul(pixelBytes));
             return writeable;
         }
         catch (Exception)

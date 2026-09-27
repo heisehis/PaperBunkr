@@ -30,6 +30,20 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<IssuePage> IssuePages => Set<IssuePage>();
 
+    public DbSet<PageReport> PageReports => Set<PageReport>();
+
+    public DbSet<PageCropOverride> PageCropOverrides => Set<PageCropOverride>();
+
+    public DbSet<PageNote> PageNotes => Set<PageNote>();
+
+    public DbSet<PageClip> PageClips => Set<PageClip>();
+
+    public DbSet<AdPageHash> AdPageHashes => Set<AdPageHash>();
+
+    public DbSet<PageHash> PageHashes => Set<PageHash>();
+
+    public DbSet<AdPageProposal> AdPageProposals => Set<AdPageProposal>();
+
     public DbSet<IssueTag> IssueTags => Set<IssueTag>();
 
     public DbSet<SeriesTitle> SeriesTitles => Set<SeriesTitle>();
@@ -81,6 +95,26 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<Character> Characters => Set<Character>();
 
     public DbSet<CharacterAppearance> CharacterAppearances => Set<CharacterAppearance>();
+
+    public DbSet<Team> Teams => Set<Team>();
+
+    public DbSet<TeamAppearance> TeamAppearances => Set<TeamAppearance>();
+
+    public DbSet<Location> Locations => Set<Location>();
+
+    public DbSet<LocationAppearance> LocationAppearances => Set<LocationAppearance>();
+
+    public DbSet<Creator> Creators => Set<Creator>();
+
+    public DbSet<CreatorCredit> CreatorCredits => Set<CreatorCredit>();
+
+    public DbSet<Publisher> Publishers => Set<Publisher>();
+
+    public DbSet<ComicMetadataExternalId> ComicMetadataExternalIds => Set<ComicMetadataExternalId>();
+
+    public DbSet<SeriesAssociation> SeriesAssociations => Set<SeriesAssociation>();
+
+    public DbSet<IssueVariantCover> IssueVariantCovers => Set<IssueVariantCover>();
 
     public DbSet<ExternalMediaId> ExternalMediaIds => Set<ExternalMediaId>();
 
@@ -147,6 +181,10 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<ActivityRun> ActivityRuns => Set<ActivityRun>();
 
     public DbSet<ReadingEvent> ReadingEvents => Set<ReadingEvent>();
+
+    public DbSet<LibrarySnapshot> LibrarySnapshots => Set<LibrarySnapshot>();
+
+    public DbSet<ReadingGoal> ReadingGoals => Set<ReadingGoal>();
 
     public DbSet<SeriesActivityEvent> SeriesActivityEvents => Set<SeriesActivityEvent>();
 
@@ -453,6 +491,9 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(p => p.Mode).HasConversion<int>();
             builder.Property(p => p.AutomationCollisionPolicy).HasConversion<int>();
             builder.Ignore(p => p.MonthNames);
+            builder.Ignore(p => p.EmptyData);
+            builder.Ignore(p => p.FailedFields);
+            builder.Ignore(p => p.ExcludeFolders);
         });
 
         modelBuilder.Entity<Paperbunkr.Data.Organizing.OrganizeBatch>(builder =>
@@ -613,6 +654,57 @@ public class PaperbunkrDbContext : DbContext
             // is a real "not overridden" value here, not CLR-default ambiguity.
             builder.Property(p => p.SpreadPosition).HasConversion<string>().HasMaxLength(16);
             builder.HasIndex(p => new { p.IssueId, p.PageNumber }).IsUnique();
+        });
+
+        modelBuilder.Entity<PageReport>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.Reason).HasConversion<string>().HasMaxLength(16);
+            builder.HasIndex(r => new { r.IssueId, r.PageNumber }).IsUnique();
+        });
+
+        modelBuilder.Entity<PageNote>(builder =>
+        {
+            builder.HasKey(n => n.Id);
+            builder.Property(n => n.Text).HasMaxLength(PageNote.MaxTextLength);
+            builder.HasIndex(n => new { n.IssueId, n.PageNumber }).IsUnique();
+        });
+
+        modelBuilder.Entity<PageClip>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.ImagePath).HasMaxLength(1024);
+            builder.Property(c => c.Caption).HasMaxLength(PageClip.MaxCaptionLength);
+            builder.HasIndex(c => new { c.IssueId, c.PageNumber });
+        });
+
+        modelBuilder.Entity<PageCropOverride>(builder =>
+        {
+            builder.HasKey(o => o.Id);
+            builder.Property(o => o.Mode).HasConversion<string>().HasMaxLength(16);
+            builder.HasIndex(o => new { o.IssueId, o.PageNumber }).IsUnique();
+        });
+
+        modelBuilder.Entity<AdPageHash>(builder =>
+        {
+            builder.HasKey(h => h.Id);
+            builder.HasIndex(h => new { h.SourceIssueId, h.SourcePageNumber });
+        });
+
+        modelBuilder.Entity<PageHash>(builder =>
+        {
+            builder.HasKey(h => h.Id);
+            builder.Property(h => h.ContentStamp).HasMaxLength(64);
+            builder.HasIndex(h => new { h.IssueId, h.PageNumber }).IsUnique();
+        });
+
+        modelBuilder.Entity<AdPageProposal>(builder =>
+        {
+            builder.HasKey(p => p.Id);
+            builder.Property(p => p.Status).HasConversion<string>().HasMaxLength(16);
+            builder.HasIndex(p => new { p.IssueId, p.PageNumber }).IsUnique();
+            builder.HasIndex(p => p.Status);
+            builder.HasOne(p => p.MatchedAdHash).WithMany().HasForeignKey(p => p.MatchedAdHashId).OnDelete(DeleteBehavior.SetNull);
         });
 
         // Brand-new table (like MetadataProposal below) - no existing rows to backfill via EF's own
@@ -828,6 +920,10 @@ public class PaperbunkrDbContext : DbContext
             builder.HasKey(i => i.Id);
             builder.HasIndex(i => i.ReadingListId);
             builder.Property(i => i.Role).HasConversion<string>().HasMaxLength(32);
+            builder.Property(i => i.RoleSource).HasConversion<string>().HasMaxLength(32);
+            builder.Property(i => i.RoleReason).HasMaxLength(200);
+            builder.Property(i => i.SuggestedRole).HasConversion<string>().HasMaxLength(32);
+            builder.Property(i => i.SuggestedReason).HasMaxLength(200);
 
             // An Issue can appear in many reading lists (and more than once within the same
             // list, e.g. a crossover issue revisited later) - Restrict, not Cascade, so deleting
@@ -999,6 +1095,10 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(m => m.Id);
             builder.Property(m => m.Role).HasConversion<string>().HasMaxLength(32);
+            builder.Property(m => m.RoleSource).HasConversion<string>().HasMaxLength(32);
+            builder.Property(m => m.RoleReason).HasMaxLength(200);
+            builder.Property(m => m.SuggestedRole).HasConversion<string>().HasMaxLength(32);
+            builder.Property(m => m.SuggestedReason).HasMaxLength(200);
             builder.HasIndex(m => m.StoryEventId);
 
             // Restrict, not Cascade - same reasoning as ReadingListItem.Issue below: deleting an
@@ -1100,6 +1200,135 @@ public class PaperbunkrDbContext : DbContext
             builder.HasOne(a => a.Issue)
                 .WithMany()
                 .HasForeignKey(a => a.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Team/Location/Creator/Publisher + ComicMetadataExternalId (docs/superpowers/specs/2026-09-23-
+        // metron-api-utilization-design.md) - mirror Character/CharacterAppearance above exactly, except
+        // CreatorCredit's unique index includes Role (one creator can hold two roles on one issue) and
+        // Publisher has no appearance table at all (single-valued per Series/Issue, not a list).
+        modelBuilder.Entity<Team>(builder =>
+        {
+            builder.HasKey(t => t.Id);
+            builder.Property(t => t.Name).IsRequired();
+            builder.HasIndex(t => t.Name);
+        });
+
+        modelBuilder.Entity<TeamAppearance>(builder =>
+        {
+            builder.HasKey(a => a.Id);
+            builder.HasIndex(a => new { a.TeamId, a.IssueId }).IsUnique();
+            builder.HasIndex(a => a.IssueId);
+
+            builder.HasOne(a => a.Team)
+                .WithMany(t => t.Appearances)
+                .HasForeignKey(a => a.TeamId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(a => a.Issue)
+                .WithMany()
+                .HasForeignKey(a => a.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Location>(builder =>
+        {
+            builder.HasKey(l => l.Id);
+            builder.Property(l => l.Name).IsRequired();
+            builder.HasIndex(l => l.Name);
+        });
+
+        modelBuilder.Entity<LocationAppearance>(builder =>
+        {
+            builder.HasKey(a => a.Id);
+            builder.HasIndex(a => new { a.LocationId, a.IssueId }).IsUnique();
+            builder.HasIndex(a => a.IssueId);
+
+            builder.HasOne(a => a.Location)
+                .WithMany(l => l.Appearances)
+                .HasForeignKey(a => a.LocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(a => a.Issue)
+                .WithMany()
+                .HasForeignKey(a => a.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Creator>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.Name).IsRequired();
+            builder.HasIndex(c => c.Name);
+        });
+
+        modelBuilder.Entity<CreatorCredit>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.HasIndex(c => new { c.CreatorId, c.IssueId, c.Role }).IsUnique();
+            builder.HasIndex(c => c.IssueId);
+
+            builder.HasOne(c => c.Creator)
+                .WithMany(cr => cr.Credits)
+                .HasForeignKey(c => c.CreatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(c => c.Issue)
+                .WithMany()
+                .HasForeignKey(c => c.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Publisher>(builder =>
+        {
+            builder.HasKey(p => p.Id);
+            builder.Property(p => p.Name).IsRequired();
+            builder.HasIndex(p => p.Name);
+        });
+
+        modelBuilder.Entity<Series>(builder =>
+        {
+            builder.HasOne(s => s.PublisherEntity)
+                .WithMany()
+                .HasForeignKey(s => s.PublisherEntityId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Issue>(builder =>
+        {
+            builder.HasOne(i => i.PublisherEntity)
+                .WithMany()
+                .HasForeignKey(i => i.PublisherEntityId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ComicMetadataExternalId>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.HasIndex(e => new { e.EntityKind, e.EntityId, e.Provider }).IsUnique();
+            builder.HasIndex(e => new { e.EntityKind, e.Provider, e.ExternalId }).IsUnique();
+        });
+
+        // Phase 5 items (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md).
+        modelBuilder.Entity<SeriesAssociation>(builder =>
+        {
+            builder.HasKey(a => a.Id);
+            builder.HasIndex(a => new { a.SeriesId, a.Provider, a.ExternalSeriesId }).IsUnique();
+
+            builder.HasOne(a => a.Series)
+                .WithMany()
+                .HasForeignKey(a => a.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<IssueVariantCover>(builder =>
+        {
+            builder.HasKey(v => v.Id);
+            builder.HasIndex(v => new { v.IssueId, v.ImageUrl }).IsUnique();
+
+            builder.HasOne(v => v.Issue)
+                .WithMany()
+                .HasForeignKey(v => v.IssueId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -1257,6 +1486,38 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.ReverseRtlNavigation).HasDefaultValue(true);
             builder.Property(a => a.HighQualityPageDisplay).HasDefaultValue(true);
             builder.Property(a => a.ResetZoomOnPageChange).HasDefaultValue(false);
+            builder.Property(a => a.SkipDeletedPages).HasDefaultValue(true);
+            builder.Property(a => a.SkipAdvertisementPages).HasDefaultValue(false);
+            builder.Property(a => a.PreOpenNextIssue).HasDefaultValue(true);
+            // Enum-as-string with HasSentinel like PageTransitionStyle below (TapZoneLayout.Default / TapZoneInvert.None are the CLR defaults, ContinuousTapZoneLayout.Disabled is not).
+            builder.Property(a => a.PagedTapZoneLayout).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(TapZoneLayout.Default)
+                .HasSentinel(TapZoneLayout.Default);
+            builder.Property(a => a.PagedTapZoneInvert).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(TapZoneInvert.None)
+                .HasSentinel(TapZoneInvert.None);
+            builder.Property(a => a.ContinuousTapZoneLayout).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(TapZoneLayout.Disabled)
+                .HasSentinel(TapZoneLayout.Disabled);
+            builder.Property(a => a.ContinuousTapZoneInvert).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(TapZoneInvert.None)
+                .HasSentinel(TapZoneInvert.None);
+            builder.Property(a => a.TapZonesForMouse).HasDefaultValue(true);
+            builder.Property(a => a.ExtraMouseButtonsTurnPages).HasDefaultValue(true);
+            builder.Property(a => a.GamepadEnabled).HasDefaultValue(true);
+            builder.Property(a => a.GuidedViewOnOpen).HasDefaultValue(false);
+            builder.Property(a => a.DefaultAutoLevels).HasDefaultValue(false);
+            builder.Property(a => a.DefaultSharpen).HasDefaultValue(0);
+            builder.Property(a => a.AutoCropMargins).HasDefaultValue(false);
+            builder.Property(a => a.InfoPanelShowSummary).HasDefaultValue(false);
+            builder.Property(a => a.SmartDoubleClickZoom).HasDefaultValue(true);
+            builder.Property(a => a.ShowSessionHud).HasDefaultValue(false);
+            builder.Property(a => a.BreakNudgesEnabled).HasDefaultValue(false);
+            builder.Property(a => a.BreakNudgeIntervalMinutes).HasDefaultValue(20);
+            builder.Property(a => a.WarmShiftEnabled).HasDefaultValue(false);
+            builder.Property(a => a.WarmShiftStartMinutes).HasDefaultValue(1260);
+            builder.Property(a => a.WarmShiftEndMinutes).HasDefaultValue(420);
+            builder.Property(a => a.WarmShiftStrength).HasDefaultValue(40);
             builder.Property(a => a.MouseWheelSpeed).HasDefaultValue(2.0);
             // HasDefaultValue is required here (unlike other enum columns in this context) because,
             // unlike Series.ContentType/ReadingMode, this ALTER TABLE runs against a table with an
@@ -1345,6 +1606,8 @@ public class PaperbunkrDbContext : DbContext
             // reflected into migration metadata (confirmed the hard way on the first scaffold of
             // this same migration - it generated defaultValue: 0.0 for this column).
             builder.Property(a => a.LibraryPreviewPanelWidth).HasDefaultValue(320.0);
+            // Non-empty default, so it needs the explicit DB default too or an existing row backfills to "".
+            builder.Property(a => a.LibraryPreviewCollapsedSections).HasMaxLength(128).HasDefaultValue("story,file,details");
             // Same treatment - Number (0) is the CLR default, desired default is Added.
             builder.Property(a => a.LibraryIssueListSortField).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(IssueListSortField.Added)
@@ -1634,6 +1897,16 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(e => e.PrimaryGenre).HasMaxLength(128);
             builder.HasIndex(e => e.TimestampUtc);
             builder.HasIndex(e => new { e.ItemType, e.ItemId });
+        });
+
+        // Nightly library snapshot (docs/superpowers/specs/2026-09-22-insights-backlog-burndown-design.md)
+        // - one row per local calendar day. SnapshotDate is unique: the write side upserts by date rather
+        // than appending, since a manual "Run now" from the Automation tab can trigger a second capture on
+        // a day the scheduler's own DailyAt due-check already ran for.
+        modelBuilder.Entity<LibrarySnapshot>(builder =>
+        {
+            builder.HasKey(s => s.Id);
+            builder.HasIndex(s => s.SnapshotDate).IsUnique();
         });
 
         modelBuilder.Entity<SeriesActivityEvent>(builder =>

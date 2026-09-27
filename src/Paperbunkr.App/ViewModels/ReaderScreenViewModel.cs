@@ -77,6 +77,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>Set only via <see cref="Load"/>'s <c>readingListId</c> param - when non-null, chapter-boundary navigation resolves "adjacent" through that reading list's own order instead of series order (docs/superpowers/specs/2026-08-23-cbl-manager-manual-editing-and-list-aware-reading-design.md §3).</summary>
     private int? _activeReadingListId;
+
+    /// <summary>Set only via <see cref="Load"/>'s <c>storyEventId</c> param, and only when no reading list anchors the reader - the Event Map's "Open reader" (docs/superpowers/specs/2026-09-25-event-map-design.md §5): paging then follows the event's own Position order and stops at its boundary.</summary>
+    private int? _activeStoryEventId;
     private IPageImageDecoder? _decoder;
     private int _currentPageIndex;
     private int _loadGeneration;
@@ -156,6 +159,8 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     {
         _trackerAutoSync = trackerAutoSync ?? NoOpTrackerAutoSyncService.Instance;
         _goBack = goBack;
+        HookPinToInfoPanel();
+        HookNotes();
         _keyBindingService = keyBindingService;
         _batteryStatusService = batteryStatusService;
         _readingEventRecorder = readingEventRecorder;
@@ -166,6 +171,12 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
     private readonly KeyBindingService _keyBindingService;
     private readonly IBatteryStatusService _batteryStatusService;
+
+    /// <summary>The reader profile in effect for the loaded issue (a series or default pointer, or one chosen this visit); null before the first load (design 2026-09-25 F2).</summary>
+    private ReaderProfileSelector.Context? _profile;
+
+    /// <summary>A profile chosen in this reader visit (<see cref="ReaderProfileSelector.StandardSessionId"/> = explicitly none); survives loading another issue, cleared when the reader is left.</summary>
+    private int? _sessionProfileId;
 
     /// <summary>Live shortcut-hint text for a toolbar/cluster control (docs/superpowers/specs/
     /// 2026-08-25-reader-chrome-design.md) - reads <see cref="KeyBindingService"/> fresh on every
@@ -194,6 +205,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     public string PreviousBookmarkHint => GetShortcutHint(KeyboardCommandRegistry.ReaderPreviousBookmark);
     public string NextBookmarkHint => GetShortcutHint(KeyboardCommandRegistry.ReaderNextBookmark);
     public string JumpBackHint => GetShortcutHint(KeyboardCommandRegistry.ReaderJumpBack);
+    public string ReportBadPageHint => GetShortcutHint(KeyboardCommandRegistry.ReaderReportBadPage);
 
     /// <summary>Public since 2026-09-16: <c>ReaderScreen.axaml.cs</c>'s root-canvas PointerMoved now
     /// calls this directly (instead of the wider <see cref="NotifyCursorActivity"/>, which also
@@ -211,6 +223,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(PreviousBookmarkHint));
         OnPropertyChanged(nameof(NextBookmarkHint));
         OnPropertyChanged(nameof(JumpBackHint));
+        OnPropertyChanged(nameof(ReportBadPageHint));
     }
 
     public ObservableCollection<ReaderThumbnailSample> Thumbnails { get; }
@@ -327,6 +340,44 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     private IReadOnlyList<KeyGesture> _jumpBackKey = [new(Key.Left, KeyModifiers.Alt)];
 
     [ObservableProperty]
+    private IReadOnlyList<KeyGesture> _reportBadPageKey = [new(Key.X)];
+
+    /// <summary>Reading-order page turns (design 2026-09-25 F1 section 2): PageDown/Space/media-next by default.</summary>
+    [ObservableProperty]
+    private IReadOnlyList<KeyGesture> _nextPageKey = [new(Key.PageDown), new(Key.Space), new(Key.MediaNextTrack)];
+
+    [ObservableProperty]
+    private IReadOnlyList<KeyGesture> _previousPageKey = [new(Key.PageUp), new(Key.Space, KeyModifiers.Shift), new(Key.MediaPreviousTrack)];
+
+    /// <summary>Mouse side buttons turn pages (<see cref="AppSettings.ExtraMouseButtonsTurnPages"/>).</summary>
+    [ObservableProperty]
+    private bool _extraMouseButtonsTurnPages = true;
+
+    /// <summary>An XInput controller drives the reader while it is showing (<see cref="AppSettings.GamepadEnabled"/>); the screen's poller starts and stops on it.</summary>
+    [ObservableProperty]
+    private bool _gamepadEnabled = true;
+
+    /// <summary>Tap/click zone layouts and inversion for paged and continuous modes (design 2026-09-25 F1 section 4), refreshed live by <see cref="RefreshDisplaySettings"/>.</summary>
+    [ObservableProperty]
+    private TapZoneLayout _pagedTapZoneLayout = TapZoneLayout.Default;
+
+    [ObservableProperty]
+    private TapZoneInvert _pagedTapZoneInvert = TapZoneInvert.None;
+
+    [ObservableProperty]
+    private TapZoneLayout _continuousTapZoneLayout = TapZoneLayout.Disabled;
+
+    [ObservableProperty]
+    private TapZoneInvert _continuousTapZoneInvert = TapZoneInvert.None;
+
+    /// <summary>Whether mouse clicks use the layout too (<see cref="AppSettings.TapZonesForMouse"/>).</summary>
+    [ObservableProperty]
+    private bool _tapZonesForMouse = true;
+
+    /// <summary>The spatial Left/Right commands are swapped (right-to-left reading with the reversal setting on); the canvas uses it to express reading-order turns spatially.</summary>
+    public bool IsSpatialFlipped => _isRightToLeft;
+
+    [ObservableProperty]
     private IReadOnlyList<KeyGesture> _toggleFullscreenKey = [new(Key.F)];
 
     [ObservableProperty]
@@ -383,15 +434,18 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         get => _zoomLevel;
         set
         {
-            // Continuous/webtoon mode: bounded 0.5x-4x (user direction, matching the toolbar zoom
-            // slider - supersedes the originally-scoped "unclamped upward"). Paged mode: unchanged 1x-4x.
-            double minZoom = IsContinuousMode ? 0.5 : 1.0;
-            double maxZoom = IsContinuousMode ? 4.0 : Views.ZoomPanMath.MaxZoom;
-            double clamped = Math.Clamp(value, minZoom, maxZoom);
-            if (SetProperty(ref _zoomLevel, clamped) && clamped == 1.0)
+            // One smooth range for paged and continuous mode, 25%-400% (docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md section 1); 100% is the fit state.
+            double clamped = Math.Clamp(value, Views.ZoomPanMath.MinZoom, Views.ZoomPanMath.MaxZoom);
+            if (SetProperty(ref _zoomLevel, clamped))
             {
-                PanOffsetX = 0;
-                PanOffsetY = 0;
+                OnPropertyChanged(nameof(ZoomSlider));
+
+                // At or below 100% the page fits inside the viewport, so there is nothing to pan to.
+                if (clamped <= Views.ZoomPanMath.FitZoom)
+                {
+                    PanOffsetX = 0;
+                    PanOffsetY = 0;
+                }
             }
         }
     }
@@ -530,28 +584,8 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private Task SavePageAsJpegAsync() => SavePageAsAsync(PageExportFormat.Jpeg, "jpg", "JPEG Image");
 
-    private async Task SavePageAsAsync(PageExportFormat format, string extension, string extensionLabel)
-    {
-        if (LoadedIssue is not { FilePath: { Length: > 0 } filePath } issue)
-        {
-            return;
-        }
-
-        using var page = PageDecodeCore.DecodeSinglePage(filePath, _currentPageIndex);
-        if (page is null)
-        {
-            return;
-        }
-
-        string suggestedName = $"{issue.Series?.Name ?? issue.Title ?? "Comic"} - Page {_currentPageIndex + 1}";
-        string? path = await new FilePickerService().PickSaveFileAsync("Save Page As", suggestedName, extension, extensionLabel);
-        if (path is null)
-        {
-            return;
-        }
-
-        PageExportService.TryExport(page, path, format);
-    }
+    private Task SavePageAsAsync(PageExportFormat format, string extension, string extensionLabel) =>
+        SaveExportAsync(spread: false, format, extension, extensionLabel);
 
     partial void OnCurrentContinuousPageIndexChanged(int value)
     {
@@ -560,14 +594,23 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
+        // Timed (design 2026-09-25 B5): this runs synchronously inside the canvas's frame callback every time the nearest page changes.
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
         _currentPageIndex = value;
         UpdatePageLabelAndProgress();
         UpdateThumbnailSelection();
+        if (_loadedIssueId is int viewedIssueId)
+        {
+            SessionClock.NotePageViewed(viewedIssueId, value);   // O(1): a hash-set add (design 2026-09-25 F3 section 1)
+        }
 
         if (_loadedIssueId is int issueId)
         {
             SchedulePositionSave(issueId, value);
         }
+
+        EvaluateNextIssueStaging();
+        Services.Reader.ReaderPerfStats.Current.RecordBoundaryHandlerMs(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
     }
 
     /// <summary>
@@ -643,7 +686,6 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(DotStripSpacing));
     }
 
-    private const double ZoomStep = 0.25;
 
     [ObservableProperty]
     private ImageFitMode _fitMode = ImageFitMode.FitWidth;
@@ -682,6 +724,10 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>Whether <see cref="ZoomLevel"/> resets to 1.0 on every page turn (docs/superpowers/specs/2026-08-10-preferences-reader-tab-design.md), read from <c>AppSettings.ResetZoomOnPageChange</c> on <see cref="Load"/>.</summary>
     private bool _resetZoomOnPageChange;
+
+    /// <summary>Page-skipping settings (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md §2), read from <c>AppSettings</c> on <see cref="Load"/>.</summary>
+    private bool _skipDeletedPages = true;
+    private bool _skipAdvertisementPages;
 
     [ObservableProperty]
     private double _mouseWheelSpeed = 2.0;
@@ -811,11 +857,33 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     {
         using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var appSettings = context.GetOrCreateAppSettings();
-        CanvasBackgroundBrush = ComputeCanvasBackgroundBrush(appSettings.ImageBackgroundMode, appSettings.BackgroundColor, appSettings.BackgroundTexture);
+
+        // The reader profile (design 2026-09-25 F2 section 1): the values a profile can set are read from the settings with it laid over them.
+        var series = _loadedSeriesId is int seriesId ? context.Series.Find(seriesId) : null;
+        var issue = _loadedIssueId is int issueId ? context.Issues.Find(issueId) : null;
+        _profile = ReaderProfileSelector.Resolve(context, series, appSettings, _sessionProfileId);
+        var effective = _profile.Effective;
+        NotifyProfileChanged();
+
+        CanvasBackgroundBrush = ComputeCanvasBackgroundBrush(effective.ImageBackgroundMode, effective.BackgroundColor, effective.BackgroundTexture);
         // Item 1 §1.5 - a page drop-shadow only when a texture background is active (solid Color/
         // Auto are visually unchanged), and only in paged modes (continuous/webtoon pages abut).
-        ShowPageShadow = appSettings.ImageBackgroundMode == ImageBackgroundMode.Texture && !IsContinuousMode;
-        PageMarginMultiplier = appSettings.PageMarginEnabled ? 1.0 - appSettings.PageMarginPercentWidth : 1.0;
+        ShowPageShadow = effective.ImageBackgroundMode == ImageBackgroundMode.Texture && !IsContinuousMode;
+        PageMarginMultiplier = effective.PageMarginEnabled ? 1.0 - effective.PageMarginPercentWidth : 1.0;
+        _preOpenNextIssue = appSettings.PreOpenNextIssue;
+        _readerMemoryLimitMb = appSettings.ReaderMemoryLimitMb;
+        PagedTapZoneLayout = effective.PagedTapZoneLayout;
+        PagedTapZoneInvert = effective.PagedTapZoneInvert;
+        ContinuousTapZoneLayout = effective.ContinuousTapZoneLayout;
+        ContinuousTapZoneInvert = effective.ContinuousTapZoneInvert;
+        TapZonesForMouse = appSettings.TapZonesForMouse;
+        ExtraMouseButtonsTurnPages = appSettings.ExtraMouseButtonsTurnPages;
+        GamepadEnabled = appSettings.GamepadEnabled;
+        ApplyComfortSettings(appSettings, effective);
+        if (!_preOpenNextIssue)
+        {
+            NextIssueStager?.Discard();
+        }
 
         // Real bug, found via manual testing: these two were originally Load-only (matching
         // MouseWheelSpeed/ResetZoomOnPageChange's precedent), but unlike those two - which only ever
@@ -823,14 +891,14 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         // duration change needs to affect a book that's already open right now, the same way
         // background/margin already do here, not require reopening the book (or switching reading
         // mode, which happens to force a fresh Load as a side effect) just to pick it up.
-        PageTransitionStyle = appSettings.PageTransitionStyle;
-        PageTransitionDurationMs = appSettings.PageTransitionDurationMs;
+        PageTransitionStyle = effective.PageTransitionStyle;
+        PageTransitionDurationMs = effective.PageTransitionDurationMs;
 
         // Double-page spread (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md
         // §2/§3) - all three tiers resolved live here, same rationale as PageTransitionStyle above.
-        var series = _loadedSeriesId is int seriesId ? context.Series.Find(seriesId) : null;
-        var issue = _loadedIssueId is int issueId ? context.Issues.Find(issueId) : null;
-        EffectivePageLayoutMode = issue?.PageLayoutModeOverride ?? series?.PageLayoutMode ?? appSettings.DefaultPageLayoutMode;
+        EffectivePageLayoutMode = ReaderProfileResolution.LayoutMode(_profile.SessionState, issue, series, effective);
+        ApplyPanelSettings(appSettings, effective);
+        ApplyImageQualityDefaults(issue, effective, pushIfChanged: true);
     }
 
     partial void OnBrightnessChanged(double value) => PersistAdjustmentOverride(_brightnessGlobalDefault, value, (issue, delta) => issue.BrightnessOverride = delta);
@@ -846,7 +914,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     private void TogglePerfOverlay()
     {
         PerfOverlayVisible = !PerfOverlayVisible;
-        PerfOverlayText = PerfOverlayVisible ? Services.Reader.ReaderPerfStats.Current.Snapshot().ToString() : string.Empty;
+        PerfOverlayText = PerfOverlayVisible ? Services.Reader.ReaderPerfStats.Current.OverlayText() : string.Empty;
     }
 
     private void PersistAdjustmentOverride(double globalDefault, double effectiveValue, Action<Issue, float> apply)
@@ -889,6 +957,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             issue.ContrastOverride = null;
             issue.SaturationOverride = null;
             issue.GammaOverride = null;
+            ResetImageQuality(issue);
             context.SaveChanges();
         }
     }
@@ -908,7 +977,10 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Opens books from remote libraries; set by the shell (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md section 7.3). Null in tests that never read a remote book.</summary>
     public Services.Sharing.RemoteReaderSource? RemoteReader { get; set; }
 
-    public void LoadIssue(int issueId, int? readingListId = null)
+    /// <summary>Keeps the ad library in step with page tags (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md §5); set by the shell. Null (no seeding) in tests that never tag an ad.</summary>
+    public Services.AdDetection.IAdHashSeeder? PageAdSeeder { get; set; }
+
+    public void LoadIssue(int issueId, int? readingListId = null, int? startPage = null, int? storyEventId = null)
     {
         using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var issue = context.Issues.Include(i => i.Series).Include(i => i.MetadataProposals).FirstOrDefault(i => i.Id == issueId);
@@ -917,7 +989,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        Load(issue, issue.Series, context, readingListId: readingListId);
+        Load(issue, issue.Series, context, forcedStartPage: startPage, readingListId: readingListId, storyEventId: storyEventId);
         LoadedIssue = issue;
         OnPropertyChanged(nameof(SharedElementKey));
         IssueOpened?.Invoke(issue);
@@ -960,8 +1032,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// call passes the *current* <see cref="_activeReadingListId"/> back through so the anchor
     /// survives further boundary crossings.
     /// </summary>
-    private void Load(Issue issue, Series series, PaperbunkrDbContext context, int? forcedStartPage = null, int? readingListId = null)
+    private void Load(Issue issue, Series series, PaperbunkrDbContext context, int? forcedStartPage = null, int? readingListId = null, int? storyEventId = null)
     {
+        System.Diagnostics.Debug.Assert(readingListId is null || storyEventId is null, "Reader opened with both a reading list and a story event anchor; the reading list wins.");
         // Flushes the *previous* issue's throttled continuous-mode position (spec §6) before this
         // method reassigns _loadedIssueId below - otherwise up to PositionSaveDebounce's worth of
         // scroll progress on the book being left would be silently dropped, not just delayed.
@@ -994,13 +1067,14 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             {
                 if (PerfOverlayVisible)
                 {
-                    PerfOverlayText = Services.Reader.ReaderPerfStats.Current.Snapshot().ToString();
+                    PerfOverlayText = Services.Reader.ReaderPerfStats.Current.OverlayText();
                 }
             };
             _perfTimer.Start();
         }
 
         RefreshClockAndBattery();
+        StartSessionTimer();
 
         _decoder?.Dispose();
         _decoder = null;
@@ -1020,10 +1094,15 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         _loadedIssueId = issue.Id;
         _loadedSeriesId = series.Id;
         _activeReadingListId = readingListId;
+        _activeStoryEventId = readingListId is null ? storyEventId : null;
         _reviewPromptShown = false;
         DismissEndCard();
         ClearJumpBack();
-        RefreshContextStrip(context, issue.Id, readingListId);
+        ClearSkippedPagesHint();
+        CloseReportPicker();
+        ClearPageReportChip();
+        RefreshContextStrip(context, issue.Id, readingListId, _activeStoryEventId);
+        RefreshInfoPanel(context, issue, series);
 
         // Real open-tracking (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-
         // metadata-design.md) - the first place either of these fields is actually written; confirmed
@@ -1067,11 +1146,21 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             : $"Issue #{issue.EffectiveNumber()} — {issue.Title}";
 
         var appSettings = context.GetOrCreateAppSettings();
+        _profile = ReaderProfileSelector.Resolve(context, series, appSettings, _sessionProfileId);
+        var effective = _profile.Effective;
+        _seriesProfileId = series.ReaderProfileId;
+        OnPropertyChanged(nameof(HasSeriesProfile));
+        RefreshProfiles();
         HighQualityPageDisplay = appSettings.HighQualityPageDisplay;
         MouseWheelSpeed = appSettings.MouseWheelSpeed;
         _resetZoomOnPageChange = appSettings.ResetZoomOnPageChange;
-        _autoHideChromeEnabled = appSettings.ReaderAutoHideChrome;
-        ChromeHoverMode = appSettings.ReaderChromeHoverMode;
+        _skipDeletedPages = appSettings.SkipDeletedPages;
+        _skipAdvertisementPages = appSettings.SkipAdvertisementPages;
+        _preOpenNextIssue = appSettings.PreOpenNextIssue;
+        _readerMemoryLimitMb = appSettings.ReaderMemoryLimitMb;
+        _autoHideChromeEnabled = effective.ReaderAutoHideChrome;
+        ChromeHoverMode = effective.ReaderChromeHoverMode;
+        ExtraMouseButtonsTurnPages = appSettings.ExtraMouseButtonsTurnPages;
 
         // The actual root cause of 4 straight "still doesn't hide" reports today (2026-09-16), found
         // only after 3 separate wrong guesses at the per-cluster hover mechanism itself: ShowChrome
@@ -1103,6 +1192,16 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         PreviousBookmarkKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPreviousBookmark);
         NextBookmarkKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderNextBookmark);
         JumpBackKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderJumpBack);
+        ReportBadPageKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderReportBadPage);
+        NextPageKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderNextPage);
+        LoadPaletteKeys(context);
+        ToggleGuidedViewKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleGuidedView);
+        RefreshExtraKeyBindings(context);
+        ToggleSessionHudKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleSessionHud);
+        ToggleWarmShiftKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleWarmShift);
+        CopyPageKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderCopyPage);
+        NextProfileKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderNextProfile);
+        PreviousPageKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPreviousPage);
         ToggleFullscreenKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleFullscreen);
         RotateClockwiseKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderRotateClockwise);
         RotateCounterClockwiseKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderRotateCounterClockwise);
@@ -1121,19 +1220,11 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         ScrollOffset = 0;
         CurrentContinuousPageIndex = -1;
         ManualRotationDegrees = 0;
-        FitMode = ReaderDefaultsResolver.EffectiveFitMode(issue, series, appSettings);
-        AutoRotate = ReaderDefaultsResolver.EffectiveAutoRotate(issue, series, appSettings);
-
-        _brightnessGlobalDefault = appSettings.DefaultBrightness;
-        _contrastGlobalDefault = appSettings.DefaultContrast;
-        _saturationGlobalDefault = appSettings.DefaultSaturation;
-        _gammaGlobalDefault = appSettings.DefaultGamma;
-        _suppressAdjustmentPersist = true;
-        Brightness = _brightnessGlobalDefault + (issue.BrightnessOverride ?? 0);
-        Contrast = _contrastGlobalDefault + (issue.ContrastOverride ?? 0);
-        Saturation = _saturationGlobalDefault + (issue.SaturationOverride ?? 0);
-        Gamma = _gammaGlobalDefault + (issue.GammaOverride ?? 0);
-        _suppressAdjustmentPersist = false;
+        FitMode = ReaderProfileResolution.FitMode(_profile.SessionState, issue, series, effective);
+        AutoRotate = ReaderProfileResolution.AutoRotate(_profile.SessionState, issue, series, effective);
+        ApplyAdjustmentDefaults(issue, effective);
+        ApplyImageQualityDefaults(issue, effective, pushIfChanged: false);
+        LoadCropOverrides(context, issue.Id);
 
         // Background/margin (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-
         // chrome-overlays-design.md §10) and page-transition style/duration (docs/superpowers/specs/
@@ -1145,6 +1236,10 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         int pageCount = issue.PageCount is > 0 ? issue.PageCount.Value : 1;
 
+        // The next issue may already be open in the background (design 2026-09-25 A): take it if this is that issue and its file is
+        // unchanged. Any other load discards whatever was staged - the reader is going somewhere else.
+        var stagedPipeline = NextIssueStager?.TryAdopt(issue.Id, issue.FilePath);
+
         if (!string.IsNullOrEmpty(issue.FilePath))
         {
             // One pipeline for every mode now (docs/superpowers/specs/2026-09-08-reader-decode-
@@ -1153,7 +1248,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             // old PageImageDecoder (sync, paged) / PageDecodeService (continuous) split is gone;
             // PageCanvas's continuous-specific calls now go through IReaderPageSource.
             Services.Reader.ReaderPerfStats.Current.Reset();
-            _decoder = Services.Reader.ReaderImagePipeline.TryOpen(issue.FilePath, appSettings.ReaderMemoryLimitMb);
+            _decoder = stagedPipeline ?? Services.Reader.ReaderImagePipeline.TryOpen(issue.FilePath, appSettings.ReaderMemoryLimitMb);
             if (_decoder is null)
             {
                 ErrorMessage = "Couldn't open this file — unsupported format or a damaged archive.";
@@ -1193,6 +1288,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         PageCount = pageCount;
         OnPropertyChanged(nameof(Decoder));
+        PushImageProcessing(refresh: false);
 
         if (forcedStartPage is int forced)
         {
@@ -1216,6 +1312,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         }
 
         IsCurrentPageBookmarked = _bookmarkedPages.Contains(_currentPageIndex);
+        LoadNotes(context, issue.Id);
 
         // Per-page type tagging + persisted rotation override (docs/ce-feature-inventory.md §A) -
         // sparse, same convention as Bookmarks above; a page with no row is Story/0deg by default.
@@ -1225,6 +1322,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             _pageOverrides[pageOverride.PageNumber] = pageOverride;
         }
 
+        RecomputeStoryEnd();
         PageRotationOverrideDegrees = _pageOverrides.TryGetValue(_currentPageIndex, out var currentOverride) ? currentOverride.RotationDegrees : 0;
 
         Thumbnails.Clear();
@@ -1237,6 +1335,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
                 CoverBrush = CoverBrush,
                 IsSelected = page == _currentPageIndex,
                 IsBookmarked = _bookmarkedPages.Contains(page),
+                HasNote = _notedPages.Contains(page),
                 PageType = pageOverride?.PageType ?? PageType.Story,
                 IsRotated = (pageOverride?.RotationDegrees ?? 0) != 0,
                 SpreadHint = pageOverride?.SpreadPosition ?? PageSpreadPosition.Default,
@@ -1251,6 +1350,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         RefreshCurrentPage();
         StartThumbnailGeneration(generation, thumbnailCount);
+        EvaluateNextIssueStaging();
 
         // Real bug, found via manual testing: resuming an issue (OpenLastPage) or crossing an issue
         // boundary backward (forcedStartPage = int.MaxValue, NavigateToAdjacentIssue) already computed
@@ -1274,6 +1374,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     private void UpdateReadingModeState(ReadingMode effectiveMode, bool reverseRtlNavigation)
     {
         _isRightToLeft = effectiveMode == ReadingMode.RightToLeft && reverseRtlNavigation;
+        OnPropertyChanged(nameof(IsSpatialFlipped));
         IsContinuousMode = effectiveMode is ReadingMode.VerticalContinuous or ReadingMode.HorizontalContinuous
             or ReadingMode.HorizontalContinuousRightToLeft or ReadingMode.Webtoon;
         EffectiveReadingMode = effectiveMode;
@@ -1867,6 +1968,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var row = context.IssuePages.FirstOrDefault(p => p.IssueId == issueId && p.PageNumber == pageNumber);
+        PageType previousType = row?.PageType ?? PageType.Story;
         PageType effectiveType = newType ?? row?.PageType ?? PageType.Story;
         int effectiveRotation = newRotation ?? row?.RotationDegrees ?? 0;
         PageSpreadPosition effectiveSpread = newSpread ?? row?.SpreadPosition ?? PageSpreadPosition.Default;
@@ -1896,12 +1998,15 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             _pageOverrides[pageNumber] = row;
         }
 
+        RecomputeStoryEnd();
+        NotifyAdSeeder(issueId, pageNumber, previousType, effectiveType);
         Thumbnails[pageNumber] = new ReaderThumbnailSample
         {
             CoverBrush = CoverBrush,
             CoverImage = thumbnail.CoverImage,
             IsSelected = thumbnail.IsSelected,
             IsBookmarked = thumbnail.IsBookmarked,
+            HasNote = thumbnail.HasNote,
             PageType = effectiveType,
             IsRotated = effectiveRotation != 0,
             SpreadHint = effectiveSpread,
@@ -1918,6 +2023,24 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         if (newSpread is not null)
         {
             RefreshCurrentPage();
+        }
+    }
+
+    /// <summary>Tagging a page Advertisement adds it to the ad library; taking that tag off removes what it seeded. Fire-and-forget: the hashing runs off the UI thread and is best-effort.</summary>
+    private void NotifyAdSeeder(int issueId, int pageNumber, PageType previous, PageType current)
+    {
+        if (PageAdSeeder is null || previous == current)
+        {
+            return;
+        }
+
+        if (current == PageType.Advertisement)
+        {
+            _ = PageAdSeeder.SeedAsync(issueId, pageNumber);
+        }
+        else if (previous == PageType.Advertisement)
+        {
+            _ = PageAdSeeder.UnseedAsync(issueId, pageNumber);
         }
     }
 
@@ -1947,7 +2070,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         Thumbnails[page] = new ReaderThumbnailSample
         {
             CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = existing.IsSelected, IsBookmarked = isBookmarked,
-            PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint,
+            PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint, HasNote = existing.HasNote,
         };
     }
 
@@ -2083,26 +2206,58 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     // CommandParameter (e.g. "1.5") bound in XAML has no compile-time check that it'll actually
     // parse/cast to double at Execute time, unlike the x:Static-enum-CommandParameter pattern used
     // for fit mode above (a real typed value, not a string Avalonia has to convert).
+    /// <summary>Back to 100% (fit). The only zoom "preset" left: every other level is reached with the slider, the wheel, pinch or the keys.</summary>
     [RelayCommand]
-    private void SetZoom100() => ZoomLevel = 1.0;
+    private void ResetZoom()
+    {
+        if (ZoomResetRequested is { } glide)
+        {
+            glide();
+            return;
+        }
+
+        ZoomLevel = Views.ZoomPanMath.FitZoom;
+    }
+
+    /// <summary>
+    /// Raised by the zoom buttons, keys and palette entries with the factor to zoom by (about 10%), so the canvas can glide to the new zoom instead of jumping. Nobody listening (tests, a screen without a
+    /// canvas): the zoom changes at once.
+    /// </summary>
+    public event Action<double>? ZoomStepRequested;
+
+    /// <summary>Raised by Fit (100%) so the canvas can glide back to the fit view; unhandled, the zoom resets at once.</summary>
+    public event Action? ZoomResetRequested;
+
+    /// <summary>The zoom slider's position: log2 of <see cref="ZoomLevel"/> (-2 = 25%, 0 = 100%, +2 = 400%), so both halves of the range get the same travel.</summary>
+    public double ZoomSlider
+    {
+        get => Views.ZoomPanMath.ZoomToSlider(_zoomLevel);
+        set => ZoomLevel = Views.ZoomPanMath.SliderToZoom(value);
+    }
 
     [RelayCommand]
-    private void SetZoom125() => ZoomLevel = 1.25;
+    private void ZoomIn()
+    {
+        if (ZoomStepRequested is { } glide)
+        {
+            glide(Views.ZoomPanMath.KeyZoomFactor);
+            return;
+        }
+
+        ZoomLevel *= Views.ZoomPanMath.KeyZoomFactor;
+    }
 
     [RelayCommand]
-    private void SetZoom150() => ZoomLevel = 1.5;
+    private void ZoomOut()
+    {
+        if (ZoomStepRequested is { } glide)
+        {
+            glide(1 / Views.ZoomPanMath.KeyZoomFactor);
+            return;
+        }
 
-    [RelayCommand]
-    private void SetZoom200() => ZoomLevel = 2.0;
-
-    [RelayCommand]
-    private void SetZoom400() => ZoomLevel = 4.0;
-
-    [RelayCommand]
-    private void ZoomIn() => ZoomLevel += ZoomStep;
-
-    [RelayCommand]
-    private void ZoomOut() => ZoomLevel -= ZoomStep;
+        ZoomLevel /= Views.ZoomPanMath.KeyZoomFactor;
+    }
 
     /// <summary>
     /// Real per-page rail thumbnails (docs/superpowers/specs/2026-08-06-cover-thumbnails-design.md
@@ -2159,7 +2314,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
                     Thumbnails[capturedPage] = new ReaderThumbnailSample
                     {
                         CoverBrush = CoverBrush, CoverImage = thumb, IsSelected = existing.IsSelected, IsBookmarked = existing.IsBookmarked,
-                        PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint,
+                        PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint, HasNote = existing.HasNote,
                     };
                 });
             }
@@ -2187,6 +2342,8 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// </summary>
     private void RefreshCurrentPage()
     {
+        // The old page's panels go first, so the canvas never pairs a new page with them (design 2026-09-25 panels-and-zoom section 3).
+        CurrentPagePanels = null;
         if (IsContinuousMode || _decoder is null)
         {
             CurrentPage = null;
@@ -2223,6 +2380,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         }
 
         CurrentPageSecondary = TryDecodePairedPage(_currentPageIndex, CurrentPage.PixelSize);
+        RequestPanels();
     }
 
     /// <summary>Gates every double-page pairing decision below (spec §3) - Single mode, continuous mode (orthogonal per spec §1), and no decoder all mean pairing never applies.</summary>
@@ -2298,7 +2456,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         _currentPageIndex = pageIndex;
         DismissEndCard();
         ClearJumpBack();
+        ClearSkippedPagesHint();
         UpdatePageLabelAndProgress();
+        NoteSessionPage(_currentPageIndex);
         PageRotationOverrideDegrees = _pageOverrides.TryGetValue(_currentPageIndex, out var pageOverride) ? pageOverride.RotationDegrees : 0;
 
         // AppSettings.ResetZoomOnPageChange (docs/superpowers/specs/2026-08-10-preferences-reader-
@@ -2314,13 +2474,15 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var issue = context.Issues.FirstOrDefault(i => i.Id == issueId);
+        bool finishedAtStoryEnd = false;
         if (issue is not null)
         {
-            issue.LastPageRead = _currentPageIndex;
+            finishedAtStoryEnd = WriteLastPageRead(issue, _currentPageIndex);
             context.SaveChanges();
         }
 
-        TrackSessionProgress(_currentPageIndex);
+        TrackSessionProgress(_currentPageIndex, finishedAtStoryEnd);
+        EvaluateNextIssueStaging();
     }
 
     /// <summary>
@@ -2328,15 +2490,20 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// design.md §5): advances the session's high-water page mark and emits the <c>Finished</c> row
     /// the first time this session's read position reaches CE's 95% "has been read" threshold.
     /// </summary>
-    private void TrackSessionProgress(int pageIndex)
+    private void TrackSessionProgress(int pageIndex, bool reachedStoryEnd = false)
     {
         if (pageIndex > _sessionMaxPage)
         {
             _sessionMaxPage = pageIndex;
         }
 
+        // CE's own formula (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md §1):
+        // pageIndex is 0-based, so the page just reached is the (pageIndex + 1)th. Reaching the story end
+        // (the last page that is not an ad or a deleted page) counts as finishing even though trailing
+        // pages remain.
         if (!_finishedEmittedThisSession && PageCount > 0
-            && 100.0 * pageIndex / PageCount >= Paperbunkr.Data.Metadata.IssueMetadataExtensions.ReadThresholdPercent)
+            && (reachedStoryEnd
+                || 100.0 * (pageIndex + 1) / PageCount >= Paperbunkr.Data.Metadata.IssueMetadataExtensions.ReadThresholdPercent))
         {
             EmitFinishedIfNeeded();
         }
@@ -2393,14 +2560,23 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Shared by <see cref="GoToPage"/> and <see cref="OnCurrentContinuousPageIndexChanged"/>, same rationale as <see cref="UpdatePageLabelAndProgress"/>.</summary>
     private void UpdateThumbnailSelection()
     {
+        // Only the items whose selected flag actually changes are replaced - normally the page just left and the page just reached
+        // (design 2026-09-25 B1). Replacing all of them (up to MaxThumbnails = 200) raised that many collection notifications into two
+        // non-virtualized lists on every page boundary, synchronously inside the continuous canvas's frame callback.
         int thumbnailCount = Thumbnails.Count;
         for (int page = 0; page < thumbnailCount; page++)
         {
             var existing = Thumbnails[page];
+            bool shouldBeSelected = page == _currentPageIndex;
+            if (existing.IsSelected == shouldBeSelected)
+            {
+                continue;
+            }
+
             Thumbnails[page] = new ReaderThumbnailSample
             {
-                CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = page == _currentPageIndex, IsBookmarked = existing.IsBookmarked,
-                PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint,
+                CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = shouldBeSelected, IsBookmarked = existing.IsBookmarked,
+                PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint, HasNote = existing.HasNote,
             };
         }
 
@@ -2417,7 +2593,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         if (_positionSaveTimer is null)
         {
             _positionSaveTimer = new DispatcherTimer { Interval = PositionSaveDebounce };
-            _positionSaveTimer.Tick += (_, _) => FlushPendingPositionSave();
+            _positionSaveTimer.Tick += (_, _) => FlushPendingPositionSaveInBackground();
         }
 
         _positionSaveTimer.Stop();
@@ -2443,17 +2619,124 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         }
 
         _pendingPositionSaveIssueId = null;
-        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
-        var issue = context.Issues.Find(issueId);
-        if (issue is not null)
-        {
-            issue.LastPageRead = _pendingPositionSaveIndex;
-            context.SaveChanges();
-        }
+        int index = _pendingPositionSaveIndex;
+        int value = ResolveLastPageReadToWrite(issueId, index, out bool finishedAtStoryEnd);
+
+        long saveStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+        WritePosition(issueId, value, NextPositionSaveSequence());
+        Services.Reader.ReaderPerfStats.Current.RecordPositionSaveMs(System.Diagnostics.Stopwatch.GetElapsedTime(saveStarted).TotalMilliseconds);
 
         if (issueId == _loadedIssueId)
         {
-            TrackSessionProgress(_pendingPositionSaveIndex);
+            TrackSessionProgress(index, finishedAtStoryEnd);
+        }
+    }
+
+    // ---- Off-thread position save (docs/superpowers/specs/2026-09-25-comic-reader-performance-design.md B2). The debounced save used to
+    // open a database connection (4 PRAGMAs, synchronous=FULL) and commit on the UI thread ~500 ms after a page boundary, which is a
+    // stall you feel half a second after crossing a page. The timer now hands the write to a background thread, one write at a time;
+    // requests that arrive while one is running coalesce to the newest. Load/GoBack still call the synchronous FlushPendingPositionSave
+    // above, and a sequence number stops a slow older background write from overwriting a newer synchronous one.
+
+    private bool _positionSaveInFlight;
+
+    /// <summary>Test seam: whether a background position write is running.</summary>
+    internal bool PositionSaveInFlight => _positionSaveInFlight;
+    private long _positionSaveSequence;
+    private long _lastWrittenPositionSequence;
+    private readonly object _positionWriteLock = new();
+
+    /// <summary>Test seam: replaces the database write (issue id, value to store). Runs on a background thread for the timer path and the calling thread for <see cref="FlushPendingPositionSave"/>. Null = the real write.</summary>
+    internal Action<int, int>? PositionWriter { get; set; }
+
+    private long NextPositionSaveSequence() => System.Threading.Interlocked.Increment(ref _positionSaveSequence);
+
+    /// <summary>What to store as <see cref="Issue.LastPageRead"/> for <paramref name="pageIndex"/> - the last page when it is the story end (page intelligence design 3), else the page itself. Needs UI-thread state, so it is decided before any background write.</summary>
+    private int ResolveLastPageReadToWrite(int issueId, int pageIndex, out bool reachedStoryEnd)
+    {
+        reachedStoryEnd = false;
+        if (issueId != _loadedIssueId)
+        {
+            return pageIndex;
+        }
+
+        reachedStoryEnd = PageCount > 1 && pageIndex == _storyEndIndex && _storyEndIndex < PageCount - 1;
+        return reachedStoryEnd ? PageCount - 1 : pageIndex;
+    }
+
+    /// <summary>The single database write for a reading position. Skipped when a newer write already landed (see the sequence number).</summary>
+    private void WritePosition(int issueId, int value, long sequence)
+    {
+        lock (_positionWriteLock)
+        {
+            if (sequence < _lastWrittenPositionSequence)
+            {
+                return;
+            }
+
+            _lastWrittenPositionSequence = sequence;
+            if (PositionWriter is { } writer)
+            {
+                writer(issueId, value);
+                return;
+            }
+
+            using var context = PaperbunkrDb.CreateContext(includeRemote: true);
+            var issue = context.Issues.Find(issueId);
+            if (issue is not null)
+            {
+                issue.LastPageRead = value;
+                context.SaveChanges();
+            }
+        }
+    }
+
+    /// <summary>The debounce timer's tick: same effect as <see cref="FlushPendingPositionSave"/> but the write happens off the UI thread. Internal so tests can drive it without a real timer.</summary>
+    internal void FlushPendingPositionSaveInBackground()
+    {
+        _positionSaveTimer?.Stop();
+        if (_positionSaveInFlight || _pendingPositionSaveIssueId is not int issueId)
+        {
+            return; // a write is running: its completion picks the newest pending position up
+        }
+
+        int index = _pendingPositionSaveIndex;
+        _pendingPositionSaveIssueId = null;
+        int value = ResolveLastPageReadToWrite(issueId, index, out bool finishedAtStoryEnd);
+        long sequence = NextPositionSaveSequence();
+        _positionSaveInFlight = true;
+
+        _ = System.Threading.Tasks.Task.Run(() =>
+        {
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            try
+            {
+                WritePosition(issueId, value, sequence);
+            }
+            catch
+            {
+                // Best-effort like the synchronous path's own callers: a failed position write must never take the reader down.
+            }
+
+            double ms = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            Dispatcher.UIThread.Post(() => OnPositionSaveCompleted(issueId, index, finishedAtStoryEnd, ms));
+        });
+    }
+
+    private void OnPositionSaveCompleted(int issueId, int index, bool finishedAtStoryEnd, double durationMs)
+    {
+        _positionSaveInFlight = false;
+        Services.Reader.ReaderPerfStats.Current.RecordPositionSaveMs(durationMs);
+
+        if (issueId == _loadedIssueId)
+        {
+            TrackSessionProgress(index, finishedAtStoryEnd);
+        }
+
+        if (_pendingPositionSaveIssueId is not null)
+        {
+            // A newer position arrived while that write ran - save it now (coalesced to the latest).
+            FlushPendingPositionSaveInBackground();
         }
     }
 
@@ -2516,7 +2799,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
                 step = 1;
             }
 
-            GoToPage(_currentPageIndex - step);
+            StepToPage(_currentPageIndex - step, forward: false);
             return;
         }
 
@@ -2540,7 +2823,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
                 step = 1;
             }
 
-            GoToPage(_currentPageIndex + step);
+            StepToPage(_currentPageIndex + step, forward: true);
             return;
         }
 
@@ -2605,7 +2888,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         // _activeReadingListId passed straight back through - the anchor survives this jump (spec
         // §3) rather than being cleared like a fresh external LoadIssue call would.
-        Load(toIssue, toIssue.Series!, context, forcedStartPage: forward ? 0 : int.MaxValue, readingListId: _activeReadingListId);
+        Load(toIssue, toIssue.Series!, context, forcedStartPage: forward ? 0 : int.MaxValue, readingListId: _activeReadingListId, storyEventId: _activeStoryEventId);
     }
 
     /// <summary>
@@ -2630,7 +2913,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return false;
         }
 
-        var step = ReadingOrderResolver.ResolveNeighbour(context, currentIssueId, _loadedSeriesId, _activeReadingListId, forward);
+        var step = ReadingOrderResolver.ResolveNeighbour(context, currentIssueId, _loadedSeriesId, _activeReadingListId, forward, _activeStoryEventId);
         if (step is null)
         {
             return false;
@@ -2676,6 +2959,276 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     private bool _pendingChapterTransitionOverscrollForward;
     private Issue? _pendingChapterTransitionFromIssue;
     private Issue? _pendingChapterTransitionToIssue;
+
+    // ===================== Next-issue pre-open (docs/superpowers/specs/2026-09-25-comic-reader-performance-design.md A) - in the last 3 pages the
+    // next issue in reading order is opened in the background; Load adopts it, so moving on skips the archive open. Off with
+    // AppSettings.PreOpenNextIssue. Null stager (tests, and any host that does not call EnableNextIssueStaging) = never stages. =====================
+
+    private bool _preOpenNextIssue = true;
+    private int? _readerMemoryLimitMb;
+
+    /// <summary>Opens the next issue in the background near the end of this one; set by <see cref="EnableNextIssueStaging"/>.</summary>
+    internal Services.Reader.NextIssueStager? NextIssueStager { get; set; }
+
+    /// <summary>Turns next-issue pre-open on for this reader (the shell calls it once). Kept opt-in so tests never stage anything as a side effect.</summary>
+    public void EnableNextIssueStaging() => NextIssueStager ??= new Services.Reader.NextIssueStager(ResolveStagingTarget);
+
+    /// <summary>The issue that follows <paramref name="currentIssueId"/> in reading order (reading list or story event if anchored, else series), as a staging target. Runs on a background thread with its own context.</summary>
+    internal static Services.Reader.StagingTarget? ResolveStagingTarget(int currentIssueId, int? seriesId, int? readingListId, int? storyEventId)
+    {
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
+        var step = ReadingOrderResolver.ResolveNeighbour(context, currentIssueId, seriesId, readingListId, forward: true, storyEventId);
+        if (step is null)
+        {
+            return null;
+        }
+
+        var next = step.To;
+        return new Services.Reader.StagingTarget(next.Id, next.FilePath, next.RemoteSourceId is not null, next.FileIsMissing);
+    }
+
+    /// <summary>Called whenever the reading position changes (both modes) and after a load: stage in the last 3 pages, drop the staged issue once the reader is back below the last 5, and drop it if the setting is off.</summary>
+    private void EvaluateNextIssueStaging()
+    {
+        var stager = NextIssueStager;
+        if (stager is null || _loadedIssueId is not int issueId || PageCount <= 0)
+        {
+            return;
+        }
+
+        if (!_preOpenNextIssue)
+        {
+            stager.Discard();
+            return;
+        }
+
+        switch (Services.Reader.NextIssueStager.EvaluatePosition(_currentPageIndex, PageCount))
+        {
+            case Services.Reader.StagingAction.Ensure:
+                int viewportWidth = (_decoder as Services.Reader.ReaderImagePipeline)?.ViewportWidth ?? int.MaxValue;
+                stager.EnsureStaged(issueId, _loadedSeriesId, _activeReadingListId, _readerMemoryLimitMb, viewportWidth, _activeStoryEventId);
+                break;
+            case Services.Reader.StagingAction.Discard:
+                stager.Discard();
+                break;
+        }
+    }
+
+    // ===================== Bad-page report (page intelligence design 4, pitch #12) - X (or the page context menu)
+    // opens a small reason picker for the current page; picking writes a PageReport row that Preferences ->
+    // Library Health lists, and a short "Reported page N - Undo" chip follows. The picker is an in-canvas overlay,
+    // not a Popup: 1-4 and Esc are handled by ReaderScreen's tunnel key handler, which the digit keys need because
+    // PageCanvas binds 1-3 to fit modes. =====================
+
+    private static readonly TimeSpan PageReportChipLifetime = TimeSpan.FromSeconds(6);
+
+    [ObservableProperty]
+    private bool _isReportPickerOpen;
+
+    [ObservableProperty]
+    private string? _reportPickerTitle;
+
+    [ObservableProperty]
+    private bool _hasPageReportChip;
+
+    [ObservableProperty]
+    private string? _pageReportChipLabel;
+
+    private int _reportTargetPage;
+    private PageReportUndo? _lastPageReportUndo;
+    private DispatcherTimer? _pageReportChipTimer;
+
+    /// <summary>Opens the reason picker for <paramref name="thumbnail"/>'s page, or the page on screen when there is none (the key, or the main-page menu).</summary>
+    [RelayCommand]
+    private void ReportBadPage(ReaderThumbnailSample? thumbnail)
+    {
+        if (_loadedIssueId is null || PageCount <= 0)
+        {
+            return;
+        }
+
+        int page = thumbnail is not null ? Thumbnails.IndexOf(thumbnail) : _currentPageIndex;
+        if (page < 0)
+        {
+            return;
+        }
+
+        _reportTargetPage = page;
+        ReportPickerTitle = $"Report page {page + 1}";
+        IsReportPickerOpen = true;
+    }
+
+    [RelayCommand]
+    private void ReportPageReason(PageReportReason reason)
+    {
+        if (!IsReportPickerOpen || _loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        int page = _reportTargetPage;
+        CloseReportPicker();
+
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
+        _lastPageReportUndo = PageReportService.Upsert(context, issueId, page, reason);
+
+        PageReportChipLabel = $"Reported page {page + 1}";
+        HasPageReportChip = true;
+        if (_pageReportChipTimer is null)
+        {
+            _pageReportChipTimer = new DispatcherTimer { Interval = PageReportChipLifetime };
+            _pageReportChipTimer.Tick += OnPageReportChipExpired;
+        }
+
+        _pageReportChipTimer.Stop();
+        _pageReportChipTimer.Start();
+    }
+
+    [RelayCommand]
+    private void CancelReportPicker() => CloseReportPicker();
+
+    [RelayCommand]
+    private void UndoPageReport()
+    {
+        if (_lastPageReportUndo is { } undo)
+        {
+            using var context = PaperbunkrDb.CreateContext(includeRemote: true);
+            PageReportService.Undo(context, undo);
+        }
+
+        ClearPageReportChip();
+    }
+
+    private void CloseReportPicker()
+    {
+        IsReportPickerOpen = false;
+        ReportPickerTitle = null;
+    }
+
+    private void ClearPageReportChip()
+    {
+        _pageReportChipTimer?.Stop();
+        _lastPageReportUndo = null;
+        HasPageReportChip = false;
+        PageReportChipLabel = null;
+    }
+
+    /// <summary>Test seam, same rationale as <see cref="OnAutoScrollTick"/>.</summary>
+    internal void OnPageReportChipExpired(object? sender, EventArgs e) => ClearPageReportChip();
+
+    // ===================== Story-end finish (page intelligence design 3, pitch #13) - the story end is the last
+    // page not tagged Advertisement or Deleted (untagged = Story). Reaching it records the issue as finished, the
+    // same LastPageRead IssueReadStateResolver.MarkAsRead writes, even though trailing ad pages remain. Recomputed
+    // on Load and whenever a page tag changes. =====================
+
+    private int _storyEndIndex = -1;
+
+    private void RecomputeStoryEnd()
+    {
+        int storyEnd = -1;
+        for (int page = PageCount - 1; page >= 0; page--)
+        {
+            if (!(_pageOverrides.TryGetValue(page, out var row) && row.PageType is PageType.Advertisement or PageType.Deleted))
+            {
+                storyEnd = page;
+                break;
+            }
+        }
+
+        // Every page tagged: there is no story end to speak of, so behave as if there were no tags.
+        _storyEndIndex = storyEnd < 0 ? PageCount - 1 : storyEnd;
+    }
+
+    /// <summary>
+    /// Writes the reader's position, or - when <paramref name="pageIndex"/> is the story end and trailing
+    /// ad/deleted pages remain - the final page, so the issue reads as read (CE percentage of 100). Returns
+    /// whether the story-end rule applied. Nothing changes when the story end already is the last page.
+    /// </summary>
+    private bool WriteLastPageRead(Issue issue, int pageIndex)
+    {
+        bool reachedStoryEnd = PageCount > 1 && pageIndex == _storyEndIndex && _storyEndIndex < PageCount - 1;
+        issue.LastPageRead = reachedStoryEnd ? PageCount - 1 : pageIndex;
+        return reachedStoryEnd;
+    }
+
+    // ===================== Page skipping (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-
+    // design.md 2, pitch #6) - a page turn steps past pages tagged Deleted (on by default, CE parity) and
+    // optionally Advertisement. Paged mode only: continuous mode, thumbnails, bookmark jumps and jump-back
+    // are direct and never skip. PageLabel keeps real page numbers. =====================
+
+    private static readonly TimeSpan SkippedPagesHintLifetime = TimeSpan.FromSeconds(3);
+
+    [ObservableProperty]
+    private bool _hasSkippedPagesHint;
+
+    [ObservableProperty]
+    private string? _skippedPagesHint;
+
+    private DispatcherTimer? _skippedPagesHintTimer;
+
+    /// <summary>Whether a page turn passes over <paramref name="index"/>: tagged Deleted/Advertisement and the matching setting is on. Untagged pages (no <see cref="IssuePage"/> row) are Story and never skipped.</summary>
+    private bool IsPageSkippable(int index) =>
+        _pageOverrides.TryGetValue(index, out var row)
+        && row.PageType switch
+        {
+            PageType.Deleted => _skipDeletedPages,
+            PageType.Advertisement => _skipAdvertisementPages,
+            _ => false,
+        };
+
+    /// <summary>
+    /// The page-turn landing point after the normal (spread-aware) step has picked <paramref name="target"/>. If
+    /// that page is skippable the walk continues in the same direction; when nothing further is readable it is the
+    /// end (start) of the issue, so the end card (or backward transition) runs instead.
+    /// </summary>
+    private void StepToPage(int target, bool forward)
+    {
+        target = Math.Clamp(target, 0, Math.Max(PageCount - 1, 0));
+        if (IsContinuousMode || !IsPageSkippable(target))
+        {
+            GoToPage(target);
+            return;
+        }
+
+        int? landing = PageSkipStepper.Resolve(target, forward ? 1 : -1, PageCount, IsPageSkippable);
+        if (landing is not int page)
+        {
+            TriggerChapterTransition(forward);
+            return;
+        }
+
+        GoToPage(page);
+        ShowSkippedPagesHint(Math.Abs(page - target));
+    }
+
+    private void ShowSkippedPagesHint(int skipped)
+    {
+        if (skipped <= 0)
+        {
+            return;
+        }
+
+        SkippedPagesHint = skipped == 1 ? "Skipped 1 page" : $"Skipped {skipped} pages";
+        HasSkippedPagesHint = true;
+        if (_skippedPagesHintTimer is null)
+        {
+            _skippedPagesHintTimer = new DispatcherTimer { Interval = SkippedPagesHintLifetime };
+            _skippedPagesHintTimer.Tick += OnSkippedPagesHintExpired;
+        }
+
+        _skippedPagesHintTimer.Stop();
+        _skippedPagesHintTimer.Start();
+    }
+
+    private void ClearSkippedPagesHint()
+    {
+        _skippedPagesHintTimer?.Stop();
+        HasSkippedPagesHint = false;
+        SkippedPagesHint = null;
+    }
+
+    /// <summary>Test seam, same rationale as <see cref="OnAutoScrollTick"/>.</summary>
+    internal void OnSkippedPagesHintExpired(object? sender, EventArgs e) => ClearSkippedPagesHint();
 
     // ===================== Jump-back chip (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-
     // design.md 4, pitch #10) - after a jump of more than JumpBackThreshold pages (thumbnail click,
@@ -2778,9 +3331,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     private int? _contextStripNextIssueId;
     private DispatcherTimer? _contextStripFlashTimer;
 
-    private void RefreshContextStrip(PaperbunkrDbContext context, int issueId, int? readingListId)
+    private void RefreshContextStrip(PaperbunkrDbContext context, int issueId, int? readingListId, int? storyEventId)
     {
-        var strip = ReadingOrderResolver.ResolveContext(context, issueId, readingListId);
+        var strip = ReadingOrderResolver.ResolveContext(context, issueId, readingListId, storyEventId);
         _contextStripPreviousIssueId = strip?.PrevIssueId;
         _contextStripNextIssueId = strip?.NextIssueId;
         CanContextStripPrevious = strip?.PrevIssueId is not null;
@@ -2816,7 +3369,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     {
         if (_contextStripPreviousIssueId is int id)
         {
-            LoadIssue(id, _activeReadingListId);
+            LoadIssue(id, _activeReadingListId, storyEventId: _activeStoryEventId);
         }
     }
 
@@ -2825,7 +3378,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     {
         if (_contextStripNextIssueId is int id)
         {
-            LoadIssue(id, _activeReadingListId);
+            LoadIssue(id, _activeReadingListId, storyEventId: _activeStoryEventId);
         }
     }
 
@@ -2873,7 +3426,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         bool autoNavigate = context.GetOrCreateAppSettings().AutoNavigateComics;
         var current = context.Issues.Find(issueId);
-        var step = ReadingOrderResolver.ResolveNeighbour(context, issueId, _loadedSeriesId, _activeReadingListId, forward: true);
+        var step = ReadingOrderResolver.ResolveNeighbour(context, issueId, _loadedSeriesId, _activeReadingListId, forward: true, _activeStoryEventId);
 
         EndCardFinishedLabel = $"Finished \u00b7 #{current?.EffectiveNumber() ?? "?"}";
         EndCardHasNext = step is not null;
@@ -3218,7 +3771,11 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         StopAutoScroll();
         _clockTimer?.Stop();
         FlushPendingPositionSave();
+        NextIssueStager?.Discard();
         EndReadingSession();
+        ClearSessionProfile();
+        EndComfortVisit();
+        ClearPin();
         _goBack();
     }
 }

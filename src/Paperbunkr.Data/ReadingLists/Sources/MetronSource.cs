@@ -85,21 +85,35 @@ public sealed class MetronSource : IReadingListSource
                     continue;
                 }
 
-                string? coverDate = node["cover_date"]?.GetValue<string>();
-                string? storeDate = node["store_date"]?.GetValue<string>();
-                int year = ParseYearFromDate(coverDate) ?? ParseYearFromDate(storeDate) ?? 0;
-
-                result.Add(new ArcIssue(
-                    Series: node["series"]?["name"]?.GetValue<string>() ?? string.Empty,
-                    Number: node["number"]?.GetValue<string>() ?? string.Empty,
-                    Year: year,
-                    CoverImageUrl: node["image"]?.GetValue<string>()));
+                result.Add(ParseArcIssue(node));
             }
 
             url = page?["next"]?.GetValue<string>();
         }
 
         return result;
+    }
+
+    /// <summary>One row of Metron's arc issue list as an <see cref="ArcIssue"/>. A story title is read if the row carries one (a <c>name</c>
+    /// that is a string or a list of strings) - <b>not verified against a live response</b> (Metron's docs could not be fetched); when the row
+    /// has none, the issue simply has no title and role detection falls back to what the library itself knows.</summary>
+    public static ArcIssue ParseArcIssue(JsonNode node)
+    {
+        string? coverDate = node["cover_date"]?.GetValue<string>();
+        string? storeDate = node["store_date"]?.GetValue<string>();
+        string? title = node["name"] switch
+        {
+            JsonArray names => string.Join("; ", names.Select(n => n?.GetValue<string>()).Where(n => !string.IsNullOrWhiteSpace(n))),
+            JsonValue value when value.TryGetValue(out string? single) => single,
+            _ => null,
+        };
+
+        return new ArcIssue(
+            Series: node["series"]?["name"]?.GetValue<string>() ?? string.Empty,
+            Number: node["number"]?.GetValue<string>() ?? string.Empty,
+            Year: ParseYearFromDate(coverDate) ?? ParseYearFromDate(storeDate) ?? 0,
+            CoverImageUrl: node["image"]?.GetValue<string>(),
+            Title: string.IsNullOrWhiteSpace(title) ? null : title.Trim());
     }
 
     public async Task<ArcOverviewInfo?> GetArcOverviewAsync(string arcId, CancellationToken cancellationToken)

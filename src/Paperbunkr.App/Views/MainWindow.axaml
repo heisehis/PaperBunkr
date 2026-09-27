@@ -347,8 +347,16 @@
                                         <Binding Path="AccentColor" Converter="{x:Static views:AccentColorToBackgroundTintConverter.Instance}" />
                                     </Setter>
                                 </Style>
-                                <Style Selector="Border.colRow Button.colHover"><Setter Property="Opacity" Value="0" /><Setter Property="IsHitTestVisible" Value="False" /></Style>
-                                <Style Selector="Border.colRow:pointerover Button.colHover"><Setter Property="Opacity" Value="1" /><Setter Property="IsHitTestVisible" Value="True" /></Style>
+                                <!-- Hover actions overlay the row's right end (they used to sit in their own two Auto
+                                     columns at Opacity 0, still reserving ~60 px, so names trimmed early - 2026-09-26
+                                     library audit). Faded out rather than collapsed so Tab still reaches them; a
+                                     keyboard-focused one shows itself (:focus-visible). On hover the count steps
+                                     aside and the name makes room. -->
+                                <Style Selector="Border.colRow Button.colAction"><Setter Property="Opacity" Value="0" /><Setter Property="IsHitTestVisible" Value="False" /></Style>
+                                <Style Selector="Border.colRow:pointerover Button.colAction"><Setter Property="Opacity" Value="1" /><Setter Property="IsHitTestVisible" Value="True" /></Style>
+                                <Style Selector="Border.colRow Button.colAction:focus-visible"><Setter Property="Opacity" Value="1" /></Style>
+                                <Style Selector="Border.colRow:pointerover TextBlock.colCount"><Setter Property="Opacity" Value="0" /></Style>
+                                <Style Selector="Border.colRow:pointerover TextBlock.colName"><Setter Property="Margin" Value="0,0,56,0" /></Style>
                             </StackPanel.Styles>
 
                             <Grid ColumnDefinitions="*,Auto" Margin="8,12,6,6">
@@ -383,7 +391,7 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:CollectionSummary">
                                         <Border Classes="colRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
-                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                                            <Grid ColumnDefinitions="Auto,*">
                                                 <Panel Grid.Column="0" Width="14" Height="8" Margin="9,0,0,0" VerticalAlignment="Center">
                                                     <Ellipse Width="8" Height="8" HorizontalAlignment="Left"
                                                              Fill="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" />
@@ -391,40 +399,46 @@
                                                                    Foreground="{DynamicResource PbTextFaintBrush}"
                                                                    IsVisible="{Binding IsSmart}" ToolTip.Tip="Has a rule-based membership slot" />
                                                 </Panel>
-                                                <Button Grid.Column="1" Classes="sideItemButton" Padding="8,7"
+                                                <Button Grid.Column="1" Classes="sideItemButton" Padding="8,7" HorizontalContentAlignment="Stretch"
                                                         Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.SelectCollectionCommand}"
                                                         CommandParameter="{Binding}">
-                                                    <Grid ColumnDefinitions="*,Auto">
-                                                        <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13"
-                                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"
+                                                    <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Stretch">
+                                                        <TextBlock Grid.Column="0" Classes="sideItemLabel colName" Text="{Binding Name}" FontSize="13"
+                                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center"
                                                                    Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                        <TextBlock Grid.Column="1" Classes="count" Text="{Binding Count}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                        <TextBlock Grid.Column="1" Classes="count colCount" Text="{Binding Count}" Margin="8,0,0,0"
+                                                                   HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource PbTextFaintBrush}" />
                                                     </Grid>
                                                 </Button>
-                                                <Button Grid.Column="2" Classes="headerAction ghost colHover" Padding="6" Margin="2,0,0,0" VerticalAlignment="Center"
-                                                        ToolTip.Tip="More">
-                                                    <fi:SymbolIcon Symbol="MoreVertical" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                                    <Button.Flyout>
-                                                        <MenuFlyout>
-                                                            <MenuItem Header="Edit…"
-                                                                      Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.OpenCollectionPropertiesCommand}"
-                                                                      CommandParameter="{Binding}" />
-                                                            <MenuItem Header="Move up"
-                                                                      Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.MoveCollectionUpCommand}"
-                                                                      CommandParameter="{Binding}" />
-                                                            <MenuItem Header="Move down"
-                                                                      Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.MoveCollectionDownCommand}"
-                                                                      CommandParameter="{Binding}" />
-                                                        </MenuFlyout>
-                                                    </Button.Flyout>
-                                                </Button>
-                                                <Button Grid.Column="3" Classes="headerAction ghost colHover" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
-                                                        Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
-                                                    <Panel>
-                                                        <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
-                                                        <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
-                                                    </Panel>
-                                                </Button>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                                                            VerticalAlignment="Center" Margin="0,0,4,0">
+                                                    <Button Classes="headerAction ghost colAction" Padding="6" ToolTip.Tip="More"
+                                                            AutomationProperties.Name="{Binding Name, StringFormat='More actions for {0}'}">
+                                                        <fi:SymbolIcon Symbol="MoreVertical" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                        <Button.Flyout>
+                                                            <MenuFlyout>
+                                                                <MenuItem Header="Edit…"
+                                                                          Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.OpenCollectionPropertiesCommand}"
+                                                                          CommandParameter="{Binding}" />
+                                                                <MenuItem Header="Move up"
+                                                                          Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.MoveCollectionUpCommand}"
+                                                                          CommandParameter="{Binding}" />
+                                                                <MenuItem Header="Move down"
+                                                                          Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.MoveCollectionDownCommand}"
+                                                                          CommandParameter="{Binding}" />
+                                                            </MenuFlyout>
+                                                        </Button.Flyout>
+                                                    </Button>
+                                                    <Button Classes="headerAction ghost colAction" Padding="6" Margin="2,0,0,0"
+                                                            Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}"
+                                                            AutomationProperties.Name="{Binding DeleteConfirm.Label}">
+                                                        <Panel>
+                                                            <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                            <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                        </Panel>
+                                                    </Button>
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -445,8 +459,8 @@
                                             AutomationProperties.AutomationId="{Binding ContentType, StringFormat='LibraryContentTypeOption_{0}'}"
                                             AutomationProperties.HelpText="{Binding IsActive}">
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                            <TextBlock Grid.Column="1" Classes="count" Text="{Binding Count}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Classes="count" Text="{Binding Count}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
                                         </Grid>
                                     </Button>
                                 </DataTemplate>
@@ -962,6 +976,9 @@
                     <DataTemplate DataType="vm:PdfPageReaderScreenViewModel">
                         <views:PdfPageReaderScreen />
                     </DataTemplate>
+                    <DataTemplate DataType="vm:CompareScreenViewModel">
+                        <views:CompareScreen />
+                    </DataTemplate>
                     <DataTemplate DataType="vm:DetailScreenViewModel">
                         <views:DetailScreen />
                     </DataTemplate>
@@ -973,6 +990,9 @@
                     </DataTemplate>
                     <DataTemplate DataType="vm:ReaderScreenViewModel">
                         <views:ReaderScreen />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:MetadataEntityDetailScreenViewModel">
+                        <views:MetadataEntityDetailScreenView />
                     </DataTemplate>
                 </TransitioningContentControl.DataTemplates>
             </TransitioningContentControl>
@@ -1134,6 +1154,16 @@
         <controls:OverlayShell.ContentTemplate>
             <DataTemplate x:DataType="vm:MainViewModel">
                 <views:NewEventOrContinuityOverlay DataContext="{Binding NewEventOrContinuity}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
+    </controls:OverlayShell>
+
+    <!-- ============ New reading goal dialog (docs/superpowers/specs/2026-09-23-insights-reading-
+         goals-design.md) ============ -->
+    <controls:OverlayShell IsOpen="{Binding IsNewGoalDialogOpen}" CloseCommand="{Binding CloseNewGoalDialogCommand}" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:GoalEditorOverlay DataContext="{Binding GoalEditor}" />
             </DataTemplate>
         </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>

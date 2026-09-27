@@ -27,6 +27,48 @@ public class OrganizerStoreTests : AcquisitionTestBase
     }
 
     [Fact]
+    public void ThePluginOptions_RoundTrip_AndDefaultToTheOriginalBehaviour()
+    {
+        var fresh = new OrganizerProfile();
+        Assert.True(fresh.UseFolder);
+        Assert.True(fresh.UseFileName);
+        Assert.Equal(string.Empty, fresh.EmptyFolder);
+        Assert.False(fresh.FailEmptyValues);
+
+        var store = new OrganizerProfileStore(NewContext);
+        var saved = store.Save(new OrganizerProfile
+        {
+            Name = "options",
+            UseFolder = false,
+            UseFileName = false,
+            EmptyFolder = "Unknown",
+            EmptyData = new Dictionary<string, string> { ["publisher"] = "Indie" },
+            FailEmptyValues = true,
+            FailedFields = new List<string> { "series", "number" },
+            ExcludeFolders = new List<string> { "Keep Here" },
+        });
+
+        var loaded = store.Get(saved.Id)!;
+        Assert.False(loaded.UseFolder);
+        Assert.False(loaded.UseFileName);
+        Assert.Equal("Unknown", loaded.EmptyFolder);
+        Assert.Equal("Indie", loaded.EmptyData["publisher"]);
+        Assert.True(loaded.FailEmptyValues);
+        Assert.Equal(new[] { "series", "number" }, loaded.FailedFields);
+        Assert.Equal(new[] { "Keep Here" }, loaded.ExcludeFolders);
+    }
+
+    [Fact]
+    public void ACorruptOptionTable_DoesNotThrow()
+    {
+        var profile = new OrganizerProfile { EmptyDataJson = "{oops", FailedFieldsJson = "[oops", ExcludeFoldersJson = "nope" };
+
+        Assert.Empty(profile.EmptyData);
+        Assert.Empty(profile.FailedFields);
+        Assert.Empty(profile.ExcludeFolders);
+    }
+
+    [Fact]
     public void AProfileWithNoMonthNames_UsesTheDefaults_AndACorruptTableDoesNotThrow()
     {
         Assert.Empty(new OrganizerProfile().MonthNames);
@@ -48,11 +90,8 @@ public class OrganizerStoreTests : AcquisitionTestBase
 
         log.MarkBatchReverted(second);
 
-        Assert.Equal(new[] { "old1" }, log.GetLastBatch().Select(m => m.OldPath));   // the earlier batch is next
+        Assert.Empty(log.GetLastBatch());                                            // only the most recent run is ever undoable: the earlier one does not resurface
         Assert.Equal(3, Context.OrganizeMoves.Count());                              // nothing was deleted
         Assert.Equal(2, Context.OrganizeMoves.Count(m => m.IsReverted));
-
-        log.MarkBatchReverted(first);
-        Assert.Empty(log.GetLastBatch());
     }
 }

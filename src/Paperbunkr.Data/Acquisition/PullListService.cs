@@ -123,6 +123,7 @@ public static class PullListService
             row.IssueNumber = entry.IssueNumber;
             row.StoreDate = entry.StoreDate;
             row.CoverDate = entry.CoverDate;
+            row.FocDate = entry.FocDate;
             row.CoverImageUrl = entry.ImageUrl;
             row.FetchedAt = nowUtc;
         }

@@ -176,9 +176,11 @@ public sealed class TemplateEngineTests
         Issue manga = MakeIssue(i => i.Series!.ContentType = ContentType.Manga);
         Issue comic = MakeIssue(i => i.Series!.ContentType = ContentType.Comic);
 
-        Assert.Equal("Manga", Render("{<manga(Manga)(!)>}", manga));
-        // Only one paren segment given -> false text defaults to "No".
-        Assert.Equal("No", Render("{<manga(Manga)>}", comic));
+        // Library Organizer 2.1.13 (`insert_yes_no_field`): (text) shows for Yes only, (text)(!) shows for No only.
+        Assert.Equal("Manga", Render("{<manga(Manga)>}", manga));
+        Assert.Equal("", Render("{<manga(Manga)>}", comic));
+        Assert.Equal("", Render("{<manga(Manga)(!)>}", manga));
+        Assert.Equal("Manga", Render("{<manga(Manga)(!)>}", comic));
     }
 
     [Fact]

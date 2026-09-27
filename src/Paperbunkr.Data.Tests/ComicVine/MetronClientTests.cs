@@ -101,6 +101,24 @@ public class MetronClientTests
     }
 
     [Fact]
+    public async Task GetStoryArcIssues_ReadsIdsNumbersAndBothDates_FromTheArcIssueList()
+    {
+        var (client, handler) = Make(_ => (HttpStatusCode.OK, Page("""
+            [{"id":900,"number":"1","cover_date":"2018-07-01","store_date":"2018-05-09"},
+             {"id":950,"number":"7","cover_date":"2018-09-01","store_date":null}]
+            """)));
+
+        var issues = await client.GetStoryArcIssuesAsync(33, CancellationToken.None);
+
+        Assert.Equal(new[]
+        {
+            new Paperbunkr.Data.ComicVine.Scraping.StoryArcIssue(900, "1", "2018-05-09", "2018-07-01"),
+            new Paperbunkr.Data.ComicVine.Scraping.StoryArcIssue(950, "7", null, "2018-09-01"),
+        }, issues);
+        Assert.Contains("/arc/33/issue_list/", handler.Requests[0].RequestUri!.OriginalString);
+    }
+
+    [Fact]
     public async Task GetIssueDetails_MapsCreditsRolesToPaperbunkrFields_AndEverythingElse()
     {
         var (client, handler) = Make(_ => (HttpStatusCode.OK, """
@@ -124,15 +142,45 @@ public class MetronClientTests
         Assert.Equal(new ComicVineDatePart(2018, 7, 1), details.PublishedDate);
         Assert.Equal(new ComicVineDatePart(2018, 5, 9), details.ReleasedDate);
         Assert.Equal("Steve & Bucky.", details.Summary);
-        Assert.Equal(new[] { "Winter Arc" }, details.StoryArcs);
-        Assert.Equal(new[] { "Captain America" }, details.Characters);
-        Assert.Equal(new[] { "Avengers" }, details.Teams);
-        Assert.Empty(details.Locations);
-        Assert.Contains(new ComicVineCredit("Ta-Nehisi Coates", "Writer"), details.Credits);
-        Assert.Contains(new ComicVineCredit("Leinil Yu", "Penciller"), details.Credits);
-        Assert.Contains(new ComicVineCredit("Leinil Yu", "Inker"), details.Credits);   // two roles, two fields
-        Assert.Contains(new ComicVineCredit("Someone", null), details.Credits);         // a role with no equivalent is kept, unmapped
+        Assert.Equal(new[] { new ComicVineIdName(5, "Winter Arc") }, details.StoryArcs);
+        Assert.Equal(new[] { new ComicVineIdName(7, "Captain America") }, details.Characters);
+        Assert.Equal(new[] { new ComicVineIdName(8, "Avengers") }, details.Teams);
+        Assert.Empty(details.Locations);                                          // Metron has no location data - confirmed, not "not yet mapped"
+        Assert.Contains(new ComicVineCredit("Ta-Nehisi Coates", "Writer", RoleExternalId: 1), details.Credits);
+        Assert.Contains(new ComicVineCredit("Leinil Yu", "Penciller", RoleExternalId: 2), details.Credits);
+        Assert.Contains(new ComicVineCredit("Leinil Yu", "Inker", RoleExternalId: 3), details.Credits);   // two roles, two fields
+        Assert.Contains(new ComicVineCredit("Someone", "Translator", RoleExternalId: 9), details.Credits); // RoleMap now covers Translator (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md)
         Assert.Contains("/issue/900/", handler.Requests[0].RequestUri!.OriginalString);
+    }
+
+    [Fact]
+    public async Task GetIssueDetails_MapsUniversesRatingIsbnUpcImprintVariantsAndRatings_AndNestedSeriesGenre()
+    {
+        // docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md - fields confirmed real
+        // via mokkari (Metron's own Python client source) but never parsed before this design. Note:
+        // no "status" here - confirmed absent from the nested issue.series object (mokkari's
+        // IssueSeries schema), unlike genres which IS present there.
+        var (client, _) = Make(_ => (HttpStatusCode.OK, """
+            {"id":900,"series":{"id":10,"name":"Captain America","volume":1,"year_began":2018,"genres":[{"id":1,"name":"Superhero"}]},
+             "number":"1","title":"Winter Soldier","cover_date":"2018-07-01","store_date":"2018-05-09","desc":"Steve.",
+             "arcs":[],"credits":[],"characters":[],"teams":[],"imprint":{"id":3,"name":"Vertigo"},
+             "universes":[{"id":21,"name":"Earth-616"}],"rating":{"id":2,"name":"Teen"},"isbn":"978-1-2345-6789-0","upc":"012345678905",
+             "average_rating":"4.25","rating_count":12,
+             "variants":[{"name":"2nd Print Variant","sku":"","upc":"","image":"https://x/variant1.jpg"}],"cv_id":null}
+            """));
+
+        var details = await client.GetIssueDetailsAsync(900, CancellationToken.None);
+
+        Assert.NotNull(details);
+        Assert.Equal(new[] { new ComicVineIdName(21, "Earth-616") }, details!.Universes);
+        Assert.Equal("Teen", details.AgeRating);
+        Assert.Equal("978-1-2345-6789-0", details.Isbn);
+        Assert.Equal("012345678905", details.Upc);
+        Assert.Equal(new[] { "Superhero" }, details.Genres);
+        Assert.Equal("Vertigo", details.Imprint);
+        Assert.Equal(4.25, details.AverageRating);
+        Assert.Equal(12, details.RatingCount);
+        Assert.Equal(new[] { new ComicVineVariantCover("2nd Print Variant", "https://x/variant1.jpg") }, details.Variants);
     }
 
     [Fact]
@@ -180,20 +228,66 @@ public class MetronClientTests
     [Fact]
     public async Task Errors_ReuseComicVinesNumbering_SoCallersTreatBothProvidersAlike()
     {
-        static async Task<ComicVineException> Failure(HttpStatusCode status)
+        MetronClient.RetryDelay = TimeSpan.Zero;   // a 500 now retries once - keep this fast
+        try
         {
-            var (client, _) = Make(_ => (status, "{}"));
-            return await Assert.ThrowsAsync<ComicVineException>(() => client.GetVolumeIssuesAsync(1, CancellationToken.None));
+            static async Task<ComicVineException> Failure(HttpStatusCode status)
+            {
+                var (client, _) = Make(_ => (status, "{}"));
+                return await Assert.ThrowsAsync<ComicVineException>(() => client.GetVolumeIssuesAsync(1, CancellationToken.None));
+            }
+
+            Assert.Equal(100, (await Failure(HttpStatusCode.Unauthorized)).ApiStatusCode);        // the login was refused
+            Assert.Equal(100, (await Failure(HttpStatusCode.Forbidden)).ApiStatusCode);
+            Assert.Equal(107, (await Failure(HttpStatusCode.TooManyRequests)).ApiStatusCode);     // rate limited: retry later
+            Assert.Null((await Failure(HttpStatusCode.InternalServerError)).ApiStatusCode);       // a plain failure
+
+            var (notFound, _) = Make(_ => (HttpStatusCode.NotFound, "{}"));
+            Assert.Null(await notFound.GetIssueDetailsAsync(1, CancellationToken.None));          // missing issue: null, as for ComicVine
+            Assert.Null(await notFound.GetVolumeAsync(1, CancellationToken.None));
         }
+        finally
+        {
+            MetronClient.RetryDelay = TimeSpan.FromMilliseconds(2500);
+        }
+    }
 
-        Assert.Equal(100, (await Failure(HttpStatusCode.Unauthorized)).ApiStatusCode);        // the login was refused
-        Assert.Equal(100, (await Failure(HttpStatusCode.Forbidden)).ApiStatusCode);
-        Assert.Equal(107, (await Failure(HttpStatusCode.TooManyRequests)).ApiStatusCode);     // rate limited: retry later
-        Assert.Null((await Failure(HttpStatusCode.InternalServerError)).ApiStatusCode);       // a plain failure
+    [Fact]
+    public async Task GetAsync_RetriesOnceOnTransientFailure_ThenSucceeds()
+    {
+        // docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md §2.2, extended to
+        // Metron per the user's Q5 answer (both providers, not just ComicVine).
+        MetronClient.RetryDelay = TimeSpan.Zero;
+        try
+        {
+            int calls = 0;
+            var (client, handler) = Make(_ =>
+            {
+                calls++;
+                return calls == 1 ? (HttpStatusCode.InternalServerError, "boom") : (HttpStatusCode.OK, Page("[]"));
+            });
 
-        var (notFound, _) = Make(_ => (HttpStatusCode.NotFound, "{}"));
-        Assert.Null(await notFound.GetIssueDetailsAsync(1, CancellationToken.None));          // missing issue: null, as for ComicVine
-        Assert.Null(await notFound.GetVolumeAsync(1, CancellationToken.None));
+            var issues = await client.GetVolumeIssuesAsync(1, CancellationToken.None);
+
+            Assert.Empty(issues);
+            Assert.Equal(2, handler.Requests.Count);
+        }
+        finally
+        {
+            MetronClient.RetryDelay = TimeSpan.FromMilliseconds(2500);
+        }
+    }
+
+    [Fact]
+    public async Task GetAsync_ARealHttpRejection_IsNotRetried_ItsARealAnswer()
+    {
+        // A well-formed 401/404/429 is an API-level answer, not a transport failure - must not consume
+        // the retry budget.
+        var (client, handler) = Make(_ => (HttpStatusCode.NotFound, ""));
+
+        await Assert.ThrowsAsync<ComicVineException>(() => client.GetVolumeIssuesAsync(1, CancellationToken.None));
+
+        Assert.Single(handler.Requests);
     }
 }
 

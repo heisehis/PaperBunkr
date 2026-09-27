@@ -54,4 +54,12 @@ public class MetadataProposal
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? ResolvedAt { get; set; }
+
+    /// <summary>
+    /// When the user looked at this proposal and kept it (Accept on an already-applied row, "Accept All", or accepting a
+    /// pending one). Null for every proposal nobody has reviewed - including all the ones the Automatic policy applied on
+    /// its own, which is what keeps them in Library Health's "Applied" list until someone reviews them. An Accepted row
+    /// with this set is finished: it stays applied (it still feeds the Effective* resolvers) but leaves the review queue.
+    /// </summary>
+    public DateTime? ReviewedAt { get; set; }
 }

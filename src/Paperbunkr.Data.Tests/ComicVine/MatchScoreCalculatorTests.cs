@@ -49,7 +49,7 @@ public sealed class MatchScoreCalculatorTests
     [Fact]
     public void BookScore_is_always_100_for_a_series_with_more_than_100_issues_even_if_the_number_seems_too_high()
     {
-        double score = MatchScoreCalculator.Compute("Batman", null, 9999, null, Candidate(publisher: null, countOfIssues: 500, startYear: null), false, 2024);
+        double score = MatchScoreCalculator.Compute("Batman", null, "9999", null, Candidate(publisher: null, countOfIssues: 500, startYear: null), false, 2024);
         // namescore=5 (exact match), publisherscore=0, yearscore=0, recency≈0 (startYear null -> -1)
         Assert.Equal(5 + 100 - 1, score);
     }
@@ -57,14 +57,14 @@ public sealed class MatchScoreCalculatorTests
     [Fact]
     public void BookScore_is_100_when_the_issue_number_plausibly_fits_within_the_count()
     {
-        double score = MatchScoreCalculator.Compute("Batman", null, 10, null, Candidate(publisher: null, countOfIssues: 20, startYear: null), false, 2024);
+        double score = MatchScoreCalculator.Compute("Batman", null, "10", null, Candidate(publisher: null, countOfIssues: 20, startYear: null), false, 2024);
         Assert.Equal(5 + 100 - 1, score);
     }
 
     [Fact]
     public void BookScore_is_negative_100_when_the_issue_number_exceeds_the_count()
     {
-        double score = MatchScoreCalculator.Compute("Batman", null, 50, null, Candidate(publisher: null, countOfIssues: 20, startYear: null), false, 2024);
+        double score = MatchScoreCalculator.Compute("Batman", null, "50", null, Candidate(publisher: null, countOfIssues: 20, startYear: null), false, 2024);
         Assert.Equal(5 - 100 - 1, score);
     }
 
@@ -104,4 +104,78 @@ public sealed class MatchScoreCalculatorTests
         // namescore=5, bookscore=100(unknown count treated neutrally), publisherscore=0, yearscore=0, recency=-1
         Assert.Equal(5 + 100 - 1, unknownYear);
     }
+
+    // docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md §2.3 - tokenizer fixes,
+    // verified directly against matchscore.py.
+
+    [Fact]
+    public void NameScore_apostrophe_is_stripped_not_a_split_point()
+    {
+        // "Don't" -> "dont" (one word), matching CE - if this regressed to splitting on the apostrophe
+        // it would tokenize as "don"/"t" (two words) and only partially match "Dont".
+        double score = MatchScoreCalculator.Compute("Don't Fear the Reaper", null, null, null,
+            Candidate(name: "Dont Fear the Reaper", publisher: null, countOfIssues: null, startYear: "2000"), false, currentYear: 2000);
+        // 4 matched words at +5 each = 20, no unmatched either side
+        Assert.Equal(20 + 100, score);
+    }
+
+    [Theory]
+    [InlineData("Giant-Sized X-Men", "Giant Size X-Men", 4)]   // giant,size,X,Men - "X-Men" itself splits on the hyphen too
+    [InlineData("Giant Sized X-Men", "Giant Size X-Men", 4)]
+    [InlineData("King-Sized Annual", "King Size Annual", 3)]   // king,size,annual
+    [InlineData("One-Shot Special", "One Shot Special", 3)]    // one,shot,special
+    public void NameScore_canonicalizes_giant_king_sized_and_one_shot(string bookSeries, string candidateName, int expectedFullMatchWordCount)
+    {
+        double score = MatchScoreCalculator.Compute(bookSeries, null, null, null,
+            Candidate(name: candidateName, publisher: null, countOfIssues: null, startYear: "2000"), false, currentYear: 2000);
+        Assert.Equal(expectedFullMatchWordCount * 5 + 100, score);
+    }
+
+    [Fact]
+    public void NameScore_underscore_is_not_a_split_point()
+    {
+        double score = MatchScoreCalculator.Compute("some_word", null, null, null,
+            Candidate(name: "some_word", publisher: null, countOfIssues: null, startYear: "2000"), false, currentYear: 2000);
+        Assert.Equal(5 + 100, score); // one word, not two
+    }
+
+    // docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md §2.4 - fractional issue numbers.
+
+    [Fact]
+    public void BookScore_handles_fractional_issue_numbers()
+    {
+        double plausible = MatchScoreCalculator.Compute("Batman", null, "5.5", null, Candidate(publisher: null, countOfIssues: 10, startYear: null), false, 2024);
+        double implausible = MatchScoreCalculator.Compute("Batman", null, "55.5", null, Candidate(publisher: null, countOfIssues: 10, startYear: null), false, 2024);
+
+        Assert.Equal(5 + 100 - 1, plausible);      // 5.5 - 1 = 4.5 <= 10
+        Assert.Equal(5 - 100 - 1, implausible);    // 55.5 - 1 = 54.5 > 10
+    }
+
+    // docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md §2.5 - year sanity check.
+
+    [Fact]
+    public void YearScore_treats_an_out_of_range_book_year_as_absent()
+    {
+        double garbageYear = MatchScoreCalculator.Compute("Batman", null, null, 31337, Candidate(publisher: null, countOfIssues: null, startYear: null), false, 2024);
+        double noYear = MatchScoreCalculator.Compute("Batman", null, null, null, Candidate(publisher: null, countOfIssues: null, startYear: null), false, 2024);
+
+        Assert.Equal(noYear, garbageYear);
+    }
+
+    [Fact]
+    public void YearScore_treats_an_out_of_range_series_year_as_absent()
+    {
+        // A series "starting" in year 50 is garbage, not a real signal that it predates the book - but
+        // RecencyScore (a separate term) still reads the raw, unvalidated series year, so the two
+        // candidates below aren't expected to score identically overall; only YearScore's own
+        // contribution should be identical (as if the series year were absent in both cases). Isolate
+        // that by subtracting out RecencyScore's own known, independently-computed delta.
+        double garbageSeriesYear = MatchScoreCalculator.Compute("Batman", null, null, 1990, Candidate(publisher: null, countOfIssues: null, startYear: "50"), false, 2024);
+        double noSeriesYear = MatchScoreCalculator.Compute("Batman", null, null, 1990, Candidate(publisher: null, countOfIssues: null, startYear: null), false, 2024);
+        double recencyDeltaOnly = RecencyOnly(seriesYear: 50, currentYear: 2024) - RecencyOnly(seriesYear: null, currentYear: 2024);
+
+        Assert.Equal(recencyDeltaOnly, garbageSeriesYear - noSeriesYear, precision: 6);
+    }
+
+    private static double RecencyOnly(int? seriesYear, int currentYear) => seriesYear.HasValue ? -(currentYear - seriesYear.Value) / 100.0 : -1.0;
 }

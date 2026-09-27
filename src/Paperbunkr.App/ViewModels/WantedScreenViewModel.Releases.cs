@@ -48,6 +48,11 @@ public sealed class ReleaseRowViewModel
 
     public string StatusText => IsHidden ? "Hidden" : IsTaken ? "Wanted" : IsFollowed ? "Following" : string.Empty;
     public bool HasStatus => IsHidden || IsTaken || IsFollowed;
+
+    /// <summary>Final order cutoff, when Metron knows it (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md) - the date shops must lock in orders by, distinct from the release's own store date.</summary>
+    public DateTime? FocDate { get; init; }
+    public string? FocDateText => FocDate is { } d ? $"FOC {d:MMM d}" : null;
+    public bool HasFocDate => FocDate is not null;
 }
 
 /// <summary>One store date of the viewed week with its releases.</summary>
@@ -227,6 +232,7 @@ public sealed partial class WantedScreenViewModel
                 IsFollowed = isFollowed,
                 IsTaken = isTaken,
                 IsHidden = release.IsHidden,
+                FocDate = release.FocDate,
             }));
         }
 

@@ -299,6 +299,121 @@ public class ReaderImagePipelineTests : IDisposable
         Assert.Equal(5, recomputes);
     }
 
+    // --- continuous-scroll boundary: decode order and the sustained-scroll fringe throttle (design 2026-09-25 B3) ----------------
+
+    [Fact]
+    public void OrderWindow_WithoutAHint_IsAscending()
+    {
+        Assert.Equal(new[] { 2, 3, 4, 5, 6 }, ReaderImagePipeline.OrderWindow(2, 6, 60, null));
+    }
+
+    [Fact]
+    public void OrderWindow_ScrollingForward_VisibleFirst_ThenAhead_ThenBehind_PlusOneMoreAhead()
+    {
+        // layout radius 2 around visible pages 10-11: window 8..13
+        var order = ReaderImagePipeline.OrderWindow(8, 13, 60, new ScrollWindowHint(10, 11, Direction: 1, SustainedScroll: true));
+
+        Assert.Equal(new[] { 10, 11, 12, 13, 14, 9, 8 }, order);
+    }
+
+    [Fact]
+    public void OrderWindow_ScrollingBackward_MirrorsIt()
+    {
+        var order = ReaderImagePipeline.OrderWindow(8, 13, 60, new ScrollWindowHint(10, 11, Direction: -1, SustainedScroll: true));
+
+        Assert.Equal(new[] { 11, 10, 9, 8, 7, 12, 13 }, order);
+    }
+
+    [Fact]
+    public void OrderWindow_ManyVisiblePages_NearestTheCentreFirst()
+    {
+        var order = ReaderImagePipeline.OrderWindow(3, 11, 60, new ScrollWindowHint(5, 9, Direction: 1, SustainedScroll: true));
+
+        Assert.Equal(new[] { 7, 6, 8, 5, 9 }, order.Take(5));
+    }
+
+    [Fact]
+    public void OrderWindow_NotScrolling_DoesNotLookAheadBeyondTheWindow()
+    {
+        var order = ReaderImagePipeline.OrderWindow(8, 13, 60, new ScrollWindowHint(10, 11, Direction: 0, SustainedScroll: false));
+
+        Assert.DoesNotContain(14, order);
+        Assert.DoesNotContain(7, order);
+        Assert.Equal(6, order.Count);
+    }
+
+    [Fact]
+    public void OrderWindow_AtTheEndOfTheBook_DoesNotInventPagesPastIt()
+    {
+        var order = ReaderImagePipeline.OrderWindow(8, 9, 10, new ScrollWindowHint(9, 9, Direction: 1, SustainedScroll: true));
+
+        Assert.All(order, page => Assert.InRange(page, 0, 9));
+    }
+
+    [Fact]
+    public void SustainedScroll_RunsTheFringePassRepeatedlyWhileCallsKeepArriving()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 60);
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+
+        int recomputes = 0;
+        pipeline.OnFringeRecomputed = () => Interlocked.Increment(ref recomputes);
+
+        // A steady scroll: a call every ~16 ms for ~500 ms. A trailing 30 ms debounce would never fire until this stopped.
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        int page = 10;
+        while (stopwatch.ElapsedMilliseconds < 500)
+        {
+            pipeline.SetVirtualizationWindow(page, page + 1, new ScrollWindowHint(page, page + 1, Direction: 1, SustainedScroll: true));
+            Thread.Sleep(16);
+            if (stopwatch.ElapsedMilliseconds % 120 < 16) { page++; }
+        }
+
+        int duringScroll = Volatile.Read(ref recomputes);
+        Assert.True(duringScroll >= 3, $"fringe ran only {duringScroll} time(s) during a 500 ms sustained scroll");
+    }
+
+    [Fact]
+    public void NonSustainedCalls_StillDebounceToOnePass()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 60);
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+
+        int recomputes = 0;
+        var settled = new ManualResetEventSlim(false);
+        pipeline.OnFringeRecomputed = () => { Interlocked.Increment(ref recomputes); settled.Set(); };
+
+        for (int i = 0; i < 12; i++)
+        {
+            pipeline.SetVirtualizationWindow(i, i + 1, new ScrollWindowHint(i, i + 1, Direction: 0, SustainedScroll: false));
+        }
+
+        Assert.True(settled.Wait(TimeSpan.FromSeconds(2)));
+        Thread.Sleep(120);
+        Assert.Equal(1, recomputes);
+    }
+
+    [Fact]
+    public void HintedWindow_DecodesTheVisiblePageBeforeTheRadiusPagesBehindIt()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 20);
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+
+        var order = new System.Collections.Concurrent.ConcurrentQueue<int>();
+        var enoughSeen = new CountdownEvent(3);
+        pipeline.OnBeforeBackgroundDecode = page =>
+        {
+            order.Enqueue(page);
+            if (!enoughSeen.IsSet) { enoughSeen.Signal(); }
+        };
+
+        // visible page 10 with radius 8..12, scrolling forward: 10 must be decoded before 8 and 9
+        pipeline.SetVirtualizationWindow(8, 12, new ScrollWindowHint(10, 10, Direction: 1, SustainedScroll: true));
+
+        Assert.True(enoughSeen.Wait(TimeSpan.FromSeconds(5)));
+        Assert.Equal(10, order.First());
+    }
+
     [Fact]
     public void SuppressFringePrefetch_DefersTheFringePass_UntilTheHoldLifts()
     {

@@ -182,4 +182,119 @@ public class ReadingOrderResolverTests : IDisposable
 
         Assert.Null(ReadingOrderResolver.ResolveContext(_context, a.Issues.Single().Id, readingListId: null));
     }
+
+    // ----- Explicit Story Event anchor (docs/superpowers/specs/2026-09-25-event-map-design.md §5) -----
+
+    private int AddEvent(string name, params Issue[] inOrder)
+    {
+        var evt = new StoryEvent { Name = name };
+        int position = 0;
+        foreach (var issue in inOrder)
+        {
+            evt.Members.Add(new EventMembership { IssueId = issue.Id, Position = position++ });
+        }
+
+        _context.StoryEvents.Add(evt);
+        _context.SaveChanges();
+        return evt.Id;
+    }
+
+    [Fact]
+    public void Event_StepsInPositionOrderAcrossSeries_SkippingMissingFiles()
+    {
+        var a = AddSeries("A", "1", "2");
+        var b = AddSeries("B", "1");
+        var a1 = a.Issues.Single(i => i.Number == "1");
+        var a2 = a.Issues.Single(i => i.Number == "2");
+        var b1 = b.Issues.Single();
+        b1.FileIsMissing = true;
+        _context.SaveChanges();
+        int eventId = AddEvent("Crossover", a2, b1, a1);
+
+        var next = ReadingOrderResolver.ResolveNeighbour(_context, a2.Id, a.Id, null, forward: true, storyEventId: eventId);
+
+        Assert.NotNull(next);
+        Assert.Equal(a1.Id, next!.To.Id);         // event order, not series order; B #1 skipped
+        Assert.Equal(3, next.ToPosition);
+        Assert.Equal(3, next.Total);
+        Assert.Equal("Event: Crossover", next.SourceLabel);
+    }
+
+    [Fact]
+    public void Event_StopsAtTheEventBoundary_NoFallbackToSeriesOrder()
+    {
+        var a = AddSeries("A", "1", "2", "3");
+        var a2 = a.Issues.Single(i => i.Number == "2");
+        int eventId = AddEvent("Crossover", a2);
+
+        Assert.Null(ReadingOrderResolver.ResolveNeighbour(_context, a2.Id, a.Id, null, forward: true, storyEventId: eventId));
+        Assert.Null(ReadingOrderResolver.ResolveNeighbour(_context, a2.Id, a.Id, null, forward: false, storyEventId: eventId));
+    }
+
+    [Fact]
+    public void Event_TiedPositions_OrderByMembershipId()
+    {
+        var a = AddSeries("A", "1", "2");
+        var a1 = a.Issues.Single(i => i.Number == "1");
+        var a2 = a.Issues.Single(i => i.Number == "2");
+        var evt = new StoryEvent { Name = "Ties" };
+        evt.Members.Add(new EventMembership { IssueId = a2.Id, Position = 0 });
+        evt.Members.Add(new EventMembership { IssueId = a1.Id, Position = 0 });
+        _context.StoryEvents.Add(evt);
+        _context.SaveChanges();
+
+        var next = ReadingOrderResolver.ResolveNeighbour(_context, a2.Id, a.Id, null, forward: true, storyEventId: evt.Id);
+
+        Assert.Equal(a1.Id, next!.To.Id);
+    }
+
+    [Fact]
+    public void NoAnchor_IgnoresEventMembership_WalksTheSeries()
+    {
+        var a = AddSeries("A", "1", "2");
+        var a1 = a.Issues.Single(i => i.Number == "1");
+        var a2 = a.Issues.Single(i => i.Number == "2");
+        AddEvent("Crossover", a2, a1);
+
+        var next = ReadingOrderResolver.ResolveNeighbour(_context, a1.Id, a.Id, null, forward: true);
+
+        Assert.Equal(a2.Id, next!.To.Id);
+        Assert.StartsWith("Series:", next.SourceLabel);
+    }
+
+    [Fact]
+    public void BothAnchors_ReadingListWins()
+    {
+        var a = AddSeries("A", "1", "2", "3");
+        var a1 = a.Issues.Single(i => i.Number == "1");
+        var a2 = a.Issues.Single(i => i.Number == "2");
+        var a3 = a.Issues.Single(i => i.Number == "3");
+        int listId = AddList("List", a1, a3);
+        int eventId = AddEvent("Event", a1, a2);
+
+        var next = ReadingOrderResolver.ResolveNeighbour(_context, a1.Id, a.Id, listId, forward: true, storyEventId: eventId);
+        var ctx = ReadingOrderResolver.ResolveContext(_context, a1.Id, listId, eventId);
+
+        Assert.Equal(a3.Id, next!.To.Id);
+        Assert.Equal(ReadingContextKind.ReadingList, ctx!.Kind);
+    }
+
+    [Fact]
+    public void Context_ExplicitEvent_BeatsALowerIdEvent()
+    {
+        var a = AddSeries("A", "1", "2", "3");
+        var a1 = a.Issues.Single(i => i.Number == "1");
+        var a2 = a.Issues.Single(i => i.Number == "2");
+        var a3 = a.Issues.Single(i => i.Number == "3");
+        int lower = AddEvent("Older event", a2, a1);
+        int higher = AddEvent("Mapped event", a1, a2, a3);
+        Assert.True(lower < higher);
+
+        var ctx = ReadingOrderResolver.ResolveContext(_context, a2.Id, readingListId: null, storyEventId: higher);
+
+        Assert.Equal("Mapped event", ctx!.Label);
+        Assert.Equal(2, ctx.Position);
+        Assert.Equal(3, ctx.Total);
+        Assert.Equal(a3.Id, ctx.NextIssueId);
+    }
 }

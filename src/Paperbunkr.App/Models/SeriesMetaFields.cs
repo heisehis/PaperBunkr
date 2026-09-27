@@ -15,6 +15,10 @@ public readonly record struct SeriesMetaFields(string? Publisher, string? Year, 
 {
     public static readonly SeriesMetaFields Empty = new(null, null, null, null, null);
 
+    /// <summary><see cref="Year"/> as a number (the series' earliest release year) - what a
+    /// publisher mark uses to pick that era's logo.</summary>
+    public int? YearValue => int.TryParse(Year, out int y) ? y : null;
+
     public static SeriesMetaFields FromSeries(Series series)
     {
         var issues = series.Issues;

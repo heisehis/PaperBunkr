@@ -22,4 +22,18 @@ public class EventMembership
     public int Position { get; set; }
 
     public EventMembershipRole Role { get; set; }
+
+    /// <summary>Who set <see cref="Role"/>. Null = set before role detection existed; treated as <see cref="RoleAssignmentSource.User"/>.</summary>
+    public RoleAssignmentSource? RoleSource { get; set; }
+
+    /// <summary>Why an automatically applied <see cref="Role"/> was chosen, e.g. "Format: Prologue".</summary>
+    public string? RoleReason { get; set; }
+
+    /// <summary>A pending low-confidence (or would-replace-a-user-choice) role suggestion, awaiting Accept or Dismiss.</summary>
+    public EventMembershipRole? SuggestedRole { get; set; }
+
+    public string? SuggestedReason { get; set; }
+
+    /// <summary>The user rejected the suggestion (or cleared an automatic role): do not suggest again.</summary>
+    public bool RoleSuggestionDismissed { get; set; }
 }

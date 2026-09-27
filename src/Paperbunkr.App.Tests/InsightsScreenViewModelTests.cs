@@ -1,8 +1,11 @@
 using System;
+using System.Threading.Tasks;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Tests;
 
@@ -38,8 +41,16 @@ public class InsightsScreenViewModelTests : IDisposable
         }
     }
 
-    private static InsightsScreenViewModel NewVm(IReadingEventRecorder? recorder = null)
-        => new(_ => { }, _ => { }, _ => { }, recorder, () => new DateTime(2026, 9, 5, 12, 0, 0, DateTimeKind.Utc));
+    private static InsightsScreenViewModel NewVm(IReadingEventRecorder? recorder = null, Func<DateTime>? nowUtc = null)
+        => new(_ => { }, _ => { }, _ => { }, () => { }, new FakeDialogService(), recorder, nowUtc ?? (() => new DateTime(2026, 9, 5, 12, 0, 0, DateTimeKind.Utc)));
+
+    private sealed class FakeDialogService : IDialogService
+    {
+        public Task<int> ShowAsync(ConfirmDialogRequest request) => Task.FromResult(0);
+
+        public Task<bool> ConfirmAsync(string message, string? title = null, string confirmLabel = "Confirm",
+            string cancelLabel = "Cancel", bool isDestructive = false) => Task.FromResult(true);
+    }
 
     [Fact]
     public void Refresh_OnEmptyLibrary_DoesNotThrow()
@@ -50,6 +61,45 @@ public class InsightsScreenViewModelTests : IDisposable
         Assert.NotNull(vm.Snapshot);
         Assert.Equal(0, vm.ContinueCount);
         Assert.True(vm.ReadingAllClear);
+        Assert.False(vm.HasRecommendations);
+        Assert.Empty(vm.Recommendations);
+    }
+
+    [Fact]
+    public void Refresh_WithFinishedSeriesAndRealRelation_PopulatesRecommendations()
+    {
+        using (var ctx = PaperbunkrDb.CreateContext())
+        {
+            var source = new Series { Name = "Source Series" };
+            var target = new Series { Name = "Target Series" };
+            ctx.Series.Add(source);
+            ctx.Series.Add(target);
+            ctx.SaveChanges();
+
+            var issue = new Issue { SeriesId = source.Id };
+            ctx.Issues.Add(issue);
+            ctx.SaveChanges();
+            ctx.ReadingEvents.Add(new ReadingEvent
+            {
+                ItemType = ReadingItemType.Comic,
+                ItemId = issue.Id,
+                Kind = ReadingEventKind.Finished,
+                TimestampUtc = DateTime.UtcNow,
+                SeriesId = source.Id,
+            });
+            ctx.SaveChanges();
+
+            MediaRelationResolver.TryCreate(ctx, source.Id, target.Id, RelationType.Prequel);
+        }
+
+        var vm = NewVm();
+        vm.Refresh();
+
+        Assert.True(vm.HasRecommendations);
+        Assert.Equal("Source Series", vm.RecommendationsSeedName);
+        var card = Assert.Single(vm.Recommendations);
+        Assert.Equal("Target Series", card.Card.Name);
+        Assert.NotEmpty(card.Explanation);
     }
 
     [Fact]
@@ -101,6 +151,69 @@ public class InsightsScreenViewModelTests : IDisposable
 
         Assert.NotSame(before, vm.Snapshot);
         Assert.Equal(1, vm.ContinueCount);
+        // CoverKey (docs/superpowers/specs/2026-09-23-insights-redesign-design.md's global cover rule)
+        // is just the cover issue's own id per CoverFingerprint.Stem - non-null whenever the series has
+        // at least one issue, which every Continue-row series does by construction.
+        Assert.Equal(issueId.ToString(), vm.ContinueRows[0].CoverKey);
+    }
+
+    [Fact]
+    public void PopulateLists_GapRow_ResolvesCoverKey()
+    {
+        int seriesId;
+        using (var ctx = PaperbunkrDb.CreateContext())
+        {
+            var series = new Series { Name = "Gap Series" };
+            ctx.Series.Add(series);
+            ctx.SaveChanges();
+            seriesId = series.Id;
+
+            // #1, #2, #4 - a real run (InsightsResolver.ComputeGaps needs >= 3 numeric issues) missing
+            // #3, at 75% ownership (exactly InsightsResolver.GapOwnershipFloor). Neither issue has its
+            // file identity set, which CoverFingerprint.Stem ignores anyway (keyed purely by Issue.Id).
+            ctx.Issues.Add(new Issue { SeriesId = seriesId, Number = "1" });
+            ctx.Issues.Add(new Issue { SeriesId = seriesId, Number = "2" });
+            ctx.Issues.Add(new Issue { SeriesId = seriesId, Number = "4" });
+            ctx.SaveChanges();
+        }
+
+        var vm = NewVm();
+        vm.Refresh();
+
+        var gap = Assert.Single(vm.GapRows);
+        Assert.NotNull(gap.CoverKey);
+    }
+
+    [Theory]
+    [InlineData(2026, 12, 28, false)]
+    [InlineData(2026, 12, 29, true)]
+    [InlineData(2026, 12, 30, true)]
+    [InlineData(2026, 12, 31, true)]
+    [InlineData(2027, 1, 1, false)]
+    public void IsWithinYearEndWindow_OnlyTrueForTheLastThreeDaysOfDecember(int year, int month, int day, bool expected)
+    {
+        var nowUtc = new DateTime(year, month, day, 12, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(expected, InsightsScreenViewModel.IsWithinYearEndWindow(nowUtc));
+    }
+
+    [Fact]
+    public void SelectRecapTab_OutsideYearEndWindow_IsGuarded()
+    {
+        var vm = NewVm(nowUtc: () => new DateTime(2026, 9, 5, 12, 0, 0, DateTimeKind.Utc));
+
+        Assert.False(vm.IsRecapAvailable);
+        vm.SelectRecapTabCommand.Execute(null);
+        Assert.False(vm.IsRecapTabSelected);
+    }
+
+    [Fact]
+    public void SelectRecapTab_WithinYearEndWindow_Works()
+    {
+        var vm = NewVm(nowUtc: () => new DateTime(2026, 12, 30, 12, 0, 0, DateTimeKind.Utc));
+
+        Assert.True(vm.IsRecapAvailable);
+        vm.SelectRecapTabCommand.Execute(null);
+        Assert.True(vm.IsRecapTabSelected);
     }
 
     private sealed class FakeRecorder : IReadingEventRecorder

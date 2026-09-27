@@ -316,7 +316,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         _readingStatusPicker = new ReadingStatusPickerViewModel(seriesId, onChanged: OnReadingStatusPicked);
         OnPropertyChanged(nameof(IDetailHeaderSource.ReadingStatusPicker));
         Band.ReadingStatusPicker = _readingStatusPicker;
-        IssueCountLabel = $"{series.Issues.Count} Issues";
+        IssueCountLabel = series.Issues.Count == 1 ? "1 Issue" : $"{series.Issues.Count} Issues";
         _seriesSummary = string.IsNullOrWhiteSpace(series.Summary) ? "No summary available." : series.Summary;
         Summary = _seriesSummary;
 

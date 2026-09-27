@@ -2165,6 +2165,63 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.Contains("2", toast!.Value.Message);
     }
 
+    // 2026-09-26 library audit: the series-card selection bar now offers Mark Read/Unread and Add to List too,
+    // acting on every issue of the selected series.
+    [Fact]
+    public void MarkSelectionRead_SeriesSelection_MarksEveryIssueOfTheSelectedSeriesOnly()
+    {
+        int seriesA = CreateSeriesWithIssue("Alpha One");
+        int seriesB = CreateSeriesWithIssue("Bravo Two");
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Issues.Add(new Issue { SeriesId = seriesA, Number = "2" });
+            context.SaveChanges();
+            foreach (var issue in context.Issues)
+            {
+                issue.PageCount = 10;
+            }
+            context.SaveChanges();
+        }
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.Granularity = LibraryContentGranularity.Series;
+        vm.ToggleSeriesSelection(vm.Covers.Single(c => c.SeriesId == seriesA), isShiftHeld: false);
+
+        vm.MarkSelectionReadCommand.Execute(null);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.All(verifyContext.Issues.Where(i => i.SeriesId == seriesA), i => Assert.Equal(9, i.LastPageRead));
+        Assert.All(verifyContext.Issues.Where(i => i.SeriesId == seriesB), i => Assert.NotEqual(9, i.LastPageRead));
+    }
+
+    [Fact]
+    public void AddSelectionToReadingList_SeriesSelection_AddsIssuesInNumberOrder()
+    {
+        int seriesId = CreateSeriesWithIssue("Alpha One");
+        int listId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Issues.Add(new Issue { SeriesId = seriesId, Number = "10" });
+            context.Issues.Add(new Issue { SeriesId = seriesId, Number = "2" });
+            var now = DateTime.UtcNow;
+            var list = new ReadingList { Name = "Weekend Reads", Type = ReadingListType.User, CreatedAt = now, UpdatedAt = now };
+            context.ReadingLists.Add(list);
+            context.SaveChanges();
+            listId = list.Id;
+        }
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.Granularity = LibraryContentGranularity.Series;
+        vm.ToggleSeriesSelection(vm.Covers[0], isShiftHeld: false);
+
+        vm.AddSelectionToReadingListCommand.Execute(listId);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        var numbers = verifyContext.ReadingListItems.Where(i => i.ReadingListId == listId).OrderBy(i => i.SortOrder)
+            .Select(i => i.Issue!.Number).ToList();
+        Assert.Equal(new[] { "1", "2", "10" }, numbers);
+    }
+
     [Fact]
     public void MarkIssueRead_SingleIssueNoSelection_DoesNotToast()
     {

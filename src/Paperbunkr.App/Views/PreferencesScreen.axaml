@@ -184,6 +184,11 @@
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <fi:SymbolIcon Symbol="Folder" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
                                     <TextBlock Text="Library" VerticalAlignment="Center" />
+                                    <!-- Something in Library Health needs a decision (docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md). -->
+                                    <Border Width="8" Height="8" CornerRadius="4" Background="{DynamicResource PbAccentBrush}" VerticalAlignment="Center"
+                                            IsVisible="{Binding NeedsReview.HasPendingItems}"
+                                            ToolTip.Tip="Library Health has items to review"
+                                            AutomationProperties.AutomationId="PreferencesLibraryNeedsReviewDot" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsAutomationSection}"

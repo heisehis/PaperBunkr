@@ -1166,6 +1166,96 @@ public class MainViewModelTests : IDisposable
         Assert.Equal("library.health", anchor);
     }
 
+    /// <summary>docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md - the review queues have one owner, shared by Preferences (which renders them) and the migration overlay (which refreshes them).</summary>
+    [Fact]
+    public void NeedsReview_IsTheSameInstanceHostedByPreferences()
+    {
+        var vm = new MainViewModel();
+
+        Assert.Same(vm.NeedsReview, vm.Preferences.NeedsReview);
+    }
+
+    /// <summary>The migration Results screen's "Review in Library Health" button: closes the overlay and lands on the Library Health card.</summary>
+    [Fact]
+    public void MigrationOverlay_ReviewInLibraryHealth_ClosesOverlayAndScrollsToHealthAnchor()
+    {
+        var vm = new MainViewModel();
+        string? anchor = null;
+        vm.Preferences.ScrollToAnchorRequested += a => anchor = a;
+        vm.OpenMigrationOverlayCommand.Execute(null);
+        Assert.True(vm.IsMigrationOverlayOpen);
+
+        vm.Migration.ReviewInLibraryHealthCommand.Execute(null);
+
+        Assert.False(vm.IsMigrationOverlayOpen);
+        Assert.True(vm.IsPreferences);
+        Assert.True(vm.Preferences.IsLibrarySection);
+        Assert.Equal("library.health", anchor);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-09-26-library-health-subtabs-design.md - the missing-files and path-repair alerts land on the Files tab.</summary>
+    [Fact]
+    public void FollowLink_WithLibraryHealthFilesPayload_LandsOnTheFilesTab()
+    {
+        var vm = new MainViewModel();
+
+        vm.ActivityCenter.FollowLinkCommand.Execute(new Paperbunkr.App.Models.ActivityLink(Paperbunkr.App.Models.ActivityLinkKind.Preferences, "LibraryHealth/Files"));
+
+        Assert.True(vm.IsPreferences);
+        Assert.True(vm.Preferences.IsLibrarySection);
+        Assert.True(vm.Preferences.IsLibraryHealthFilesTab);
+    }
+
+    /// <summary>The duplicate-files alert lands on Review with Duplicate Files already open.</summary>
+    [Fact]
+    public void FollowLink_WithLibraryHealthReviewDuplicatesPayload_OpensTheDuplicatesSection()
+    {
+        var vm = new MainViewModel();
+        string? anchor = null;
+        vm.Preferences.ScrollToAnchorRequested += a => anchor = a;
+
+        vm.ActivityCenter.FollowLinkCommand.Execute(new Paperbunkr.App.Models.ActivityLink(Paperbunkr.App.Models.ActivityLinkKind.Preferences, "LibraryHealth/Review/Duplicates"));
+
+        Assert.True(vm.Preferences.IsLibraryHealthReviewTab);
+        Assert.True(vm.Preferences.LibraryHealthSections.Duplicates.IsOpen);
+        Assert.Equal("library.healthDuplicates", anchor);
+    }
+
+    /// <summary>An unknown tab or section in a payload falls back to the plain card rather than failing.</summary>
+    [Fact]
+    public void FollowLink_WithAnUnknownLibraryHealthPayload_StillOpensTheCard()
+    {
+        var vm = new MainViewModel();
+        string? anchor = null;
+        vm.Preferences.ScrollToAnchorRequested += a => anchor = a;
+
+        vm.ActivityCenter.FollowLinkCommand.Execute(new Paperbunkr.App.Models.ActivityLink(Paperbunkr.App.Models.ActivityLinkKind.Preferences, "LibraryHealth/Nowhere/Nothing"));
+
+        Assert.True(vm.Preferences.IsLibrarySection);
+        Assert.Equal("library.health", anchor);
+    }
+
+    [Fact]
+    public void TheDuplicateAndMissingFileAlerts_UseTheSpecificPayloads()
+    {
+        Assert.Equal("LibraryHealth/Review/Duplicates", Paperbunkr.App.Services.DuplicateAlertHelper.DuplicateAlertPayload);
+    }
+
+    /// <summary>Alerts persisted before the move (and anything else still raising the legacy kind) must not open a dead overlay tab.</summary>
+    [Fact]
+    public void FollowLink_WithLegacyMigrationReviewKind_LandsOnLibraryHealth()
+    {
+        var vm = new MainViewModel();
+        string? anchor = null;
+        vm.Preferences.ScrollToAnchorRequested += a => anchor = a;
+
+        vm.ActivityCenter.FollowLinkCommand.Execute(new Paperbunkr.App.Models.ActivityLink(Paperbunkr.App.Models.ActivityLinkKind.MigrationReview));
+
+        Assert.False(vm.IsMigrationOverlayOpen);
+        Assert.True(vm.IsPreferences);
+        Assert.Equal("library.health", anchor);
+    }
+
     /// <summary>
     /// The safe-mode Activity alert (docs/superpowers/specs/2026-09-10-bootstrap-crash-sentinel-
     /// safe-mode-design.md §5.4) links to <c>Preferences</c>/"Advanced" - the resolver must open

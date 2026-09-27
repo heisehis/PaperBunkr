@@ -42,6 +42,16 @@ public class Continuity
     /// </summary>
     public string? FandomKey { get; set; }
 
+    /// <summary>
+    /// Metron's universe id (its <c>universes[].id</c>, e.g. on an issue/character/team), set when
+    /// <see cref="Metadata.ContinuityMetronMatchResolver"/> tags this continuity during a Metron scrape
+    /// (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md). Side by side with
+    /// <see cref="WikidataId"/>/<see cref="FandomKey"/>, not a replacement - Metron's tag wins when both
+    /// identify the same continuity for a series, but Wikidata matching still runs and fills in
+    /// continuities Metron hasn't tagged.
+    /// </summary>
+    public string? MetronId { get; set; }
+
     /// <summary>Join rows to the member <see cref="Series"/>, each with its own note and sort order.</summary>
     public List<ContinuityMembership> Memberships { get; set; } = new();
 }

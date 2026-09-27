@@ -87,7 +87,10 @@ public class WorkspaceService
         context.SaveChanges();
     }
 
-    /// <summary>No-op for a built-in.</summary>
+    /// <summary>
+    /// No-op for a built-in. Deleting a reader profile also clears <see cref="AppSettings.DefaultReaderProfileId"/> when it pointed at it (series pointers are left and simply fall through
+    /// on read, docs/superpowers/specs/2026-09-25-comic-reader-profiles-design.md section 4).
+    /// </summary>
     public void Delete(int id)
     {
         using var context = _contextFactory();
@@ -95,6 +98,15 @@ public class WorkspaceService
         if (workspace is null || workspace.IsBuiltIn)
         {
             return;
+        }
+
+        if (workspace.Screen == WorkspaceScreen.Reader)
+        {
+            var settings = context.GetOrCreateAppSettings();
+            if (settings.DefaultReaderProfileId == id)
+            {
+                settings.DefaultReaderProfileId = null;
+            }
         }
 
         context.Workspaces.Remove(workspace);
@@ -192,6 +204,48 @@ public class WorkspaceService
                     SortOrder = order,
                     IsBuiltIn = true,
                     StateJson = WorkspaceStateJson.Serialize(state),
+                });
+            }
+
+            order++;
+        }
+
+        // --- Reader profiles (docs/superpowers/specs/2026-09-25-comic-reader-profiles-design.md section 2). Each sets only what it needs; the rest stays the user's own settings. ---
+        var reader = new (string Name, ReaderProfileState State)[]
+        {
+            ("Manga night", new ReaderProfileState(
+                ImageBackgroundMode: ImageBackgroundMode.Color,
+                BackgroundColor: "#0E0E12",
+                Brightness: -8,
+                PageTransitionStyle: PageTransitionStyle.None,
+                PageMarginEnabled: false)),
+            ("Webtoon", new ReaderProfileState(
+                FitMode: ImageFitMode.FitWidth,
+                PageLayoutMode: PageLayoutMode.Single,
+                PageMarginEnabled: false,
+                PageTransitionStyle: PageTransitionStyle.None,
+                ReaderAutoHideChrome: true)),
+            ("Tablet", new ReaderProfileState(
+                FitMode: ImageFitMode.Fit,
+                PageLayoutMode: PageLayoutMode.Single,
+                ReaderAutoHideChrome: false,
+                ReaderChromeHoverMode: ReaderChromeHoverMode.Ambient,
+                PagedTapZoneLayout: TapZoneLayout.Kindlish,
+                ContinuousTapZoneLayout: TapZoneLayout.Disabled)),
+        };
+
+        order = 0;
+        foreach (var (name, state) in reader)
+        {
+            if (Missing(WorkspaceScreen.Reader, name))
+            {
+                context.Workspaces.Add(new Workspace
+                {
+                    Screen = WorkspaceScreen.Reader,
+                    Name = name,
+                    SortOrder = order,
+                    IsBuiltIn = true,
+                    StateJson = ReaderProfileStateJson.Serialize(state),
                 });
             }
 

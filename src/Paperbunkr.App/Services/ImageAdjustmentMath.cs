@@ -38,7 +38,23 @@ public static class ImageAdjustmentMath
     /// (<c>tbBrightness.Value / 100f</c>, etc.) doing the same conversion once, at its own point of
     /// use, rather than storing the normalized value anywhere.
     /// </summary>
-    public static float[] CreateColorMatrix(double brightness, double contrast, double saturation)
+    /// <summary>
+    /// How much the warm shift dims the green and blue output channels at <c>warmth</c> = 1 (docs/superpowers/specs/2026-09-25-comic-reader-comfort-design.md section 4): red is
+    /// left alone, green loses a little and blue a lot, which shifts white towards amber. Tuned by eye; at 0 the matrix is exactly the one without warmth.
+    /// </summary>
+    public const double WarmGreenLoss = 0.10;
+
+    /// <summary>See <see cref="WarmGreenLoss"/>.</summary>
+    public const double WarmBlueLoss = 0.45;
+
+    /// <summary>The per-channel (R, G, B) multiplier for a warmth of 0-1.</summary>
+    public static (float R, float G, float B) WarmthScale(double warmth)
+    {
+        double k = Math.Clamp(warmth, 0, 1);
+        return (1f, (float)(1 - (WarmGreenLoss * k)), (float)(1 - (WarmBlueLoss * k)));
+    }
+
+    public static float[] CreateColorMatrix(double brightness, double contrast, double saturation, double warmth = 0)
     {
         double brightnessNormalized = brightness / 100.0;
         double contrastNormalized = contrast / 100.0;
@@ -94,6 +110,19 @@ public static class ImageAdjustmentMath
                                + (saturationLinear[r, 2] * scaleOffset[2]);
         }
 
+        // Warm shift: scale the output channels (rows). A scale of exactly 1 for every channel (warmth 0) leaves every value untouched.
+        var (warmR, warmG, warmB) = WarmthScale(warmth);
+        float[] rowScale = [warmR, warmG, warmB];
+        for (int r = 0; r < 3; r++)
+        {
+            for (int c = 0; c < 3; c++)
+            {
+                combinedLinear[r, c] *= rowScale[r];
+            }
+
+            combinedOffset[r] *= rowScale[r];
+        }
+
         return new float[]
         {
             combinedLinear[0, 0], combinedLinear[0, 1], combinedLinear[0, 2], 0, combinedOffset[0],
@@ -134,6 +163,56 @@ public static class ImageAdjustmentMath
     }
 
     /// <summary>No-op check so callers can skip building/applying any filter at all for the common "nothing adjusted" case.</summary>
-    public static bool IsIdentity(double brightness, double contrast, double saturation, double gamma) =>
-        brightness == 0 && contrast == 0 && saturation == 0 && gamma == 0;
+    public static bool IsIdentity(double brightness, double contrast, double saturation, double gamma, double warmth = 0, int sharpen = 0) =>
+        brightness == 0 && contrast == 0 && saturation == 0 && gamma == 0 && warmth == 0 && sharpen == 0;
+
+    // ===================== Auto-levels (docs/superpowers/specs/2026-09-26-comic-reader-image-quality-design.md #2) =====================
+
+    /// <summary>
+    /// Whether a page with these black and white points (0-1) is washed out enough to stretch: CE only applies its auto-contrast matrix when <c>whitePoint &lt; 0.95</c> or <c>blackPoint &gt; 0.05</c>
+    /// (<c>ImageProcessing.ApplyAdjustment</c>), so a page that already spans the range is left exactly as it is.
+    /// </summary>
+    public static bool NeedsLevels(float blackPoint, float whitePoint) => whitePoint < 0.95f || blackPoint > 0.05f;
+
+    /// <summary>
+    /// The colour matrix (Skia's 4x5 layout, translation normalized to -1..1) that stretches <paramref name="blackPoint"/>..<paramref name="whitePoint"/> to the full range: <c>(x - black) / (white - black)</c>.
+    /// <b>Deviation from CE, on purpose:</b> CE builds <c>scale = (contrast + 1) / (white - black)</c> and adds <c>brightness - black</c> <em>after</em> the scale, which puts the black point at
+    /// <c>black / (white - black) - black</c>, not at zero, so it is not a levels stretch; this is the true one. Applied first, then the contrast, brightness, saturation and warmth matrix as usual.
+    /// </summary>
+    public static float[] CreateLevelsMatrix(float blackPoint, float whitePoint)
+    {
+        float range = Math.Max(whitePoint - blackPoint, 0.05f);
+        float scale = 1f / range;
+        float offset = -blackPoint * scale;
+        return
+        [
+            scale, 0, 0, 0, offset,
+            0, scale, 0, 0, offset,
+            0, 0, scale, 0, offset,
+            0, 0, 0, 1, 0,
+        ];
+    }
+
+    // ===================== Sharpen =====================
+
+    /// <summary>The most sharpening there is (CE's preferences trackbar runs 0-3).</summary>
+    public const int MaxSharpen = 3;
+
+    /// <summary>
+    /// CE's sharpening kernel for a level 1-3 (<c>ImageProcessing.ApplyAdjustment</c>: <c>Sharpen((4 - level) * 5, 1)</c>): a 3x3 cross with <c>(4 - level) * 5</c> in the middle, -1 on the four
+    /// sides and 0 in the corners, divided by <c>centre - 4</c> (a divisor of 0 becomes 1). Level 1, 2, 3 give a centre of 15, 10, 5: the higher the level, the stronger. Row-major, already divided.
+    /// </summary>
+    public static float[] CreateSharpenKernel(int level)
+    {
+        int clamped = Math.Clamp(level, 1, MaxSharpen);
+        int centre = (4 - clamped) * 5;
+        int divisor = centre - 4;
+        if (divisor == 0)
+        {
+            divisor = 1;
+        }
+
+        float d = divisor;
+        return [0, -1 / d, 0, -1 / d, centre / d, -1 / d, 0, -1 / d, 0];
+    }
 }

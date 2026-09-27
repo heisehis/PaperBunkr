@@ -32,6 +32,9 @@ public static class ScheduledTaskCatalog
     public const string ComicVineScrape = "comicvine-scrape";
     public const string LibraryOrganize = "library-organize";
     public const string RemotePageCacheSweep = "remote-page-cache-sweep";
+    public const string LibrarySnapshot = "library-snapshot";
+    public const string GoalPaceCheck = "goal-pace-check";
+    public const string DetectAdPages = "detect-ad-pages";
 
     public static IReadOnlyList<ScheduledTaskDescriptor> All { get; } = Build();
 
@@ -264,16 +267,16 @@ public static class ScheduledTaskCatalog
                     return notReady;
                 }
 
-                var profile = organizer.Profiles.GetAll().FirstOrDefault(p => p.UseForScheduledRun);
-                if (profile is null)
+                var scheduled = organizer.Profiles.GetAll().Where(p => p.UseForScheduledRun).ToList();
+                if (scheduled.Count == 0)
                 {
                     const string none = "No organizer profile is marked for scheduled runs, so nothing was organized.";
                     handle.Succeed(none);
                     return none;
                 }
 
-                handle.Report($"Organizing with \"{profile.Name}\"…");
-                string summary = await organizer.OrganizeLibraryAsync(profile.Id, ct, handle);
+                handle.Report(scheduled.Count == 1 ? $"Organizing with \"{scheduled[0].Name}\"…" : $"Organizing with {scheduled.Count} profiles…");
+                string summary = await organizer.OrganizeLibraryAsync(scheduled.Select(p => p.Id).ToList(), ct, handle);
                 handle.Succeed(summary);
                 return summary;
             }),
@@ -292,6 +295,66 @@ public static class ScheduledTaskCatalog
                 int removed = Paperbunkr.App.Services.Sharing.PeerPageCache.Shared.SweepExpired();
                 return removed == 0 ? "Nothing to clean up" : $"Removed {removed} page{Plural(removed)}";
             }, ct)),
+
+        // First real use of ScheduleMode.DailyAt (docs/superpowers/specs/2026-09-22-insights-backlog-
+        // burndown-design.md) - every other entry above uses Interval. Counts local comics for the
+        // Insights screen's Backlog burn-down chart; DefaultEnabled true and ActivityJobKind.Other match
+        // DbBackup's own reasoning (cheap, safe, no visible side effect, unlike the scan/organize tasks
+        // that default off).
+        new ScheduledTaskDescriptor(
+            LibrarySnapshot, "Record daily library snapshot",
+            "Counts your unread comics for the Backlog burn-down chart on the Insights screen.",
+            ActivityJobKind.Other, Priority: 14, SchedulerResourceClass.Db,
+            TimeSpan.FromHours(24), DefaultEnabled: true, ScheduleMode.DailyAt,
+            static (handle, ct) => Task.Run(() =>
+            {
+                handle.Report("Recording snapshot…");
+                using var context = PaperbunkrDb.CreateContext();
+                var (total, backlog) = new LibrarySnapshotService().Capture(context);
+                return backlog == 0 ? "No backlog - all caught up" : $"{backlog} of {total} comics unread";
+            }, ct)),
+
+        // Behind-pace check for reading goals (docs/superpowers/specs/2026-09-23-insights-reading-goals-
+        // design.md). Milestone (50%/100%) nudges are live, in GoalsViewModel - this task only covers the
+        // daily pace check, which needs an elapsed-time context that only makes sense to evaluate
+        // periodically. No per-goal ActivityAlert here (a task body has no IActivityService of its own - see
+        // the StoryEventAutodetect entry's own comment above) - like every other task in this catalog, the
+        // outcome is just this task's own completion summary.
+        new ScheduledTaskDescriptor(
+            GoalPaceCheck, "Check reading goal pace",
+            "Lets you know if you're falling behind on an active reading goal.",
+            ActivityJobKind.Other, Priority: 15, SchedulerResourceClass.Db,
+            TimeSpan.FromHours(24), DefaultEnabled: true, ScheduleMode.DailyAt,
+            static (handle, ct) => Task.Run(() =>
+            {
+                handle.Report("Checking goal pace…");
+                using var context = PaperbunkrDb.CreateContext();
+                int behind = GoalResolver.Build(context, DateTime.UtcNow).Count(g => g.PaceState == GoalPaceState.Behind);
+                return behind == 0 ? "No goals behind pace" : $"{behind} goal{Plural(behind)} behind pace";
+            }, ct)),
+
+        // Ad-page detection (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md §5, pitch
+        // #9), modelled on VerifyCovers: DiskCpu (it decodes pages), off by default (a first pass over a large
+        // library is long and the user has to opt in), later runs only touch changed files. It only ever creates
+        // proposals for Library Health - never a page tag. Its Run-now button in Preferences > Automation is the
+        // "Scan now" of the design; the finished job's summary in the Activity Center carries the count.
+        new ScheduledTaskDescriptor(
+            DetectAdPages, "Detect advertisement pages",
+            "Looks for pages that match ads you have already tagged in the reader and lists them in Library Health.",
+            ActivityJobKind.Other, Priority: 16, SchedulerResourceClass.DiskCpu,
+            TimeSpan.FromDays(7), DefaultEnabled: false, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                var result = await new Paperbunkr.App.Services.AdDetection.AdPageDetectionService().ScanAsync(Adapt(handle, "issues"), ct);
+                if (result.IssuesScanned == 0 && result.IssuesFailed == 0)
+                {
+                    return "Nothing to scan yet - tag an advertisement page in the reader first";
+                }
+
+                return result.ProposalsCreated == 0
+                    ? "No new ad pages found"
+                    : $"Found {result.ProposalsCreated} possible ad page{Plural(result.ProposalsCreated)} - review them in Library Health";
+            }),
     };
 
     public static ScheduledTaskDescriptor? Find(string id)

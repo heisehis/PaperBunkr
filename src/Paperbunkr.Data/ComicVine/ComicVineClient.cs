@@ -21,6 +21,9 @@ public interface IComicVineClient
 {
     Task<IReadOnlyList<ComicVineVolume>> SearchVolumesAsync(string query, CancellationToken cancellationToken);
 
+    /// <summary>Word-based fuzzy series search, as the original ComicVine Scraper does it. Defaults to the plain name-filter search for a source with no such mode (Metron).</summary>
+    Task<IReadOnlyList<ComicVineVolume>> SearchVolumesFuzzyAsync(string query, CancellationToken cancellationToken) => SearchVolumesAsync(query, cancellationToken);
+
     Task<ComicVineVolume?> GetVolumeAsync(int volumeId, CancellationToken cancellationToken);
 
     /// <summary>Every issue of a volume, following ComicVine's 100-per-page pagination.</summary>
@@ -37,7 +40,7 @@ public interface IComicVineClient
 /// the UI; interactive lookups use <see cref="ComicVineRequestPriority.High"/>.
 /// </para>
 /// </summary>
-public sealed class ComicVineClient : IComicProvider, IPullListSource
+public sealed class ComicVineClient : IComicProvider, IPullListSource, Scraping.IStoryArcSource
 {
     private const string BaseUrl = "https://comicvine.gamespot.com/api";
     private const int PageSize = 100;
@@ -66,6 +69,19 @@ public sealed class ComicVineClient : IComicProvider, IPullListSource
         // /volumes/ with a name filter rather than the generic /search/ endpoint: the existing ComicVineSource
         // documents /search/ silently returning empty for some resource types.
         var url = Url("volumes", $"filter=name:{Uri.EscapeDataString(query)}&field_list={VolumeFields}&limit=25&sort=count_of_issues:desc");
+        var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+        return (root["results"] as JsonArray)?.Select(ParseVolume).OfType<ComicVineVolume>().ToList() ?? new List<ComicVineVolume>();
+    }
+
+    /// <summary>
+    /// CE's actual series search (cvconnection.py <c>_query_series_ids_dom</c>, verified): the fuzzy
+    /// <c>/search/?resources=volume</c> endpoint, up to 100 results. The name-filter search above is a
+    /// substring match on the exact stored name - "Batman Dark Victory" never finds "Batman: Dark
+    /// Victory" - and its 25-result cap sorted by issue count drops short or recent series entirely.
+    /// </summary>
+    public async Task<IReadOnlyList<ComicVineVolume>> SearchVolumesFuzzyAsync(string query, CancellationToken cancellationToken)
+    {
+        var url = Url("search", $"resources=volume&field_list={VolumeFields}&limit={PageSize}&query={Uri.EscapeDataString(query)}");
         var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
         return (root["results"] as JsonArray)?.Select(ParseVolume).OfType<ComicVineVolume>().ToList() ?? new List<ComicVineVolume>();
     }
@@ -197,22 +213,58 @@ public sealed class ComicVineClient : IComicProvider, IPullListSource
         return volume is null ? null : new PullListSeriesInfo(volume.Id, volume.Name, volume.Publisher, volume.StartYear, ComicVineId: null);
     }
 
-    /// <summary>ComicVine's own person-role -> Paperbunkr credit field mapping (CE's <c>cvdb.py</c> person_credits handling, as verified in the plugin this was ported from).</summary>
-    private static readonly IReadOnlyDictionary<string, string> PersonRoleMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    /// <summary>
+    /// ComicVine's own person-role -> Paperbunkr credit field mapping (CE's real <c>cvdb.py</c>
+    /// <c>ROLE_DICT</c>, verified directly against the extracted plugin source - docs/superpowers/specs/
+    /// 2026-09-24-comicvine-scraper-fidelity-design.md §2.6). "Artist" fans out to BOTH Penciller and
+    /// Inker in CE (cvdb.py:663-667: <c>artist -> [pencillers_sl, inkers_sl]</c>) - every other key maps
+    /// to exactly one field, but the value type has to be an array to express this one case honestly.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string[]> PersonRoleMap = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
     {
-        ["writer"] = "Writer",
-        ["penciler"] = "Penciller",
-        ["penciller"] = "Penciller",
-        ["artist"] = "Penciller",
-        ["inker"] = "Inker",
-        ["cover"] = "CoverArtist",
-        ["editor"] = "Editor",
-        ["colorer"] = "Colorist",
-        ["colorist"] = "Colorist",
-        ["letterer"] = "Letterer",
+        ["writer"] = new[] { "Writer" },
+        ["penciler"] = new[] { "Penciller" },
+        ["penciller"] = new[] { "Penciller" },
+        ["artist"] = new[] { "Penciller", "Inker" },
+        ["inker"] = new[] { "Inker" },
+        ["cover"] = new[] { "CoverArtist" },
+        ["editor"] = new[] { "Editor" },
+        ["colorer"] = new[] { "Colorist" },
+        ["colorist"] = new[] { "Colorist" },
+        ["letterer"] = new[] { "Letterer" },
     };
 
-    private const string IssueDetailFields = "id,name,issue_number,site_detail_url,cover_date,store_date,description,volume,story_arc_credits,character_credits,team_credits,location_credits,person_credits";
+    private const string IssueDetailFields = "id,name,issue_number,site_detail_url,cover_date,store_date,description,volume,story_arc_credits,character_credits,team_credits,location_credits,concept_credits,person_credits";
+
+    /// <summary>
+    /// The fork's <c>_query_story_arc_order</c> inputs: the arc's issue ids (<c>story_arc/4045-{id}</c>, 4045- being
+    /// ComicVine's story-arc prefix), then issue number and both dates for those ids in batches of 100 (its page limit).
+    /// </summary>
+    public async Task<IReadOnlyList<Scraping.StoryArcIssue>> GetStoryArcIssuesAsync(int storyArcId, CancellationToken cancellationToken)
+    {
+        var arc = await GetAsync(Url($"story_arc/4045-{storyArcId}", "field_list=id,name,issues"), cancellationToken).ConfigureAwait(false);
+        var ids = ((arc["results"] as JsonObject)?["issues"] as JsonArray)?
+            .OfType<JsonObject>()
+            .Select(i => i["id"] is { } id && int.TryParse(id.ToString(), out int parsed) ? parsed : (int?)null)
+            .OfType<int>()
+            .ToList() ?? new List<int>();
+
+        var issues = new List<Scraping.StoryArcIssue>();
+        for (int i = 0; i < ids.Count; i += PageSize)
+        {
+            string filter = string.Join('|', ids.Skip(i).Take(PageSize));
+            var page = await GetAsync(Url("issues", $"field_list=id,issue_number,store_date,cover_date&limit={PageSize}&filter=id:{filter}"), cancellationToken).ConfigureAwait(false);
+            foreach (var node in (page["results"] as JsonArray) ?? new JsonArray())
+            {
+                if (node is JsonObject o && o["id"] is { } idNode && int.TryParse(idNode.ToString(), out int issueId))
+                {
+                    issues.Add(new Scraping.StoryArcIssue(issueId, o["issue_number"]?.GetValue<string>(), o["store_date"]?.GetValue<string>(), o["cover_date"]?.GetValue<string>()));
+                }
+            }
+        }
+
+        return issues;
+    }
 
     public async Task<ComicVineIssueDetails?> GetIssueDetailsAsync(int issueId, CancellationToken cancellationToken)
     {
@@ -243,17 +295,42 @@ public sealed class ComicVineClient : IComicProvider, IPullListSource
                     continue;
                 }
 
-                string? field = null;
+                // ComicVine's person_credits carry a real id per person (confirmed present on the
+                // live API shape, previously unread) - docs/superpowers/specs/2026-09-23-metron-api-
+                // utilization-design.md. Unlike Metron, ComicVine's credit objects genuinely do
+                // identify the creator, not just the role.
+                int? personId = person["id"] is { } pid && int.TryParse(pid.ToString(), out int parsedPersonId) ? parsedPersonId : null;
+
+                // Apply EVERY recognized role token, not just the first (CE's cvdb.py:686-691 loops
+                // over every role a person has, not just one) - a person credited "writer, artist"
+                // gets a Writer credit AND a Penciller AND an Inker credit, not just the first match.
+                // Dedup in case two tokens resolve to the same field (e.g. "penciler, penciller").
+                var resolvedFields = new List<string>();
                 foreach (var token in (person["role"]?.GetValue<string>() ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
                 {
                     if (PersonRoleMap.TryGetValue(token, out var mapped))
                     {
-                        field = mapped;
-                        break;
+                        foreach (var field in mapped)
+                        {
+                            if (!resolvedFields.Contains(field, StringComparer.OrdinalIgnoreCase))
+                            {
+                                resolvedFields.Add(field);
+                            }
+                        }
                     }
                 }
 
-                credits.Add(new ComicVineCredit(name, field));
+                if (resolvedFields.Count == 0)
+                {
+                    credits.Add(new ComicVineCredit(name, null, CreatorExternalId: personId));
+                }
+                else
+                {
+                    foreach (var field in resolvedFields)
+                    {
+                        credits.Add(new ComicVineCredit(name, field, CreatorExternalId: personId));
+                    }
+                }
             }
         }
 
@@ -268,17 +345,32 @@ public sealed class ComicVineClient : IComicProvider, IPullListSource
             ParseDatePart(o["cover_date"]?.GetValue<string>()),
             ParseDatePart(o["store_date"]?.GetValue<string>()),
             StripHtml(o["description"]?.GetValue<string>()),
-            NamesOf(o["story_arc_credits"]),
-            NamesOf(o["character_credits"]),
-            NamesOf(o["team_credits"]),
-            NamesOf(o["location_credits"]),
-            credits);
+            IdNamesOf(o["story_arc_credits"]),
+            IdNamesOf(o["character_credits"]),
+            IdNamesOf(o["team_credits"]),
+            IdNamesOf(o["location_credits"]),
+            credits)
+        {
+            // The fork's Tags (Concepts): ComicVine's concept_credits, names only.
+            Concepts = IdNamesOf(o["concept_credits"]).Select(c => c.Name).ToList(),
+        };
+            // Genre/AgeRating/Isbn/Upc/Universes are left at their record defaults for
+            // ComicVine (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md) - none of
+            // these fields is confirmed to exist on ComicVine's real API from anything in this repo,
+            // and IssueDetailFields deliberately doesn't request unverified field names (a rejected or
+            // silently-ignored field could otherwise degrade the whole request). Confirm against a
+            // live response before requesting any of them.
     }
 
-    private static IReadOnlyList<string> NamesOf(JsonNode? array) =>
+    private static IReadOnlyList<ComicVineIdName> IdNamesOf(JsonNode? array) =>
         array is JsonArray items
-            ? items.OfType<JsonObject>().Select(i => i["name"]?.GetValue<string>()).Where(n => !string.IsNullOrEmpty(n)).Select(n => n!).ToList()
-            : new List<string>();
+            ? items.OfType<JsonObject>()
+                .Where(i => i["name"]?.GetValue<string>() is { Length: > 0 })
+                .Select(i => new ComicVineIdName(
+                    i["id"] is { } id && int.TryParse(id.ToString(), out int parsed) ? parsed : null,
+                    i["name"]!.GetValue<string>()))
+                .ToList()
+            : new List<ComicVineIdName>();
 
     /// <summary>ComicVine dates arrive as <c>yyyy-MM-dd HH:mm:ss</c> (or just <c>yyyy-MM-dd</c>); any part can be missing, so this is not a single DateTime.</summary>
     private static ComicVineDatePart ParseDatePart(string? date)
@@ -311,36 +403,67 @@ public sealed class ComicVineClient : IComicProvider, IPullListSource
 
     private string Url(string path, string query) => $"{BaseUrl}/{path}/?api_key={Uri.EscapeDataString(_apiKey)}&format=json&{query}";
 
+    /// <summary>CE's real <c>__get_dom</c> retries the whole request exactly once, after a flat 2.5s
+    /// sleep, on ANY transport/parse-level failure - network error, empty body, XML/JSON parse failure
+    /// (cvconnection.py:159-219, verified directly against source). Docs/superpowers/specs/2026-09-24-
+    /// comicvine-scraper-fidelity-design.md §2.2. Deliberately NOT a retry trigger: a well-formed
+    /// response with a non-1 <c>status_code</c> (rejected key, rate-limited, not-found) - that's an API-
+    /// level answer, not a failure to get one, and is handled below, outside this retry.</summary>
+    /// <summary>Mutable (not <c>readonly</c>) so tests can shrink it - a real 2.5s sleep per retried
+    /// test would make the suite slow for no benefit, same test-seam shape as <see cref="MetronQuota.Clock"/>.</summary>
+    internal static TimeSpan RetryDelay { get; set; } = TimeSpan.FromMilliseconds(2500);
+
     private async Task<JsonNode> GetAsync(string url, CancellationToken cancellationToken)
     {
-        string body;
-        try
+        JsonNode? root = null;
+        ComicVineException? lastFailure = null;
+
+        for (int attempt = 0; attempt < 2 && root is null; attempt++)
         {
-            using var request = ComicVineHttp.Get(url, _priority);
-            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-            body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (HttpRequestException ex)
-        {
-            throw new ComicVineException($"ComicVine request failed: {ex.Message}", inner: ex);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            throw new ComicVineException("ComicVine did not respond in time.");
+            if (attempt > 0)
+            {
+                await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+
+            string body;
+            try
+            {
+                using var request = ComicVineHttp.Get(url, _priority);
+                using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode();
+                body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex)
+            {
+                lastFailure = new ComicVineException($"ComicVine request failed: {ex.Message}", inner: ex);
+                continue;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                lastFailure = new ComicVineException("ComicVine did not respond in time.");
+                continue;
+            }
+
+            try
+            {
+                root = JsonNode.Parse(body);
+                if (root is null)
+                {
+                    lastFailure = new ComicVineException("ComicVine returned an empty response.");
+                }
+            }
+            catch (JsonException ex)
+            {
+                lastFailure = new ComicVineException($"ComicVine returned an unexpected response: {ex.Message}", inner: ex);
+            }
         }
 
-        JsonNode? root;
-        try
+        if (root is null)
         {
-            root = JsonNode.Parse(body);
-        }
-        catch (JsonException ex)
-        {
-            throw new ComicVineException($"ComicVine returned an unexpected response: {ex.Message}", inner: ex);
+            throw lastFailure!;
         }
 
-        int status = root?["status_code"]?.GetValue<int>() ?? 0;
+        int status = root["status_code"]?.GetValue<int>() ?? 0;
         if (status == 107)
         {
             // ComicVine's own "rate limit exceeded": pause every caller, not just this one.

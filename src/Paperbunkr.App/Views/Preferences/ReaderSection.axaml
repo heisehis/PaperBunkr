@@ -6,181 +6,451 @@
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
              x:Class="Paperbunkr.App.Views.Preferences.ReaderSection"
              x:DataType="vm:PreferencesScreenViewModel">
 
-    <ScrollViewer>
-        <StackPanel Margin="28,20,28,40" Spacing="20">
-            <TextBlock Classes="pbTextHeading" Text="Reader" />
+    <!-- Reader preferences, split into five tabs (docs/superpowers/specs/2026-09-26-preferences-reader-organize-tabs-design.md):
+         Pages / Controls / Image / Comfort / Profiles. The title and tab strip stay put; each tab's panel scrolls on its own
+         (a nested ScrollViewer inside one shared scroller would fight for the wheel). A new setting goes in the matching
+         captioned group; a new group gets a Tag + a PreferenceIndex entry naming its tab; a new area gets a tab in
+         PreferencesScreenViewModel.ReaderTabs and a panel here. -->
+    <Grid RowDefinitions="Auto,Auto,*" Margin="28,20,0,0">
+        <TextBlock Grid.Row="0" Classes="pbTextHeading" Text="Reader" Margin="0,0,0,14" />
+        <pref:SettingsTabStrip Grid.Row="1" Tabs="{Binding ReaderTabs}" AutomationProperties.Name="Reader tabs" />
 
-        <StackPanel Tag="reader.rtl">
-            <TextBlock Classes="settingsGroupCaption" Text="RIGHT TO LEFT" />
-            <pref:SettingsRow Icon="ArrowLeft" Title="Reverse left/right page-turn direction for right-to-left books">
-                <pref:SettingsRow.SettingsContent>
-                    <ToggleSwitch IsChecked="{Binding ReverseRtlNavigation}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-        </StackPanel>
+        <Panel Grid.Row="2">
 
-        <StackPanel Tag="reader.display">
-            <TextBlock Classes="settingsGroupCaption" Text="DISPLAY" />
-            <pref:SettingsRow Icon="Image" Title="High quality page display"
-                               Description="Smoother scaling, more CPU.">
-                <pref:SettingsRow.SettingsContent>
-                    <ToggleSwitch IsChecked="{Binding HighQualityPageDisplay}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="EyeOff" Title="Auto-hide toolbar when idle"
-                               Description="Fades the floating toolbar/clusters after a few seconds of no pointer movement while reading. Off keeps them always visible.">
-                <pref:SettingsRow.SettingsContent>
-                    <ToggleSwitch IsChecked="{Binding ReaderAutoHideChrome}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="CursorHover" Title="Chrome reveal style"
-                               Description="PerCluster: each corner control pops in only when you hover over it. Ambient: any pointer movement reveals the whole toolbar at once (the original behavior).">
-                <pref:SettingsRow.SettingsContent>
-                    <controls:SuggestBox IsStrict="True" Text="{Binding ReaderChromeHoverModeText}"
-                                         Suggestions="{Binding ReaderChromeHoverModeNames}" Width="150" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="ArrowFit" Title="Default fit mode"
-                               Description="Used for any book that hasn't been set to a different fit mode from the reader itself.">
-                <pref:SettingsRow.SettingsContent>
-                    <controls:SuggestBox IsStrict="True" Text="{Binding DefaultPageFitModeText}"
-                                         Suggestions="{Binding FitModeNames}" Width="150" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="ArrowRotateClockwise" Title="Auto-rotate landscape pages by default">
-                <pref:SettingsRow.SettingsContent>
-                    <ToggleSwitch IsChecked="{Binding DefaultAutoRotate}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="DualScreen" Title="Double-page spread"
-                               Description="Used for any series that hasn't been set to a different double-page mode from the reader toolbar itself.">
-                <pref:SettingsRow.SettingsContent>
-                    <controls:SuggestBox IsStrict="True" Text="{Binding DefaultPageLayoutModeText}"
-                                         Suggestions="{Binding PageLayoutModeNames}" Width="150" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="SlideTransition" Title="Page transition"
-                               Description="Animates turning the page (arrow keys, click-zones, flick, scrubber) - jumping to a page (e.g. a thumbnail click) is always instant.">
-                <pref:SettingsRow.SettingsContent>
-                    <controls:SuggestBox IsStrict="True" Text="{Binding PageTransitionStyleText}"
-                                         Suggestions="{Binding PageTransitionStyleNames}" Width="150" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="TopSpeed" Title="{Binding PageTransitionDurationMs, StringFormat='Page transition speed: {0}ms'}">
-                <pref:SettingsRow.SettingsContent>
-                    <Slider Minimum="100" Maximum="600" TickFrequency="50" IsSnapToTickEnabled="True"
-                            Value="{Binding PageTransitionDurationMs}" Width="220" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-        </StackPanel>
+            <!-- PAGES: how pages are shown and turned -->
+            <ScrollViewer IsVisible="{Binding ReaderTabs.SelectedKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=pages}">
+                <StackPanel Margin="0,16,28,40" Spacing="20">
 
-        <StackPanel Tag="reader.zoomNav">
-            <TextBlock Classes="settingsGroupCaption" Text="ZOOM &amp; NAVIGATION" />
-            <pref:SettingsRow Icon="ZoomFit" Title="Reset zoom when turning the page">
-                <pref:SettingsRow.SettingsContent>
-                    <ToggleSwitch IsChecked="{Binding ResetZoomOnPageChange}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="ArrowSort" Title="{Binding MouseWheelSpeed, StringFormat='Mouse wheel scroll speed: {0:F1}'}">
-                <pref:SettingsRow.SettingsContent>
-                    <Slider Minimum="0.5" Maximum="5" Value="{Binding MouseWheelSpeed}" Width="220" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-        </StackPanel>
-
-        <StackPanel Tag="reader.imageAdjust">
-            <TextBlock Classes="settingsGroupCaption" Text="IMAGE ADJUSTMENT" />
-            <TextBlock Text="Default brightness/contrast/saturation/gamma for every book - a book's own reader toolbar can adjust further from here."
-                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
-            <pref:SettingsRow Icon="BrightnessHigh" Title="{Binding DefaultBrightness, StringFormat='Brightness: {0:F0}'}">
-                <pref:SettingsRow.SettingsContent>
-                    <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultBrightness}" Width="220" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="Options" Title="{Binding DefaultContrast, StringFormat='Contrast: {0:F0}'}">
-                <pref:SettingsRow.SettingsContent>
-                    <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultContrast}" Width="220" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="ColorBackground" Title="{Binding DefaultSaturation, StringFormat='Saturation: {0:F0}'}">
-                <pref:SettingsRow.SettingsContent>
-                    <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultSaturation}" Width="220" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="Gauge" Title="{Binding DefaultGamma, StringFormat='Gamma: {0:F0}'}">
-                <pref:SettingsRow.SettingsContent>
-                    <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultGamma}" Width="220" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-        </StackPanel>
-
-        <StackPanel Tag="reader.background">
-            <TextBlock Classes="settingsGroupCaption" Text="BACKGROUND &amp; MARGIN" />
-            <pref:SettingsRow Icon="ColorBackground" Title="Canvas background"
-                               Description="Auto keeps the app's own background; Color fills the canvas with the color below; Texture tiles one of the swatches below that.">
-                <pref:SettingsRow.SettingsContent>
-                    <controls:SuggestBox IsStrict="True" Text="{Binding ImageBackgroundModeText}"
-                                         Suggestions="{Binding BackgroundModeNames}" Width="150" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <!-- Compound content: two controls (presets + freeform hex) for one logical setting
-                 (docs/superpowers/specs/2026-09-07-preferences-tile-hub-redesign-plan.md's own note
-                 on this row) - SettingsContent holds both side by side. -->
-            <pref:SettingsRow Icon="ColorBackground" Title="Background color"
-                               IsVisible="{Binding ImageBackgroundMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageBackgroundMode.Color}}">
-                <pref:SettingsRow.SettingsContent>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <controls:SuggestBox Text="{Binding BackgroundColor}"
-                                             Suggestions="{Binding BackgroundColorPresetNames}" Width="130" Watermark="Presets" />
-                        <TextBox Text="{Binding BackgroundColor}" Width="130" ToolTip.Tip="A named color (e.g. WhiteSmoke) or hex value (e.g. #F5F5F5)" />
+                    <StackPanel Tag="reader.rtl">
+                        <TextBlock Classes="settingsGroupCaption" Text="READING DIRECTION" />
+                        <pref:SettingsRow Icon="ArrowLeft" Title="Reverse left/right page-turn direction for right-to-left books">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding ReverseRtlNavigation}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
                     </StackPanel>
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <!-- Texture swatch picker (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-
-                 design.md Item 1) - 3 clickable preview swatches, same "compound content" shape as
-                 the Background color row above. ReaderTextureSwatchConverter ignores the bound value
-                 and reads the texture id straight off ConverterParameter, since each swatch is a
-                 fixed id, not a bound property. -->
-            <pref:SettingsRow Icon="ColorBackground" Title="Background texture"
-                               IsVisible="{Binding ImageBackgroundMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageBackgroundMode.Texture}}">
-                <pref:SettingsRow.SettingsContent>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Classes="textureSwatch" Classes.active="{Binding IsTextureNeutralDark}"
-                                Command="{Binding SetBackgroundTextureCommand}" CommandParameter="neutral-dark"
-                                ToolTip.Tip="Neutral dark" AutomationProperties.Name="Neutral dark texture">
-                            <Border Classes="textureSwatchFill" Background="{Binding Converter={x:Static views:ReaderTextureSwatchConverter.Instance}, ConverterParameter=neutral-dark}" />
-                        </Button>
-                        <Button Classes="textureSwatch" Classes.active="{Binding IsTextureCarbon}"
-                                Command="{Binding SetBackgroundTextureCommand}" CommandParameter="carbon"
-                                ToolTip.Tip="Carbon" AutomationProperties.Name="Carbon texture">
-                            <Border Classes="textureSwatchFill" Background="{Binding Converter={x:Static views:ReaderTextureSwatchConverter.Instance}, ConverterParameter=carbon}" />
-                        </Button>
-                        <Button Classes="textureSwatch" Classes.active="{Binding IsTextureLinen}"
-                                Command="{Binding SetBackgroundTextureCommand}" CommandParameter="linen"
-                                ToolTip.Tip="Linen" AutomationProperties.Name="Linen texture">
-                            <Border Classes="textureSwatchFill" Background="{Binding Converter={x:Static views:ReaderTextureSwatchConverter.Instance}, ConverterParameter=linen}" />
-                        </Button>
+
+                    <StackPanel Tag="reader.layout">
+                        <TextBlock Classes="settingsGroupCaption" Text="LAYOUT" />
+                        <pref:SettingsRow Icon="ArrowFit" Title="Default fit mode"
+                                           Description="Used for any book that hasn't been set to a different fit mode from the reader itself.">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding DefaultPageFitModeText}"
+                                                     Suggestions="{Binding FitModeNames}" Width="150" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="ArrowRotateClockwise" Title="Auto-rotate landscape pages by default">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding DefaultAutoRotate}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="DualScreen" Title="Double-page spread"
+                                           Description="Used for any series that hasn't been set to a different double-page mode from the reader toolbar itself.">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding DefaultPageLayoutModeText}"
+                                                     Suggestions="{Binding PageLayoutModeNames}" Width="150" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
                     </StackPanel>
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="BorderAll" Title="Add a margin around the page">
-                <pref:SettingsRow.SettingsContent>
-                    <ToggleSwitch IsChecked="{Binding PageMarginEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="ArrowExpand" Title="{Binding PageMarginPercentWidth, StringFormat='Margin width: {0:P0}'}"
-                               IsVisible="{Binding PageMarginEnabled}">
-                <pref:SettingsRow.SettingsContent>
-                    <Slider Minimum="0" Maximum="0.3" Value="{Binding PageMarginPercentWidth}" Width="220" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-        </StackPanel>
-    </StackPanel>
-    </ScrollViewer>
+
+                    <StackPanel Tag="reader.turning">
+                        <TextBlock Classes="settingsGroupCaption" Text="TURNING PAGES" />
+                        <pref:SettingsRow Icon="SlideTransition" Title="Page transition"
+                                           Description="Animates turning the page (arrow keys, click-zones, flick, scrubber) - jumping to a page (e.g. a thumbnail click) is always instant.">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding PageTransitionStyleText}"
+                                                     Suggestions="{Binding PageTransitionStyleNames}" Width="150" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="TopSpeed" Title="{Binding PageTransitionDurationMs, StringFormat='Page transition speed: {0}ms'}">
+                            <pref:SettingsRow.SettingsContent>
+                                <Slider Minimum="100" Maximum="600" TickFrequency="50" IsSnapToTickEnabled="True"
+                                        Value="{Binding PageTransitionDurationMs}" Width="220" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="ZoomFit" Title="Reset zoom when turning the page">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding ResetZoomOnPageChange}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="ArrowNext" Title="Skip pages tagged Deleted when turning the page">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding SkipDeletedPages}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="ArrowNext" Title="Skip pages tagged Advertisement when turning the page">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding SkipAdvertisementPages}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="ArrowDownload" Title="Pre-open the next issue"
+                                          Description="Near the end of an issue, opens the next one in the background so moving on is instant. It reads that file ahead of time, which can matter on a spinning disk or on battery.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding PreOpenNextIssue}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- CONTROLS: how you drive the reader -->
+            <ScrollViewer IsVisible="{Binding ReaderTabs.SelectedKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=controls}">
+                <StackPanel Margin="0,16,28,40" Spacing="20">
+
+                    <StackPanel Tag="reader.tapZones">
+                        <TextBlock Classes="settingsGroupCaption" Text="TAP ZONES" />
+                        <TextBlock Text="Which parts of the page a tap or click turns the page from. Default keeps the classic behaviour (touch: left/middle/right thirds; mouse: two halves). The other layouts follow Mihon's and apply to touch, pen and the mouse."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                        <pref:SettingsRow Icon="CursorClick" Title="Paged reading: tap zone layout">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding PagedTapZoneLayoutText}"
+                                                     Suggestions="{Binding TapZoneLayoutNames}" Width="150" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="ArrowSwap" Title="Paged reading: invert zones"
+                                          Description="Mirrors the layout on top of the automatic right-to-left mirroring, for left-handed use.">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding PagedTapZoneInvertText}"
+                                                     Suggestions="{Binding TapZoneInvertNames}" Width="150" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="ArrowSort" Title="Continuous reading: tap zone layout"
+                                          Description="Previous and Next scroll about a screen. Disabled keeps taps and clicks inert while scrolling.">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding ContinuousTapZoneLayoutText}"
+                                                     Suggestions="{Binding TapZoneLayoutNames}" Width="150" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="ArrowSwap" Title="Continuous reading: invert zones">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding ContinuousTapZoneInvertText}"
+                                                     Suggestions="{Binding TapZoneInvertNames}" Width="150" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Cursor" Title="Use the tap zones for mouse clicks"
+                                          Description="Off keeps the plain two halves for the mouse whatever the layout says.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding TapZonesForMouse}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <StackPanel Orientation="Horizontal" Spacing="20" Margin="0,4,0,10">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Paged" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <controls:TapZoneOverlay Width="150" Height="200" ShowFrame="True"
+                                                         Layout="{Binding PagedTapZoneLayout}" Invert="{Binding PagedTapZoneInvert}"
+                                                         AutomationProperties.Name="Paged reading tap zone preview" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Continuous" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <controls:TapZoneOverlay Width="150" Height="200" ShowFrame="True" IsContinuous="True"
+                                                         Layout="{Binding ContinuousTapZoneLayout}" Invert="{Binding ContinuousTapZoneInvert}"
+                                                         AutomationProperties.Name="Continuous reading tap zone preview" />
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Tag="reader.pointerInput">
+                        <TextBlock Classes="settingsGroupCaption" Text="MOUSE &amp; CONTROLLER" />
+                        <pref:SettingsRow Icon="Cursor" Title="Mouse side buttons turn pages"
+                                          Description="The back button goes to the previous page and the forward button to the next; in continuous mode they scroll a screen.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding ExtraMouseButtonsTurnPages}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Games" Title="Use a game controller"
+                                          Description="An Xbox or other XInput controller drives the reader while it is open: D-pad or A/B and the bumpers turn pages, sticks pan and scroll, triggers zoom, Y toggles the toolbar, X fullscreen, Start opens the command palette, Back leaves.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding GamepadEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="ArrowSort" Title="{Binding MouseWheelSpeed, StringFormat='Mouse wheel scroll speed: {0:F1}'}">
+                            <pref:SettingsRow.SettingsContent>
+                                <Slider Minimum="0.5" Maximum="5" Value="{Binding MouseWheelSpeed}" Width="220" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                    <StackPanel Tag="reader.panelsZoom">
+                        <TextBlock Classes="settingsGroupCaption" Text="PANELS &amp; ZOOM" />
+                        <pref:SettingsRow Icon="Grid" Title="Start in guided view"
+                                          Description="Next and previous step through a page panel by panel, zooming to each, instead of turning the page. G toggles it while reading. Paged, single-page reading only.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding GuidedViewOnOpen}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="ZoomIn" Title="Smart double-click zoom"
+                                          Description="Double-clicking (or double-tapping) a page zooms to the panel under the pointer, and again returns. With no panel found it zooms to 200% as before. Off always zooms to 200%.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding SmartDoubleClickZoom}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- IMAGE: how the page itself looks -->
+            <ScrollViewer IsVisible="{Binding ReaderTabs.SelectedKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=image}">
+                <StackPanel Margin="0,16,28,40" Spacing="20">
+
+                    <StackPanel Tag="reader.quality">
+                        <TextBlock Classes="settingsGroupCaption" Text="PAGE QUALITY" />
+                        <pref:SettingsRow Icon="Image" Title="High quality page display"
+                                           Description="Smoother scaling, more CPU.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding HighQualityPageDisplay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                    <StackPanel Tag="reader.imageAdjust">
+                        <TextBlock Classes="settingsGroupCaption" Text="IMAGE ADJUSTMENT" />
+                        <TextBlock Text="Default brightness/contrast/saturation/gamma for every book - a book's own reader toolbar can adjust further from here."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                        <pref:SettingsRow Icon="BrightnessHigh" Title="{Binding DefaultBrightness, StringFormat='Brightness: {0:F0}'}">
+                            <pref:SettingsRow.SettingsContent>
+                                <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultBrightness}" Width="220" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Options" Title="{Binding DefaultContrast, StringFormat='Contrast: {0:F0}'}">
+                            <pref:SettingsRow.SettingsContent>
+                                <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultContrast}" Width="220" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="ColorBackground" Title="{Binding DefaultSaturation, StringFormat='Saturation: {0:F0}'}">
+                            <pref:SettingsRow.SettingsContent>
+                                <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultSaturation}" Width="220" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Gauge" Title="{Binding DefaultGamma, StringFormat='Gamma: {0:F0}'}">
+                            <pref:SettingsRow.SettingsContent>
+                                <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultGamma}" Width="220" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Sparkle" Title="Auto levels"
+                                          Description="Stretches each washed-out page so its darkest and lightest parts use the full range (ComicRack's Auto Contrast). Pages that already span the range are left alone. A book's own toolbar can override it.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding DefaultAutoLevels}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Sparkle" Title="{Binding DefaultSharpen, StringFormat='Sharpen: {0}'}"
+                                          Description="0 is off; 1 to 3 are ComicRack's sharpening levels, each stronger than the last.">
+                            <pref:SettingsRow.SettingsContent>
+                                <Slider Minimum="0" Maximum="3" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding DefaultSharpen}" Width="220" AutomationProperties.Name="Sharpen" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                    <StackPanel Tag="reader.autoCrop">
+                        <TextBlock Classes="settingsGroupCaption" Text="AUTO-CROP" />
+                        <pref:SettingsRow Icon="Crop" Title="Trim scan borders"
+                                          Description="Trims plain white or black borders from comic pages so they fill the window. Off by default. A single page can be forced either way from its right-click menu or the Ctrl+K palette.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding AutoCropMargins}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                    <StackPanel Tag="reader.background">
+                        <TextBlock Classes="settingsGroupCaption" Text="BACKGROUND &amp; MARGIN" />
+                        <pref:SettingsRow Icon="ColorBackground" Title="Canvas background"
+                                           Description="Auto keeps the app's own background; Color fills the canvas with the color below; Texture tiles one of the swatches below that.">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding ImageBackgroundModeText}"
+                                                     Suggestions="{Binding BackgroundModeNames}" Width="150" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <!-- Compound content: two controls (presets + freeform hex) for one logical setting
+                             (docs/superpowers/specs/2026-09-07-preferences-tile-hub-redesign-plan.md's own note
+                             on this row) - SettingsContent holds both side by side. -->
+                        <pref:SettingsRow Icon="ColorBackground" Title="Background color"
+                                           IsVisible="{Binding ImageBackgroundMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageBackgroundMode.Color}}">
+                            <pref:SettingsRow.SettingsContent>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <controls:SuggestBox Text="{Binding BackgroundColor}"
+                                                         Suggestions="{Binding BackgroundColorPresetNames}" Width="130" Watermark="Presets" />
+                                    <TextBox Text="{Binding BackgroundColor}" Width="130" ToolTip.Tip="A named color (e.g. WhiteSmoke) or hex value (e.g. #F5F5F5)" />
+                                </StackPanel>
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <!-- Texture swatch picker (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-
+                             design.md Item 1) - one clickable preview swatch per ReaderBackgroundTextures.All entry
+                             (docs/superpowers/specs/2026-09-25-publisher-icons-and-reader-textures-design.md §B),
+                             wrapping so the 16 swatches stay inside the row. ReaderTextureSwatchConverter turns the
+                             bound texture id into the preview brush. -->
+                        <pref:SettingsRow Icon="ColorBackground" Title="Background texture"
+                                           IsVisible="{Binding ImageBackgroundMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageBackgroundMode.Texture}}">
+                            <pref:SettingsRow.SettingsContent>
+                                <ItemsControl ItemsSource="{Binding TextureChoices}" MaxWidth="330" HorizontalAlignment="Right">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal" ItemSpacing="4" LineSpacing="4" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:ReaderTextureChoice">
+                                            <Button Classes="textureSwatch" Classes.active="{Binding IsActive}"
+                                                    Command="{Binding SelectCommand}"
+                                                    ToolTip.Tip="{Binding DisplayName}" AutomationProperties.Name="{Binding AutomationName}">
+                                                <Border Classes="textureSwatchFill" Background="{Binding Id, Converter={x:Static views:ReaderTextureSwatchConverter.Instance}}" />
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="BorderAll" Title="Add a margin around the page">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding PageMarginEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="ArrowExpand" Title="{Binding PageMarginPercentWidth, StringFormat='Margin width: {0:P0}'}"
+                                           IsVisible="{Binding PageMarginEnabled}">
+                            <pref:SettingsRow.SettingsContent>
+                                <Slider Minimum="0" Maximum="0.3" Value="{Binding PageMarginPercentWidth}" Width="220" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- COMFORT: the reading session -->
+            <ScrollViewer IsVisible="{Binding ReaderTabs.SelectedKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=comfort}">
+                <StackPanel Margin="0,16,28,40" Spacing="20">
+
+                    <StackPanel Tag="reader.toolbar">
+                        <TextBlock Classes="settingsGroupCaption" Text="TOOLBAR" />
+                        <pref:SettingsRow Icon="EyeOff" Title="Auto-hide toolbar when idle"
+                                           Description="Fades the floating toolbar/clusters after a few seconds of no pointer movement while reading. Off keeps them always visible.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding ReaderAutoHideChrome}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="CursorHover" Title="Chrome reveal style"
+                                           Description="PerCluster: each corner control pops in only when you hover over it. Ambient: any pointer movement reveals the whole toolbar at once (the original behavior).">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding ReaderChromeHoverModeText}"
+                                                     Suggestions="{Binding ReaderChromeHoverModeNames}" Width="150" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                    <StackPanel Tag="reader.session">
+                        <TextBlock Classes="settingsGroupCaption" Text="READING SESSION" />
+                        <pref:SettingsRow Icon="Gauge" Title="Show the reading stats chip"
+                                          Description="A small chip in the corner of the page with your session time, pages read, pace and an estimate of the time left in the issue. H toggles it while reading.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding ShowSessionHud}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Eye" Title="Remind me to rest my eyes"
+                                          Description="After a stretch of reading you get a reminder to look at something 20 feet away for 20 seconds (the 20-20-20 rule). Only counts time you are actually reading.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding BreakNudgesEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Timer" Title="{Binding BreakNudgeIntervalMinutes, StringFormat='Reminder every {0} minutes of reading'}"
+                                          IsEnabled="{Binding BreakNudgesEnabled}">
+                            <pref:SettingsRow.SettingsContent>
+                                <Slider Minimum="10" Maximum="60" TickFrequency="5" IsSnapToTickEnabled="True" Value="{Binding BreakNudgeIntervalMinutes}" Width="220" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                    <StackPanel Tag="reader.night">
+                        <TextBlock Classes="settingsGroupCaption" Text="NIGHT TINT" />
+                        <pref:SettingsRow Icon="WeatherMoon" Title="Warm tint at night"
+                                          Description="Warms the colours of the comic pages between the times below (the app itself is unchanged; Windows Night Light covers the whole screen). W turns it on or off while reading.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding WarmShiftEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Clock" Title="Warm tint starts at" IsEnabled="{Binding WarmShiftEnabled}">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding WarmShiftStartText}" Suggestions="{Binding WarmShiftTimeChoices}" Width="110" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Clock" Title="Warm tint ends at" IsEnabled="{Binding WarmShiftEnabled}">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding WarmShiftEndText}" Suggestions="{Binding WarmShiftTimeChoices}" Width="110" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Options" Title="{Binding WarmShiftStrength, StringFormat='Warm tint strength: {0}'}" IsEnabled="{Binding WarmShiftEnabled}">
+                            <pref:SettingsRow.SettingsContent>
+                                <Slider Minimum="0" Maximum="100" Value="{Binding WarmShiftStrength}" Width="220" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                    <StackPanel Tag="reader.infoPanel">
+                        <TextBlock Classes="settingsGroupCaption" Text="INFO PANEL" />
+                        <pref:SettingsRow Icon="Info" Title="Show the summary straight away"
+                                          Description="The reader's info panel (I) shows an issue's credits, characters and story arc. Its summary stays behind a Show summary button unless you turn this on, because summaries can spoil.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding InfoPanelShowSummary}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- PROFILES -->
+            <ScrollViewer IsVisible="{Binding ReaderTabs.SelectedKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=profiles}">
+                <StackPanel Margin="0,16,28,40" Spacing="20">
+
+                    <StackPanel Tag="reader.profiles">
+                        <TextBlock Classes="settingsGroupCaption" Text="PROFILES" />
+                        <TextBlock Text="A profile is a named set of display settings (fit, adjustments, background, margin, toolbar behaviour, tap zones) you can switch to while reading. Save one from the reader's drawer; the built-in ones can be switched to but not edited."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                        <pref:SettingsRow Icon="Color" Title="Default profile"
+                                          Description="Used for every series that has no profile of its own. A series can be pointed at a profile from the reader's drawer.">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding DefaultReaderProfileText}"
+                                                     Suggestions="{Binding ReaderProfileChoiceNames}" Width="170" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <ItemsControl ItemsSource="{Binding ReaderProfiles}" Margin="0,4,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:WorkspaceRow">
+                                    <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2">
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}"
+                                                   AutomationProperties.AutomationId="{Binding Name, StringFormat='ReaderProfileRow_{0}'}" />
+                                        <TextBlock Grid.Column="1" Text="Built-in" FontSize="11" Margin="0,0,10,0" VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsBuiltIn}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding !IsBuiltIn}">
+                                            <Button Content="▲" FontSize="10" Padding="4,2" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip.Tip="Move up"
+                                                    AutomationProperties.Name="Move profile up"
+                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).MoveReaderProfileUpCommand}" CommandParameter="{Binding Id}" />
+                                            <Button Content="▼" FontSize="10" Padding="4,2" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip.Tip="Move down"
+                                                    AutomationProperties.Name="Move profile down"
+                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).MoveReaderProfileDownCommand}" CommandParameter="{Binding Id}" />
+                                            <Button Content="✎" Padding="4,2" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip.Tip="Rename"
+                                                    AutomationProperties.Name="Rename profile"
+                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).RenameReaderProfileCommand}" CommandParameter="{Binding Id}" />
+                                            <Button Content="✕" Padding="4,2" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip.Tip="Delete"
+                                                    AutomationProperties.Name="Delete profile"
+                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).DeleteReaderProfileCommand}" CommandParameter="{Binding Id}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+
+        </Panel>
+    </Grid>
 </UserControl>

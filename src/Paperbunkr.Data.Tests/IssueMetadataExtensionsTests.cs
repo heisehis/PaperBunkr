@@ -33,13 +33,18 @@ public class IssueMetadataExtensionsTests
         Assert.False(issue.IsSpecial());
     }
 
+    // CE formula: 0 when LastPageRead <= 0 or PageCount unknown, else (LastPageRead+1)*100/PageCount clamped to 1..100.
     [Theory]
     [InlineData(null, 0, 0)]
+    [InlineData(null, 100, 0)]
     [InlineData(0, 100, 0)]
-    [InlineData(50, 100, 50)]
-    [InlineData(100, 100, 100)]
+    [InlineData(1, 100, 2)]
+    [InlineData(49, 100, 50)]
+    [InlineData(99, 100, 100)]
     [InlineData(150, 100, 100)] // clamped, defensive against bad data
-    public void ReadPercentage_ComputesClampedPercent(int? lastPageRead, int? pageCount, double expected)
+    [InlineData(9, 10, 100)] // a short issue reaches 100% at its last page (no longer 90%)
+    [InlineData(18, 20, 95)]
+    public void ReadPercentage_UsesCeFormula(int? lastPageRead, int? pageCount, double expected)
     {
         var issue = new Issue { LastPageRead = lastPageRead, PageCount = pageCount };
         Assert.Equal(expected, issue.ReadPercentage());
@@ -55,10 +60,17 @@ public class IssueMetadataExtensionsTests
     [Fact]
     public void HasBeenRead_UsesCeVerified95PercentThreshold_Not90()
     {
-        var at94 = new Issue { LastPageRead = 94, PageCount = 100 };
-        var at95 = new Issue { LastPageRead = 95, PageCount = 100 };
+        var at94 = new Issue { LastPageRead = 93, PageCount = 100 };
+        var at95 = new Issue { LastPageRead = 94, PageCount = 100 };
         Assert.False(at94.HasBeenRead());
         Assert.True(at95.HasBeenRead());
+    }
+
+    [Fact]
+    public void HasBeenRead_ShortIssue_TrueAtLastPage()
+    {
+        Assert.True(new Issue { LastPageRead = 9, PageCount = 10 }.HasBeenRead());
+        Assert.False(new Issue { LastPageRead = 8, PageCount = 10 }.HasBeenRead());
     }
 
     [Fact]
@@ -66,7 +78,7 @@ public class IssueMetadataExtensionsTests
     {
         var unread = new Issue { LastPageRead = 0, PageCount = 100 };
         var inProgress = new Issue { LastPageRead = 50, PageCount = 100 };
-        var read = new Issue { LastPageRead = 100, PageCount = 100 };
+        var read = new Issue { LastPageRead = 99, PageCount = 100 };
 
         Assert.True(unread.IsUnread());
         Assert.False(unread.IsInProgress());
@@ -79,6 +91,22 @@ public class IssueMetadataExtensionsTests
         Assert.False(read.IsUnread());
         Assert.False(read.IsInProgress());
         Assert.True(read.HasBeenRead());
+    }
+
+    [Fact]
+    public void IsUnread_NullLastPageRead_IsUnread()
+    {
+        Assert.True(new Issue { LastPageRead = null, PageCount = 100 }.IsUnread());
+    }
+
+    /// <summary>Behaviour change of the 2026-09-25 CE fix: with an unknown page count and a real position the issue is in progress, where it used to count as unread.</summary>
+    [Fact]
+    public void UnknownPageCount_WithLastPageRead_IsInProgress()
+    {
+        var issue = new Issue { LastPageRead = 5, PageCount = null };
+        Assert.False(issue.IsUnread());
+        Assert.True(issue.IsInProgress());
+        Assert.False(issue.HasBeenRead());
     }
 
     [Theory]

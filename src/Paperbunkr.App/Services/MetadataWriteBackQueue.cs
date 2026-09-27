@@ -170,7 +170,7 @@ public class MetadataWriteBackQueue : IDisposable
                 }
             }
 
-            ReportBatch(wrote, skippedFormat, failed, lastFailureMessage, singleSkipToast);
+            ReportBatch(wrote, skippedFormat, alreadyCurrent, failed, lastFailureMessage, singleSkipToast);
         }
         finally
         {
@@ -178,7 +178,7 @@ public class MetadataWriteBackQueue : IDisposable
         }
     }
 
-    private void ReportBatch(int wrote, List<string> skippedFormat, int failed, string? lastFailureMessage, string? singleSkipToast)
+    private void ReportBatch(int wrote, List<string> skippedFormat, int unwritable, int failed, string? lastFailureMessage, string? singleSkipToast)
     {
         if (singleSkipToast is not null)
         {
@@ -186,7 +186,7 @@ public class MetadataWriteBackQueue : IDisposable
             return;
         }
 
-        if (wrote == 0 && skippedFormat.Count == 0 && failed == 0)
+        if (wrote == 0 && skippedFormat.Count == 0 && unwritable == 0 && failed == 0)
         {
             return;
         }
@@ -200,6 +200,13 @@ public class MetadataWriteBackQueue : IDisposable
         if (skippedFormat.Count > 0)
         {
             parts.Add($"{skippedFormat.Count} skipped (unsupported format)");
+        }
+
+        if (unwritable > 0)
+        {
+            // Used to be silent: a missing or read-only file produced no notice at all, which looked
+            // exactly like the write never having run.
+            parts.Add($"{unwritable} not written (file missing or read-only)");
         }
 
         if (failed > 0)

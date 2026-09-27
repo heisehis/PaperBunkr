@@ -62,6 +62,22 @@ internal static class SkiaBitmapConverter
     /// scanline decode itself fail with <c>InvalidConversion</c>), so this conversion has to follow
     /// suit rather than assume.
     /// </summary>
+    /// <summary>
+    /// An immutable Avalonia <see cref="Bitmap"/> holding a copy of <paramref name="source"/>'s pixels. Unlike the <see cref="WriteableBitmap"/> <see cref="FromSkBitmap"/> returns, this can be handed to
+    /// <c>CreateScaledBitmap</c> (which rejects a writeable one), so it is what the reader pipeline caches.
+    /// </summary>
+    public static Bitmap ToImmutableBitmap(SKBitmap source)
+    {
+        var pixelFormat = source.ColorType switch
+        {
+            SKColorType.Bgra8888 => PixelFormat.Bgra8888,
+            SKColorType.Rgba8888 => PixelFormat.Rgba8888,
+            _ => throw new NotSupportedException($"ToImmutableBitmap: unsupported SKColorType '{source.ColorType}'."),
+        };
+        var alphaFormat = source.AlphaType == SKAlphaType.Opaque ? AlphaFormat.Opaque : source.AlphaType == SKAlphaType.Unpremul ? AlphaFormat.Unpremul : AlphaFormat.Premul;
+        return new Bitmap(pixelFormat, alphaFormat, source.GetPixels(), new PixelSize(source.Width, source.Height), new Vector(96, 96), source.RowBytes);
+    }
+
     public static WriteableBitmap FromSkBitmap(SKBitmap source)
     {
         var pixelSize = new PixelSize(source.Width, source.Height);

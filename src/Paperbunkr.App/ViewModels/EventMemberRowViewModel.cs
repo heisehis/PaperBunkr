@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Models;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
+using Paperbunkr.Data.ReadingLists;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -84,7 +85,61 @@ public partial class EventMemberRowViewModel : ViewModelBase, Models.ISelectable
 
     public bool HasRole => true; // role is always set on an EventMembership (no "unset" state)
 
-    public string RoleChipLabel => SelectedRoleOption?.Label ?? string.Empty;
+    /// <summary>The role, with a small "auto" marker when detection (not the user) chose it.</summary>
+    public string RoleChipLabel => (SelectedRoleOption?.Label ?? string.Empty) + (IsAutoRole ? " · auto" : string.Empty);
+
+    /// <summary>The role was applied by role detection and may be cleared or replaced.</summary>
+    public bool IsAutoRole => Member.RoleSource == RoleAssignmentSource.Auto;
+
+    /// <summary>Tooltip for the role chip: why detection chose it.</summary>
+    public string? RoleReasonText => Member.RoleReason is { Length: > 0 } reason ? $"Detected automatically: {reason}" : null;
+
+    /// <summary>Detection has a role in mind that it was not sure enough to apply (or that differs from the user's own).</summary>
+    public bool HasRoleSuggestion => Member.SuggestedRole is not null;
+
+    public string SuggestionText => Member.SuggestedRole is { } role
+        ? $"Suggested: {RoleOptions.First(o => o.Role == role).Label} ({Member.SuggestedReason})"
+        : string.Empty;
+
+    private void RaiseRoleStateChanged()
+    {
+        OnPropertyChanged(nameof(IsAutoRole));
+        OnPropertyChanged(nameof(RoleChipLabel));
+        OnPropertyChanged(nameof(RoleReasonText));
+        OnPropertyChanged(nameof(HasRoleSuggestion));
+        OnPropertyChanged(nameof(SuggestionText));
+    }
+
+    /// <summary>Takes the suggested role as the user's own choice.</summary>
+    [RelayCommand]
+    private void AcceptSuggestion()
+    {
+        if (Member.SuggestedRole is { } role)
+        {
+            SelectedRoleOption = RoleOptions.First(o => o.Role == role);        // the change handler marks it user-set and saves
+        }
+    }
+
+    /// <summary>Rejects the suggestion; detection does not raise it again for this member.</summary>
+    [RelayCommand]
+    private void DismissSuggestion()
+    {
+        MemberRoleApplier.Dismiss(Member);
+        RaiseRoleStateChanged();
+        _onRoleChanged(this);
+    }
+
+    /// <summary>Drops an automatically detected role (back to Core); detection does not put it back.</summary>
+    [RelayCommand]
+    private void ClearAutoRole()
+    {
+        if (MemberRoleApplier.ClearAuto(Member))
+        {
+            SelectedRoleOption = RoleOptions.First(o => o.Role == Member.Role);
+            RaiseRoleStateChanged();
+            _onRoleChanged(this);
+        }
+    }
 
     public static EventMembershipRoleOption[] RoleOptions => EventMembershipRoleOption.All;
 
@@ -115,6 +170,8 @@ public partial class EventMemberRowViewModel : ViewModelBase, Models.ISelectable
     partial void OnSelectedRoleChanged(EventMembershipRole value)
     {
         Member.Role = value;
+        MemberRoleApplier.MarkUserSet(Member);          // a role chosen here is the user's own, never replaced by detection
+        RaiseRoleStateChanged();
         _onRoleChanged(this);
     }
 

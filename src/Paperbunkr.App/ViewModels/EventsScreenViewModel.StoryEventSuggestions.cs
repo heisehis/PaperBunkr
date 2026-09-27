@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.ReadingLists;
 using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
@@ -49,18 +50,17 @@ public partial class EventsScreenViewModel
         storyEvent.MetronArcId ??= verified.MetronArcId;
         context.SaveChanges();
 
-        // Calling AddMember in position order lets its own auto-incrementing Position assignment
-        // (max + 1 per call) reproduce the verified/local order, with no separate position-setter
-        // needed on EventMembershipResolver.
-        foreach (var member in verified.Members.OrderBy(m => m.Position ?? int.MaxValue).ThenBy(m => m.Issue.Year ?? int.MaxValue))
-        {
-            EventMembershipResolver.AddMember(context, storyEvent.Id, member.Issue.Id, EventMembershipRole.Core);
-        }
+        // Adding in position order lets AddMember's own auto-incrementing Position (max + 1 per call) reproduce the verified/local order.
+        // Each new member takes the role the detector is sure of (a Prologue format, an "Aftermath" title...), else Core as before, and a
+        // weaker guess is held as a suggestion to review.
+        var detected = MemberRoleDetection.AddDetectedMembers(
+            context, storyEvent.Id,
+            verified.Members.OrderBy(m => m.Position ?? int.MaxValue).ThenBy(m => m.Issue.Year ?? int.MaxValue).Select(m => m.Issue.Id).ToList());
 
         NewStoryEventCandidates.Remove(row);
         OnPropertyChanged(nameof(HasNoNewStoryEventCandidates));
         RefreshSidebar();
-        _notify("Story event created", $"\"{verified.ArcName}\" added with {verified.Members.Count} issue(s).");
+        _notify("Story event created", $"\"{verified.ArcName}\" added with {verified.Members.Count} issue(s). {detected}");
     }
 
     private void DismissStoryEventCandidate(StoryEventCandidateRowViewModel row)

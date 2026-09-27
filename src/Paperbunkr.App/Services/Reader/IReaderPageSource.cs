@@ -13,6 +13,13 @@ namespace Paperbunkr.App.Services.Reader;
 /// Names match the members <c>PageCanvas</c> already called on <c>PageDecodeService</c> so the
 /// continuous render path changes only its <c>is</c>-check, not its calls.
 /// </summary>
+/// <summary>What the continuous canvas knows about a window that the bare min/max range does not (see <see cref="IReaderPageSource.SetVirtualizationWindow(int,int,ScrollWindowHint)"/>).</summary>
+/// <param name="VisibleMin">First page actually intersecting the viewport.</param>
+/// <param name="VisibleMax">Last page actually intersecting the viewport.</param>
+/// <param name="Direction">+1 scrolling towards higher page indices, -1 towards lower, 0 not scrolling.</param>
+/// <param name="SustainedScroll">The scroll is ongoing: the fringe pass runs on a throttle instead of waiting for calls to stop.</param>
+public readonly record struct ScrollWindowHint(int VisibleMin, int VisibleMax, int Direction, bool SustainedScroll);
+
 public interface IReaderPageSource : IPageImageDecoder
 {
     /// <summary>Live decoded display-tier bitmap count - the observable "decoded pages are a hard-bounded resource" signal, asserted in the memory-bound tests.</summary>
@@ -30,6 +37,15 @@ public interface IReaderPageSource : IPageImageDecoder
     /// for anything well outside it. Cheap to call every frame; idempotent.
     /// </summary>
     void SetVirtualizationWindow(int minIndex, int maxIndex);
+
+    /// <summary>
+    /// The continuous canvas's version of <see cref="SetVirtualizationWindow(int,int)"/> (docs/superpowers/specs/2026-09-25-comic-reader-
+    /// performance-design.md B3): <paramref name="minIndex"/>..<paramref name="maxIndex"/> is still the visible pages plus the layout radius,
+    /// but <paramref name="hint"/> says which of them are actually on screen and which way the reader is scrolling, so the pipeline can
+    /// decode the visible pages first, look one page further ahead in the scroll direction, and keep the low-priority fringe running while
+    /// the scroll continues instead of waiting for it to pause.
+    /// </summary>
+    void SetVirtualizationWindow(int minIndex, int maxIndex, ScrollWindowHint hint);
 
     /// <summary>Non-blocking display-tier cache peek - the page if already decoded, else <see langword="null"/> (caller draws a gap and waits for <see cref="BackgroundDecodeCompleted"/>).</summary>
     Bitmap? TryGetCachedPage(int pageIndex);

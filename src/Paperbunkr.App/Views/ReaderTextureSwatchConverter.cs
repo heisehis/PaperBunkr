@@ -8,11 +8,10 @@ namespace Paperbunkr.App.Views;
 
 /// <summary>
 /// Renders a <c>ReaderBackgroundTextures</c> swatch preview for the Preferences → Reader texture
-/// picker (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md Item 1) - same
-/// "ignore the bound value, take the id from ConverterParameter" idiom as a literal per-swatch
-/// binding, since each swatch is a fixed texture id, not a bound property. <see cref="BookThemeSwatchConverter"/>
-/// is the precedent for a static-swatch-brush converter in this codebase, just keyed off the bound
-/// value instead of a parameter there.
+/// picker (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md Item 1). The texture
+/// id comes from the bound value (each swatch's <c>Id</c>); a ConverterParameter still wins, so a
+/// fixed-id literal binding keeps working. <see cref="BookThemeSwatchConverter"/> is the precedent
+/// for a static-swatch-brush converter in this codebase.
 /// </summary>
 public sealed class ReaderTextureSwatchConverter : IValueConverter
 {
@@ -20,7 +19,7 @@ public sealed class ReaderTextureSwatchConverter : IValueConverter
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (parameter is not string id)
+        if ((parameter ?? value) is not string id)
         {
             return Brushes.Transparent;
         }

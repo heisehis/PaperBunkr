@@ -114,9 +114,9 @@ internal sealed record ReaderPageTransitionData(
 /// <see cref="ReaderPageVisualHandler"/>'s color-filter cache, so dragging a slider that ends up
 /// back where it started doesn't rebuild a filter unnecessarily.
 /// </summary>
-internal sealed record AdjustmentVisualData(double Brightness, double Contrast, double Saturation, double Gamma)
+internal sealed record AdjustmentVisualData(double Brightness, double Contrast, double Saturation, double Gamma, double Warmth = 0, int Sharpen = 0)
 {
-    public static readonly AdjustmentVisualData None = new(0, 0, 0, 0);
+    public static readonly AdjustmentVisualData None = new(0, 0, 0, 0, 0, 0);
 }
 
 /// <summary>
@@ -184,6 +184,47 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// </summary>
     private SKColorFilter? _cachedColorFilter;
     private AdjustmentVisualData? _cachedFor;
+
+    /// <summary>
+    /// Sharpening (docs/superpowers/specs/2026-09-26-comic-reader-image-quality-design.md #2): CE's 3x3 cross kernel as a paint-level Skia matrix convolution, applied after the colour filter to the page as drawn
+    /// (so it sharpens what is on screen, at any zoom). Null while the level is 0; built once per level and replaced only when the level changes.
+    /// </summary>
+    private SKImageFilter? _sharpenFilter;
+    private int _sharpenFilterLevel;
+
+    private void RefreshSharpenFilter()
+    {
+        int level = Math.Clamp(_adjustmentData.Sharpen, 0, ImageAdjustmentMath.MaxSharpen);
+        if (level == _sharpenFilterLevel)
+        {
+            return;
+        }
+
+        _sharpenFilterLevel = level;
+        _sharpenFilter = level == 0
+            ? null
+            : SKImageFilter.CreateMatrixConvolution(new SKSizeI(3, 3), ImageAdjustmentMath.CreateSharpenKernel(level), 1f, 0f, new SKPointI(1, 1), SKShaderTileMode.Clamp, convolveAlpha: false);
+    }
+
+    /// <summary>Whether draws must go through the leased Skia canvas: a colour filter or sharpening needs a paint the plain Avalonia draw call cannot carry.</summary>
+    private bool NeedsPaint(SKColorFilter? colorFilter) => colorFilter is not null || _sharpenFilter is not null;
+
+    /// <summary>
+    /// How a page bitmap is sampled when the leased canvas draws it (docs/superpowers/specs/2026-09-26-comic-reader-image-quality-design.md #25). A bare <c>SKPaint</c> samples with nearest-neighbour, which
+    /// aliases print screentone into moire (measured: about twice the shimmer of a mipmapped draw when the page is drawn smaller than its bitmap) and blocks the page when it is enlarged. High quality
+    /// downscales through mipmaps (the same anti-aliased result <c>CreateScaledBitmap(HighQuality)</c> gives the unfiltered path) and enlarges with a cubic; low quality is plain bilinear.
+    /// </summary>
+    internal static SKSamplingOptions SamplingFor(bool highQuality, double drawWidth, double sourceWidth)
+    {
+        if (!highQuality)
+        {
+            return new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None);
+        }
+
+        return drawWidth < sourceWidth
+            ? new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear)
+            : new SKSamplingOptions(SKCubicResampler.Mitchell);
+    }
 
     /// <summary>
     /// Real perf bug, found while chasing continuous-scroll tearing: <see cref="RenderContinuous"/>'s
@@ -420,6 +461,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     private void RenderCore(ImmediateDrawingContext context)
     {
         var colorFilter = GetColorFilter();
+        RefreshSharpenFilter();
 
         // Real bug, found 2026-09-12 via manual testing: the page-shadow (Item 1 §1.5) drew via
         // plain context.DrawRectangle from inside RenderPaged/RenderSpread, *after* the lease
@@ -449,7 +491,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         // Any transition takes the leased path now, not just Crossfade: it draws the pre-converted
         // SKImages (OnMessage) rather than the raw page bitmaps, so an in-flight animation survives
         // the reader pipeline freeing a bitmap.
-        bool needsLease = colorFilter is not null || _transitionData is not null;
+        bool needsLease = NeedsPaint(colorFilter) || _transitionData is not null;
         using ISkiaSharpApiLease? lease = needsLease && context.TryGetFeature<ISkiaSharpApiLeaseFeature>() is { } leaseFeature
             ? leaseFeature.Lease()
             : null;
@@ -472,7 +514,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// <summary>Cached by <see cref="AdjustmentVisualData"/> record equality against <see cref="_cachedFor"/> - only rebuilds the <see cref="SKColorFilter"/> when the actual values changed, not every compose pass.</summary>
     private SKColorFilter? GetColorFilter()
     {
-        if (ImageAdjustmentMath.IsIdentity(_adjustmentData.Brightness, _adjustmentData.Contrast, _adjustmentData.Saturation, _adjustmentData.Gamma))
+        if (ImageAdjustmentMath.IsIdentity(_adjustmentData.Brightness, _adjustmentData.Contrast, _adjustmentData.Saturation, _adjustmentData.Gamma, _adjustmentData.Warmth))
         {
             _cachedColorFilter = null;
             _cachedFor = _adjustmentData;
@@ -484,7 +526,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
             return _cachedColorFilter;
         }
 
-        var matrix = ImageAdjustmentMath.CreateColorMatrix(_adjustmentData.Brightness, _adjustmentData.Contrast, _adjustmentData.Saturation);
+        var matrix = ImageAdjustmentMath.CreateColorMatrix(_adjustmentData.Brightness, _adjustmentData.Contrast, _adjustmentData.Saturation, _adjustmentData.Warmth);
         SKColorFilter colorFilter = SKColorFilter.CreateColorMatrix(matrix);
 
         // Gamma is a second pass, composed on top (CE: ApplyAdjustment calls ApplyColorMatrix, then
@@ -545,30 +587,31 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// <see cref="_transitionOldImage"/>'s own doc comment for why that per-frame conversion was a
     /// real performance bug.
     /// </summary>
-    private static void DrawBitmap(ImmediateDrawingContext context, Bitmap bitmap, PixelSize pixelSize, PageDrawPlan plan, int rotationDegrees, bool highQuality, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter, double alpha, SKImage? cachedImage = null, Func<Bitmap, SKImage>? skImageResolver = null)
+    private void DrawBitmap(ImmediateDrawingContext context, Bitmap bitmap, PixelSize pixelSize, PageDrawPlan plan, int rotationDegrees, bool highQuality, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter, double alpha, SKImage? cachedImage = null, Func<Bitmap, SKImage>? skImageResolver = null)
     {
         // Take the leased SKImage path whenever a colour filter or partial alpha needs it, OR a
         // caller handed us a pre-converted SKImage - the latter means "don't touch the raw Bitmap",
         // which matters when the reader pipeline may free it out from under an in-flight animation.
-        if (lease is not null && (colorFilter is not null || alpha < 1.0 || cachedImage is not null || skImageResolver is not null))
+        if (lease is not null && (NeedsPaint(colorFilter) || alpha < 1.0 || cachedImage is not null || skImageResolver is not null))
         {
             bool ownsImage = cachedImage is null && skImageResolver is null;
             SKImage skImage = cachedImage ?? skImageResolver?.Invoke(bitmap) ?? SkiaBitmapConverter.ToSkImage(bitmap);
             try
             {
-                using var paint = new SKPaint { ColorFilter = colorFilter, IsAntialias = true, Color = new SKColor(255, 255, 255, (byte)(Math.Clamp(alpha, 0, 1) * 255)) };
+                using var paint = new SKPaint { ColorFilter = colorFilter, ImageFilter = _sharpenFilter, IsAntialias = true, Color = new SKColor(255, 255, 255, (byte)(Math.Clamp(alpha, 0, 1) * 255)) };
                 var sourceRect = new SKRect(0, 0, pixelSize.Width, pixelSize.Height);
                 var destRectSk = new SKRect((float)plan.DestRect.X, (float)plan.DestRect.Y, (float)(plan.DestRect.X + plan.DestRect.Width), (float)(plan.DestRect.Y + plan.DestRect.Height));
+                var sampling = SamplingFor(highQuality, plan.DestRect.Width, pixelSize.Width);
 
                 if (rotationDegrees == 0)
                 {
-                    lease.SkCanvas.DrawImage(skImage, sourceRect, destRectSk, paint);
+                    lease.SkCanvas.DrawImage(skImage, sourceRect, destRectSk, sampling, paint);
                     return;
                 }
 
                 int saveCount = lease.SkCanvas.Save();
                 lease.SkCanvas.RotateDegrees(rotationDegrees, (float)plan.CenterX, (float)plan.CenterY);
-                lease.SkCanvas.DrawImage(skImage, sourceRect, destRectSk, paint);
+                lease.SkCanvas.DrawImage(skImage, sourceRect, destRectSk, sampling, paint);
                 lease.SkCanvas.RestoreToCount(saveCount);
                 return;
             }
@@ -616,13 +659,13 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
             // former per-frame double pixel copy. EvictStaleContinuousScales keys off the visible
             // continuous set; a lone paged bitmap that changes triggers OnMessage's cache dispose.
             DrawBitmap(context, data.Bitmap, pixelSize, plan, data.RotationDegrees, data.HighQuality, lease, colorFilter, alpha: 1.0,
-                skImageResolver: colorFilter is not null ? GetOrCreateSkImage : null);
+                skImageResolver: NeedsPaint(colorFilter) ? GetOrCreateSkImage : null);
             return;
         }
 
         RenderSpread(context, data.Bounds, data.Bitmap, data.SecondaryBitmap, data.Zoom, data.PanOffsetX, data.PanOffsetY,
             data.FitMode, data.FitOnlyIfOversized, data.HighQuality, data.IsRightToLeft, lease, colorFilter, offset: default, alpha: 1.0,
-            skImageResolver: colorFilter is not null ? GetOrCreateSkImage : null);
+            skImageResolver: NeedsPaint(colorFilter) ? GetOrCreateSkImage : null);
     }
 
     /// <summary>
@@ -696,7 +739,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// own transition. The offset is a <see cref="Vector"/> so a vertical page-turn
     /// (<see cref="Data.Entities.ReadingMode.TopToBottom"/>) can slide the spread along Y.
     /// </summary>
-    private static void RenderSpread(ImmediateDrawingContext context, Rect bounds, Bitmap primary, Bitmap secondary,
+    private void RenderSpread(ImmediateDrawingContext context, Rect bounds, Bitmap primary, Bitmap secondary,
         double zoom, double panOffsetX, double panOffsetY, ImageFitMode fitMode, bool fitOnlyIfOversized, bool highQuality,
         bool isRightToLeft, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter, Vector offset, double alpha,
         SKImage? primaryCachedImage = null, SKImage? secondaryCachedImage = null, Func<Bitmap, SKImage>? skImageResolver = null)
@@ -740,7 +783,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// <see cref="Data.Entities.PageTransitionStyle.Crossfade"/> leaves placement alone and blends
     /// alpha via <see cref="PageTransitionMath.CrossfadeAlpha"/>.
     /// </summary>
-    private static void RenderTransition(ImmediateDrawingContext context, ReaderPageTransitionData data, double progress,
+    private void RenderTransition(ImmediateDrawingContext context, ReaderPageTransitionData data, double progress,
         SKImage? oldImage, SKImage? newImage, SKImage? oldSecondaryImage, SKImage? newSecondaryImage,
         ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
     {
@@ -778,7 +821,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// <see cref="SKImage"/>s (<see cref="_transitionOldImage"/> etc.) - only non-null for a Crossfade
     /// turn, since Slide never needs the lease path unless a color filter is separately active.
     /// </summary>
-    private static void DrawTransitionSide(ImmediateDrawingContext context, Bitmap? bitmap, Bitmap? secondaryBitmap,
+    private void DrawTransitionSide(ImmediateDrawingContext context, Bitmap? bitmap, Bitmap? secondaryBitmap,
         SKImage? cachedImage, SKImage? secondaryCachedImage, ReaderPageTransitionData data, bool isRightToLeft, Vector offset, double alpha,
         ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
     {
@@ -859,14 +902,14 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// <summary>One page's or one band's actual draw call - split out of <see cref="RenderContinuous"/> so the whole-page and per-band paths (design §4.3) share identical draw logic rather than two copies drifting apart.</summary>
     private void DrawOneContinuousBitmap(ImmediateDrawingContext context, Bitmap bitmap, Rect rect, BitmapInterpolationMode mode, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
     {
-        if (lease is not null && colorFilter is not null)
+        if (lease is not null && NeedsPaint(colorFilter))
         {
             var pixelSize = bitmap.PixelSize;
             var skImage = GetOrCreateSkImage(bitmap); // cached across frames (§10), not per-frame
-            using var paint = new SKPaint { ColorFilter = colorFilter, IsAntialias = true };
+            using var paint = new SKPaint { ColorFilter = colorFilter, ImageFilter = _sharpenFilter, IsAntialias = true };
             var sourceRect = new SKRect(0, 0, pixelSize.Width, pixelSize.Height);
             var destRectSk = new SKRect((float)rect.X, (float)rect.Y, (float)(rect.X + rect.Width), (float)(rect.Y + rect.Height));
-            lease.SkCanvas.DrawImage(skImage, sourceRect, destRectSk, paint);
+            lease.SkCanvas.DrawImage(skImage, sourceRect, destRectSk, SamplingFor(mode == BitmapInterpolationMode.HighQuality, rect.Width, pixelSize.Width), paint);
             return;
         }
 

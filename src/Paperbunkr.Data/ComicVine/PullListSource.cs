@@ -3,7 +3,7 @@ using Paperbunkr.Data.Entities;
 namespace Paperbunkr.Data.ComicVine;
 
 /// <summary>One release from a store-date query: what the weekly pull list is made of.</summary>
-public sealed record PullListEntry(int IssueId, int SeriesId, string SeriesName, string IssueNumber, DateTime StoreDate, DateTime? CoverDate, string? ImageUrl);
+public sealed record PullListEntry(int IssueId, int SeriesId, string SeriesName, string IssueNumber, DateTime StoreDate, DateTime? CoverDate, string? ImageUrl, DateTime? FocDate = null);
 
 /// <summary>A series' publisher and cross-reference ids, which a release list item doesn't carry.</summary>
 public sealed record PullListSeriesInfo(int SeriesId, string Name, string? Publisher, int? YearBegan, int? ComicVineId);

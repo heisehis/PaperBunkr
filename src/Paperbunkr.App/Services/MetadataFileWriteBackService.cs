@@ -156,6 +156,14 @@ public class MetadataFileWriteBackService
             }
 
             UpdateZipEntries(path, entries);
+
+            // The rewrite changed the file's size and modified time - keep the DB's copy current
+            // (only these columns are dirty, so this can't clobber a concurrent metadata edit).
+            if (Paperbunkr.Data.Library.IssueFileStats.TryApply(issue))
+            {
+                context.SaveChanges();
+            }
+
             return new MetadataWriteBackOutcome(MetadataWriteBackResult.Success, fileName, null);
         }
         catch (Exception ex)

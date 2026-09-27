@@ -32,6 +32,9 @@ public sealed class DetailIssueContextMenuBuilder
         {
             ContextMenuEntry.Item("Edit Properties", _vm.EditIssuePropertiesCommand, issue, Symbol.Info),
             ContextMenuEntry.Item("Open in Reader", _vm.OpenIssueInReaderCommand, issue, Symbol.Open),
+            _vm.CanScrapeIssues
+                ? ContextMenuEntry.Item("Scrape…", _vm.ScrapeIssueCommand, issue, Symbol.ArrowDownload)
+                : null,
             ContextMenuEntry.Item("Show in Explorer", _vm.RevealIssueCommand, issue, Symbol.FolderOpen, isEnabled: issue.HasFile),
             ContextMenuEntry.Separator,
             ContextMenuEntry.Item("Mark as Read", _vm.MarkIssueReadCommand, issue, Symbol.CheckmarkCircle),

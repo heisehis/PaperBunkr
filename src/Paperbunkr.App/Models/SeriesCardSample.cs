@@ -69,6 +69,10 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     public required string Name { get; init; }
     public required string Sub { get; init; }
     public string? Publisher { get; init; }
+
+    /// <summary>The series' earliest release year - picks the era-specific publisher logo
+    /// (docs/superpowers/specs/2026-09-25-publisher-icons-and-reader-textures-design.md §A4).</summary>
+    public int? PublisherYear { get; init; }
     public required string ContentTypeLabel { get; init; }
 
     /// <summary>Series-level current values, for the series-card context menu's radio ✓ marks
@@ -83,7 +87,10 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
 
     /// <summary>Home screen's count-pill badge text (docs/superpowers/specs/2026-08-18-home-screen-
     /// design.md) - a plain <c>StringFormat</c> can't singularize "1 issue" on its own.</summary>
-    public string IssueCountLabel => IssueCount == 1 ? "1 issue" : $"{IssueCount} issues";
+    public string IssueCountLabel => FormatIssueCount(IssueCount);
+
+    /// <summary>"1 issue" / "N issues" - the one pluralized count every series card, tile and detail header shares.</summary>
+    public static string FormatIssueCount(int count) => count == 1 ? "1 issue" : $"{count:N0} issues";
 
     /// <summary>Home screen's Recently Added row badge (docs/superpowers/specs/2026-08-24-home-
     /// screen-design.md) - "New" when this series' newest issue was actually added recently (real
@@ -141,6 +148,26 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
 
     /// <summary>The Panorama card's full cell width - <see cref="PanoramaWidth"/> (the cover) plus <see cref="PanoramaRingGutter"/> each side. The DataTemplate binds the Button's Width here.</summary>
     public double PanoramaCellWidth => PanoramaWidth + (2 * PanoramaRingGutter);
+
+    /// <summary>Library preview panel hero cover (docs/superpowers/specs/2026-09-26-library-preview-panel-v2-design.md §2): fixed
+    /// width, height from this cover's own aspect ratio (<see cref="PanoramaWidth"/> is that ratio at <see cref="PanoramaHeight"/>),
+    /// so the whole cover shows instead of a crop.</summary>
+    public const double HeroCoverWidth = 118;
+
+    public double HeroCoverHeight => PanoramaWidth > 0 ? HeroCoverWidth * PanoramaHeight / PanoramaWidth : HeroCoverWidth * 1.5;
+
+    // ---- Library preview panel display strings (same spec, §2) ----
+
+    public string? TotalSizeLabel => TotalFileSize > 0 ? IssueListFieldCatalog.FormatFileSize(TotalFileSize) : null;
+    public string? LastOpenedLabel => LastOpenedTime?.ToString("d MMM yyyy", System.Globalization.CultureInfo.CurrentCulture);
+    public string? LastAddedLabel => LastAddedTime?.ToString("d MMM yyyy", System.Globalization.CultureInfo.CurrentCulture);
+    public bool HasTotalSize => TotalSizeLabel is not null;
+    public bool HasLastOpened => LastOpenedLabel is not null;
+    public bool HasLastAdded => LastAddedLabel is not null;
+    public bool HasDetails => HasTotalSize || HasLastOpened || HasLastAdded;
+
+    /// <summary>One-line hint shown while Details is collapsed.</summary>
+    public string DetailsHint => string.Join(" · ", new[] { TotalSizeLabel, LastOpenedLabel is null ? null : $"opened {LastOpenedLabel}" }.Where(s => !string.IsNullOrEmpty(s)));
 
     /// <summary>
     /// Cover issue id, resolved to a <see cref="Bitmap"/> lazily via <c>CoverImageConverter</c>
@@ -275,7 +302,8 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
         // and-glyphs-design.md Part 4, "Absolute Batman" bug). series.Publisher itself is stale
         // (populated once at CE-migration time - Series.cs's own doc comment) and was the Library
         // Publisher badge's actual bug: it read that stale field directly instead of aggregating.
-        string? publisher = SeriesMetaFields.FromSeries(series).Publisher;
+        SeriesMetaFields metaFields = SeriesMetaFields.FromSeries(series);
+        string? publisher = metaFields.Publisher;
 
         return new SeriesCardSample
         {
@@ -298,11 +326,12 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
                     PanoramaWidth = ComputePanoramaWidth(aspectRatio),
                 },
             Sub = series.RemoteSourceId is null
-                ? $"{series.ContentType} · {series.Issues.Count} issues"
-                : $"{series.ContentType} · {series.Issues.Count} issues · on {series.RemoteSource?.DisplayName ?? "remote library"}",
+                ? $"{series.ContentType} · {FormatIssueCount(series.Issues.Count)}"
+                : $"{series.ContentType} · {FormatIssueCount(series.Issues.Count)} · on {series.RemoteSource?.DisplayName ?? "remote library"}",
             IsRemote = series.RemoteSourceId is not null,
             RemoteSourceName = series.RemoteSource?.DisplayName,
             Publisher = publisher,
+            PublisherYear = metaFields.YearValue,
             ContentTypeLabel = series.ContentType.ToString(),
             SeriesStatusLabel = series.Status.ToString(),
             ReadingStatusLabel = series.ReadingStatus.ToString(),

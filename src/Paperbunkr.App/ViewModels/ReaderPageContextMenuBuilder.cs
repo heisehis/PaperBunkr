@@ -31,11 +31,51 @@ public sealed class ReaderPageContextMenuBuilder
     /// Two menu items instead of one multi-format dialog - see the design doc's "approaches
     /// considered" for why.
     /// </summary>
-    private IReadOnlyList<ContextMenuEntry> BuildForMainPage() => new[]
+    private IReadOnlyList<ContextMenuEntry> BuildForMainPage()
     {
-        ContextMenuEntry.Item("Save Page as PNG…", _vm.SavePageAsPngCommand),
-        ContextMenuEntry.Item("Save Page as JPEG…", _vm.SavePageAsJpegCommand),
-    };
+        var entries = new List<ContextMenuEntry>
+        {
+            ContextMenuEntry.Item("Copy Page", _vm.CopyPageCommand),
+        };
+
+        // Only while a double-page spread is showing: copying or saving it stitched (comfort design 2).
+        if (_vm.IsSpreadShowing)
+        {
+            entries.Add(ContextMenuEntry.Item("Copy Spread", _vm.CopySpreadCommand));
+        }
+
+        entries.Add(ContextMenuEntry.Item("Add Note…", _vm.NoteOnThisPageCommand));
+        if (!_vm.IsContinuousMode && !_vm.IsSpreadShowing)
+        {
+            entries.Add(ContextMenuEntry.Item("Clip a Region…", _vm.ToggleClipModeCommand));
+        }
+
+        entries.Add(_vm.HasPin
+            ? ContextMenuEntry.Item("Unpin reference page", _vm.UnpinPageCommand)
+            : ContextMenuEntry.Item("Pin this page as a reference", _vm.PinCurrentPageCommand));
+        entries.Add(ContextMenuEntry.Item("Save Page as PNG…", _vm.SavePageAsPngCommand));
+        entries.Add(ContextMenuEntry.Item("Save Page as JPEG…", _vm.SavePageAsJpegCommand));
+        if (_vm.IsSpreadShowing)
+        {
+            entries.Add(ContextMenuEntry.Item("Save Spread as PNG…", _vm.SaveSpreadAsPngCommand));
+            entries.Add(ContextMenuEntry.Item("Save Spread as JPEG…", _vm.SaveSpreadAsJpegCommand));
+        }
+
+        // Auto-crop for this page only (docs/superpowers/specs/2026-09-26-comic-reader-image-quality-design.md #3); omitted in continuous mode, which has no single current page.
+        var cropMenu = ContextMenuEntry.SubMenu("Auto-crop this page", new[]
+        {
+            ContextMenuEntry.Item("Follow the setting", _vm.SetCurrentPageCropAutoCommand),
+            ContextMenuEntry.Item("Never crop", _vm.SetCurrentPageCropNeverCommand),
+            ContextMenuEntry.Item("Always crop", _vm.SetCurrentPageCropAlwaysCommand),
+        }, isVisible: !_vm.IsContinuousMode);
+        if (cropMenu is not null)
+        {
+            entries.Add(cropMenu);
+        }
+
+        entries.Add(ContextMenuEntry.Item("Report Bad Page…", _vm.ReportBadPageCommand));
+        return entries;
+    }
 
     /// <summary>
     /// "Spread position" (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md Item
@@ -72,6 +112,9 @@ public sealed class ReaderPageContextMenuBuilder
         {
             entries.Add(spreadMenu);
         }
+
+        // Last, so the existing submenu positions stay where they were.
+        entries.Add(ContextMenuEntry.Item("Report Bad Page…", _vm.ReportBadPageCommand, thumbnail));
 
         return entries;
     }

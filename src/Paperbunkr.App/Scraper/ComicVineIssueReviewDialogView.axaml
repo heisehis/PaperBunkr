@@ -50,26 +50,32 @@
         <TextBlock Text="{Binding BookLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
 
         <Grid ColumnDefinitions="*,160">
-            <!-- Padding for scrollbar breathing room - see ComicVineMatchReviewDialogView.axaml's
-                 own comment on this exact fix. -->
-            <ScrollViewer Grid.Column="0" MaxHeight="260" Margin="0,0,16,0" Padding="0,0,10,0">
-                <ItemsControl ItemsSource="{Binding Candidates}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ComicVineIssueCandidateViewModel">
-                            <Border CornerRadius="6" Padding="10,8" Margin="0,2" Classes.selected="{Binding IsSelected}">
-                                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                        Background="Transparent" BorderThickness="0" Padding="0"
-                                        Command="{Binding SelectCommand}">
-                                    <TextBlock Text="{Binding DisplayLabel}" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}" />
-                                </Button>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+            <!-- Real sortable table (docs/superpowers/specs/2026-09-24-scraper-review-tables-and-
+                 batch-summary-design.md §1.2) - CE's own issueform.py shape, verified: a DataGridView
+                 with Issue#/Title columns, natural-sort on Issue# specifically (CE's own SortCompare
+                 handler calling utils.natural_compare - ported into NaturalSortKey below). -->
+            <DataGrid Grid.Column="0" Margin="0,0,16,0" MaxHeight="260"
+                      ItemsSource="{Binding Candidates}" SelectedItem="{Binding SelectedCandidate, Mode=TwoWay}"
+                      AutoGenerateColumns="False" CanUserSortColumns="True" CanUserResizeColumns="True" CanUserReorderColumns="True"
+                      IsReadOnly="True" SelectionMode="Single" GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                      Background="Transparent" BorderThickness="0" RowBackground="Transparent">
+                <DataGrid.Columns>
+                    <!-- SortMemberPath redirects the header's sort to NaturalSortKey while the cell
+                         itself keeps displaying the issue's real number - DataGrid has no per-column
+                         custom-comparer hook, only this single-property redirect. -->
+                    <DataGridTemplateColumn Header="Issue#" SortMemberPath="NaturalSortKey" Width="Auto">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Issue.IssueNumber}" Margin="8,0" VerticalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Title" Binding="{Binding Issue.Name}" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
 
             <StackPanel Grid.Column="1" Spacing="8" HorizontalAlignment="Center">
-                <Border Width="140" Height="210" CornerRadius="6" Background="{DynamicResource PbSurface2Brush}">
+                <Border Width="140" Height="210" CornerRadius="6" Background="{DynamicResource PbSurface2Brush}" IsVisible="{Binding ShowCovers}">
                     <Image Stretch="Uniform" vm:RemoteCoverImage.SourceUrl="{Binding SelectedCandidate.CoverImageUrl}" />
                 </Border>
                 <TextBlock Text="{Binding SelectedCandidate.DisplayLabel}" FontSize="12" Foreground="{DynamicResource PbTextBrush}"
@@ -79,7 +85,12 @@
 
         <Grid ColumnDefinitions="*,Auto,Auto,Auto" IsVisible="{Binding !ReadOnlyPeek}">
             <Button Grid.Column="1" Content="Go Back" Classes="secondary" Command="{Binding GoBackCommand}" Margin="0,0,8,0" />
-            <Button Grid.Column="2" Content="Skip" Classes="secondary" Command="{Binding SkipCommand}" Margin="0,0,8,0" />
+            <!-- Ctrl-held Skip (docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-plan.md
+                 Step 16, CE's real issueform.py affordance, verified) - see the series dialog's own
+                 Skip button for the full rationale (same pattern, mirrored here). -->
+            <Button Grid.Column="2" Content="{Binding SkipLabel}" Classes="secondary" Margin="0,0,8,0"
+                    PointerPressed="OnSkipPointerPressed" PointerMoved="OnSkipPointerMoved" PointerExited="OnSkipPointerExited"
+                    KeyDown="OnSkipKeyDown" />
             <Button Grid.Column="3" Content="OK" Classes="primary" Command="{Binding ConfirmCommand}" />
         </Grid>
         <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ReadOnlyPeek}">

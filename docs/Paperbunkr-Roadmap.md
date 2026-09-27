@@ -2108,10 +2108,24 @@ plan `...-plan.md`, both with the deviations found while building (no manual "fl
 card has no Flag button; the jump-back chip has only thumbnail and bookmark triggers because the comic reader has no
 go-to-page or search yet; continuity defines no issue order so the strip uses reading lists and Story Events only;
 `PageLayoutMode` already had a series level so #4 added only two columns). #16 and #19 were left out of slice A.
-**Slice B (#6, #9, #12, #13) is designed, one spec** (`docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md`,
-not yet planned or built): page skipping (Deleted on / ads off by default), story-end finish plus a CE read-percentage fix
+**Slice B (#6, #9, #12, #13) is built (2026-09-25, uncommitted, on-screen check pending)** (`docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md`,
+plan `docs/superpowers/specs/2026-09-25-comic-reader-page-intelligence-plan.md`): page skipping (Deleted on / ads off by default), story-end finish plus a CE read-percentage fix
 (issues under 20 pages could never count as read), bad-page reports in Library Health, and dHash-based ad-page proposals
-reviewed in Needs Review. Slices C-H not started.
+reviewed in Needs Review. **Slice G (#23, #24) is built (2026-09-25, uncommitted, on-screen check pending)** (`docs/superpowers/specs/2026-09-25-comic-reader-performance-design.md`,
+plan `...-plan.md`): **#24 turned out to be mostly shipped** (the pipeline already widens its prefetch fringe 2-6 pages from decode times, and the pipeline spec
+rejected a velocity-scaled fringe), so it was retargeted at the user-reported hitch when a continuous scroll crosses from page to page (thumbnail churn and a
+UI-thread position save at every boundary, no scroll anchoring, a fringe starved by its own debounce) plus new overlay metrics; **#23** is a staged pipeline for
+the next issue (Tachiyomi/Mihon-style) with a "Pre-open the next issue" toggle. **Slice F is built (2026-09-25, uncommitted, on-screen checks pending)**, split into three specs
+(`docs/superpowers/specs/2026-09-25-comic-reader-{reach,profiles,comfort}-design.md`): **F1 Reach** (#19 Ctrl+K palette with go-to-page, #20 media keys / clickers / mouse side buttons / an XInput
+gamepad, #30 Mihon-style tap-zone layouts that also apply to mouse clicks, plus a fix so right and middle clicks no longer turn the page), **F2 Profiles** (#15, layered reader profiles with a series pointer),
+**F3 Comfort** (#17 stats chip, #22 copy and stitched-spread export, #18 nudges and a warm tint). Pitch premises corrected: #17 cannot read the ReadingEvent log (no per-page timing, so a live session clock),
+#18's nudges are toasts under the feedback taxonomy, #15's reading mode cannot sit in a profile (it is a series fact). **Slice D is built (2026-09-26, uncommitted, on-screen check pending)** (`docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md`): #1 guided panel view and #14 smart double-click zoom on one
+local panel detector (CE has no panel detection, so no parity to check; the split-page part navigation was the existing hook), plus a smooth 25%-400% zoom with no preset steps. Pitch premises corrected: the
+"cache results per page" is an in-memory cache (analysis is a few milliseconds, so no table), and the first click of a double-click used to turn the page before the zoom (fixed). **Slice C is built (2026-09-26, uncommitted, on-screen check pending)** (`docs/superpowers/specs/2026-09-26-comic-reader-image-quality-design.md`): #2 shrank to CE's auto levels and sharpen (the sliders and warm tint were already
+built and are render-time, so "part of the decode cache key" was stale for them), #3 auto-crop margins (Paperbunkr-original, applied in the decode pipeline, off by default, per-page override), and #25 was measured before being touched: the
+downscale was already anti-aliased and the shimmer came from the colour-filter draw's nearest-neighbour sampling. **Slice E is built (2026-09-26, uncommitted, on-screen check pending)**, split into two specs: E1 in-reader reference (`docs/superpowers/specs/2026-09-26-comic-reader-inreader-reference-design.md`: #28 info panel, #29 pinned page, #7 page notes and region clips
+with a Markdown export) and E2 compare (`...-compare-design.md`: #11 two-edition compare with dHash page pairing, entered from the Library menu and each duplicate group). Pitch premises corrected: CE has no in-reader info panel (its info panel is the library sidebar,
+`ComicInfoUI` a plugin script type), comic bookmarks already had a note field, and the pin can survive moving to another issue because it is an independent copy. Slice H not started.
 26, 21 and 8 are deferred as "needs its own project". **Survey corrections (2026-09-21):** #2 mostly exists
 (per-issue and global brightness/contrast/saturation/gamma; only night/sepia, auto-levels and sharpen remain);
 #3 is new, CE has no auto-crop; #5 extends an existing chapter-transition card and review prompt; #4 only needs

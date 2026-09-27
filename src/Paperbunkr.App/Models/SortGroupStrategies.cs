@@ -1,4 +1,5 @@
 using System;
+using cYo.Common.Text;
 
 namespace Paperbunkr.App.Models;
 
@@ -13,6 +14,17 @@ public static class SortStrategies
 {
     public static Comparison<IssueListRow> CaseInsensitiveString(Func<IssueListRow, string?> get) =>
         (a, b) => string.Compare(get(a), get(b), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>CE's own <c>ExtendedStringComparer</c> - case-insensitive, natural-number-aware ("Vol 2" before "Vol 10"),
+    /// and, with <paramref name="ignoreArticles"/>, skipping a leading article ("The Flash" files under F). Same flags CE's
+    /// per-field comparers use (<c>ComicBookSeriesComparer</c>/<c>TitleComparer</c>/<c>StoryArcComparer</c>/... ignore
+    /// articles; <c>FileComparer</c>/<c>DirectoryComparer</c>/... don't). Values are trimmed first: CE's comparer indexes one
+    /// past the end of a string that is nothing but an article plus a space ("The ").</summary>
+    public static Comparison<IssueListRow> NaturalString(Func<IssueListRow, string?> get, bool ignoreArticles)
+    {
+        var mode = ExtendedStringComparison.IgnoreCase | (ignoreArticles ? ExtendedStringComparison.IgnoreArticles : 0);
+        return (a, b) => ExtendedStringComparer.Compare(get(a)?.Trim(), get(b)?.Trim(), mode);
+    }
 
     public static Comparison<IssueListRow> Numeric<T>(Func<IssueListRow, T?> get) where T : struct, IComparable<T> =>
         (a, b) => Nullable.Compare(get(a), get(b));

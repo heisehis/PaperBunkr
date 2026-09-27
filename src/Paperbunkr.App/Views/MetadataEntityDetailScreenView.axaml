@@ -1,0 +1,103 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:m="using:Paperbunkr.App.Models"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.MetadataEntityDetailScreenView"
+             x:DataType="vm:MetadataEntityDetailScreenViewModel">
+
+    <!--
+        One shared screen for Character/Team/Location/Creator/Publisher (docs/superpowers/specs/
+        2026-09-23-metron-api-utilization-design.md) - see the ViewModel's own doc comment for why
+        this is one screen, not five, and why there's no bio/image section (no hydration pipeline
+        populates one yet).
+    -->
+    <UserControl.Styles>
+        <Style Selector="Border.rowCard">
+            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel Margin="0,0,0,40">
+            <Button Classes="backLink" Command="{Binding NavigateBackCommand}" Margin="28,20,28,12">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                    <TextBlock Text="Back" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+
+            <StackPanel Margin="28,0,28,0" Spacing="2">
+                <Border Classes="pbChip" Padding="9,3" HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding KindLabel}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                </Border>
+                <TextBlock Text="{Binding Name}" FontSize="26" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" Margin="0,6,0,0" />
+            </StackPanel>
+
+            <StackPanel Margin="28,20,28,0" Spacing="16">
+
+                <!-- Character/Team/Location/Creator: issues this entity appears in -->
+                <StackPanel Spacing="8" IsVisible="{Binding !IsPublisher}">
+                    <TextBlock Text="APPEARS IN" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock Text="No linked issues yet." Foreground="{DynamicResource PbTextMutedBrush}"
+                               IsVisible="{Binding !HasAppearances}" />
+                    <ItemsControl ItemsSource="{Binding Appearances}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="m:MetadataEntityAppearanceRow">
+                                <Border Classes="rowCard">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Grid.Column="0" Spacing="2">
+                                            <TextBlock Text="{Binding IssueLabel}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                            <TextBlock Text="{Binding Role}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                       IsVisible="{Binding Role, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                            <Button Content="Open series" Classes="ghost" FontSize="12.5"
+                                                    Command="{Binding $parent[UserControl].((vm:MetadataEntityDetailScreenViewModel)DataContext).OpenSeriesCommand}"
+                                                    CommandParameter="{Binding SeriesId}" />
+                                            <Button Content="Read" Classes="primary" FontSize="12.5"
+                                                    Command="{Binding $parent[UserControl].((vm:MetadataEntityDetailScreenViewModel)DataContext).OpenIssueCommand}"
+                                                    CommandParameter="{Binding IssueId}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- Publisher: series it publishes (no per-issue appearance table - single-valued, see Publisher's own doc comment) -->
+                <StackPanel Spacing="8" IsVisible="{Binding IsPublisher}">
+                    <TextBlock Text="PUBLISHES" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock Text="No linked series yet." Foreground="{DynamicResource PbTextMutedBrush}"
+                               IsVisible="{Binding !HasPublishedSeries}" />
+                    <ItemsControl ItemsSource="{Binding PublishedSeries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="m:MetadataEntitySeriesRow">
+                                <Border Classes="rowCard">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0" Text="{Binding SeriesName}" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                        <Button Grid.Column="1" Content="Open series" Classes="ghost" FontSize="12.5"
+                                                Command="{Binding $parent[UserControl].((vm:MetadataEntityDetailScreenViewModel)DataContext).OpenSeriesCommand}"
+                                                CommandParameter="{Binding SeriesId}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

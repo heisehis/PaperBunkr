@@ -85,7 +85,8 @@ public class HomeScreenViewModelTests : IDisposable
 
         var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
 
-        Assert.Equal(0.30, vm.ContinueReading[0].ResumeProgressFraction, precision: 5);
+        // CE formula (LastPageRead is a 0-based index): page index 30 of 100 is the 31st page, so 31%.
+        Assert.Equal(0.31, vm.ContinueReading[0].ResumeProgressFraction, precision: 5);
     }
 
     [Fact]

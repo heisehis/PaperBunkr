@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Paperbunkr.Data.ComicVine.Scraping;
 
 /// <summary>
@@ -13,12 +15,26 @@ public static class MatchScoreCalculator
     private static readonly string[] MirrorPublisherSubstrings = { "panini", "deagostina" };
     private static readonly string[] MirrorPublisherExact = { "marvel italia", "marvel uk", "semic_as", "abril" };
 
-    private static readonly char[] WordSeparators = { ' ', '-', '_', ':', ',', '.', '\'', '(', ')', '[', ']' };
+    // CE tokenizes on \W+ (any non-word character - matchscore.py:45, verified directly against
+    // source), which treats '_' as a word character and does NOT split on it - unlike the earlier
+    // curated separator list here, which did. Apostrophes are stripped before tokenizing instead of
+    // being a split point (matchscore.py:44: "don't" -> "dont", one word, not "don"/"t" two words).
+    private static readonly Regex WordSplitter = new(@"[^\w]+", RegexOptions.Compiled);
+
+    // CE's giant/king-sized and one-shot canonicalization (matchscore.py:46-48, verified), applied
+    // before tokenizing so "Giant-Sized X-Men" and "Giant Size X-Men" namescore-match at full weight.
+    private static readonly Regex GiantSized = new(@"giant[- ]*sized?", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex KingSized = new(@"king[- ]*sized?", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex OneShot = new(@"one[- ]*shot", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <param name="bookSeriesName">The book's parsed/effective series name.</param>
     /// <param name="bookFormat">The book's effective format (e.g. "TPB", "Annual") - CE folds this
     /// into the same word-bag as the series name for namescore.</param>
-    /// <param name="bookIssueNumber">The book's parsed issue number, or null if unparseable.</param>
+    /// <param name="bookIssueNumberRaw">The book's raw issue number string (e.g. "5.5", "01"), or null
+    /// if unknown. CE stores issue numbers as plain strings everywhere except this one scoring call,
+    /// where it parses a float (matchscore.py:87-92, verified directly against source) - this stays a
+    /// raw string end-to-end rather than a pre-parsed int, so fractional numbers (annuals, X.5 issues)
+    /// score correctly instead of falling back to the neutral case an int-only parse would hit.</param>
     /// <param name="bookYear">The book's effective year, or null if unknown.</param>
     /// <param name="candidate">The ComicVine volume being scored against the book.</param>
     /// <param name="wasPreviouslyChosenForSimilarBook">From <see cref="ComicVineMatchMemory"/> -
@@ -28,7 +44,7 @@ public static class MatchScoreCalculator
     public static double Compute(
         string bookSeriesName,
         string? bookFormat,
-        int? bookIssueNumber,
+        string? bookIssueNumberRaw,
         int? bookYear,
         ComicVineVolumeSearchResult candidate,
         bool wasPreviouslyChosenForSimilarBook,
@@ -38,8 +54,8 @@ public static class MatchScoreCalculator
         score += NameScore(bookSeriesName, bookFormat, candidate.Name);
         score += wasPreviouslyChosenForSimilarBook ? 7 : 0;
         score += PublisherScore(candidate.Publisher);
-        score += BookScore(bookIssueNumber, candidate.CountOfIssues);
-        score += YearScore(bookYear, ParseYear(candidate.StartYear));
+        score += BookScore(ParseIssueNumberForScoring(bookIssueNumberRaw), candidate.CountOfIssues);
+        score += YearScore(bookYear, ParseYear(candidate.StartYear), currentYear);
         score += RecencyScore(ParseYear(candidate.StartYear), currentYear);
         return score;
     }
@@ -74,7 +90,11 @@ public static class MatchScoreCalculator
     private static List<string> Tokenize(string? text, string? extra)
     {
         string combined = string.IsNullOrEmpty(extra) ? text ?? string.Empty : $"{text} {extra}";
-        return combined.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries).ToList();
+        combined = combined.Replace("'", string.Empty);
+        combined = GiantSized.Replace(combined, "giant size");
+        combined = KingSized.Replace(combined, "king size");
+        combined = OneShot.Replace(combined, "one shot");
+        return WordSplitter.Split(combined).Where(w => w.Length > 0).ToList();
     }
 
     private static double PublisherScore(string? publisher)
@@ -97,14 +117,16 @@ public static class MatchScoreCalculator
     /// A series with more than 100 issues is always treated as compatible (CE's own rationale,
     /// verified: long-running series are assumed compatible and CV's issue count is often stale for
     /// them). Otherwise 100 if the book's issue number could plausibly belong (issueNumber - 1 &lt;=
-    /// count_of_issues), else -100.
+    /// count_of_issues), else -100. <paramref name="bookIssueNumber"/> is a double (not int) so
+    /// fractional numbers like 5.5 (annuals, half-numbered issues) score correctly (matchscore.py:87-92,
+    /// verified) instead of falling into the neutral unparseable case.
     ///
     /// Null-handling not directly verifiable from source in this pass (see this file's own class doc)
     /// - an unknown book issue number or unknown candidate count_of_issues is treated as neutral
     /// (100, i.e. don't penalize incomplete metadata) rather than guessing at CE's exact behavior for
     /// that case.
     /// </summary>
-    private static double BookScore(int? bookIssueNumber, int? countOfIssues)
+    private static double BookScore(double? bookIssueNumber, int? countOfIssues)
     {
         if (!bookIssueNumber.HasValue || !countOfIssues.HasValue)
         {
@@ -119,19 +141,44 @@ public static class MatchScoreCalculator
         return bookIssueNumber.Value - 1 <= countOfIssues.Value ? 100 : -100;
     }
 
-    private static double YearScore(int? bookYear, int? seriesYear)
+    /// <summary>CE parses the issue number as a float only for this scoring call, nowhere else
+    /// (confirmed directly against source: <c>bookdata.py</c>/<c>dbmodels.py</c>/<c>comicbook.py</c> all
+    /// carry it as a plain string; only <c>matchscore.py:87-92</c> ever floats it) - strips everything
+    /// but digits/period/minus before parsing, matching CE's own regex-then-float approach exactly.</summary>
+    private static double? ParseIssueNumberForScoring(string? raw)
     {
-        if (!bookYear.HasValue)
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        string stripped = Regex.Replace(raw, @"[^0-9.\-]", string.Empty);
+        return double.TryParse(stripped, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double n) ? n : null;
+    }
+
+    /// <summary>CE validates both years through <c>is_valid_year_b(y) = 1900 &lt; y &lt;= currentYear+1</c>
+    /// (matchscore.py:110, verified) before applying the -100/-500 logic - an out-of-range year (e.g.
+    /// garbage like 31337, or a plainly-wrong 50) is treated as absent rather than as a real signal.
+    /// <paramref name="currentYear"/> is the same injected value <see cref="Compute"/> already threads
+    /// into <see cref="RecencyScore"/>, kept deterministic for tests rather than reading the clock here.</summary>
+    private static double YearScore(int? bookYear, int? seriesYear, int currentYear)
+    {
+        bool IsValidYear(int y) => y > 1900 && y <= currentYear + 1;
+
+        int? validBookYear = bookYear is int by && IsValidYear(by) ? by : null;
+        int? validSeriesYear = seriesYear is int sy && IsValidYear(sy) ? sy : null;
+
+        if (!validBookYear.HasValue)
         {
             return 0;
         }
 
-        if (!seriesYear.HasValue)
+        if (!validSeriesYear.HasValue)
         {
             return -100;
         }
 
-        return seriesYear.Value > bookYear.Value ? -500 : 0;
+        return validSeriesYear.Value > validBookYear.Value ? -500 : 0;
     }
 
     private static double RecencyScore(int? seriesYear, int currentYear) =>

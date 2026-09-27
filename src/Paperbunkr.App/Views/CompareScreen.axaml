@@ -1,0 +1,122 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="800"
+             x:Class="Paperbunkr.App.Views.CompareScreen"
+             x:DataType="vm:CompareScreenViewModel">
+
+    <!-- Two-edition compare (docs/superpowers/specs/2026-09-26-comic-reader-compare-design.md #11): a header with the mode, the pairing and the decision, the two editions' pages, and a facts strip under each.
+         Side by side gives each edition half the width; flicker gives the one canvas all of it and Space flips between A and B. Zoom and pan are one shared value, so both sides always look at the same spot. -->
+    <Grid Background="{DynamicResource PbSurface1Brush}" RowDefinitions="Auto,*,Auto">
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="12,8">
+            <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Button Grid.Column="0" Classes="clusterPill" Command="{Binding CloseCommand}" ToolTip.Tip="Back without changing anything (Esc)"
+                            AutomationProperties.Name="Back">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeXs}" />
+                            <TextBlock Text="Back" />
+                        </StackPanel>
+                    </Button>
+                    <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center" Spacing="1">
+                        <TextBlock FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextBrush}">
+                            <Run Text="A  " Foreground="{DynamicResource PbAccentTextBrush}" /><Run Text="{Binding TitleA}" />
+                        </TextBlock>
+                        <TextBlock FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextBrush}">
+                            <Run Text="B  " Foreground="{DynamicResource PbAccentTextBrush}" /><Run Text="{Binding TitleB}" />
+                        </TextBlock>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                        <Button Classes="clusterPill" Content="Keep A" Command="{Binding KeepACommand}" ToolTip.Tip="Keep A and move B to the Recycle Bin (1)" />
+                        <Button Classes="clusterPill" Content="Keep B" Command="{Binding KeepBCommand}" ToolTip.Tip="Keep B and move A to the Recycle Bin (2)" />
+                        <Button Classes="clusterPill" Content="Not a duplicate" Command="{Binding NotADuplicateCommand}" ToolTip.Tip="Keep both and stop listing them as duplicates" />
+                    </StackPanel>
+                </Grid>
+                <WrapPanel Orientation="Horizontal">
+                    <Button Classes="clusterPill" Command="{Binding ToggleModeCommand}" ToolTip.Tip="Switch between side by side and flicker (M)" Margin="0,0,8,4">
+                        <TextBlock Text="{Binding ModeLabel, StringFormat='Mode: {0}'}" />
+                    </Button>
+                    <Button Classes="clusterPill" Command="{Binding FlipCommand}" IsVisible="{Binding IsFlicker}" ToolTip.Tip="Show the other edition in the same place (Space)" Margin="0,0,8,4">
+                        <TextBlock Text="{Binding FlickerLabel, StringFormat='Showing {0} - flip (Space)'}" />
+                    </Button>
+                    <TextBlock Text="{Binding PageLabel}" FontFamily="Consolas,monospace" FontSize="12" VerticalAlignment="Center" Margin="0,0,12,4"
+                               Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                        <Button Classes="clusterIcon" Command="{Binding OffsetMinusCommand}" ToolTip.Tip="Pair B one page earlier" AutomationProperties.Name="Offset minus one">
+                            <fi:SymbolIcon Symbol="Subtract" FontSize="{StaticResource PbIconSizeXs}" />
+                        </Button>
+                        <TextBlock Text="{Binding OffsetText}" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <Button Classes="clusterIcon" Command="{Binding OffsetPlusCommand}" ToolTip.Tip="Pair B one page later" AutomationProperties.Name="Offset plus one">
+                            <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
+                        </Button>
+                        <Button Classes="clusterPill" Content="Reset" Command="{Binding OffsetResetCommand}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding MatchText}" VerticalAlignment="Center" FontSize="12" Margin="0,0,12,4"
+                               Foreground="{DynamicResource PbTextBrush}" />
+                    <Button Classes="clusterPill" Content="Reset view (0)" Command="{Binding ResetViewCommand}" Margin="0,0,8,4" />
+                    <Button Classes="clusterPill" Content="Next copy" Command="{Binding NextCandidateCommand}" IsVisible="{Binding HasSecondCandidate}"
+                            ToolTip.Tip="This group has more than two copies: compare A with the next one" Margin="0,0,8,4" />
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- The two pages -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*" IsVisible="{Binding !HasError}">
+            <views:PageCanvas x:Name="CanvasA" Grid.Column="0" Grid.ColumnSpan="{Binding LeftColumnSpan}"
+                              Page="{Binding LeftPage}"
+                              ZoomLevel="{Binding ZoomLevel}" PanOffsetX="{Binding PanOffsetX}" PanOffsetY="{Binding PanOffsetY}"
+                              HighQualityDisplay="True" MinZoomLevel="0.25" />
+            <views:PageCanvas x:Name="CanvasB" Grid.Column="1" IsVisible="{Binding IsSideBySide}"
+                              Page="{Binding PageB}"
+                              ZoomLevel="{Binding ZoomLevel}" PanOffsetX="{Binding PanOffsetX}" PanOffsetY="{Binding PanOffsetY}"
+                              HighQualityDisplay="True" MinZoomLevel="0.25" />
+            <Border Grid.Column="1" IsVisible="{Binding IsSideBySide}" Width="1" HorizontalAlignment="Left" Background="{DynamicResource PbBorderBrush}" IsHitTestVisible="False" />
+            <Border Grid.Column="0" Classes="floatingPanel" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12" Padding="8,3" IsHitTestVisible="False">
+                <TextBlock Text="A" FontWeight="Bold" FontSize="14" />
+            </Border>
+            <Border Grid.Column="1" IsVisible="{Binding IsSideBySide}" Classes="floatingPanel" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12" Padding="8,3" IsHitTestVisible="False">
+                <TextBlock Text="B" FontWeight="Bold" FontSize="14" />
+            </Border>
+            <Border Grid.Column="0" Grid.ColumnSpan="2" IsVisible="{Binding IsFlicker}" Classes="floatingPanel" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="12" Padding="10,3"
+                    IsHitTestVisible="False">
+                <TextBlock Text="{Binding FlickerLabel, StringFormat='Showing {0}'}" FontWeight="Bold" FontSize="14" />
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="1" IsVisible="{Binding HasError}" Width="420" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center"
+                CornerRadius="{DynamicResource PbRadiusLg}" Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+            <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+        </Border>
+
+        <!-- Facts strip: one column per edition. The badges (text, not colour alone) name the edition that wins a row. -->
+        <Border Grid.Row="2" Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="12,8"
+                IsVisible="{Binding !HasError}">
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                <StackPanel Grid.Column="0" Spacing="2">
+                    <TextBlock Text="A" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                    <TextBlock Text="{Binding FactsA.ResolutionLabel, StringFormat='Page size: {0}'}" FontSize="12" />
+                    <TextBlock FontSize="12">
+                        <Run Text="{Binding FactsA.SizeLabel, StringFormat='File: {0}'}" /><Run Text="  ·  " /><Run Text="{Binding FactsA.Format}" /><Run Text="  ·  " /><Run Text="{Binding FactsA.PageCount, StringFormat='{}{0} pages'}" />
+                    </TextBlock>
+                    <TextBlock Text="{Binding FactsA.BytesPerPageLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <TextBlock Text="{Binding BadgesA}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="2">
+                    <TextBlock Text="B" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                    <TextBlock Text="{Binding FactsB.ResolutionLabel, StringFormat='Page size: {0}'}" FontSize="12" />
+                    <TextBlock FontSize="12">
+                        <Run Text="{Binding FactsB.SizeLabel, StringFormat='File: {0}'}" /><Run Text="  ·  " /><Run Text="{Binding FactsB.Format}" /><Run Text="  ·  " /><Run Text="{Binding FactsB.PageCount, StringFormat='{}{0} pages'}" />
+                    </TextBlock>
+                    <TextBlock Text="{Binding FactsB.BytesPerPageLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <TextBlock Text="{Binding BadgesB}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

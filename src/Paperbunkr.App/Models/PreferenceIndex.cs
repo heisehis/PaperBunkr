@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Paperbunkr.App.Models;
 
@@ -7,14 +8,17 @@ namespace Paperbunkr.App.Models;
 /// 2026-08-28-preferences-rework-design.md "Search"). <see cref="Keywords"/> carries the labels of
 /// the individual controls inside the group so a query like "double page" still resolves to the
 /// Reader → Display card. <see cref="AnchorKey"/> matches the <c>Tag</c> on that group's
-/// <c>Border</c> in the section's .axaml, which the shell scrolls into view.
+/// <c>Border</c> in the section's .axaml, which the shell scrolls into view. <see cref="SubTab"/> is the key of the section tab
+/// that holds the group (docs/superpowers/specs/2026-09-26-preferences-reader-organize-tabs-design.md); the shell selects it
+/// before scrolling. Null for sections without tabs (Library Health has its own reveal).
 /// </summary>
 public sealed record PreferenceIndexEntry(
     PreferencesSection Section,
     string GroupTitle,
     string Title,
     IReadOnlyList<string> Keywords,
-    string AnchorKey);
+    string AnchorKey,
+    string? SubTab = null);
 
 /// <summary>
 /// The static catalog behind the Preferences search box. Hand-maintained; kept honest by
@@ -23,6 +27,10 @@ public sealed record PreferenceIndexEntry(
 /// </summary>
 public static class PreferenceIndex
 {
+    /// <summary>The entry with this anchor key, or null.</summary>
+    public static PreferenceIndexEntry? Find(string? anchorKey)
+        => anchorKey is null ? null : Entries.FirstOrDefault(e => e.AnchorKey == anchorKey);
+
     public static IReadOnlyList<PreferenceIndexEntry> Entries { get; } = new PreferenceIndexEntry[]
     {
         new(PreferencesSection.General, "Startup", "Startup",
@@ -69,26 +77,89 @@ public static class PreferenceIndex
         new(PreferencesSection.Library, "Library Health", "Library Health",
             new[] { "missing files", "verify", "confirmed missing", "recently removed", "restore", "relink", "dismiss all", "ghost", "library health" },
             "library.health"),
+        // One entry per Library Health section (docs/superpowers/specs/2026-09-26-library-health-subtabs-design.md) - opening a hit
+        // switches to the section's sub-tab, opens it and scrolls to it. Anchors are the sections' own Border tags.
+        new(PreferencesSection.Library, "Library Health", "Duplicate files",
+            new[] { "duplicate", "duplicates", "same file", "keep largest", "dismiss all", "merge entries", "copies" },
+            "library.healthDuplicates"),
+        new(PreferencesSection.Library, "Library Health", "Series conflicts",
+            new[] { "series conflict", "conflict", "merge series", "keep separate", "keep all separate", "same series" },
+            "library.healthSeriesConflicts"),
+        new(PreferencesSection.Library, "Library Health", "Content type",
+            new[] { "content type", "unknown content type", "comic or manga", "unknown series" },
+            "library.healthContentType"),
+        new(PreferencesSection.Library, "Library Health", "Metadata proposals",
+            new[] { "metadata proposal", "proposal", "proposals", "accept all", "reject all", "applied automatically", "filename parser", "review metadata" },
+            "library.healthProposals"),
+        new(PreferencesSection.Library, "Library Health", "Advertisement pages",
+            new[] { "advertisement", "advertisement pages", "ad pages", "ads", "ad detection" },
+            "library.healthAdPages"),
+        new(PreferencesSection.Library, "Library Health", "Reported pages",
+            new[] { "reported pages", "bad page", "broken page", "page report" },
+            "library.healthReportedPages"),
+        new(PreferencesSection.Library, "Library Health", "Find similar series",
+            new[] { "similar series", "scan for similar names", "punctuation variant", "split series" },
+            "library.healthSimilarSeries"),
+        new(PreferencesSection.Library, "Library Health", "Missing files",
+            new[] { "missing files", "relink", "relink all", "dismiss all", "ghost" },
+            "library.healthMissing"),
+        new(PreferencesSection.Library, "Library Health", "Empty rows",
+            new[] { "empty rows", "empty series", "empty issue", "nothing empty" },
+            "library.healthEmptyRows"),
+        new(PreferencesSection.Library, "Library Health", "Recently removed",
+            new[] { "recently removed", "restore removed", "undo remove" },
+            "library.healthRecentlyRemoved"),
 
         new(PreferencesSection.Automation, "Scheduled Tasks", "Scheduled Tasks",
             new[] { "schedule", "scheduled task", "automation", "automatic", "recurring", "background job", "backup", "scan on startup", "periodic", "cron" },
             "automation.tasks"),
 
-        new(PreferencesSection.Reader, "Right to Left", "Right to Left",
+        // Reader: one entry per group, each naming the tab that holds it (PreferencesScreenViewModel.ReaderTabKeys).
+        new(PreferencesSection.Reader, "Reading direction", "Reading direction",
             new[] { "right to left", "rtl", "manga", "page turn direction", "reverse" },
-            "reader.rtl"),
-        new(PreferencesSection.Reader, "Display", "Display",
-            new[] { "high quality", "fit mode", "auto rotate", "double page", "spread", "page transition", "transition speed" },
-            "reader.display"),
-        new(PreferencesSection.Reader, "Zoom & Navigation", "Zoom & Navigation",
-            new[] { "reset zoom", "mouse wheel", "scroll speed", "zoom" },
-            "reader.zoomNav"),
-        new(PreferencesSection.Reader, "Image Adjustment", "Image Adjustment",
-            new[] { "brightness", "contrast", "saturation", "gamma", "image adjustment" },
-            "reader.imageAdjust"),
-        new(PreferencesSection.Reader, "Background & Margin", "Background & Margin",
-            new[] { "canvas background", "background color", "page margin", "margin width" },
-            "reader.background"),
+            "reader.rtl", "pages"),
+        new(PreferencesSection.Reader, "Layout", "Layout",
+            new[] { "fit mode", "default fit", "fit width", "fit height", "auto rotate", "rotate landscape", "double page", "spread", "page layout" },
+            "reader.layout", "pages"),
+        new(PreferencesSection.Reader, "Turning", "Turning pages",
+            new[] { "page transition", "transition speed", "crossfade", "slide", "animation", "reset zoom", "skip deleted", "skip advertisement", "skip ads", "pre-open", "next issue", "preload" },
+            "reader.turning", "pages"),
+        new(PreferencesSection.Reader, "Tap zones", "Tap zones",
+            new[] { "tap zone", "click zone", "touch", "layout", "l-shaped", "kindle", "edge", "left handed", "invert", "mouse click", "paged", "continuous" },
+            "reader.tapZones", "controls"),
+        new(PreferencesSection.Reader, "Mouse & controller", "Mouse & controller",
+            new[] { "mouse button", "side button", "back button", "forward button", "gamepad", "controller", "xbox", "clicker", "media keys", "mouse wheel", "scroll speed", "wheel speed" },
+            "reader.pointerInput", "controls"),
+        new(PreferencesSection.Reader, "Panels & zoom", "Panels & zoom",
+            new[] { "guided view", "panel", "panels", "comic panel", "smart zoom", "double click", "double tap", "zoom to panel", "panel by panel", "zoom" },
+            "reader.panelsZoom", "controls"),
+        new(PreferencesSection.Reader, "Quality", "Page quality",
+            new[] { "high quality", "smoother scaling", "scaling", "page display", "cpu" },
+            "reader.quality", "image"),
+        new(PreferencesSection.Reader, "Image adjustment", "Image adjustment",
+            new[] { "brightness", "contrast", "saturation", "gamma", "image adjustment", "auto levels", "auto contrast", "levels", "washed out", "sharpen", "sharpening" },
+            "reader.imageAdjust", "image"),
+        new(PreferencesSection.Reader, "Auto-crop", "Auto-crop margins",
+            new[] { "crop", "auto crop", "trim", "margins", "borders", "white border", "scan border", "black border" },
+            "reader.autoCrop", "image"),
+        new(PreferencesSection.Reader, "Background & margin", "Background & margin",
+            new[] { "canvas background", "background color", "background texture", "texture", "page margin", "margin width" },
+            "reader.background", "image"),
+        new(PreferencesSection.Reader, "Toolbar", "Toolbar",
+            new[] { "toolbar", "auto hide", "hide toolbar", "idle", "chrome", "reveal", "per cluster", "ambient", "controls fade" },
+            "reader.toolbar", "comfort"),
+        new(PreferencesSection.Reader, "Session", "Reading session",
+            new[] { "stats", "hud", "session", "pace", "reading time", "break", "eye", "20-20-20", "reminder", "nudge", "rest" },
+            "reader.session", "comfort"),
+        new(PreferencesSection.Reader, "Night", "Night tint",
+            new[] { "warm", "night", "tint", "blue light", "night light", "warm tint", "evening" },
+            "reader.night", "comfort"),
+        new(PreferencesSection.Reader, "Info panel", "Info panel",
+            new[] { "info panel", "summary", "spoiler", "spoilers", "credits", "characters", "story arc" },
+            "reader.infoPanel", "comfort"),
+        new(PreferencesSection.Reader, "Profiles", "Reader Profiles",
+            new[] { "profile", "reader profile", "preset", "manga night", "webtoon", "tablet", "default profile", "workspace" },
+            "reader.profiles", "profiles"),
 
         new(PreferencesSection.KeyboardShortcuts, "Import / Export", "Import / Export Layout",
             new[] { "import layout", "export layout", "shortcut layout", "keybindings file" },
@@ -119,9 +190,25 @@ public static class PreferenceIndex
         new(PreferencesSection.Acquisition, "Connections", "Prowlarr, qBittorrent and ComicVine",
             new[] { "prowlarr", "qbittorrent", "comicvine", "indexer", "api key", "torrent", "download client", "web ui", "password", "acquisition", "test connection" },
             "acquisition.connections"),
-        new(PreferencesSection.OrganizeScrape, "ComicVine scraper", "ComicVine scraper",
-            new[] { "scrape", "scraper", "comicvine", "match", "auto choose", "confirm issue", "overwrite", "blank", "fields", "credits", "summary", "imprint", "publisher", "ignore", "search results", "cluster library manager" },
-            "organizeScrape.matching"),
+        // Organize & Scrape: one entry per group, each naming its tab (OrganizeScrapeSettingsViewModel.TabKeys).
+        new(PreferencesSection.OrganizeScrape, "Source", "Scrape source",
+            new[] { "scrape from", "source", "provider", "comicvine", "metron", "api key", "login", "connections", "scraper" },
+            "organizeScrape.source", "scrape"),
+        new(PreferencesSection.OrganizeScrape, "Matching", "Matching",
+            new[] { "scrape", "match", "auto choose", "best match", "confirm issue", "search results", "results considered", "series art", "cover thumbnails", "covers", "delay", "review dialog" },
+            "organizeScrape.matching", "scrape"),
+        new(PreferencesSection.OrganizeScrape, "Writing", "Writing",
+            new[] { "overwrite", "blank", "never blank", "fields", "fields to fill in", "credits", "summary", "imprint", "convert imprints", "parent publisher" },
+            "organizeScrape.writing", "scrape"),
+        new(PreferencesSection.OrganizeScrape, "Ignore rules", "Ignore rules",
+            new[] { "filter", "ignore", "ignored publishers", "ignored search words", "volumes before year", "volumes after year", "never ignore", "cluster library manager", "advanced scraper" },
+            "organizeScrape.filters", "filters"),
+        new(PreferencesSection.OrganizeScrape, "Name mapping", "Name mapping",
+            new[] { "imprint", "imprint override", "publisher alias", "alias", "publisher", "parent publisher", "rename publisher" },
+            "organizeScrape.names", "filters"),
+        new(PreferencesSection.OrganizeScrape, "Organizer profiles", "Organizer profiles",
+            new[] { "organize", "organizer", "profile", "move files", "copy files", "rename files", "folder template", "naming template", "undo" },
+            "organizeScrape.profiles", "organize"),
         new(PreferencesSection.Acquisition, "Searching", "Searching",
             new[] { "search interval", "check every", "poll", "release size", "minimum size", "maximum size", "release group", "ignored words", "cbz", "cbr", "prefer cbz", "wanted" },
             "acquisition.search"),
@@ -150,10 +237,16 @@ public static class PreferenceIndex
             "advanced.backup"),
 
         new(PreferencesSection.About, "Updates", "Updates",
-            new[] { "update", "check for updates", "auto update", "version", "new version" },
-            "about.updates"),
+            new[] { "update", "check for updates", "auto update", "version", "new version", "copy version" },
+            "about.updates", SubTab: "overview"),
+        new(PreferencesSection.About, "Project", "Project",
+            new[] { "github", "wiki", "help", "report an issue", "bug", "releases", "logs", "log folder", "data folder", "crash log" },
+            "about.project", SubTab: "overview"),
         new(PreferencesSection.About, "Changelog", "Changelog",
             new[] { "changelog", "what's new", "whats new", "release notes", "history" },
-            "about.changelog"),
+            "about.changelog", SubTab: "changelog"),
+        new(PreferencesSection.About, "Legal & notices", "Legal & notices",
+            new[] { "license", "agpl", "privacy", "terms", "comicvine", "metron", "api key", "open source", "third party", "notices", "credits", "acknowledgements" },
+            "about.legal", SubTab: "legal"),
     };
 }

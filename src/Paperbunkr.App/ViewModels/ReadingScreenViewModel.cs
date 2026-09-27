@@ -442,6 +442,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
             foreach (var item in context.ReadingListItems.Where(i => ids.Contains(i.Id)))
             {
                 item.Role = BulkRole.Role;
+                MemberRoleApplier.MarkUserSet(item);
             }
 
             BumpUpdatedAt(context, listId);
@@ -844,6 +845,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         item.Role = row.SelectedRole;
+        MemberRoleApplier.CopyState(row.Item, item);          // role source / reason / pending suggestion, as the row now shows them
         item.Notes = row.Notes;
         list.UpdatedAt = DateTime.UtcNow;
         context.SaveChanges();
@@ -1372,6 +1374,42 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         {
             ArcSearchStatus = ex.Message;
         }
+    }
+
+    /// <summary>The "Detect roles" action: runs role detection over every item of the open list. Roles it is sure of fill items that have
+    /// no role yet (marked automatic); a role you set is never changed - a differing guess is offered as a suggestion instead. Reported
+    /// through the Activity Center.</summary>
+    [RelayCommand]
+    private void DetectRoles()
+    {
+        if (_activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        using var job = _activity.StartJob(ActivityJobKind.Other, "Detecting roles in this list");
+        string message;
+        try
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            var summary = MemberRoleDetection.DetectForList(context, listId);
+            message = summary.ToString();
+            job.Succeed(message, itemsProcessed: summary.Applied + summary.Suggested);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Role detection failed: {ex.Message}";
+            job.Fail(StatusMessage, ex: ex);
+            return;
+        }
+
+        // Reload after the click has finished routing (the rows being rebuilt include the control that raised it); the reload clears the
+        // status line, so the result is shown once it is done.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            LoadReadingList(listId);
+            StatusMessage = message;
+        });
     }
 
     [RelayCommand]

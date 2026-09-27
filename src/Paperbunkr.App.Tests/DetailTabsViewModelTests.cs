@@ -304,6 +304,57 @@ public class DetailTabsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void SeriesReaderProfile_ShowsTheProfileName_AndClearRemovesThePointer()
+    {
+        int profileId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            profileId = new Paperbunkr.App.Services.WorkspaceService(() => new PaperbunkrDbContext(_dbOptions)).Create(WorkspaceScreen.Reader, "Night", "{}").Id;
+            context.Series.First(s => s.Id == _seriesId).ReaderProfileId = profileId;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        Assert.True(vm.HasSeriesProfile);
+        Assert.Equal("Night", vm.SeriesProfileLabel);
+
+        vm.ClearSeriesProfileCommand.Execute(null);
+
+        Assert.False(vm.HasSeriesProfile);
+        Assert.Equal("Not set", vm.SeriesProfileLabel);
+        using var reload = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(reload.Series.First(s => s.Id == _seriesId).ReaderProfileId);
+    }
+
+    [Fact]
+    public void SeriesReaderProfile_APointerToADeletedProfile_ShowsDeleted()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.Series.First(s => s.Id == _seriesId).ReaderProfileId = 4242;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.True(vm.HasSeriesProfile);
+        Assert.Equal("Deleted profile", vm.SeriesProfileLabel);
+    }
+
+    [Fact]
+    public void SeriesReaderProfile_DefaultsToNotSet()
+    {
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.False(vm.HasSeriesProfile);
+        Assert.Equal("Not set", vm.SeriesProfileLabel);
+    }
+
+    [Fact]
     public void ToggleReadingMode_LeftToRight_FlipsToRightToLeft_AndPersists()
     {
         var vm = CreateViewModel();
@@ -520,6 +571,63 @@ public class DetailTabsViewModelTests : IDisposable
         var exception = Record.Exception(() => vm.RevealIssueCommand.Execute(third));
 
         Assert.Null(exception);
+    }
+
+    // --- "Scrape…" on an issue tile (the request behind this addition: no way to scrape just one
+    // comic from the Detail screen before this - only the whole-series panel existed) ---
+
+    [Fact]
+    public async Task ScrapeIssue_NoSelection_ScrapesOnlyTheClickedIssue()
+    {
+        IReadOnlyList<int>? capturedIds = null;
+        var vm = CreateViewModel();
+        vm.ScrapeIssues = ids => { capturedIds = ids; return Task.FromResult("done"); };
+        vm.LoadSeries(LoadSeriesEntity());
+        var issueCard = vm.Issues.First();
+
+        await vm.ScrapeIssueCommand.ExecuteAsync(issueCard);
+
+        Assert.Equal(new[] { issueCard.Id }, capturedIds);
+    }
+
+    [Fact]
+    public async Task ScrapeIssue_WithMultipleSelected_ScrapesTheWholeUnion_NotJustTheClickedTile()
+    {
+        IReadOnlyList<int>? capturedIds = null;
+        var vm = CreateViewModel();
+        vm.ScrapeIssues = ids => { capturedIds = ids; return Task.FromResult("done"); };
+        vm.LoadSeries(LoadSeriesEntity());
+        var first = vm.Issues[0];
+        var second = vm.Issues[1];
+        var third = vm.Issues[2];
+        vm.ToggleIssueSelection(first, isShiftHeld: false);
+        vm.ToggleIssueSelection(second, isShiftHeld: false);
+
+        await vm.ScrapeIssueCommand.ExecuteAsync(third); // right-click an unselected tile - unions it in, same as EditIssueProperties/RevealIssue
+
+        Assert.Equal(new[] { first.Id, second.Id, third.Id }, capturedIds!.OrderBy(id => id));
+    }
+
+    [Fact]
+    public async Task ScrapeIssue_NoHostWired_DoesNothing()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var issueCard = vm.Issues.First();
+
+        var exception = await Record.ExceptionAsync(() => vm.ScrapeIssueCommand.ExecuteAsync(issueCard));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void CanScrapeIssues_ReflectsWhetherTheHostWiredScrapeIssues()
+    {
+        var vm = CreateViewModel();
+        Assert.False(vm.CanScrapeIssues);
+
+        vm.ScrapeIssues = _ => Task.FromResult("done");
+        Assert.True(vm.CanScrapeIssues);
     }
 
     // --- Mark as Read/Unread (docs/superpowers/specs/2026-08-23-mark-as-read-design.md) ---

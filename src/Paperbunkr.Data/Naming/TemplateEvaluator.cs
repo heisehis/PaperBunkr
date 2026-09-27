@@ -109,7 +109,22 @@ public static class TemplateEvaluator
                 string? value = ResolveValue(token.Name, token.Args, issue, context);
                 if (!string.IsNullOrEmpty(value))
                 {
+                    // A value must never introduce a path separator of its own ("Fate/Zero" would nest a
+                    // folder): the plugin strips them from values as they are inserted (`lobookmover.py:1529`),
+                    // leaving only the template's own literal separators to split the path.
+                    value = value.Replace("/", string.Empty).Replace("\\", string.Empty);
                     builder.Append(token.Prefix).Append(value).Append(token.Postfix);
+                }
+                else if (context is not null)
+                {
+                    // Remembered for "skip books with empty required fields", and the profile's per-token fallback text is
+                    // inserted bare - without the group's prefix and postfix - exactly as the plugin does (`lobookmover.py:1441`).
+                    context.EmptyTokens.Add(token.Name);
+                    if (context.EmptyData is { } emptyData
+                        && emptyData.FirstOrDefault(e => string.Equals(e.Key, token.Name, StringComparison.OrdinalIgnoreCase)) is { Value.Length: > 0 } fallback)
+                    {
+                        builder.Append(fallback.Value);
+                    }
                 }
 
                 break;
@@ -197,6 +212,11 @@ public static class TemplateEvaluator
 
     private static string? ResolveValue(string name, string args, Issue issue, TemplateContext? context)
     {
+        if (FieldResolvers.TryResolveMultiValue(name, args, issue, context, out string? multiValue))
+        {
+            return multiValue;
+        }
+
         if (string.Equals(name, "Custom", StringComparison.Ordinal))
         {
             string key = ExtractFirstParenSegment(args);

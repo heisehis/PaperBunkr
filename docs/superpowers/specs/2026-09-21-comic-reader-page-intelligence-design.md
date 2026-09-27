@@ -137,3 +137,49 @@ adds UI.
 - Hash matching is heuristic: expect some false proposals. Proposals-only plus remembered rejections is the mitigation.
 - A large library makes the first scan long. It is opt-in and runs as a background job, and later runs only touch
   changed files.
+
+## Implementation notes (2026-09-25)
+
+Everything in this spec was built in the order given under "Build order" (plan:
+`2026-09-25-comic-reader-page-intelligence-plan.md`). Where the code differs from the design:
+
+- **Reason picker is an in-canvas overlay, not a `Popup`.** `PageCanvas` binds keys 1–3 to fit modes, so the digits have
+  to be intercepted before it sees them; `ReaderScreen`'s tunnel key handler does that while the picker is open (1–4 pick,
+  Esc cancels, every other key is swallowed so no page turns happen underneath). Because nothing is a `Popup` and the
+  close is an `IsVisible` change, the routed-event deferral from CLAUDE.md is not needed there; the Library Health row
+  actions and the Needs Review Accept/Reject actions do defer their list refresh one dispatcher tick.
+- **`Reader.ReportBadPage` needs three pieces, not just a registry entry:** the registry command, a `ReportBadPageKey` on the
+  view model, and a `ReportBadPageGesture`/`ReportBadPageCommand` pair on `PageCanvas` (the same wiring as `Reader.JumpBack`).
+  In the page context menu the item is last, so the existing submenu positions did not move.
+- **The read-percentage fix reaches one more place.** `TrackSessionProgress` in the reader had its own 0-based
+  `100 * pageIndex / PageCount >= 95` check, which decides the Finished reading event and the tracker auto-sync; it now uses
+  CE's `(pageIndex + 1)` too. Visible side effects of the CE formula elsewhere: Home's Continue Reading progress bar shows
+  page index 30 of 100 as 31%, and an issue with an unknown page count but a real position is now "in progress" rather than
+  "unread". `MarkAsRead`'s one-page hack is still needed and unchanged.
+- **Story-end finish writes only the stored position.** The reader stays on the page the user is on; `LastPageRead` becomes
+  the last page and the Finished event fires once per session. The same rule runs in the debounced position save used by
+  continuous mode.
+- **Ad hashing does not use `PageDecodeCore.DecodeSinglePage`.** That reopens the archive for every page; the scan opens each
+  archive once and hashes the raw page bytes with Skia, falling back to the engine's own decode (and a PNG round trip) for
+  formats Skia cannot read. The hash itself oversamples: Skia scales the page to 72×64, each 8×8 block is averaged into one
+  of the 9×8 cells, and the 64 bits come from neighbouring cells. A single direct 9×8 scale flipped too many bits between a
+  page and its own rescaled copy.
+- **`AdPageHash` has no foreign key** (deleting a source issue keeps the ad), and `AdPageProposal.MatchedAdHashId` is
+  nullable with `SetNull`, so removing an ad keeps Rejected proposals (their pages are still never proposed again) while the
+  seeder deletes the still-Pending ones. Tagging a page Advertisement by hand also resolves a Pending proposal for that page.
+  The scan returns immediately when the ad library is empty (there is nothing to match, and hashing the library first would
+  be wasted work).
+- **"Scan now" is the task's Run-now button** in Preferences → Automation; no separate button was added. Scheduler tasks have
+  no alert channel (a task body has no `IActivityService`), so the completion message is the finished job's summary in the
+  Activity Center ("Found N possible ad pages - review them in Needs Review"), and the Libraries tab's pending badge picks the
+  proposals up the next time Preferences opens.
+- **The seeder is attached through `Reader.PageAdSeeder`** (set in `MainViewModel`, null in tests), like `RemoteReader`. Tests
+  therefore never hash pages as a side effect of tagging.
+- **Library Health's "Open in reader"** goes through a new optional `startPage` on `LoadIssue`, which is `Load`'s existing
+  `forcedStartPage`: it does not overwrite the saved reading position.
+- **New shared helpers:** `IssuePageTagger` (Data; writes a page tag the way the reader's `SetPageOverride` does, keeping
+  rotation and spread overrides) is used by Library Health's Tag as Deleted and by ad-proposal Accept
+  (`AdPageProposalResolver`).
+- **Not verified:** nothing in this slice has been looked at on screen. The skipped-pages hint, the reason picker and undo chip,
+  the Library Health list, the two Preferences toggles and the Needs Review section (including the ad thumbnail, which loads
+  off the UI thread) are covered by view-model and service tests only.

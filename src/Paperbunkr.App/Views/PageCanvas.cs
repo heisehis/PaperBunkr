@@ -38,10 +38,11 @@ namespace Paperbunkr.App.Views;
 /// TwoWay round-trip to reflect the clamped result back, the same mechanism a TwoWay-bound
 /// <c>Slider.Value</c> relies on.
 /// </summary>
-public class PageCanvas : Control
+public partial class PageCanvas : Control
 {
     private const double KeyPanStep = 40;
-    private const double WheelZoomStep = 0.25;
+    /// <summary>Exponent per wheel notch (about 22% per notch): zoom is multiplicative, so nothing snaps to a step.</summary>
+    private const double WheelZoomStep = 0.2;
     private const double MinFlickDistance = 60;
     private const double MaxFlickDurationMs = 400;
     private const double WheelScrollStepPixels = 80;
@@ -64,7 +65,7 @@ public class PageCanvas : Control
     public static readonly StyledProperty<ICommand?> FullscreenToggleCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(FullscreenToggleCommand));
 
-    /// <summary>Touch center-zone tap (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §3) - invoked by <see cref="InvokeTouchZone"/> when <see cref="PageTurnGestureMath.ResolveZone"/> returns the reserved center-column no-op.</summary>
+    /// <summary>Touch center-zone tap (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §3) - invoked by <see cref="RunTapAction"/> when the tap zone resolves to the menu area (the middle column under the default layout).</summary>
     public static readonly StyledProperty<ICommand?> ToggleChromeCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ToggleChromeCommand));
 
@@ -93,6 +94,9 @@ public class PageCanvas : Control
 
     public static readonly StyledProperty<ICommand?> JumpBackCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(JumpBackCommand));
+
+    public static readonly StyledProperty<ICommand?> ReportBadPageCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ReportBadPageCommand));
 
     public static readonly StyledProperty<ICommand?> ZoomInCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ZoomInCommand));
@@ -197,6 +201,82 @@ public class PageCanvas : Control
     public static readonly StyledProperty<IReadOnlyList<KeyGesture>> JumpBackGestureProperty =
         AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(JumpBackGesture), defaultValue: [new KeyGesture(Key.Left, KeyModifiers.Alt)]);
 
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ReportBadPageGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ReportBadPageGesture), defaultValue: [new KeyGesture(Key.X)]);
+
+    /// <summary>Reader command palette (Ctrl+K) and go-to-page (Ctrl+G), design 2026-09-25 F1 section 5. Empty gesture lists by default so the PDF reader, which binds neither, never reacts.</summary>
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> CommandPaletteGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(CommandPaletteGesture), defaultValue: []);
+
+    public static readonly StyledProperty<ICommand?> CommandPaletteCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(CommandPaletteCommand));
+
+    /// <summary>Comfort commands (design 2026-09-25 F3): stats chip, warm tint, copy. Empty gesture lists by default so the PDF reader, which binds none of them, never reacts.</summary>
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ToggleSessionHudGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ToggleSessionHudGesture), defaultValue: []);
+
+    public static readonly StyledProperty<ICommand?> ToggleSessionHudCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ToggleSessionHudCommand));
+
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ToggleWarmShiftGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ToggleWarmShiftGesture), defaultValue: []);
+
+    public static readonly StyledProperty<ICommand?> ToggleWarmShiftCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ToggleWarmShiftCommand));
+
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> CopyPageGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(CopyPageGesture), defaultValue: []);
+
+    public static readonly StyledProperty<ICommand?> CopyPageCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(CopyPageCommand));
+
+    /// <summary>Cycles the reader profile for this visit (design 2026-09-25 F2 section 3). Empty by default so the PDF reader never reacts.</summary>
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> NextProfileGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(NextProfileGesture), defaultValue: []);
+
+    public static readonly StyledProperty<ICommand?> NextProfileCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(NextProfileCommand));
+
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> GoToPageGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(GoToPageGesture), defaultValue: []);
+
+    public static readonly StyledProperty<ICommand?> GoToPageCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(GoToPageCommand));
+
+    /// <summary>
+    /// Reading-order page turns (design 2026-09-25 F1 section 2): PageDown/Space/media-next and PageUp/Shift+Space/media-previous by default, paged mode only. Empty by
+    /// default so the Novels PDF reader, which shares this control and binds nothing, never reacts to them.
+    /// </summary>
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> NextPageGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(NextPageGesture), defaultValue: []);
+
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> PreviousPageGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(PreviousPageGesture), defaultValue: []);
+
+    /// <summary>True when the spatial Left/Right page turns are swapped (right-to-left reading with the reversal setting on), so a reading-order turn can be expressed spatially and still get its part-stepping and animation.</summary>
+    public static readonly StyledProperty<bool> SpatialTurnsFlippedProperty =
+        AvaloniaProperty.Register<PageCanvas, bool>(nameof(SpatialTurnsFlipped));
+
+    /// <summary>Mouse side buttons (XButton1 = back, XButton2 = forward) turn pages; off by default so the PDF reader is unaffected.</summary>
+    public static readonly StyledProperty<bool> ExtraMouseButtonsTurnPagesProperty =
+        AvaloniaProperty.Register<PageCanvas, bool>(nameof(ExtraMouseButtonsTurnPages));
+
+    /// <summary>Tap/click zone settings (design 2026-09-25 F1 section 4). The defaults reproduce the pre-existing behaviour, so the Novels PDF reader (which binds none of these) is unchanged.</summary>
+    public static readonly StyledProperty<TapZoneLayout> PagedTapZoneLayoutProperty =
+        AvaloniaProperty.Register<PageCanvas, TapZoneLayout>(nameof(PagedTapZoneLayout), defaultValue: TapZoneLayout.Default);
+
+    public static readonly StyledProperty<TapZoneInvert> PagedTapZoneInvertProperty =
+        AvaloniaProperty.Register<PageCanvas, TapZoneInvert>(nameof(PagedTapZoneInvert), defaultValue: TapZoneInvert.None);
+
+    public static readonly StyledProperty<TapZoneLayout> ContinuousTapZoneLayoutProperty =
+        AvaloniaProperty.Register<PageCanvas, TapZoneLayout>(nameof(ContinuousTapZoneLayout), defaultValue: TapZoneLayout.Disabled);
+
+    public static readonly StyledProperty<TapZoneInvert> ContinuousTapZoneInvertProperty =
+        AvaloniaProperty.Register<PageCanvas, TapZoneInvert>(nameof(ContinuousTapZoneInvert), defaultValue: TapZoneInvert.None);
+
+    public static readonly StyledProperty<bool> TapZonesForMouseProperty =
+        AvaloniaProperty.Register<PageCanvas, bool>(nameof(TapZonesForMouse), defaultValue: true);
+
     public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ZoomInGestureProperty =
         AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ZoomInGesture), defaultValue: [new KeyGesture(Key.Z)]);
 
@@ -219,8 +299,15 @@ public class PageCanvas : Control
         AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(FitBestGesture), defaultValue: [new KeyGesture(Key.D5)]);
 
     public static readonly StyledProperty<double> ZoomLevelProperty =
-        AvaloniaProperty.Register<PageCanvas, double>(nameof(ZoomLevel), defaultValue: ZoomPanMath.MinZoom,
+        AvaloniaProperty.Register<PageCanvas, double>(nameof(ZoomLevel), defaultValue: ZoomPanMath.FitZoom,
             defaultBindingMode: BindingMode.TwoWay);
+
+    /// <summary>
+    /// The smallest zoom this canvas allows (docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md section 1). Defaults to 100% (<see cref="ZoomPanMath.FitZoom"/>) so the Novels PDF reader,
+    /// which shares this control and clamps its own zoom, is unchanged; the comic reader binds 25%.
+    /// </summary>
+    public static readonly StyledProperty<double> MinZoomLevelProperty =
+        AvaloniaProperty.Register<PageCanvas, double>(nameof(MinZoomLevel), defaultValue: ZoomPanMath.FitZoom);
 
     public static readonly StyledProperty<double> PanOffsetXProperty =
         AvaloniaProperty.Register<PageCanvas, double>(nameof(PanOffsetX), defaultBindingMode: BindingMode.TwoWay);
@@ -364,6 +451,20 @@ public class PageCanvas : Control
     public static readonly StyledProperty<double> GammaProperty =
         AvaloniaProperty.Register<PageCanvas, double>(nameof(Gamma));
 
+    /// <summary>Warm shift tint, 0 (none) to 1 (full): scales the green and blue output channels (docs/superpowers/specs/2026-09-25-comic-reader-comfort-design.md section 4). Pushed with the other adjustments.</summary>
+    public static readonly StyledProperty<double> WarmthProperty =
+        AvaloniaProperty.Register<PageCanvas, double>(nameof(Warmth));
+
+    /// <summary>
+    /// Bumped by the view model when the pipeline's processing (auto-levels, auto-crop, a page's crop override) changes, so continuous mode pushes again and asks the pipeline for the pages it now decodes differently.
+    /// </summary>
+    public static readonly StyledProperty<int> ProcessingVersionProperty =
+        AvaloniaProperty.Register<PageCanvas, int>(nameof(ProcessingVersion));
+
+    /// <summary>Sharpening 0-3 (CE's range; docs/superpowers/specs/2026-09-26-comic-reader-image-quality-design.md #2). Pushed with the other adjustments and applied as a paint-level convolution.</summary>
+    public static readonly StyledProperty<int> SharpenProperty =
+        AvaloniaProperty.Register<PageCanvas, int>(nameof(Sharpen));
+
     /// <summary>
     /// Page margin (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-
     /// overlays-design.md §10) - a separate multiplier applied on top of <see cref="ZoomLevel"/> at
@@ -400,6 +501,10 @@ public class PageCanvas : Control
     private static readonly Size DefaultEstimatedPageSize = new(660, 1010);
 
     private bool _isDragging;
+
+    /// <summary>When the current continuous-mode press started, for tap detection (<see cref="PointerButtonPolicy.IsTap"/>).</summary>
+    private long _continuousPressTimestamp;
+
     private Point _dragStartPointer;
     private double _dragStartPanX;
     private double _dragStartPanY;
@@ -524,7 +629,7 @@ public class PageCanvas : Control
     /// </summary>
     private static readonly AvaloniaProperty[] RenderAffectingProperties =
     [
-        PageProperty, SecondaryPageProperty, HighQualityDisplayProperty, ShowPageShadowProperty, ZoomLevelProperty, PanOffsetXProperty, PanOffsetYProperty,
+        PageProperty, SecondaryPageProperty, HighQualityDisplayProperty, ShowPageShadowProperty, ZoomLevelProperty, PanOffsetXProperty, PanOffsetYProperty, ProcessingVersionProperty,
         FitModeProperty, FitOnlyIfOversizedProperty, ManualRotationDegreesProperty, AutoRotateProperty, PageRotationOverrideDegreesProperty,
         ReadingModeProperty, DecoderProperty, PageCountProperty, ScrollOffsetProperty, PageMarginMultiplierProperty
     ];
@@ -537,7 +642,7 @@ public class PageCanvas : Control
     /// </summary>
     private static readonly AvaloniaProperty[] AdjustmentProperties =
     [
-        BrightnessProperty, ContrastProperty, SaturationProperty, GammaProperty
+        BrightnessProperty, ContrastProperty, SaturationProperty, GammaProperty, WarmthProperty, SharpenProperty
     ];
 
     static PageCanvas()
@@ -636,6 +741,12 @@ public class PageCanvas : Control
     {
         get => GetValue(JumpBackCommandProperty);
         set => SetValue(JumpBackCommandProperty, value);
+    }
+
+    public ICommand? ReportBadPageCommand
+    {
+        get => GetValue(ReportBadPageCommandProperty);
+        set => SetValue(ReportBadPageCommandProperty, value);
     }
 
     public ICommand? RotateCounterClockwiseCommand
@@ -808,6 +919,138 @@ public class PageCanvas : Control
         set => SetValue(JumpBackGestureProperty, value);
     }
 
+    public IReadOnlyList<KeyGesture> ReportBadPageGesture
+    {
+        get => GetValue(ReportBadPageGestureProperty);
+        set => SetValue(ReportBadPageGestureProperty, value);
+    }
+
+    public IReadOnlyList<KeyGesture> CommandPaletteGesture
+    {
+        get => GetValue(CommandPaletteGestureProperty);
+        set => SetValue(CommandPaletteGestureProperty, value);
+    }
+
+    public ICommand? CommandPaletteCommand
+    {
+        get => GetValue(CommandPaletteCommandProperty);
+        set => SetValue(CommandPaletteCommandProperty, value);
+    }
+
+    public IReadOnlyList<KeyGesture> ToggleSessionHudGesture
+    {
+        get => GetValue(ToggleSessionHudGestureProperty);
+        set => SetValue(ToggleSessionHudGestureProperty, value);
+    }
+
+    public ICommand? ToggleSessionHudCommand
+    {
+        get => GetValue(ToggleSessionHudCommandProperty);
+        set => SetValue(ToggleSessionHudCommandProperty, value);
+    }
+
+    public IReadOnlyList<KeyGesture> ToggleWarmShiftGesture
+    {
+        get => GetValue(ToggleWarmShiftGestureProperty);
+        set => SetValue(ToggleWarmShiftGestureProperty, value);
+    }
+
+    public ICommand? ToggleWarmShiftCommand
+    {
+        get => GetValue(ToggleWarmShiftCommandProperty);
+        set => SetValue(ToggleWarmShiftCommandProperty, value);
+    }
+
+    public IReadOnlyList<KeyGesture> CopyPageGesture
+    {
+        get => GetValue(CopyPageGestureProperty);
+        set => SetValue(CopyPageGestureProperty, value);
+    }
+
+    public ICommand? CopyPageCommand
+    {
+        get => GetValue(CopyPageCommandProperty);
+        set => SetValue(CopyPageCommandProperty, value);
+    }
+
+    public IReadOnlyList<KeyGesture> NextProfileGesture
+    {
+        get => GetValue(NextProfileGestureProperty);
+        set => SetValue(NextProfileGestureProperty, value);
+    }
+
+    public ICommand? NextProfileCommand
+    {
+        get => GetValue(NextProfileCommandProperty);
+        set => SetValue(NextProfileCommandProperty, value);
+    }
+
+    public IReadOnlyList<KeyGesture> GoToPageGesture
+    {
+        get => GetValue(GoToPageGestureProperty);
+        set => SetValue(GoToPageGestureProperty, value);
+    }
+
+    public ICommand? GoToPageCommand
+    {
+        get => GetValue(GoToPageCommandProperty);
+        set => SetValue(GoToPageCommandProperty, value);
+    }
+
+    public IReadOnlyList<KeyGesture> NextPageGesture
+    {
+        get => GetValue(NextPageGestureProperty);
+        set => SetValue(NextPageGestureProperty, value);
+    }
+
+    public IReadOnlyList<KeyGesture> PreviousPageGesture
+    {
+        get => GetValue(PreviousPageGestureProperty);
+        set => SetValue(PreviousPageGestureProperty, value);
+    }
+
+    public bool SpatialTurnsFlipped
+    {
+        get => GetValue(SpatialTurnsFlippedProperty);
+        set => SetValue(SpatialTurnsFlippedProperty, value);
+    }
+
+    public bool ExtraMouseButtonsTurnPages
+    {
+        get => GetValue(ExtraMouseButtonsTurnPagesProperty);
+        set => SetValue(ExtraMouseButtonsTurnPagesProperty, value);
+    }
+
+    public TapZoneLayout PagedTapZoneLayout
+    {
+        get => GetValue(PagedTapZoneLayoutProperty);
+        set => SetValue(PagedTapZoneLayoutProperty, value);
+    }
+
+    public TapZoneInvert PagedTapZoneInvert
+    {
+        get => GetValue(PagedTapZoneInvertProperty);
+        set => SetValue(PagedTapZoneInvertProperty, value);
+    }
+
+    public TapZoneLayout ContinuousTapZoneLayout
+    {
+        get => GetValue(ContinuousTapZoneLayoutProperty);
+        set => SetValue(ContinuousTapZoneLayoutProperty, value);
+    }
+
+    public TapZoneInvert ContinuousTapZoneInvert
+    {
+        get => GetValue(ContinuousTapZoneInvertProperty);
+        set => SetValue(ContinuousTapZoneInvertProperty, value);
+    }
+
+    public bool TapZonesForMouse
+    {
+        get => GetValue(TapZonesForMouseProperty);
+        set => SetValue(TapZonesForMouseProperty, value);
+    }
+
     public IReadOnlyList<KeyGesture> ZoomInGesture
     {
         get => GetValue(ZoomInGestureProperty);
@@ -952,6 +1195,12 @@ public class PageCanvas : Control
         set => SetValue(CurrentContinuousPageIndexProperty, value);
     }
 
+    public double MinZoomLevel
+    {
+        get => GetValue(MinZoomLevelProperty);
+        set => SetValue(MinZoomLevelProperty, value);
+    }
+
     public double Brightness
     {
         get => GetValue(BrightnessProperty);
@@ -974,6 +1223,24 @@ public class PageCanvas : Control
     {
         get => GetValue(GammaProperty);
         set => SetValue(GammaProperty, value);
+    }
+
+    public double Warmth
+    {
+        get => GetValue(WarmthProperty);
+        set => SetValue(WarmthProperty, value);
+    }
+
+    public int ProcessingVersion
+    {
+        get => GetValue(ProcessingVersionProperty);
+        set => SetValue(ProcessingVersionProperty, value);
+    }
+
+    public int Sharpen
+    {
+        get => GetValue(SharpenProperty);
+        set => SetValue(SharpenProperty, value);
     }
 
     public double PageMarginMultiplier
@@ -1013,6 +1280,41 @@ public class PageCanvas : Control
     private (ICommand? Command, PageTransitionDirection Direction) BackwardTurn =>
         IsPagedVertical ? (LeftCommand, PageTransitionDirection.Up) : (LeftCommand, PageTransitionDirection.Left);
 
+    /// <summary>Records media keys (which Windows may route elsewhere) for the perf overlay's "last input" line, so a device that never arrives is diagnosable.</summary>
+    private static void NoteDeviceKey(KeyEventArgs e)
+    {
+        if (e.Key is Key.MediaNextTrack or Key.MediaPreviousTrack or Key.MediaPlayPause or Key.MediaStop)
+        {
+            Services.Reader.ReaderPerfStats.Current.RecordInput($"media key {e.Key}");
+        }
+    }
+
+    /// <summary>
+    /// A turn in reading order (next/previous page whichever way the book reads), expressed spatially so it shares <see cref="ExecuteTurn"/>'s part stepping and
+    /// transition animation: with the spatial commands swapped (<see cref="SpatialTurnsFlipped"/>) reading-forward is spatial-back.
+    /// </summary>
+    private bool ExecuteReadingOrderTurn(bool forward) => ExecuteTurn(SpatialTurnsFlipped ? !forward : forward);
+
+    /// <summary>The mouse side buttons: paged mode turns the page in reading order, continuous mode scrolls one screen. Returns whether the press was used.</summary>
+    private bool HandleExtraMouseButton(PointerRole role)
+    {
+        if (!ExtraMouseButtonsTurnPages || role is not (PointerRole.Back or PointerRole.Forward))
+        {
+            return false;
+        }
+
+        bool forward = role == PointerRole.Forward;
+        Services.Reader.ReaderPerfStats.Current.RecordInput(forward ? "mouse side button 2 (forward)" : "mouse side button 1 (back)");
+        if (IsContinuous)
+        {
+            double screen = (ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? Bounds.Height : Bounds.Width) * PageJumpFraction;
+            ScrollOffset = ClampScrollOffset(ScrollOffset + (forward ? screen : -screen));
+            return true;
+        }
+
+        return ExecuteReadingOrderTurn(forward);
+    }
+
     /// <summary>
     /// Runs a resolved zone/flick turn intent (<c>true</c> = forward, <c>false</c> = back).
     /// Split-page part navigation (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-
@@ -1028,6 +1330,7 @@ public class PageCanvas : Control
             return true;
         }
 
+        NoteTurnDirection(forward);
         var (command, direction) = forward ? ForwardTurn : BackwardTurn;
         bool executed = ExecuteDirectional(command, direction);
         if (executed && !IsContinuous)
@@ -1073,6 +1376,15 @@ public class PageCanvas : Control
             return;
         }
 
+        // Guided panel view (design 2026-09-25 panels-and-zoom section 3): "Panel 3/7" while a panel of a confidently detected page is framed.
+        if (GuidedPartLabel(out int panelCount, out int panelCurrent) is { } panelLabel)
+        {
+            PartCount = panelCount;
+            CurrentPart = panelCurrent;
+            PartLabel = panelLabel;
+            return;
+        }
+
         var grid = ComputeCurrentPartGrid();
         int count = PagePartMath.PartCount(grid);
         PartCount = count;
@@ -1090,6 +1402,12 @@ public class PageCanvas : Control
         if (Page is null)
         {
             return false;
+        }
+
+        // Guided panel view replaces the uniform part grid with the detected panels (falling through to a real page turn after the last one).
+        if (GuidedActive)
+        {
+            return TryStepPanel(forward);
         }
 
         var grid = ComputeCurrentPartGrid();
@@ -1126,9 +1444,9 @@ public class PageCanvas : Control
     /// </summary>
     private void LandOnPartAfterPageTurn(bool forward)
     {
-        if (Page is null)
+        if (Page is null || GuidedActive)
         {
-            return;
+            return;   // guided view lands on the new page's first or last panel itself, once the page's panels are known
         }
 
         var grid = ComputeCurrentPartGrid();
@@ -1158,9 +1476,7 @@ public class PageCanvas : Control
     /// "unclamped upward" language with an explicit finite range once the user gave a concrete
     /// slider range to match.
     /// </summary>
-    private const double ContinuousMinZoom = 0.5;
-
-    private const double ContinuousMaxZoom = 4.0;
+    private const double ContinuousMaxZoom = ZoomPanMath.MaxZoom;
 
     /// <summary>Double-tap zoom target for continuous/webtoon modes (user direction) - a second double-tap at this zoom level returns to 100%, matching <see cref="ZoomPanMath.DoubleClickZoom"/>'s paged-mode toggle shape but a different target level.</summary>
     private const double ContinuousDoubleTapZoom = 2.5;
@@ -1214,7 +1530,7 @@ public class PageCanvas : Control
     /// canvas at <c>ZoomLevel == MinZoom</c> too - without checking actual overflow, that content
     /// is unreachable, stuck cut off with no way to pan to it (real bug, found via manual testing).
     /// </summary>
-    private bool CanPan() => ZoomLevel > ZoomPanMath.MinZoom || ZoomPanMath.HasOverflow(Bounds.Size, EffectivePixelSize(), ZoomLevel, FitMode, FitOnlyIfOversized);
+    private bool CanPan() => ZoomLevel > ZoomPanMath.FitZoom || ZoomPanMath.HasOverflow(Bounds.Size, EffectivePixelSize(), ZoomLevel, FitMode, FitOnlyIfOversized);
 
     /// <summary>
     /// Known-or-estimated size of every page - shared by continuous-mode layout
@@ -1425,7 +1741,7 @@ public class PageCanvas : Control
     {
         Dispatcher.UIThread.Post(() =>
         {
-            _knownPageSizes[pageIndex] = new Size(size.Width, size.Height);
+            SetKnownPageSize(pageIndex, new Size(size.Width, size.Height));
             if (IsContinuous)
             {
                 RequestContinuousPush();
@@ -1450,6 +1766,7 @@ public class PageCanvas : Control
         // bounds) regardless of which branch a given property change falls into. Cheap no-op for any
         // unrelated property change - UpdatePartLabel itself no-ops in continuous mode or with no
         // page loaded.
+        OnPanelPropertyChanged(change);
         UpdatePartLabel();
 
         if (change.Property == DecoderProperty)
@@ -1736,7 +2053,7 @@ public class PageCanvas : Control
     }
 
     private void PushAdjustmentData() =>
-        _visual?.SendHandlerMessage(new AdjustmentVisualData(Brightness, Contrast, Saturation, Gamma));
+        _visual?.SendHandlerMessage(new AdjustmentVisualData(Brightness, Contrast, Saturation, Gamma, Warmth, Sharpen));
 
     /// <summary>
     /// Synthesizes a Crossfade transition for a double-page layout-mode or reading-direction change
@@ -1956,7 +2273,7 @@ public class PageCanvas : Control
         {
             int viewportCrossSize = (int)(ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? Bounds.Width : Bounds.Height);
             decodeService.SetViewportWidth(Math.Max(1, viewportCrossSize));
-            decodeService.SetVirtualizationWindow(layout[0].Index, layout[^1].Index);
+            decodeService.SetVirtualizationWindow(layout[0].Index, layout[^1].Index, BuildScrollWindowHint(layout));
 
             // A strip's true size (design §4.3) - requested for every page entering the window
             // whose size isn't known yet, so a webtoon strip's scroll extent is correct from the
@@ -2007,7 +2324,7 @@ public class PageCanvas : Control
                 bitmap = blockDecode ? Decoder.GetPage(page.Index) : decodeService!.TryGetCachedPage(page.Index);
                 if (bitmap is not null)
                 {
-                    _knownPageSizes[page.Index] = new Size(bitmap.PixelSize.Width, bitmap.PixelSize.Height);
+                    SetKnownPageSize(page.Index, new Size(bitmap.PixelSize.Width, bitmap.PixelSize.Height));
                 }
             }
             catch
@@ -2018,7 +2335,150 @@ public class PageCanvas : Control
             entries.Add(new ContinuousPageEntry(page.Rect, bitmap));
         }
 
+        RecordBlankVisiblePages(entries);
         _visual.SendHandlerMessage(new ReaderContinuousVisualData(Bounds.Size, entries, HighQualityDisplay));
+    }
+
+    // ---- Scroll anchoring and scroll-direction hint (docs/superpowers/specs/2026-09-25-comic-reader-performance-design.md B3/B4) ----
+
+    /// <summary>How long a scroll direction is held after the offset last changed, so one still frame between two wheel ticks does not read as "stopped".</summary>
+    private const long ScrollDirectionHoldMs = 250;
+
+    private double _lastPushedScrollOffset;
+    private int _scrollDirection;
+    private long _scrollDirectionUntilTick;
+
+    /// <summary>
+    /// Records a page's size. If the page is above the first visible page and its on-screen size changes, the scroll offset moves by the
+    /// same amount so the visible content does not jump (<see cref="ScrollAnchor"/>). A same-aspect-ratio update (a decoded bitmap
+    /// replacing a peeked native size: different pixels, identical layout) only stores the value.
+    /// </summary>
+    private void SetKnownPageSize(int pageIndex, Size size)
+    {
+        double delta = 0;
+        if (_knownPageSizes.TryGetValue(pageIndex, out var old) && HasSameAspect(old, size))
+        {
+            _knownPageSizes[pageIndex] = size;
+            return;
+        }
+
+        if (IsContinuous && PageCount > 0 && pageIndex >= 0 && pageIndex < PageCount && Bounds.Width > 0 && Bounds.Height > 0)
+        {
+            double[] mainSizes = ComputeMainAxisSizes(EstimatedPageSizes());
+            delta = ScrollAnchor.OffsetDelta(mainSizes, ContinuousMainAxisGap, ScrollOffset, pageIndex, MainAxisSizeOf(size));
+        }
+
+        _knownPageSizes[pageIndex] = size;
+
+        if (delta != 0)
+        {
+            Paperbunkr.App.Services.Reader.ReaderPerfStats.Current.RecordLayoutShift(delta);
+            _lastPushedScrollOffset += delta; // a correction is not the reader scrolling: keep it out of the direction estimate
+            ScrollOffset += delta;
+        }
+    }
+
+    private static bool HasSameAspect(Size a, Size b)
+    {
+        if (a.Width <= 0 || b.Width <= 0 || a.Height <= 0 || b.Height <= 0)
+        {
+            return false;
+        }
+
+        return Math.Abs((a.Height / a.Width) - (b.Height / b.Width)) < 0.001;
+    }
+
+    /// <summary>On-screen main-axis size of a page of native size <paramref name="native"/> - the same scaling <see cref="ReaderLayoutModel.ComputeContinuousLayout"/> applies (cross axis fits the viewport times zoom).</summary>
+    private double MainAxisSizeOf(Size native)
+    {
+        bool vertical = ContinuousAxis == ReaderLayoutModel.Axis.Vertical;
+        double viewportCross = vertical ? Bounds.Width : Bounds.Height;
+        double crossAxisSize = viewportCross * ZoomLevel * PageMarginMultiplier;
+        double nativeCross = vertical ? native.Width : native.Height;
+        double nativeMain = vertical ? native.Height : native.Width;
+        return nativeCross > 0 ? nativeMain * (crossAxisSize / nativeCross) : 0;
+    }
+
+    private double[] ComputeMainAxisSizes(Size[] sizes)
+    {
+        var result = new double[sizes.Length];
+        for (int i = 0; i < sizes.Length; i++)
+        {
+            result[i] = MainAxisSizeOf(sizes[i]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Which pages actually intersect the viewport, and which way the reader is scrolling (from the change in <see cref="ScrollOffset"/>
+    /// since the last push, held for <see cref="ScrollDirectionHoldMs"/>), for <see cref="Paperbunkr.App.Services.Reader.IReaderPageSource.SetVirtualizationWindow(int,int,Paperbunkr.App.Services.Reader.ScrollWindowHint)"/>.
+    /// </summary>
+    private Paperbunkr.App.Services.Reader.ScrollWindowHint BuildScrollWindowHint(IReadOnlyList<ReaderLayoutModel.LayoutPage> layout)
+    {
+        bool vertical = ContinuousAxis == ReaderLayoutModel.Axis.Vertical;
+        double viewMain = vertical ? Bounds.Height : Bounds.Width;
+        int visibleMin = int.MaxValue;
+        int visibleMax = int.MinValue;
+        foreach (var page in layout)
+        {
+            double start = vertical ? page.Rect.Top : page.Rect.Left;
+            double end = vertical ? page.Rect.Bottom : page.Rect.Right;
+            if (end > 0 && start < viewMain)
+            {
+                visibleMin = Math.Min(visibleMin, page.Index);
+                visibleMax = Math.Max(visibleMax, page.Index);
+            }
+        }
+
+        if (visibleMin > visibleMax)
+        {
+            visibleMin = layout[0].Index;
+            visibleMax = layout[^1].Index;
+        }
+
+        long now = Environment.TickCount64;
+        double moved = ScrollOffset - _lastPushedScrollOffset;
+        if (Math.Abs(moved) > 0.5)
+        {
+            // The reversed horizontal stack (right-to-left) grows towards lower offsets on screen but page indices still rise with the offset.
+            _scrollDirection = Math.Sign(moved);
+            _scrollDirectionUntilTick = now + ScrollDirectionHoldMs;
+        }
+        else if (now > _scrollDirectionUntilTick)
+        {
+            _scrollDirection = 0;
+        }
+
+        _lastPushedScrollOffset = ScrollOffset;
+        return new Paperbunkr.App.Services.Reader.ScrollWindowHint(visibleMin, visibleMax, _scrollDirection, SustainedScroll: _scrollDirection != 0);
+    }
+
+    /// <summary>
+    /// Perf metric (docs/superpowers/specs/2026-09-25-comic-reader-performance-design.md B5): how many pages actually on screen
+    /// (not the ±2 layout radius) are drawn as a gap this frame because their decode has not landed. Whole pages only - a strip's
+    /// band slots are not counted.
+    /// </summary>
+    private void RecordBlankVisiblePages(List<ContinuousPageEntry> entries)
+    {
+        double viewMain = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? Bounds.Height : Bounds.Width;
+        int blank = 0;
+        foreach (var entry in entries)
+        {
+            if (entry.Bitmap is not null || entry.Bands is not null)
+            {
+                continue;
+            }
+
+            double start = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? entry.Rect.Top : entry.Rect.Left;
+            double end = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? entry.Rect.Bottom : entry.Rect.Right;
+            if (end > 0 && start < viewMain)
+            {
+                blank++;
+            }
+        }
+
+        Paperbunkr.App.Services.Reader.ReaderPerfStats.Current.RecordBlankPages(blank);
     }
 
     /// <summary>
@@ -2080,11 +2540,26 @@ public class PageCanvas : Control
         base.OnPointerPressed(e);
         Focus();
 
+        // Only a primary press (left button, touch, pen tip) may drag, hit a zone or double-click zoom
+        // (docs/superpowers/specs/2026-09-25-comic-reader-reach-design.md §1). A right press only opens the
+        // context menu (ContextMenuHost, unhandled here); middle does nothing; the side buttons turn pages.
+        var role = PointerButtonPolicy.Classify(e.GetCurrentPoint(this).Properties.PointerUpdateKind);
+        if (!PointerButtonPolicy.MayAct(role))
+        {
+            if (HandleExtraMouseButton(role))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
         if (IsContinuous)
         {
             // Drag always scrolls in continuous mode - there's no "CanPan" gate the way paged mode
             // has, since there's always more stack to reveal (spec §5).
             _isDragging = true;
+            _continuousPressTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
             _dragStartPointer = e.GetPosition(this);
             _dragStartScrollOffset = ScrollOffset;
             _dragStartPanX = PanOffsetX;
@@ -2096,7 +2571,16 @@ public class PageCanvas : Control
 
         if (e.ClickCount == 2)
         {
-            ToggleZoom(e.GetPosition(this));
+            // The first click of this double-click already landed on a tap zone and stepped or turned: put that back before zooming.
+            UndoTapTurnForDoubleClick(e.GetPosition(this));
+
+            // Smart double-click (design section 4): the panel under the pointer, or guided view's panel/whole-page toggle; the plain 200% otherwise.
+            if (!TrySmartDoubleClick(e.GetPosition(this)))
+            {
+                _smartRestore = null;
+                ToggleZoom(e.GetPosition(this));
+            }
+
             e.Handled = true;
             return;
         }
@@ -2114,19 +2598,14 @@ public class PageCanvas : Control
             _dragStartPointer = e.GetPosition(this);
             _dragStartPanX = PanOffsetX;
             _dragStartPanY = PanOffsetY;
+            _panPressTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+            _panPressWasGuided = GuidedSteps;
             e.Pointer.Capture(this);
             e.Handled = true;
             return;
         }
 
-        if (isTouch)
-        {
-            InvokeTouchZone(e.GetPosition(this));
-        }
-        else
-        {
-            InvokeZoneCommand(e.GetPosition(this));
-        }
+        InvokeTapZone(e.GetPosition(this), e.Pointer.Type);
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
@@ -2171,12 +2650,43 @@ public class PageCanvas : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+
+        // A release of the right/middle/side button is not the end of a primary gesture (the left button may still be
+        // down): ignore it so it cannot end a drag or resolve a flick. Touch reports no mouse button, so it stays primary.
+        if (e.InitialPressMouseButton is MouseButton.Right or MouseButton.Middle or MouseButton.XButton1 or MouseButton.XButton2)
+        {
+            return;
+        }
+
+        bool wasDragging = _isDragging;
         if (_isDragging)
         {
             e.Pointer.Capture(null);
         }
 
         _isDragging = false;
+
+        // A press on a page that can pan starts a drag, so a plain tap never reached the tap zones there: no step in guided view, and (worst) no way for touch or a pen to toggle the chrome, so no way
+        // to reach the back button. A press that stayed put is a tap after all.
+        if (wasDragging && !IsContinuous)
+        {
+            double pressMs = System.Diagnostics.Stopwatch.GetElapsedTime(_panPressTimestamp).TotalMilliseconds;
+            if (PointerButtonPolicy.IsTap(e.GetPosition(this) - _dragStartPointer, pressMs) && HandleTapFromPan(_dragStartPointer, e.Pointer.Type, _panPressWasGuided))
+            {
+                e.Handled = true;
+            }
+        }
+
+        if (wasDragging && IsContinuous)
+        {
+            double elapsedMs = System.Diagnostics.Stopwatch.GetElapsedTime(_continuousPressTimestamp).TotalMilliseconds;
+            var releasePoint = e.GetPosition(this);
+            if (PointerButtonPolicy.IsTap(releasePoint - _dragStartPointer, elapsedMs))
+            {
+                HandleContinuousTap(releasePoint, e.Pointer.Type);
+                e.Handled = true;
+            }
+        }
 
         if (e.Pointer.Type == PointerType.Touch && _touchPressPosition is { } start && !CanPan())
         {
@@ -2207,33 +2717,9 @@ public class PageCanvas : Control
         {
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
-                // Cursor-anchored zoom (docs/superpowers/specs/2026-09-12-continuous-mode-cursor-
-                // anchored-zoom-design.md §4): find the anchor's stack-space identity at the *current*
-                // zoom/scroll/pan (read before ZoomLevel is reassigned below, same ordering paged
-                // mode's own Ctrl+wheel branch uses with PanToKeepPointFixed), then solve for the
-                // ScrollOffset/cross-axis pan that puts that same identity back under the cursor at
-                // the new zoom. The ZoomLevelProperty-changed reflex-clamp (OnPropertyChanged) still
-                // fires when ZoomLevel is assigned below and re-clamps the stale pre-zoom ScrollOffset/
-                // Pan against the new zoom first - harmless, since the explicit assignments right after
-                // immediately overwrite it with the anchor-computed (and then re-clamped) result.
-                double newZoom = ZoomPanMath.ClampZoom(ZoomLevel + (e.Delta.Y * WheelZoomStep), ContinuousMaxZoom, ContinuousMinZoom);
-                var cursor = e.GetPosition(this);
-                double crossAxisPan = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? PanOffsetX : PanOffsetY;
-                var (newScrollOffset, newCrossAxisPan) = ReaderLayoutModel.ComputeContinuousZoomAnchor(
-                    EstimatedPageSizes(), ScrollOffset, ZoomLevel, crossAxisPan, Bounds.Size, ContinuousAxis,
-                    cursor, newZoom, ContinuousMainAxisGap, IsContinuousReversed);
-
-                ZoomLevel = newZoom;
-                ScrollOffset = ClampScrollOffset(newScrollOffset);
-                if (ContinuousAxis == ReaderLayoutModel.Axis.Vertical)
-                {
-                    PanOffsetX = ClampContinuousCrossAxisPan(newCrossAxisPan);
-                }
-                else
-                {
-                    PanOffsetY = ClampContinuousCrossAxisPan(newCrossAxisPan);
-                }
-
+                // Cursor-anchored zoom (docs/superpowers/specs/2026-09-12-continuous-mode-cursor-anchored-zoom-design.md section 4), now eased: the wheel moves a zoom goal and
+                // PageCanvas.Smooth.cs glides the view to it a frame at a time, solving the same anchor each frame so the content under the cursor stays under it.
+                SmoothZoomBy(ZoomPanMath.WheelZoomFactor(e.Delta.Y, WheelZoomStep), e.GetPosition(this));
                 e.Handled = true;
                 return;
             }
@@ -2251,24 +2737,32 @@ public class PageCanvas : Control
 
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
-            double newZoom = ZoomPanMath.ClampZoom(ZoomLevel + (e.Delta.Y * WheelZoomStep));
-            var cursor = e.GetPosition(this);
-            var (x, y) = ZoomPanMath.PanToKeepPointFixed(Bounds.Size, EffectivePixelSize(),
-                ZoomLevel, new Point(PanOffsetX, PanOffsetY), cursor, newZoom, FitMode, FitOnlyIfOversized);
-            ZoomLevel = newZoom;
-            PanOffsetX = x;
-            PanOffsetY = y;
+            SmoothZoomBy(ZoomPanMath.WheelZoomFactor(e.Delta.Y, WheelZoomStep), e.GetPosition(this));
             e.Handled = true;
             return;
         }
 
-        if (CanPan())
+        // A zoomed page pans; a page that guided view has framed for you steps panels instead (falling to the turn below).
+        if (CanPan() && !GuidedSteps)
         {
-            var (x, y) = ZoomPanMath.ClampPan(Bounds.Size, EffectivePixelSize(), ZoomLevel,
-                PanOffsetX - (e.Delta.X * WheelPanStep), PanOffsetY + (e.Delta.Y * WheelPanStep), FitMode, FitOnlyIfOversized);
-            PanOffsetX = x;
-            PanOffsetY = y;
-            _wheelPageTurns.Reset();
+            bool quiet = NoteInput(ref _lastWheelTimestamp, WheelEdgeQuietMs);
+            if (TryPanPaged(-(e.Delta.X * WheelPanStep), e.Delta.Y * WheelPanStep))
+            {
+                _wheelPageTurns.Reset();
+            }
+            else if (quiet)
+            {
+                // Already at the edge in the direction of the scroll: a fresh scroll (nothing arrived just before it) turns the page, so a zoomed page is not a dead end.
+                int edgeTurn = _wheelPageTurns.Accumulate(WheelPageTurnAccumulator.ForwardScalar(e.Delta.X, e.Delta.Y));
+                if (edgeTurn > 0)
+                {
+                    ExecuteTurn(forward: true);
+                }
+                else if (edgeTurn < 0)
+                {
+                    ExecuteTurn(forward: false);
+                }
+            }
         }
         else
         {
@@ -2358,6 +2852,92 @@ public class PageCanvas : Control
             return;
         }
 
+        if (AnyMatches(ReportBadPageGesture, e))
+        {
+            if (TryExecute(ReportBadPageCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (AnyMatches(CommandPaletteGesture, e))
+        {
+            if (TryExecute(CommandPaletteCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (AnyMatches(ToggleSessionHudGesture, e))
+        {
+            if (TryExecute(ToggleSessionHudCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (AnyMatches(ToggleWarmShiftGesture, e))
+        {
+            if (TryExecute(ToggleWarmShiftCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (AnyMatches(CopyPageGesture, e))
+        {
+            if (TryExecute(CopyPageCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (AnyMatches(ToggleGuidedViewGesture, e))
+        {
+            if (TryExecute(ToggleGuidedViewCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (TryRunExtraKeyBinding(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (AnyMatches(NextProfileGesture, e))
+        {
+            if (TryExecute(NextProfileCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (AnyMatches(GoToPageGesture, e))
+        {
+            if (TryExecute(GoToPageCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
         if (AnyMatches(ZoomInGesture, e))
         {
             if (TryExecute(ZoomInCommand))
@@ -2432,13 +3012,37 @@ public class PageCanvas : Control
             return;
         }
 
-        if (CanPan() && TryGetArrowPanDelta(e, out double dx, out double dy))
+        // Reading-order turns (design 2026-09-25 F1 section 2): PageDown/Space/media keys and their opposites, remappable.
+        if (AnyMatches(NextPageGesture, e) && ExecuteReadingOrderTurn(forward: true))
         {
-            var (x, y) = ZoomPanMath.ClampPan(Bounds.Size, EffectivePixelSize(), ZoomLevel, PanOffsetX + dx, PanOffsetY + dy, FitMode, FitOnlyIfOversized);
-            PanOffsetX = x;
-            PanOffsetY = y;
+            NoteDeviceKey(e);
             e.Handled = true;
             return;
+        }
+
+        if (AnyMatches(PreviousPageGesture, e) && ExecuteReadingOrderTurn(forward: false))
+        {
+            NoteDeviceKey(e);
+            e.Handled = true;
+            return;
+        }
+
+        if (CanPan() && TryGetArrowPanDelta(e, out double dx, out double dy))
+        {
+            if (!GuidedSteps)
+            {
+                // Pans the zoomed page; at its edge the same key turns the page.
+                PanOrTurnFromKey(dx, dy);
+                e.Handled = true;
+                return;
+            }
+
+            // Guided view has framed a panel for you: up and down step in reading order (left and right fall through to the turn keys below, which step panels too).
+            if (dx == 0 && ExecuteReadingOrderTurn(forward: dy < 0))
+            {
+                e.Handled = true;
+                return;
+            }
         }
 
         // Vertical paged mode (docs/superpowers/specs/2026-08-27-vertical-paged-reading-mode-
@@ -2528,8 +3132,8 @@ public class PageCanvas : Control
         _pinchLastOrigin = e.ScaleOrigin;
         _pinchLastScale = e.Scale;
 
-        double minZoom = IsContinuous ? ContinuousMinZoom : ZoomPanMath.MinZoom;
-        double maxZoom = IsContinuous ? ContinuousMaxZoom : ZoomPanMath.MaxZoom;
+        double minZoom = MinZoomLevel;
+        double maxZoom = ZoomPanMath.MaxZoom;
         double newZoom = ZoomPanMath.ClampZoom(_pinchStartZoom * e.Scale, maxZoom, minZoom);
         ZoomLevel = newZoom;
 
@@ -2605,8 +3209,8 @@ public class PageCanvas : Control
             return;
         }
 
-        ZoomLevel = ZoomLevel > ZoomPanMath.MinZoom ? 1.0 : ContinuousDoubleTapZoom;
-        if (ZoomLevel <= ZoomPanMath.MinZoom)
+        ZoomLevel = ZoomPanMath.IsFit(ZoomLevel) ? ContinuousDoubleTapZoom : ZoomPanMath.FitZoom;
+        if (ZoomLevel <= ZoomPanMath.FitZoom)
         {
             PanOffsetX = 0;
             PanOffsetY = 0;
@@ -2617,9 +3221,9 @@ public class PageCanvas : Control
 
     private void ToggleZoom(Point clickPoint)
     {
-        if (ZoomLevel > ZoomPanMath.MinZoom)
+        if (!ZoomPanMath.IsFit(ZoomLevel))
         {
-            ZoomLevel = ZoomPanMath.MinZoom; // cascade (VM setter) zeroes pan
+            ZoomLevel = ZoomPanMath.FitZoom; // cascade (VM setter) zeroes pan
             return;
         }
 
@@ -2629,28 +3233,217 @@ public class PageCanvas : Control
         PanOffsetY = y;
     }
 
-    private void InvokeTouchZone(Point p)
+    // ===================== Gamepad (design 2026-09-25 F1 section 3): the reader screen's poller calls these =====================
+
+    /// <summary>Full-deflection speed of the analogue pan/scroll, in pixels per second.</summary>
+    private const double GamepadPanPixelsPerSecond = 900;
+
+    /// <summary>Full-deflection zoom rate: the zoom level is multiplied by e^(1.5 x amount x seconds).</summary>
+    private const double GamepadZoomRate = 1.5;
+
+    /// <summary>Next/previous page in reading order (A/B, bumpers); in continuous mode a screen's worth of scrolling.</summary>
+    public void GamepadTurn(bool forward)
     {
-        // Left/right thirds (top/bottom in vertical paged mode); middle third toggles chrome
-        // visibility (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §3) -
-        // originally a reserved no-op per the 3-zone tap spec, back when chrome didn't exist yet.
-        if (PageTurnGestureMath.ResolveZone(p, Bounds.Size, IsPagedVertical, divisions: 3) is { } forward)
+        if (IsContinuous)
         {
-            ExecuteTurn(forward);
+            double screen = (ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? Bounds.Height : Bounds.Width) * PageJumpFraction;
+            ScrollOffset = ClampScrollOffset(ScrollOffset + (forward ? screen : -screen));
+            return;
         }
-        else
+
+        ExecuteReadingOrderTurn(forward);
+    }
+
+    /// <summary>
+    /// A D-pad or left-stick press (<paramref name="dx"/>, <paramref name="dy"/> each -1, 0 or 1; right and down positive), acting like the arrow keys: continuous mode scrolls
+    /// or pans, a zoomed page pans, an unzoomed paged page turns (spatially, so right-to-left books flip as the arrow keys do).
+    /// </summary>
+    public void GamepadDirection(int dx, int dy)
+    {
+        if (IsContinuous)
         {
-            TryExecute(ToggleChromeCommand);
+            ApplyContinuousMove(dx, dy, WheelScrollStepPixels, KeyPanStep);
+            return;
+        }
+
+        if (Page is null)
+        {
+            return;
+        }
+
+        if (CanPan() && !GuidedSteps)
+        {
+            PanOrTurnFromKey(-dx * KeyPanStep, -dy * KeyPanStep);
+        }
+        else if (IsPagedVertical)
+        {
+            if (dy != 0)
+            {
+                ExecuteTurn(forward: dy > 0);
+            }
+        }
+        else if (dx != 0)
+        {
+            ExecuteTurn(forward: dx > 0);
         }
     }
 
-    private void InvokeZoneCommand(Point p)
+    /// <summary>Right-stick pan/scroll, <paramref name="x"/> and <paramref name="y"/> in -1..1 (right and down positive) scaled by the frame time.</summary>
+    public void GamepadAnalog(double x, double y, TimeSpan elapsed)
     {
-        if (PageTurnGestureMath.ResolveZone(p, Bounds.Size, IsPagedVertical, divisions: 2) is { } forward)
+        double pixels = GamepadPanPixelsPerSecond * elapsed.TotalSeconds;
+        if (IsContinuous)
         {
-            ExecuteTurn(forward);
+            ApplyContinuousMove(x, y, pixels, pixels);
+        }
+        else if (Page is not null && CanPan())
+        {
+            ApplyPagedPan(x * pixels, y * pixels);
         }
     }
+
+    /// <summary>Trigger zoom, <paramref name="amount"/> in -1..1 (in positive), anchored on the middle of the canvas.</summary>
+    public void GamepadZoom(double amount, TimeSpan elapsed)
+    {
+        double factor = Math.Exp(amount * GamepadZoomRate * elapsed.TotalSeconds);
+        var centre = new Point(Bounds.Width / 2, Bounds.Height / 2);
+        if (IsContinuous)
+        {
+            double newZoom = ZoomPanMath.ClampZoom(ZoomLevel * factor, ContinuousMaxZoom, MinZoomLevel);
+            double crossAxisPan = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? PanOffsetX : PanOffsetY;
+            var (newScrollOffset, newCrossAxisPan) = ReaderLayoutModel.ComputeContinuousZoomAnchor(
+                EstimatedPageSizes(), ScrollOffset, ZoomLevel, crossAxisPan, Bounds.Size, ContinuousAxis,
+                centre, newZoom, ContinuousMainAxisGap, IsContinuousReversed);
+            ZoomLevel = newZoom;
+            ScrollOffset = ClampScrollOffset(newScrollOffset);
+            if (ContinuousAxis == ReaderLayoutModel.Axis.Vertical)
+            {
+                PanOffsetX = ClampContinuousCrossAxisPan(newCrossAxisPan);
+            }
+            else
+            {
+                PanOffsetY = ClampContinuousCrossAxisPan(newCrossAxisPan);
+            }
+
+            return;
+        }
+
+        if (Page is null)
+        {
+            return;
+        }
+
+        double zoom = ZoomPanMath.ClampZoom(ZoomLevel * factor, ZoomPanMath.MaxZoom, MinZoomLevel);
+        var (x, y) = ZoomPanMath.PanToKeepPointFixed(Bounds.Size, EffectivePixelSize(), ZoomLevel, new Point(PanOffsetX, PanOffsetY), centre, zoom, FitMode, FitOnlyIfOversized);
+        ZoomLevel = zoom;
+        PanOffsetX = x;
+        PanOffsetY = y;
+    }
+
+    /// <summary>Moves the view right and down by (<paramref name="x"/>, <paramref name="y"/>) times the given step sizes in continuous mode: the scroll axis by <paramref name="mainStep"/>, the other axis as a pan by <paramref name="crossStep"/>.</summary>
+    private void ApplyContinuousMove(double x, double y, double mainStep, double crossStep)
+    {
+        bool vertical = ContinuousAxis == ReaderLayoutModel.Axis.Vertical;
+        double main = vertical ? y : x;
+        double cross = vertical ? x : y;
+        if (main != 0)
+        {
+            ScrollOffset = ClampScrollOffset(ScrollOffset + (main * mainStep));
+        }
+
+        if (cross != 0)
+        {
+            if (vertical)
+            {
+                PanOffsetX = ClampContinuousCrossAxisPan(PanOffsetX - (cross * crossStep));
+            }
+            else
+            {
+                PanOffsetY = ClampContinuousCrossAxisPan(PanOffsetY - (cross * crossStep));
+            }
+        }
+    }
+
+    /// <summary>Pans the zoomed page so the view moves right and down by (<paramref name="dx"/>, <paramref name="dy"/>) pixels (content moves the other way), clamped like the keyboard pan.</summary>
+    private void ApplyPagedPan(double dx, double dy)
+    {
+        var (x, y) = ZoomPanMath.ClampPan(Bounds.Size, EffectivePixelSize(), ZoomLevel, PanOffsetX - dx, PanOffsetY - dy, FitMode, FitOnlyIfOversized);
+        PanOffsetX = x;
+        PanOffsetY = y;
+    }
+
+    /// <summary>A continuous-mode press that stayed put and was short enough to be a click/tap (tap zones use it; see the reach design §4).</summary>
+    private void HandleContinuousTap(Point point, PointerType pointerType) => InvokeTapZone(point, pointerType);
+
+    /// <summary>
+    /// A tap or click on the page area, resolved through the configured tap zone layout (design 2026-09-25 F1 section 4). With the default layout this is exactly the old
+    /// behaviour: touch = left third back / right third forward / middle third toggles the chrome (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md
+    /// section 3), mouse = the two halves, continuous mode = nothing. Pen counts as touch.
+    /// </summary>
+    private void InvokeTapZone(Point point, PointerType pointerType)
+    {
+        _tapPoint = point;
+        RunTapAction(ResolveTapAction(point, pointerType));
+    }
+
+    private TapAction ResolveTapAction(Point point, PointerType pointerType)
+    {
+        var input = pointerType == PointerType.Mouse ? TapInput.Mouse : TapInput.Touch;
+        bool rightToLeft = ReadingMode is ReadingMode.RightToLeft or ReadingMode.HorizontalContinuousRightToLeft;
+        return IsContinuous
+            ? TapZoneResolver.Resolve(point, Bounds.Size, ContinuousTapZoneLayout, ContinuousTapZoneInvert, input, TapZonesForMouse, rightToLeft, vertical: false, continuous: true)
+            : TapZoneResolver.Resolve(point, Bounds.Size, PagedTapZoneLayout, PagedTapZoneInvert, input, TapZonesForMouse, rightToLeft, IsPagedVertical, continuous: false);
+    }
+
+    private long _panPressTimestamp;
+    private bool _panPressWasGuided;
+
+    /// <summary>
+    /// A tap on a page that can pan. In guided view every tap zone acts (the tap steps to the next or previous panel, like the keys). Otherwise only the chrome toggle does: turning or stepping parts on a
+    /// tap would change how a zoomed page has always worked, but the chrome must stay reachable for a touch screen, which has no hover to reveal it.
+    /// </summary>
+    private bool HandleTapFromPan(Point point, PointerType pointerType, bool guided)
+    {
+        var action = ResolveTapAction(point, pointerType);
+        if (action == TapAction.None || (!guided && action != TapAction.Menu))
+        {
+            return false;
+        }
+
+        _tapPoint = point;
+        RunTapAction(action);
+        return true;
+    }
+
+    private void RunTapAction(TapAction action)
+    {
+        switch (action)
+        {
+            case TapAction.Menu:
+                TryExecute(ToggleChromeCommand);
+                break;
+            case TapAction.Previous or TapAction.Next when IsContinuous:
+            case TapAction.Left or TapAction.Right when IsContinuous:
+                double screen = (ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? Bounds.Height : Bounds.Width) * ContinuousTapScrollFraction;
+                ScrollOffset = ClampScrollOffset(ScrollOffset + (action is TapAction.Next or TapAction.Right ? screen : -screen));
+                break;
+            case TapAction.Previous:
+                TapTurn(spatialForward: SpatialTurnsFlipped, () => ExecuteReadingOrderTurn(forward: false));
+                break;
+            case TapAction.Next:
+                TapTurn(spatialForward: !SpatialTurnsFlipped, () => ExecuteReadingOrderTurn(forward: true));
+                break;
+            case TapAction.Left:
+                TapTurn(spatialForward: false, () => ExecuteTurn(forward: false));
+                break;
+            case TapAction.Right:
+                TapTurn(spatialForward: true, () => ExecuteTurn(forward: true));
+                break;
+        }
+    }
+
+    /// <summary>How far a previous/next tap zone scrolls in continuous mode, as a fraction of the viewport along the scroll axis (a little under a screen so the last lines stay in view).</summary>
+    private const double ContinuousTapScrollFraction = 0.9;
 
     /// <summary>
     /// Continuous mode's arrow/Page-Up/Page-Down scroll step (spec §5 - Home/End are handled

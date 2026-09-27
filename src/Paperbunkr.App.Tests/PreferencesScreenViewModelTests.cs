@@ -2,6 +2,7 @@ using Avalonia.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Reader;
 using Paperbunkr.App.Services.Scheduling;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
@@ -57,7 +58,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         context.Database.EnsureCreated();
 
         // Real pre-existing isolation gap, surfaced (not caused) by an unrelated schema change:
-        // MigrationOverlayViewModel/NeedsReviewViewModel (constructed in CreateViewModel below)
+        // NeedsReviewViewModel (constructed in CreateViewModel below)
         // have no injected context-factory seam, unlike every other service here - without this,
         // they silently fall through to the real default database path instead of this test's
         // isolated one. Matches the class-wide DatabasePathOverride pattern other test classes
@@ -98,16 +99,174 @@ public class PreferencesScreenViewModelTests : IDisposable
         }
     }
 
+    // ===== Library Health sub-tabs (docs/superpowers/specs/2026-09-26-library-health-subtabs-design.md) =====
+
+    private void SeedPendingProposal()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = new Series { Name = "Kilo Station", ContentType = ContentType.Comic };
+        var issue = new Issue { Series = series, Number = null };
+        context.Issues.Add(issue);
+        context.SaveChanges();
+        context.MetadataProposals.Add(new MetadataProposal { IssueId = issue.Id, Field = MetadataProposalField.Number, ProposedValue = "12", Source = MetadataProposalSource.FilenameParser, Confidence = 0.6m, Status = MetadataProposalStatus.Pending });
+        context.SaveChanges();
+    }
+
+    private string? StoredLibraryHealthTab()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        return context.GetOrCreateAppSettings().LibraryHealthTab;
+    }
+
+    [Fact]
+    public void LibraryHealthTab_FirstOpen_IsOverview_ThenReviewOnceSomethingIsPending_WithoutBeingSaved()
+    {
+        var needsReview = new NeedsReviewViewModel(_ => { }, loadOnConstruction: false);
+        var vm = CreateViewModel(needsReview: needsReview);
+        vm.EnsureLoaded();
+        Assert.Equal(Paperbunkr.App.Models.LibraryHealthTab.Overview, vm.ActiveLibraryHealthTab);
+        Assert.True(vm.IsLibraryHealthOverviewTab);
+
+        SeedPendingProposal();
+        needsReview.Refresh(); // the first refresh finishing is what applies the first-open rule
+
+        Assert.Equal(Paperbunkr.App.Models.LibraryHealthTab.Review, vm.ActiveLibraryHealthTab);
+        Assert.Null(StoredLibraryHealthTab()); // a default, not a choice
+    }
+
+    [Fact]
+    public void LibraryHealthTab_RememberedTab_BeatsTheFirstOpenRule()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().LibraryHealthTab = "Files";
+            context.SaveChanges();
+        }
+
+        var needsReview = new NeedsReviewViewModel(_ => { }, loadOnConstruction: false);
+        var vm = CreateViewModel(needsReview: needsReview);
+        vm.EnsureLoaded();
+        Assert.Equal(Paperbunkr.App.Models.LibraryHealthTab.Files, vm.ActiveLibraryHealthTab);
+
+        SeedPendingProposal();
+        needsReview.Refresh();
+
+        Assert.Equal(Paperbunkr.App.Models.LibraryHealthTab.Files, vm.ActiveLibraryHealthTab);
+    }
+
+    [Fact]
+    public void LibraryHealthTab_UserSwitch_IsSavedAndRestoredNextTime()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.ShowLibraryHealthFilesTabCommand.Execute(null);
+
+        Assert.True(vm.IsLibraryHealthFilesTab);
+        Assert.Equal("Files", StoredLibraryHealthTab());
+        var next = CreateViewModel();
+        next.EnsureLoaded();
+        Assert.Equal(Paperbunkr.App.Models.LibraryHealthTab.Files, next.ActiveLibraryHealthTab);
+    }
+
+    [Fact]
+    public void LibraryHealthTab_UnknownStoredValue_FallsBackToTheFirstOpenRule()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().LibraryHealthTab = "Nonsense";
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.Equal(Paperbunkr.App.Models.LibraryHealthTab.Overview, vm.ActiveLibraryHealthTab);
+    }
+
+    [Fact]
+    public void OpenLibraryHealth_WithASection_SwitchesTabOpensItAndScrollsThere_WithoutSaving()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        string? anchor = null;
+        vm.ScrollToAnchorRequested += a => anchor = a;
+
+        vm.OpenLibraryHealth(Paperbunkr.App.Models.LibraryHealthTab.Review, "duplicates");
+
+        Assert.True(vm.IsLibrarySection);
+        Assert.True(vm.IsLibraryHealthReviewTab);
+        Assert.True(vm.LibraryHealthSections.Duplicates.IsOpen);
+        Assert.Equal("library.healthDuplicates", anchor);
+        Assert.Null(StoredLibraryHealthTab()); // a deep link overrides the remembered tab for this visit only
+    }
+
+    [Fact]
+    public void OpenLibraryHealth_WithOnlyATab_ShowsIt_AndTheCardAnchor()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        string? anchor = null;
+        vm.ScrollToAnchorRequested += a => anchor = a;
+
+        vm.OpenLibraryHealth(Paperbunkr.App.Models.LibraryHealthTab.Files);
+
+        Assert.True(vm.IsLibraryHealthFilesTab);
+        Assert.Equal("library.health", anchor);
+    }
+
+    [Fact]
+    public void SearchHit_OnASectionInAHiddenTab_SwitchesTheTabAndOpensTheSectionFirst()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var entry = Paperbunkr.App.Models.PreferenceIndex.Entries.Single(e => e.AnchorKey == "library.healthEmptyRows");
+
+        vm.OpenSearchResultCommand.Execute(new PreferenceSearchResultViewModel(entry));
+
+        Assert.True(vm.IsLibraryHealthFilesTab); // Empty Rows lives on Files, which was not the active tab
+        Assert.True(vm.LibraryHealthSections.EmptyRows.IsOpen);
+    }
+
+    [Fact]
+    public void OverviewReviewLink_SwitchesToTheSectionsTab_OpensIt_AndRemembersTheTab()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.ReviewLibraryHealthSectionCommand.Execute(vm.LibraryHealthSections.Proposals);
+
+        Assert.True(vm.IsLibraryHealthReviewTab);
+        Assert.True(vm.LibraryHealthSections.Proposals.IsOpen);
+        Assert.Equal("Review", StoredLibraryHealthTab());
+    }
+
+    [Fact]
+    public void EverySectionHasAUniqueAnchorAndKey_AndTheRightTab()
+    {
+        var sections = new LibraryHealthSections();
+
+        Assert.Equal(10, sections.All.Count);
+        Assert.Equal(10, sections.All.Select(s => s.Anchor).Distinct().Count());
+        Assert.Equal(10, sections.All.Select(s => s.Key).Distinct().Count());
+        Assert.All(new[] { sections.Missing, sections.EmptyRows, sections.RecentlyRemoved }, s => Assert.Equal(Paperbunkr.App.Models.LibraryHealthTab.Files, s.Tab));
+        Assert.Equal(7, sections.All.Count(s => s.Tab == Paperbunkr.App.Models.LibraryHealthTab.Review));
+        Assert.Same(sections.Duplicates, sections.Find("duplicates"));
+        Assert.Same(sections.Duplicates, sections.Find("library.healthDuplicates"));
+        Assert.Null(sections.Find("library.health"));
+    }
+
     private PreferencesScreenViewModel CreateViewModel(
         IFilePickerService? filePicker = null,
         IShellFileAssociation? shell = null,
         Action<string, string>? showToast = null,
-        MigrationOverlayViewModel? migration = null,
+        NeedsReviewViewModel? needsReview = null,
         Action? openMigration = null,
         IActivityService? activity = null,
         IDialogService? dialogService = null,
         Action? reloadFolderWatch = null,
-        Action<int, bool>? enqueueMetadataWriteBack = null)
+        Action<int, bool>? enqueueMetadataWriteBack = null,
+        Action<int, int>? openIssueAtPage = null)
     {
         var themeService = new ThemeService(() => new PaperbunkrDbContext(_dbOptions));
         var scanner = new LibraryFolderScanner(() => new PaperbunkrDbContext(_dbOptions));
@@ -122,7 +281,7 @@ public class PreferencesScreenViewModelTests : IDisposable
             backupService,
             keyBindingService,
             showToast ?? ((_, _) => { }),
-            migration ?? new MigrationOverlayViewModel(filePicker ?? new NoOpFilePicker(), _ => { }),
+            needsReview ?? new NeedsReviewViewModel(_ => { }),
             new PluginScreenViewModel(filePicker ?? new NoOpFilePicker(), new FakeDialogService()),
             openMigration ?? (() => { }),
             activity ?? new ActivityService(a => a(), _ => { }),
@@ -131,7 +290,8 @@ public class PreferencesScreenViewModelTests : IDisposable
             () => { },
             new UpdateService(),
             () => new PaperbunkrDbContext(_dbOptions),
-            enqueueMetadataWriteBack ?? ((_, _) => { }));
+            enqueueMetadataWriteBack ?? ((_, _) => { }),
+            openIssueAtPage: openIssueAtPage);
     }
 
     // ===================== Sidebar hard-switch (reverted back from the single-scroll shell -
@@ -481,15 +641,208 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.SearchQuery = "double page";
 
         Assert.True(vm.IsSearching);
-        Assert.Contains(vm.SearchResults, r => r.AnchorKey == "reader.display");
+        Assert.Contains(vm.SearchResults, r => r.AnchorKey == "reader.layout");
 
-        var result = vm.SearchResults.First(r => r.AnchorKey == "reader.display");
+        var result = vm.SearchResults.First(r => r.AnchorKey == "reader.layout");
         vm.OpenSearchResultCommand.Execute(result);
 
         Assert.True(vm.IsReaderSection);
         Assert.Equal(string.Empty, vm.SearchQuery);
         Assert.False(vm.IsSearching);
-        Assert.Equal("reader.display", pulsedAnchor);
+        Assert.Equal("reader.layout", pulsedAnchor);
+    }
+
+    // ===== Reader and Organize & Scrape sub-tabs (docs/superpowers/specs/2026-09-26-preferences-reader-organize-tabs-design.md) =====
+
+    [Fact]
+    public void SearchHit_InAnotherReaderTab_SelectsThatTabBeforeScrolling()
+    {
+        var vm = CreateViewModel();
+        Assert.Equal(PreferencesScreenViewModel.ReaderTabKeys.Pages, vm.ReaderTabs.SelectedKey);
+        string? tabWhenScrolled = null;
+        vm.ScrollToAnchorRequested += _ => tabWhenScrolled = vm.ReaderTabs.SelectedKey;
+
+        vm.SearchQuery = "warm tint";
+        vm.OpenSearchResultCommand.Execute(vm.SearchResults.First(r => r.AnchorKey == "reader.night"));
+
+        Assert.Equal(PreferencesScreenViewModel.ReaderTabKeys.Comfort, vm.ReaderTabs.SelectedKey);
+        Assert.Equal(PreferencesScreenViewModel.ReaderTabKeys.Comfort, tabWhenScrolled); // the panel must be showing when the shell looks for the anchor
+    }
+
+    [Theory]
+    [InlineData("reader.rtl", "pages")]
+    [InlineData("reader.turning", "pages")]
+    [InlineData("reader.tapZones", "controls")]
+    [InlineData("reader.pointerInput", "controls")]
+    [InlineData("reader.panelsZoom", "controls")]
+    [InlineData("reader.quality", "image")]
+    [InlineData("reader.background", "image")]
+    [InlineData("reader.toolbar", "comfort")]
+    [InlineData("reader.infoPanel", "comfort")]
+    [InlineData("reader.profiles", "profiles")]
+    public void DeepLink_ToAReaderGroup_SelectsItsTab(string anchor, string expectedTab)
+    {
+        var vm = CreateViewModel();
+
+        vm.RequestScrollToAnchor(anchor);
+
+        Assert.Equal(expectedTab, vm.ReaderTabs.SelectedKey);
+    }
+
+    [Fact]
+    public void SearchHit_InOrganizeScrape_SelectsItsTab_AndTheSaveFooterFollowsTheTab()
+    {
+        var vm = CreateViewModel();
+        Assert.Equal(OrganizeScrapeSettingsViewModel.TabKeys.Scrape, vm.OrganizeScrape.Tabs.SelectedKey);
+        Assert.True(vm.OrganizeScrape.IsSaveFooterVisible);
+
+        vm.SearchQuery = "publisher alias";
+        vm.OpenSearchResultCommand.Execute(vm.SearchResults.First(r => r.AnchorKey == "organizeScrape.names"));
+        Assert.Equal(OrganizeScrapeSettingsViewModel.TabKeys.Filters, vm.OrganizeScrape.Tabs.SelectedKey);
+        Assert.True(vm.OrganizeScrape.IsSaveFooterVisible);
+
+        vm.SearchQuery = "naming template";
+        vm.OpenSearchResultCommand.Execute(vm.SearchResults.First(r => r.AnchorKey == "organizeScrape.profiles"));
+        Assert.Equal(OrganizeScrapeSettingsViewModel.TabKeys.Organize, vm.OrganizeScrape.Tabs.SelectedKey);
+        Assert.False(vm.OrganizeScrape.IsSaveFooterVisible); // profiles manage themselves; nothing to Save here
+    }
+
+    [Fact]
+    public void SearchHit_OutsideTheTabbedSections_LeavesEveryTabAlone()
+    {
+        var vm = CreateViewModel();
+        vm.ReaderTabs.Select(PreferencesScreenViewModel.ReaderTabKeys.Image);
+        vm.OrganizeScrape.Tabs.Select(OrganizeScrapeSettingsViewModel.TabKeys.Filters);
+
+        vm.SearchQuery = "missing files";
+        vm.OpenSearchResultCommand.Execute(vm.SearchResults.First(r => r.AnchorKey == "library.health"));
+        vm.RequestScrollToAnchor("about.changelog");
+
+        Assert.Equal(PreferencesScreenViewModel.ReaderTabKeys.Image, vm.ReaderTabs.SelectedKey);
+        Assert.Equal(OrganizeScrapeSettingsViewModel.TabKeys.Filters, vm.OrganizeScrape.Tabs.SelectedKey);
+    }
+
+    /// <summary>
+    /// Loads the real section view with its real view model (Fluent theme + the two icon-size tokens the rows need; the app's own
+    /// styles are not available headlessly, so this proves structure and visibility, not looks) and runs <paramref name="check"/>.
+    /// </summary>
+    private static void WithSection(Avalonia.Controls.Control section, Action<Avalonia.Controls.Window> check)
+    {
+        var app = Avalonia.Application.Current!;
+        var theme = new Avalonia.Themes.Fluent.FluentTheme();
+        app.Styles.Add(theme);
+        app.Resources["PbIconSizeSm"] = 16d;
+        app.Resources["PbIconSizeXs"] = 12d;
+        try
+        {
+            var window = new Avalonia.Controls.Window { Width = 900, Height = 700, Content = section };
+            window.Show();
+            try
+            {
+                window.UpdateLayout();
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                check(window);
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+        finally
+        {
+            app.Styles.Remove(theme);
+            app.Resources.Remove("PbIconSizeSm");
+            app.Resources.Remove("PbIconSizeXs");
+        }
+    }
+
+    /// <summary>A hidden panel is never templated, so its groups are not in the visual tree until its tab has been shown once. (The shell's search jump waits two dispatcher hops after selecting the tab for this reason.)</summary>
+    private static void RealizeEveryTab(Avalonia.Controls.Window window, SettingsTabs tabs)
+    {
+        foreach (var tab in tabs.Items)
+        {
+            tabs.Select(tab.Key);
+            window.UpdateLayout();
+        }
+    }
+
+    /// <summary>For every index entry of <paramref name="section"/>: its Tag'd group sits in a tab panel, and that panel shows only while the entry's tab is selected.</summary>
+    private static void AssertGroupsLiveInTheirTabsPanel(Avalonia.Controls.Window window, PreferencesSection section, SettingsTabs tabs)
+    {
+        var tree = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window).OfType<Avalonia.Controls.Control>().ToList();
+        foreach (var entry in PreferenceIndex.Entries.Where(e => e.Section == section))
+        {
+            var group = tree.FirstOrDefault(c => c.Tag as string == entry.AnchorKey);
+            Assert.True(group is not null, $"{entry.AnchorKey} is not in the {section} view");
+            var panel = Avalonia.VisualTree.VisualExtensions.GetVisualAncestors(group!).OfType<Avalonia.Controls.ScrollViewer>().FirstOrDefault();
+            Assert.True(panel is not null, $"{entry.AnchorKey} is not inside a tab panel");
+            Assert.Equal(entry.SubTab == tabs.SelectedKey, panel!.IsVisible);
+        }
+    }
+
+    [Fact]
+    public void ReaderSection_ShowsOnlyTheSelectedTabsGroups_AndEveryGroupIsInTheTabTheIndexNames()
+    {
+        var vm = CreateViewModel();
+        WithSection(new Paperbunkr.App.Views.Preferences.ReaderSection { DataContext = vm }, window =>
+        {
+            RealizeEveryTab(window, vm.ReaderTabs);
+            foreach (var tab in vm.ReaderTabs.Items)
+            {
+                vm.ReaderTabs.Select(tab.Key);
+                window.UpdateLayout();
+
+                AssertGroupsLiveInTheirTabsPanel(window, PreferencesSection.Reader, vm.ReaderTabs);
+            }
+        });
+    }
+
+    [Fact]
+    public void OrganizeScrapeSection_ShowsOnlyTheSelectedTabsGroups_AndTheSaveFooterHidesOnOrganize()
+    {
+        var vm = CreateViewModel();
+        var scrape = vm.OrganizeScrape;
+        WithSection(new Paperbunkr.App.Views.Preferences.OrganizeScrapeSection { DataContext = scrape }, window =>
+        {
+            var footer = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window).OfType<Avalonia.Controls.Border>()
+                .Single(b => b.Child is Avalonia.Controls.StackPanel sp && sp.Children.OfType<Avalonia.Controls.Button>().Any(x => x.Command == scrape.SaveCommand));
+
+            RealizeEveryTab(window, scrape.Tabs);
+            foreach (var tab in scrape.Tabs.Items)
+            {
+                scrape.Tabs.Select(tab.Key);
+                window.UpdateLayout();
+
+                AssertGroupsLiveInTheirTabsPanel(window, PreferencesSection.OrganizeScrape, scrape.Tabs);
+                Assert.Equal(tab.Key != OrganizeScrapeSettingsViewModel.TabKeys.Organize, footer.IsVisible);
+            }
+        });
+    }
+
+    [Fact]
+    public void EveryTabbedSectionGroup_NamesARealTab_AndEveryTabHasAGroup()
+    {
+        var vm = CreateViewModel();
+        var sections = new (PreferencesSection Section, IReadOnlyList<SettingsTabItem> Tabs)[]
+        {
+            (PreferencesSection.Reader, vm.ReaderTabs.Items),
+            (PreferencesSection.OrganizeScrape, vm.OrganizeScrape.Tabs.Items),
+        };
+
+        foreach (var (section, tabs) in sections)
+        {
+            var entries = PreferenceIndex.Entries.Where(e => e.Section == section).ToList();
+            foreach (var entry in entries)
+            {
+                Assert.True(tabs.Any(t => t.Key == entry.SubTab), $"{entry.AnchorKey} names tab '{entry.SubTab}', which {section} does not have");
+            }
+
+            foreach (var tab in tabs)
+            {
+                Assert.True(entries.Any(e => e.SubTab == tab.Key), $"{section} tab '{tab.Key}' has no search entry");
+            }
+        }
     }
 
     [Fact]
@@ -876,6 +1229,8 @@ public class PreferencesScreenViewModelTests : IDisposable
     [InlineData("neutral-dark")]
     [InlineData("carbon")]
     [InlineData("linen")]
+    [InlineData("brick-wall")]
+    [InlineData("sketch")]
     public void SetBackgroundTexture_PersistsAndFlipsTheActiveSwatch(string id)
     {
         var vm = CreateViewModel();
@@ -884,9 +1239,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.SetBackgroundTextureCommand.Execute(id);
 
         Assert.Equal(id, vm.BackgroundTexture);
-        Assert.Equal(id == "neutral-dark", vm.IsTextureNeutralDark);
-        Assert.Equal(id == "carbon", vm.IsTextureCarbon);
-        Assert.Equal(id == "linen", vm.IsTextureLinen);
+        Assert.Equal(ReaderBackgroundTextures.All.Count, vm.TextureChoices.Count);
+        Assert.All(vm.TextureChoices, c => Assert.Equal(c.Id == id, c.IsActive));
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.Equal(id, context.GetOrCreateAppSettings().BackgroundTexture);
@@ -899,7 +1253,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.EnsureLoaded();
 
         Assert.Null(vm.BackgroundTexture);
-        Assert.True(vm.IsTextureNeutralDark); // Resolve(null) falls back to the first texture
+        // BackgroundTexture is null, but the swatch row still shows the fallback (first texture) as active.
+        Assert.True(vm.TextureChoices.Single(c => c.Id == "neutral-dark").IsActive);
 
         using (var context = new PaperbunkrDbContext(_dbOptions))
         {
@@ -910,7 +1265,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         var reloaded = CreateViewModel();
         reloaded.EnsureLoaded();
         Assert.Equal("linen", reloaded.BackgroundTexture);
-        Assert.True(reloaded.IsTextureLinen);
+        Assert.True(reloaded.TextureChoices.Single(c => c.Id == "linen").IsActive);
+        Assert.Single(reloaded.TextureChoices, c => c.IsActive);
     }
 
     [Fact]
@@ -1166,6 +1522,118 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.False(vm.IsLegalDocumentViewerOpen);
     }
 
+    // About polish (docs/superpowers/specs/2026-09-26-about-polish-design.md)
+    [Fact]
+    public void AboutTabs_StartOnOverview()
+    {
+        Assert.Equal(PreferencesScreenViewModel.AboutTabKeys.Overview, CreateViewModel().AboutTabs.SelectedKey);
+    }
+
+    [Theory]
+    [InlineData("about.legal", PreferencesScreenViewModel.AboutTabKeys.Legal)]
+    [InlineData("about.changelog", PreferencesScreenViewModel.AboutTabKeys.Changelog)]
+    [InlineData("about.project", PreferencesScreenViewModel.AboutTabKeys.Overview)]
+    public void AboutAnchor_SelectsItsTab(string anchor, string expectedTab)
+    {
+        var vm = CreateViewModel();
+        vm.AboutTabs.Select(expectedTab == PreferencesScreenViewModel.AboutTabKeys.Overview
+            ? PreferencesScreenViewModel.AboutTabKeys.Legal
+            : PreferencesScreenViewModel.AboutTabKeys.Overview);
+
+        vm.RequestScrollToAnchor(anchor);
+
+        Assert.Equal(expectedTab, vm.AboutTabs.SelectedKey);
+    }
+
+    [Fact]
+    public void OpenLegalDocument_License_IsOnePreformattedBlock()
+    {
+        var vm = CreateViewModel();
+
+        vm.OpenLegalDocumentCommand.Execute("LICENSE");
+
+        var block = Assert.Single(vm.SelectedLegalDocumentBlocks);
+        Assert.Equal(MdBlockKind.Preformatted, block.Kind);
+        Assert.Contains("GNU AFFERO GENERAL PUBLIC LICENSE", block.PlainText);
+        Assert.Null(vm.SelectedLegalDocumentUpdated);
+    }
+
+    [Fact]
+    public void OpenLegalDocument_LiftsLastUpdatedIntoTheHeader()
+    {
+        var vm = CreateViewModel();
+
+        vm.OpenLegalDocumentCommand.Execute("PRIVACY.md");
+
+        Assert.Equal("Privacy notice", vm.SelectedLegalDocumentTitle);
+        Assert.Matches(@"^\d{4}-\d{2}-\d{2}$", vm.SelectedLegalDocumentUpdated);
+        Assert.DoesNotContain(vm.SelectedLegalDocumentBlocks, b => b.PlainText.StartsWith("Last updated", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void OpenLegalLink_ToAnotherDocument_SwapsTheViewer()
+    {
+        var vm = CreateViewModel();
+        vm.OpenLegalDocumentCommand.Execute("TERMS.md");
+
+        vm.OpenLegalLinkCommand.Execute("COMICVINE_NOTICE.md");
+
+        Assert.True(vm.IsLegalDocumentViewerOpen);
+        Assert.Equal("ComicVine & Metron notice", vm.SelectedLegalDocumentTitle);
+    }
+
+    [Fact]
+    public void OpenLegalLink_WebLinkGoesToTheShell_OtherTargetsAreIgnored()
+    {
+        var vm = CreateViewModel();
+        var opened = new List<string>();
+        vm.ShellOpener = target => { opened.Add(target); return true; };
+
+        vm.OpenLegalLinkCommand.Execute("https://metron.cloud");
+        vm.OpenLegalLinkCommand.Execute("C:\\Windows\\notepad.exe");
+        vm.OpenProjectLinkCommand.Execute("file:///C:/Windows/notepad.exe");
+
+        Assert.Equal(["https://metron.cloud"], opened);
+    }
+
+    [Fact]
+    public async Task CopyVersionInfo_WritesTheReportToTheClipboard()
+    {
+        var vm = CreateViewModel();
+        var copied = new List<string>();
+        vm.ClipboardTextWriter = text => { copied.Add(text); return Task.CompletedTask; };
+        vm.CopiedFeedbackDuration = TimeSpan.Zero;
+
+        await vm.CopyVersionInfoCommand.ExecuteAsync(null);
+
+        var text = Assert.Single(copied);
+        Assert.StartsWith($"Paperbunkr {vm.CurrentVersion}", text);
+        Assert.False(vm.VersionInfoCopied);
+    }
+
+    [Fact]
+    public async Task CopyLegalDocument_CopiesTheRawFileText()
+    {
+        var vm = CreateViewModel();
+        var copied = new List<string>();
+        vm.ClipboardTextWriter = text => { copied.Add(text); return Task.CompletedTask; };
+        vm.CopiedFeedbackDuration = TimeSpan.Zero;
+        vm.OpenLegalDocumentCommand.Execute("TERMS.md");
+
+        await vm.CopyLegalDocumentCommand.ExecuteAsync(null);
+
+        Assert.StartsWith("# Terms of Use", Assert.Single(copied));
+    }
+
+    [Fact]
+    public void AboutVersionLine_ShowsTheVersionOnce()
+    {
+        var vm = CreateViewModel();
+
+        Assert.StartsWith($"Version {vm.CurrentVersion}", vm.AboutVersionLine);
+        Assert.EndsWith("Comic and manga library", vm.AboutVersionLine);
+    }
+
     // App chrome (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-design.md §4)
     [Fact]
     public void EnsureLoaded_PopulatesMinimizeToTrayFromAppSettings()
@@ -1396,6 +1864,333 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.True(context.GetOrCreateAppSettings().ResetZoomOnPageChange);
+    }
+
+    [Fact]
+    public void EnsureLoaded_PageSkipSettings_DefaultDeletedOnAdsOff()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.True(vm.SkipDeletedPages);
+        Assert.False(vm.SkipAdvertisementPages);
+    }
+
+    [Fact]
+    public void TogglingPageSkipSettings_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.SkipDeletedPages = false;
+        vm.SkipAdvertisementPages = true;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.False(settings.SkipDeletedPages);
+        Assert.True(settings.SkipAdvertisementPages);
+    }
+
+    [Fact]
+    public void EnsureLoaded_PreOpenNextIssue_DefaultsOn()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.True(vm.PreOpenNextIssue);
+    }
+
+    [Fact]
+    public void TogglingPreOpenNextIssue_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.PreOpenNextIssue = false;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(context.GetOrCreateAppSettings().PreOpenNextIssue);
+    }
+
+    [Fact]
+    public void EnsureLoaded_TapZoneAndInputSettings_DefaultToTodaysBehaviour()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.Equal(TapZoneLayout.Default, vm.PagedTapZoneLayout);
+        Assert.Equal(TapZoneInvert.None, vm.PagedTapZoneInvert);
+        Assert.Equal(TapZoneLayout.Disabled, vm.ContinuousTapZoneLayout);
+        Assert.Equal(TapZoneInvert.None, vm.ContinuousTapZoneInvert);
+        Assert.True(vm.TapZonesForMouse);
+        Assert.True(vm.ExtraMouseButtonsTurnPages);
+        Assert.True(vm.GamepadEnabled);
+    }
+
+    [Fact]
+    public void ChangingTapZoneAndInputSettings_PersistsAndRaisesReaderDisplaySettingsChanged()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        int raised = 0;
+        vm.ReaderDisplaySettingsChanged += () => raised++;
+
+        vm.PagedTapZoneLayoutText = "Kindlish";
+        vm.PagedTapZoneInvert = TapZoneInvert.Horizontal;
+        vm.ContinuousTapZoneLayout = TapZoneLayout.LShaped;
+        vm.ContinuousTapZoneInvert = TapZoneInvert.Both;
+        vm.TapZonesForMouse = false;
+        vm.ExtraMouseButtonsTurnPages = false;
+        vm.GamepadEnabled = false;
+
+        Assert.Equal(7, raised);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.Equal(TapZoneLayout.Kindlish, settings.PagedTapZoneLayout);
+        Assert.Equal(TapZoneInvert.Horizontal, settings.PagedTapZoneInvert);
+        Assert.Equal(TapZoneLayout.LShaped, settings.ContinuousTapZoneLayout);
+        Assert.Equal(TapZoneInvert.Both, settings.ContinuousTapZoneInvert);
+        Assert.False(settings.TapZonesForMouse);
+        Assert.False(settings.ExtraMouseButtonsTurnPages);
+        Assert.False(settings.GamepadEnabled);
+    }
+
+    [Fact]
+    public void TapZoneLayoutText_IgnoresUnknownNames()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.PagedTapZoneLayoutText = "NotALayout";
+
+        Assert.Equal(TapZoneLayout.Default, vm.PagedTapZoneLayout);
+    }
+
+    // ===== Panels & zoom (docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md) =====
+
+    [Fact]
+    public void EnsureLoaded_PanelSettings_DefaultGuidedOffAndSmartZoomOn()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.GuidedViewOnOpen);
+        Assert.True(vm.SmartDoubleClickZoom);
+    }
+
+    [Fact]
+    public void ChangingPanelSettings_PersistsAndRaisesReaderDisplaySettingsChanged()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        int raised = 0;
+        vm.ReaderDisplaySettingsChanged += () => raised++;
+
+        vm.GuidedViewOnOpen = true;
+        vm.SmartDoubleClickZoom = false;
+
+        Assert.Equal(2, raised);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.True(settings.GuidedViewOnOpen);
+        Assert.False(settings.SmartDoubleClickZoom);
+    }
+
+    // ===== Image quality (docs/superpowers/specs/2026-09-26-comic-reader-image-quality-design.md) =====
+
+    [Fact]
+    public void ImageQualitySettings_DefaultOff_ThenPersistAndRaiseReaderDisplaySettingsChanged()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        Assert.False(vm.DefaultAutoLevels);
+        Assert.Equal(0, vm.DefaultSharpen);
+        Assert.False(vm.AutoCropMargins);
+        int raised = 0;
+        vm.ReaderDisplaySettingsChanged += () => raised++;
+
+        vm.DefaultAutoLevels = true;
+        vm.DefaultSharpen = 3;
+        vm.AutoCropMargins = true;
+
+        Assert.Equal(3, raised);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.True(settings.DefaultAutoLevels);
+        Assert.Equal(3, settings.DefaultSharpen);
+        Assert.True(settings.AutoCropMargins);
+    }
+
+    // ===== Comfort (docs/superpowers/specs/2026-09-25-comic-reader-comfort-design.md) =====
+
+    [Fact]
+    public void EnsureLoaded_ComfortSettings_DefaultToOffWithTheDocumentedValues()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.ShowSessionHud);
+        Assert.False(vm.BreakNudgesEnabled);
+        Assert.Equal(20, vm.BreakNudgeIntervalMinutes);
+        Assert.False(vm.WarmShiftEnabled);
+        Assert.Equal("21:00", vm.WarmShiftStartText);
+        Assert.Equal("07:00", vm.WarmShiftEndText);
+        Assert.Equal(40, vm.WarmShiftStrength);
+    }
+
+    [Fact]
+    public void ChangingComfortSettings_PersistsAndRaisesReaderDisplaySettingsChanged()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        int raised = 0;
+        vm.ReaderDisplaySettingsChanged += () => raised++;
+
+        vm.ShowSessionHud = true;
+        vm.BreakNudgesEnabled = true;
+        vm.BreakNudgeIntervalMinutes = 35;
+        vm.WarmShiftEnabled = true;
+        vm.WarmShiftStartText = "22:30";
+        vm.WarmShiftEndText = "06:00";
+        vm.WarmShiftStrength = 65;
+
+        Assert.Equal(7, raised);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.True(settings.ShowSessionHud);
+        Assert.True(settings.BreakNudgesEnabled);
+        Assert.Equal(35, settings.BreakNudgeIntervalMinutes);
+        Assert.True(settings.WarmShiftEnabled);
+        Assert.Equal(22 * 60 + 30, settings.WarmShiftStartMinutes);
+        Assert.Equal(6 * 60, settings.WarmShiftEndMinutes);
+        Assert.Equal(65, settings.WarmShiftStrength);
+    }
+
+    [Fact]
+    public void WarmShiftTimeText_IgnoresNonTimes()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.WarmShiftStartText = "banana";
+
+        Assert.Equal("21:00", vm.WarmShiftStartText);
+    }
+
+    [Fact]
+    public void ComfortValues_AreClampedWhenPersisted()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.BreakNudgeIntervalMinutes = 5;
+        vm.WarmShiftStrength = 300;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.Equal(10, settings.BreakNudgeIntervalMinutes);
+        Assert.Equal(100, settings.WarmShiftStrength);
+    }
+
+    // ===== Reader profiles (docs/superpowers/specs/2026-09-25-comic-reader-profiles-design.md section 4) =====
+
+    [Fact]
+    public void EnsureLoaded_ListsTheBuiltInReaderProfiles_AndDefaultsToStandard()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.Equal(["Manga night", "Webtoon", "Tablet"], vm.ReaderProfiles.Select(p => p.Name));
+        Assert.All(vm.ReaderProfiles, p => Assert.True(p.IsBuiltIn));
+        Assert.Equal("Standard", vm.DefaultReaderProfileText);
+        Assert.Equal(["Standard", "Manga night", "Webtoon", "Tablet"], vm.ReaderProfileChoiceNames);
+    }
+
+    [Fact]
+    public void DefaultReaderProfileText_PersistsAPickedProfile_AndStandardClearsIt()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        int raised = 0;
+        vm.ReaderDisplaySettingsChanged += () => raised++;
+
+        vm.DefaultReaderProfileText = "Webtoon";
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            Assert.Equal(vm.ReaderProfiles.Single(p => p.Name == "Webtoon").Id, context.GetOrCreateAppSettings().DefaultReaderProfileId);
+        }
+
+        Assert.Equal("Webtoon", vm.DefaultReaderProfileText);
+        Assert.Equal(1, raised);
+
+        vm.DefaultReaderProfileText = "Standard";
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            Assert.Null(context.GetOrCreateAppSettings().DefaultReaderProfileId);
+        }
+
+        vm.DefaultReaderProfileText = "Not a profile";
+        Assert.Equal("Standard", vm.DefaultReaderProfileText);
+    }
+
+    private int CreateUserReaderProfile(string name) =>
+        new WorkspaceService(() => new PaperbunkrDbContext(_dbOptions)).Create(WorkspaceScreen.Reader, name, "{}").Id;
+
+    [Fact]
+    public void RenameReaderProfile_PromptsForAName_AndRenamesUserProfilesOnly()
+    {
+        int id = CreateUserReaderProfile("Mine");
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        vm.PromptForName = (initial, callback) =>
+        {
+            Assert.Equal("Mine", initial);
+            callback("Better name");
+        };
+        int changed = 0;
+        vm.ReaderProfilesChanged += () => changed++;
+
+        vm.RenameReaderProfileCommand.Execute(id);
+        vm.RenameReaderProfileCommand.Execute(vm.ReaderProfiles.First(p => p.IsBuiltIn).Id);   // ignored: built-in
+
+        Assert.Contains(vm.ReaderProfiles, p => p.Name == "Better name");
+        Assert.DoesNotContain(vm.ReaderProfiles, p => p.Name == "Mine");
+        Assert.Equal(1, changed);
+    }
+
+    [Fact]
+    public void DeleteReaderProfile_RemovesIt_ClearsTheDefault_AndNeverDeletesBuiltIns()
+    {
+        int id = CreateUserReaderProfile("Mine");
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        vm.DefaultReaderProfileText = "Mine";
+
+        vm.DeleteReaderProfileCommand.Execute(id);
+        vm.DeleteReaderProfileCommand.Execute(vm.ReaderProfiles.First(p => p.IsBuiltIn).Id);
+        TestDispatcher.Drain();   // the refresh is deferred one dispatcher tick
+
+        Assert.DoesNotContain(vm.ReaderProfiles, p => p.Name == "Mine");
+        Assert.Equal(3, vm.ReaderProfiles.Count);
+        Assert.Equal("Standard", vm.DefaultReaderProfileText);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(context.GetOrCreateAppSettings().DefaultReaderProfileId);
+    }
+
+    [Fact]
+    public void MoveReaderProfile_ReordersUserProfiles()
+    {
+        int first = CreateUserReaderProfile("A");
+        CreateUserReaderProfile("B");
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        Assert.True(vm.HasReorderableReaderProfiles);
+
+        vm.MoveReaderProfileDownCommand.Execute(first);
+        TestDispatcher.Drain();
+
+        Assert.Equal(["B", "A"], vm.ReaderProfiles.Where(p => !p.IsBuiltIn).Select(p => p.Name));
     }
 
     [Fact]
@@ -2588,6 +3383,134 @@ public class PreferencesScreenViewModelTests : IDisposable
         context.Issues.Add(issue);
         context.SaveChanges();
         return issue.Id;
+    }
+
+    // ===== Reported pages (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md 4) =====
+
+    private int SeedPageReport(int pageNumber = 4, PageReportReason reason = PageReportReason.Blank, string seriesName = "Ghost Series")
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = new Series { Name = seriesName };
+        var issue = new Issue { Series = series, Number = "7", FilePath = Path.Combine(_scanRoot, "reported.cbz") };
+        context.Series.Add(series);
+        context.Issues.Add(issue);
+        context.SaveChanges();
+        context.PageReports.Add(new PageReport { IssueId = issue.Id, PageNumber = pageNumber, Reason = reason, CreatedAt = DateTime.UtcNow });
+        context.SaveChanges();
+        return issue.Id;
+    }
+
+    [Fact]
+    public void LibraryHealth_ListsReportedPages_WithLabelAndReason()
+    {
+        SeedPageReport(pageNumber: 4, reason: PageReportReason.LowRes);
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        var row = Assert.Single(vm.PageReportItems);
+
+        Assert.True(vm.HasPageReportItems);
+        Assert.Equal("Ghost Series #7 \u00b7 page 5", row.DisplayLabel);
+        Assert.Equal("Low resolution", row.ReasonLabel);
+    }
+
+    [Fact]
+    public void LibraryHealth_NoReports_HasNoPageReportItems()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.Empty(vm.PageReportItems);
+        Assert.False(vm.HasPageReportItems);
+    }
+
+    [Fact]
+    public void OpenReportedPage_PassesTheIssueAndZeroBasedPage()
+    {
+        int issueId = SeedPageReport(pageNumber: 4);
+        (int Issue, int Page)? opened = null;
+        var vm = CreateViewModel(openIssueAtPage: (i, p) => opened = (i, p));
+        vm.EnsureLoaded();
+
+        vm.PageReportItems[0].OpenCommand.Execute(null);
+
+        Assert.Equal((issueId, 4), opened);
+    }
+
+    [Fact]
+    public void DismissReportedPage_HidesIt_ButKeepsTheRow()
+    {
+        SeedPageReport();
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.PageReportItems[0].DismissCommand.Execute(null);
+        TestDispatcher.Drain(); // the refresh is deferred one dispatcher tick
+
+        Assert.Empty(vm.PageReportItems);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.True(context.PageReports.Single().Acknowledged);
+    }
+
+    [Fact]
+    public void TagReportedPageAsDeleted_WritesTheTag_AndResolvesTheReport()
+    {
+        int issueId = SeedPageReport(pageNumber: 4);
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.PageReportItems[0].TagDeletedCommand.Execute(null);
+        TestDispatcher.Drain();
+
+        Assert.Empty(vm.PageReportItems);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var tag = Assert.Single(context.IssuePages.ToList());
+        Assert.Equal(issueId, tag.IssueId);
+        Assert.Equal(4, tag.PageNumber);
+        Assert.Equal(PageType.Deleted, tag.PageType);
+        Assert.True(context.PageReports.Single().Acknowledged);
+    }
+
+    [Fact]
+    public void TagReportedPageAsDeleted_KeepsAnExistingRotation()
+    {
+        int issueId = SeedPageReport(pageNumber: 4);
+        using (var seed = new PaperbunkrDbContext(_dbOptions))
+        {
+            seed.IssuePages.Add(new IssuePage { IssueId = issueId, PageNumber = 4, RotationDegrees = 90 });
+            seed.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        vm.PageReportItems[0].TagDeletedCommand.Execute(null);
+        TestDispatcher.Drain();
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var tag = Assert.Single(context.IssuePages.ToList());
+        Assert.Equal(PageType.Deleted, tag.PageType);
+        Assert.Equal(90, tag.RotationDegrees);
+    }
+
+    [Fact]
+    public void ReReportingADismissedPage_BringsItBack()
+    {
+        int issueId = SeedPageReport();
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        vm.PageReportItems[0].DismissCommand.Execute(null);
+        TestDispatcher.Drain();
+        Assert.Empty(vm.PageReportItems);
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            Paperbunkr.Data.Metadata.PageReportService.Upsert(context, issueId, 4, PageReportReason.Corrupt);
+        }
+
+        var reopened = CreateViewModel();
+        reopened.EnsureLoaded();
+
+        Assert.Single(reopened.PageReportItems);
     }
 
     [Fact]

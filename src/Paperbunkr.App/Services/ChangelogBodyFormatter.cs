@@ -1,53 +1,70 @@
+using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace Paperbunkr.App.Services;
 
-/// <summary>One category group (e.g. "Added") within a changelog entry's body, or an uncategorized fallback.</summary>
-public sealed record ChangelogBodyGroup(string? Category, IReadOnlyList<string> Lines);
+/// <summary>The Keep a Changelog category of a group, which picks its tag colour. Anything unrecognised is <see cref="Other"/>.</summary>
+public enum ChangelogTagKind
+{
+    Added,
+    Changed,
+    Fixed,
+    Removed,
+    Security,
+    Other,
+}
+
+/// <summary>One category group (e.g. "Added") within a changelog entry's body, or an uncategorized one (<see cref="Category"/> null).</summary>
+public sealed record ChangelogBodyGroup(string? Category, ChangelogTagKind Kind, IReadOnlyList<MdBlock> Blocks)
+{
+    /// <summary>Removed and Security share the danger-coloured tag.</summary>
+    public bool IsRemovalOrSecurity => Kind is ChangelogTagKind.Removed or ChangelogTagKind.Security;
+}
 
 /// <summary>
-/// Splits a <see cref="ChangelogEntry.Body"/> string on its "### Added" / "### Fixed" sub-headings
-/// into category-tagged groups for the About section's accordion (docs/superpowers/specs/
-/// 2026-09-07-about-redesign-design.md §Architecture 3). View-layer only - does not touch
-/// <see cref="ChangelogParser"/>/<see cref="ChangelogEntry"/>, which the update-available overlay
-/// also depends on.
+/// Splits a <see cref="ChangelogEntry.Body"/> on its "### Added" / "### Fixed" sub-headings into category groups, each parsed with
+/// <see cref="MarkdownLite"/> so hard-wrapped bullets and inline bold render as one piece of text (docs/superpowers/specs/
+/// 2026-09-26-about-polish-design.md §3). View-layer only: <see cref="ChangelogParser"/>/<see cref="ChangelogEntry"/> are untouched.
 /// </summary>
 public static class ChangelogBodyFormatter
 {
-    private static readonly Regex CategoryHeadingPattern = new(@"^###\s*(?<category>.+)$", RegexOptions.Multiline);
+    private static readonly Regex CategoryHeadingPattern = new(@"^###\s*(?<category>.+?)\s*$", RegexOptions.Multiline);
 
     public static IReadOnlyList<ChangelogBodyGroup> Format(string body)
     {
+        var groups = new List<ChangelogBodyGroup>();
         var matches = CategoryHeadingPattern.Matches(body);
-        if (matches.Count == 0)
+
+        string preamble = (matches.Count == 0 ? body : body[..matches[0].Index]).Trim();
+        if (preamble.Length > 0)
         {
-            return body.Length == 0
-                ? []
-                : [new ChangelogBodyGroup(null, [body])];
+            groups.Add(new ChangelogBodyGroup(null, ChangelogTagKind.Other, MarkdownLite.Parse(preamble)));
         }
 
-        var groups = new List<ChangelogBodyGroup>();
         for (int i = 0; i < matches.Count; i++)
         {
             var match = matches[i];
-            string category = match.Groups["category"].Value.Trim();
+            string category = match.Groups["category"].Value;
             int contentStart = match.Index + match.Length;
             int contentEnd = i + 1 < matches.Count ? matches[i + 1].Index : body.Length;
-            string content = body[contentStart..contentEnd].Trim();
-
-            IReadOnlyList<string> lines = content.Length == 0
-                ? []
-                : content.Replace("\r\n", "\n").Split('\n')
-                    .Select(l => l.Trim())
-                    .Where(l => l.Length > 0)
-                    .Select(l => l.StartsWith("- ") ? l[2..] : l)
-                    .ToArray();
-
-            groups.Add(new ChangelogBodyGroup(category, lines));
+            var blocks = MarkdownLite.Parse(body[contentStart..contentEnd]);
+            if (blocks.Count > 0)
+            {
+                groups.Add(new ChangelogBodyGroup(category, KindOf(category), blocks));
+            }
         }
 
         return groups;
     }
+
+    public static ChangelogTagKind KindOf(string category) => category.Trim().ToLowerInvariant() switch
+    {
+        "added" => ChangelogTagKind.Added,
+        "changed" => ChangelogTagKind.Changed,
+        "fixed" => ChangelogTagKind.Fixed,
+        "removed" => ChangelogTagKind.Removed,
+        "security" => ChangelogTagKind.Security,
+        _ => ChangelogTagKind.Other,
+    };
 }

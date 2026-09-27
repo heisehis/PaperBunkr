@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:views="using:Paperbunkr.App.Views"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -24,6 +25,8 @@
             <Setter Property="Width" Value="76" />
         </Style>
         <Style Selector="Border.railCover">
+            <!-- Explicit width: without an intrinsic image (cover-key rails) the box collapsed to a sliver. Matches Button.railCard. -->
+            <Setter Property="Width" Value="76" />
             <Setter Property="Height" Value="112" />
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="BorderThickness" Value="1" />
@@ -53,7 +56,9 @@
     </UserControl.Styles>
 
     <StackPanel Margin="0,0,0,16">
-        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,7">
+        <!-- Hidden when the host supplies its own section header (the Library preview panel passes no Title): the empty row still took ~20 px. -->
+        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,7"
+                    IsVisible="{Binding #u.Title, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
             <TextBlock Text="{Binding #u.Title}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding #u.ContextLabel}" FontSize="10" Foreground="{DynamicResource PbAccentTextBrush}"
                        VerticalAlignment="Center" IsVisible="{Binding #u.ContextLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
@@ -71,7 +76,14 @@
                                 <StackPanel Spacing="4">
                                     <Panel>
                                         <Border Classes="railCover" Background="{Binding CoverBrush}">
-                                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                            <Panel>
+                                                <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                                <!-- Library preview panel's issue rail: cover loaded by cache key like a grid tile (CoverImage stays null there). -->
+                                                <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                                                <Border Background="{DynamicResource PbBgBrush}" Opacity="0.55" IsVisible="{Binding IsRead}" />
+                                                <TextBlock Text="✓" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,3,5,0" IsVisible="{Binding IsRead}" />
+                                            </Panel>
                                         </Border>
                                         <Button Classes="railRemove" Content="✕"
                                                 Command="{Binding #u.RemoveCommand}" CommandParameter="{Binding Payload}"

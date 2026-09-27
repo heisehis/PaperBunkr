@@ -38,6 +38,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private readonly IFilePickerService _filePicker;
     private readonly LibraryFolderScanner _libraryScanner;
     private readonly LibraryHealthService _libraryHealth;
+    private readonly Action<int, int> _openIssueAtPage;
     private readonly FileAssociationService _fileAssociationService;
     private readonly BackupService _backupService;
     private readonly KeyBindingService _keyBindingService;
@@ -68,7 +69,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         BackupService backupService,
         KeyBindingService keyBindingService,
         Action<string, string> showToast,
-        MigrationOverlayViewModel migration,
+        NeedsReviewViewModel needsReview,
         PluginScreenViewModel plugin,
         Action openMigration,
         IActivityService activity,
@@ -77,8 +78,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         Action openDesignShowcase,
         UpdateService updateService,
         Action<int, bool>? enqueueMetadataWriteBack = null,
-        LibraryHealthService? libraryHealth = null)
-        : this(themeService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, migration, plugin, openMigration, activity, dialogService, reloadFolderWatch, openDesignShowcase, updateService, PaperbunkrDb.CreateContext, enqueueMetadataWriteBack, libraryHealth)
+        LibraryHealthService? libraryHealth = null,
+        Action<int, int>? openIssueAtPage = null)
+        : this(themeService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, needsReview, plugin, openMigration, activity, dialogService, reloadFolderWatch, openDesignShowcase, updateService, PaperbunkrDb.CreateContext, enqueueMetadataWriteBack, libraryHealth, openIssueAtPage)
     {
     }
 
@@ -91,7 +93,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         BackupService backupService,
         KeyBindingService keyBindingService,
         Action<string, string> showToast,
-        MigrationOverlayViewModel migration,
+        NeedsReviewViewModel needsReview,
         PluginScreenViewModel plugin,
         Action openMigration,
         IActivityService activity,
@@ -101,8 +103,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         UpdateService updateService,
         Func<PaperbunkrDbContext> contextFactory,
         Action<int, bool>? enqueueMetadataWriteBack = null,
-        LibraryHealthService? libraryHealth = null)
+        LibraryHealthService? libraryHealth = null,
+        Action<int, int>? openIssueAtPage = null)
     {
+        TextureChoices = ReaderBackgroundTextures.All
+            .Select(t => new ReaderTextureChoice(t.Id, t.DisplayName, SetBackgroundTexture))
+            .ToList();
+        RefreshTextureChoices(null);
+        _openIssueAtPage = openIssueAtPage ?? ((_, _) => { });
         _enqueueMetadataWriteBack = enqueueMetadataWriteBack ?? ((_, _) => { });
         _openDesignShowcase = openDesignShowcase;
         _themeService = themeService;
@@ -114,7 +122,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _keyBindingService = keyBindingService;
         _updateService = updateService;
         _showToast = showToast;
-        Migration = migration;
+        NeedsReview = needsReview;
+        InitLibraryHealthTabs();
         Plugin = plugin;
         _openMigration = openMigration;
         _activity = activity;
@@ -131,9 +140,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         NavigationKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
         ZoomFitKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
         DisplayKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
-        ChangelogEntries = new ObservableCollection<ChangelogEntry>();
         ScheduledTasks = new ObservableCollection<ScheduledTaskRow>();
         MissingFileItems = new ObservableCollection<MissingFileRowViewModel>();
+        PageReportItems = new ObservableCollection<PageReportRowViewModel>();
         RecentlyRemovedItems = new ObservableCollection<RemovedLibraryEntryRowViewModel>();
         SimilarSeriesCandidates = new ObservableCollection<SeriesConflictRowViewModel>();
         EmptySeriesItems = new ObservableCollection<EmptySeriesRowViewModel>();
@@ -156,7 +165,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             new Scraper.ProfileManagerViewModel(
                 new Paperbunkr.Data.Organizing.OrganizerProfileStore(_contextFactory),
                 organizerService: Scraper.OrganizeCoordinator.CreateService(_contextFactory),
-                createDbContext: _contextFactory));
+                createDbContext: _contextFactory,
+                activity: _activity));
         Acquisition.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(AcquisitionSettingsViewModel.IsProwlarrConnected) or nameof(AcquisitionSettingsViewModel.IsQBittorrentConnected))
@@ -276,9 +286,6 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// non-strict, so a hex value typed into it still round-trips through <c>BackgroundColor</c>.</summary>
     public string[] BackgroundColorPresetNames => BackgroundColorPresets;
 
-    /// <summary>docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md - newest first, parsed from the bundled CHANGELOG.md.</summary>
-    public ObservableCollection<ChangelogEntry> ChangelogEntries { get; }
-
     /// <summary>The release-style version string for the About section - <c>"0.3.0-beta"</c>. Matches
     /// the <c>CHANGELOG.md</c> <c>## [x.y.z-beta]</c> headings (so the changelog accordion's exact-match
     /// "Current" badge actually lights - it never did while this returned the four-part <c>x.y.z.w</c>)
@@ -335,7 +342,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             Title = $"Update available: v{version}",
             Detail = "A new version of Paperbunkr is available.",
             ActionLabel = "View release",
-            ActionLink = new Paperbunkr.App.Models.ActivityLink(ActivityLinkKind.ExternalUrl, "https://github.com/heisehis/PaperBunkr/releases"),
+            ActionLink = new Paperbunkr.App.Models.ActivityLink(ActivityLinkKind.ExternalUrl, ProjectLinks.Releases),
             DedupeKey = "update-available",
         });
     }
@@ -351,12 +358,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public ObservableCollection<BookFolderSummary> BookFolders { get; }
 
     /// <summary>
-    /// The same <see cref="MigrationOverlayViewModel"/> instance <see cref="MainViewModel"/> owns -
-    /// exposed here so the Libraries tab's "Migrate from ComicRack CE" entry point (docs/superpowers/specs/
-    /// 2026-08-09-embedded-metadata-and-migration-relocation-design.md §2) can bind to
-    /// <c>Migration.NeedsReview.HasPendingItems</c> for its badge without duplicating that state.
+    /// The same <see cref="NeedsReviewViewModel"/> instance <see cref="MainViewModel"/> owns - the review queues
+    /// (Content Type, Duplicate Files, Series Conflicts, Metadata Proposals, Ad Pages) rendered inside Library
+    /// Health, plus the pending count behind the "Needs review · N" chip and the Library nav dot
+    /// (docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md).
     /// </summary>
-    public MigrationOverlayViewModel Migration { get; }
+    public NeedsReviewViewModel NeedsReview { get; }
 
     /// <summary>docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - the same instance <see cref="MainViewModel"/> owns (constructed there, passed in) - Plugins moved from a standalone rail screen to a Preferences tab, this ViewModel doesn't own the lifetime.</summary>
     public PluginScreenViewModel Plugin { get; }
@@ -434,7 +441,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// <summary>Public wrapper so callers outside this class (MainViewModel's deep-links) can trigger
     /// the same scroll+pulse a search result or a tile click does - an event can't be raised from
     /// outside its declaring class.</summary>
-    public void RequestScrollToAnchor(string anchorKey) => ScrollToAnchorRequested?.Invoke(anchorKey);
+    public void RequestScrollToAnchor(string anchorKey)
+    {
+        RevealSubTab(anchorKey);
+        ScrollToAnchorRequested?.Invoke(anchorKey);
+    }
 
     /// <summary>Raised by the About section's "What's New" button - MainViewModel opens the
     /// WhatsNewOverlay scoped to the current release (docs/superpowers/specs/2026-09-09-startup-
@@ -496,6 +507,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         ActiveSection = result.Section;
         SearchQuery = string.Empty;
+        RevealLibraryHealthAnchor(result.AnchorKey);
+        RevealSubTab(result.AnchorKey);
         ScrollToAnchorRequested?.Invoke(result.AnchorKey);
     }
 
@@ -631,6 +644,78 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private bool _resetZoomOnPageChange;
 
+    /// <summary>docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md §2 - CE parity: skipping Deleted-tagged pages is on by default.</summary>
+    [ObservableProperty]
+    private bool _skipDeletedPages = true;
+
+    /// <summary>Same, for Advertisement-tagged pages; off by default.</summary>
+    [ObservableProperty]
+    private bool _skipAdvertisementPages;
+
+    /// <summary>docs/superpowers/specs/2026-09-25-comic-reader-performance-design.md A - open the next issue in the background near the end of this one. Default on.</summary>
+    [ObservableProperty]
+    private bool _preOpenNextIssue = true;
+
+    // --- Tap zones & input (docs/superpowers/specs/2026-09-25-comic-reader-reach-design.md sections 2-4) ---
+
+    /// <summary>Tap/click zone layout in paged reading modes; <see cref="TapZoneLayout.Default"/> is the long-standing behaviour.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PagedTapZoneLayoutText))]
+    private TapZoneLayout _pagedTapZoneLayout = TapZoneLayout.Default;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PagedTapZoneInvertText))]
+    private TapZoneInvert _pagedTapZoneInvert = TapZoneInvert.None;
+
+    /// <summary>Tap/click zone layout in continuous and long-strip modes; <see cref="TapZoneLayout.Disabled"/> (no zones) by default.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ContinuousTapZoneLayoutText))]
+    private TapZoneLayout _continuousTapZoneLayout = TapZoneLayout.Disabled;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ContinuousTapZoneInvertText))]
+    private TapZoneInvert _continuousTapZoneInvert = TapZoneInvert.None;
+
+    /// <summary>Mouse clicks use the layout too (default on).</summary>
+    [ObservableProperty]
+    private bool _tapZonesForMouse = true;
+
+    /// <summary>Mouse side buttons turn pages (default on).</summary>
+    [ObservableProperty]
+    private bool _extraMouseButtonsTurnPages = true;
+
+    /// <summary>An XInput gamepad drives the reader while it is showing (default on).</summary>
+    [ObservableProperty]
+    private bool _gamepadEnabled = true;
+
+    public string PagedTapZoneLayoutText
+    {
+        get => PagedTapZoneLayout.ToString();
+        set { if (Enum.TryParse<TapZoneLayout>(value, out var parsed)) PagedTapZoneLayout = parsed; }
+    }
+
+    public string PagedTapZoneInvertText
+    {
+        get => PagedTapZoneInvert.ToString();
+        set { if (Enum.TryParse<TapZoneInvert>(value, out var parsed)) PagedTapZoneInvert = parsed; }
+    }
+
+    public string ContinuousTapZoneLayoutText
+    {
+        get => ContinuousTapZoneLayout.ToString();
+        set { if (Enum.TryParse<TapZoneLayout>(value, out var parsed)) ContinuousTapZoneLayout = parsed; }
+    }
+
+    public string ContinuousTapZoneInvertText
+    {
+        get => ContinuousTapZoneInvert.ToString();
+        set { if (Enum.TryParse<TapZoneInvert>(value, out var parsed)) ContinuousTapZoneInvert = parsed; }
+    }
+
+    public string[] TapZoneLayoutNames { get; } = Enum.GetNames<TapZoneLayout>();
+
+    public string[] TapZoneInvertNames { get; } = Enum.GetNames<TapZoneInvert>();
+
     /// <summary>CE: <c>Settings.MouseWheelSpeed</c> ("lines per mouse scrolling"), default 2.0, CE's own UI range 0.5-5.0.</summary>
     [ObservableProperty]
     private double _mouseWheelSpeed = 2.0;
@@ -684,14 +769,24 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// <see cref="ReaderBackgroundTextures.Resolve"/> (null/unknown -&gt; the first texture).
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsTextureNeutralDark))]
-    [NotifyPropertyChangedFor(nameof(IsTextureCarbon))]
-    [NotifyPropertyChangedFor(nameof(IsTextureLinen))]
     private string? _backgroundTexture;
 
-    public bool IsTextureNeutralDark => ReaderBackgroundTextures.Resolve(BackgroundTexture).Id == "neutral-dark";
-    public bool IsTextureCarbon => ReaderBackgroundTextures.Resolve(BackgroundTexture).Id == "carbon";
-    public bool IsTextureLinen => ReaderBackgroundTextures.Resolve(BackgroundTexture).Id == "linen";
+    /// <summary>One swatch per <see cref="ReaderBackgroundTextures.All"/> entry, in catalog order;
+    /// exactly one is <see cref="ReaderTextureChoice.IsActive"/> (the resolved selection).</summary>
+    public IReadOnlyList<ReaderTextureChoice> TextureChoices { get; }
+
+    partial void OnBackgroundTextureChanged(string? value) => RefreshTextureChoices(value);
+
+    /// <summary>Marks the swatch for the resolved texture active. Also run once at construction:
+    /// an unset (null) setting never raises a change, yet the fallback swatch must still show.</summary>
+    private void RefreshTextureChoices(string? id)
+    {
+        string active = ReaderBackgroundTextures.Resolve(id).Id;
+        foreach (var choice in TextureChoices)
+        {
+            choice.IsActive = choice.Id == active;
+        }
+    }
 
     [RelayCommand]
     private void SetBackgroundTexture(string id)
@@ -701,7 +796,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             return;
         }
 
-        BackgroundTexture = id; // generated setter raises the three NotifyPropertyChangedFor
+        BackgroundTexture = id; // OnBackgroundTextureChanged refreshes each swatch's IsActive
         PersistBehaviorSetting(s => s.BackgroundTexture = id);
         ReaderDisplaySettingsChanged?.Invoke();
     }
@@ -824,11 +919,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// same mechanism <see cref="OpenSearchResult"/> uses for a search hit.
     /// </summary>
     [RelayCommand]
-    private void GoLibraryHealth()
-    {
-        ActiveSection = PreferencesSection.Library;
-        ScrollToAnchorRequested?.Invoke("library.health");
-    }
+    private void GoLibraryHealth() => OpenLibraryHealth();
 
     [RelayCommand]
     private void GoReader() => ActiveSection = PreferencesSection.Reader;
@@ -921,6 +1012,16 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ReaderAutoHideChrome = settings.ReaderAutoHideChrome;
         ReaderChromeHoverMode = settings.ReaderChromeHoverMode;
         ResetZoomOnPageChange = settings.ResetZoomOnPageChange;
+        SkipDeletedPages = settings.SkipDeletedPages;
+        SkipAdvertisementPages = settings.SkipAdvertisementPages;
+        PreOpenNextIssue = settings.PreOpenNextIssue;
+        PagedTapZoneLayout = settings.PagedTapZoneLayout;
+        PagedTapZoneInvert = settings.PagedTapZoneInvert;
+        ContinuousTapZoneLayout = settings.ContinuousTapZoneLayout;
+        ContinuousTapZoneInvert = settings.ContinuousTapZoneInvert;
+        TapZonesForMouse = settings.TapZonesForMouse;
+        ExtraMouseButtonsTurnPages = settings.ExtraMouseButtonsTurnPages;
+        GamepadEnabled = settings.GamepadEnabled;
         MouseWheelSpeed = settings.MouseWheelSpeed;
         DefaultPageFitMode = settings.DefaultPageFitMode;
         DefaultAutoRotate = settings.DefaultAutoRotate;
@@ -945,7 +1046,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         DontReimportRemovedFiles = settings.DontReimportRemovedFiles;
         ExportedListsContainFilenames = settings.ExportedListsContainFilenames;
         LibraryHealthConfirmedMissingThreshold = settings.LibraryHealthConfirmedMissingThreshold;
+        LoadComfortSettings(settings);
+        LoadImageQualitySettings(settings);
+        LoadLibraryHealthTab(settings);
         _suppressBehaviorApply = false;
+        RefreshReaderProfiles();
 
         var firstIssue = context.Issues.Include(i => i.Series).OrderBy(i => i.Id).FirstOrDefault();
         if (firstIssue is not null)
@@ -1081,7 +1186,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             {
                 var a = all[i];
                 var b = all[j];
-                if (a.Context != ConflictContext.Always && b.Context != ConflictContext.Always && a.Context != b.Context)
+                if (!ConflictContexts.MayOverlap(a.Context, b.Context))
                 {
                     continue;
                 }
@@ -1106,66 +1211,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         KeyBindingConflictError = firstConflict;
     }
 
-    /// <summary>
-    /// Parses the bundled CHANGELOG.md (copied to output next to the exe - see the csproj's
-    /// CopyToOutputDirectory item) via <see cref="ChangelogParser"/>. Missing file (e.g. a dev build
-    /// run before the csproj copy step) just leaves the list empty rather than throwing - the About
-    /// section still shows the current version either way.
-    /// </summary>
-    private void RefreshChangelog()
-    {
-        ChangelogEntries.Clear();
-        string path = Path.Combine(AppContext.BaseDirectory, "CHANGELOG.md");
-        if (!File.Exists(path))
-        {
-            return;
-        }
-
-        foreach (var entry in ChangelogParser.Parse(File.ReadAllText(path)))
-        {
-            ChangelogEntries.Add(entry);
-        }
-    }
-
-    [ObservableProperty]
-    private string? _selectedLegalDocumentTitle;
-
-    [ObservableProperty]
-    private IReadOnlyList<LegalDocumentBlock> _selectedLegalDocumentBlocks = Array.Empty<LegalDocumentBlock>();
-
-    [ObservableProperty]
-    private bool _isLegalDocumentViewerOpen;
-
-    /// <summary>
-    /// Opens one of the repo-root legal/community documents (LICENSE, PRIVACY.md, TERMS.md,
-    /// COMICVINE_NOTICE.md) bundled next to the exe (see the csproj's CopyToOutputDirectory items)
-    /// in the in-app viewer overlay (docs/superpowers/specs/2026-09-07-about-redesign-design.md) -
-    /// no external-launch path is kept. Same "missing file just does nothing" tolerance as
-    /// <see cref="RefreshChangelog"/> - a dev build run before the csproj copy step shouldn't crash.
-    /// </summary>
-    [RelayCommand]
-    private void OpenLegalDocument(string fileName)
-    {
-        string path = Path.Combine(AppContext.BaseDirectory, fileName);
-        if (!File.Exists(path))
-        {
-            return;
-        }
-
-        SelectedLegalDocumentTitle = fileName switch
-        {
-            "LICENSE" => "License",
-            "PRIVACY.md" => "Privacy notice",
-            "TERMS.md" => "Terms of use",
-            "COMICVINE_NOTICE.md" => "ComicVine API notice",
-            _ => fileName,
-        };
-        SelectedLegalDocumentBlocks = LegalDocumentParser.Parse(File.ReadAllText(path));
-        IsLegalDocumentViewerOpen = true;
-    }
-
-    [RelayCommand]
-    private void CloseLegalDocumentViewer() => IsLegalDocumentViewerOpen = false;
+    // Changelog + legal viewer: PreferencesScreenViewModel.About.cs.
 
     private void RefreshThemes()
     {
@@ -1468,6 +1514,55 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnReaderChromeHoverModeChanged(ReaderChromeHoverMode value) => PersistBehaviorSetting(s => s.ReaderChromeHoverMode = value);
 
     partial void OnResetZoomOnPageChangeChanged(bool value) => PersistBehaviorSetting(s => s.ResetZoomOnPageChange = value);
+
+    partial void OnSkipDeletedPagesChanged(bool value) => PersistBehaviorSetting(s => s.SkipDeletedPages = value);
+
+    partial void OnSkipAdvertisementPagesChanged(bool value) => PersistBehaviorSetting(s => s.SkipAdvertisementPages = value);
+
+    partial void OnPreOpenNextIssueChanged(bool value) => PersistBehaviorSetting(s => s.PreOpenNextIssue = value);
+
+    // The reader can already be open behind Preferences, so every tap-zone/input change also raises ReaderDisplaySettingsChanged (same live-while-open rule as the background settings).
+    partial void OnPagedTapZoneLayoutChanged(TapZoneLayout value)
+    {
+        PersistBehaviorSetting(s => s.PagedTapZoneLayout = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
+
+    partial void OnPagedTapZoneInvertChanged(TapZoneInvert value)
+    {
+        PersistBehaviorSetting(s => s.PagedTapZoneInvert = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
+
+    partial void OnContinuousTapZoneLayoutChanged(TapZoneLayout value)
+    {
+        PersistBehaviorSetting(s => s.ContinuousTapZoneLayout = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
+
+    partial void OnContinuousTapZoneInvertChanged(TapZoneInvert value)
+    {
+        PersistBehaviorSetting(s => s.ContinuousTapZoneInvert = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
+
+    partial void OnTapZonesForMouseChanged(bool value)
+    {
+        PersistBehaviorSetting(s => s.TapZonesForMouse = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
+
+    partial void OnExtraMouseButtonsTurnPagesChanged(bool value)
+    {
+        PersistBehaviorSetting(s => s.ExtraMouseButtonsTurnPages = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
+
+    partial void OnGamepadEnabledChanged(bool value)
+    {
+        PersistBehaviorSetting(s => s.GamepadEnabled = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
 
     partial void OnMouseWheelSpeedChanged(double value) => PersistBehaviorSetting(s => s.MouseWheelSpeed = value);
 
@@ -3371,11 +3466,19 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public bool HasMissingFileItems => MissingFileItems.Count > 0;
 
+    /// <summary>Pages the reader flagged as bad (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md §4) that have not been dismissed or tagged Deleted.</summary>
+    public ObservableCollection<PageReportRowViewModel> PageReportItems { get; }
+
+    public bool HasPageReportItems => PageReportItems.Count > 0;
+
     public bool HasRecentlyRemovedItems => RecentlyRemovedItems.Count > 0;
 
     public bool HasSimilarSeriesCandidates => SimilarSeriesCandidates.Count > 0;
 
     public bool HasEmptyRowItems => EmptySeriesItems.Count > 0 || EmptyIssueItems.Count > 0;
+
+    /// <summary>Empty series plus empty issue rows, for the section header.</summary>
+    public int EmptyRowCount => EmptySeriesItems.Count + EmptyIssueItems.Count;
 
     /// <summary>Recently Removed is collapsed by default (docs/superpowers/specs/2026-09-07-
     /// library-health-redesign-design.md §6) - it's an audit trail, not an actionable list like
@@ -3494,15 +3597,66 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 severityLabel: "Unreadable"));
         }
 
+        // Reported pages (page intelligence design 4) - reports are never auto-resolved; a row leaves only by Dismiss or Tag as Deleted.
+        PageReportItems.Clear();
+        var reports = context.PageReports
+            .Where(r => !r.Acknowledged)
+            .Include(r => r.Issue).ThenInclude(i => i!.Series)
+            .OrderBy(r => r.Issue!.Series!.Name).ThenBy(r => r.IssueId).ThenBy(r => r.PageNumber)
+            .ToList();
+        foreach (var report in reports)
+        {
+            PageReportItems.Add(new PageReportRowViewModel(
+                report.Id,
+                report.IssueId,
+                report.PageNumber,
+                $"{report.Issue?.Series?.Name ?? "Unknown"} #{report.Issue?.EffectiveNumber() ?? "?"} \u00b7 page {report.PageNumber + 1}",
+                report.Reason,
+                onOpen: row => _openIssueAtPage(row.IssueId, row.PageNumber),
+                onTagDeleted: TagReportedPageDeleted,
+                onDismiss: DismissPageReport));
+        }
+
         NotifyLibraryHealthCountsChanged();
     }
+
+    private void TagReportedPageDeleted(PageReportRowViewModel row)
+    {
+        using (var context = _contextFactory())
+        {
+            IssuePageTagger.SetPageType(context, row.IssueId, row.PageNumber, PageType.Deleted);
+            PageReportService.Acknowledge(context, row.ReportId);
+        }
+
+        RefreshLibraryHealthDeferred();
+    }
+
+    private void DismissPageReport(PageReportRowViewModel row)
+    {
+        using (var context = _contextFactory())
+        {
+            PageReportService.Acknowledge(context, row.ReportId);
+        }
+
+        RefreshLibraryHealthDeferred();
+    }
+
+    /// <summary>Deferred one dispatcher tick: these run from a Button inside a <see cref="PageReportItems"/> row, and the refresh clears that collection, which would detach the clicking row mid-route (CLAUDE.md "routed event" gotcha). A fresh context is created inside the callback.</summary>
+    private void RefreshLibraryHealthDeferred() =>
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            using var refreshContext = _contextFactory();
+            RefreshLibraryHealth(refreshContext);
+        });
 
     private void NotifyLibraryHealthCountsChanged()
     {
         OnPropertyChanged(nameof(HasMissingFileItems));
+        OnPropertyChanged(nameof(HasPageReportItems));
         OnPropertyChanged(nameof(HasRecentlyRemovedItems));
         OnPropertyChanged(nameof(HasSimilarSeriesCandidates));
         OnPropertyChanged(nameof(HasEmptyRowItems));
+        OnPropertyChanged(nameof(EmptyRowCount));
         OnPropertyChanged(nameof(HasConfirmedMissingItems));
     }
 

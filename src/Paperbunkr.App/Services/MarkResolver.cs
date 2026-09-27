@@ -20,6 +20,7 @@ public sealed class MarkResolver
     public static MarkResolver Instance { get; } = new();
 
     private const string Root = "avares://Paperbunkr.App/Assets/Marks/";
+    private const string PublisherIconsRoot = "avares://Paperbunkr.App/Assets/Icons/Publishers/";
 
     /// <summary>Single-colour SVGs that should follow the theme text colour rather than render their
     /// own (near-black) fill. <see cref="MarkSpec.Foreground"/> == <see cref="ThemeTint"/> tells
@@ -54,6 +55,8 @@ public sealed class MarkResolver
     private readonly HashSet<string> _ageRatingAssets;
     private readonly HashSet<string> _formatAssets;
     private readonly HashSet<string> _flagAssets;
+    private readonly PublisherIconIndex _publisherIcons;
+    private readonly Dictionary<string, Uri> _publisherIconUris;
 
     /// <summary>Canonical age-rating spellings from <c>age-rating-aliases.tsv</c> (the ComicInfo
     /// v2.1 value set + ESRB labels), for the metadata editors' Age Rating dropdown
@@ -71,6 +74,7 @@ public sealed class MarkResolver
         _ageRatingAssets = ListAssetStems(Root + "AgeRatings");
         _formatAssets = ListAssetStems(Root + "Formats");
         _flagAssets = ListAssetStems(Root + "Flags");
+        (_publisherIcons, _publisherIconUris) = LoadPublisherIcons();
     }
 
     private static string NormaliseRatingKey(string s) =>
@@ -109,26 +113,91 @@ public sealed class MarkResolver
 
     // ---- Publishers --------------------------------------------------------------------------------
 
-    public MarkSpec ResolvePublisher(string? publisher)
+    /// <summary>
+    /// Publisher → mark (docs/superpowers/specs/2026-09-25-publisher-icons-and-reader-textures-design.md
+    /// §A2). Precedence: an era-specific CE raster covering <paramref name="year"/>, the curated SVG,
+    /// an undated raster, the newest era's raster, then the coloured letter chip / plain text.
+    /// </summary>
+    public MarkSpec ResolvePublisher(string? publisher, int? year = null, int? month = null)
     {
         if (string.IsNullOrWhiteSpace(publisher))
         {
             return MarkSpec.None;
         }
 
-        if (_publishers.TryResolve(NormalisePublisher(publisher), out AliasRow row))
+        string normalised = NormalisePublisher(publisher);
+        bool inTable = _publishers.TryResolve(normalised, out AliasRow row);
+
+        var names = new List<string> { publisher.Trim(), normalised };
+        if (inTable && !names.Contains(row.Canonical, StringComparer.OrdinalIgnoreCase))
+        {
+            names.Add(row.Canonical);
+            names.Add(NormalisePublisher(row.Canonical));
+        }
+
+        if (year is int y && _publisherIcons.FindEra(names, y, month) is { } eraFile && Raster(eraFile) is { } era)
+        {
+            return era;
+        }
+
+        if (inTable)
         {
             string? asset = string.IsNullOrWhiteSpace(row.Col3) ? null : row.Col3;
             if (asset is not null && _publisherAssets.Contains(asset))
             {
                 return Svg("Publishers", asset);
             }
+        }
 
+        string? file = _publisherIcons.FindUndated(names) ?? _publisherIcons.FindNewestEra(names);
+        if (file is not null && Raster(file) is { } raster)
+        {
+            return raster;
+        }
+
+        if (inTable)
+        {
             return new MarkSpec(MarkKind.LetterMark, Text: Initials(row.Canonical),
                 Background: string.IsNullOrWhiteSpace(row.Col4) ? null : row.Col4);
         }
 
         return MarkSpec.PlainText(publisher);
+    }
+
+    private MarkSpec? Raster(string file) =>
+        _publisherIconUris.TryGetValue(file, out Uri? uri)
+            ? new MarkSpec(MarkKind.Raster, AssetPath: uri.ToString())
+            : null;
+
+    private static (PublisherIconIndex, Dictionary<string, Uri>) LoadPublisherIcons()
+    {
+        var uris = new Dictionary<string, Uri>(StringComparer.OrdinalIgnoreCase);
+        string? mapIni = null;
+        try
+        {
+            foreach (Uri uri in AssetLoader.GetAssets(new Uri(PublisherIconsRoot), null))
+            {
+                // AbsolutePath is percent-encoded ("12bis%2312%20Bis.png") - the '#' in CE's
+                // alias filenames would otherwise read as a URI fragment.
+                string name = Uri.UnescapeDataString(Path.GetFileName(uri.AbsolutePath));
+                if (name.Equals("map.ini", StringComparison.OrdinalIgnoreCase))
+                {
+                    using Stream stream = AssetLoader.Open(uri);
+                    using var reader = new StreamReader(stream);
+                    mapIni = reader.ReadToEnd();
+                }
+                else
+                {
+                    uris[name] = uri;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // pack not bundled - the resolver falls back to SVG / letter marks as before.
+        }
+
+        return (PublisherIconIndex.Build(uris.Keys, mapIni), uris);
     }
 
     internal static string NormalisePublisher(string value)

@@ -92,7 +92,7 @@ public sealed class ComicVineSource : IReadingListSource
             string idsParam = string.Join("|", chunk);
             string issuesUrl = $"{BaseUrl}/issues/?api_key={Uri.EscapeDataString(_apiKey)}&format=json" +
                                 $"&filter=id:{idsParam}" +
-                                "&field_list=id,issue_number,volume,cover_date,store_date,image" +
+                                "&field_list=id,issue_number,volume,cover_date,store_date,image,name,deck" +
                                 $"&limit={BatchChunkSize}";
 
             var issuesRoot = await GetJsonAsync(issuesUrl, cancellationToken).ConfigureAwait(false);
@@ -103,16 +103,7 @@ public sealed class ComicVineSource : IReadingListSource
                     continue;
                 }
 
-                int id = node["id"]!.GetValue<int>();
-                string? coverDate = node["cover_date"]?.GetValue<string>();
-                string? storeDate = node["store_date"]?.GetValue<string>();
-                int year = ParseYearFromDate(coverDate) ?? ParseYearFromDate(storeDate) ?? 0;
-
-                detailsById[id] = new ArcIssue(
-                    Series: node["volume"]?["name"]?.GetValue<string>() ?? string.Empty,
-                    Number: node["issue_number"]?.GetValue<string>() ?? string.Empty,
-                    Year: year,
-                    CoverImageUrl: node["image"]?["small_url"]?.GetValue<string>());
+                detailsById[node["id"]!.GetValue<int>()] = ParseArcIssue(node);
             }
         }
 
@@ -123,6 +114,24 @@ public sealed class ComicVineSource : IReadingListSource
             .Select(id => detailsById[id])
             .ToList();
     }
+
+    /// <summary>One ComicVine issue record as an <see cref="ArcIssue"/>. Besides series/number/year, ComicVine gives each issue a <c>name</c> (its
+    /// story title) and a <c>deck</c> (one-line summary); neither is a role - the API has no field saying "tie-in" or "prologue" - but both are
+    /// text role detection can read, and they exist even for issues the library does not own yet, which have no title of their own.</summary>
+    public static ArcIssue ParseArcIssue(JsonNode node)
+    {
+        string? coverDate = node["cover_date"]?.GetValue<string>();
+        string? storeDate = node["store_date"]?.GetValue<string>();
+        return new ArcIssue(
+            Series: node["volume"]?["name"]?.GetValue<string>() ?? string.Empty,
+            Number: node["issue_number"]?.GetValue<string>() ?? string.Empty,
+            Year: ParseYearFromDate(coverDate) ?? ParseYearFromDate(storeDate) ?? 0,
+            CoverImageUrl: node["image"]?["small_url"]?.GetValue<string>(),
+            Title: NullIfBlank(node["name"]?.GetValue<string>()),
+            Summary: NullIfBlank(node["deck"]?.GetValue<string>()));
+    }
+
+    private static string? NullIfBlank(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
     public async Task<ArcOverviewInfo?> GetArcOverviewAsync(string arcId, CancellationToken cancellationToken)
     {

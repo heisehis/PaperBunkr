@@ -63,3 +63,15 @@ Progress for the manual checks shows in the Activity Center.
 
 A [Reading List](Reading-Lists) can be **linked** to a Story Event so the two stay in
 sync. Issues that share an event show "Same Event" on their detail pages.
+
+## Roles are detected for you
+
+Each issue in a story event or reading list can be a **Prologue, Core, Tie-in, Epilogue, Optional or Aftermath**. Paperbunkr suggests these from what it can see:
+
+- a reading-order site's own section headings and notes ("Prelude", "Tie-Ins"), when the list was built from a story arc;
+- the issue's **Format** (Prologue, Minus 1, Epilogue);
+- words in the issue's title - *prologue*, *prelude*, *epilogue*, **aftermath**, *tie-in* - or an issue number of 0 or -1;
+- for lists built from ComicVine, the issue's story title there (which exists even for issues you do not own yet) counts like a title in your library, and its one-line summary is a weak hint;
+- weaker hints: the same words only in the series name, or an issue from a different series than the rest of the arc.
+
+When the evidence is strong the role is filled in for you and marked **· auto** (hover for why). A role you set yourself is never changed. A weaker guess, or a different idea about a role you set, appears as a **Suggested** chip with **Accept** and **Dismiss**. **Detect roles** in the ⋯ menu of an event or list runs detection over everything in it, and **Clear detected role** takes an automatic role back off. *Optional* is never suggested - only you mark an issue optional.

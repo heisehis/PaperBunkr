@@ -12,8 +12,10 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Paperbunkr.App.Scraper;
 
-/// <summary>One ranked candidate row (docs/superpowers/specs/2026-09-13-cluster-scraper-ui-redesign-
-/// design.md §2 - select-then-confirm, not click-to-resolve).</summary>
+/// <summary>One ranked candidate row (docs/superpowers/specs/2026-09-24-scraper-review-tables-and-
+/// batch-summary-design.md §1.1 - a real sortable table, CE's own seriesform.py shape, replacing the
+/// old "Best match"/"Other results" card-list split; CE's table has no such split either, just one
+/// flat list defaulting to Score descending). Select-then-confirm, not click-to-resolve.</summary>
 public sealed partial class ComicVineMatchCandidateViewModel : ObservableObject
 {
     private readonly Action<ComicVineMatchCandidateViewModel> _select;
@@ -21,20 +23,8 @@ public sealed partial class ComicVineMatchCandidateViewModel : ObservableObject
     public ComicVineVolumeSearchResult Volume { get; }
     public double Score { get; }
 
-    /// <summary>True only for the single highest-scored candidate - the "Best match" vs.
-    /// "Other results" split is rank-based (index 0 of the already-sorted list), not a score
-    /// threshold, since CE has no confidence cutoff anywhere in its own scoring (design doc §2).</summary>
-    public bool IsTopMatch { get; internal set; }
-
-    /// <summary>True only for the first candidate after the top match - the view uses this to draw
-    /// the "Other results" section header exactly once, right above this row.</summary>
-    public bool IsFirstOtherResult { get; internal set; }
-
     [ObservableProperty]
     private bool _isSelected;
-
-    public string DisplayLabel =>
-        $"{Volume.Name} ({Volume.StartYear ?? "?"}) - {Volume.Publisher ?? "Unknown publisher"}";
 
     public string? CoverImageUrl => Volume.ImageUrl;
 
@@ -79,7 +69,31 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
     private readonly ScrapeOrchestrator.SearchAndRankDelegate _search;
     private readonly Func<int, Task<IReadOnlyList<ComicVineIssueSummary>>>? _loadIssues;
     private readonly Func<ComicProvider, bool>? _switchProvider;
+    private readonly bool _forceSeriesArt;
+    private readonly Func<int, CancellationToken, Task<string?>>? _findIssueCoverUrl;
+    private readonly Action? _markPermanentlySkipped;
+    private CancellationTokenSource? _coverLookupCts;
     private bool _revertingProvider;
+
+    /// <summary>Docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md Phase 3 -
+    /// hides the cover pane entirely (a real "scrape faster on a slow connection" toggle CE had).</summary>
+    public bool ShowCovers { get; }
+
+    /// <summary>Code-behind toggles this while Ctrl is held over the Skip button (CE's own visual
+    /// affordance, <c>seriesform.py</c>, verified) - the view binds the Skip button's own label to it.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SkipLabel))]
+    private bool _isCtrlHeldOverSkip;
+
+    public string SkipLabel => IsCtrlHeldOverSkip ? "Skip this book (always)" : "Skip this book";
+
+    /// <summary>The cover pane's actual image source - the selected candidate's volume art when
+    /// <c>ForceSeriesArt</c> is on (or no lookup delegate was given), or that one issue's own cover
+    /// (CE's real off-behavior, <c>seriesform.py</c>, verified) once an async lookup by the book's own
+    /// number resolves. Starts each selection showing the volume art immediately (never a blank pane)
+    /// and swaps to the issue-specific cover if/when the lookup finds one.</summary>
+    [ObservableProperty]
+    private string? _resolvedCoverImageUrl;
 
     public static IReadOnlyList<string> ProviderNames { get; } = ComicProviderFactory.All.Select(ComicProviderFactory.DisplayName).ToList();
 
@@ -147,7 +161,11 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
         Action<ComicVineVolumeSearchResult?> resolve,
         Func<int, Task<IReadOnlyList<ComicVineIssueSummary>>>? loadIssues = null,
         ComicProvider provider = ComicProvider.ComicVine,
-        Func<ComicProvider, bool>? switchProvider = null)
+        Func<ComicProvider, bool>? switchProvider = null,
+        bool forceSeriesArt = true,
+        bool showCovers = true,
+        Func<int, CancellationToken, Task<string?>>? findIssueCoverUrl = null,
+        Action? markPermanentlySkipped = null)
     {
         BookLabel = bookLabel;
         _providerText = ComicProviderFactory.DisplayName(provider);
@@ -156,6 +174,10 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
         _search = search;
         _resolve = resolve;
         _loadIssues = loadIssues;
+        _forceSeriesArt = forceSeriesArt;
+        ShowCovers = showCovers;
+        _findIssueCoverUrl = findIssueCoverUrl;
+        _markPermanentlySkipped = markPermanentlySkipped;
         SetCandidates(initialCandidates);
     }
 
@@ -163,16 +185,9 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
     {
         Candidates.Clear();
         SelectedCandidate = null;
-        int index = 0;
         foreach (var candidate in ranked.OrderByDescending(c => c.Score))
         {
-            var vm = new ComicVineMatchCandidateViewModel(candidate.Volume, candidate.Score, Select)
-            {
-                IsTopMatch = index == 0,
-                IsFirstOtherResult = index == 1,
-            };
-            Candidates.Add(vm);
-            index++;
+            Candidates.Add(new ComicVineMatchCandidateViewModel(candidate.Volume, candidate.Score, Select));
         }
 
         // Pre-select the top match - CE's own series-choose dialog highlights its top row by default
@@ -186,14 +201,57 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
         SearchStatus = ranked.Count == 0 ? "No matches found - try a different search." : null;
     }
 
-    private void Select(ComicVineMatchCandidateViewModel candidate)
+    private void Select(ComicVineMatchCandidateViewModel candidate) => SelectedCandidate = candidate;
+
+    /// <summary>CommunityToolkit's generated partial hook for <see cref="SelectedCandidate"/> - the
+    /// single place selection side effects (row highlight sync, cover refresh) happen, regardless of
+    /// whether the change came from <see cref="Select"/> (the row's own command) or directly from the
+    /// DataGrid's own <c>SelectedItem</c> two-way binding (docs/superpowers/specs/2026-09-24-scraper-
+    /// review-tables-and-batch-summary-design.md §1.1) when the user clicks a row.</summary>
+    partial void OnSelectedCandidateChanged(ComicVineMatchCandidateViewModel? oldValue, ComicVineMatchCandidateViewModel? newValue)
     {
         foreach (ComicVineMatchCandidateViewModel c in Candidates)
         {
-            c.IsSelected = ReferenceEquals(c, candidate);
+            c.IsSelected = ReferenceEquals(c, newValue);
         }
 
-        SelectedCandidate = candidate;
+        if (newValue is not null)
+        {
+            _ = RefreshCoverAsync(newValue);
+        }
+        else
+        {
+            ResolvedCoverImageUrl = null;
+        }
+    }
+
+    /// <summary>Resolves <see cref="ResolvedCoverImageUrl"/> for the just-selected candidate. Shows the
+    /// volume art immediately (matching <c>ForceSeriesArt</c> on, and never leaving the pane blank
+    /// while an off-mode lookup is in flight), then swaps to the specific issue's own cover if the
+    /// async lookup finds one before a newer selection cancels it.</summary>
+    private async Task RefreshCoverAsync(ComicVineMatchCandidateViewModel candidate)
+    {
+        _coverLookupCts?.Cancel();
+        ResolvedCoverImageUrl = candidate.CoverImageUrl;
+
+        if (_forceSeriesArt || _findIssueCoverUrl is null)
+        {
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _coverLookupCts = cts;
+        try
+        {
+            string? issueCoverUrl = await _findIssueCoverUrl(candidate.Volume.Id, cts.Token).ConfigureAwait(true);
+            if (!cts.IsCancellationRequested)
+            {
+                ResolvedCoverImageUrl = issueCoverUrl ?? candidate.CoverImageUrl;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     [RelayCommand]
@@ -226,6 +284,16 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
     [RelayCommand]
     private void Skip() => _resolve(null);
 
+    /// <summary>Ctrl-held Skip (CE's real <c>book.skip_forever()</c>, <c>seriesform.py</c>, verified) -
+    /// same outcome as a plain <see cref="Skip"/> for this run, plus a durable marker so every future
+    /// scrape of this book, interactive or unattended, is silently excluded without asking again.</summary>
+    [RelayCommand]
+    private void SkipPermanently()
+    {
+        _markPermanentlySkipped?.Invoke();
+        _resolve(null);
+    }
+
     private bool CanShowIssues() => SelectedCandidate is not null && _loadIssues is not null;
 
     /// <summary>
@@ -247,6 +315,6 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
     {
         IReadOnlyList<ComicVineIssueSummary> issues = await _loadIssues!(SelectedCandidate!.Volume.Id).ConfigureAwait(true);
         IssuePeek = new ComicVineIssueReviewDialogViewModel(
-            BookLabel, issues, preSelected: null, readOnlyPeek: true, _ => IssuePeek = null);
+            BookLabel, issues, preSelected: null, readOnlyPeek: true, _ => IssuePeek = null, ShowCovers);
     }
 }

@@ -26,7 +26,9 @@ public sealed class OrganizeCoordinator(
     NativePluginModalHostViewModel modalHost,
     Func<PaperbunkrDbContext> createContext,
     IActivityService activity,
-    Action<int>? enqueueWriteBack = null)
+    Action<int>? enqueueWriteBack = null,
+    Func<OrganizePlanSummary, IReadOnlyList<OrganizerProfile>, Task<bool>>? confirmPlan = null,
+    string? reportFolder = null)
 {
     private readonly LibraryOrganizerService _service = CreateService(createContext);
 
@@ -34,7 +36,7 @@ public sealed class OrganizeCoordinator(
 
     /// <summary>The organizer service with the app's rules engine resolving profile exclude rules, and the core undo log.</summary>
     public static LibraryOrganizerService CreateService(Func<PaperbunkrDbContext> createContext) =>
-        new(ResolveExcludedIds, new OrganizeUndoLog(createContext));
+        new(ResolveExcludedIds, new OrganizeUndoLog(createContext), path => RecycleBinHelper.SendToRecycleBin(path));
 
     private static IReadOnlyCollection<int> ResolveExcludedIds(string ruleJson)
     {
@@ -59,22 +61,26 @@ public sealed class OrganizeCoordinator(
             return NoProfilesMessage;
         }
 
-        var profile = profiles.Count == 1
-            ? profiles[0]
-            : await modalHost.ShowAsync<OrganizerProfile?>(resolve => new ProfileSelectDialogView { DataContext = new ProfileSelectDialogViewModel(profiles, resolve) });
-        if (profile is null)
+        IReadOnlyList<OrganizerProfile>? chosen = profiles.Count == 1
+            ? profiles
+            : await modalHost.ShowAsync<IReadOnlyList<OrganizerProfile>?>(resolve => new ProfileSelectDialogView { DataContext = new ProfileSelectDialogViewModel(profiles, resolve) });
+        if (chosen is not { Count: > 0 })
         {
             return "Organize cancelled.";
         }
 
-        return await RunAsync(issueIds, profile, isInteractive: true, cancellationToken);
+        return await RunAsync(issueIds, chosen, isInteractive: true, cancellationToken);
     }
 
     /// <summary>The scheduled task: every comic with a file, the chosen profile, never asking anything.</summary>
-    public async Task<string> OrganizeLibraryAsync(int profileId, CancellationToken cancellationToken, IActivityJobHandle? existingJob = null)
+    public Task<string> OrganizeLibraryAsync(int profileId, CancellationToken cancellationToken, IActivityJobHandle? existingJob = null) =>
+        OrganizeLibraryAsync(new[] { profileId }, cancellationToken, existingJob);
+
+    /// <summary>The scheduled task with several profiles marked for it: they run together, in list order, as one run.</summary>
+    public async Task<string> OrganizeLibraryAsync(IReadOnlyList<int> profileIds, CancellationToken cancellationToken, IActivityJobHandle? existingJob = null)
     {
-        var profile = Profiles.Get(profileId);
-        if (profile is null)
+        var chosen = profileIds.Select(Profiles.Get).OfType<OrganizerProfile>().ToList();
+        if (chosen.Count == 0)
         {
             return "The automatic organize profile no longer exists.";
         }
@@ -85,15 +91,33 @@ public sealed class OrganizeCoordinator(
             ids = context.Issues.Where(i => i.FilePath != null).Select(i => i.Id).ToList();
         }
 
-        return await RunAsync(ids, profile, isInteractive: false, cancellationToken, existingJob);
+        return await RunAsync(ids, chosen, isInteractive: false, cancellationToken, existingJob);
     }
 
-    private async Task<string> RunAsync(IReadOnlyList<int> issueIds, OrganizerProfile profile, bool isInteractive, CancellationToken cancellationToken, IActivityJobHandle? existingJob = null)
+    private async Task<string> RunAsync(IReadOnlyList<int> issueIds, IReadOnlyList<OrganizerProfile> profiles, bool isInteractive, CancellationToken cancellationToken, IActivityJobHandle? existingJob = null)
     {
-        if (string.IsNullOrWhiteSpace(profile.BaseFolder))
+        foreach (var profile in profiles)
         {
-            return $"Choose a base folder for the profile \"{profile.Name}\" first.";
+            if (string.IsNullOrWhiteSpace(profile.BaseFolder))
+            {
+                return $"Choose a base folder for the profile \"{profile.Name}\" first.";
+            }
         }
+
+        // A Copy into a watched library folder makes the watcher import every copy as a duplicate comic - refuse before a single file is written.
+        List<string> watchedFolders;
+        using (var watchedContext = createContext())
+        {
+            watchedFolders = watchedContext.WatchedFolders.Select(w => w.Path).ToList();
+        }
+
+        var unsafeCopies = OrganizerSafety.CopiesIntoWatchedFolders(profiles, watchedFolders);
+        if (unsafeCopies.Count > 0)
+        {
+            return OrganizerSafety.Describe(unsafeCopies);
+        }
+
+        var profileLabel = profiles.Count == 1 ? profiles[0].Name : $"{profiles.Count} profiles";
 
         List<Issue> books;
         using (var context = createContext())
@@ -107,7 +131,7 @@ public sealed class OrganizeCoordinator(
         }
 
         using var owned = existingJob is null
-            ? activity.StartJob(ActivityJobKind.Import, $"Organizing {books.Count} comic{(books.Count == 1 ? string.Empty : "s")} ({profile.Name})",
+            ? activity.StartJob(ActivityJobKind.Import, $"Organizing {books.Count} comic{(books.Count == 1 ? string.Empty : "s")} ({profileLabel})",
                 cancellable: true, trigger: isInteractive ? ActivityTrigger.Manual : ActivityTrigger.Scheduled)
             : null;
         var job = existingJob ?? owned!;
@@ -115,24 +139,58 @@ public sealed class OrganizeCoordinator(
 
         try
         {
-            var plan = await _service.PlanAsync(books, profile, createContext).ConfigureAwait(false);
-            var result = await _service.ExecuteAsync(
-                plan, profile, isInteractive,
+            var plans = await _service.PlanManyAsync(books, profiles, createContext).ConfigureAwait(false);
+
+            // A manual run shows what is about to happen before any file moves. A scheduled run has nobody to ask. A run where nothing
+            // would move (everything in place, or only problems) has nothing to confirm - go straight on and report.
+            var preview = OrganizePlanSummary.From(plans);
+            bool simulationOnly = profiles.All(p => p.Mode == OrganizerMode.Simulate);
+            if (isInteractive && (preview.HasWork || simulationOnly))
+            {
+                var proceed = await (confirmPlan ?? ShowPreviewAsync)(preview, profiles).ConfigureAwait(false);
+                if (simulationOnly)
+                {
+                    var simulated = SimulationSummary(preview, OrganizeReport.TrySave(OrganizeReport.FromPlans(plans), reportFolder));
+                    owned?.Succeed(simulated, itemsProcessed: preview.Moving, itemsFailed: preview.Problems);
+                    return simulated;
+                }
+
+                if (!proceed)
+                {
+                    owned?.Fail("Organize cancelled at the preview - nothing was moved.");
+                    return "Organize cancelled.";
+                }
+            }
+
+            var results = await _service.ExecuteManyAsync(
+                plans, isInteractive,
                 isInteractive ? (incoming, existingPath, ct) => ShowCollisionAsync(incoming, existingPath) : null,
                 createContext,
                 (done, total, label) => job.Report(done, total, label),
                 linked.Token).ConfigureAwait(false);
 
+            // Only a real Move changes what the library knows about a file. A Simulate touched nothing and a Copy left
+            // the original where it was, so neither has any reason to rewrite an archive.
             if (enqueueWriteBack is not null)
             {
-                foreach (var move in result.Succeeded)
+                foreach (var moved in results.Where(r => r.Profile.Mode == OrganizerMode.Move).SelectMany(r => r.Result.Succeeded))
                 {
-                    enqueueWriteBack(move.Issue.Id);
+                    enqueueWriteBack(moved.Issue.Id);
                 }
             }
 
-            var summary = $"Organized {result.Succeeded.Count} comic{(result.Succeeded.Count == 1 ? string.Empty : "s")}; {result.Skipped.Count} skipped; {result.Failed.Count} failed.";
-            owned?.Succeed(summary, itemsProcessed: result.Succeeded.Count, itemsFailed: result.Failed.Count);
+            var summary = SummarizeAll(results);
+            if (results.Any(r => r.Result.Failed.Count > 0 || r.Result.Skipped.Count > 0))
+            {
+                // The line above can only name the first few; the whole list goes to a file so nothing is lost.
+                if (OrganizeReport.TrySave(OrganizeReport.FromResults(results), reportFolder) is { } reportPath)
+                {
+                    summary += $" Full report: {reportPath}";
+                }
+            }
+
+            owned?.Succeed(summary, itemsProcessed: results.Sum(r => r.Result.Succeeded.Count), itemsFailed: results.Sum(r => r.Result.Failed.Count));
+
             return summary;
         }
         catch (OperationCanceledException)
@@ -140,7 +198,63 @@ public sealed class OrganizeCoordinator(
             owned?.Fail("Organize cancelled.");
             return "Organize cancelled.";
         }
+        catch (Exception ex) when (owned is not null)
+        {
+            // A scheduled run (existingJob) lets the scheduler record the failure; an interactive run ends its own job here
+            // instead of leaving it "Cancelled" with no explanation.
+            var message = $"Organize failed: {ex.Message}";
+            owned.Fail(message, ex: ex);
+            return message;
+        }
     }
+
+    /// <summary>One profile: <see cref="Summarize"/>. Several: each profile's line, named, since "3 failed" means little without saying where.</summary>
+    internal static string SummarizeAll(IReadOnlyList<ProfileResult> results) =>
+        results.Count == 1
+            ? Summarize(results[0].Profile.Mode, results[0].Result)
+            : string.Join(" | ", results.Select(r => $"{r.Profile.Name}: {Summarize(r.Profile.Mode, r.Result)}"));
+
+    /// <summary>The one-line run report. Failed and skipped books are named with the reason - "3 failed" alone tells the user
+    /// nothing they can act on.</summary>
+    internal static string Summarize(OrganizerMode mode, OrganizeResult result)
+    {
+        var verb = mode switch { OrganizerMode.Copy => "Copied", OrganizerMode.Simulate => "Would organize", _ => "Organized" };
+        var parts = new List<string> { $"{verb} {result.Succeeded.Count} comic{(result.Succeeded.Count == 1 ? string.Empty : "s")}" };
+        if (result.AlreadyInPlace.Count > 0)
+        {
+            parts.Add($"{result.AlreadyInPlace.Count} already in place");
+        }
+
+        if (result.Skipped.Count > 0)
+        {
+            parts.Add($"{result.Skipped.Count} skipped");
+        }
+
+        if (result.ReplacedIssueIds.Count > 0)
+        {
+            parts.Add($"{result.ReplacedIssueIds.Count} library entr{(result.ReplacedIssueIds.Count == 1 ? "y" : "ies")} lost the file that was replaced (it is in the Recycle Bin)");
+        }
+
+        if (result.Failed.Count > 0)
+        {
+            var reasons = result.Failed.Take(3).Select(f => $"{Describe(f.Move)}: {f.Error}");
+            var more = result.Failed.Count > 3 ? $" (and {result.Failed.Count - 3} more)" : string.Empty;
+            parts.Add($"{result.Failed.Count} failed - {string.Join("; ", reasons)}{more}");
+        }
+
+        return string.Join("; ", parts) + ".";
+    }
+
+    private static string Describe(PlannedMove move) => $"{move.Issue.Series?.Name} #{move.Issue.Number}".Trim() is { Length: > 2 } label ? label : Path.GetFileName(move.SourcePath);
+
+    internal static string SimulationSummary(OrganizePlanSummary preview, string? reportPath)
+    {
+        var text = $"Simulation: {preview.Moving} would be processed, {preview.AlreadyInPlace} already in place, {preview.Skipped} skipped, {preview.Problems} would fail. Nothing was moved.";
+        return reportPath is null ? text : $"{text} Full report: {reportPath}";
+    }
+
+    private Task<bool> ShowPreviewAsync(OrganizePlanSummary summary, IReadOnlyList<OrganizerProfile> profiles) =>
+        modalHost.ShowAsync<bool>(resolve => new OrganizePreviewDialogView { DataContext = new OrganizePreviewDialogViewModel(summary, profiles, resolve) });
 
     private Task<(CollisionResolution Resolution, bool ApplyToAllRemaining)> ShowCollisionAsync(Issue incoming, string existingPath) =>
         modalHost.ShowAsync<(CollisionResolution, bool)>(resolve => new FileConflictDialogView

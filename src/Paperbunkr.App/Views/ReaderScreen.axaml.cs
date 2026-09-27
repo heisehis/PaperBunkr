@@ -11,6 +11,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data.Entities;
 
@@ -19,11 +20,21 @@ namespace Paperbunkr.App.Views;
 public partial class ReaderScreen : UserControl
 {
     private ReaderScreenViewModel? _viewModel;
+    private GamepadPoller? _gamepad;
+    private Window? _hostWindow;
+
+    /// <summary>
+    /// The rail-nav switcher only toggles <c>IsVisible</c> on this screen's host and Avalonia 12 raises no public change notification for <c>IsEffectivelyVisible</c>, so a
+    /// half-second supervisor decides whether the 60 Hz poller should run (visible, window active, setting on). It costs one property read twice a second.
+    /// </summary>
+    private DispatcherTimer? _gamepadSupervisor;
 
     public ReaderScreen()
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        InitializePinPanel();
+        ClipOverlay.RegionCaptured += OnClipRegionCaptured;
 
         // Dock-style hover magnify on the page-turn dot strip (on-screen feedback) - AddHandler with
         // handledEventsToo: true, not the plain XAML attribute, since "not seeing it at all" traced
@@ -36,11 +47,266 @@ public partial class ReaderScreen : UserControl
         // prefetch-pipeline-design.md §10). Handled here rather than via UserControl.KeyBindings so
         // it fires even though PageCanvas is the focused element - handledEventsToo covers the case
         // where PageCanvas already marked an unrelated modifier chord handled.
-        AddHandler(KeyDownEvent, OnReaderKeyDown, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+        // Tunnel only: with Tunnel | Bubble and handledEventsToo the handler ran twice per press (the tunnel pass handled it, the bubble pass ran again) and toggled the overlay back off.
+        AddHandler(KeyDownEvent, OnReaderKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
 
         // "Auto in 5s - any key cancels" on the end-of-issue card. Tunnel only: the key press that opens the card
         // must not cancel the countdown the same press just started (a bubble handler would run after the command).
         AddHandler(KeyDownEvent, OnEndCardKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+        // Bad-page reason picker (page intelligence design 4): while it is open every key is swallowed here, before
+        // PageCanvas sees it - 1-4 pick a reason, Esc cancels, anything else does nothing (no page turns under it).
+        AddHandler(KeyDownEvent, OnReportPickerKeyDown, RoutingStrategies.Tunnel);
+
+        // Reading session clock (comfort design 1): any key, click or wheel turn over the reader counts as the reader being present and reading.
+        AddHandler(KeyDownEvent, (_, _) => _viewModel?.NoteReaderInput(), RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(PointerPressedEvent, (_, _) => _viewModel?.NoteReaderInput(), RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(PointerWheelChangedEvent, (_, _) => _viewModel?.NoteReaderInput(), RoutingStrategies.Tunnel, handledEventsToo: true);
+
+        // Command palette / go-to-page (reach design 5): Up/Down/Enter/Esc (and Ctrl+K / Ctrl+G to close) are taken here, everything else
+        // reaches the query TextBox that owns focus while the palette is open.
+        AddHandler(KeyDownEvent, OnPaletteKeyDown, RoutingStrategies.Tunnel);
+    }
+
+    // ===================== Gamepad (reach design 3): polled only while this screen is visible and its window active =====================
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _hostWindow = TopLevel.GetTopLevel(this) as Window;
+        if (_hostWindow is not null)
+        {
+            _hostWindow.PropertyChanged += OnHostWindowPropertyChanged;
+        }
+
+        UpdateGamepadRunning();
+        _gamepadSupervisor ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _gamepadSupervisor.Tick -= OnGamepadSupervisorTick;
+        _gamepadSupervisor.Tick += OnGamepadSupervisorTick;
+        _gamepadSupervisor.Start();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _gamepadSupervisor?.Stop();
+        if (_hostWindow is not null)
+        {
+            _hostWindow.PropertyChanged -= OnHostWindowPropertyChanged;
+            _hostWindow = null;
+        }
+
+        _gamepad?.Stop();
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    private void OnGamepadSupervisorTick(object? sender, EventArgs e) => UpdateGamepadRunning();
+
+    private void OnHostWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == Window.IsActiveProperty)
+        {
+            UpdateGamepadRunning();
+        }
+    }
+
+    private void UpdateGamepadRunning()
+    {
+        bool present = IsEffectivelyVisible && _hostWindow is { IsActive: true };
+        _viewModel?.SetUserPresent(present);
+        bool run = _viewModel is { GamepadEnabled: true } && present;
+        if (run)
+        {
+            _gamepad ??= new GamepadPoller(new XInputSource(), OnGamepadFrame);
+            _gamepad.Start();
+        }
+        else
+        {
+            _gamepad?.Stop();
+        }
+    }
+
+    private void OnGamepadFrame(GamepadFrame frame, TimeSpan elapsed)
+    {
+        if (_viewModel is not { } vm)
+        {
+            return;
+        }
+
+        vm.NoteReaderInput();
+        if (frame.HasAny && (frame.Next || frame.Previous || frame.Palette || frame.Leave || frame.ToggleChrome || frame.Fullscreen))
+        {
+            Services.Reader.ReaderPerfStats.Current.RecordInput("gamepad button");
+        }
+
+        var palette = vm.Palette;
+        if (frame.Palette)
+        {
+            palette.Toggle();
+            return;
+        }
+
+        if (palette.IsOpen)
+        {
+            // While the palette is open the pad drives it: D-pad/left stick up and down move, A runs, B closes.
+            if (frame.Up)
+            {
+                palette.MoveSelection(-1);
+            }
+
+            if (frame.Down)
+            {
+                palette.MoveSelection(1);
+            }
+
+            if (frame.Next)
+            {
+                palette.ExecuteSelectedCommand.Execute(null);
+            }
+            else if (frame.Previous)
+            {
+                palette.Close();
+            }
+
+            return;
+        }
+
+        if (vm.IsReportPickerOpen)
+        {
+            if (frame.Previous)
+            {
+                vm.CancelReportPickerCommand.Execute(null);
+            }
+
+            return;
+        }
+
+        if (frame.Leave)
+        {
+            vm.GoBackCommand.Execute(null);
+            return;
+        }
+
+        if (frame.ToggleChrome)
+        {
+            vm.ToggleChromeCommand.Execute(null);
+        }
+
+        if (frame.Fullscreen)
+        {
+            vm.ToggleFullscreenCommand.Execute(null);
+        }
+
+        if (frame.Next)
+        {
+            PageCanvasControl.GamepadTurn(forward: true);
+        }
+
+        if (frame.Previous)
+        {
+            PageCanvasControl.GamepadTurn(forward: false);
+        }
+
+        int dx = (frame.Right ? 1 : 0) - (frame.Left ? 1 : 0);
+        int dy = (frame.Down ? 1 : 0) - (frame.Up ? 1 : 0);
+        if (dx != 0 || dy != 0)
+        {
+            PageCanvasControl.GamepadDirection(dx, dy);
+        }
+
+        if (frame.PanX != 0 || frame.PanY != 0)
+        {
+            PageCanvasControl.GamepadAnalog(frame.PanX, frame.PanY, elapsed);
+        }
+
+        if (frame.Zoom != 0)
+        {
+            PageCanvasControl.GamepadZoom(frame.Zoom, elapsed);
+        }
+    }
+
+    private void OnPaletteKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_viewModel is not { Palette: { IsOpen: true } palette } vm)
+        {
+            return;
+        }
+
+        if (vm.CommandPaletteKey.Any(g => g.Matches(e)) || vm.GoToPageKey.Any(g => g.Matches(e)))
+        {
+            palette.Close();
+            e.Handled = true;
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Escape:
+                palette.Close();
+                e.Handled = true;
+                break;
+            case Key.Down:
+                palette.MoveSelection(1);
+                e.Handled = true;
+                break;
+            case Key.Up:
+                palette.MoveSelection(-1);
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                palette.ExecuteSelectedCommand.Execute(null);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    /// <summary>Palette just opened: focus its query box; just closed: hand focus back to the canvas so reader keys work again.</summary>
+    private void OnPalettePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(ReaderCommandPaletteViewModel.IsOpen) || sender is not ReaderCommandPaletteViewModel palette)
+        {
+            return;
+        }
+
+        if (palette.IsOpen)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                PaletteQueryBox.Focus();
+                PaletteQueryBox.SelectAll();
+            });
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(() => PageCanvasControl.Focus());
+        }
+    }
+
+    private void OnReportPickerKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_viewModel is not { IsReportPickerOpen: true })
+        {
+            return;
+        }
+
+        PageReportReason? reason = e.Key switch
+        {
+            Key.D1 or Key.NumPad1 => PageReportReason.Corrupt,
+            Key.D2 or Key.NumPad2 => PageReportReason.Blank,
+            Key.D3 or Key.NumPad3 => PageReportReason.LowRes,
+            Key.D4 or Key.NumPad4 => PageReportReason.Other,
+            _ => null,
+        };
+
+        if (reason is { } chosen)
+        {
+            _viewModel.ReportPageReasonCommand.Execute(chosen);
+        }
+        else if (e.Key == Key.Escape)
+        {
+            _viewModel.CancelReportPickerCommand.Execute(null);
+        }
+
+        e.Handled = true;
     }
 
     private void OnEndCardKeyDown(object? sender, KeyEventArgs e) => _viewModel?.CancelEndCardCountdown();
@@ -70,8 +336,12 @@ public partial class ReaderScreen : UserControl
         {
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             _viewModel.ScrollToPageRequested -= OnScrollToPageRequested;
+            _viewModel.NoteFocusRequested -= OnNoteFocusRequested;
+            _viewModel.ZoomStepRequested -= OnZoomStepRequested;
+            _viewModel.ZoomResetRequested -= OnZoomResetRequested;
             _viewModel.CurrentPageIndexChanged -= OnCurrentPageIndexChanged;
             _viewModel.ReflowTransitionRequested -= OnReflowTransitionRequested;
+            _viewModel.Palette.PropertyChanged -= OnPalettePropertyChanged;
         }
 
         _viewModel = DataContext as ReaderScreenViewModel;
@@ -79,9 +349,15 @@ public partial class ReaderScreen : UserControl
         {
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
             _viewModel.ScrollToPageRequested += OnScrollToPageRequested;
+            _viewModel.NoteFocusRequested += OnNoteFocusRequested;
+            _viewModel.ZoomStepRequested += OnZoomStepRequested;
+            _viewModel.ZoomResetRequested += OnZoomResetRequested;
             _viewModel.CurrentPageIndexChanged += OnCurrentPageIndexChanged;
             _viewModel.ReflowTransitionRequested += OnReflowTransitionRequested;
+            _viewModel.Palette.PropertyChanged += OnPalettePropertyChanged;
         }
+
+        UpdateGamepadRunning();
     }
 
     /// <summary>
@@ -91,6 +367,117 @@ public partial class ReaderScreen : UserControl
     /// knows real/estimated per-page sizes.
     /// </summary>
     private void OnScrollToPageRequested(int pageIndex) => PageCanvasControl.ScrollToPage(pageIndex);
+
+    // ===================== Notes and clips =====================
+
+    /// <summary>The capture overlay's drag rectangle (canvas coordinates) as fractions of the displayed page, then the view model cuts the clip.</summary>
+    private void OnClipRegionCaptured(object? sender, Rect e)
+    {
+        var imageBounds = PageCanvasControl.GetCurrentImageBounds();
+        if (_viewModel is null || imageBounds.Width <= 0 || imageBounds.Height <= 0)
+        {
+            return;
+        }
+
+        double x = Math.Clamp((e.X - imageBounds.X) / imageBounds.Width, 0, 1);
+        double y = Math.Clamp((e.Y - imageBounds.Y) / imageBounds.Height, 0, 1);
+        double width = Math.Clamp(e.Width / imageBounds.Width, 0, 1 - x);
+        double height = Math.Clamp(e.Height / imageBounds.Height, 0, 1 - y);
+        _viewModel.CaptureClip(new Rect(x, y, width, height));
+    }
+
+    /// <summary>Puts the cursor in the note box once the drawer section has had a chance to show it.</summary>
+    private void OnNoteFocusRequested() => Dispatcher.UIThread.Post(() =>
+    {
+        NoteBox.Focus();
+        NoteBox.CaretIndex = NoteBox.Text?.Length ?? 0;
+    });
+
+    private void OnClipCaptionLostFocus(object? sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox { DataContext: NoteListItem item } box)
+        {
+            _viewModel?.CommitClipCaption(item, box.Text);
+        }
+    }
+
+    // ===================== Pinned reference page: drag to a corner, wheel to resize =====================
+
+    private readonly TranslateTransform _pinDrag = new();
+    private bool _pinDragging;
+    private Point _pinDragStart;
+
+    private void InitializePinPanel()
+    {
+        PinPanel.RenderTransform = _pinDrag;
+        PinPanel.PointerPressed += OnPinPressed;
+        PinPanel.PointerMoved += OnPinMoved;
+        PinPanel.PointerReleased += OnPinReleased;
+        PinPanel.PointerCaptureLost += (_, _) => EndPinDrag();
+        PinPanel.PointerWheelChanged += OnPinWheel;
+    }
+
+    private void OnPinPressed(object? sender, PointerPressedEventArgs e)
+    {
+        // A press on the size or unpin button is the button's own.
+        if (!e.GetCurrentPoint(PinPanel).Properties.IsLeftButtonPressed || (e.Source is Visual source && source.FindAncestorOfType<Button>() is not null))
+        {
+            return;
+        }
+
+        _pinDragging = true;
+        _pinDragStart = e.GetPosition(this);
+        e.Pointer.Capture(PinPanel);
+        e.Handled = true;
+    }
+
+    private void OnPinMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_pinDragging)
+        {
+            return;
+        }
+
+        var point = e.GetPosition(this);
+        _pinDrag.X = point.X - _pinDragStart.X;
+        _pinDrag.Y = point.Y - _pinDragStart.Y;
+        e.Handled = true;
+    }
+
+    private void OnPinReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_pinDragging)
+        {
+            return;
+        }
+
+        var point = e.GetPosition(this);
+        e.Pointer.Capture(null);
+        EndPinDrag();
+        _viewModel?.SetPinCorner(Services.Reader.ReaderPinMath.NearestCorner(point, Bounds.Size));
+        e.Handled = true;
+    }
+
+    private void EndPinDrag()
+    {
+        _pinDragging = false;
+        _pinDrag.X = 0;
+        _pinDrag.Y = 0;
+    }
+
+    private void OnPinWheel(object? sender, PointerWheelEventArgs e)
+    {
+        if (e.Delta.Y != 0)
+        {
+            _viewModel?.StepPinSize(e.Delta.Y > 0);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>The zoom buttons, keys and palette glide to the new zoom (about the middle of the page) instead of jumping to it.</summary>
+    private void OnZoomStepRequested(double factor) => PageCanvasControl.SmoothZoomBy(factor);
+
+    private void OnZoomResetRequested() => PageCanvasControl.SmoothZoomToFit();
 
     /// <summary>Double-page layout-mode/reading-direction reflow (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §6) - same "ViewModel raises, View has the geometry" split as <see cref="OnScrollToPageRequested"/> above.</summary>
     private void OnReflowTransitionRequested(Bitmap? oldPrimary, Bitmap? oldSecondary, bool oldIsRightToLeft) =>
@@ -126,6 +513,28 @@ public partial class ReaderScreen : UserControl
             // CurrentScreen to "reader" and the IsVisible binding propagates, so calling Focus()
             // synchronously here would target a not-yet-effectively-visible control and silently
             // no-op - the same failure mode as the bug this fixes.
+            Dispatcher.UIThread.Post(() => PageCanvasControl.Focus());
+            return;
+        }
+
+        if (e.PropertyName == nameof(ReaderScreenViewModel.IsPanelFlashVisible) && _viewModel is { IsPanelFlashVisible: true } flashVm)
+        {
+            // The overlay draws over the page, so it needs where the page is on the canvas right now and the panels in the orientation shown.
+            PanelFlashOverlay.PageRect = PageCanvasControl.GetPageScreenRect();
+            PanelFlashOverlay.Panels = PageCanvasControl.GetShownPanels();
+            PanelFlashOverlay.Confident = flashVm.CurrentPagePanels?.Confident ?? false;
+            return;
+        }
+
+        if (e.PropertyName == nameof(ReaderScreenViewModel.GamepadEnabled))
+        {
+            UpdateGamepadRunning();
+            return;
+        }
+
+        if (e.PropertyName == nameof(ReaderScreenViewModel.IsReportPickerOpen) && _viewModel is { IsReportPickerOpen: false })
+        {
+            // The picker just hid (possibly with a clicked Button holding focus) - hand focus back so reader keys keep working.
             Dispatcher.UIThread.Post(() => PageCanvasControl.Focus());
             return;
         }

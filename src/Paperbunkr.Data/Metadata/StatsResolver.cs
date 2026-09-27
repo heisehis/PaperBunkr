@@ -31,6 +31,7 @@ public static class StatsResolver
             .Include(b => b.BookSeries)
             .ToList();
         var events = context.ReadingEvents.AsNoTracking().ToList();
+        var snapshots = context.LibrarySnapshots.AsNoTracking().OrderBy(s => s.SnapshotDate).ToList();
 
         DateTime? rangeStart = RangeStartUtc(range, nowUtc);
         var inRange = rangeStart is { } start
@@ -38,6 +39,8 @@ public static class StatsResolver
             : events;
 
         var realSpans = ComputeRealSpans(events);
+        var finishedInRange = ComputeFinishedInRange(inRange);
+        var readingActivity = ComputeReadingActivity(realSpans, inRange, range, nowUtc);
 
         return new StatsSnapshot(
             Range: range,
@@ -45,19 +48,21 @@ public static class StatsResolver
             Lifetime: ComputeLifetime(readIssues, books, events),
             ReadingDayStreak: ComputeStreak(events, nowUtc, finishOnly: false),
             FinishStreak: ComputeStreak(events, nowUtc, finishOnly: true),
-            FinishedInRange: ComputeFinishedInRange(inRange),
+            FinishedInRange: finishedInRange,
             Pace: ComputePace(inRange, range, nowUtc),
             Breakdown: ComputeBreakdown(issues, books),
             Composition: ComputeComposition(issues, books),
             Ratings: ComputeRatings(readIssues),
             Highlights: ComputeHighlights(readIssues, events, realSpans, nowUtc),
-            ReadingActivity: ComputeReadingActivity(realSpans, inRange, range, nowUtc),
+            ReadingActivity: readingActivity,
             Heatmap: ComputeHeatmap(events),
             LibraryGrowth: ComputeLibraryGrowth(issues, books),
             ContentRating: ComputeContentRating(issues),
             PublicationYear: ComputePublicationYear(issues),
             TopAuthors: ComputeTopCreators(issues, i => new[] { i.Writer }),
-            TopArtists: ComputeTopCreators(issues, i => new[] { i.Penciller, i.Inker, i.Colorist }));
+            TopArtists: ComputeTopCreators(issues, i => new[] { i.Penciller, i.Inker, i.Colorist }),
+            Trend: ComputeTrend(events, realSpans, range, nowUtc, finishedInRange, readingActivity),
+            BurnDown: ComputeBurnDown(snapshots, range, nowUtc));
     }
 
     internal static DateTime? RangeStartUtc(InsightsRange range, DateTime nowUtc) => range switch
@@ -167,23 +172,39 @@ public static class StatsResolver
 
     private static IReadOnlyList<PaceBucket> ComputePace(List<ReadingEvent> inRange, InsightsRange range, DateTime nowUtc)
     {
-        bool monthly = range is InsightsRange.Months12 or InsightsRange.AllTime;
         var finished = inRange.Where(e => e.Kind == ReadingEventKind.Finished)
             .Select(e => (Local: e.TimestampUtc.ToLocalTime(), Pages: e.PagesRead ?? 0))
             .ToList();
 
-        DateTime nowLocal = nowUtc.ToLocalTime();
         var buckets = new List<PaceBucket>();
+        foreach (var (start, end, label) in BucketBoundaries(range, nowUtc, finished.Select(f => f.Local).ToList()))
+        {
+            var hits = finished.Where(f => f.Local >= start && f.Local < end).ToList();
+            buckets.Add(new PaceBucket(start, label, hits.Count, hits.Sum(h => h.Pages)));
+        }
+
+        return buckets;
+    }
+
+    /// <summary>The weekly/monthly bucket boundaries <see cref="ComputePace"/>'s bar chart uses, extracted so
+    /// <see cref="ComputeTrend"/>'s sparklines (docs/superpowers/specs/2026-09-22-insights-period-over-period-
+    /// deltas-design.md) draw over the identical buckets instead of a second bucketing scheme. Boundaries are in
+    /// local time, matching every other bucket/heatmap computation in this class. <paramref name="finishedLocal"/>
+    /// is only consulted for <see cref="InsightsRange.AllTime"/>'s month count (<see cref="MonthsSpan"/>).</summary>
+    private static IReadOnlyList<(DateTime Start, DateTime End, string Label)> BucketBoundaries(
+        InsightsRange range, DateTime nowUtc, IReadOnlyList<DateTime> finishedLocal)
+    {
+        bool monthly = range is InsightsRange.Months12 or InsightsRange.AllTime;
+        DateTime nowLocal = nowUtc.ToLocalTime();
+        var boundaries = new List<(DateTime, DateTime, string)>();
 
         if (monthly)
         {
-            int months = range == InsightsRange.Months12 ? 12 : MonthsSpan(finished, nowLocal);
+            int months = range == InsightsRange.Months12 ? 12 : MonthsSpan(finishedLocal, nowLocal);
             for (int i = months - 1; i >= 0; i--)
             {
                 var monthStart = new DateTime(nowLocal.Year, nowLocal.Month, 1).AddMonths(-i);
-                var monthEnd = monthStart.AddMonths(1);
-                var hits = finished.Where(f => f.Local >= monthStart && f.Local < monthEnd).ToList();
-                buckets.Add(new PaceBucket(monthStart, monthStart.ToString("MMM"), hits.Count, hits.Sum(h => h.Pages)));
+                boundaries.Add((monthStart, monthStart.AddMonths(1), monthStart.ToString("MMM")));
             }
         }
         else
@@ -193,23 +214,21 @@ public static class StatsResolver
             for (int i = weeks - 1; i >= 0; i--)
             {
                 var weekStart = thisWeekStart.AddDays(-7 * i);
-                var weekEnd = weekStart.AddDays(7);
-                var hits = finished.Where(f => f.Local >= weekStart && f.Local < weekEnd).ToList();
-                buckets.Add(new PaceBucket(weekStart, weekStart.ToString("MMM d"), hits.Count, hits.Sum(h => h.Pages)));
+                boundaries.Add((weekStart, weekStart.AddDays(7), weekStart.ToString("MMM d")));
             }
         }
 
-        return buckets;
+        return boundaries;
     }
 
-    private static int MonthsSpan(List<(DateTime Local, int Pages)> finished, DateTime nowLocal)
+    private static int MonthsSpan(IReadOnlyList<DateTime> finishedLocal, DateTime nowLocal)
     {
-        if (finished.Count == 0)
+        if (finishedLocal.Count == 0)
         {
             return 1;
         }
 
-        var earliest = finished.Min(f => f.Local);
+        var earliest = finishedLocal.Min();
         return Math.Max(1, ((nowLocal.Year - earliest.Year) * 12) + nowLocal.Month - earliest.Month + 1);
     }
 
@@ -413,11 +432,19 @@ public static class StatsResolver
     private static string? ResolveTitle(ReadingItemType type, int itemId, List<Issue> issues)
         => type == ReadingItemType.Comic ? issues.FirstOrDefault(i => i.Id == itemId)?.Series?.Name : null;
 
+    /// <summary>
+    /// <b>Bug fix (found 2026-09-22, docs/superpowers/specs/2026-09-22-insights-period-over-period-deltas-
+    /// design.md):</b> <see cref="ReadingActivityData.AvgDaysToComplete"/> used to average every
+    /// <paramref name="realSpans"/> ever logged regardless of <paramref name="range"/>, so it never actually
+    /// moved when the range selector changed even after reading comics inside that window. It now filters to
+    /// spans finished within the range, same boundary <paramref name="inRange"/> events already use.
+    /// </summary>
     private static ReadingActivityData ComputeReadingActivity(IReadOnlyList<RealSpan> realSpans, List<ReadingEvent> inRange, InsightsRange range, DateTime nowUtc)
     {
-        double avgDays = realSpans.Count > 0 ? realSpans.Average(s => s.Days) : 0;
-
         DateTime? rangeStart = RangeStartUtc(range, nowUtc);
+        var spansInRange = rangeStart is { } rs ? realSpans.Where(s => s.FinishedUtc >= rs).ToList() : realSpans;
+        double avgDays = spansInRange.Count > 0 ? spansInRange.Average(s => s.Days) : 0;
+
         double rangeDays;
         if (rangeStart is { } start)
         {
@@ -434,6 +461,140 @@ public static class StatsResolver
         double avgPerDay = finishedInRange / rangeDays;
 
         return new ReadingActivityData(avgDays, avgPerDay);
+    }
+
+    /// <summary>
+    /// Period-over-period deltas + sparklines for the three range-scoped Reading Activity tiles (design doc
+    /// above, item #6 of the "Insights pitch"). <c>null</c> for <see cref="InsightsRange.AllTime"/> (no
+    /// meaningful "prior period" for a lifetime figure) or when there isn't enough history to cover a full
+    /// prior window the same length as <paramref name="range"/> - in either case the tiles render exactly as
+    /// they do today, no badge, no sparkline.
+    /// </summary>
+    private static TrendData? ComputeTrend(
+        List<ReadingEvent> events, IReadOnlyList<RealSpan> realSpans, InsightsRange range, DateTime nowUtc,
+        FinishedInRange currentFinished, ReadingActivityData currentActivity)
+    {
+        DateTime? rangeStart = RangeStartUtc(range, nowUtc);
+        if (rangeStart is not { } start)
+        {
+            return null; // AllTime
+        }
+
+        TimeSpan windowLength = nowUtc - start;
+        DateTime priorStart = start - windowLength;
+        DateTime priorEnd = start;
+
+        if (events.Count == 0 || events.Min(e => e.TimestampUtc) > priorStart)
+        {
+            return null; // not enough history to cover a full prior window
+        }
+
+        var priorEvents = events.Where(e => e.TimestampUtc >= priorStart && e.TimestampUtc < priorEnd).ToList();
+        var priorFinished = ComputeFinishedInRange(priorEvents);
+        var priorRealSpans = realSpans.Where(s => s.FinishedUtc >= priorStart && s.FinishedUtc < priorEnd).ToList();
+        double priorAvgDays = priorRealSpans.Count > 0 ? priorRealSpans.Average(s => s.Days) : 0;
+        double priorAvgPerDay = priorFinished.Items / Math.Max(1, windowLength.TotalDays);
+
+        var boundaries = BucketBoundaries(range, nowUtc, Array.Empty<DateTime>());
+        var finishedLocal = events.Where(e => e.Kind == ReadingEventKind.Finished)
+            .Select(e => e.TimestampUtc.ToLocalTime()).ToList();
+        var realSpansLocal = realSpans.Select(s => (Local: s.FinishedUtc.ToLocalTime(), s.Days)).ToList();
+
+        var finishedSparkline = new List<double>();
+        var paceSparkline = new List<double>();
+        var avgDaysSparkline = new List<double>();
+        foreach (var (bStart, bEnd, _) in boundaries)
+        {
+            int count = finishedLocal.Count(f => f >= bStart && f < bEnd);
+            double bucketDays = Math.Max(1, (bEnd - bStart).TotalDays);
+            finishedSparkline.Add(count);
+            paceSparkline.Add(count / bucketDays);
+
+            var spansInBucket = realSpansLocal.Where(s => s.Local >= bStart && s.Local < bEnd).ToList();
+            avgDaysSparkline.Add(spansInBucket.Count > 0 ? spansInBucket.Average(s => s.Days) : 0);
+        }
+
+        TileTrend? BuildTile(double current, double prior, bool lowerIsBetter, IReadOnlyList<double> sparkline)
+        {
+            if (prior <= 0 && current <= 0)
+            {
+                return null; // nothing happened in either window
+            }
+
+            if (prior <= 0)
+            {
+                return new TileTrend(null, ShowNew: true, IsGoodDirection: !lowerIsBetter, sparkline);
+            }
+
+            double pct = (current - prior) / prior * 100.0;
+            bool isGood = lowerIsBetter ? pct <= 0 : pct >= 0; // flat/no-change reads as neutral-good, not danger
+            return new TileTrend(pct, ShowNew: false, IsGoodDirection: isGood, sparkline);
+        }
+
+        return new TrendData(
+            FinishedItems: BuildTile(currentFinished.Items, priorFinished.Items, lowerIsBetter: false, finishedSparkline),
+            AvgIssuesPerDay: BuildTile(currentActivity.AvgIssuesPerDay, priorAvgPerDay, lowerIsBetter: false, paceSparkline),
+            AvgDaysToComplete: BuildTile(currentActivity.AvgDaysToComplete, priorAvgDays, lowerIsBetter: true, avgDaysSparkline));
+    }
+
+    /// <summary>
+    /// Backlog burn-down for the Insights screen (docs/superpowers/specs/2026-09-22-insights-backlog-
+    /// burndown-design.md). Evaluated in a fixed precedence: <see cref="BurnDownData.IsCleared"/> first
+    /// (a statement about right now, not a trend, so it isn't gated behind a history minimum), then
+    /// <see cref="BurnDownData.HasEnoughHistory"/> (at least 7 <paramref name="snapshots"/> ever recorded),
+    /// then a linear-regression projection over the last 30 real snapshot rows (or all of them if fewer).
+    /// <paramref name="snapshots"/> must already be ordered by <see cref="LibrarySnapshot.SnapshotDate"/>.
+    /// </summary>
+    private static BurnDownData ComputeBurnDown(List<LibrarySnapshot> snapshots, InsightsRange range, DateTime nowUtc)
+    {
+        DateTime? rangeStart = RangeStartUtc(range, nowUtc);
+        DateOnly? rangeStartLocal = rangeStart is { } start ? DateOnly.FromDateTime(start.ToLocalTime()) : null;
+        var points = snapshots
+            .Where(s => rangeStartLocal is null || s.SnapshotDate >= rangeStartLocal.Value)
+            .Select(s => new BurnDownPoint(s.SnapshotDate, s.BacklogComics))
+            .ToList();
+
+        bool isCleared = snapshots.Count > 0 && snapshots[^1].BacklogComics == 0;
+        if (isCleared)
+        {
+            return new BurnDownData(points, ProjectedPoints: null, ProjectedClearDate: null, HasEnoughHistory: true, IsCleared: true);
+        }
+
+        if (snapshots.Count < 7)
+        {
+            return new BurnDownData(points, ProjectedPoints: null, ProjectedClearDate: null, HasEnoughHistory: false, IsCleared: false);
+        }
+
+        // Rolling window: the most recent 30 real snapshot rows, not a calendar-day cutoff - a day the
+        // app never opens on is a gap, not a zero, so counting by row keeps the slope meaningful even
+        // when the app isn't opened daily.
+        var window = snapshots.Count > 30 ? snapshots.Skip(snapshots.Count - 30).ToList() : snapshots;
+        var latest = window[^1];
+        var earliest = window[0];
+
+        double[] xs = window.Select(s => (double)(s.SnapshotDate.DayNumber - earliest.SnapshotDate.DayNumber)).ToArray();
+        double[] ys = window.Select(s => (double)s.BacklogComics).ToArray();
+        double xMean = xs.Average();
+        double yMean = ys.Average();
+        double numerator = 0, denominator = 0;
+        for (int i = 0; i < xs.Length; i++)
+        {
+            numerator += (xs[i] - xMean) * (ys[i] - yMean);
+            denominator += (xs[i] - xMean) * (xs[i] - xMean);
+        }
+
+        double slope = denominator > 0 ? numerator / denominator : 0; // backlog change per day
+
+        if (slope >= 0)
+        {
+            return new BurnDownData(points, ProjectedPoints: null, ProjectedClearDate: null, HasEnoughHistory: true, IsCleared: false);
+        }
+
+        double daysToZero = latest.BacklogComics / -slope;
+        var clearDate = latest.SnapshotDate.AddDays((int)Math.Ceiling(daysToZero));
+        var projected = new[] { new BurnDownPoint(latest.SnapshotDate, latest.BacklogComics), new BurnDownPoint(clearDate, 0) };
+
+        return new BurnDownData(points, projected, clearDate, HasEnoughHistory: true, IsCleared: false);
     }
 
     private static IReadOnlyDictionary<DateOnly, int> ComputeHeatmap(List<ReadingEvent> events)
@@ -540,7 +701,9 @@ public sealed record StatsSnapshot(
     IReadOnlyList<CompositionSlice> ContentRating,
     IReadOnlyList<YearBucket> PublicationYear,
     IReadOnlyList<CompositionSlice> TopAuthors,
-    IReadOnlyList<CompositionSlice> TopArtists);
+    IReadOnlyList<CompositionSlice> TopArtists,
+    TrendData? Trend,
+    BurnDownData BurnDown);
 
 public sealed record LifetimeTotals(int ItemsRead, long PagesRead, int SeriesRead);
 
@@ -564,8 +727,13 @@ public sealed record CompositionData(
 public sealed record RatingBucket(int Stars, int Count);
 
 /// <summary>One Highlights card (design §6.1). <see cref="Titles"/> has more than one entry when
-/// several items tie for the top spot - rendered as "Title and N others".</summary>
-public sealed record HighlightGroup(IReadOnlyList<string> Titles, string Detail)
+/// several items tie for the top spot - rendered as "Title and N others". <see cref="SeriesId"/>/
+/// <see cref="IssueId"/> (docs/superpowers/specs/2026-09-23-insights-redesign-design.md) are populated
+/// only by <see cref="RecapResolver"/>'s three coverable tiles (Top Series, Highest Rated, Most Reread)
+/// so <c>RecapViewModel</c> can resolve a cover key for the first tied item - left null by every
+/// <see cref="StatsResolver"/> construction of this type, since the Trends tab's own Highlights card
+/// doesn't show covers.</summary>
+public sealed record HighlightGroup(IReadOnlyList<string> Titles, string Detail, int? SeriesId = null, int? IssueId = null)
 {
     /// <summary>"Title" or "Title and N others" (matches MangaBaka's own copy for a tie) - computed
     /// rather than stored so XAML can bind it directly without a converter.</summary>
@@ -587,6 +755,31 @@ public sealed record HighlightsData(
     int ZeroProgressCount);
 
 public sealed record ReadingActivityData(double AvgDaysToComplete, double AvgIssuesPerDay);
+
+/// <summary>Period-over-period deltas for the three range-scoped Reading Activity tiles (design doc
+/// 2026-09-22-insights-period-over-period-deltas). Any/all of the three can be null - see
+/// <c>StatsResolver.ComputeTrend</c>.</summary>
+public sealed record TrendData(TileTrend? FinishedItems, TileTrend? AvgIssuesPerDay, TileTrend? AvgDaysToComplete);
+
+/// <summary>One tile's delta + sparkline. <see cref="PercentChange"/> is null exactly when
+/// <see cref="ShowNew"/> is true (prior-window baseline was 0, current value isn't - render "new" instead of
+/// a percent). <see cref="IsGoodDirection"/> already accounts for the tile's own better-direction rule (e.g.
+/// fewer days to finish is an improvement) - true always means "render the success brush".</summary>
+public sealed record TileTrend(double? PercentChange, bool ShowNew, bool IsGoodDirection, IReadOnlyList<double> SparklinePoints);
+
+/// <summary>Backlog burn-down chart data (design 2026-09-22-insights-backlog-burndown). <see cref="Points"/>
+/// is real snapshot history within the selected range; <see cref="ProjectedPoints"/> (when non-null) is
+/// exactly two points - the latest real point and the projected zero-crossing - the dashed continuation's
+/// endpoints. See <c>StatsResolver.ComputeBurnDown</c> for the precedence between <see cref="IsCleared"/>,
+/// <see cref="HasEnoughHistory"/>, and the projection fields.</summary>
+public sealed record BurnDownData(
+    IReadOnlyList<BurnDownPoint> Points,
+    IReadOnlyList<BurnDownPoint>? ProjectedPoints,
+    DateOnly? ProjectedClearDate,
+    bool HasEnoughHistory,
+    bool IsCleared);
+
+public sealed record BurnDownPoint(DateOnly Date, int BacklogCount);
 
 public sealed record GrowthPoint(DateTime AddedDate, string ReadingStatus, string MediaType, string ContentRating, int? SeriesId);
 

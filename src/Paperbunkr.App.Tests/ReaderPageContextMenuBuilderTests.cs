@@ -25,10 +25,36 @@ public class ReaderPageContextMenuBuilderTests
         var entries = builder.Build(thumbnail);
 
         Assert.NotNull(entries);
-        Assert.Equal(3, entries!.Count);
+        Assert.Equal(4, entries!.Count);
         Assert.Equal("Page Type", entries[0].Header);
         Assert.Equal("Rotate", entries[1].Header);
         Assert.Equal("Spread position", entries[2].Header);
+        Assert.Equal("Report Bad Page…", entries[3].Header);
+    }
+
+    [Fact]
+    public void Build_Thumbnail_ReportBadPage_TargetsThatThumbnail()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        var builder = new ReaderPageContextMenuBuilder(vm);
+        var thumbnail = MakeThumbnail();
+
+        var report = builder.Build(thumbnail)!.Single(e => e.Header == "Report Bad Page…");
+
+        Assert.Same(vm.ReportBadPageCommand, report.Command);
+        Assert.Same(thumbnail, report.CommandParameter);
+    }
+
+    [Fact]
+    public void Build_MainPage_OffersReportBadPage_WithNoParameter()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        var builder = new ReaderPageContextMenuBuilder(vm);
+
+        var report = builder.Build(null)!.Single(e => e.Header == "Report Bad Page…");
+
+        Assert.Same(vm.ReportBadPageCommand, report.Command);
+        Assert.Null(report.CommandParameter);
     }
 
     [Fact]
@@ -59,7 +85,7 @@ public class ReaderPageContextMenuBuilderTests
         var entries = builder.Build(thumbnail);
 
         Assert.NotNull(entries);
-        Assert.Equal(2, entries!.Count);
+        Assert.Equal(3, entries!.Count);
         Assert.DoesNotContain(entries, e => e.Header == "Spread position");
     }
 
@@ -108,11 +134,18 @@ public class ReaderPageContextMenuBuilderTests
         foreach (var entries in new[] { builder.Build(new object()), builder.Build(null) })
         {
             Assert.NotNull(entries);
-            Assert.Equal(2, entries!.Count);
-            Assert.Equal("Save Page as PNG…", entries[0].Header);
-            Assert.Same(vm.SavePageAsPngCommand, entries[0].Command);
-            Assert.Equal("Save Page as JPEG…", entries[1].Header);
-            Assert.Same(vm.SavePageAsJpegCommand, entries[1].Command);
+            // Copy Page joined the menu with the comfort slice (docs/superpowers/specs/2026-09-25-comic-reader-comfort-design.md section 2); the spread items only appear while a spread is showing. The image quality slice added
+            // "Auto-crop this page" (2026-09-26 #3) and the in-reader reference slice "Add Note…", "Clip a Region…" and "Pin this page as a reference" (2026-09-26 #7, #29).
+            Assert.Equal(
+                new[] { "Copy Page", "Add Note…", "Clip a Region…", "Pin this page as a reference", "Save Page as PNG…", "Save Page as JPEG…", "Auto-crop this page", "Report Bad Page…" },
+                entries!.Select(e => e.Header).ToArray());
+            Assert.Same(vm.CopyPageCommand, entries[0].Command);
+            Assert.Same(vm.NoteOnThisPageCommand, entries[1].Command);
+            Assert.Same(vm.ToggleClipModeCommand, entries[2].Command);
+            Assert.Same(vm.PinCurrentPageCommand, entries[3].Command);
+            Assert.Same(vm.SavePageAsPngCommand, entries[4].Command);
+            Assert.Same(vm.SavePageAsJpegCommand, entries[5].Command);
+            Assert.Same(vm.ReportBadPageCommand, entries[7].Command);
         }
     }
 }

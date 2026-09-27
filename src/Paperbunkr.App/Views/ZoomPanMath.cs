@@ -23,9 +23,34 @@ namespace Paperbunkr.App.Views;
 /// </summary>
 public static class ZoomPanMath
 {
-    public const double MinZoom = 1.0;
+    /// <summary>
+    /// The smallest zoom the comic reader allows, 25% (docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md section 1). Zoom is a multiplier over the fit-mode base scale, so
+    /// below <see cref="FitZoom"/> the page is simply smaller than the viewport. <see cref="PageCanvas.MinZoomLevel"/> is what a canvas actually clamps to (the Novels PDF reader keeps <see cref="FitZoom"/>).
+    /// </summary>
+    public const double MinZoom = 0.25;
+
+    /// <summary>100%: the fit-mode base scale, the "unzoomed" state (what double-click and reset return to).</summary>
+    public const double FitZoom = 1.0;
+
     public const double MaxZoom = 4.0;
     public const double DoubleClickZoom = 2.0;
+
+    /// <summary>Slider range in log2 space: -2 = 25%, 0 = 100% (the middle), +2 = 400%.</summary>
+    public const double SliderMin = -2.0;
+
+    public const double SliderMax = 2.0;
+
+    /// <summary>The zoom slider position for a zoom level. Logarithmic, so 25%-100% and 100%-400% get the same travel and every value in between is reachable.</summary>
+    public static double ZoomToSlider(double zoom) => Math.Clamp(Math.Log2(Math.Max(zoom, MinZoom)), SliderMin, SliderMax);
+
+    /// <summary>The zoom level for a zoom slider position (inverse of <see cref="ZoomToSlider"/>).</summary>
+    public static double SliderToZoom(double slider) => Math.Pow(2, Math.Clamp(slider, SliderMin, SliderMax));
+
+    /// <summary>Multiplier for one keyboard zoom step: about 10%, smooth when the key repeats.</summary>
+    public const double KeyZoomFactor = 1.1;
+
+    /// <summary>Multiplier for a wheel movement of <paramref name="delta"/> notches: exponential, so every notch is the same proportional change and nothing snaps to a step.</summary>
+    public static double WheelZoomFactor(double delta, double exponentPerNotch = 0.2) => Math.Exp(delta * exponentPerNotch);
 
     /// <summary>
     /// Per-mode formulas and the <paramref name="fitOnlyIfOversized"/> early-return checks are
@@ -66,6 +91,9 @@ public static class ZoomPanMath
     /// <c>ContinuousMaxZoom</c> - one clamp implementation, not two.
     /// </summary>
     public static double ClampZoom(double zoom, double maxZoom = MaxZoom, double minZoom = MinZoom) => Math.Clamp(zoom, minZoom, maxZoom);
+
+    /// <summary>Whether <paramref name="zoom"/> is the fit state (100%) within a hair, for "already reset?" checks.</summary>
+    public static bool IsFit(double zoom) => Math.Abs(zoom - FitZoom) < 0.001;
 
     /// <summary>
     /// Whether the current fit-mode/zoom combination makes the displayed content bigger than the

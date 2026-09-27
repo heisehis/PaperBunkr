@@ -9,6 +9,22 @@
         in Styles/Typography.axaml. The control resolves everything and exposes ready-to-bind outputs
         (ImageSource / Glyph / Label / ChipBackground + Is* flags) - the template just switches on them.
     -->
+    <!-- Publisher logo laid straight on a cover tile (Library grids), no badge pill behind it: bigger
+         so it reads, and a soft shadow instead of a backdrop so a tinted / plain-text mark still
+         reads on a light cover (raster logos carry their own contrast plate already). -->
+    <Style Selector="controls|BrandMark.coverLogo">
+        <Setter Property="MarkSize" Value="22" />
+        <Setter Property="MaxMarkWidth" Value="54" />
+        <Setter Property="EnsureContrast" Value="True" />
+        <Setter Property="Margin" Value="7" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        <Setter Property="Effect">
+            <DropShadowEffect OffsetX="0" OffsetY="1" BlurRadius="3" Color="Black" Opacity="0.9" />
+        </Setter>
+    </Style>
+
     <Styles.Resources>
         <ControlTheme x:Key="{x:Type controls:BrandMark}" TargetType="controls:BrandMark">
             <Setter Property="VerticalAlignment" Value="Center" />
@@ -19,10 +35,21 @@
                         <!-- Bitmap is already aspect-correct (SvgMarkRenderer fits longest side to
                              2*MarkSize); Height drives display, wide wordmarks stay wide. -->
                         <Image Source="{TemplateBinding ImageSource}"
-                               Height="{TemplateBinding MarkSize}" Stretch="Uniform"
+                               Height="{TemplateBinding MarkHeight}" Stretch="Uniform"
                                VerticalAlignment="Center"
                                RenderOptions.BitmapInterpolationMode="HighQuality"
-                               IsVisible="{TemplateBinding IsImage}" />
+                               IsVisible="{TemplateBinding IsBareImage}" />
+
+                        <!-- CE publisher raster (PNG/JPG): drawn as-is on a contrast plate picked from
+                             its own pixels (PlateBrush null = opaque image, no plate). Small squircle
+                             radius, not an oval (feedback: no oval pills). -->
+                        <Border IsVisible="{TemplateBinding IsPlatedImage}" VerticalAlignment="Center"
+                                CornerRadius="4" Padding="1.5" ClipToBounds="True"
+                                Background="{TemplateBinding PlateBrush}">
+                            <Image Source="{TemplateBinding ImageSource}"
+                                   Height="{TemplateBinding MarkHeight}" Stretch="Uniform"
+                                   RenderOptions.BitmapInterpolationMode="HighQuality" />
+                        </Border>
 
                         <fi:SymbolIcon Symbol="{TemplateBinding Glyph}"
                                        FontSize="{TemplateBinding MarkSize}"

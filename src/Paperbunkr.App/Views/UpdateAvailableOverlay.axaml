@@ -16,12 +16,16 @@
                            FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
             </StackPanel>
 
-            <Border Classes="groupBox" Margin="0,10,0,0" MaxHeight="200">
-                <ScrollViewer>
-                    <TextBlock Text="{Binding ChangelogBody}" Margin="14,10" FontSize="12.5" TextWrapping="Wrap"
-                               Foreground="{DynamicResource PbTextFaintBrush}" />
-                </ScrollViewer>
-            </Border>
+            <!-- A link, not a changelog excerpt: the bundled changelog is the installed version's and the appcast carries no notes
+                 (docs/superpowers/specs/2026-09-26-about-polish-design.md §4). -->
+            <Button Classes="linkText" Margin="34,2,0,0" HorizontalAlignment="Left"
+                    Command="{Binding OpenReleaseNotesCommand}" ToolTip.Tip="{Binding ReleaseNotesUrl}"
+                    AutomationProperties.AutomationId="UpdateAvailableReleaseNotes">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <TextBlock Text="See what's new in this release" />
+                    <fi:SymbolIcon Symbol="Open" FontSize="12" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
 
             <Grid ColumnDefinitions="*,Auto" Margin="0,10,0,0">
                 <TextBlock Grid.Column="0" Text="Don't check for updates on startup" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,10,0" />

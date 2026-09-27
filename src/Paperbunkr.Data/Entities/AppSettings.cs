@@ -133,6 +133,92 @@ public class AppSettings
     public bool ResetZoomOnPageChange { get; set; }
 
     /// <summary>
+    /// Paged reader skips pages tagged <see cref="PageType.Deleted"/> when turning pages (docs/superpowers/
+    /// specs/2026-09-21-comic-reader-page-intelligence-design.md §2). CE parity: CE's page filter
+    /// (<c>Settings.PageFilter</c>, default <c>All</c>) excludes only Deleted pages, so Deleted skipping is
+    /// on by default. Continuous mode and direct jumps are unaffected.
+    /// </summary>
+    public bool SkipDeletedPages { get; set; } = true;
+
+    /// <summary>
+    /// Same as <see cref="SkipDeletedPages"/> for <see cref="PageType.Advertisement"/> pages. Off by default:
+    /// CE shows ads unless the user narrows its page filter.
+    /// </summary>
+    public bool SkipAdvertisementPages { get; set; }
+
+    /// <summary>
+    /// While reading the last few pages of an issue, open the next one in the background so moving on is instant (docs/superpowers/specs/
+    /// 2026-09-25-comic-reader-performance-design.md A). It reads the whole next archive, which matters on spinning disks and battery, so it
+    /// can be turned off. Default on. Not a ComicRack CE setting: CE has no next-book pre-open (its ImagePool and the OS file cache hid the cost).
+    /// </summary>
+    public bool PreOpenNextIssue { get; set; } = true;
+
+    /// <summary>
+    /// Tap/click zone layout in paged reading modes (docs/superpowers/specs/2026-09-25-comic-reader-reach-design.md section 4). <see cref="TapZoneLayout.Default"/>
+    /// reproduces the long-standing behaviour exactly (touch = three columns, mouse = two halves). Not a CE setting (CE has fixed hot spots).
+    /// </summary>
+    public TapZoneLayout PagedTapZoneLayout { get; set; } = TapZoneLayout.Default;
+
+    /// <summary>Manual mirroring of <see cref="PagedTapZoneLayout"/> (Mihon's tapping invert mode).</summary>
+    public TapZoneInvert PagedTapZoneInvert { get; set; } = TapZoneInvert.None;
+
+    /// <summary>Tap/click zone layout in continuous and long-strip modes. Default <see cref="TapZoneLayout.Disabled"/> = today's behaviour (no zones there).</summary>
+    public TapZoneLayout ContinuousTapZoneLayout { get; set; } = TapZoneLayout.Disabled;
+
+    /// <summary>Manual mirroring of <see cref="ContinuousTapZoneLayout"/>.</summary>
+    public TapZoneInvert ContinuousTapZoneInvert { get; set; } = TapZoneInvert.None;
+
+    /// <summary>
+    /// Whether mouse clicks use the tap zone layout too (default on). When off the mouse keeps the plain two halves in paged mode and does nothing in continuous
+    /// mode, whatever the layout says. Touch and pen always use the layout.
+    /// </summary>
+    public bool TapZonesForMouse { get; set; } = true;
+
+    /// <summary>Mouse side buttons turn pages (XButton1 back, XButton2 forward; in continuous mode they scroll a screen). Default on; CE binds its mouse buttons 4/5 to list back/forward.</summary>
+    public bool ExtraMouseButtonsTurnPages { get; set; } = true;
+
+    /// <summary>
+    /// The reader profile applied to every series that has none of its own (docs/superpowers/specs/2026-09-25-comic-reader-profiles-design.md). Null = plain settings.
+    /// A plain id like <see cref="Series.ReaderProfileId"/>; a deleted profile silently falls through to plain settings.
+    /// </summary>
+    public int? DefaultReaderProfileId { get; set; }
+
+    /// <summary>Show the reading stats chip (session time, pages, pace, time left) when the reader opens (docs/superpowers/specs/2026-09-25-comic-reader-comfort-design.md section 1). Off by default. Not a CE feature.</summary>
+    public bool ShowSessionHud { get; set; }
+
+    /// <summary>Remind the reader to rest their eyes after <see cref="BreakNudgeIntervalMinutes"/> of active reading (section 3). Off by default. Not a CE feature.</summary>
+    public bool BreakNudgesEnabled { get; set; }
+
+    /// <summary>Minutes of active reading between eye-rest reminders; the 20-20-20 rule's 20 by default, 10-60 in the UI.</summary>
+    public int BreakNudgeIntervalMinutes { get; set; } = 20;
+
+    /// <summary>Tint the comic pages warm between <see cref="WarmShiftStartMinutes"/> and <see cref="WarmShiftEndMinutes"/> (section 4). Off by default. Pages only, not the app chrome.</summary>
+    public bool WarmShiftEnabled { get; set; }
+
+    /// <summary>Start of the warm shift window, minutes after local midnight (default 1260 = 21:00). The window may wrap midnight.</summary>
+    public int WarmShiftStartMinutes { get; set; } = 1260;
+
+    /// <summary>End of the warm shift window, minutes after local midnight (default 420 = 07:00).</summary>
+    public int WarmShiftEndMinutes { get; set; } = 420;
+
+    /// <summary>How strong the warm tint is, 0-100 (default 40).</summary>
+    public int WarmShiftStrength { get; set; } = 40;
+
+    /// <summary>
+    /// Open the comic reader in guided panel view (docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md section 3): next and previous step through the page's panels. Off by default;
+    /// <c>G</c> toggles it for one reading visit and a reader profile may set it. Not a CE feature (CE has no panel detection).
+    /// </summary>
+    public bool GuidedViewOnOpen { get; set; }
+
+    /// <summary>
+    /// A double-click (or double-tap) on a page zooms to the panel under the pointer instead of the plain 200% (section 4). On by default; off restores the old behaviour exactly. Paged modes only.
+    /// </summary>
+    public bool SmartDoubleClickZoom { get; set; } = true;
+
+    /// <summary>Whether an XInput gamepad drives the reader while it is showing (default on; it costs nothing when no controller is connected). Not a CE feature.</summary>
+    public bool GamepadEnabled { get; set; } = true;
+
+    /// <summary>
     /// Mouse-wheel scroll/pan speed multiplier, replacing <c>PageCanvas</c>'s previously-fixed
     /// <c>WheelPanStep</c> constant. CE: <c>Settings.MouseWheelSpeed</c> ("lines per mouse
     /// scrolling"), default 2.0, UI range 0.5-5.0 (CE's own trackbar min/max) - governs plain-wheel
@@ -213,6 +299,24 @@ public class AppSettings
 
     /// <summary>See <see cref="DefaultBrightness"/>.</summary>
     public double DefaultGamma { get; set; }
+
+    /// <summary>
+    /// Stretch each page's levels so a washed-out scan uses the full range (CE's "Auto Contrast", <c>BitmapAdjustmentOptions.AutoContrast</c>; docs/superpowers/specs/2026-09-26-comic-reader-image-quality-design.md).
+    /// Off by default, like CE. <see cref="Issue.AutoLevelsOverride"/> overrides it per issue.
+    /// </summary>
+    public bool DefaultAutoLevels { get; set; }
+
+    /// <summary>Sharpening 0-3 (CE's <c>BitmapAdjustment.Sharpen</c>, its preferences trackbar range). 0 = off. <see cref="Issue.SharpenOverride"/> overrides it per issue.</summary>
+    public int DefaultSharpen { get; set; }
+
+    /// <summary>Show the summary in the reader's info panel straight away instead of behind "Show summary" (docs/superpowers/specs/2026-09-26-comic-reader-inreader-reference-design.md #28). Off: a summary can spoil.</summary>
+    public bool InfoPanelShowSummary { get; set; }
+
+    /// <summary>
+    /// Trim the white or black scan borders of comic pages so fit modes use the real content area (Paperbunkr-original, no CE counterpart). Off by default: trimming pages is a visible change. A page can
+    /// still be forced either way with <see cref="PageCropOverride"/>.
+    /// </summary>
+    public bool AutoCropMargins { get; set; }
 
     /// <summary>
     /// Reader canvas background mode (docs/superpowers/specs/2026-08-10-reader-polish-continuous-
@@ -312,6 +416,13 @@ public class AppSettings
     /// (docs/superpowers/specs/2026-09-14-library-visual-redesign-design.md §4).
     /// </summary>
     public bool IsLibraryPreviewPanelVisible { get; set; } = true;
+
+    /// <summary>
+    /// Comma-separated keys of the preview panel's collapsible sections that are currently collapsed
+    /// (docs/superpowers/specs/2026-09-26-library-preview-panel-v2-design.md §6). One value shared by the
+    /// series and issue states. Default collapses Story, File and Details, leaving Summary/Credits open.
+    /// </summary>
+    public string LibraryPreviewCollapsedSections { get; set; } = "story,file,details";
 
     /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public double LibraryGridDensity { get; set; } = 1.0;
@@ -693,6 +804,13 @@ public class AppSettings
     /// setting in this redesign. Default 2 preserves the prior hardcoded behavior.
     /// </summary>
     public int LibraryHealthConfirmedMissingThreshold { get; set; } = 2;
+
+    /// <summary>
+    /// The Library Health sub-tab last used ("Overview", "Review" or "Files") - null until the user first switches tabs, in
+    /// which case the card opens on Review if anything is pending, else Overview (docs/superpowers/specs/
+    /// 2026-09-26-library-health-subtabs-design.md). A deep link or search hit overrides it for that visit.
+    /// </summary>
+    public string? LibraryHealthTab { get; set; }
 
     /// <summary>
     /// Whether a Scan Now automatically runs Library Health's "Remove All Confirmed Missing" (same

@@ -15,6 +15,9 @@ public sealed class ReaderThumbnailSample
     /// <summary>Drives the corner ribbon indicator (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md) - CE draws the same kind of marker on its own thumbnail rail.</summary>
     public bool IsBookmarked { get; init; }
 
+    /// <summary>The page has a note (docs/superpowers/specs/2026-09-26-comic-reader-inreader-reference-design.md #7): its page dot is tinted.</summary>
+    public bool HasNote { get; init; }
+
     /// <summary>Per-page type tagging (docs/ce-feature-inventory.md §A) - null/<see cref="Paperbunkr.Data.Entities.PageType.Story"/> pages show no badge at all, matching the bookmark ribbon's "only show when set" precedent.</summary>
     public Paperbunkr.Data.Entities.PageType PageType { get; init; }
 

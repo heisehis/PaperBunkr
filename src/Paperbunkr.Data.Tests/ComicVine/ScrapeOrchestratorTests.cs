@@ -3,6 +3,8 @@ using Paperbunkr.Data.ComicVine.Scraping;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace Paperbunkr.Data.Tests.ComicVine;
 
@@ -18,10 +20,16 @@ public sealed class ScrapeOrchestratorTests : IDisposable
     {
         _testRoot = Directory.CreateTempSubdirectory("clm-scrape-test-").FullName;
         _dbPath = Path.Combine(_testRoot, "test.db");
+        // ScrapeDelayMs's clamped 2-3600s inter-book delay (docs/superpowers/specs/2026-09-24-
+        // comicvine-scraper-fidelity-design.md Phase 3) would otherwise add real multi-second waits to
+        // any test scraping more than one book - disabled for every test in this class, same test-seam
+        // pattern as ComicVineClient.RetryDelay.
+        ScrapeOrchestrator.ScrapeDelayOverride = TimeSpan.Zero;
     }
 
     public void Dispose()
     {
+        ScrapeOrchestrator.ScrapeDelayOverride = null;
         try { Directory.Delete(_testRoot, recursive: true); } catch (IOException) { }
     }
 
@@ -68,6 +76,15 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         {"status_code":1,"error":"OK","results":[{"id":555,"name":"The Beginning","issue_number":"3","image":null}]}
         """;
 
+    /// <summary>A multi-issue volume, unlike <see cref="SingleIssueSearchJson"/> - needed so a test can
+    /// prove <c>FindByNumber</c> actually used the book's own resolved number to pick #3 out of several,
+    /// rather than accidentally passing via the single-issue-volume fallback that also exists in
+    /// <c>FindIssueDetailsAsync</c>.</summary>
+    private const string MultiIssueSearchJson =
+        """
+        {"status_code":1,"error":"OK","results":[{"id":553,"name":"Origins","issue_number":"1","image":null},{"id":555,"name":"The Beginning","issue_number":"3","image":null},{"id":557,"name":"Aftermath","issue_number":"5","image":null}]}
+        """;
+
     private const string IssueDetailsJson =
         """
         {"status_code":1,"error":"OK","results":{"id":555,"name":"The Beginning","issue_number":"3","site_detail_url":"https://comicvine.gamespot.com/batman-3/4000-555/","cover_date":"1990-04-25","store_date":"1990-03-15","description":"<p>Batman <b>fights</b> crime.</p>","volume":{"id":1,"name":"Batman"},"story_arc_credits":[{"id":1,"name":"Zero Year"}],"character_credits":[{"id":2,"name":"Batman"},{"id":3,"name":"Joker"}],"team_credits":[{"id":9,"name":"Bat-Family"}],"location_credits":[{"id":4,"name":"Gotham City"}],"person_credits":[{"name":"Bob Kane","role":"writer"},{"name":"Bill Finger","role":"writer, artist"},{"name":"Jerry Robinson","role":"inker"}]}}
@@ -95,15 +112,137 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
         bool reviewCalled = false;
 
-        int applied = await orchestrator.ScrapeAsync(
+        var result = await orchestrator.ScrapeAsync(
             new[] { issue }, isInteractive: true,
             (_, _, _, _, _) => { reviewCalled = true; return Task.FromResult<ComicVineVolumeSearchResult?>(null); },
             CreateDbContext);
 
-        Assert.Equal(1, applied);
+        Assert.Equal(1, result.Applied);
         Assert.False(reviewCalled);
         using PaperbunkrDbContext context = CreateDbContext();
         Assert.Equal("DC Comics", context.Issues.Single(i => i.Id == 1).Publisher);
+    }
+
+    [Fact]
+    public async Task PendingNumberProposal_StillResolvesTheRightIssue_ForPerIssueDetails()
+    {
+        // Real bug (2026-09-24, found live by the user): a freshly-imported book's filename-parsed
+        // issue number lives in a Pending MetadataProposal (LibraryFolderScanner) until a human
+        // accepts it in Needs Review or edits+saves the issue directly - issue.Number itself stays
+        // null until then. The orchestrator used to read issue.EffectiveNumber() directly at every
+        // FindByNumber call site, which only ever resolves an *Accepted* proposal, so it always passed
+        // a null bookNumber and could never find this book's own issue within a multi-issue volume -
+        // every per-issue field (Title/Summary/credits/dates/...) silently never applied for a whole
+        // series scrape, except whichever book already had Number set directly.
+        var issue = MakeIssue();
+        issue.Number = null;
+        Seed(issue);
+        using (var context = CreateDbContext())
+        {
+            context.MetadataProposals.Add(new MetadataProposal
+            {
+                IssueId = issue.Id,
+                Field = MetadataProposalField.Number,
+                ProposedValue = "3",
+                Status = MetadataProposalStatus.Pending,
+            });
+            context.SaveChanges();
+        }
+
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchJson, MultiIssueSearchJson, IssueDetailsJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        var result = await orchestrator.ScrapeAsync(
+            new[] { issue }, isInteractive: true,
+            (_, _, _, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(null),
+            CreateDbContext);
+
+        Assert.Equal(1, result.Applied);
+        using PaperbunkrDbContext context2 = CreateDbContext();
+        var saved = context2.Issues.Single(i => i.Id == issue.Id);
+        // Only reachable if bookNumber="3" (from the Pending proposal) was actually threaded through to
+        // FindByNumber to pick issue id 555 out of the three in MultiIssueSearchJson.
+        Assert.Equal("The Beginning", saved.Title);
+        Assert.Equal("Zero Year", saved.StoryArc);
+    }
+
+    [Fact]
+    public async Task Scrape_WritesCount_AndTheForkFields_IncludingRealArcReadingOrder()
+    {
+        // Volume "Batman" reports 50 issues; the matched issue (#3, id 555) belongs to arc id 1
+        // ("Zero Year"), whose two issues ComicVine dates so that #3 (id 555) comes second.
+        const string arcJson = """{"status_code":1,"error":"OK","results":{"id":1,"name":"Zero Year","issues":[{"id":555},{"id":600}]}}""";
+        const string arcDatesJson =
+            """
+            {"status_code":1,"error":"OK","results":[
+              {"id":555,"issue_number":"3","store_date":"1990-03-15","cover_date":"1990-04-25"},
+              {"id":600,"issue_number":"1","store_date":"1990-01-01","cover_date":"1990-02-01"}]}
+            """;
+        var issue = MakeIssue();
+        Seed(issue);
+        var handler = new FakeHttpMessageHandler(VolumeSearchJson, SingleIssueSearchJson, IssueDetailsJson, arcJson, arcDatesJson);
+        var orchestrator = new ScrapeOrchestrator(Cv(handler), new ComicVineMatchMemory(CreateDbContext), new ScrapeSettings { AutoChooseTopMatch = true });
+
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true,
+            (_, _, _, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(null), CreateDbContext);
+
+        Assert.Equal(1, result.Applied);
+        using PaperbunkrDbContext context = CreateDbContext();
+        var saved = context.Issues.Single(i => i.Id == issue.Id);
+        Assert.Equal(50, saved.Count);                        // the volume's issue count
+        Assert.Equal("Batman", saved.MainCharacterOrTeam);    // first character in the response
+        Assert.Equal("Zero Year", saved.SeriesGroup);
+        Assert.Equal("2", saved.StoryArcNumber);              // dated second of the arc's two issues
+        Assert.Equal("2", saved.AlternateNumber);
+        Assert.Equal(2, saved.AlternateCount);
+        Assert.Contains(handler.RequestedUrls, u => u.Contains("story_arc/4045-1"));
+    }
+
+    [Fact]
+    public async Task AcceptedNumberProposal_NotIncludedOnTheLoadedIssue_StillResolvesTheRightIssue()
+    {
+        // The realistic case behind the same live bug: MetadataResolutionPolicy.Prompt has no
+        // Preferences toggle to ever reach, so every real library runs under the default Automatic
+        // policy, under which LibraryFolderScanner.AddFilenameProposal creates the Number/Year
+        // proposal already Accepted - issue.Number itself is still never written directly. The
+        // orchestrator's real caller (ScrapeCoordinator.ScrapeIssuesAsync) loads books via a bare
+        // .Include(i => i.Series), never .Include(i => i.MetadataProposals), so issue.EffectiveNumber()
+        // always saw an empty in-memory proposals collection and returned null even though the DB had
+        // a perfectly good Accepted proposal the whole time. Mirrors that exact shape: the seeded issue
+        // instance passed into ScrapeAsync has an empty MetadataProposals collection, same as a fresh
+        // .Include(i => i.Series)-only load would.
+        var issue = MakeIssue();
+        issue.Number = null;
+        Seed(issue);
+        using (var context = CreateDbContext())
+        {
+            context.MetadataProposals.Add(new MetadataProposal
+            {
+                IssueId = issue.Id,
+                Field = MetadataProposalField.Number,
+                ProposedValue = "3",
+                Status = MetadataProposalStatus.Accepted,
+            });
+            context.SaveChanges();
+        }
+
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchJson, MultiIssueSearchJson, IssueDetailsJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        var result = await orchestrator.ScrapeAsync(
+            new[] { issue }, isInteractive: true,
+            (_, _, _, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(null),
+            CreateDbContext);
+
+        Assert.Equal(1, result.Applied);
+        using PaperbunkrDbContext context2 = CreateDbContext();
+        var saved = context2.Issues.Single(i => i.Id == issue.Id);
+        Assert.Equal("The Beginning", saved.Title);
+        Assert.Equal("Zero Year", saved.StoryArc);
     }
 
     private sealed class FakeMetron : IScrapeComicVine
@@ -140,7 +279,7 @@ public sealed class ScrapeOrchestratorTests : IDisposable
             p => p == ComicProvider.Metron ? (metron, new ComicVineMatchMemory(CreateDbContext, ComicProvider.Metron)) : null);
         var providersSeenByReview = new List<ComicProvider>();
 
-        int applied = await orchestrator.ScrapeAsync(
+        var result = await orchestrator.ScrapeAsync(
             new[] { first, second }, isInteractive: true,
             async (_, _, _, search, ct) =>
             {
@@ -155,7 +294,7 @@ public sealed class ScrapeOrchestratorTests : IDisposable
             },
             CreateDbContext);
 
-        Assert.Equal(2, applied);
+        Assert.Equal(2, result.Applied);
         Assert.Equal(new[] { ComicProvider.Metron, ComicProvider.Metron }, providersSeenByReview);   // the second book stays on Metron
         Assert.Equal(3, metron.Searches);                                   // the dialog search for book 1, then the automatic and dialog searches for book 2
         using PaperbunkrDbContext context = CreateDbContext();
@@ -226,12 +365,12 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         var settings = new ScrapeSettings { AutoChooseTopMatch = false };
         var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
 
-        int applied = await orchestrator.ScrapeAsync(
+        var result = await orchestrator.ScrapeAsync(
             new[] { issue }, isInteractive: true,
             (_, _, candidates, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(candidates[0].Volume),
             CreateDbContext);
 
-        Assert.Equal(1, applied);
+        Assert.Equal(1, result.Applied);
     }
 
     [Fact]
@@ -244,10 +383,10 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         var settings = new ScrapeSettings { AutoChooseTopMatch = false };
         var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
 
-        int applied = await orchestrator.ScrapeAsync(
+        var result = await orchestrator.ScrapeAsync(
             new[] { issue }, isInteractive: true, (_, _, _, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(null), CreateDbContext);
 
-        Assert.Equal(0, applied);
+        Assert.Equal(0, result.Applied);
     }
 
     [Fact]
@@ -262,9 +401,9 @@ public sealed class ScrapeOrchestratorTests : IDisposable
 
         // interactiveReview is null, matching how the plugin calls this for a non-interactive
         // (Scheduled Task-style) run - must never be invoked and must never hang.
-        int applied = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: false, interactiveReview: null, CreateDbContext);
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: false, interactiveReview: null, CreateDbContext);
 
-        Assert.Equal(0, applied);
+        Assert.Equal(0, result.Applied);
     }
 
     [Fact]
@@ -334,6 +473,49 @@ public sealed class ScrapeOrchestratorTests : IDisposable
 
         using PaperbunkrDbContext context = CreateDbContext();
         Assert.Equal("DC Comics", context.Issues.Single(i => i.Id == 1).Publisher);
+    }
+
+    [Fact]
+    public async Task ConvertImprints_false_reproduces_CEs_real_off_behavior()
+    {
+        // comicbook.py:464-466 (verified): with convert_imprints_b off, the raw ComicVine publisher
+        // string ("Vertigo" itself, not "DC Comics") writes straight to Publisher, and Imprint is left
+        // alone - the literal alternate branch, not just "skip resolution and do nothing".
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(VertigoVolumeSearchJson, EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true, ConvertImprints = false };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
+
+        using PaperbunkrDbContext context = CreateDbContext();
+        Issue saved = context.Issues.Single(i => i.Id == 1);
+        Assert.Equal("Vertigo", saved.Publisher);
+        Assert.Null(saved.Imprint);
+    }
+
+    [Fact]
+    public async Task PublisherAliases_applies_to_both_the_resolved_publisher_and_the_imprint()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(VertigoVolumeSearchJson, EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings
+        {
+            AutoChooseTopMatch = true,
+            PublisherAliases = new Dictionary<string, string> { ["DC Comics"] = "DC", ["Vertigo"] = "Vertigo (DC)" },
+        };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
+
+        using PaperbunkrDbContext context = CreateDbContext();
+        Issue saved = context.Issues.Single(i => i.Id == 1);
+        Assert.Equal("DC", saved.Publisher);          // resolved via the static imprint table, then aliased
+        Assert.Equal("Vertigo (DC)", saved.Imprint);  // the raw imprint name, aliased independently
     }
 
     [Fact]
@@ -547,9 +729,32 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         // whitespace afterward either - only asserting the stripped words are actually gone and the
         // real series name survives, not an exact encoded query string.
         string requestedUrl = Assert.Single(handler.RequestedUrls);
-        Assert.Contains("Batman", requestedUrl);
+        Assert.Contains("Batman", requestedUrl, StringComparison.OrdinalIgnoreCase);   // cleaned to lowercase, as CE does
         Assert.DoesNotContain("Annual", requestedUrl, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("query=The", requestedUrl, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SeriesSearch_UsesTheFuzzySearchEndpoint_AndRetriesWithNumberWordsWhenEmpty()
+    {
+        // 2026-09-25, found live by the user: the old name-filter search was a punctuation-sensitive
+        // substring match ("Batman Dark Victory" never found "Batman: Dark Victory"). CE searches the
+        // fuzzy /search/ endpoint and, on an empty result, retries once with digits swapped for words.
+        var issue = MakeIssue();
+        issue.Series!.Name = "Fantastic 4";
+        Seed(issue);
+        var handler = new FakeHttpMessageHandler(EmptyIssueSearchJson, VolumeSearchJson);
+        var orchestrator = new ScrapeOrchestrator(Cv(handler), new ComicVineMatchMemory(CreateDbContext),
+            new ScrapeSettings { AutoChooseTopMatch = false });
+
+        await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true,
+            (_, _, _, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(null), CreateDbContext);
+
+        Assert.Equal(2, handler.RequestedUrls.Count);
+        Assert.All(handler.RequestedUrls, u => Assert.Contains("/api/search/", u));
+        // Uri.ToString() shows %20 as a plain space.
+        Assert.Contains("query=fantastic 4", handler.RequestedUrls[0]);
+        Assert.Contains("query=fantastic four", handler.RequestedUrls[1]);
     }
 
     [Fact]
@@ -572,7 +777,7 @@ public sealed class ScrapeOrchestratorTests : IDisposable
             CreateDbContext);
 
         string requestedUrl = Assert.Single(handler.RequestedUrls);
-        Assert.Contains("Sci-Fi", requestedUrl);
+        Assert.Contains("Sci-Fi", requestedUrl, StringComparison.OrdinalIgnoreCase);   // cleaned to lowercase, as CE does
     }
 
     [Fact]
@@ -605,9 +810,9 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         var settings = new ScrapeSettings { AutoChooseTopMatch = true };
         var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
 
-        int applied = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
 
-        Assert.Equal(1, applied);
+        Assert.Equal(1, result.Applied);
         using PaperbunkrDbContext context = CreateDbContext();
         Issue saved = context.Issues.Single(i => i.Id == 1);
         Assert.Equal("3", saved.Number);
@@ -622,12 +827,38 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         Assert.Equal(4, saved.Month);
         Assert.Equal(25, saved.Day);
         Assert.Equal(new DateTime(1990, 3, 15), saved.ReleasedTime);
-        // Bill Finger's role string "writer, artist" maps through PersonRoleMap on its FIRST
-        // matching token only (ComicVineService.MapIssueDetails) - "writer" matches before "artist"
-        // is ever checked, so his credit lands entirely on Writer, not Penciller.
+        // Bill Finger's role string "writer, artist" applies EVERY recognized role token (docs/
+        // superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md §2.6, fixing a real bug -
+        // this test used to document PersonRoleMap matching only the first token). "artist" itself
+        // fans out to both Penciller and Inker (CE's cvdb.py:663-667, verified), so Bill Finger's
+        // credit now correctly lands on Writer AND Penciller AND Inker, not just Writer.
         Assert.Equal("Bob Kane, Bill Finger", saved.Writer);
-        Assert.Null(saved.Penciller);
-        Assert.Equal("Jerry Robinson", saved.Inker);
+        Assert.Equal("Bill Finger", saved.Penciller);
+        Assert.Equal("Bill Finger, Jerry Robinson", saved.Inker);
+    }
+
+    [Fact]
+    public async Task Scrape_PersistsComicVineIdentity_ForBothTheSeriesAndTheMatchedIssue()
+    {
+        // docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md §2.7 - CE persists a
+        // durable comicvine_issue/comicvine_volume link on every scraped book; Paperbunkr had none.
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchJson, SingleIssueSearchJson, IssueDetailsJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
+
+        using PaperbunkrDbContext context = CreateDbContext();
+        Issue saved = context.Issues.Single(i => i.Id == 1);
+        var seriesExternalId = context.ComicMetadataExternalIds.Single(e => e.EntityKind == ComicMetadataEntityKind.Series);
+        Assert.Equal(saved.SeriesId, seriesExternalId.EntityId);
+        Assert.Equal(ComicProvider.ComicVine, seriesExternalId.Provider);
+        var issueExternalId = context.ComicMetadataExternalIds.Single(e => e.EntityKind == ComicMetadataEntityKind.Issue);
+        Assert.Equal(saved.Id, issueExternalId.EntityId);
+        Assert.Equal("555", issueExternalId.ExternalId);   // IssueDetailsJson's own "id":555
     }
 
     [Fact]
@@ -700,9 +931,9 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         var settings = new ScrapeSettings { AutoChooseTopMatch = true };
         var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
 
-        int applied = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
 
-        Assert.Equal(1, applied);
+        Assert.Equal(1, result.Applied);
         using PaperbunkrDbContext context = CreateDbContext();
         Issue saved = context.Issues.Single(i => i.Id == 1);
         Assert.Equal("DC Comics", saved.Publisher); // volume-level field still applied
@@ -721,9 +952,9 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         var settings = new ScrapeSettings { AutoChooseTopMatch = true };
         var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
 
-        int applied = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
 
-        Assert.Equal(1, applied);
+        Assert.Equal(1, result.Applied);
         using PaperbunkrDbContext context = CreateDbContext();
         Assert.Equal("DC Comics", context.Issues.Single(i => i.Id == 1).Publisher);
     }
@@ -782,9 +1013,39 @@ public sealed class ScrapeOrchestratorTests : IDisposable
 
         await orchestrator.ScrapeAsync(
             new[] { issue1, issue2 }, isInteractive: true, null, CreateDbContext,
-            onProgress: (total, index, issue) => progress.Add((total, index, issue.Id)));
+            onProgress: (phase, total, index, issue, bookLabel) => progress.Add((total, index, issue.Id)));
 
         Assert.Equal(new[] { (2, 1, 1), (2, 2, 2) }, progress);
+    }
+
+    [Fact]
+    public async Task ScrapeDelayMs_waits_between_books_but_never_before_the_first_or_after_the_last()
+    {
+        // scrapeengine.py:231-235 (verified) - "wait for the scrape delay to pass after scraping each
+        // book...don't do this for...the first book". Asserts via DelayInvocationCount, not wall-clock
+        // duration - a real-time assertion here was flaky under a full parallel test-suite run's own
+        // CPU/thread-pool contention (confirmed live: a configured 200ms delay measured as 148 real
+        // seconds elapsed under that load, nothing to do with this feature's own correctness).
+        var issue1 = MakeIssue();
+        var issue2 = new Issue { Id = 2, SeriesId = 1, Number = "4", FilePath = "book2.cbz" };
+        Seed(issue1);
+        using (PaperbunkrDbContext context = CreateDbContext())
+        {
+            context.Issues.Add(issue2);
+            context.SaveChanges();
+        }
+
+        var comicVine = Cv(new FakeHttpMessageHandler(
+            VolumeSearchJson, EmptyIssueSearchJson, VolumeSearchJson, EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+        ScrapeOrchestrator.DelayInvocationCount = 0;
+
+        await orchestrator.ScrapeAsync(new[] { issue1, issue2 }, isInteractive: true, null, CreateDbContext);
+
+        // One delay for two books - before the 2nd, none before the 1st or after the 2nd.
+        Assert.Equal(1, ScrapeOrchestrator.DelayInvocationCount);
     }
 
     [Fact]
@@ -798,14 +1059,14 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         var settings = new ScrapeSettings { AutoChooseTopMatch = false, ConfirmIssueMatch = true };
         var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
 
-        int applied = await orchestrator.ScrapeAsync(
+        var result = await orchestrator.ScrapeAsync(
             new[] { issue }, isInteractive: true,
             (_, _, candidates, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(candidates[0].Volume),
             CreateDbContext,
             interactiveIssueReview: (_, _, issues, autoMatched, _) =>
                 Task.FromResult(ComicVineIssueReviewResult.Confirmed(autoMatched ?? issues[0])));
 
-        Assert.Equal(1, applied);
+        Assert.Equal(1, result.Applied);
         using PaperbunkrDbContext context = CreateDbContext();
         Assert.Equal("The Beginning", context.Issues.Single(i => i.Id == 1).Title);
     }
@@ -821,13 +1082,13 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         var settings = new ScrapeSettings { AutoChooseTopMatch = false, ConfirmIssueMatch = true };
         var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
 
-        int applied = await orchestrator.ScrapeAsync(
+        var result = await orchestrator.ScrapeAsync(
             new[] { issue }, isInteractive: true,
             (_, _, candidates, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(candidates[0].Volume),
             CreateDbContext,
             interactiveIssueReview: (_, _, _, _, _) => Task.FromResult(ComicVineIssueReviewResult.Skipped));
 
-        Assert.Equal(1, applied);
+        Assert.Equal(1, result.Applied);
         using PaperbunkrDbContext context = CreateDbContext();
         Issue saved = context.Issues.Single(i => i.Id == 1);
         Assert.Equal("DC Comics", saved.Publisher);
@@ -847,7 +1108,7 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         int seriesReviewCalls = 0;
         int issueReviewCalls = 0;
 
-        int applied = await orchestrator.ScrapeAsync(
+        var result = await orchestrator.ScrapeAsync(
             new[] { issue }, isInteractive: true,
             (_, _, candidates, _, _) =>
             {
@@ -862,7 +1123,7 @@ public sealed class ScrapeOrchestratorTests : IDisposable
                 return Task.FromResult(ComicVineIssueReviewResult.WentBack);
             });
 
-        Assert.Equal(0, applied);
+        Assert.Equal(0, result.Applied);
         Assert.Equal(2, seriesReviewCalls);
         Assert.Equal(1, issueReviewCalls); // the 2nd series pass never reaches the issue dialog (chosen is null)
     }
@@ -902,5 +1163,635 @@ public sealed class ScrapeOrchestratorTests : IDisposable
 
         using PaperbunkrDbContext context = CreateDbContext();
         Assert.Equal("The Beginning", context.Issues.Single(i => i.Id == 1).Title);
+    }
+
+    // Cover-hash auto-match safety gate (docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-
+    // plan.md Step 11 verify section) - exercises PassesCoverHashGateAsync end-to-end through
+    // ScrapeAsync, not just CoverPerceptualHash in isolation. Swaps the static ScrapeOrchestrator.
+    // CoverHttp test seam for a fake handler returning canned image bytes, and getCoverPath for a temp
+    // file, so no live network or real cover cache is involved. Fixture images mirror
+    // CoverPerceptualHashTests' own tonal-split/tonal-inverse pattern (a solid color hashes near-
+    // identically regardless of actual color under average-hash, so a flat fixture proves nothing).
+
+    private static byte[] TopLightBottomDarkCover(int size = 64)
+    {
+        using var image = new Image<Rgba32>(size, size);
+        var light = new Rgba32(240, 240, 240);
+        var dark = new Rgba32(15, 15, 15);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                image[x, y] = y < size / 2 ? light : dark;
+            }
+        }
+
+        using var stream = new MemoryStream();
+        image.SaveAsPng(stream);
+        return stream.ToArray();
+    }
+
+    private static byte[] BottomLightTopDarkCover(int size = 64)
+    {
+        using var image = new Image<Rgba32>(size, size);
+        var light = new Rgba32(240, 240, 240);
+        var dark = new Rgba32(15, 15, 15);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                image[x, y] = y < size / 2 ? dark : light;
+            }
+        }
+
+        using var stream = new MemoryStream();
+        image.SaveAsPng(stream);
+        return stream.ToArray();
+    }
+
+    private const string VolumeSearchWithImageJson =
+        """
+        {"status_code":1,"error":"OK","results":[{"id":1,"name":"Batman","start_year":"1990","publisher":{"name":"DC Comics"},"count_of_issues":50,"image":{"medium_url":"http://fake.test/cover.png"}}]}
+        """;
+
+    [Fact]
+    public async Task Cover_hash_gate_passes_and_auto_applies_without_review_when_covers_match()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        string localCoverPath = Path.Combine(_testRoot, "local-cover.png");
+        File.WriteAllBytes(localCoverPath, TopLightBottomDarkCover());
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchWithImageJson, EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings, getCoverPath: _ => localCoverPath);
+        HttpClient original = ScrapeOrchestrator.CoverHttp;
+        ScrapeOrchestrator.CoverHttp = new HttpClient(new FakeImageHttpMessageHandler(TopLightBottomDarkCover()));
+        bool reviewCalled = false;
+
+        ScrapeBatchResult result;
+        try
+        {
+            result = await orchestrator.ScrapeAsync(
+                new[] { issue }, isInteractive: true,
+                (_, _, _, _, _) => { reviewCalled = true; return Task.FromResult<ComicVineVolumeSearchResult?>(null); },
+                CreateDbContext);
+        }
+        finally
+        {
+            ScrapeOrchestrator.CoverHttp = original;
+        }
+
+        Assert.Equal(1, result.Applied);
+        Assert.False(reviewCalled);
+        using PaperbunkrDbContext context = CreateDbContext();
+        Assert.Equal("DC Comics", context.Issues.Single(i => i.Id == 1).Publisher);
+    }
+
+    [Fact]
+    public async Task Cover_hash_gate_fails_and_falls_through_to_interactive_review_when_covers_mismatch()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        string localCoverPath = Path.Combine(_testRoot, "local-cover.png");
+        File.WriteAllBytes(localCoverPath, TopLightBottomDarkCover());
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchWithImageJson, EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings, getCoverPath: _ => localCoverPath);
+        HttpClient original = ScrapeOrchestrator.CoverHttp;
+        ScrapeOrchestrator.CoverHttp = new HttpClient(new FakeImageHttpMessageHandler(BottomLightTopDarkCover()));
+        bool reviewCalled = false;
+
+        ScrapeBatchResult result;
+        try
+        {
+            result = await orchestrator.ScrapeAsync(
+                new[] { issue }, isInteractive: true,
+                (_, _, _, _, _) => { reviewCalled = true; return Task.FromResult<ComicVineVolumeSearchResult?>(null); },
+                CreateDbContext);
+        }
+        finally
+        {
+            ScrapeOrchestrator.CoverHttp = original;
+        }
+
+        // The gate failing falls through to interactive review exactly as if AutoChooseTopMatch were
+        // off for this one book (design doc §2.1) - it doesn't mean "no match," it means "don't trust
+        // this one without a human looking at it." The review here declines (returns null), so the
+        // book is skipped, not force-applied.
+        Assert.True(reviewCalled);
+        Assert.Equal(0, result.Applied);
+    }
+
+    [Fact]
+    public async Task Cover_hash_gate_fails_and_skips_silently_in_a_non_interactive_run()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        string localCoverPath = Path.Combine(_testRoot, "local-cover.png");
+        File.WriteAllBytes(localCoverPath, TopLightBottomDarkCover());
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchWithImageJson, EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings, getCoverPath: _ => localCoverPath);
+        HttpClient original = ScrapeOrchestrator.CoverHttp;
+        ScrapeOrchestrator.CoverHttp = new HttpClient(new FakeImageHttpMessageHandler(BottomLightTopDarkCover()));
+
+        ScrapeBatchResult result;
+        try
+        {
+            // Non-interactive - same headless-automation gate every other low-confidence path in
+            // ScrapeAsync already uses: no modal is ever attempted, the book is just skipped-and-logged.
+            result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: false, interactiveReview: null, CreateDbContext);
+        }
+        finally
+        {
+            ScrapeOrchestrator.CoverHttp = original;
+        }
+
+        Assert.Equal(0, result.Applied);
+        using PaperbunkrDbContext context = CreateDbContext();
+        Assert.Null(context.Issues.Single(i => i.Id == 1).Publisher);
+    }
+
+    // Cover gate rebuilt to automatcher.py's real find_series_ref (2026-09-25, found live by the user:
+    // "it barely automatically matches"). The old gate compared a book's cover with the volume's
+    // generic series art - nearly always issue #1's cover - so for any other issue it could not match.
+
+    private const string TwoLookalikeVolumesJson =
+        """
+        {"status_code":1,"error":"OK","results":[
+            {"id":1,"name":"Batman","start_year":"1990","publisher":{"name":"DC Comics"},"count_of_issues":50,"image":{"medium_url":"http://fake.test/series-a.png"}},
+            {"id":2,"name":"Batman","start_year":"1990","publisher":{"name":"DC Comics"},"count_of_issues":6,"image":{"medium_url":"http://fake.test/series-b.png"}}]}
+        """;
+
+    private const string IssueWithOwnCoverJson =
+        """
+        {"status_code":1,"error":"OK","results":[{"id":555,"name":"The Beginning","issue_number":"3","image":{"medium_url":"http://fake.test/issue3.png"}},{"id":556,"name":"Next","issue_number":"4","image":{"medium_url":"http://fake.test/issue4.png"}}]}
+        """;
+
+    private async Task<(ScrapeBatchResult Result, bool ReviewCalled)> RunGateScenario(string number, string[] responses, Func<string, byte[]> imageFor)
+    {
+        var issue = MakeIssue();
+        issue.Number = number;
+        Seed(issue);
+        string localCoverPath = Path.Combine(_testRoot, "local-cover.png");
+        File.WriteAllBytes(localCoverPath, TopLightBottomDarkCover());
+        var orchestrator = new ScrapeOrchestrator(Cv(new FakeHttpMessageHandler(responses)), new ComicVineMatchMemory(CreateDbContext),
+            new ScrapeSettings { AutoChooseTopMatch = true }, getCoverPath: _ => localCoverPath);
+        HttpClient original = ScrapeOrchestrator.CoverHttp;
+        ScrapeOrchestrator.CoverHttp = new HttpClient(new FakeImageHttpMessageHandler(imageFor));
+        bool reviewCalled = false;
+        try
+        {
+            var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true,
+                (_, _, _, _, _) => { reviewCalled = true; return Task.FromResult<ComicVineVolumeSearchResult?>(null); }, CreateDbContext);
+            return (result, reviewCalled);
+        }
+        finally
+        {
+            ScrapeOrchestrator.CoverHttp = original;
+        }
+    }
+
+    [Fact]
+    public async Task CoverGate_ComparesTheBooksOwnIssueCover_NotTheGenericSeriesArt()
+    {
+        // The series art is a different picture from the local file, but issue #3's own cover matches it.
+        var result = await RunGateScenario("3",
+            [TwoLookalikeVolumesJson, IssueWithOwnCoverJson, IssueDetailsJson],
+            url => url.Contains("issue3") ? TopLightBottomDarkCover() : BottomLightTopDarkCover());
+
+        Assert.False(result.ReviewCalled);   // auto-matched: never asked
+        Assert.Equal(1, result.Result.Applied);
+    }
+
+    [Fact]
+    public async Task CoverGate_TpbGuard_BlocksIssueOne_WhenTheTopTwoSeriesHaveLookalikeArt()
+    {
+        // Same picture for both series' art: a trade paperback and a regular #1 can't be told apart.
+        var result = await RunGateScenario("1",
+            [TwoLookalikeVolumesJson, TwoLookalikeVolumesJson],
+            _ => TopLightBottomDarkCover());
+
+        Assert.True(result.ReviewCalled);
+        Assert.Equal(0, result.Result.Applied);
+    }
+
+    [Fact]
+    public async Task CoverGate_TpbGuard_DoesNotApplyToOtherIssueNumbers()
+    {
+        // Identical setup to the test above but issue #3 - CE only runs the guard for a first/unnumbered book.
+        var result = await RunGateScenario("3",
+            [TwoLookalikeVolumesJson, IssueWithOwnCoverJson, IssueDetailsJson],
+            _ => TopLightBottomDarkCover());
+
+        Assert.False(result.ReviewCalled);
+        Assert.Equal(1, result.Result.Applied);
+    }
+
+    // ScrapeBatchResult's four buckets (docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-
+    // design.md §4.1) - one focused test per classification, distinct from the tests above that mostly
+    // care about the *fields written*, not which bucket the outcome landed in.
+
+    [Fact]
+    public async Task BatchResult_NormalApply_LandsOnlyInApplied()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchJson, EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
+
+        Assert.Equal((1, 0, 0, 0), (result.Applied, result.SkippedByUser, result.NoMatchFound, result.Failed));
+    }
+
+    // Per-book outcome detail (docs/superpowers/specs/2026-09-24-scraper-review-tables-and-batch-
+    // summary-design.md §3.1) - the counts above are computed from Outcomes, so these verify the
+    // actual per-book records a batch-summary UI would render: IssueId/BookLabel/Kind/Reason.
+
+    [Fact]
+    public async Task Outcomes_NormalApply_RecordsTheMatchedSeriesNameAsTheReason()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchJson, EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
+
+        var outcome = Assert.Single(result.Outcomes);
+        Assert.Equal(1, outcome.IssueId);
+        Assert.Equal("Batman #3", outcome.BookLabel);
+        Assert.Equal(ScrapeOutcomeKind.Applied, outcome.Kind);
+        Assert.Equal("Matched \"Batman\"", outcome.Reason);
+    }
+
+    [Fact]
+    public async Task Outcomes_SearchThrows_RecordsTheRealExceptionMessage()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(ErrorJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
+
+        var outcome = Assert.Single(result.Outcomes);
+        Assert.Equal(ScrapeOutcomeKind.Failed, outcome.Kind);
+        Assert.False(string.IsNullOrWhiteSpace(outcome.Reason));
+    }
+
+    [Fact]
+    public async Task Outcomes_PermanentSkip_ReasonDistinguishesFromAPlainSkip()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = false };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        // Simulates ScrapeCoordinator.MarkPermanentlySkipped, which the real dialog's
+        // SkipPermanentlyCommand calls synchronously before resolving with null - the orchestrator
+        // has no direct signal of "which kind of skip", so it re-reads this same flag afterward.
+        var result = await orchestrator.ScrapeAsync(
+            new[] { issue }, isInteractive: true,
+            (_, _, _, _, _) =>
+            {
+                using var context = CreateDbContext();
+                context.Issues.Single(i => i.Id == issue.Id).ScrapePermanentlySkipped = true;
+                context.SaveChanges();
+                return Task.FromResult<ComicVineVolumeSearchResult?>(null);
+            },
+            CreateDbContext);
+
+        var outcome = Assert.Single(result.Outcomes);
+        Assert.Equal(ScrapeOutcomeKind.SkippedByUser, outcome.Kind);
+        Assert.Equal("Skipped permanently", outcome.Reason);
+    }
+
+    [Fact]
+    public async Task Outcomes_PlainSkip_ReasonIsJustSkipped()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = false };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        var result = await orchestrator.ScrapeAsync(
+            new[] { issue }, isInteractive: true,
+            (_, _, _, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(null),
+            CreateDbContext);
+
+        var outcome = Assert.Single(result.Outcomes);
+        Assert.Equal(ScrapeOutcomeKind.SkippedByUser, outcome.Kind);
+        Assert.Equal("Skipped", outcome.Reason);
+    }
+
+    [Fact]
+    public async Task BatchResult_UserSkip_LandsOnlyInSkippedByUser()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = false };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        // The review dialog's own "Skip this book" button resolves with null (ComicVineMatchReview
+        // DialogViewModel.Skip()) - a real human decision, distinct from a search that found nothing.
+        var result = await orchestrator.ScrapeAsync(
+            new[] { issue }, isInteractive: true,
+            (_, _, _, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(null),
+            CreateDbContext);
+
+        Assert.Equal((0, 1, 0, 0), (result.Applied, result.SkippedByUser, result.NoMatchFound, result.Failed));
+    }
+
+    [Fact]
+    public async Task BatchResult_EmptySearch_LandsOnlyInNoMatchFound()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(EmptyIssueSearchJson)); // an empty results array - a genuine "nothing found", not a thrown failure
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
+
+        Assert.Equal((0, 0, 1, 0), (result.Applied, result.SkippedByUser, result.NoMatchFound, result.Failed));
+    }
+
+    [Fact]
+    public async Task BatchResult_SearchThrows_LandsOnlyInFailed_NotNoMatchFound()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        // status_code 100 (not 1, and not a retried transient failure - ComicVineClient.RetryDelay's
+        // own contract only retries a genuine transport/parse failure) - a real thrown ComicVineException,
+        // distinguishable from a search that succeeded and came back empty.
+        var comicVine = Cv(new FakeHttpMessageHandler(ErrorJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
+
+        Assert.Equal((0, 0, 0, 1), (result.Applied, result.SkippedByUser, result.NoMatchFound, result.Failed));
+    }
+
+    // CE's real manual-search fallback (scrapeengine.py:262-266, verified) - "no series could be
+    // found using the current (automatic or manual) search terms...force the user to choose the
+    // search terms." An auto-choose run whose automatic search comes back empty falls through to the
+    // interactive dialog instead of silently skipping, as long as a human is actually there to ask.
+
+    [Fact]
+    public async Task EmptySearch_WithAutoChooseOn_FallsThroughToInteractiveReview_WhenTheUserPicksAMatch()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        var picked = new ComicVineVolumeSearchResult(1, "Batman", "1990", "DC Comics", 50, null);
+        var comicVine = Cv(new FakeHttpMessageHandler(EmptyIssueSearchJson, EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+        bool reviewCalled = false;
+
+        var result = await orchestrator.ScrapeAsync(
+            new[] { issue }, isInteractive: true,
+            (_, _, candidates, _, _) =>
+            {
+                reviewCalled = true;
+                Assert.Empty(candidates); // the automatic search really did find nothing - an empty list reaches the dialog, not a skip
+                return Task.FromResult<ComicVineVolumeSearchResult?>(picked);
+            },
+            CreateDbContext);
+
+        Assert.True(reviewCalled);
+        Assert.Equal((1, 0, 0, 0), (result.Applied, result.SkippedByUser, result.NoMatchFound, result.Failed));
+        using PaperbunkrDbContext context = CreateDbContext();
+        Assert.Equal("DC Comics", context.Issues.Single(i => i.Id == 1).Publisher);
+    }
+
+    [Fact]
+    public async Task EmptySearch_WithAutoChooseOn_FallsThroughToInteractiveReview_WhenTheUserDeclines()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+        bool reviewCalled = false;
+
+        var result = await orchestrator.ScrapeAsync(
+            new[] { issue }, isInteractive: true,
+            (_, _, _, _, _) => { reviewCalled = true; return Task.FromResult<ComicVineVolumeSearchResult?>(null); },
+            CreateDbContext);
+
+        Assert.True(reviewCalled);
+        Assert.Equal((0, 1, 0, 0), (result.Applied, result.SkippedByUser, result.NoMatchFound, result.Failed));
+    }
+
+    [Fact]
+    public async Task EmptySearch_WithAutoChooseOn_NonInteractive_StillJustSkips_NoDialogEverAttempted()
+    {
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        // CE never had a headless mode - this preserves Paperbunkr's own existing headless-automation
+        // gate rather than ever attempting a modal on an unattended run.
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: false, interactiveReview: null, CreateDbContext);
+
+        Assert.Equal((0, 0, 1, 0), (result.Applied, result.SkippedByUser, result.NoMatchFound, result.Failed));
+    }
+
+    // Two-phase auto-choose (2026-09-25, found live by the user, verified against scrapeengine.py's
+    // real __scrape/__scrape_book): CE never interrupts an auto-choose batch to ask about a book its
+    // own automatcher couldn't confidently resolve - it defers that one book to the end of the
+    // worklist (BookStatus("DELAYED")) and keeps auto-matching everything else first, only
+    // interactively resolving the deferred books once the whole batch's automatic pass is done. The
+    // earlier EmptySearch_WithAutoChooseOn_* tests above only ever scraped a single book, so they
+    // couldn't distinguish "falls through immediately" from "gets deferred, then reviewed at the end" -
+    // both look identical with nothing else in the batch to interleave with.
+
+    [Fact]
+    public async Task TwoPhaseAutoChoose_DefersUnmatchedBooksToTheEnd_InsteadOfInterruptingTheBatch()
+    {
+        var series = new Series { Id = 1, Name = "Batman" };
+        var bookA = new Issue { Id = 1, SeriesId = 1, Series = series, Number = "1", FilePath = "a.cbz" };
+        var bookB = new Issue { Id = 2, SeriesId = 1, Number = "2", FilePath = "b.cbz" };
+        var bookC = new Issue { Id = 3, SeriesId = 1, Number = "3", FilePath = "c.cbz" };
+        Seed(bookA);
+        using (var context = CreateDbContext())
+        {
+            // No .Series navigation on bookB/bookC here - EF's Add() cascades to any reachable,
+            // not-yet-tracked entity, and the shared in-memory `series` object would collide with the
+            // one bookA's own Seed() already wrote under the same Id. Set on the in-memory objects
+            // below instead, purely for ScrapeAsync's own issue.Series?.Name read - never re-saved.
+            context.Issues.Add(bookB);
+            context.Issues.Add(bookC);
+            context.SaveChanges();
+        }
+
+        bookB.Series = series;
+        bookC.Series = series;
+
+        var comicVine = Cv(new FakeHttpMessageHandler(
+            VolumeSearchJson, EmptyIssueSearchJson,    // book A: auto-matches cleanly
+            EmptyIssueSearchJson,                      // book B: phase-1 auto-match attempt finds nothing -> deferred, no dialog yet
+            VolumeSearchJson, EmptyIssueSearchJson,    // book C: auto-matches cleanly, never blocked on book B
+            EmptyIssueSearchJson));                    // book B: phase-2 fresh search, now shown to the dialog
+
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        var reviewedLabels = new List<string>();
+        var result = await orchestrator.ScrapeAsync(
+            new[] { bookA, bookB, bookC }, isInteractive: true,
+            (label, query, candidates, search, ct) => { reviewedLabels.Add(label); return Task.FromResult<ComicVineVolumeSearchResult?>(null); },
+            CreateDbContext);
+
+        // Only the one unmatched book ever reached a dialog - A and C never did.
+        Assert.Equal(new[] { "Batman #2" }, reviewedLabels);
+
+        // Outcome order proves A and C applied without ever waiting on B: both Applied entries land
+        // before B's Skipped one, which is only recorded once the deferred/Reviewing pass runs.
+        Assert.Equal(
+            new[] { (1, ScrapeOutcomeKind.Applied), (3, ScrapeOutcomeKind.Applied), (2, ScrapeOutcomeKind.SkippedByUser) },
+            result.Outcomes.Select(o => (o.IssueId, o.Kind)).ToArray());
+    }
+
+    [Fact]
+    public async Task TwoPhaseAutoChoose_ReportsProgress_AutoMatchingThenSeparatelyReviewing()
+    {
+        var series = new Series { Id = 1, Name = "Batman" };
+        var bookA = new Issue { Id = 1, SeriesId = 1, Series = series, Number = "1", FilePath = "a.cbz" };
+        var bookB = new Issue { Id = 2, SeriesId = 1, Number = "2", FilePath = "b.cbz" };
+        Seed(bookA);
+        using (var context = CreateDbContext())
+        {
+            context.Issues.Add(bookB);
+            context.SaveChanges();
+        }
+
+        bookB.Series = series;
+
+        var comicVine = Cv(new FakeHttpMessageHandler(
+            VolumeSearchJson, EmptyIssueSearchJson, // book A auto-matches
+            EmptyIssueSearchJson,                   // book B phase-1 attempt: nothing found, deferred
+            EmptyIssueSearchJson));                 // book B phase-2 fresh search
+
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        var progress = new List<(ScrapePhase Phase, int Total, int Index, int IssueId)>();
+        await orchestrator.ScrapeAsync(
+            new[] { bookA, bookB }, isInteractive: true,
+            (_, _, _, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(null),
+            CreateDbContext,
+            onProgress: (phase, total, index, issue, bookLabel) => progress.Add((phase, total, index, issue.Id)));
+
+        // The Reviewing phase gets its own separate 1-based count (1 of 1), not a continuation of the
+        // AutoMatching phase's count (which would have made it "3 of 2" - nonsensical).
+        Assert.Equal(new[]
+        {
+            (ScrapePhase.AutoMatching, 2, 1, 1),
+            (ScrapePhase.AutoMatching, 2, 2, 2),
+            (ScrapePhase.Reviewing, 1, 1, 2),
+        }, progress);
+    }
+
+    [Fact]
+    public async Task TwoPhaseAutoChoose_NeverDefers_WhenNothingWouldCatchItLater()
+    {
+        // Guards the allowDefer gate itself: a genuinely single-phase auto-choose run (no interactive
+        // reviewer at all) must keep its old immediate-skip behavior, never silently defer a book that
+        // nothing would ever come back to resolve.
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        // isInteractive is true but no reviewer is supplied - same as ScrapeCoordinator would never
+        // actually do, but the orchestrator itself must not assume one exists.
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, interactiveReview: null, CreateDbContext);
+
+        Assert.Equal((0, 0, 1, 0), (result.Applied, result.SkippedByUser, result.NoMatchFound, result.Failed));
+    }
+
+    // Step 16's "permanently skip" marker (docs/superpowers/specs/2026-09-24-comicvine-scraper-
+    // fidelity-plan.md) - CE's real book.skip_forever() (comicbook.py:109, verified): a marked book is
+    // silently excluded from every future scrape, interactive or unattended, without even a search
+    // attempt - not just "skipped this one time" like a plain Skip.
+
+    [Fact]
+    public async Task PermanentlySkippedIssue_IsExcludedEntirely_NoSearchEverAttempted()
+    {
+        var issue = MakeIssue();
+        issue.ScrapePermanentlySkipped = true;
+        Seed(issue);
+        var handler = new FakeHttpMessageHandler(VolumeSearchJson, EmptyIssueSearchJson); // would match cleanly if ever reached
+        var comicVine = Cv(handler);
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, isInteractive: true, null, CreateDbContext);
+
+        Assert.Equal((0, 0, 1, 0), (result.Applied, result.SkippedByUser, result.NoMatchFound, result.Failed));
+        Assert.Empty(handler.RequestedUrls); // no search, no issue lookup - nothing was ever attempted
+        using PaperbunkrDbContext context = CreateDbContext();
+        Assert.Null(context.Issues.Single(i => i.Id == 1).Publisher);
+    }
+
+    [Fact]
+    public async Task PermanentlySkippedIssue_DoesNotBlockOtherBooksInTheSameBatch()
+    {
+        // Both issues share one Series object added in a single SaveChanges - splitting this across
+        // two CreateDbContext() calls (this file's usual Seed() + a second Add()) would make EF try to
+        // insert the same already-saved Series a second time, since a fresh context has no tracking
+        // history for it even when the in-memory C# object reference is identical.
+        var series = new Series { Id = 1, Name = "Batman" };
+        var skipped = new Issue { Id = 1, SeriesId = 1, Series = series, Number = "3", FilePath = "book.cbz", ScrapePermanentlySkipped = true };
+        var normal = new Issue { Id = 2, SeriesId = 1, Series = series, Number = "4", FilePath = "book2.cbz" };
+        using (PaperbunkrDbContext context = CreateDbContext())
+        {
+            context.Series.Add(series);
+            context.Issues.AddRange(skipped, normal);
+            context.SaveChanges();
+        }
+
+        var comicVine = Cv(new FakeHttpMessageHandler(VolumeSearchJson, EmptyIssueSearchJson));
+        var matchMemory = new ComicVineMatchMemory(CreateDbContext);
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        var orchestrator = new ScrapeOrchestrator(comicVine, matchMemory, settings);
+
+        var result = await orchestrator.ScrapeAsync(new[] { skipped, normal }, isInteractive: true, null, CreateDbContext);
+
+        Assert.Equal((1, 0, 1, 0), (result.Applied, result.SkippedByUser, result.NoMatchFound, result.Failed));
+        using PaperbunkrDbContext context2 = CreateDbContext();
+        Assert.Null(context2.Issues.Single(i => i.Id == 1).Publisher);       // permanently skipped - untouched
+        Assert.Equal("DC Comics", context2.Issues.Single(i => i.Id == 2).Publisher); // the other book still applied normally
     }
 }

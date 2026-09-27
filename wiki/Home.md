@@ -21,6 +21,7 @@ Your library and settings never leave your machine: no cloud, no account.
 - **[Getting Comics Automatically](Getting-Comics-Automatically)** — a want-list, weekly pull list, Prowlarr and qBittorrent
 - **[Smart Lists](Smart-Lists)** — saved rule-based views
 - **[Reading Lists](Reading-Lists)** — hand-curated and imported (CBL/CSV) lists
+- **[Comparing Duplicates](Comparing-Duplicates)** — two copies of a comic side by side or flickering, pick the better scan
 - **[Home Dashboard & Recommendations](Home-Dashboard-and-Recommendations)**
 - **[Story Events & Relations](Story-Events-and-Relations)**
 

@@ -23,20 +23,50 @@ public enum ReadingContextKind
 /// One place that answers "what comes before/after this issue, and where does it sit" for the comic
 /// reader (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-design.md §1). Replaces the
 /// reader VM's private adjacent-issue query. Paging order follows the reading list the reader was
-/// opened from, else series order - it never silently switches to Event order. <see cref="ResolveContext"/>
-/// is the separate, display-only lookup behind the context strip. Continuity is deliberately not used:
-/// it is series-level (<see cref="ContinuityMembership"/>) and defines no issue order.
+/// opened from, else the Story Event it was explicitly opened from (the Event Map, docs/superpowers/specs/
+/// 2026-09-25-event-map-design.md §5), else series order - it follows Event order only when the reader was
+/// explicitly opened from one. <see cref="ResolveContext"/> is the separate, display-only lookup behind the
+/// context strip. Continuity is deliberately not used: it is series-level (<see cref="ContinuityMembership"/>)
+/// and defines no issue order.
 /// </summary>
 public static class ReadingOrderResolver
 {
     /// <summary>
     /// Step to the next (<paramref name="forward"/>) or previous issue. With a <paramref name="readingListId"/>
     /// this walks that list's <c>SortOrder</c> across series, skipping missing files and stopping at the
-    /// list boundary with no fallback to series order; otherwise it walks the series by issue number.
+    /// list boundary with no fallback to series order. With a <paramref name="storyEventId"/> (and no list) it
+    /// does the same over the event's memberships by <c>(Position, Id)</c>. Otherwise it walks the series by
+    /// issue number. The two anchors are mutually exclusive; if both are passed the reading list wins.
     /// </summary>
-    public static ReadingOrderStep? ResolveNeighbour(PaperbunkrDbContext context, int issueId, int? seriesId, int? readingListId, bool forward)
+    public static ReadingOrderStep? ResolveNeighbour(PaperbunkrDbContext context, int issueId, int? seriesId, int? readingListId, bool forward, int? storyEventId = null)
     {
         int step = forward ? 1 : -1;
+
+        if (readingListId is null && storyEventId is int eventId)
+        {
+            var members = context.EventMemberships
+                .Where(m => m.StoryEventId == eventId)
+                .Include(m => m.Issue).ThenInclude(i => i!.Series)
+                .Include(m => m.Issue).ThenInclude(i => i!.MetadataProposals)
+                .OrderBy(m => m.Position).ThenBy(m => m.Id)
+                .ToList();
+            int eventIndex = members.FindIndex(m => m.IssueId == issueId);
+            if (eventIndex < 0)
+            {
+                return null;
+            }
+
+            for (int i = eventIndex + step; i >= 0 && i < members.Count; i += step)
+            {
+                if (members[i].Issue is { FileIsMissing: false, Series: not null } candidate)
+                {
+                    string name = context.StoryEvents.Where(e => e.Id == eventId).Select(e => e.Name).FirstOrDefault() ?? "Event";
+                    return new ReadingOrderStep(members[eventIndex].Issue!, candidate, i + 1, members.Count, $"Event: {name}");
+                }
+            }
+
+            return null;
+        }
 
         if (readingListId is int listId)
         {
@@ -89,10 +119,11 @@ public static class ReadingOrderResolver
     }
 
     /// <summary>
-    /// The context the strip describes. The reading list the reader was opened from wins; otherwise
-    /// the Story Event the issue belongs to (lowest event id if several); otherwise none.
+    /// The context the strip describes. The reading list the reader was opened from wins; then the Story
+    /// Event it was explicitly opened from; otherwise the Story Event the issue belongs to (lowest event id
+    /// if several); otherwise none.
     /// </summary>
-    public static ReadingContext? ResolveContext(PaperbunkrDbContext context, int issueId, int? readingListId)
+    public static ReadingContext? ResolveContext(PaperbunkrDbContext context, int issueId, int? readingListId, int? storyEventId = null)
     {
         if (readingListId is int listId)
         {
@@ -106,7 +137,7 @@ public static class ReadingOrderResolver
         }
 
         var membership = context.EventMemberships
-            .Where(m => m.IssueId == issueId)
+            .Where(m => m.IssueId == issueId && (storyEventId == null || m.StoryEventId == storyEventId))
             .OrderBy(m => m.StoryEventId)
             .FirstOrDefault();
         if (membership is null)
@@ -117,7 +148,7 @@ public static class ReadingOrderResolver
         var members = context.EventMemberships
             .Where(m => m.StoryEventId == membership.StoryEventId)
             .Include(m => m.Issue)
-            .OrderBy(m => m.Position)
+            .OrderBy(m => m.Position).ThenBy(m => m.Id)
             .ToList();
         string eventName = context.StoryEvents.Where(e => e.Id == membership.StoryEventId).Select(e => e.Name).FirstOrDefault() ?? "Event";
         return Build(ReadingContextKind.StoryEvent, eventName, members.Select(m => (m.IssueId, m.Issue)).ToList(), issueId);

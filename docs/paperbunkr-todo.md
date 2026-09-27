@@ -26,6 +26,266 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-26, status-line audit across the 2026-09-22 to -25 spec batch):**
+> the user confirmed directly that **Event Map is the only item from this batch not worked on** —
+> every other design doc in it had a stale "not yet implemented"/"draft" status line despite real,
+> uncommitted source already existing. Fixed each doc's own status line in place (see
+> `docs/superpowers/specs/2026-09-2{3,4,5}-*-design.md`) rather than duplicating the detail here.
+> Confirmed built, uncommitted, on-screen check outstanding on all: Insights reading goals/
+> year-in-review recap/recommendations surface/redesign, Metron API utilization (5 phases), ComicVine
+> scraper fidelity, comic reader Performance (steps 1-7), publisher icons + reader textures, reading-
+> list role detection, library organizer audit fixes. **Event Map** (`2026-09-25-event-map-design.md`)
+> remains a draft awaiting review — no plan doc, zero source, confirmed by grep.
+
+> **Manual session note (2026-09-24, ComicVine scraper fidelity audit — uncommitted, working tree
+> shared with other concurrent sessions):** the user supplied the real, original ComicRack CE
+> "ComicVine Scraper" plugin source (`ComicVineScraper-1.0.102.crplugin`, extracted for direct
+> reading) and asked for a fidelity audit against Paperbunkr's own C# port, since prior design docs'
+> claims hadn't been checked against the real plugin. The audit found a real correctness bug (the
+> Imprint/Publisher write logic) plus a genuinely missing safety mechanism (CE's perceptual-cover-
+> hash confirmation gate before an unattended auto-match ever applies). Design + plan:
+> `docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-{design,plan}.md` (4 phases, 17
+> steps). **Phases 1-3 (Steps 1-13) and Phase 4 Steps 14-16 all built and unit-tested this session:**
+> - **Phase 1 (correctness):** Imprint/Publisher bug fixed; match-scoring apostrophe/underscore/
+>   giant-sized/king-sized/one-shot canonicalization; fractional issue-number `BookScore`; out-of-
+>   range-year handling; ComicVine **and** Metron clients both gained a real retry-once on transient
+>   failure (2500ms, test-seam `RetryDelay`); person-credit role mapping now fans out every
+>   comma-separated role (e.g. "artist" → Penciller **and** Inker) instead of just the first match.
+> - **Phase 2 (safety):** the real cover-hash auto-match gate, via `CoenM.ImageSharp.ImageHash`'s
+>   `AverageHash` (matching CE's own real algorithm, verified) — pinned `SixLabors.ImageSharp` to
+>   2.1.13 to dodge several CVEs the transitive floor version carried. A gate failure falls through
+>   to interactive review (or skip-and-log, unattended) exactly like `AutoChooseTopMatch` being off
+>   for that one book. ComicVine identity (series+issue) now persists durably via the existing
+>   `ComicMetadataExternalId` table (extended with `Issue`/`Series` kinds), not new columns.
+> - **Phase 3 (settings):** `ConvertImprints`/`ForceSeriesArt`/`ShowCovers`/`ScrapeDelayMs`/
+>   `PublisherAliases` added and wired into real behavior (imprint off-behavior, the match dialog's
+>   cover pane falling back to the specific issue's own cover via a new `FindIssueCoverUrlAsync`,
+>   cover-thumbnail visibility, a real inter-book delay distinct from the per-request rate limiter),
+>   plus Preferences UI for all five.
+> - **Phase 4 Step 14:** `ScrapeAsync` now returns a `ScrapeBatchResult` (Applied/SkippedByUser/
+>   NoMatchFound/Failed breakdown) instead of a bare int; `ScrapeCoordinator`'s job-result summary
+>   reflects the real breakdown. **Step 15:** the issue-review dialog's candidate list sorts in CE's
+>   real natural order (`utils.py:natural_key`, verified, including unicode-fraction issue numbers
+>   like "5½"), not raw API order. **Step 16:** Ctrl-held Skip in both review dialogs now writes a
+>   durable `Issue.ScrapePermanentlySkipped` marker (migration `AddScrapePermanentlySkipped`) that
+>   excludes the book from every future scrape attempt, interactive or unattended, with no search
+>   even attempted — CE's real `book.skip_forever()`, verified.
+> - **Step 17 (cover-image cycling + alt-cover memory) NOT done, deliberately:** CE's real field is
+>   `associated_images.original_url` on the issue detail response (`cvdb.py`, verified directly), but
+>   a live fetch of ComicVine's own current public API docs today shows **no `associated_images`
+>   field on the Issue resource at all** — it may have been removed/renamed since CE's plugin was
+>   written. Building the parser/UI around an unconfirmed field would be exactly the kind of
+>   assumption this project's own standing rule says not to make; needs a real ComicVine API key and
+>   a live call (or a maintainer of ComicVine's docs) to confirm before this step can be built.
+> **Verified this session:** `Paperbunkr.Data.Tests`' full `ComicVine` subset and
+> `Paperbunkr.App.Tests`' full `Scraper` subset both green after every step, plus two full-suite runs
+> (Data.Tests 1601/1602, App.Tests 3463/3464 — the lone failures in each were pre-existing/unrelated
+> to this work, from other sessions' uncommitted changes already in this shared tree:
+> `RecapResolver.cs`'s remote-opt-in allowlist and `WantedScreenViewModel.Releases.cs`'s own sort
+> test). **Not verified on screen** (no UI automation without permission, and the shared dev DB/
+> working-tree risk noted elsewhere in this file). **Commit caveat:** the `AddScrapePermanentlySkipped`
+> migration was generated against a tree that already had several other sessions' own uncommitted
+> migrations present (`AddLibrarySnapshots`, `AddReadingGoals`, `AddComicMetadataEntities`,
+> `AddMetronScrapeFields`, `AddPhase5MetronItems`) — the migration itself only touches the one new
+> column (confirmed by reading its generated `Up()`/`Down()`), but review the migration ordering at
+> commit time once those other sessions land, rather than assuming this one is safe to commit in
+> isolation right now.
+> **Follow-up same session:** the user pointed out there was no way to scrape a single comic from the
+> Detail screen (only the whole-series panel existed there; the Library screen already had a working
+> per-issue "Scrape…" right-click). Added a "Scrape…" entry to the Detail screen's issue-tile context
+> menu (`DetailIssueContextMenuBuilder`/`DetailTabsViewModel.ScrapeIssue`), mirroring
+> `LibraryScreenViewModel.ScrapeWithComicVine`'s exact selection-union shape and reusing the same
+> `ScrapeCoordinator.ScrapeIssuesAsync`; the shell wiring (`MainViewModel.cs`) reloads the series
+> afterward so the tile reflects whatever the scrape wrote. 692 Detail/Library/Scraper App.Tests pass.
+> Not verified on screen (computer-use permission stays revoked per standing note elsewhere in this
+> project).
+> **Follow-up same session (2026-09-24, review-dialog tables + manual-search fallback + batch
+> summary):** the user's own screenshot of the series-match dialog prompted three more asks, all
+> verified against the real CE plugin source before building: design doc
+> `docs/superpowers/specs/2026-09-24-scraper-review-tables-and-batch-summary-design.md`.
+> - **Sortable tables:** both review dialogs (series-choice, issue-choice) redesigned from the old
+>   card-list ("Best match"/"Other results") into real `Avalonia.Controls.DataGrid` tables with
+>   click-to-sort column headers - CE's own `seriesform.py`/`issueform.py` shape, verified directly.
+>   Series table: Series/Year/Issues/Publisher/Score (Score stays visible - Paperbunkr's own existing
+>   deviation from CE, which hides it). Issue table: Issue#/Title, natural-sorted by default via a new
+>   `NaturalSortKey` on `ComicVineIssueCandidateViewModel` (DataGrid only supports a single
+>   `SortMemberPath` redirect, not a custom comparer, so the natural-sort tuple from Step 15 had to be
+>   collapsed into one ordinal-sortable string). **Caught by its own test, not on screen:** the first
+>   delimiter choice (`|`) sorted *after* lowercase letters, inverting the ordering for an empty vs.
+>   non-empty prefix (e.g. "3" vs "Annual 1") - fixed to U+0001. New dependency:
+>   `Avalonia.Controls.DataGrid` 12.1.1 (needed for the `DataGrid` control type itself); DataGrid
+>   column bindings are always reflection bindings even in this compiled-bindings app (confirmed
+>   Avalonia limitation, isolated to these two views). **Real theming bug caught before shipping, not
+>   on screen:** `Avalonia.Controls.DataGrid`'s own bundled `Themes/Fluent.xaml` targets Avalonia's
+>   *core* `<FluentTheme/>`, and FluentAvaloniaTheme's own docs are explicit that running it alongside
+>   core FluentTheme is unsupported (this app uses FluentAvaloniaTheme, not core FluentTheme) - a live
+>   community report (`github.com/amwx/FluentAvalonia` issue #30) confirms mixing them for DataGrid
+>   specifically causes unresolved-resource/binding-exception failures. Verified two ways rather than
+>   trusting a search result: directly inspecting the installed `FluentAvalonia.dll` (v3.1.0, the exact
+>   version this app references) for its embedded `avares://` resource manifest, which confirmed
+>   FluentAvaloniaUI ships its own bundled DataGrid styling
+>   (`Styling/ControlThemes/BasicControls/DataGrid/DataGridStyles.axaml`); and the Avalonia XAML
+>   compiler itself (`AVLN2000`), which rejected an initial `<StyleInclude>` attempt by reporting the
+>   resource's real type as `Avalonia.Controls.ResourceDictionary` - confirming it needs
+>   `ResourceInclude`/`MergedDictionaries` under `Application.Resources`, not `Styles`. Fixed in
+>   `App.axaml` (wrapped the existing resource block in an explicit `<ResourceDictionary>` so
+>   `MergedDictionaries` could sit alongside the pre-existing bare `<Color>`/`<Brush>` entries -
+>   `Application.Resources` doesn't allow a second top-level content assignment). A full forced rebuild
+>   (`-t:Rebuild`, not incremental - this project's own documented stale-DLL gotcha) confirms 0 errors
+>   with the fix in place.
+> - **Manual-search fallback:** `ScrapeOrchestrator.ScrapeAsync` now falls through to the interactive
+>   review dialog when an auto-choose run's automatic search comes back with zero results (and a
+>   reviewer is available) - CE's own real `scrapeengine.py` behavior ("no series could be
+>   found...force the user to choose the search terms"), verified; Paperbunkr previously just skipped
+>   the book silently in this case, which was the user's actual complaint.
+> - **Batch summary:** `ScrapeBatchResult` restructured from bare counts to a list of
+>   `ScrapeBookOutcome` (IssueId/BookLabel/Kind/Reason) with the four counts now computed properties -
+>   every one of the ~10 counter-increment sites in the orchestrator's batch loop got a real reason
+>   string (exception message for Failed; "Skipped"/"Skipped permanently" for SkippedByUser, the
+>   latter re-checking `Issue.ScrapePermanentlySkipped` right after a skip resolves since the
+>   orchestrator has no other signal which kind just happened). New `ScrapeBatchSummaryDialogView`/
+>   `ViewModel` - a blocking modal at the end of every *interactive* batch (never unattended, matching
+>   the existing headless-automation gate) with 4 count chips plus expandable-by-bucket lists, CE's
+>   real `FinishForm` with a richer breakdown than CE's own plain scraped/skipped pair. Shown via
+>   `ScrapeCoordinator.ScrapeIssuesAsync`, after the batch-progress header closes, not layered above it.
+> **Verified:** 1619/1620 Data.Tests pass (the one failure is the same pre-existing, unrelated
+> `RecapResolver.cs` issue from another concurrent session noted above); full App.Tests suite
+> (3494 tests, re-run after the DataGrid/theme fix, with a `-t:Rebuild` forced full rebuild beforehand
+> per this project's own documented stale-DLL gotcha) - 3493/3494 pass, the one failure the same
+> pre-existing, unrelated `WantedQueueTests` sort issue from another concurrent session. **Not verified
+> on screen** - same standing computer-use constraint; specifically flag whether the two review
+> dialogs' new tables render with proper Fluent styling (not blank/unstyled) the first time either is
+> opened for real, since that's the one piece automated tests can't confirm.
+> **Follow-up same session (2026-09-24, two real bugs found live by the user, both fixed+tested):**
+> - **Whole-series scrape barely applied anything, except whichever issue already had its Number set
+>   directly.** The user found this themselves mid-session ("the scraper cannot detect the issue number
+>   at all... paperbunkr scraper can only detect the issue number when i edit the metadata in-app and
+>   save the exact number"). Two compounding root causes, both in how `ScrapeOrchestrator.ScrapeAsync`
+>   resolved a book's own number for the real `FindByNumber` lookup (`CurrentBookNumber`, the legacy
+>   `ApplyAsync` path, the issue-dialog's `LoadIssueSummariesAsync` all used to call
+>   `issue.EffectiveNumber()` directly):
+>   1. A filename-parsed number is **never written to `Issue.Number` directly** - it always becomes a
+>      `MetadataProposal` row (`LibraryFolderScanner.AddFilenameProposal`), resolved dynamically via
+>      `IssueMetadataExtensions.EffectiveNumber()`. That resolver reads the already-loaded
+>      `issue.MetadataProposals` **in-memory collection** - and none of the scraper's real callers ever
+>      `.Include(i => i.MetadataProposals)` (`ScrapeCoordinator.ScrapeIssuesAsync` loads books via a bare
+>      `.Include(i => i.Series)`), so that collection is always empty at scrape time and
+>      `EffectiveNumber()` silently returns null even when the DB has a perfectly good proposal.
+>   2. `MetadataResolutionPolicy.Prompt` (which would leave the proposal `Pending`) has **no Preferences
+>      toggle to ever reach** - every real library runs under the only reachable policy, `Automatic`,
+>      under which the proposal is created already `Accepted`. So root cause 1 alone was the whole
+>      story for virtually every real user: this was never a Pending-vs-Accepted policy gap, it was an
+>      unloaded-navigation-collection bug that made an already-Accepted number invisible to the scraper.
+>   Editing+saving the issue "worked" only because Issue Properties writes `Issue.Number` directly,
+>   bypassing the whole proposal mechanism (and its unloaded-collection gap) entirely.
+>   Fixed by rewriting the shared resolver (renamed `ResolveEffectiveNumberAndYearAsync`) to read
+>   `MetadataProposal` straight from the database (Accepted preferred, Pending as a secondary fallback
+>   for a book still sitting in Needs Review) instead of ever trusting `issue.EffectiveNumber()`, then
+>   threading that one resolved value through every `FindByNumber` call site instead of each re-deriving
+>   it. Two regression tests, one per root cause -
+>   `PendingNumberProposal_StillResolvesTheRightIssue_ForPerIssueDetails` and
+>   `AcceptedNumberProposal_NotIncludedOnTheLoadedIssue_StillResolvesTheRightIssue` (the realistic one,
+>   matching what every actual user's library looks like) - both confirmed to fail without their
+>   respective fix (manually reverted each in turn, reran red, restored, reran green).
+>   **No rescan needed** - this only changes what the ComicVine *scrape* step reads, not
+>   scanning/import, and the Number proposal this now finds was already sitting in the DB from the
+>   original import. Any issue already scraped once under the old bug (recorded "Applied" but with only
+>   Publisher/Series/Volume-year actually written) needs a plain **re-scrape**, not a rescan, to pick up
+>   the fix and fill in the missing per-issue fields (Title/Summary/credits/dates/genres/...). An issue
+>   whose filename genuinely had no parseable number (no proposal exists at all) still needs its number
+>   typed in by hand, exactly as before - neither this fix nor a rescan invents a number from nothing.
+> - **Detail screen's whole-series scrape panel never refreshed after finishing.** `MainViewModel`
+>   wired `Detail.Tabs.ScraperPanelFactory` straight to `Scraper.CreateSeriesPanel` with no completion
+>   callback at all - unlike the single-issue scrape action above it, which explicitly reloads. So even
+>   once the number-resolution bug above is fixed, the Issues tab's tiles would still show stale data
+>   until the user navigated away from Detail and back. Gave `CreateSeriesPanel` an optional
+>   `onScraped` callback, wired to `Detail.ReloadCurrentSeries()`, matching the sibling action's
+>   pattern. New test `TheSeriesPanel_InvokesOnScraped_OnceTheBatchFinishes`.
+> - **Also found+fixed while investigating (a crash report the user pasted mid-session):**
+>   `IssueDetailsApplier`'s genre-tag loop checked incoming genres against a `HashSet` snapshot taken
+>   *before* the loop instead of updating it as tags were added, so a ComicVine response that repeats a
+>   genre name (confirmed live: "Super-Hero" twice) wrote two duplicate `IssueTag` rows - no DB
+>   constraint stops it. Didn't crash at scrape time; crashed later, the moment the user opened that
+>   issue's Properties editor and hit Save (`ApplyTagRows`'s `ToDictionary` throwing on the duplicate
+>   key). Fixed the root cause plus hardened both `ApplyTagRows` call sites (Issue Properties and
+>   Reading List Properties - identical fragile pattern, no DB uniqueness constraint on either tag
+>   table) so a pre-existing duplicate can never crash Save again.
+> **Verified:** targeted suites green - Data.Tests ComicVine folder 174/174 (incl. the three new
+> regression tests above), App.Tests `IssuePropertiesScreenViewModelTests`/`ScraperTests`/
+> `ReadingListPropertiesScreenViewModelTests` all pass. Both `Paperbunkr.App`/`Paperbunkr.Data` rebuild
+> with 0 errors. **Not verified on screen** - same standing computer-use constraint; the user's own
+> live reports are what surfaced both bugs, so worth a real re-scrape to confirm before considering
+> this fully closed.
+> **Follow-up same session (2026-09-25, two-phase auto-choose - the user's own observation: "the CE
+> comicvine scraper would keep on going till it's scraped all the matched comics [then] let you sort
+> out the unmatched ones"):** verified directly against `scrapeengine.py`'s real `__scrape`/
+> `__scrape_book` - with auto-choose on, CE never interrupts a batch to ask about a book its own
+> automatcher (`automatcher.py`'s `find_series_ref`, also verified) couldn't confidently resolve. It
+> silently appends that book to the end of its own worklist (`BookStatus("DELAYED")`) and keeps
+> auto-matching everything else; only once the whole original batch has had its automatic shot does it
+> loop back and interactively resolve whatever got set aside. Paperbunkr's earlier "manual-search
+> fallback" (this same file, above) had modeled the wrong CE codepath - the always-immediate
+> `BookStatus("UNSCRAPED")` retry, not the auto-scrape-specific deferred one - so it blocked on a
+> dialog for the very first unmatched book instead of finishing the batch first.
+> - Restructured `ScrapeOrchestrator.ScrapeAsync` into two passes when interactive + auto-choose +
+>   a reviewer are all present: an `AutoMatching` pass over the whole batch (deferring instead of
+>   falling through to a dialog on either failure mode - `find_series_ref` returns "no match" for
+>   both an empty search and a failed cover-hash check, so both defer identically), then a `Reviewing`
+>   pass over just what got deferred, doing a *fresh* search per CE (its automatcher and its later
+>   interactive step are genuinely separate queries, not one cached and replayed for the other) with
+>   no inter-book delay (`delayed_b` skips it in CE too - a dialog's own human-paced interaction
+>   already spaces requests out). A single-phase run (non-interactive, or no reviewer) keeps its
+>   exact old immediate-skip behavior - nothing to come back to would ever resolve a deferred book.
+> - New `ScrapePhase` enum (`Single`/`AutoMatching`/`Reviewing`) threaded through `onProgress` so the
+>   batch header can label the two passes separately - **grilling round: "Two labeled phases"
+>   (Recommended)** - "Auto-matching 4 of 10" then, only if anything was deferred, "Reviewing 2 of 3"
+>   with its own count, rather than CE's own single counter that would visibly shrink when the second
+>   pass starts (looks like a glitch, not a phase change).
+> - **Also fixed while investigating:** the `BookLabel` helper building the review dialogs' own title
+>   text (and a second, separate copy in `ScrapeCoordinator` for the Activity Center job title/batch
+>   header) still called the old, never-fixed `issue.EffectiveNumber()` directly - the user's own
+>   screenshot showed "Red Hulk #" with no number even after the Pending-proposal fix landed, because
+>   that fix only ever touched the *matching* logic, not these two separate display-label call sites.
+>   Both now use the same resolved number as everything else; `ScrapeCoordinator`'s own copy was
+>   deleted in favor of a new public `ScrapeOrchestrator.ResolveBookLabelAsync` one-off entry point.
+> **Verified:** Data.Tests ComicVine folder 177/177 (3 new tests proving the defer-to-end ordering,
+> per-phase progress counts, and that a genuinely single-phase run still never defers), App.Tests
+> `ScraperTests`/`ScraperDialogViewModelTests`/`ScraperScrapeBatchHeaderViewModelTests` 70/70. Both
+> projects rebuild with 0 errors. **A real lesson from a false start**, worth recording: a new
+> `ScraperTests` test hung the test host indefinitely (not flaky - unconditional) because
+> `ScrapeCoordinator`'s own cover-hash gate is *always* active (its constructor's `getCoverPath ??
+> CoverThumbnailService.GetEffectiveCoverPath` fallback means `_getCoverPath is null` is never true
+> for a real coordinator, test or production) - a fake issue with no real decoded cover fails that gate
+> and defers into a genuine `ComicVineMatchReviewDialog` via the real `NativePluginModalHostViewModel`,
+> which nothing in the test ever resolves. Fixed by testing with a zero-issue series (completes
+> instantly via `ScrapeSeriesAsync`'s own "Nothing to scrape" early-out, never touching the modal host)
+> rather than faking a passing cover-hash match. **Not verified on screen** - same standing constraint.
+> **Follow-up same session (2026-09-25, the user's "extensive usage" observations, all verified against
+> the CE plugin source and the user's own fork at `Downloads\comic-vine-scraper`):**
+> - **Punctuation-sensitive search.** The scrape used ComicVine's `filter=name:` (an exact-substring match
+>   capped at 25 results sorted by issue count) where CE uses the fuzzy `/search/?resources=volume` (100
+>   results). Now `IComicVineClient.SearchVolumesFuzzyAsync` (default-implemented, so Metron falls back to
+>   its own search), plus a port of CE's `__cleanup_search_terms` (`SearchTermCleaner`: lowercase, "&" to
+>   "and", noise words, keep only `\w ' : . -`) and its one retry with digits/number words swapped.
+> - **"Barely auto-matches".** CE has no score threshold: it takes the top-scored series and confirms by
+>   comparing the book's cover with that *issue's own* cover (found by number; series art only as a
+>   fallback). Ours compared against the series art (usually #1's cover), so any other issue failed the
+>   gate. Rebuilt to match `find_series_ref`: the TPB-vs-#1 guard now runs only for #1/unnumbered books and
+>   compares top vs 2nd/3rd series art (0.77); the issue lookup is cached per (volume, number) so gate and
+>   apply share it. Not ported: checking an issue's alternate covers (needs `associated_images`).
+> - **Fork fields ported (each its own toggle, on by default; a saved settings row gets them turned on
+>   once via `FieldSetVersion`):** Count (volume issue count - approved, not in CE or the fork),
+>   Main character/team, Series group, Tags from concepts (`concept_credits`), and Story arc order =
+>   StoryArcNumber + AlternateNumber + AlternateCount via `StoryArcOrderResolver` (ComicVine `story_arc`
+>   issue list, sorted store date, cover date, natural number; cached per arc; optional
+>   `arc_overrides.json` in the app data folder, same format as the fork). Correction to an earlier claim:
+>   ComicVine *does* carry this data; CE's own plugin just never used it. Metron gets none of the arc
+>   fields. `StoryArcNumber` is stored but the engine's `ComicInfo` has no such element, so it is not written
+>   into `ComicInfo.xml` (AlternateNumber/AlternateCount/SeriesGroup/MainCharacterOrTeam/Count are).
+>   `ScrapeByIdService` doesn't compute arc order (its own apply path) - the other new fields do apply there.
+> **Verified:** Data.Tests ComicVine + external-id suites 209/209, App.Tests scraper/organize/write-back 86/86,
+> Daemon scrape 9/9; not run against real ComicVine or seen on screen.
+
 > **Manual session note (2026-09-20, Remote/server library sharing built on branch `feat/remote-library-sharing`; **MERGED to master 2026-09-21 (dcaef82, v0.6.9.0) and confirmed on-screen by the user; branch/worktree removed**):** design + plan in
 > `docs/superpowers/specs/2026-09-19-remote-library-sharing-{design,plan}.md`; all phases P0-P5 implemented. **P0** `PAPERBUNKR_DATA_DIR` (`AppDataPaths`, ~17 paths routed through it).
 > **P1** new `Paperbunkr.Sharing` (Kestrel HTTPS server, PBKDF2 password + session tokens + failed-auth lockout, DPAPI-protected self-signed ECDSA cert, paginated JSON
@@ -138,6 +398,213 @@ this file itself already did once (see the note below).
 > field); backlog burn-down (needs a nightly library snapshot); drop-off analysis; period-over-period
 > deltas + sparklines; creator/publisher affinity linked to Wanted; storage/format breakdown;
 > recommendations surface (UI for the backend-only Phase 6a engine); milestones timeline.
+> **Insights pitch, decomposed 2026-09-22 into a 5-item queue** (#9 recommendations surface brought back
+> into scope during the brainstorm, slotted last): 1) #6 period-over-period deltas + sparklines, 2) #4's
+> nightly snapshot table (foundation), 3) #1 year-in-review recap, 4) #2 reading goals/challenges, 5) #9
+> recommendations surface. Each gets its own brainstorm/design/plan cycle.
+> **Slice 1 (#6) — built 2026-09-22** (docs/superpowers/specs/2026-09-22-insights-period-over-period-
+> deltas-{design,plan}.md), uncommitted: delta badge + sparkline on the Stats tab's Finished · range/Pace/
+> Avg to finish tiles, hidden on All time or when history doesn't reach back far enough for a full prior
+> window; also fixed a real bug found in the same session where `AvgDaysToComplete` ignored the range
+> selector entirely (averaged lifetime `RealSpan`s regardless of range). Verified: `StatsResolverTests`
+> (25/25, includes 7 new trend/regression cases), `InsightsChartPolishTests`/`StatsScreenViewModelTests`
+> (both scoped Insights/Stats filters, 32/32 and 40/40 across App.Tests/Data.Tests respectively) — not a
+> full-suite run. **On-screen-checked by the user 2026-09-22:** confirmed the hidden-when-insufficient-
+> history behavior is correct; the user's own library is too young for a full 90-day prior window yet, so
+> the actual delta/sparkline rendering with real numbers won't be visible on their machine until roughly
+> early 2027 — the "hidden" path is what's actually been eyeballed, not the populated one.
+> **Slice 2 (#4's nightly snapshot table + Backlog burn-down card) — built 2026-09-22**
+> (docs/superpowers/specs/2026-09-22-insights-backlog-burndown-{design,plan}.md), uncommitted: new
+> `LibrarySnapshot` table (one row/day, comics-only local backlog counts, migration `AddLibrarySnapshots`
+> scaffolded via the real `dotnet ef` CLI), `LibrarySnapshotService` upsert-by-date write side, wired as the
+> `library-snapshot` scheduled task — the **first real use of the pre-existing but previously-unused
+> `ScheduleMode.DailyAt`** (every other of the app's 14 scheduled tasks uses `Interval`). Read side:
+> `StatsResolver.BurnDownData`/`ComputeBurnDown` (cleared → 7-day history gate → 30-row rolling linear
+> regression, precedence order documented in the design doc), new Backlog burn-down card on the Stats tab
+> with a solid ScottPlot line for real history plus a dashed projected-zero-crossing line (verified real API:
+> `ScottPlot.Plottables.Scatter.LinePattern`/`ScottPlot.LinePattern.Dashed` in the installed 5.1.59).
+> Verified: `dotnet build` clean (0 errors/warnings) on both `Paperbunkr.Data` and `Paperbunkr.App`; scoped
+> test runs — `Paperbunkr.App.Tests` 68/68 (Insights/Stats/Scheduler/LibrarySnapshot filter),
+> `Paperbunkr.Data.Tests` 47/47 (Insights/Stats/LibrarySnapshot filter) — not a full-suite run. **Not
+> checked on screen**: like slice 1, the card needs real `LibrarySnapshot` history to accumulate (minimum 7
+> daily rows) before there's anything to look at, so this is unverifiable visually for about a week from
+> whenever it first starts running.
+> **Slice 3 (#1 year-in-review recap) — built 2026-09-23**
+> (docs/superpowers/specs/2026-09-23-insights-year-in-review-recap-{design,plan}.md), uncommitted: new
+> "Recap" tab on the Insights screen (3-way tab selection alongside Overview/Stats), a calendar-year picker
+> (years with any `ReadingEvent` history, newest first, current year labeled "so far"), a 9-slide paged
+> narrative — items finished, pages read, longest streak (year-scoped, capped at the calendar-year boundary,
+> not `StatsResolver`'s lifetime streak), busiest day (by pages), top series, top writer (comics `Writer` +
+> novel `Author` combined), top artist, highest-rated series, most-reread item — computed by a new
+> `RecapResolver` deliberately separate from `StatsResolver` (incompatible range models: calendar year vs.
+> `InsightsRange`'s rolling windows). No new table, no new scheduled task — purely a read-side query over
+> existing `ReadingEvent`/`Issue`/`Book` data. One-click PNG export of a purpose-built compact poster
+> (`RecapPosterView`, distinct portrait layout from the in-app slides, both skin-reactive per this session's
+> design review — not a fixed "wrapped" palette). **Real gotcha caught before implementation, not after**:
+> the design originally assumed `RenderTargetBitmap.Render` works on a fully detached/unparented control;
+> checking the actual Avalonia docs (`avalonia-docs` MCP) showed this needs a control genuinely attached to
+> a visible window outside the headless test platform, so the poster is instead added to an always-present,
+> zero-opacity `PosterExportHost` panel already inside `InsightsScreen`'s live visual tree for the duration
+> of the render, then removed. Verified: `RecapResolverTests` (13/13, including a year-boundary case and a
+> streak-does-not-cross-year-boundary case using `TimeZoneInfo.ConvertTimeToUtc` for precision regardless of
+> the test machine's local zone), `RecapViewModelTests` (5/5), scoped `Insights|Stats|Recap` filter across
+> both suites (38/38 App.Tests, 58/58 Data.Tests) — not a full-suite run. `dotnet build` clean on both
+> `Paperbunkr.Data` and `Paperbunkr.App`, including a forced fresh compile of the brand-new `RecapPosterView`
+> per this doc's own AVLN2000 build gotcha. **Not checked on screen**: the whole tab, year picker, slide
+> paging, and PNG export are unverified visually — outstanding for the user to check.
+> **Slice 4 (#2 reading goals & challenges) — built 2026-09-23**
+> (docs/superpowers/specs/2026-09-23-insights-reading-goals-{design,plan}.md), uncommitted: first
+> Insights-family slice with real persisted user state — new `ReadingGoal` table (migration
+> `AddReadingGoals`), a `GoalResolver` computing progress + pace against it, goal cards (progress ring +
+> status text) on the Overview tab, a "+ Add goal" create dialog (hosted the same way as every other "New X"
+> dialog in this app — `controls:OverlayShell` at `MainWindow.axaml` level, not a screen-local popup), and
+> live 50%/100% milestone alerts fired from `GoalsViewModel` the moment a `ReadingEvent` crosses a threshold.
+> Goals can be scoped to the whole library, one series, one publisher, or one genre, and to "This year"/"This
+> month"/a custom date range — no auto-renewal; a preset goal whose period ends just stays as history.
+> **Two real corrections found before they shipped as bugs, not guessed at:** (1) the design's original plan
+> to raise a persistent, per-goal-deduped `ActivityAlert` for behind-pace nudges from inside the new
+> `goal-pace-check` scheduled task turned out to be impossible — a scheduled task's `RunAsync` body has no
+> `IActivityService` of its own (no DI container in this app, confirmed via `ScheduledTaskCatalog.cs`'s own
+> comment on the `StoryEventAutodetect` entry) — so behind-pace nudges instead follow every other task in
+> this catalog's own shape: a plain completion-summary toast, not a dismissible alert card. (2) an early XAML
+> draft nested one `ItemsControl`'s own `WrapPanel` inside another `WrapPanel` to combine the goal cards with
+> a static "+ Add goal" tile in one flowing row — caught before it shipped: a nested `WrapPanel` gets measured
+> at infinite width by its parent and never actually wraps internally, so the goal cards would have rendered
+> as one unbounded-width row. Fixed by moving "+ Add goal" into the section header instead of the card flow.
+> Verified: `GoalResolverTests` (11/11), `GoalsViewModelTests` (4/4), `AddReadingGoalsMigrationTests` (1/1),
+> scoped `Insights|Stats|Recap|Goal` filter across both suites (42/42 App.Tests, 70/70 Data.Tests) — not a
+> full-suite run. `dotnet build` clean on `Paperbunkr.Data` and `Paperbunkr.App`, including a forced fresh
+> compile for the two brand-new views (`GoalEditorOverlay`, plus `GoalRing`/`GoalCardViewModel`'s wiring into
+> the already-fresh-compiled `InsightsScreen`) per this doc's own AVLN2000 build gotcha.
+> **On-screen-checked by the user 2026-09-23**: the goal creation flow works end to end (Track/Target/Period/
+> Scope chips, Title auto-suggest, Create) and the resulting card renders correctly on the Overview tab (ring,
+> "0 of 30 · on track" status text). **Real bug found + fixed during this on-screen pass, not before**: the
+> Custom-range period's two date fields were originally `DatePicker` (three separate day/month/year spinner
+> fields), which visibly collided/wrapped when squeezed into a half-width `Grid` column - screenshotted by the
+> user. Swapped to `CalendarDatePicker` (compact single text field + calendar dropdown) fixed the visual
+> collision, but its `SelectedDate` turned out to be `DateTime?` at runtime, not `DateTimeOffset?` as the
+> Avalonia docs' own prose claimed (`CalendarDatePicker` wraps an internal `Calendar` control, which has
+> always used `DateTime?` in both WPF and Avalonia) - a real `System.InvalidCastException` surfaced this
+> immediately on first use, caught and fixed by retyping `GoalEditorViewModel.CustomStart`/`CustomEnd` to
+> `DateTime?` (trusted the runtime exception over the docs' prose, verified rather than re-guessed). **Still
+> not checked on screen**: watching the ring/status update live as a goal progresses, the 50%/100% milestone
+> alerts, goal deletion, the `Series`/`Publisher`/`Genre` scope options, and the behind-pace scheduled task's
+> actual toast.
+> **Slice 5 (#9 recommendations surface) — built 2026-09-23 — closes the Insights pitch queue**
+> (docs/superpowers/specs/2026-09-23-insights-recommendations-surface-{design,plan}.md), uncommitted.
+> **Premise correction found before writing the design, not after**: the pitch's "backend-only, no UI"
+> framing was stale — the Home screen's "Because You Read" module already ships a live UI for
+> `RecommendationResolver`, seeded by recently-*opened* series (`HomeFeedResolver.GetRecentlyOpenedSeriesIds`),
+> shipped 2026-08-23. The real surviving gap, matching the roadmap's actual literal wording (not the todo
+> doc's own paraphrase): a distinct card on the Insights Overview tab seeded by recently-*finished* series,
+> showing the `Explanation` text Home's `PosterTile` rows never display. New `InsightsRecommendationResolver`
+> (no changes to `RecommendationResolver`/`HomeScreenViewModel`/`HomeScreen.axaml` at all) finds the most
+> recently-finished series (falling through up to 5 candidates if needed), excludes anything already in
+> Home's current picks by directly recomputing that same exclusion set from the identical public functions
+> Home itself calls (no real cross-screen coupling), and reuses `SeriesCardSample.FromSeries`/`PosterTile`
+> as-is for the actual tiles — no new entity, no migration, no scheduled task, the smallest of the 5 slices.
+> Verified: `InsightsRecommendationResolverTests` (5/5, including a fall-through-after-exclusion case and an
+> ordering case proving it doesn't just always pick the oldest finish), 1 new `InsightsScreenViewModelTests`
+> case plus assertions added to its existing empty-library case, scoped `Insights|Stats|Recap|Goal|
+> Recommendation` filter across both suites (43/43 App.Tests, 84/84 Data.Tests) — not a full-suite run.
+> `dotnet build` clean on both projects. **Not checked on screen**: the section's actual placement/appearance
+> between READING and Collection health, the explanation captions, click-to-Detail navigation, and whether it
+> visibly avoids duplicating Home's current picks are all unverified visually — outstanding for the user to
+> check. **This closes all 5 items of the 2026-09-22 decomposed Insights pitch queue** (slices 1-5, all built
+> 2026-09-22/23, all uncommitted, all with on-screen verification still outstanding).
+> **Insights section redesign — built 2026-09-23** (design + plan:
+> `docs/superpowers/specs/2026-09-23-insights-redesign-{design,plan}.md`), uncommitted. IA rework, not just a
+> restyle: renamed the three tabs Overview/Stats/Recap -> **Today**/**Trends**/Recap to match what they'd
+> organically become after the five slices above landed. **Today**: a new glow-tier hero row (goal
+> progress + mono readout, continue-reading, top recommendation, all with real cover art via a new shared
+> `CoverThumb` control wrapping `AsyncCoverImage` — not the older synchronous `CoverImageConverter`) replacing
+> the old stacked Goals section + top of Reading; every remaining row that names a series (Almost Done, Dive
+> In, secondary recommendations, Collection health gaps) also gained a cover thumbnail. **Trends**: the same
+> ~15 existing cards regrouped under a pill sub-nav (Activity/Composition/Top Lists), pure display-side
+> partition, no data change; glow deliberately excluded here (reserved for Today's actionable tiles).
+> **Recap**: the three tiles that actually name a coverable item (Top Series, Highest Rated, Most Reread —
+> not "Longest journey", which turned out to be Trends-only and got wrongly conflated with Recap during
+> brainstorming) now show cover art too, both in-app and on the exported poster. Two design-doc assumptions
+> corrected during implementation, not silently dropped: (1) goal/continue-reading hero-tile sparklines cut
+> entirely — no pace-history data source exists without new resolver logic, which was out of scope; (2)
+> `HighlightGroup` (shared by `StatsResolver`/`RecapResolver`) gained two optional `SeriesId`/`IssueId`
+> fields so `RecapViewModel` can resolve a cover for a tied item — a narrow, additive exception to the
+> design's "no resolver changes," left null everywhere the Trends tab constructs the type. Also fixed one
+> real accessibility defect caught by the `avalonia-pro-max/review-checklist` self-review: hero tiles were
+> marked `Focusable="True"` on the wrapping `Border` even where a real inner `Button` was the actual
+> interactive element, creating an inert extra tab-stop — removed. **Verified:** `dotnet build` clean on
+> `Paperbunkr.Data`/`Paperbunkr.App` (including a forced fresh compile for `CoverThumb`, the first new View,
+> per this project's AVLN2000 gotcha); scoped `Insights|Stats|Recap|Goal|Recommendation|Trends` filter, 46/46
+> `Paperbunkr.App.Tests` and 85/85 `Paperbunkr.Data.Tests` — not full-suite runs. **Not checked on screen**:
+> the whole redesign is unverified visually — the hero row's layout/empty-state fallback, the Trends pill
+> sub-nav (including whether ScottPlot charts redraw correctly after a group is hidden then reshown), and
+> every cover-thumbnail placement, all outstanding for the user.
+> **Correction (2026-09-23, same day, on-screen check by the user):** the Trends tab's "Score
+> distribution" chart was found completely broken - `InsightsScreen.axaml.cs`'s `RenderCharts` never
+> called any ratings-chart renderer at all, so the `RatingsChart` `AvaPlot` sat permanently on
+> ScottPlot's default empty-axis range (-10 to 10) regardless of `StatsScreenViewModel.HasRatings`.
+> Pre-existing bug, not introduced by this redesign - just never on-screen-checked closely enough
+> before now. Fixed with a new `RenderRatings` method (same bar-chart shape as the existing
+> `RenderPublicationYear`), wired into `RenderCharts`. Scoped test filter re-run clean (46/46
+> `Paperbunkr.App.Tests`) after the fix; still needs the user's on-screen confirmation that the bars
+> now actually render.
+> **Two more corrections (2026-09-24, on-screen check continued):** (1) every Trends chart's mouse
+> wheel hijacked the page scroll to zoom the individual chart instead - genuinely annoying while
+> scrolling the tab. `AvaPlot.HandleMouseWheelEvent = false` alone does **not** fix this (that flag
+> only controls whether the pointer-wheel event bubbles to the ScrollViewer, not whether ScottPlot's
+> own zoom interaction fires) - confirmed by the user after a first attempted fix still zoomed. The
+> real fix, taken from ScottPlot's own "Plot in a Scroll Viewer" Avalonia demo:
+> `chart.UserInputProcessor.RemoveAll<ScottPlot.Interactivity.UserActionResponses.MouseWheelZoom>()`
+> on all five charts, alongside keeping `HandleMouseWheelEvent = false` so the event still bubbles.
+> (2) The Recap tab's original one-slide-at-a-time card (prev/next, dots) left almost the entire tab
+> empty on a real window - user pushback led to a second grilling round (visual companion, three
+> layout options) and **replacing the whole slideshow with an always-visible 9-tile grid** (Items
+> Finished spans 2 rows in a wider first column; the rest fill a 3-column grid), matching the density
+> the exported poster already had. Removed now-dead `RecapViewModel` slide-paging surface entirely
+> (`CurrentSlideIndex`, `Dots`/`SlideDot`, `NextSlideCommand`/`PreviousSlideCommand`,
+> `CurrentSlideLabel`/`Value`/`CoverKey`) in favor of nine named `*Tile` accessors
+> (`ItemsFinishedTile`, `TopSeriesTile`, etc.) bound directly from the grid - `RecapPosterView`'s
+> export path is untouched, it already read `Tiles` directly rather than the slide index. Verified:
+> `RecapViewModelTests` updated (removed the two now-meaningless slide-navigation tests, adjusted the
+> rest to the named accessors), scoped filter 45/45 `Paperbunkr.App.Tests`; `dotnet build` clean.
+> **Not yet checked on screen**: the new Recap grid layout, the mouse-wheel fix's actual behavior in
+> the running app, and the poster export still matching (it should be untouched, but hasn't been
+> re-exported and looked at since this change).
+> **Library growth chart split (2026-09-24), the real fix behind the legend mess:** root-caused via
+> ScottPlot's own source (`Plot.ShowLegend(Edge)` calls `Axes.AddPanel(...)` and returns a brand-new
+> panel every call; neither `Plot.Clear()` nor `HideLegend()` ever removes a previous one) - every
+> stack-by/range switch had been permanently stacking another legend panel at the chart's bottom edge
+> all session long, which is what the "two different legend boxes" screenshot actually showed. Fixed
+> that leak first (tracked + explicitly removed the panel each render), but the user then asked to
+> split the chart up anyway rather than just fix the leak - **removed the Stack-by toggle (Reading
+> state/Media type/Content rating) entirely**: `StatsScreenViewModel`'s `GrowthStackBy` enum,
+> `GrowthStackByOption`, `SetGrowthStackByCommand` all deleted; `RenderLibraryGrowth` now plots one
+> plain "Total" cumulative line with no legend at all (sidesteps the whole leak class structurally,
+> not just patches it). Composition breakdowns aren't lost - **Content rating gained the same
+> `CategoryDonut` treatment Reading state/Media type already had** (identical
+> `IReadOnlyList<CompositionSlice>` shape, no new binding), so all three composition dimensions now have a
+> consistent donut+list card instead of two donuts plus one bar-only list. Panel height reverted
+> 160->240->160 (240 was compensating for the leak, not a real sizing need once the leak's gone).
+> Verified: `dotnet build` clean (`Paperbunkr.Data` and `Paperbunkr.App`), scoped filter 52/52
+> `Paperbunkr.App.Tests`; confirmed zero remaining `GrowthStackBy` references repo-wide. **Not yet
+> checked on screen**: the single-line growth chart's actual appearance, and whether the new Content
+> rating donut renders correctly with up to 9 categories (more than Reading state's 5 or Media type's
+> handful - `CategoryDonut`'s slice-count ceiling, if it has one, hasn't been checked).
+> **Two more requests (2026-09-24):** (1) Recap is now gated to a 3-day year-end window
+> (Dec 29-31, local time) rather than visible year-round - it's a once-a-year "Wrapped" moment, not a
+> daily-use tab. New `InsightsScreenViewModel.IsRecapAvailable` (backed by a pure, unit-tested
+> `IsWithinYearEndWindow(DateTime)` static) hides the Recap tab button outside the window and guards
+> `SelectRecapTabCommand` directly as a second line of defense. No persistence/timer for a mid-session
+> midnight rollover - out of scope, extremely low-value edge case. (2) The Trends tab's "Library
+> growth" chart panel was found genuinely broken on screen, not just tight: at its old fixed
+> `Height="160"`, the chart's own legend (up to 5 reading-state/media-type/content-rating categories,
+> wrapping to 2 rows in that column width) ate almost the entire panel, squeezing the actual plotted
+> lines into a barely-visible sliver at the top. Bumped to `Height="240"` - the only other chart on
+> this tab with a legend of comparable size. Verified: 7 new `InsightsScreenViewModelTests` cases
+> (year-end window theory cases + command-guard cases), scoped filter 52/52 `Paperbunkr.App.Tests`;
+> `dotnet build` clean. **Not yet checked on screen**: whether 240 is actually enough room for the
+> Library growth legend + chart together, and that the Recap tab button correctly disappears/
+> reappears (can't be verified live without changing the system clock).
 > **Comic reader pitch, slice A "Flow & defaults" — built 2026-09-21 (uncommitted; on-screen check by the
 > user outstanding):** series-level fit-mode/auto-rotate defaults (`Series.PageFitModeOverride`/
 > `AutoRotateOverride`, migration `AddSeriesReaderDefaults`, "Apply to series" in the reader's fit flyout and
@@ -148,6 +615,89 @@ this file itself already did once (see the note below).
 > `Paperbunkr.Data.Tests` 1493 passed/0 failed (both with `--blame`). An earlier plain full run of each aborted with
 > "Test host process crashed" (App after 3068 passing, Data with no detail) and did not reproduce; a clean-HEAD Data run
 > also passed, so treat it as an intermittent host crash of unknown cause. Not built: #16 (needs the Cosmetics scrubber), #19 (slice F). Slices B–H not started.
+> **Comic reader pitch, slice B "Page intelligence" — built 2026-09-25 (uncommitted; on-screen check by the user
+> outstanding):** spec `docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md` (deviations in its
+> "Implementation notes"), plan `docs/superpowers/specs/2026-09-25-comic-reader-page-intelligence-plan.md`. CE read-percentage fix (`IssueMetadataExtensions`:
+> `(LastPageRead+1)*100/PageCount`, so short issues reach 100%; reader's Finished threshold aligned); #6 page skipping
+> (`SkipDeletedPages` on / `SkipAdvertisementPages` off, migration `AddPageSkipSettings`, `PageSkipStepper`, "Skipped N pages"
+> hint); #13 story-end finish (last non-ad/non-deleted page writes the last page as `LastPageRead`); #12 bad-page report
+> (`PageReport`, migration `AddPageReports`, `X` / page menu → reason picker → undo chip, Preferences → Library Health
+> "Reported pages": open / tag Deleted / dismiss); #9 ad-page detection (`AdPageHash`/`PageHash`/`AdPageProposal`, migration
+> `AddAdPageDetection`, dHash `PageHasher`, `AdPageDetectionService`, reader-seeded ad library, "Detect advertisement pages"
+> scheduled task off by default, Needs Review "Advertisement Pages" section with Accept/Reject all). All three migrations have
+> a no-op `Down()`. Verified by tests, **nothing viewed on screen**. Full `Paperbunkr.App.Tests` (1 h 1 m, machine shared with other sessions): 3572 passed, 13 failed; 12 of the 13 (PDF book source, remote library/sharing, two Preferences cover-cache confirms) passed when rerun alone, so they are load flakes; `WantedQueueTests.GroupsFollowTheSort...` fails alone and sits in another session's uncommitted Wanted work. Full `Paperbunkr.Data.Tests`: non-Migration 1549 passed/1 failed (`RemoteRowIsolationTests.OptInSites_AreExplicit...` flags `RecapResolver.cs`, another session's new `includeRemote` site that needs an allowlist entry), Migration 114/114. Still needing a look: the
+> skipped-pages hint, the reason picker and undo chip, the Library Health list, the Preferences toggles and the Needs Review
+> section (thumbnail loading included) all need a look. Slices C–H not started.
+> **Comic reader pitch, slice G "Performance" — built 2026-09-25 (uncommitted; on-screen check by the user outstanding):** spec
+> `docs/superpowers/specs/2026-09-25-comic-reader-performance-design.md`, plan `...-plan.md`, deviations in the spec's "Implementation notes". #24 was mostly
+> already shipped (adaptive fringe), so it became the continuous-scroll page-boundary fix the user reported: overlay metrics (boundary handler, decode latency,
+> blank frames, layout shift, position-save time; once-per-page cache hit/miss), thumbnail selection replaces at most 2 items instead of up to 200, the debounced
+> position save writes off the UI thread (single-flight, sequence-guarded), `ScrollAnchor` scroll anchoring for page sizes arriving above the viewport,
+> `ScrollWindowHint` (visible range + direction) with distance-ordered decode and a 100 ms fringe throttle during sustained scroll. #23: `NextIssueStager` opens the
+> next issue in the background in the last 3 pages (paged and continuous, forward only, local files), `Load` adopts it, discard rules (adopted / other issue /
+> below the last 5 pages / 2 min idle / file stamp changed / setting off / GoBack), `AppSettings.PreOpenNextIssue` (migration `AddPreOpenNextIssue`, no-op `Down()`,
+> Preferences → Reader). Verified by unit/service/view-model tests only; **not felt or viewed on screen** (steady-pace continuous scroll with the overlay open; a real
+> solid `.cbr` read to its last pages, then Continue).
+> **Needs Review → Library Health — built 2026-09-25 (uncommitted; on-screen check by the user outstanding):** spec
+> `docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md` (committed e242af6; no plan file, the user said "implement it"). All five
+> review queues (Content Type, Duplicate Files, Series Conflicts, Metadata Proposals, Ad Pages) moved out of the CE migration overlay into the Library Health card in
+> Preferences → Library, in the spec's order, each with an "all clear" empty state. The overlay lost its Needs Review tab (Results button is now "Review in Library
+> Health"). `MainViewModel.NeedsReview` owns the one `NeedsReviewViewModel`; Preferences hosts it. Metadata Proposals split into Pending (shown) and Applied
+> (collapsed "Applied · N", not counted as pending); `PendingCount` drives a "Needs review · N" chip on the card header and a dot on the Library nav item.
+> `ActivityLinkKind.MigrationReview` kept but routes to Library Health; the duplicate-files alert now links `Preferences`/"LibraryHealth". Beyond the spec: the
+> Applied list binds to `ExpandedAppliedProposalItems` (empty until expanded), because a collapsed ItemsControl still realizes every row and a big library has
+> thousands of auto-applied proposals. Bulk actions (added after the user pointed out none had been): Duplicate Files "Dismiss All" (alongside the existing "Keep
+> Largest in All Groups"); Metadata Proposals and Ad Pages "Accept All" / "Reject All" behind the inline two-step confirm (pending only - Applied proposals stay
+> per-row, since rejecting one reverts a written field; Series-field accepts and series-scoped rejects go one by one through `ResolveProposal` on fresh contexts);
+> Content Type has no bulk action because each series needs its own answer. **Applied proposals (2026-09-26, after the user hit 1,814 of them):**
+> per-row Accept on an applied proposal used to be a durable no-op (already `Accepted`, so it came straight back), so `MetadataProposal.ReviewedAt` (migration
+> `AddMetadataProposalReviewedAt`, real `Down()`) marks "looked at and kept"; an explicit accept sets it, auto-applied ones leave it null. The Applied list is now
+> `AppliedProposalGroups` - one bucket per field + source (+ provider) from a single `GROUP BY`, rows built only on expand (latest 100), each with Accept All
+> (one `UPDATE`) and Reject All (two-step confirm; series-scoped rows restore the earlier field value one by one), plus "Accept All" / "Reject All Applied" on the
+> section header. Tests: `NeedsReviewViewModelTests` (+9), `AddMetadataProposalReviewedAtMigrationTests`, all 131 Data migration tests pass.
+> **Library Health sub-tabs + faster refresh (2026-09-26, uncommitted, not viewed on screen):** spec
+> `docs/superpowers/specs/2026-09-26-library-health-subtabs-design.md` (deviations in its "Implementation notes"). The card is now Overview / Review / Files
+> sub-tabs with ten collapsible sections (`LibraryHealthSections`), every list a `VirtualList` (code-only control: `VirtualizingStackPanel` in a scroll region up to 420 px,
+> since `ItemsRepeater` is unsupported in Avalonia 12), the last tab remembered (`AppSettings.LibraryHealthTab`, migration `AddLibraryHealthTab`, no-op `Down()`), ten
+> new search entries and deep-link payloads (`LibraryHealth/Files`, `LibraryHealth/Review/Duplicates`; the duplicate, missing-files and path-repair alerts use them).
+> Pending proposals are bucketed like Applied ones (`ProposalGroupViewModel`, latest 500 rows). Speed: Content Type is a direct series query (was a smart-list scan of every
+> issue), the duplicate scan loads a slim projection instead of tracked entities with `Include(Series)` (algorithm untouched), and `RefreshAsync` does the database work
+> off the UI thread with per-queue `Refresh(Queue)` after actions. Measured on a seeded 3,650-issue library: full refresh 500-880 ms -> 53-70 ms, UI-thread time for
+> the async refresh 0.1-3.6 ms, a 1,000-row list builds about 7-25 rows instead of 1,000. Tests: `VirtualListTests`, `AddLibraryHealthTabMigrationTests`, +~20 in
+> `NeedsReviewViewModelTests` / `PreferencesScreenViewModelTests` / `MainViewModelTests`. **Nothing viewed on screen** - tab switching, section open/close, inner-list scrolling and
+> scroll chaining over a long list, every deep link, a search hit into a hidden tab, both themes. Full `Paperbunkr.App.Tests` not run (affected classes only). Verified: `Paperbunkr.App` builds 0 errors; the affected classes (`NeedsReviewViewModelTests`, `DuplicateFilesReviewTests`,
+> `MainViewModelTests`, `PreferencesScreenViewModelTests`, `DetectAdPagesTaskTests`) 302 passed, plus 1 `VerifyCoversCommand…` load flake that passes alone; the full
+> suite was not run. **Nothing viewed on screen** - the section order, chip, nav dot, Applied toggle, the migration overlay without tabs and the Results-button
+> deep-link all need a look. Not done: the Pending proposals list is neither capped nor virtualized (it was not before either, but it now sits on a page that is always
+> built); search-index entries (`PreferenceIndex`) for the new subsections.
+> **Comic reader pitch, slice F (F1 Reach, F2 Profiles, F3 Comfort) — built 2026-09-25 (uncommitted; on-screen checks by the user outstanding):** specs
+> `docs/superpowers/specs/2026-09-25-comic-reader-{reach,profiles,comfort}-design.md`, plan `...-slice-f-plan.md`, deviations in each spec's "Implementation notes". **F1:** right/middle clicks no longer turn
+> pages (pointer-button policy), PageDown/Space/media-next and PageUp/Shift+Space/media-previous reading-order turns (clickers work), mouse side buttons, Mihon-style tap-zone layouts for paged and continuous
+> mode including the mouse (`TapZoneResolver`, `TapZoneOverlay`, Preferences preview), a Ctrl+K command palette with go-to-page (Ctrl+G), an XInput gamepad; migration `AddReaderInputSettings`. **F2:** named
+> reader profiles on the `Workspace` table (`WorkspaceScreen.Reader`), layered `AppSettings` -> profile -> series -> issue, a per-series pointer and a default, a session-only live switch (hotkey P, drawer,
+> palette), capture from the live reader, three built-ins, Preferences management; migration `AddReaderProfiles`. **F3:** reading stats chip (H), eye-rest nudge toasts with snooze, a schedule-based warm tint
+> (W), Ctrl+C copy of the page or stitched spread and Save Spread As; migration `AddReaderComfortSettings`. Verified by unit/service/view-model tests only; **not viewed or felt on screen** (media keys delivery, the
+> Xbox controller, mouse clicks with a non-default layout, the palette, the profile flyout, the chip, the tint, pasting a copied page/spread). *(User-verified on screen 2026-09-25/26 after fixes: the
+> Ctrl+Shift+P overlay's double toggle, the stats chip moved to the bottom-right.)*
+> **Comic reader pitch, slice D "Panels & zoom" — built 2026-09-26 (uncommitted; on-screen checks by the user outstanding):** spec `docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md`, plan
+> `...-plan.md`, deviations in the spec's "Implementation notes". **Smooth zoom:** one 25%-400% range for paged and continuous mode (100% = fit), a logarithmic slider with 100% in the middle, proportional wheel
+> and key steps, the five preset buttons gone (only "Fit (100%)" remains); the PDF reader keeps 100%-400% via a new canvas `MinZoomLevel`. **#1 guided panel view** (`G`): a local gutter-based panel detector
+> (`PanelDetector`, no ML), next/previous step panel by panel with an eased zoom and pan, landing on the next page's first (or previous page's last) panel, "Panel 3/7" label, paged single-page only, settings
+> `GuidedViewOnOpen` + profile field. **#14 smart double-click zoom:** double-click/tap zooms to the panel under the pointer, second one returns, falls back to 200%; in guided view it toggles panel/whole page;
+> `SmartDoubleClickZoom` (on). Fixes a pre-existing flaw: the first click of a double-click turned the page before the zoom, now undone. **Tuning aid:** palette "Show detected panels". Migration
+> `AddGuidedViewSettings`. Verified by unit, view-model and headless canvas tests only (synthetic pages); **the detector on real comics/manga, the eased steps and the log slider are not viewed or felt.**
+> **Comic reader pitch, slice C "Image quality" — built 2026-09-26 (uncommitted; on-screen checks by the user outstanding):** spec `docs/superpowers/specs/2026-09-26-comic-reader-image-quality-design.md`, plan `...-plan.md`,
+> deviations in the spec's "Implementation notes". **#2** turned out mostly built (sliders, warm tint): the new work is CE's **auto levels** (per-page black/white points, true levels stretch, baked into the display bitmap
+> in the reader pipeline, `PageId.Variant` in the cache identity) and **sharpen 0-3** (CE's kernel, a live paint-level convolution), on the usual layers (Preferences default, per-issue override, reader profile, palette, drawer
+> ADJUST). **#3 auto-crop margins** (Paperbunkr-original): `PageCropDetector` on a small luminance copy, crop applied in the pipeline before the downscale (detail tier reuses it; strips and thumbnails never cropped), off by
+> default, per-page override table `PageCropOverrides` (Follow / Never / Always from the page menu and palette), "Show crop" toast. **#25** was measured first: the pipeline downscale was fine; the colour-filter draw path sampled
+> nearest-neighbour (about twice the shimmer), now mipmapped/cubic. Migration `AddImageQualitySettings`. Verified by unit, pipeline and view-model tests on synthetic pages plus one real page; **how it looks on real scans is not viewed.**
+> **Comic reader pitch, slice E "Info & compare" — built 2026-09-26 (uncommitted; on-screen checks by the user outstanding):** two specs, `docs/superpowers/specs/2026-09-26-comic-reader-inreader-reference-design.md` (E1) and
+> `...-compare-design.md` (E2), deviations in each one's "Implementation notes". **E1:** **#28** a read-only info panel (`I`; summary hidden behind "Show summary", Preferences default off), **#29** a pinned reference page (`Shift+P`;
+> a scaled copy, drag to a corner, three sizes, survives moving to the next issue), **#7** page notes (one per page, marker on the page dot) and region clips (`Ctrl+Shift+C`, PNGs under `annotations\clips`, caption/copy/save/delete)
+> with a Markdown export; migration `AddPageNotesAndClips`; a fix that made `CaptureOverlay` hit-testable. **E2:** **#11** a Compare screen (side by side or flicker, dHash page pairing with an offset, linked zoom/pan, facts strip with
+> badges, Keep A / Keep B through a confirmation, Not a duplicate), from the Library menu (two selected) and each duplicate group; the duplicate delete was extracted into `DuplicateGroupResolver`. Verified by unit, view-model and headless
+> tests on synthetic pages; **how it looks and feels, and pairing quality on real editions, are not viewed.**
 > **Smart-feature pitch (16 total — 7 from 2026-09-14, 9 added 2026-09-18):** Smart Lists v2 preset
 > gallery; Continuity auto-suggest via shared-character MediaRelation data; Reading-order conflict
 > detector (CBL order vs. StoryEvent chronology); auto-match missing files against series-identity
@@ -1707,6 +2257,172 @@ Test infrastructure only; no production code or `<Version>` change.
   `CoverBrushFor` return `Immutable*` brushes); now asserts `IGradientBrush`, same colour checks.
 - **Verified:** narrow and wide filters twice each; full suite 2794/2794 twice. **Not done:** reversed
   or shuffled class order (the collection orderer is fixed and Avalonia-first by design).
+
+## 2026-09-25 — Library organizer audit + automatic role detection
+
+Two specs, both built this session: `docs/superpowers/specs/2026-09-25-library-organizer-audit-fixes-design.md` (+ `-plan`) and
+`2026-09-25-reading-list-role-detection-design.md` (+ `-plan`). Tests were written alongside the code, not strictly before it; **nothing
+here has been viewed on screen or run against live ComicVine/Metron.**
+
+### Organizer (audited against the real Library Organizer 2.1.13 plugin source, supplied by the user)
+- **Defects fixed** (each has a test): empty publisher/imprint no longer roots the path and drops the base folder; `/` `\` inside a value no
+  longer nests folders; a file already at its calculated path is left alone (no move, no undo row, no write-back); two books headed for one
+  path reach the collision resolver (also in Simulate); Replace goes to the Recycle Bin and leaves the replaced library entry without a file;
+  a failed library update moves the file back; Simulate/Copy no longer queue write-back; a bad token or empty file name fails that book only
+  with a reason; undo reverses only the latest run and removes the folders it created; the scheduled/interactive job no longer ends
+  "Cancelled" on an exception.
+- **Plugin parity added:** `manga`/yes-no polarity, `first(Series)` plugin field names, decimal/negative/auto-width padding, `(sep)(issue|series)`
+  multi-value tokens, `UseFolder`/`UseFileName`, `EmptyFolder`, `EmptyData`, skip-on-empty-fields, excluded folders, ANY/ALL exclude match,
+  Windows reserved names and the 259-character limit, save-time template validation, pre-run preview, saved run/simulation reports.
+- **Deliberate deviations:** unknown token fails the book (plugin leaves the text in the path); bare date renders ISO; empty-folder cleanup
+  is bounded to the base folder; Copy does not add the copy to the library; a Replace leaves the old entry fileless instead of deleting it;
+  the importer keeps its own no-decimal-padding behaviour (`TemplateContext.PadDecimals`).
+- **Follow-up round (same day), all built:** nested exclude groups in the editor (`ExcludeGroupViewModel`, recursive template, any depth; a new
+  rule defaults to "Any", the plugin's default); a live preview in the profile editor (a few real comics, one per series, redrawn as you edit,
+  `LibraryOrganizerService.PreviewAsync` reads only the sample's series; the exclude RULE is not evaluated there, excluded FOLDERS are); several
+  profiles per run (`PlanManyAsync`/`ExecuteManyAsync`: every Copy profile copies, only the last Move profile that can place a book moves it,
+  copies run first, one undo batch, one Activity job; the picker is now a multi-select and the scheduled task runs every profile marked for it).
+- **Found while doing this (fixed):** the organizer read `Effective*` values (number, year, volume, format, title) from `issue.MetadataProposals`
+  and the genre/tags/custom tokens from collections that no caller ever loaded, so a comic whose values were only parsed from its file name
+  (or that had tags) produced empty template values. `PlanAsync` now evaluates every book through a fully loaded copy of itself. Tests
+  `AComicWhoseNumberAndYearWereOnlyParsedFromItsFileName...` and `GenreAndTagTokens_AreFilled...`.
+- **Not done:** fileless-book thumbnail export; undo does not re-queue write-back (moving a file does not change its contents); the recursive
+  group template and the preview panel were checked only through view-model tests and template registration - the headless test app loads no
+  theme, so item controls cannot be rendered there. **Look at both on screen.**
+- **Unverified:** how the folder watcher reacts to moves into folders outside the watched library; whether an uncaught exception in an async
+  command is swallowed globally.
+- Migration `AddOrganizerParityOptions` (profile options, `OrganizeBatches.BaseFolder`); `UseFolder`/`UseFileName` default to true for existing profiles.
+
+### Role detection
+- `MemberRoleDetector` (pure) + `MemberRoleApplier` + `MemberRoleDetection`; migration `AddRoleDetectionColumns` adds `RoleSource`, `RoleReason`,
+  `SuggestedRole`, `SuggestedReason`, `RoleSuggestionDismissed` to `EventMemberships` and `ReadingListItems`. A null source is treated as the user's.
+- High-confidence roles apply only into an empty or automatic slot; existing event members (whose default Core is indistinguishable from a
+  choice) only ever get a suggestion. Comic Book Reading Orders now keeps its section headings (h2-h6) and blue notes as `ArcIssue.Annotation`.
+  Every UI path that sets a role marks it as the user's. "Detect roles" on events and lists; Activity Center job + toast.
+- **Fixed on the way:** the Comic Book Reading Orders parser replaced `</p>`/`<br>` with an unclosed `<span style="color:`, which the tag strip
+  then closed at the next `>` - swallowing text between two boundaries. Boundaries are now plain newlines; the existing parsing tests still pass.
+- **Providers (follow-up):** neither ComicVine nor Metron has a role field (ComicVine's documented issue and story-arc fields contain none;
+  Metron's docs could not be fetched). What they do give is used: ComicVine's per-issue `name` and `deck` now ride on `ArcIssue.Title`/`Summary`.
+  The title is a high-confidence signal and, unlike the library's own title, exists for issues you do not own yet; the deck is only a low-confidence
+  suggestion (prose, not a label). Metron's row parser reads a story title if the row has one - **unverified**, silent when absent.
+- **Not done:** no Wikidata/Fandom lookup (nothing there is per-issue); the low-confidence first/last-of-a-long-arc rule may prove noisy.
+
+### Scraper follow-ups recorded earlier this session
+- Metron now supplies story-arc reading order too (`/arc/{id}/issue_list/`, unverified against a live response); the ComicVine search
+  clean-up and fuzzy retry are ComicVine-only; Metron search is still punctuation-sensitive.
+
+### 2026-09-25 (late) — duplicates after an organize, and "keep the file"
+User report: after an organize, every issue of a series appeared twice; deleting a series deleted the files; resolving the "duplicate" deleted the
+comic, and restoring it brought the duplicate back. **Cause not confirmed against the user's data** (a read-only copy of the live WAL database was
+inconsistent, so nothing was read from it). What was verified in code:
+- `LibraryDeletionHelper.RemoveIssue` sent `issue.FilePath` to the Recycle Bin without checking whether ANOTHER entry (the one being kept) points at
+  the same file, so resolving a duplicate group of two same-path entries deleted the kept entry's file. Fixed: the file and the removed-paths
+  list are only touched by the last entry that references a file.
+- `AppSettings.DontReimportRemovedFiles` defaults to **false**, so the removed-paths list was recorded but never consulted; a restored file was
+  re-imported at the next scan/watch event ("the duplicate returns").
+- Copy mode into a watched library folder makes the watcher import every copy as a duplicate comic. A Copy profile is now refused up front
+  (`OrganizerSafety`) with a plain explanation and nothing copied.
+- New: "Merge entries that share one file" (Library Health → Duplicate Files; `SamePathEntryMerger`, touches no files, hands list/event memberships,
+  reading progress and rating to the kept entry); "keep the file" variants everywhere entries are removed (tile/series context menus, duplicate
+  groups: "Remove extras, keep files"); `RemovedFilePath.KeepFile` (migration `AddRemovedFileKeepFlag`) makes a kept-file removal stick even
+  with the setting off.
+- **Not done:** the folder-watcher race (an organize Move whose new path the watcher imports before the row is updated) is still unproven; the
+  action-bar "Delete" and Book screens have no keep-file variant yet.
+
+## 2026-09-26 - Library preview panel v2
+
+Design [2026-09-26-library-preview-panel-v2-design.md](superpowers/specs/2026-09-26-library-preview-panel-v2-design.md), plan alongside it. Not committed.
+- **Fixed:** the series issue rail rendered as thin slivers (its items carried only a placeholder brush; `PosterRailItem` now has `CoverKey`/`IsRead`
+  and `PosterRail` loads through `AsyncCoverImage`, cover box has an explicit width); the hero cover was cropped to a landscape strip (now the
+  whole cover at its own aspect ratio).
+- **Built:** backdrop-hero series state and collapsible-section issue state, pinned action bars (series: Continue/Read, Mark all read/unread,
+  Add to Collection, overflow; issue: Read, Mark read/unread, Edit, overflow), rail click drills into the issue with a "back" link, multi-select
+  strip, persisted collapsed sections (`AppSettings.LibraryPreviewCollapsedSections`, migration `AddLibraryPreviewCollapsedSections`), 120 ms hero
+  cross-fade (skipped on rapid focus changes and reduced motion), column min width 280.
+- **Verified:** `Paperbunkr.App` builds with 0 errors and no XAML diagnostics on the touched files; 11 new view-model tests
+  (`LibraryPreviewPanelViewModelTests`) pass; the Library/ContextMenu/PosterRail/Detail App test filter passes (703 tests); the generated migration is a
+  single `AddColumn` and its Designer differs from the previous one only by that column. Rolling a scratch database up to head and back down with `dotnet ef`
+  reverts the new migration and every one after `AddWorkspaces` cleanly.
+- **Existing failures found (not from this work):** `Paperbunkr.Data.Tests` has 7 failures. Six are down-migration tests that target old migrations: reverting
+  `20260903082832_AddWorkspaces` throws `no such column: "LibraryGroupField"` (reproduced with `dotnet ef database update 20260827045244_LibraryPosterGridConsolidation`),
+  so any test that rolls back past it fails. The seventh is `RemoteRowIsolationTests.OptInSites_AreExplicit_AndMatchTheAllowlist`, which I did not investigate.
+- **Seen on screen by the user (2026-09-26):** the whole panel works - hero cover and backdrop, chips, progress line, section headers, pinned action
+  bars, issue rail with real covers for the whole series (a first version built the rail from the filtered grid rows and showed one cover; it now uses the
+  projection's unfiltered rows), issue state and collapsible sections, drill-in and back link, and the flyouts; the last two cosmetic fixes (empty title row under "ISSUES" hidden in `PosterRail`, rail given clearance above its scrollbar) also confirmed. Not looked at separately: Detail-screen rails
+  (their cover box now has a fixed 76 px width) and a short window height.
+- **Deviations from the spec:** see its "Implementation notes" (width default kept at 320, no rail double-click, no `PanelSection` control).
+
+## 2026-09-26 - About polish
+
+Design [2026-09-26-about-polish-design.md](superpowers/specs/2026-09-26-about-polish-design.md), plan alongside it. Not committed.
+- **Built:** About split into Overview / Changelog / Legal & notices tabs (`AboutTabs`, search anchors `about.project`/`about.legal` added);
+  header with version once + **Copy version info**; Project group (GitHub, wiki, report an issue, releases, logs/data folders). One markdown parser
+  (`MarkdownLite`, replaces `LegalDocumentParser`) and one renderer (`Controls/MarkdownView`) behind the changelog and the legal viewer; shared
+  `Views/ChangelogEntryView` for About and What's New with coloured category tags. `ChangelogSelection` hides empty entries and picks the Current
+  entry as the newest not newer than the running version. Legal viewer 680 px with "Last updated", Copy text, in-document links; `LICENSE`
+  preformatted. Update-available overlay links to the offered version's release page instead of showing the installed changelog.
+- **Texts:** `PRIVACY.md`, `TERMS.md`, `COMICVINE_NOTICE.md` rewritten from two code audits (update check and daily Wikidata task are on by default
+  and now disclosed; DPAPI; sharing; plugins; real ComicVine/Metron throttles); new `THIRD-PARTY-NOTICES.md` (bundled via the csproj);
+  0.7.0 changelog bullets split.
+- **Fixed on the way:** empty "Unreleased" row in About; no Current badge between releases; About → What's new opened the empty Unreleased entry;
+  What's New rows had stock ToggleButton chrome (its styles lived only in AboutSection).
+- **Verified:** forced-`CoreCompile` build clean; 310 targeted tests pass (new `MarkdownLiteTests`, `ChangelogSelectionTests`,
+  `AboutPolishHelpersTests`, About VM tests); the changelog and all five documents rendered headlessly with real Skia and checked by eye (link
+  baseline fixed after the first render). **Seen on screen and confirmed by the user (2026-09-26).**
+- **Follow-ups for the user (not done here):** PDFiumSharpV2 is MS-RL (FSF: GPL-incompatible); `libx265.dll` ships via `LibHeif.Native.win-x64`
+  (GPL-2.0-or-later, listed in the notices); the unreferenced copies in `src/Paperbunkr.Engine/DLL/x64/`; `sharpPDF.dll` provenance; the CE
+  publisher-pack/texture licensing; user-agent strings point at two different GitHub URLs.
+
+## 2026-09-26 - Library focus ring + cosmetic toggle audit
+
+Not committed.
+- **Ring missing its top edge outside Matrix (the 2026-09-03 report, never actually fixed):** poster cards were arranged ~21 px shorter than their
+  content (`PosterCardHeight` ignored `Border.posterCover`'s 15 px ring gutter, and the 34 px title allowance was below the real ~40 px row), so
+  the star row squeezed the cover ~10 px upward and the ring's top edge landed outside the card, where only a full-window redraw paints it. Matrix
+  looked fixed only because its code rain redraws the whole window every frame. `PosterCardHeight` now counts the gutter; the title row is pinned
+  (`PosterTitleTextHeight`, 34 + 8 margin) so its height no longer depends on the theme font. Rows are ~23 px taller as a result.
+- **Grey box behind the hovered card's title:** the Fluent button template's own pointer-over/pressed background; `Button.card` now keeps it transparent.
+- **View & Sort toggles that did nothing in the current mode are now shown only where they work:** Dog-ear / Numeric rating / Tooltips (Poster +
+  Panorama; Dog-ear was also shown in Tiles), Language badge / flag (List + Tiles), Unread / Publisher badge (not the Details table), Continue
+  reading (series Poster / Panorama / Tiles only). Collection tiles' title now follows "Show titles" (it was always on while the height math dropped it).
+- **Verified:** build clean; 7 new tests in `LibraryPreviewPanelViewModelTests` (scopes, card height); the Library App test group passes (440).
+- **Not verified:** on screen - ring top edge in a non-Matrix theme, the hover box gone, row spacing.
+
+## 2026-09-26 - Library page audit fixes
+
+Not committed. From a gap audit of the Library screen (user screenshot + code read), all fixed:
+- **"0 MB" / empty file fields:** nothing ever wrote `Issue.FileSize`/`FileModifiedTime`/`FileCreationTime`, so the status bar, the File
+  Size/Modified/Created sort + columns, Smart List rules on them and the preview panel's series size were all empty. New
+  `Paperbunkr.Data/Library/IssueFileStats` (CE `ComicBook.RefreshFileProperties` parity: `Length`/`LastWriteTimeUtc`/`CreationTimeUtc`) runs on
+  scan, on CE migration (CE's cached values first, live file wins), after a CBZ metadata write-back, and as an idempotent startup backfill
+  (`MainViewModel`, background thread) for rows with no size. Folder comics keep no size (FileInfo on a directory).
+- **"1 issues":** series cards, collection series tiles and the Detail header now singularize (`SeriesCardSample.FormatIssueCount`).
+- **Sort order:** Series/Title/Story Arc/Series Group/Alternate Series now use CE's `ExtendedStringComparer` with IgnoreCase|IgnoreArticles
+  (CE's `ComicBookSeriesComparer` etc.); File Path/Name/Directory use it without articles. Natural numbers ("Vol 2" < "Vol 10"). CE's default
+  article list is "the, der, die, das, le, la, les, l'" - not "a/an". The A-Z rail, its click target and the Alphabetical group use the same
+  article skip (`AlphabetIndexEntry.LetterFor`), so "The Flash" lives under F everywhere.
+- **Tiles density:** the Grid density slider now shows in Tiles too (`IsGridDensityScope`), which already scaled with it.
+- **Series selection bar:** gained Mark Read / Mark Unread / Add to List (every issue of the selected series, card order then issue number -
+  `SelectionBarIssueIds`). Plugins stays issue-only.
+- **Collection sidebar rows:** hover actions overlay the row instead of reserving ~60 px at Opacity 0 (names trimmed early); counts right-aligned
+  and vertically centred (Content Type counts centred too); actions still Tab-reachable (`:focus-visible`).
+- **Status bar** says "issues", not "comics".
+- **View & Sort popup** fades its bottom edge while settings remain below the fold (OpacityMask, theme-independent); its scroll
+  bar is hidden (wheel/keyboard still scroll); "Show titles" now uses the rows' 12.5 size.
+- **"I enable the cosmetics and don't see them work" - two real bugs:**
+  - *Dog-ear preview never showed on Poster cards* since the 2026-09-19 LazyPart change: `FindDogEarPeekImage` searched only the
+    cover Grid's direct children, and the Poster peek Image now sits inside a `LazyPart`. Finder looks inside it (plus a one-tick
+    retry). Also: an unknown `PageCount` (93 of the user's 3,616) is now eligible and the page-2 decode decides - deviation from
+    CE, which always knows the count.
+  - *Fade in thumbnails never visibly faded:* Opacity was set 0 then 1 in one tick with the transition already attached (animated
+    1 -> 1), and cache hits never faded at all - with the prefetching grid cache that was nearly every paint. Now CE's
+    `ThumbnailViewItem.Animate`: 300 ms linear, on a cover's first appearance whether cached or not, once per session per cover
+    (recycled cards don't re-fade; switching the toggle on resets that), skipped under Reduced Motion.
+  - Numeric rating badge and Tooltips were wired correctly; the badge only shows on rated issues (4 in the user's library).
+- **Not the app:** the "SP" bubble over the toolbar in the screenshot is another program's overlay.
+- **Verified:** build clean; new tests `LibraryAuditFixesTests`, `IssueFileStatsTests` (Data), 2 series-selection tests in
+  `LibraryScreenViewModelTests`, 4 new `AlphabetIndexEntryTests` rows.
+- **Not verified:** on screen - sidebar rows, popup fade, series selection bar; the startup backfill against the real library.
 
 ## Explicitly not in scope here
 

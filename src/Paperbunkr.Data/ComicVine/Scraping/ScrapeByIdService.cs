@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.Data.ComicVine.Scraping;
 
@@ -99,6 +100,20 @@ public sealed class ScrapeByIdService(Func<PaperbunkrDbContext> createContext, F
             issue.MetadataSource = provider;
             await write.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
+
+        // Keeps the derived Character/Team/Location/Creator/Publisher index current with every scrape
+        // (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md) - previously this only
+        // ran on manual Issue Properties save, so a scrape-only issue never got indexed at all. Runs
+        // unconditionally (not gated on `changed.Count > 0`) since it's idempotent and a first-ever
+        // scrape needs it even when nothing looked "changed" by IssueDetailsApplier's own field policy.
+        CharacterResolver.SyncFromIssue(write, issue.Id);
+        TeamResolver.SyncFromIssue(write, issue.Id);
+        LocationResolver.SyncFromIssue(write, issue.Id);
+        CreatorResolver.SyncFromIssue(write, issue.Id);
+        PublisherResolver.SyncIssue(write, issue.Id);
+        ComicMetadataExternalIdSync.SyncFromIssueDetails(write, issue.Id, provider, details);
+        ContinuityMetronMatchResolver.SyncFromIssueDetails(write, issue.SeriesId, provider, details.Universes);
+        IssueVariantCoverSync.SyncFromIssueDetails(write, issue.Id, details.Variants);
 
         return ScrapeOutcome.Success(issue.Id, changed);
     }

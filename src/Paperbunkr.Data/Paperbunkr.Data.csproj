@@ -13,6 +13,19 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
+    <!-- Cover-hash auto-match safety gate (docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-
+         design.md §2.1) - CE's own imagehash.py is a plain average hash (verified directly against the
+         extracted plugin source); this library's AverageHash algorithm specifically is used, not its
+         DCT-based PerceptualHash, so computed similarity values stay comparable to CE's verified
+         0.87/0.77 thresholds. First use of SixLabors.ImageSharp in this solution (pulled in transitively) -
+         confirmed no conflicting image-processing dependency exists anywhere else in the codebase. -->
+    <PackageReference Include="CoenM.ImageSharp.ImageHash" Version="1.3.6" />
+    <!-- CoenM.ImageSharp.ImageHash only floors SixLabors.ImageSharp at 2.1.3 (not an exact pin), which
+         resolves to a version with several known CVEs. Pinned directly to 2.1.13 - the last release on
+         the SAME 2.1.x branch CoenM was built/tested against (no breaking API surface risk, unlike
+         jumping to ImageSharp 3.x/4.x), and >= 2.1.10, which GitHub's advisory confirms is where the
+         GIF-decoder out-of-bounds-write CVE (and the others reported alongside it) were fixed. -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="2.1.13" />
   </ItemGroup>
 
   <ItemGroup>

@@ -96,6 +96,12 @@ public sealed class CaptureOverlay : Control
 
     public override void Render(DrawingContext context)
     {
+        // A bare Control is only hit-testable where it draws something: a transparent fill over the whole overlay lets it receive the press that starts a drag while capture mode is on.
+        if (IsCaptureMode)
+        {
+            context.FillRectangle(Brushes.Transparent, new Rect(Bounds.Size));
+        }
+
         if (_dragStart is not { } start || _dragCurrent is not { } current)
         {
             return;

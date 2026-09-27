@@ -44,7 +44,7 @@ reads them from wherever they already are.
 ## Updating
 
 PaperBunkr checks for new releases on startup and lets you know when one's available; you can
-also check manually from **Preferences → About → Check for Updates**. Approve the update and it
+also check manually from **Preferences → About → Check now**. Approve the update and it
 downloads and installs itself. You can turn off the startup check in the same About section if
 you'd rather update manually — grab the newer installer from the
 [latest release](https://github.com/heisehis/PaperBunkr/releases/latest) and run it over the top.

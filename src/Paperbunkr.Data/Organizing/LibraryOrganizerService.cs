@@ -23,45 +23,119 @@ public sealed class LibraryOrganizerService
 {
     private readonly Func<string, IReadOnlyCollection<int>>? _resolveExcluded;
     private readonly OrganizeUndoLog? _undoLog;
+    private readonly Action<string>? _sendToRecycleBin;
 
     /// <param name="resolveExcluded">Turns a profile's exclude-rule JSON into the ids of the issues it matches. Supplied by the app (its rules engine lives above this project); null means "exclude nothing".</param>
     /// <param name="undoLog">Where real moves are recorded for undo; null disables undo.</param>
-    public LibraryOrganizerService(Func<string, IReadOnlyCollection<int>>? resolveExcluded = null, OrganizeUndoLog? undoLog = null)
+    /// <param name="sendToRecycleBin">Disposes of a file a Replace overwrites, recoverably. The Recycle Bin helper lives in the app project, so it is injected; null (tests, headless hosts) deletes permanently.</param>
+    public LibraryOrganizerService(
+        Func<string, IReadOnlyCollection<int>>? resolveExcluded = null,
+        OrganizeUndoLog? undoLog = null,
+        Action<string>? sendToRecycleBin = null)
     {
         _resolveExcluded = resolveExcluded;
         _undoLog = undoLog;
+        _sendToRecycleBin = sendToRecycleBin;
     }
 
     /// <summary>
     /// Pure planning aside from the one read-only library query below (no writes) - runs the token
     /// engine per book, sanitizes the result, and flags every destination that already exists on disk
-    /// (CE's own definition of "duplicate" - a plain `File.Exists` check, no hash/metadata comparison,
-    /// verified against `loduplicate.py`).
+    /// or that an earlier book in this same batch already claimed (the plugin's own definition of
+    /// "duplicate" - a plain existence check plus in-batch paths, `lobookmover.py:406`; no
+    /// hash/metadata comparison). A destination equal to the file's current path is marked
+    /// already-in-place instead of being planned as a move. One book that cannot be planned (a bad
+    /// template token, an empty file name) becomes a <see cref="PlannedMove.Problem"/> for that book
+    /// only - it never aborts the batch.
     /// </summary>
-    public async Task<OrganizePlan> PlanAsync(IReadOnlyList<Issue> books, OrganizerProfile profile, Func<PaperbunkrDbContext> createDbContext)
+    public Task<OrganizePlan> PlanAsync(IReadOnlyList<Issue> books, OrganizerProfile profile, Func<PaperbunkrDbContext> createDbContext) =>
+        PlanCoreAsync(books, profile, createDbContext, restrictLibraryToSeriesIds: null, useExcludeRule: true);
+
+    /// <summary>
+    /// What <paramref name="sample"/> (a handful of comics) would look like under <paramref name="profile"/> - the editor's live preview.
+    /// The same planning as <see cref="PlanAsync"/>, but the library it reads for series-wide values (start year, first/last issue,
+    /// `(series)` credits) is only the sample's own series, so it stays cheap enough to run as you type. The exclude RULE is not evaluated
+    /// (it queries the whole library); excluded FOLDERS are.
+    /// </summary>
+    public Task<OrganizePlan> PreviewAsync(IReadOnlyList<Issue> sample, OrganizerProfile profile, Func<PaperbunkrDbContext> createDbContext) =>
+        PlanCoreAsync(sample, profile, createDbContext, sample.Select(i => i.SeriesId).Distinct().ToList(), useExcludeRule: false);
+
+    private async Task<OrganizePlan> PlanCoreAsync(
+        IReadOnlyList<Issue> books, OrganizerProfile profile, Func<PaperbunkrDbContext> createDbContext,
+        IReadOnlyCollection<int>? restrictLibraryToSeriesIds, bool useExcludeRule)
     {
-        IReadOnlyCollection<int> excludedIssueIds = ResolveExcludedIssueIds(profile);
-        List<Issue> libraryBooks = await LoadLibraryBooksAsync(createDbContext).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(profile.BaseFolder))
+        {
+            throw new InvalidOperationException($"The organizer profile \"{profile.Name}\" has no base folder.");
+        }
+
+        IReadOnlyCollection<int> excludedIssueIds = useExcludeRule ? ResolveExcludedIssueIds(profile) : Array.Empty<int>();
+        // Tags and custom values are only loaded when a template can read them - they are the heavy part of the query.
+        bool Mentions(string text) =>
+            profile.FolderTemplate.Contains(text, StringComparison.OrdinalIgnoreCase) || profile.FileTemplate.Contains(text, StringComparison.OrdinalIgnoreCase);
+        bool needsTags = Mentions("(series)") || Mentions("genre") || Mentions("tags");
+        bool needsCustom = Mentions("custom");
+        List<Issue> libraryBooks = await LoadLibraryBooksAsync(createDbContext, needsTags, needsCustom, restrictLibraryToSeriesIds).ConfigureAwait(false);
+
+        // Every value a template reads goes through the Effective* accessors, which look at the issue's accepted filename proposals (a comic
+        // whose number, year or format was only ever parsed from its file name has NOTHING in the raw fields). Those collections are not
+        // loaded on the issues callers pass in, so each book is evaluated through this fully loaded copy of itself - callers cannot get it wrong.
+        var loadedById = libraryBooks.ToDictionary(b => b.Id);
         var aggregateCache = new Dictionary<(int SeriesId, string? Volume, string? Publisher), SeriesAggregate>();
 
         // One shared context for the whole run - see TemplateContext.AdvanceCounter's own doc comment
         // for why a fresh instance per issue would silently break CE's own running-counter behavior.
         // Aggregate is mutated per issue below rather than rebuilding the whole context each time.
-        var context = new TemplateContext { MonthNames = profile.MonthNames.Count > 0 ? profile.MonthNames : FieldResolvers.DefaultMonthNames };
+        var context = new TemplateContext
+        {
+            MonthNames = profile.MonthNames.Count > 0 ? profile.MonthNames : FieldResolvers.DefaultMonthNames,
+            EmptyData = profile.EmptyData,
+        };
+        IReadOnlyList<string> excludedFolders = profile.ExcludeFolders.Where(f => !string.IsNullOrWhiteSpace(f)).ToList();
+        IReadOnlyList<string> requiredTokens = profile.FailEmptyValues ? profile.FailedFields : Array.Empty<string>();
 
         var moves = new List<PlannedMove>();
+        var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (Issue issue in books)
         {
-            if (excludedIssueIds.Contains(issue.Id) || string.IsNullOrEmpty(issue.FilePath))
+            if (excludedIssueIds.Contains(issue.Id) || string.IsNullOrEmpty(issue.FilePath)
+                || excludedFolders.Any(folder => issue.FilePath.Contains(folder, StringComparison.OrdinalIgnoreCase)))
             {
                 continue;
             }
 
-            context.Aggregate = GetOrBuildAggregate(issue, libraryBooks, aggregateCache);
-            string destination = BuildDestinationPath(issue, profile, context);
-            bool isCollision = File.Exists(destination) &&
-                !string.Equals(Path.GetFullPath(destination), Path.GetFullPath(issue.FilePath), StringComparison.OrdinalIgnoreCase);
-            moves.Add(new PlannedMove(issue, issue.FilePath, destination, isCollision));
+            Issue evaluated = loadedById.TryGetValue(issue.Id, out Issue? loaded) ? loaded : issue;
+            string destination;
+            try
+            {
+                context.Aggregate = GetOrBuildAggregate(evaluated, libraryBooks, aggregateCache);
+                context.SeriesBooks = context.Aggregate.Books;
+                context.EmptyTokens.Clear();
+                destination = BuildDestinationPath(evaluated, issue.FilePath, profile, context);
+            }
+            catch (Exception ex) when (ex is NotSupportedException or ArgumentException or InvalidOperationException)
+            {
+                moves.Add(new PlannedMove(evaluated, issue.FilePath, issue.FilePath, false, Problem: ex.Message));
+                continue;
+            }
+
+            if (requiredTokens.Count > 0 && context.EmptyTokens.Where(t => requiredTokens.Contains(t, StringComparer.OrdinalIgnoreCase)).Distinct().ToList() is { Count: > 0 } missing)
+            {
+                moves.Add(new PlannedMove(evaluated, issue.FilePath, issue.FilePath, false, SkipReason: $"required field(s) empty: {string.Join(", ", missing)}"));
+                continue;
+            }
+
+            string fullSource = Path.GetFullPath(issue.FilePath);
+            string fullDestination = Path.GetFullPath(destination);
+            bool sameFile = string.Equals(fullSource, fullDestination, StringComparison.OrdinalIgnoreCase);
+            bool alreadyInPlace = string.Equals(fullSource, fullDestination, StringComparison.Ordinal);
+            bool isCollision = !sameFile && File.Exists(destination);
+            if (!claimed.Add(fullDestination) && !alreadyInPlace)
+            {
+                isCollision = true;     // another book in this batch is already headed for this exact path
+            }
+
+            moves.Add(new PlannedMove(evaluated, issue.FilePath, destination, isCollision, alreadyInPlace));
         }
 
         return new OrganizePlan(moves);
@@ -72,10 +146,27 @@ public sealed class LibraryOrganizerService
     /// full-library lookups in CE (`locommon.py`'s <c>get_earliest_book</c>/<c>get_last_book</c>,
     /// verified), not scoped to whatever subset of a series happens to be selected for this one
     /// organize run. <c>AsNoTracking</c> - this is a read-only rollup, never written back.</summary>
-    private static async Task<List<Issue>> LoadLibraryBooksAsync(Func<PaperbunkrDbContext> createDbContext)
+    private static async Task<List<Issue>> LoadLibraryBooksAsync(
+        Func<PaperbunkrDbContext> createDbContext, bool includeTags, bool includeCustom, IReadOnlyCollection<int>? seriesIds)
     {
         using PaperbunkrDbContext context = createDbContext();
-        return await context.Issues.AsNoTracking().Include(i => i.Series).ToListAsync().ConfigureAwait(false);
+        IQueryable<Issue> query = context.Issues.AsNoTracking().Include(i => i.Series).Include(i => i.MetadataProposals);
+        if (seriesIds is not null)
+        {
+            query = query.Where(i => seriesIds.Contains(i.SeriesId));
+        }
+
+        if (includeTags)
+        {
+            query = query.Include(i => i.Tags);
+        }
+
+        if (includeCustom)
+        {
+            query = query.Include(i => i.CustomValues);
+        }
+
+        return await query.ToListAsync().ConfigureAwait(false);
     }
 
     /// <summary>Per-(series, volume, publisher) cache, mirroring CE's own <c>startbooks</c>/<c>endbooks</c>
@@ -115,7 +206,9 @@ public sealed class LibraryOrganizerService
             last.EffectiveYear(),
             last.Month,
             earliest.EffectiveNumber(),
-            last.EffectiveNumber());
+            last.EffectiveNumber(),
+            last,
+            candidates);
 
         cache[key] = aggregate;
         return aggregate;
@@ -205,12 +298,68 @@ public sealed class LibraryOrganizerService
         return best;
     }
 
-    private string BuildDestinationPath(Issue issue, OrganizerProfile profile, TemplateContext context)
+    /// <summary>The Windows path limit the plugin warns about (`lobookmover.py:627`). Only enforced on Windows.</summary>
+    private const int MaxWindowsPathLength = 259;
+
+    private string BuildDestinationPath(Issue issue, string sourcePath, OrganizerProfile profile, TemplateContext context)
     {
-        string folderPart = Sanitizer.SanitizePath(TemplateEvaluator.Evaluate(profile.FolderTemplate, issue, context));
-        string filePart = Sanitizer.SanitizeSegment(TemplateEvaluator.Evaluate(profile.FileTemplate, issue, context));
-        string extension = Path.GetExtension(issue.FilePath ?? string.Empty);
-        return Path.Combine(profile.BaseFolder, folderPart, filePart + extension);
+        // `UseFolder` / `UseFileName` off keep that half of the current path as it is (`lobookmover.py:1246-1252`).
+        string folderPath;
+        if (profile.UseFolder)
+        {
+            string folderPart = Sanitizer.SanitizePath(TemplateEvaluator.Evaluate(profile.FolderTemplate, issue, context), profile.EmptyFolder);
+            foreach (string segment in folderPart.Split(Path.DirectorySeparatorChar))
+            {
+                if (Sanitizer.IsReservedDeviceName(segment))
+                {
+                    throw new InvalidOperationException($"The folder name \"{segment}\" is reserved by Windows and cannot be created.");
+                }
+            }
+
+            folderPath = Path.Combine(profile.BaseFolder, folderPart);
+
+            // Defence in depth: whatever the template did, the file must land under the profile's base folder.
+            string fullBase = Path.GetFullPath(profile.BaseFolder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string fullFolder = Path.GetFullPath(folderPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (!string.Equals(fullFolder, fullBase, StringComparison.OrdinalIgnoreCase)
+                && !fullFolder.StartsWith(fullBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"The templates produced a path outside the base folder: {folderPath}");
+            }
+        }
+        else
+        {
+            folderPath = Path.GetDirectoryName(sourcePath) ?? string.Empty;
+        }
+
+        string fileName;
+        if (profile.UseFileName)
+        {
+            string filePart = Sanitizer.SanitizeSegment(TemplateEvaluator.Evaluate(profile.FileTemplate, issue, context));
+            if (filePart.Length == 0)
+            {
+                throw new InvalidOperationException("The file template produced an empty file name for this comic.");
+            }
+
+            if (Sanitizer.IsReservedDeviceName(filePart))
+            {
+                throw new InvalidOperationException($"The file name \"{filePart}\" is reserved by Windows and cannot be created.");
+            }
+
+            fileName = filePart + Path.GetExtension(sourcePath);
+        }
+        else
+        {
+            fileName = Path.GetFileName(sourcePath);
+        }
+
+        string destination = Path.Combine(folderPath, fileName);
+        if (OperatingSystem.IsWindows() && Path.GetFullPath(destination).Length > MaxWindowsPathLength)
+        {
+            throw new InvalidOperationException($"The new path is {Path.GetFullPath(destination).Length} characters, over the {MaxWindowsPathLength} Windows allows: {destination}");
+        }
+
+        return destination;
     }
 
     /// <summary>CE's own zero-rules default is "move everything" (`ExcludeMode: Do not` with no
@@ -250,10 +399,38 @@ public sealed class LibraryOrganizerService
         Action<int, int, string?>? reportProgress = null,
         CancellationToken cancellationToken = default)
     {
+        var state = new RunState
+        {
+            BatchId = profile.Mode == OrganizerMode.Move ? _undoLog?.BeginBatch(profile.Name, profile.BaseFolder) ?? 0 : 0,
+        };
+        return await ExecuteCoreAsync(plan, profile, isInteractive, interactiveResolver, createDbContext, reportProgress, cancellationToken, state).ConfigureAwait(false);
+    }
+
+    /// <summary>What one organize run shares across every profile it executes: the undo batch, the "apply to all remaining" answer, and
+    /// every destination already used (or, in Simulate, that would have been) - the plugin's `MovedBooks` (`lobookmover.py:406`), so a later
+    /// book aimed at the same path is a real collision even though nothing exists on disk yet.</summary>
+    private sealed class RunState
+    {
+        public int BatchId { get; init; }
+
+        public bool ApplyToAll { get; set; }
+
+        public CollisionResolution Sticky { get; set; } = CollisionResolution.Skip;
+
+        public HashSet<string> Claimed { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task<OrganizeResult> ExecuteCoreAsync(
+        OrganizePlan plan,
+        OrganizerProfile profile,
+        bool isInteractive,
+        InteractiveCollisionResolver? interactiveResolver,
+        Func<PaperbunkrDbContext> createDbContext,
+        Action<int, int, string?>? reportProgress,
+        CancellationToken cancellationToken,
+        RunState state)
+    {
         var result = new OrganizeResult();
-        int batchId = _undoLog?.BeginBatch(profile.Name) ?? 0;
-        bool applyToAllRemaining = false;
-        CollisionResolution stickyResolution = CollisionResolution.Skip;
 
         int total = plan.Moves.Count;
         for (int i = 0; i < total; i++)
@@ -262,24 +439,47 @@ public sealed class LibraryOrganizerService
             PlannedMove move = plan.Moves[i];
             reportProgress?.Invoke(i, total, move.Issue.EffectiveTitle() ?? Path.GetFileName(move.SourcePath));
 
+            if (move.Problem is not null)
+            {
+                result.Failed.Add((move, move.Problem));
+                continue;
+            }
+
+            if (move.SkipReason is not null)
+            {
+                result.Skipped.Add(move);
+                continue;
+            }
+
+            if (move.IsAlreadyInPlace)
+            {
+                state.Claimed.Add(Path.GetFullPath(move.DestinationPath));
+                result.AlreadyInPlace.Add(move);
+                continue;
+            }
+
             try
             {
                 string destination = move.DestinationPath;
 
-                if (move.IsCollision && File.Exists(destination))
+                // Decided now, not from the plan's flag: earlier items in this run change what exists.
+                bool sameFile = string.Equals(Path.GetFullPath(move.SourcePath), Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase);
+                bool collides = !sameFile && (File.Exists(destination) || state.Claimed.Contains(Path.GetFullPath(destination)));
+
+                if (collides)
                 {
                     CollisionResolution resolution;
-                    if (applyToAllRemaining)
+                    if (state.ApplyToAll)
                     {
-                        resolution = stickyResolution;
+                        resolution = state.Sticky;
                     }
                     else if (isInteractive && interactiveResolver is not null)
                     {
                         (resolution, bool applyAll) = await interactiveResolver(move.Issue, destination, cancellationToken).ConfigureAwait(false);
                         if (applyAll)
                         {
-                            applyToAllRemaining = true;
-                            stickyResolution = resolution;
+                            state.ApplyToAll = true;
+                            state.Sticky = resolution;
                         }
                     }
                     else
@@ -302,19 +502,20 @@ public sealed class LibraryOrganizerService
 
                     if (resolution == CollisionResolution.Rename)
                     {
-                        destination = CreateRenamedPath(destination);
+                        destination = CreateRenamedPath(destination, state.Claimed);
                     }
                     else if (resolution == CollisionResolution.Replace)
                     {
-                        DeleteExisting(destination, profile.Mode);
+                        DisposeOfReplacedFile(destination, move.Issue.Id, profile.Mode, createDbContext, result);
                     }
                 }
 
+                state.Claimed.Add(Path.GetFullPath(destination));
                 await PerformMoveAsync(move.Issue, move.SourcePath, destination, profile.Mode, createDbContext, cancellationToken).ConfigureAwait(false);
 
                 if (profile.Mode == OrganizerMode.Move)
                 {
-                    RecordUndoBestEffort(batchId, move.SourcePath, destination);
+                    RecordUndoBestEffort(state.BatchId, move.SourcePath, destination);
 
                     if (profile.RemoveEmptyFolders && !string.IsNullOrWhiteSpace(profile.BaseFolder))
                     {
@@ -332,6 +533,97 @@ public sealed class LibraryOrganizerService
 
         reportProgress?.Invoke(total, total, null);
         return result;
+    }
+
+
+    /// <summary>Plans one run for several profiles at once, with the plugin's rule for a book several profiles would place
+    /// (`create_book_paths`, `lobookmover.py:172-236`): every <b>Copy</b> profile copies it, but only the <b>last Move</b> profile that can
+    /// place it moves it - earlier Move profiles skip it ("moved by a later profile"). Books a profile excludes or cannot plan do not count as
+    /// placed by it. One profile behaves exactly like <see cref="PlanAsync"/>.</summary>
+    public async Task<IReadOnlyList<ProfilePlan>> PlanManyAsync(
+        IReadOnlyList<Issue> books, IReadOnlyList<OrganizerProfile> profiles, Func<PaperbunkrDbContext> createDbContext)
+    {
+        var plans = new List<ProfilePlan>();
+        foreach (OrganizerProfile profile in profiles)
+        {
+            plans.Add(new ProfilePlan(profile, await PlanAsync(books, profile, createDbContext).ConfigureAwait(false)));
+        }
+
+        if (profiles.Count < 2)
+        {
+            return plans;
+        }
+
+        static bool CanPlace(PlannedMove m) => m.Problem is null && m.SkipReason is null;
+
+        var winner = new Dictionary<int, int>();
+        for (int i = 0; i < plans.Count; i++)
+        {
+            if (plans[i].Profile.Mode == OrganizerMode.Copy)
+            {
+                continue;
+            }
+
+            foreach (PlannedMove move in plans[i].Plan.Moves.Where(CanPlace))
+            {
+                winner[move.Issue.Id] = i;      // a later profile overwrites an earlier one
+            }
+        }
+
+        for (int i = 0; i < plans.Count; i++)
+        {
+            if (plans[i].Profile.Mode == OrganizerMode.Copy)
+            {
+                continue;
+            }
+
+            int index = i;
+            var moves = plans[i].Plan.Moves.Select(m =>
+                CanPlace(m) && winner.TryGetValue(m.Issue.Id, out int w) && w != index
+                    ? m with { IsCollision = false, IsAlreadyInPlace = false, SkipReason = $"the book is moved by a later profile ({plans[w].Profile.Name})" }
+                    : m).ToList();
+            plans[i] = plans[i] with { Plan = new OrganizePlan(moves) };
+        }
+
+        return plans;
+    }
+
+    /// <summary>Executes <see cref="PlanManyAsync"/>'s plans as ONE run: Copy profiles first (a copy must read the file before a Move profile
+    /// relocates it), then the Move profiles, all in a single undo batch and sharing the collision answers. Returns each profile's own result.</summary>
+    public async Task<IReadOnlyList<ProfileResult>> ExecuteManyAsync(
+        IReadOnlyList<ProfilePlan> plans,
+        bool isInteractive,
+        InteractiveCollisionResolver? interactiveResolver,
+        Func<PaperbunkrDbContext> createDbContext,
+        Action<int, int, string?>? reportProgress = null,
+        CancellationToken cancellationToken = default)
+    {
+        List<OrganizerProfile> moveProfiles = plans.Select(p => p.Profile).Where(p => p.Mode == OrganizerMode.Move).ToList();
+        var bases = moveProfiles.Select(p => p.BaseFolder).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var state = new RunState
+        {
+            // The folder-cleanup boundary an undo may go up to is only known when every moving profile shares one base folder.
+            BatchId = moveProfiles.Count > 0
+                ? _undoLog?.BeginBatch(string.Join(", ", moveProfiles.Select(p => p.Name)), bases.Count == 1 ? bases[0] : null) ?? 0
+                : 0,
+        };
+
+        List<ProfilePlan> ordered = plans.Where(p => p.Profile.Mode == OrganizerMode.Copy).Concat(plans.Where(p => p.Profile.Mode != OrganizerMode.Copy)).ToList();
+        int grandTotal = ordered.Sum(p => p.Plan.Moves.Count);
+        int offset = 0;
+        var results = new List<ProfileResult>();
+        foreach (ProfilePlan item in ordered)
+        {
+            int start = offset;
+            OrganizeResult result = await ExecuteCoreAsync(
+                item.Plan, item.Profile, isInteractive, interactiveResolver, createDbContext,
+                (done, _, label) => reportProgress?.Invoke(start + done, grandTotal, label),
+                cancellationToken, state).ConfigureAwait(false);
+            results.Add(new ProfileResult(item.Profile, result));
+            offset += item.Plan.Moves.Count;
+        }
+
+        return results;
     }
 
     /// <summary>
@@ -361,6 +653,7 @@ public sealed class LibraryOrganizerService
 
         int reversed = 0;
         var errors = new List<string>();
+        string? batchBaseFolder = _undoLog.GetBatchBaseFolder(entries[0].BatchId);
 
         foreach (OrganizeMove entry in entries)
         {
@@ -373,7 +666,8 @@ public sealed class LibraryOrganizerService
                     continue;
                 }
 
-                if (File.Exists(entry.OldPath))
+                bool caseOnlyChange = string.Equals(entry.OldPath, entry.NewPath, StringComparison.OrdinalIgnoreCase);
+                if (!caseOnlyChange && File.Exists(entry.OldPath))
                 {
                     errors.Add($"{Path.GetFileName(entry.NewPath)}: original location is occupied again - skipped.");
                     continue;
@@ -398,6 +692,13 @@ public sealed class LibraryOrganizerService
                 }
 
                 reversed++;
+
+                // The run created these folders (or emptied them by moving into them); take back the ones that are empty now,
+                // never going above the base folder the run was organizing into.
+                if (!string.IsNullOrWhiteSpace(batchBaseFolder))
+                {
+                    RemoveEmptyFoldersUpward(Path.GetDirectoryName(entry.NewPath), batchBaseFolder);
+                }
             }
             catch (Exception ex)
             {
@@ -414,9 +715,11 @@ public sealed class LibraryOrganizerService
         return new UndoResult(reversed, errors.Count, errors);
     }
 
-    /// <summary>CE's exact numeric-suffix algorithm (`lobookmover.py:670-689`, verified): strip an
-    /// existing " (N)" suffix, then try " (1)", " (2)", ... up to 100 attempts.</summary>
-    private static string CreateRenamedPath(string path)
+    /// <summary>The plugin's numeric-suffix algorithm (`lobookmover.py:676-689`): strip an existing
+    /// " (N)" suffix, then try " (1)", " (2)", ... up to 100 attempts. A candidate must be free on disk
+    /// and not already claimed by an earlier book in this run (which matters in Simulate, where nothing
+    /// is really created).</summary>
+    private static string CreateRenamedPath(string path, ISet<string> claimed)
     {
         string? directory = Path.GetDirectoryName(path);
         string extension = Path.GetExtension(path);
@@ -425,7 +728,7 @@ public sealed class LibraryOrganizerService
         for (int i = 1; i <= 100; i++)
         {
             string candidate = Path.Combine(directory ?? string.Empty, $"{baseName} ({i}){extension}");
-            if (!File.Exists(candidate))
+            if (!File.Exists(candidate) && !claimed.Contains(Path.GetFullPath(candidate)))
             {
                 return candidate;
             }
@@ -434,20 +737,51 @@ public sealed class LibraryOrganizerService
         throw new InvalidOperationException($"Could not find a free renamed path for '{path}' after 100 attempts.");
     }
 
+    // The plugin's regex matches a single digit (`[0-9]`); \d+ additionally strips " (12)" so a name renamed
+    // past nine still counts up instead of growing " (12) (1)".
     private static readonly Regex ExistingSuffixRegexInstance = new(@" \(\d+\)$", RegexOptions.Compiled);
 
     private static Regex ExistingSuffixRegex() => ExistingSuffixRegexInstance;
 
-    /// <summary>Recycle-bin-safe where the platform supports it; Simulate mode never reaches here
-    /// (it's short-circuited in <see cref="PerformMoveAsync"/> before any real I/O).</summary>
-    private static void DeleteExisting(string path, OrganizerMode mode)
+    /// <summary>Replace: the overwritten file goes to the Recycle Bin (recoverable, as the plugin does -
+    /// `lobookmover.py:503`) instead of being deleted outright, and any library entry that pointed at it is left
+    /// without a file rather than sharing the incoming book's path. Simulate never gets here in a way that
+    /// touches anything.</summary>
+    private void DisposeOfReplacedFile(string path, int movingIssueId, OrganizerMode mode, Func<PaperbunkrDbContext> createDbContext, OrganizeResult result)
     {
         if (mode == OrganizerMode.Simulate)
         {
             return;
         }
 
-        File.Delete(path);
+        if (File.Exists(path))
+        {
+            if (_sendToRecycleBin is not null)
+            {
+                _sendToRecycleBin(path);
+                if (File.Exists(path))
+                {
+                    throw new IOException($"Could not move the existing file to the Recycle Bin: {path}");
+                }
+            }
+            else
+            {
+                File.Delete(path);
+            }
+        }
+
+        using PaperbunkrDbContext context = createDbContext();
+        List<Issue> orphaned = context.Issues.Where(i => i.FilePath == path && i.Id != movingIssueId).ToList();
+        if (orphaned.Count > 0)
+        {
+            foreach (Issue issue in orphaned)
+            {
+                issue.FilePath = null;
+                result.ReplacedIssueIds.Add(issue.Id);
+            }
+
+            context.SaveChanges();
+        }
     }
 
     private static async Task PerformMoveAsync(
@@ -478,12 +812,31 @@ public sealed class LibraryOrganizerService
         // "add copied book to library" sub-setting, not built in this pass (design doc's own scope).
         if (mode == OrganizerMode.Move)
         {
-            using PaperbunkrDbContext context = createDbContext();
-            Issue? tracked = await context.Issues.FindAsync(new object[] { issue.Id }, cancellationToken).ConfigureAwait(false);
-            if (tracked is not null)
+            try
             {
-                tracked.FilePath = destination;
-                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                using PaperbunkrDbContext context = createDbContext();
+                Issue? tracked = await context.Issues.FindAsync(new object[] { issue.Id }, cancellationToken).ConfigureAwait(false);
+                if (tracked is not null)
+                {
+                    tracked.FilePath = destination;
+                    await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                // The move and the library record must not disagree: put the file back so the record (still
+                // the old path) stays true, and say so. If even that fails, the message names both paths.
+                try
+                {
+                    File.Move(destination, source, overwrite: false);
+                }
+                catch (Exception moveBack)
+                {
+                    throw new IOException(
+                        $"The file was moved to '{destination}' but the library could not be updated ({ex.Message}) and moving it back failed ({moveBack.Message}).", ex);
+                }
+
+                throw new IOException($"The library could not be updated ({ex.Message}); the file was moved back to '{source}'.", ex);
             }
         }
     }

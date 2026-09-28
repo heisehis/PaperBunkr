@@ -2415,7 +2415,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         job.Succeed("Update downloaded", new ActivityLink(ActivityLinkKind.UpdateChangelog));
 
         ToastRequest? readyToast = null;
-        var restartCommand = new RelayCommand(() => _updateService.ApplyUpdatesAndRestart(item, downloadPath));
+        var restartCommand = new RelayCommand(() =>
+        {
+            if (_updateService.ApplyUpdatesAndRestart(item, downloadPath) is string failure)
+            {
+                Activity.RaiseAlert(new ActivityAlert
+                {
+                    Severity = ActivityAlertSeverity.Error,
+                    Title = "Update couldn't be installed",
+                    Detail = failure,
+                    DedupeKey = "update-install-failed",
+                });
+            }
+        });
         var laterCommand = new RelayCommand(() => CloseToast(readyToast!));
         var whatsNewCommand = new RelayCommand(() =>
         {

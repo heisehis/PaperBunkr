@@ -19,4 +19,38 @@ public class UpdateServiceTests
 
         Assert.NotNull(service);
     }
+
+    [Fact]
+    public void ApplyUpdatesAndRestart_MissingInstaller_ReturnsFailure()
+    {
+        var service = new UpdateService();
+        string missing = Path.Combine(Path.GetTempPath(), $"paperbunkr_update_missing_{Guid.NewGuid():N}.exe");
+
+        string? failure = service.ApplyUpdatesAndRestart(new NetSparkleUpdater.AppCastItem(), missing);
+
+        Assert.NotNull(failure);
+    }
+
+    [Fact]
+    public void ApplyUpdatesAndRestart_BadSignature_ReturnsFailure_WithoutRunningIt()
+    {
+        var service = new UpdateService();
+        // .txt, not .exe: if verification were ever skipped, shell-executing this opens a text
+        // file rather than running anything.
+        string path = Path.Combine(Path.GetTempPath(), $"paperbunkr_update_unsigned_{Guid.NewGuid():N}.txt");
+        File.WriteAllText(path, "not a real installer");
+        try
+        {
+            var item = new NetSparkleUpdater.AppCastItem { DownloadSignature = "AAAA" };
+
+            string? failure = service.ApplyUpdatesAndRestart(item, path);
+
+            Assert.NotNull(failure);
+            Assert.Contains("signature", failure);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

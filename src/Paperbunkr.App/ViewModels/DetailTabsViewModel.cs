@@ -1170,8 +1170,10 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         // LINQ query projecting both entity types into a shared anonymous type before
         // materializing - that shape needs a typed null literal for whichever entity type isn't
         // present in a given row, which most EF Core providers refuse to translate to SQL.
+        // ItemType filter is required: a Novel row's SeriesId is a BookSeries id, a separate id
+        // space that can collide with this comic Series id.
         var readingEvents = context.ReadingEvents
-            .Where(e => e.SeriesId == seriesId)
+            .Where(e => e.SeriesId == seriesId && e.ItemType == ReadingItemType.Comic)
             .OrderByDescending(e => e.TimestampUtc)
             .Take(20)
             .ToList();

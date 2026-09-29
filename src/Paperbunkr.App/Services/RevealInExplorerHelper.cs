@@ -19,22 +19,48 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public static class RevealInExplorerHelper
 {
-    /// <summary>Selects the exact file in Explorer - CE's own per-ComicBook behavior.</summary>
-    public static bool RevealIssue(Issue issue)
+    /// <summary>Selects the exact file in Explorer - CE's own per-ComicBook behavior. A file that's no
+    /// longer on disk raises a "not found" Activity Center alert instead (CE just did nothing).</summary>
+    public static bool RevealIssue(Issue issue, IActivityService? activity = null)
     {
         string? path = ResolveIssueFilePath(issue);
-        return path is not null && FileExplorer.OpenFolderAndSelect(path);
+        return path is not null && RevealFile(path, activity);
     }
 
     /// <summary>
     /// More than one file may be involved, so there's no single file to select - dedupes to unique
     /// containing folders and opens each once.
     /// </summary>
-    public static void RevealIssues(IEnumerable<Issue> issues)
+    public static void RevealIssues(IEnumerable<Issue> issues, IActivityService? activity = null)
     {
+        var missing = new List<string>();
         foreach (var folder in ResolveUniqueFolders(issues))
         {
-            FileExplorer.OpenFolder(folder);
+            if (Directory.Exists(folder))
+            {
+                FileExplorer.OpenFolder(folder);
+            }
+            else
+            {
+                missing.Add(folder);
+            }
+        }
+
+        if (missing.Count == 1)
+        {
+            RaiseNotFound(activity, missing[0], isFolder: true);
+        }
+        else if (missing.Count > 1)
+        {
+            activity?.RaiseAlert(new ActivityAlert
+            {
+                Severity = ActivityAlertSeverity.Warning,
+                Title = "Folders not found",
+                Detail = $"{missing.Count} of the selected issues' folders no longer exist. They may have been moved, renamed or deleted.",
+                ActionLabel = "Library Health",
+                ActionLink = new ActivityLink(ActivityLinkKind.Preferences, LibraryHealthFilesPayload),
+                DedupeKey = "reveal-not-found:multiple",
+            });
         }
     }
 
@@ -42,19 +68,63 @@ public static class RevealInExplorerHelper
     /// A series has no single file, so this opens (doesn't select) the containing folder of its
     /// first issue by number - the closest analog to "reveal this series" at series granularity.
     /// </summary>
-    public static bool RevealSeries(Series series)
+    public static bool RevealSeries(Series series, IActivityService? activity = null)
     {
         string? folder = ResolveSeriesFolder(series);
-        return folder is not null && FileExplorer.OpenFolder(folder);
+        if (folder is null)
+        {
+            return false;
+        }
+
+        if (!Directory.Exists(folder))
+        {
+            RaiseNotFound(activity, folder, isFolder: true);
+            return false;
+        }
+
+        return FileExplorer.OpenFolder(folder);
     }
 
     /// <summary>Selects the book's file in Explorer (docs/superpowers/specs/2026-08-27-book-details-
     /// screen-design.md) - a <see cref="Book"/> is a single file like an <see cref="Issue"/>, so this
     /// mirrors <see cref="RevealIssue"/> exactly.</summary>
-    public static bool RevealBook(Book book)
+    public static bool RevealBook(Book book, IActivityService? activity = null)
     {
         string? path = ResolveBookFilePath(book);
-        return path is not null && FileExplorer.OpenFolderAndSelect(path);
+        return path is not null && RevealFile(path, activity);
+    }
+
+    /// <summary>The Activity link payload for the not-found alert's button: Library Health, Files tab.</summary>
+    private const string LibraryHealthFilesPayload = "LibraryHealth/Files";
+
+    private static bool RevealFile(string path, IActivityService? activity)
+    {
+        if (!File.Exists(path))
+        {
+            RaiseNotFound(activity, path, isFolder: false);
+            return false;
+        }
+
+        return FileExplorer.OpenFolderAndSelect(path);
+    }
+
+    /// <summary>
+    /// Keyed on the path, so clicking Reveal again on the same missing file refreshes the one alert
+    /// instead of stacking duplicates.
+    /// </summary>
+    private static void RaiseNotFound(IActivityService? activity, string path, bool isFolder)
+    {
+        activity?.RaiseAlert(new ActivityAlert
+        {
+            Severity = ActivityAlertSeverity.Warning,
+            Title = isFolder ? "Folder not found" : "File not found",
+            Detail = isFolder
+                ? $"{path} no longer exists. It may have been moved, renamed or deleted."
+                : $"{Path.GetFileName(path)} is no longer in {Path.GetDirectoryName(path)}. It may have been moved, renamed or deleted.",
+            ActionLabel = "Library Health",
+            ActionLink = new ActivityLink(ActivityLinkKind.Preferences, LibraryHealthFilesPayload),
+            DedupeKey = $"reveal-not-found:{path}",
+        });
     }
 
     /// <summary>Pure - returns null if the issue has no file, otherwise its own <see cref="Issue.FilePath"/> unchanged (no folder extraction; OpenFolderAndSelect wants the file itself).</summary>

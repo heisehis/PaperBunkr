@@ -71,6 +71,7 @@ public static class LibraryPathRepairService
 
             issue.FilePath = real;
             issue.FileIsMissing = false;
+            issue.MissingAcknowledged = false;
             takenPaths.Add(real);
             reconnected++;
         }

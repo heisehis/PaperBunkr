@@ -4023,6 +4023,140 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.True(verify.Series.Find(seriesId)!.EmptyRowAcknowledged);
     }
 
+    // ===== Dismissed sub-groups (docs/superpowers/specs/2026-09-28-library-health-dismissed-rows-design.md) =====
+
+    [Fact]
+    public void RefreshLibraryHealth_DismissedMissingFile_ListedInDismissedGroupOnly()
+    {
+        SeedMissingIssue(missingVerificationCount: 62, missingAcknowledged: true);
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.Empty(vm.MissingFileItems);
+        Assert.False(vm.HasMissingFileItems);
+        var row = Assert.Single(vm.DismissedMissingFileItems);
+        Assert.True(row.IsDismissed);
+        Assert.False(row.IsError);
+        Assert.False(row.IsWarning);
+        Assert.True(vm.HasDismissedMissingFileItems);
+        Assert.True(vm.CanExpandMissingFiles);
+    }
+
+    [Fact]
+    public void RefreshLibraryHealth_NothingMissingOrDismissed_MissingFilesNotExpandable()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.CanExpandMissingFiles);
+        Assert.False(vm.CanExpandEmptyRows);
+    }
+
+    [Fact]
+    public void RestoreMissingFile_ClearsAcknowledged_AndMovesRowBackToActiveList()
+    {
+        int issueId = SeedMissingIssue(missingAcknowledged: true);
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var row = Assert.Single(vm.DismissedMissingFileItems);
+
+        row.RestoreCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(vm.DismissedMissingFileItems);
+        Assert.Equal(issueId, Assert.Single(vm.MissingFileItems).IssueId);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(context.Issues.Find(issueId)!.MissingAcknowledged);
+    }
+
+    [Fact]
+    public void RestoreAllDismissedMissingFiles_RestoresEveryDismissedRow()
+    {
+        SeedMissingIssue(fileName: "a.cbz", missingAcknowledged: true, seriesName: "A");
+        SeedMissingIssue(fileName: "b.cbz", missingAcknowledged: true, seriesName: "B");
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        Assert.Equal(2, vm.DismissedMissingFileItems.Count);
+
+        vm.RestoreAllDismissedMissingFilesCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(vm.DismissedMissingFileItems);
+        Assert.Equal(2, vm.MissingFileItems.Count);
+    }
+
+    [Fact]
+    public void RelinkDismissedMissingFile_ClearsAcknowledged()
+    {
+        int issueId = SeedMissingIssue(missingAcknowledged: true);
+        var vm = CreateViewModel(new FileRoundTripPicker { OpenPathToReturn = Path.Combine(_scanRoot, "found.cbz") });
+        vm.EnsureLoaded();
+
+        Assert.Single(vm.DismissedMissingFileItems).RelinkCommand.Execute(null);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var issue = context.Issues.Find(issueId)!;
+        Assert.False(issue.FileIsMissing);
+        Assert.False(issue.MissingAcknowledged);
+    }
+
+    [Fact]
+    public void DismissedEmptyRows_ListedInDismissedGroup_AndRestoreAllClearsBothKinds()
+    {
+        int seriesId;
+        int issueId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var ghost = new Series { Name = "Ghost Series", EmptyRowAcknowledged = true };
+            var real = new Series { Name = "Real Series" };
+            context.Series.AddRange(ghost, real);
+            context.SaveChanges();
+            var issue = new Issue { SeriesId = real.Id, Number = "1", FilePath = Path.Combine(_scanRoot, "corrupt.cbz"), IsContentEmpty = true, EmptyRowAcknowledged = true };
+            context.Issues.Add(issue);
+            context.SaveChanges();
+            seriesId = ghost.Id;
+            issueId = issue.Id;
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.HasEmptyRowItems);
+        Assert.Equal(2, vm.DismissedEmptyRowCount);
+        Assert.True(vm.CanExpandEmptyRows);
+        Assert.True(Assert.Single(vm.DismissedEmptySeriesItems).IsDismissed);
+        Assert.True(Assert.Single(vm.DismissedEmptyIssueItems).IsDismissed);
+
+        vm.RestoreAllDismissedEmptyRowsCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.False(vm.HasDismissedEmptyRowItems);
+        Assert.Equal(2, vm.EmptyRowCount);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(verify.Series.Find(seriesId)!.EmptyRowAcknowledged);
+        Assert.False(verify.Issues.Find(issueId)!.EmptyRowAcknowledged);
+    }
+
+    [Fact]
+    public void RestoreDismissedEmptySeries_MovesItBackToActiveList()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.Series.Add(new Series { Name = "Ghost Series", EmptyRowAcknowledged = true });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.Single(vm.DismissedEmptySeriesItems).RestoreCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(vm.DismissedEmptySeriesItems);
+        Assert.Single(vm.EmptySeriesItems);
+    }
+
     /// <summary>Returns a configurable file path for both open/save dialogs - used by the keyboard-shortcut import/export round-trip tests, neither existing fake above supports this.</summary>
     private sealed class FileRoundTripPicker : IFilePickerService
     {

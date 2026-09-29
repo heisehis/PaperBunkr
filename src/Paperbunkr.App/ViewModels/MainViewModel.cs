@@ -225,6 +225,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         Detail = new DetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
         MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
         MetadataEntityDetail = new MetadataEntityDetailScreenViewModel(NavigateBack, GoDetailForSeries, GoReaderForIssue);
+        Detail.Tabs.ActivityCenter = Activity;
+        MangaDetail.ActivityCenter = Activity;
+        MangaDetail.Tabs.ActivityCenter = Activity;
+        BookDetail.ActivityCenter = Activity;
         Paperbunkr.App.Scraper.ScheduledCoordinators.Scraper = Scraper;
         Paperbunkr.App.Scraper.ScheduledCoordinators.Organizer = Organizer;
         Library.ScrapeIssues = ids => Scraper.ScrapeIssuesAsync(ids);

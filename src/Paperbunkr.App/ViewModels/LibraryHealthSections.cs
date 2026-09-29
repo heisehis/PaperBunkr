@@ -51,6 +51,8 @@ public sealed class LibraryHealthSections
         EmptyRows = new("emptyRows", LibraryHealthTab.Files, "library.healthEmptyRows");
         RecentlyRemoved = new("recentlyRemoved", LibraryHealthTab.Files, "library.healthRecentlyRemoved");
         All = new[] { Duplicates, SeriesConflicts, ContentType, Proposals, AdPages, ReportedPages, SimilarSeries, Missing, EmptyRows, RecentlyRemoved };
+        MissingDismissed = new("missingDismissed", LibraryHealthTab.Files, Missing.Anchor);
+        EmptyRowsDismissed = new("emptyRowsDismissed", LibraryHealthTab.Files, EmptyRows.Anchor);
     }
 
     public LibraryHealthSectionState Duplicates { get; }
@@ -72,6 +74,15 @@ public sealed class LibraryHealthSections
     public LibraryHealthSectionState EmptyRows { get; }
 
     public LibraryHealthSectionState RecentlyRemoved { get; }
+
+    /// <summary>
+    /// The collapsed "Dismissed" sub-groups nested inside Missing Files and Empty Rows (docs/superpowers/specs/
+    /// 2026-09-28-library-health-dismissed-rows-design.md). Deliberately not in <see cref="All"/>: they share their
+    /// parent's anchor and aren't search or deep-link targets of their own.
+    /// </summary>
+    public LibraryHealthSectionState MissingDismissed { get; }
+
+    public LibraryHealthSectionState EmptyRowsDismissed { get; }
 
     public IReadOnlyList<LibraryHealthSectionState> All { get; }
 

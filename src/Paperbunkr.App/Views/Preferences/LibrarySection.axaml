@@ -78,17 +78,33 @@
                                 <TextBlock Text="{Binding SeverityLabel}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbDangerBrush}" />
                             </StackPanel>
                         </Border>
+                        <!-- Dismissed (docs/superpowers/specs/2026-09-28-library-health-dismissed-rows-design.md): neutral outline
+                             chip in place of the severity chip - the row is parked, not a live problem. -->
+                        <Border IsVisible="{Binding IsDismissed}" CornerRadius="{StaticResource PbRadiusChip}" Padding="7,2"
+                                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Ellipse Width="6" Height="6" Fill="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="Dismissed" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            </StackPanel>
+                        </Border>
                         <TextBlock Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
                                    VerticalAlignment="Center" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                        <Button Classes="headerAction ghost" Command="{Binding RestoreCommand}" IsVisible="{Binding IsDismissed}"
+                                ToolTip.Tip="Put this back in the list above">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <fi:SymbolIcon Symbol="ArrowUndo" FontSize="{StaticResource PbIconSizeXs}" />
+                                <TextBlock Text="Restore" />
+                            </StackPanel>
+                        </Button>
                         <Button Classes="headerAction ghost" Command="{Binding RelinkCommand}">
                             <StackPanel Orientation="Horizontal" Spacing="5">
                                 <fi:SymbolIcon Symbol="Link" FontSize="{StaticResource PbIconSizeXs}" />
                                 <TextBlock Text="Relink" />
                             </StackPanel>
                         </Button>
-                        <Button Classes="headerAction ghost" Command="{Binding DismissCommand}">
+                        <Button Classes="headerAction ghost" Command="{Binding DismissCommand}" IsVisible="{Binding !IsDismissed}">
                             <StackPanel Orientation="Horizontal" Spacing="5">
                                 <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                                 <TextBlock Text="Dismiss" />
@@ -192,10 +208,28 @@
         <DataTemplate x:Key="EmptySeriesRowTemplate" x:DataType="vm:EmptySeriesRowViewModel">
             <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
                 <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
-                    <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
-                               VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <!-- Dismissed (docs/superpowers/specs/2026-09-28-library-health-dismissed-rows-design.md): neutral outline
+                             chip in place of the severity chip - the row is parked, not a live problem. -->
+                        <Border IsVisible="{Binding IsDismissed}" CornerRadius="{StaticResource PbRadiusChip}" Padding="7,2"
+                                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Ellipse Width="6" Height="6" Fill="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="Dismissed" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                        <Button Classes="headerAction ghost" Command="{Binding DismissCommand}">
+                        <Button Classes="headerAction ghost" Command="{Binding RestoreCommand}" IsVisible="{Binding IsDismissed}"
+                                ToolTip.Tip="Put this back in the list above">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <fi:SymbolIcon Symbol="ArrowUndo" FontSize="{StaticResource PbIconSizeXs}" />
+                                <TextBlock Text="Restore" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="headerAction ghost" Command="{Binding DismissCommand}" IsVisible="{Binding !IsDismissed}">
                             <StackPanel Orientation="Horizontal" Spacing="5">
                                 <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                                 <TextBlock Text="Dismiss" />
@@ -859,17 +893,18 @@
                             <StackPanel Spacing="8">
                                 <Grid ColumnDefinitions="*,Auto">
                                     <Button Grid.Column="0" Classes="sideItemButton" HorizontalContentAlignment="Stretch" Padding="0"
-                                            Command="{Binding LibraryHealthSections.Missing.ToggleCommand}" IsHitTestVisible="{Binding HasMissingFileItems}"
+                                            Command="{Binding LibraryHealthSections.Missing.ToggleCommand}" IsHitTestVisible="{Binding CanExpandMissingFiles}"
                                             AutomationProperties.AutomationId="LibraryHealthToggleMissing">
                                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                            <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" IsVisible="{Binding !HasMissingFileItems}" />
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding HasMissingFileItems}">
+                                            <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" IsVisible="{Binding !CanExpandMissingFiles}" />
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding CanExpandMissingFiles}">
                                                 <fi:SymbolIcon Symbol="ChevronUp" IsVisible="{Binding LibraryHealthSections.Missing.IsOpen}" FontSize="{StaticResource PbIconSizeXs}" />
                                                 <fi:SymbolIcon Symbol="ChevronDown" IsVisible="{Binding !LibraryHealthSections.Missing.IsOpen}" FontSize="{StaticResource PbIconSizeXs}" />
                                             </StackPanel>
                                             <TextBlock Text="Missing Files" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                                             <TextBlock Text="{Binding MissingFileItems.Count, StringFormat='· {0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" IsVisible="{Binding HasMissingFileItems}" />
                                             <TextBlock Text="· No missing files" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" IsVisible="{Binding !HasMissingFileItems}" />
+                                            <TextBlock Text="{Binding DismissedMissingFileItems.Count, StringFormat='· {0} dismissed'}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" IsVisible="{Binding HasDismissedMissingFileItems}" />
                                             
                                         </StackPanel>
                                     </Button>
@@ -880,6 +915,27 @@
                                 </Grid>
                                 <StackPanel Spacing="8" IsVisible="{Binding LibraryHealthSections.Missing.IsOpen}">
                                     <controls:VirtualList ItemsSource="{Binding MissingFileItems}" ItemTemplate="{StaticResource MissingFileRowTemplate}" />
+                                    <!-- Dismissed sub-group (docs/superpowers/specs/2026-09-28-library-health-dismissed-rows-design.md) -->
+                                    <StackPanel Spacing="8" IsVisible="{Binding HasDismissedMissingFileItems}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Button Grid.Column="0" Classes="sideItemButton" HorizontalContentAlignment="Stretch" Padding="0"
+                                                    Command="{Binding LibraryHealthSections.MissingDismissed.ToggleCommand}"
+                                                    AutomationProperties.AutomationId="LibraryHealthToggleMissingDismissed">
+                                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <fi:SymbolIcon Symbol="ChevronUp" IsVisible="{Binding LibraryHealthSections.MissingDismissed.IsOpen}" FontSize="{StaticResource PbIconSizeXs}" />
+                                                        <fi:SymbolIcon Symbol="ChevronDown" IsVisible="{Binding !LibraryHealthSections.MissingDismissed.IsOpen}" FontSize="{StaticResource PbIconSizeXs}" />
+                                                    </StackPanel>
+                                                    <TextBlock Text="Dismissed" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding DismissedMissingFileItems.Count, StringFormat='· {0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Grid.Column="1" Classes="headerAction ghost" Content="Restore All" Command="{Binding RestoreAllDismissedMissingFilesCommand}"
+                                                    AutomationProperties.AutomationId="LibraryHealthRestoreAllMissingButton" />
+                                        </Grid>
+                                        <controls:VirtualList ItemsSource="{Binding DismissedMissingFileItems}" ItemTemplate="{StaticResource MissingFileRowTemplate}"
+                                                              IsVisible="{Binding LibraryHealthSections.MissingDismissed.IsOpen}" />
+                                    </StackPanel>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -887,17 +943,18 @@
                             <StackPanel Spacing="8">
                                 <Grid ColumnDefinitions="*,Auto">
                                     <Button Grid.Column="0" Classes="sideItemButton" HorizontalContentAlignment="Stretch" Padding="0"
-                                            Command="{Binding LibraryHealthSections.EmptyRows.ToggleCommand}" IsHitTestVisible="{Binding HasEmptyRowItems}"
+                                            Command="{Binding LibraryHealthSections.EmptyRows.ToggleCommand}" IsHitTestVisible="{Binding CanExpandEmptyRows}"
                                             AutomationProperties.AutomationId="LibraryHealthToggleEmptyRows">
                                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                            <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" IsVisible="{Binding !HasEmptyRowItems}" />
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding HasEmptyRowItems}">
+                                            <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" IsVisible="{Binding !CanExpandEmptyRows}" />
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding CanExpandEmptyRows}">
                                                 <fi:SymbolIcon Symbol="ChevronUp" IsVisible="{Binding LibraryHealthSections.EmptyRows.IsOpen}" FontSize="{StaticResource PbIconSizeXs}" />
                                                 <fi:SymbolIcon Symbol="ChevronDown" IsVisible="{Binding !LibraryHealthSections.EmptyRows.IsOpen}" FontSize="{StaticResource PbIconSizeXs}" />
                                             </StackPanel>
                                             <TextBlock Text="Empty Rows" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                                             <TextBlock Text="{Binding EmptyRowCount, StringFormat='· {0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" IsVisible="{Binding HasEmptyRowItems}" />
                                             <TextBlock Text="· Nothing empty" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" IsVisible="{Binding !HasEmptyRowItems}" />
+                                            <TextBlock Text="{Binding DismissedEmptyRowCount, StringFormat='· {0} dismissed'}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" IsVisible="{Binding HasDismissedEmptyRowItems}" />
                                             
                                         </StackPanel>
                                     </Button>
@@ -908,6 +965,28 @@
                                 <StackPanel Spacing="8" IsVisible="{Binding LibraryHealthSections.EmptyRows.IsOpen}">
                                     <controls:VirtualList ItemsSource="{Binding EmptySeriesItems}" ItemTemplate="{StaticResource EmptySeriesRowTemplate}" />
                                     <controls:VirtualList ItemsSource="{Binding EmptyIssueItems}" ItemTemplate="{StaticResource MissingFileRowTemplate}" />
+                                    <StackPanel Spacing="8" IsVisible="{Binding HasDismissedEmptyRowItems}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Button Grid.Column="0" Classes="sideItemButton" HorizontalContentAlignment="Stretch" Padding="0"
+                                                    Command="{Binding LibraryHealthSections.EmptyRowsDismissed.ToggleCommand}"
+                                                    AutomationProperties.AutomationId="LibraryHealthToggleEmptyRowsDismissed">
+                                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <fi:SymbolIcon Symbol="ChevronUp" IsVisible="{Binding LibraryHealthSections.EmptyRowsDismissed.IsOpen}" FontSize="{StaticResource PbIconSizeXs}" />
+                                                        <fi:SymbolIcon Symbol="ChevronDown" IsVisible="{Binding !LibraryHealthSections.EmptyRowsDismissed.IsOpen}" FontSize="{StaticResource PbIconSizeXs}" />
+                                                    </StackPanel>
+                                                    <TextBlock Text="Dismissed" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding DismissedEmptyRowCount, StringFormat='· {0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Grid.Column="1" Classes="headerAction ghost" Content="Restore All" Command="{Binding RestoreAllDismissedEmptyRowsCommand}"
+                                                    AutomationProperties.AutomationId="LibraryHealthRestoreAllEmptyRowsButton" />
+                                        </Grid>
+                                        <StackPanel Spacing="8" IsVisible="{Binding LibraryHealthSections.EmptyRowsDismissed.IsOpen}">
+                                            <controls:VirtualList ItemsSource="{Binding DismissedEmptySeriesItems}" ItemTemplate="{StaticResource EmptySeriesRowTemplate}" />
+                                            <controls:VirtualList ItemsSource="{Binding DismissedEmptyIssueItems}" ItemTemplate="{StaticResource MissingFileRowTemplate}" />
+                                        </StackPanel>
+                                    </StackPanel>
                                 </StackPanel>
                             </StackPanel>
                         </Border>

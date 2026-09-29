@@ -79,7 +79,8 @@ namespace cYo.Common.Win32
 				return false;
 
 			string fullPath = Path.GetFullPath(path);
-			bool exists = File.GetAttributes(fullPath).HasFlag(FileAttributes.Directory) ? Directory.Exists(fullPath) : File.Exists(fullPath);
+			// CE probed File.GetAttributes first, which throws (instead of returning false) when the path is gone
+			bool exists = File.Exists(fullPath) || Directory.Exists(fullPath);
 			if (!exists)
 				return false;
 
@@ -110,7 +111,8 @@ namespace cYo.Common.Win32
 				return false;
 
 			string fullPath = Path.GetFullPath(path);
-			bool exists = File.GetAttributes(fullPath).HasFlag(FileAttributes.Directory) ? Directory.Exists(fullPath) : File.Exists(fullPath);
+			// CE probed File.GetAttributes first, which throws (instead of returning false) when the path is gone
+			bool exists = File.Exists(fullPath) || Directory.Exists(fullPath);
 			if (!exists)
 				return false;
 

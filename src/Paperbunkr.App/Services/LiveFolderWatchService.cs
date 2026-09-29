@@ -183,6 +183,7 @@ public class LiveFolderWatchService : IDisposable
                 {
                     issue.FilePath = e.FullPath + issue.FilePath!.Substring(e.OldFullPath.Length);
                     issue.FileIsMissing = false;
+                    issue.MissingAcknowledged = false;
                     changed = true;
                 }
             }
@@ -193,6 +194,7 @@ public class LiveFolderWatchService : IDisposable
                 {
                     issue.FilePath = e.FullPath;
                     issue.FileIsMissing = false;
+                    issue.MissingAcknowledged = false;
                     changed = true;
                 }
             }

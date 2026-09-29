@@ -250,6 +250,105 @@ public class LibraryHealthServiceTests : IDisposable
         Assert.False(verify.Issues.Find(issueId)!.IsContentEmpty);
     }
 
+    // ===================== Dismissals expire (docs/superpowers/specs/2026-09-28-library-health-
+    // dismissed-rows-design.md) - a dismissal covers one missing/empty episode, so a later
+    // recurrence shows up in Library Health again instead of staying silently hidden. =====================
+
+    [Fact]
+    public async Task Verify_FileBackOnDisk_ClearsMissingAcknowledged()
+    {
+        int issueId = AddIssue("back.cbz", createFile: true, missingVerificationCount: 4, missingAcknowledged: true);
+
+        await CreateService().VerifyAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(context.Issues.Find(issueId)!.MissingAcknowledged);
+    }
+
+    [Fact]
+    public async Task Verify_StillMissing_KeepsMissingAcknowledged()
+    {
+        int issueId = AddIssue("gone.cbz", createFile: false, missingAcknowledged: true);
+
+        await CreateService().VerifyAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.True(context.Issues.Find(issueId)!.MissingAcknowledged);
+    }
+
+    [Fact]
+    public async Task Verify_ReadableAgain_ClearsEmptyRowAcknowledged_UnreadableKeepsIt()
+    {
+        string healthyPath = Path.Combine(_root, "healthy.cbz");
+        CbzFixture.Create(healthyPath, pageCount: 1);
+        int healthyId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Test Series" };
+            context.Series.Add(series);
+            var healthy = new Issue { Series = series, Number = "1", FilePath = healthyPath, IsContentEmpty = true, EmptyRowAcknowledged = true };
+            context.Issues.Add(healthy);
+            context.SaveChanges();
+            healthyId = healthy.Id;
+        }
+
+        int corruptId = AddIssue("corrupt.cbz"); // garbage text, still unopenable
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.Issues.Find(corruptId)!.EmptyRowAcknowledged = true;
+            context.SaveChanges();
+        }
+
+        await CreateService().VerifyAsync(new Progress<(int, int)>());
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(verify.Issues.Find(healthyId)!.EmptyRowAcknowledged);
+        Assert.True(verify.Issues.Find(corruptId)!.EmptyRowAcknowledged);
+    }
+
+    [Fact]
+    public async Task Verify_SeriesWithIssuesAgain_ClearsEmptyRowAcknowledged_EmptySeriesKeepsIt()
+    {
+        int issueId = AddIssue("present.cbz");
+        int seriesWithIssueId;
+        int stillEmptyId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var withIssue = context.Issues.Include(i => i.Series).Single(i => i.Id == issueId).Series!;
+            withIssue.EmptyRowAcknowledged = true;
+            var stillEmpty = new Series { Name = "Ghost", EmptyRowAcknowledged = true };
+            context.Series.Add(stillEmpty);
+            context.SaveChanges();
+            seriesWithIssueId = withIssue.Id;
+            stillEmptyId = stillEmpty.Id;
+        }
+
+        await CreateService().VerifyAsync(new Progress<(int, int)>());
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(verify.Series.Find(seriesWithIssueId)!.EmptyRowAcknowledged);
+        Assert.True(verify.Series.Find(stillEmptyId)!.EmptyRowAcknowledged);
+    }
+
+    [Fact]
+    public async Task ScopedVerify_LeavesSeriesEmptyRowAcknowledgedAlone()
+    {
+        int issueId = AddIssue("present.cbz");
+        int seriesId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = context.Issues.Include(i => i.Series).Single(i => i.Id == issueId).Series!;
+            series.EmptyRowAcknowledged = true;
+            context.SaveChanges();
+            seriesId = series.Id;
+        }
+
+        await CreateService().VerifyAsync(new[] { issueId }, new Progress<(int, int)>());
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.True(verify.Series.Find(seriesId)!.EmptyRowAcknowledged);
+    }
+
     // ===================== Scanning: missing-file handling (docs/superpowers/specs/2026-09-06-
     // scan-missing-file-handling-design.md) - the drive-reachability guard the unattended auto-
     // remove-on-scan path needs and the manual "Remove All Confirmed Missing" button doesn't. =====================

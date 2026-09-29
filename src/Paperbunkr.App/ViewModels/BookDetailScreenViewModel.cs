@@ -583,6 +583,9 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
         }
     }
 
+    /// <summary>Where Reveal in Explorer reports a file that's no longer on disk. Set by <see cref="MainViewModel"/> after construction; null (tests) = no alert.</summary>
+    public IActivityService? ActivityCenter { get; set; }
+
     [RelayCommand]
     private void RevealInExplorer()
     {
@@ -590,7 +593,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
         var book = context.Books.Find(_bookId);
         if (book is not null)
         {
-            RevealInExplorerHelper.RevealBook(book);
+            RevealInExplorerHelper.RevealBook(book, ActivityCenter);
         }
     }
 

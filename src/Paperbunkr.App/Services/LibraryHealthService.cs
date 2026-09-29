@@ -87,6 +87,14 @@ public class LibraryHealthService
             issue.FileIsMissing = !exists;
             issue.MissingVerificationCount = exists ? 0 : issue.MissingVerificationCount + 1;
 
+            // A dismissal covers one missing episode (docs/superpowers/specs/2026-09-28-library-health-
+            // dismissed-rows-design.md): once the file is back, forget it, so a later disappearance
+            // shows up in Missing Files again instead of staying silently hidden.
+            if (exists)
+            {
+                issue.MissingAcknowledged = false;
+            }
+
             if (!exists)
             {
                 missingNow++;
@@ -127,9 +135,23 @@ public class LibraryHealthService
                 {
                     contentEmptyNow++;
                 }
+                else
+                {
+                    issue.EmptyRowAcknowledged = false;
+                }
             }
 
             progress.Report((++done, total));
+        }
+
+        // Same one-episode rule for an empty series: once it has issues again, its dismissal no longer
+        // applies. Full passes only - a scoped pass (one removed folder) isn't a statement about every series.
+        if (issueIds is null)
+        {
+            foreach (var series in context.Series.Where(s => s.EmptyRowAcknowledged && s.Issues.Any()))
+            {
+                series.EmptyRowAcknowledged = false;
+            }
         }
 
         context.SaveChanges();

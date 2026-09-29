@@ -73,6 +73,9 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     private List<ChapterRowSample> _allChapters = new();
 
     public DetailTabsViewModel Tabs { get; }
+
+    /// <summary>Where Reveal in Explorer reports a file that's no longer on disk. Set by <see cref="MainViewModel"/> after construction; null (tests) = no alert.</summary>
+    public IActivityService? ActivityCenter { get; set; }
     public DetailBandViewModel Band { get; }
     public ObservableCollection<ChapterRowSample> Chapters { get; }
 
@@ -609,7 +612,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         var issue = context.Issues.Find(row.Id);
         if (issue is not null)
         {
-            RevealInExplorerHelper.RevealIssue(issue);
+            RevealInExplorerHelper.RevealIssue(issue, ActivityCenter);
         }
     }
 

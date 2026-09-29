@@ -23,6 +23,7 @@ public partial class MissingFileRowViewModel : ViewModelBase
 {
     private readonly Func<MissingFileRowViewModel, Task> _onRelink;
     private readonly Action<MissingFileRowViewModel> _onDismiss;
+    private readonly Action<MissingFileRowViewModel>? _onRestore;
 
     public MissingFileRowViewModel(
         int issueId,
@@ -31,7 +32,8 @@ public partial class MissingFileRowViewModel : ViewModelBase
         Action<MissingFileRowViewModel> onRemove,
         Action<MissingFileRowViewModel> onDismiss,
         HealthSeverity severity = HealthSeverity.Warning,
-        string severityLabel = "Missing")
+        string severityLabel = "Missing",
+        Action<MissingFileRowViewModel>? onRestore = null)
     {
         IssueId = issueId;
         Severity = severity;
@@ -39,6 +41,7 @@ public partial class MissingFileRowViewModel : ViewModelBase
         DisplayLabel = displayLabel;
         _onRelink = onRelink;
         _onDismiss = onDismiss;
+        _onRestore = onRestore;
         DeleteConfirm = new TwoStepConfirm(() => onRemove(this));
     }
 
@@ -51,9 +54,16 @@ public partial class MissingFileRowViewModel : ViewModelBase
 
     public string SeverityLabel { get; }
 
-    public bool IsError => Severity == HealthSeverity.Error;
+    /// <summary>
+    /// A row the user already dismissed, shown in its section's "Dismissed" sub-group
+    /// (docs/superpowers/specs/2026-09-28-library-health-dismissed-rows-design.md) - offers Restore in
+    /// place of Dismiss and a neutral chip in place of the severity chip.
+    /// </summary>
+    public bool IsDismissed => _onRestore is not null;
 
-    public bool IsWarning => Severity == HealthSeverity.Warning;
+    public bool IsError => !IsDismissed && Severity == HealthSeverity.Error;
+
+    public bool IsWarning => !IsDismissed && Severity == HealthSeverity.Warning;
 
     public TwoStepConfirm DeleteConfirm { get; }
 
@@ -69,5 +79,12 @@ public partial class MissingFileRowViewModel : ViewModelBase
     {
         DeleteConfirm.Cancel();
         _onDismiss(this);
+    }
+
+    [RelayCommand]
+    private void Restore()
+    {
+        DeleteConfirm.Cancel();
+        _onRestore?.Invoke(this);
     }
 }

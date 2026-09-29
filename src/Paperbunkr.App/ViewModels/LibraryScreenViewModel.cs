@@ -2895,7 +2895,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         var issue = context.Issues.Find(issueId);
         if (issue is not null)
         {
-            RevealInExplorerHelper.RevealIssue(issue);
+            RevealInExplorerHelper.RevealIssue(issue, _activity);
         }
     }
 
@@ -3324,7 +3324,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         var series = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == card.SeriesId);
         if (series is not null)
         {
-            RevealInExplorerHelper.RevealSeries(series);
+            RevealInExplorerHelper.RevealSeries(series, _activity);
         }
     }
 

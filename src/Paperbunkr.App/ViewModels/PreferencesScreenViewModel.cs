@@ -147,6 +147,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         SimilarSeriesCandidates = new ObservableCollection<SeriesConflictRowViewModel>();
         EmptySeriesItems = new ObservableCollection<EmptySeriesRowViewModel>();
         EmptyIssueItems = new ObservableCollection<MissingFileRowViewModel>();
+        DismissedMissingFileItems = new ObservableCollection<MissingFileRowViewModel>();
+        DismissedEmptySeriesItems = new ObservableCollection<EmptySeriesRowViewModel>();
+        DismissedEmptyIssueItems = new ObservableCollection<MissingFileRowViewModel>();
 
         // Connections list+dialog (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-
         // redesign-design.md) - fresh row instances per VM instance, never the shared static catalog
@@ -3466,6 +3469,25 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public bool HasMissingFileItems => MissingFileItems.Count > 0;
 
+    // "Dismissed" sub-groups (docs/superpowers/specs/2026-09-28-library-health-dismissed-rows-design.md) - rows
+    // the user dismissed used to vanish from Library Health entirely, with no way to see or undo it.
+    public ObservableCollection<MissingFileRowViewModel> DismissedMissingFileItems { get; }
+
+    public ObservableCollection<EmptySeriesRowViewModel> DismissedEmptySeriesItems { get; }
+
+    public ObservableCollection<MissingFileRowViewModel> DismissedEmptyIssueItems { get; }
+
+    public bool HasDismissedMissingFileItems => DismissedMissingFileItems.Count > 0;
+
+    public int DismissedEmptyRowCount => DismissedEmptySeriesItems.Count + DismissedEmptyIssueItems.Count;
+
+    public bool HasDismissedEmptyRowItems => DismissedEmptyRowCount > 0;
+
+    /// <summary>The Missing Files header expands when there's anything to show, active or dismissed.</summary>
+    public bool CanExpandMissingFiles => HasMissingFileItems || HasDismissedMissingFileItems;
+
+    public bool CanExpandEmptyRows => HasEmptyRowItems || HasDismissedEmptyRowItems;
+
     /// <summary>Pages the reader flagged as bad (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md §4) that have not been dismissed or tagged Deleted.</summary>
     public ObservableCollection<PageReportRowViewModel> PageReportItems { get; }
 
@@ -3555,6 +3577,19 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 severityLabel: confirmedMissing ? "Confirmed missing" : "Missing"));
         }
 
+        DismissedMissingFileItems.Clear();
+        foreach (var issue in trackedIssues.Where(i => i.FileIsMissing && i.MissingAcknowledged).Include(i => i.Series).OrderBy(i => i.Series!.Name))
+        {
+            int issueId = issue.Id;
+            DismissedMissingFileItems.Add(new MissingFileRowViewModel(
+                issueId,
+                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}",
+                onRelink: RelinkMissingFile,
+                onRemove: _ => RemoveMissingFile(issueId),
+                onDismiss: _ => { },
+                onRestore: _ => RestoreMissingFiles(new[] { issueId })));
+        }
+
         var cutoff = DateTime.UtcNow.AddDays(-RecentlyRemovedRetentionDays);
         var stale = context.RemovedLibraryEntries.Where(e => e.RemovedAtUtc < cutoff);
         context.RemovedLibraryEntries.RemoveRange(stale);
@@ -3583,6 +3618,18 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 onDismiss: () => DismissEmptySeries(seriesId)));
         }
 
+        DismissedEmptySeriesItems.Clear();
+        foreach (var series in context.Series.Where(s => s.EmptyRowAcknowledged && !s.Issues.Any()).OrderBy(s => s.Name).ToList())
+        {
+            int seriesId = series.Id;
+            DismissedEmptySeriesItems.Add(new EmptySeriesRowViewModel(
+                seriesId,
+                series.Name,
+                onRemove: () => RemoveEmptySeries(seriesId),
+                onDismiss: () => { },
+                onRestore: () => RestoreEmptyRows(new[] { seriesId }, Array.Empty<int>())));
+        }
+
         EmptyIssueItems.Clear();
         foreach (var issue in trackedIssues.Where(i => i.IsContentEmpty && !i.EmptyRowAcknowledged).Include(i => i.Series).OrderBy(i => i.Series!.Name).ToList())
         {
@@ -3595,6 +3642,19 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 onDismiss: _ => DismissEmptyIssue(issueId),
                 severity: HealthSeverity.Error,
                 severityLabel: "Unreadable"));
+        }
+
+        DismissedEmptyIssueItems.Clear();
+        foreach (var issue in trackedIssues.Where(i => i.IsContentEmpty && i.EmptyRowAcknowledged).Include(i => i.Series).OrderBy(i => i.Series!.Name).ToList())
+        {
+            int issueId = issue.Id;
+            DismissedEmptyIssueItems.Add(new MissingFileRowViewModel(
+                issueId,
+                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}",
+                onRelink: RelinkEmptyIssue,
+                onRemove: _ => RemoveEmptyIssue(issueId),
+                onDismiss: _ => { },
+                onRestore: _ => RestoreEmptyRows(Array.Empty<int>(), new[] { issueId })));
         }
 
         // Reported pages (page intelligence design 4) - reports are never auto-resolved; a row leaves only by Dismiss or Tag as Deleted.
@@ -3658,6 +3718,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasEmptyRowItems));
         OnPropertyChanged(nameof(EmptyRowCount));
         OnPropertyChanged(nameof(HasConfirmedMissingItems));
+        OnPropertyChanged(nameof(HasDismissedMissingFileItems));
+        OnPropertyChanged(nameof(DismissedEmptyRowCount));
+        OnPropertyChanged(nameof(HasDismissedEmptyRowItems));
+        OnPropertyChanged(nameof(CanExpandMissingFiles));
+        OnPropertyChanged(nameof(CanExpandEmptyRows));
     }
 
     [RelayCommand]
@@ -3724,6 +3789,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 issue.FileIsMissing = false;
                 issue.IsPlaceholder = false;
                 issue.MissingVerificationCount = 0;
+                issue.MissingAcknowledged = false;
                 context.SaveChanges();
             }
         }
@@ -3756,6 +3822,62 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             RefreshLibraryHealth(refreshContext);
         });
     }
+
+    /// <summary>Clears the dismissal on the given missing-file rows so they return to the active list. Deferred
+    /// refresh: the click is still routing through the dismissed row being rebuilt away (CLAUDE.md).</summary>
+    internal void RestoreMissingFiles(IReadOnlyCollection<int> issueIds)
+    {
+        using (var context = _contextFactory())
+        {
+            foreach (var issue in context.Issues.Where(i => issueIds.Contains(i.Id)))
+            {
+                issue.MissingAcknowledged = false;
+            }
+
+            context.SaveChanges();
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            using var refreshContext = _contextFactory();
+            RefreshLibraryHealth(refreshContext);
+        });
+    }
+
+    [RelayCommand]
+    private void RestoreAllDismissedMissingFiles() =>
+        RestoreMissingFiles(DismissedMissingFileItems.Select(r => r.IssueId).ToList());
+
+    /// <summary>Same as <see cref="RestoreMissingFiles"/> for Empty Rows - series and issues carry separate flags.</summary>
+    internal void RestoreEmptyRows(IReadOnlyCollection<int> seriesIds, IReadOnlyCollection<int> issueIds)
+    {
+        using (var context = _contextFactory())
+        {
+            foreach (var series in context.Series.Where(s => seriesIds.Contains(s.Id)))
+            {
+                series.EmptyRowAcknowledged = false;
+            }
+
+            foreach (var issue in context.Issues.Where(i => issueIds.Contains(i.Id)))
+            {
+                issue.EmptyRowAcknowledged = false;
+            }
+
+            context.SaveChanges();
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            using var refreshContext = _contextFactory();
+            RefreshLibraryHealth(refreshContext);
+        });
+    }
+
+    [RelayCommand]
+    private void RestoreAllDismissedEmptyRows() =>
+        RestoreEmptyRows(
+            DismissedEmptySeriesItems.Select(r => r.SeriesId).ToList(),
+            DismissedEmptyIssueItems.Select(r => r.IssueId).ToList());
 
     private void DismissMissingFile(int issueId)
     {
@@ -4012,6 +4134,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                     issue.FileIsMissing = false;
                     issue.IsPlaceholder = false;
                     issue.MissingVerificationCount = 0;
+                    issue.MissingAcknowledged = false;
                     relinked++;
                 }
             }

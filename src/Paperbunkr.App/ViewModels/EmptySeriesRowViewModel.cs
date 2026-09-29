@@ -13,12 +13,15 @@ namespace Paperbunkr.App.ViewModels;
 public partial class EmptySeriesRowViewModel : ViewModelBase
 {
     private readonly Action _onDismiss;
+    private readonly Action? _onRestore;
 
-    public EmptySeriesRowViewModel(int seriesId, string displayLabel, Action onRemove, Action onDismiss)
+    /// <param name="onRestore">Supplied only for a row in the "Dismissed" sub-group (docs/superpowers/specs/2026-09-28-library-health-dismissed-rows-design.md).</param>
+    public EmptySeriesRowViewModel(int seriesId, string displayLabel, Action onRemove, Action onDismiss, Action? onRestore = null)
     {
         SeriesId = seriesId;
         DisplayLabel = displayLabel;
         _onDismiss = onDismiss;
+        _onRestore = onRestore;
         DeleteConfirm = new TwoStepConfirm(onRemove);
     }
 
@@ -28,10 +31,20 @@ public partial class EmptySeriesRowViewModel : ViewModelBase
 
     public TwoStepConfirm DeleteConfirm { get; }
 
+    /// <summary>True for a row in the "Dismissed" sub-group - shows Restore in place of Dismiss.</summary>
+    public bool IsDismissed => _onRestore is not null;
+
     [RelayCommand]
     private void Dismiss()
     {
         DeleteConfirm.Cancel();
         _onDismiss();
+    }
+
+    [RelayCommand]
+    private void Restore()
+    {
+        DeleteConfirm.Cancel();
+        _onRestore?.Invoke();
     }
 }

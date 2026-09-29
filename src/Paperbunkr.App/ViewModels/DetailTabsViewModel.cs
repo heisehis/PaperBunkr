@@ -1130,6 +1130,9 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
     public bool HasExternalLinks => ExternalLinks.Count > 0;
 
+    /// <summary>Where Reveal in Explorer reports a file that's no longer on disk. Set by <see cref="MainViewModel"/> after construction; null (tests) = no alert.</summary>
+    public IActivityService? ActivityCenter { get; set; }
+
     /// <summary>Backing collection for the Activity tab - see <see cref="RefreshActivity"/>.</summary>
     public ObservableCollection<ActivitySample> Activity { get; }
 
@@ -2526,11 +2529,11 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
         if (issues.Count == 1)
         {
-            RevealInExplorerHelper.RevealIssue(issues[0]);
+            RevealInExplorerHelper.RevealIssue(issues[0], ActivityCenter);
         }
         else
         {
-            RevealInExplorerHelper.RevealIssues(issues);
+            RevealInExplorerHelper.RevealIssues(issues, ActivityCenter);
         }
     }
 

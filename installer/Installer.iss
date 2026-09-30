@@ -145,9 +145,9 @@ LicenseFile=publish\License.txt
 ; [Code] InitializeSetup gate below land back in the previously-used install directory - see
 ; design decision 7 ("falling through to the normal wizard").
 UsePreviousAppDir=yes
-; NetSparkle-driven auto-update (src/Paperbunkr.App/Services/UpdateService.cs) runs this same
-; installer over a copy of Paperbunkr that may still be mid-shutdown when Setup starts (NetSparkle
-; exits the app and launches Setup, but doesn't wait for the OS to release file locks). Restart
+; Auto-update (src/Paperbunkr.App/Services/UpdateService.cs) runs this same installer over a copy
+; of Paperbunkr that may still be mid-shutdown when Setup starts (the app launches Setup first, so
+; the UAC prompt gets the foreground, then exits; InitializeSetup waits for it below). Restart
 ; Manager integration below detects the app still holding {app}'s files open and closes it, instead
 ; of failing the file copy - the [Run] "launch after install" entry on the Finished page handles
 ; getting it running again, so RestartApplications is off to avoid a double-launch.
@@ -306,8 +306,24 @@ var
   OldVersion: String;
   ResultCode: Integer;
   Choice: Integer;
+  Waited: Integer;
 begin
   Result := True;
+
+  // Launched by the app's own Restart-to-update (UpdateService.ApplyUpdatesAndRestart), which
+  // starts Setup and then shuts down. Give that shutdown (exit handlers, auto-backup) up to 60s to
+  // release the AppMutex, so the user isn't shown the "Paperbunkr is running" prompt for an app
+  // that is already closing. This runs before Inno's own AppMutex check, which still catches an
+  // app that never exits. A manual run (no flag) skips the wait entirely.
+  if ExpandConstant('{param:PAPERBUNKRUPDATE|0}') = '1' then
+  begin
+    Waited := 0;
+    while CheckForMutexes('{#SetupSetting("AppMutex")}') and (Waited < 60000) do
+    begin
+      Sleep(250);
+      Waited := Waited + 250;
+    end;
+  end;
 
   UninstallString := GetPrevRegString('UninstallString');
   if UninstallString = '' then

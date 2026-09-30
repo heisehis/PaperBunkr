@@ -260,6 +260,36 @@ public class DetailTabsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void LoadSeries_Activity_ExcludesNovelEvents_FromBookSeriesWithSameId()
+    {
+        // ReadingEvent.SeriesId holds a BookSeries id for Novel rows - a separate id space that
+        // can equal this comic Series id.
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var bookSeries = new BookSeries { Id = _seriesId, Name = "Colliding Book Series" };
+            var book = new Book { Title = "Novel", FilePath = "novel.epub", BookSeries = bookSeries };
+            context.Books.Add(book);
+            context.SaveChanges();
+
+            context.ReadingEvents.Add(new ReadingEvent
+            {
+                ItemType = ReadingItemType.Novel,
+                ItemId = book.Id,
+                Kind = ReadingEventKind.Opened,
+                TimestampUtc = DateTime.UtcNow,
+                SeriesId = bookSeries.Id,
+            });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.False(vm.HasActivity);
+        Assert.Empty(vm.Activity);
+    }
+
+    [Fact]
     public void LoadSeries_NoSeriesReaderDefaults_ShowsNotSetAndHidesClear()
     {
         var vm = CreateViewModel();

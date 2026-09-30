@@ -41,6 +41,9 @@ public sealed record PagePanels(IReadOnlyList<PanelRect> Rects, bool Confident)
 /// </summary>
 public static class PanelDetector
 {
+    /// <summary>The long side the detector itself analyses pages at. Higher than <see cref="AnalysisSize"/> (still used by auto-levels/crop) because real gutters are only a few pixels wide on a 480 px page.</summary>
+    public const int DetectionSize = 1000;
+
     /// <summary>The long side pages are analysed at (callers downscale to about this).</summary>
     public const int AnalysisSize = 480;
 
@@ -54,7 +57,7 @@ public static class PanelDetector
     public const double GutterFraction = 0.985;
 
     /// <summary>The thinnest gutter that separates two panels, as a fraction of the page dimension it cuts across (with a 3 px floor).</summary>
-    public const double MinGutter = 0.012;
+    public const double MinGutter = 0.006;
 
     /// <summary>Panels smaller than this fraction of the page are noise and are dropped.</summary>
     public const double MinPanelArea = 0.04;
@@ -89,6 +92,96 @@ public static class PanelDetector
 
         var second = DetectWith(luma, width, height, rightToLeft, light: !lightFirst);
         return second.Confident ? second : PagePanels.Whole;
+    }
+
+    /// <summary>The narrowest run of empty rows that separates two blocks of a scrolling strip, as a fraction of the strip width.</summary>
+    public const double StripMinGutter = 0.04;
+
+    /// <summary>Blocks of a strip shorter than this fraction of its width are stray text or effects and are dropped.</summary>
+    public const double StripMinBlock = 0.12;
+
+    private const int MaxStripBlocks = 400;
+
+    /// <summary>
+    /// Detects the blocks of a tall scrolling strip (webtoon/manhwa) by its full-width empty bands: everything between two such bands is one block, trimmed sideways to its content. Strips have no
+    /// side-by-side panels, so this only cuts rows. Returns <see cref="PagePanels.Whole"/> when the strip has fewer than two blocks (no usable bands, for example a patterned background).
+    /// </summary>
+    public static PagePanels DetectStrip(byte[] luma, int width, int height)
+    {
+        if (luma is null || width < 16 || height < 16 || luma.Length < width * height)
+        {
+            return PagePanels.Whole;
+        }
+
+        bool lightFirst = BorderIsLight(luma, width, height);
+        var first = DetectStripWith(luma, width, height, lightFirst);
+        if (first.Confident)
+        {
+            return first;
+        }
+
+        var second = DetectStripWith(luma, width, height, !lightFirst);
+        return second.Confident ? second : PagePanels.Whole;
+    }
+
+    private static PagePanels DetectStripWith(byte[] luma, int width, int height, bool light)
+    {
+        var mask = new BackgroundMask(luma, width, height, light);
+        int minGap = Math.Max(3, (int)Math.Round(StripMinGutter * width));
+        int minBlock = Math.Max(3, (int)Math.Round(StripMinBlock * width));
+
+        var blocks = new List<Region>();
+        int y = 0;
+        while (y < height)
+        {
+            while (y < height && mask.IsGutterRow(y, 0, width))
+            {
+                y++;
+            }
+
+            int start = y;
+            int lastContent = y;
+            // A block runs until an empty band at least minGap tall; shorter empty stretches (space inside a block) do not end it.
+            int gapStart = -1;
+            while (y < height)
+            {
+                if (mask.IsGutterRow(y, 0, width))
+                {
+                    if (gapStart < 0)
+                    {
+                        gapStart = y;
+                    }
+
+                    if (y - gapStart + 1 >= minGap)
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    gapStart = -1;
+                    lastContent = y;
+                }
+
+                y++;
+            }
+
+            int end = lastContent + 1;
+            if (end - start >= minBlock)
+            {
+                blocks.Add(Trim(mask, new Region(0, start, width, end - start)));
+            }
+
+            y = Math.Max(y + 1, end);
+        }
+
+        blocks.RemoveAll(b => b.Width <= 0 || b.Height <= 0);
+        if (blocks.Count < 2 || blocks.Count > MaxStripBlocks)
+        {
+            return PagePanels.Whole;
+        }
+
+        return new PagePanels(blocks.Select(r => new PanelRect(r.X / (double)width, r.Y / (double)height, r.Width / (double)width, r.Height / (double)height)).ToList(), Confident: true);
     }
 
     private static bool BorderIsLight(byte[] luma, int width, int height)

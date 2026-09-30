@@ -335,6 +335,9 @@ public class Issue
     /// </summary>
     public bool IsPlaceholder { get; set; }
 
+    /// <summary>The Grand Comics Database issue this is (docs/superpowers/specs/2026-09-27-gcd-data-design.md §3) - the key to its on-sale date in the extract; null = not matched.</summary>
+    public int? GcdIssueId { get; set; }
+
     /// <summary>
     /// True once the user has dismissed this issue's missing-file state from the Needs Review
     /// queue ("I know this one's missing, stop asking") without relinking or removing it

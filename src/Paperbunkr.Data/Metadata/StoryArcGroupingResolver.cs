@@ -100,11 +100,22 @@ internal static class StoryArcGroupingResolver
         // Existing StoryEvents by StripDown'd name -> the issue ids already members, so an issue
         // that's already tracked under this arc name (any punctuation variant of it) isn't proposed
         // again.
+        // Every name key an event is known by - its name, the series-prefix-stripped form and its aliases (docs/superpowers/specs/
+        // 2026-09-27-story-event-resolver-design.md §4) - so after a ComicVine/Metron duplicate is merged, issues still tagged with the
+        // merged-away spelling aren't proposed as a new event again.
         var existingMemberIssueIdsByArcKey = context.StoryEvents
-            .Select(e => new { e.Name, MemberIssueIds = e.Members.Select(m => m.IssueId).ToList() })
+            .Select(e => new
+            {
+                e.Name,
+                AliasKeys = e.Aliases.Select(a => a.Key).ToList(),
+                Members = e.Members.Select(m => new { m.IssueId, SeriesName = m.Issue!.Series!.Name }).ToList(),
+            })
             .AsEnumerable()
-            .GroupBy(e => TitleNormalizer.StripDown(e.Name).ToLowerInvariant())
-            .ToDictionary(g => g.Key, g => (IReadOnlySet<int>)g.SelectMany(e => e.MemberIssueIds).ToHashSet());
+            .SelectMany(e => EventNameKeys
+                .For(e.Name, e.Members.Select(m => m.SeriesName).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList(), e.AliasKeys)
+                .Select(key => (Key: key, IssueIds: e.Members.Select(m => m.IssueId))))
+            .GroupBy(x => x.Key)
+            .ToDictionary(g => g.Key, g => (IReadOnlySet<int>)g.SelectMany(x => x.IssueIds).ToHashSet());
 
         var groups = new Dictionary<(string ArcKey, string PublisherKey), (string Publisher, List<(string RawArcName, StoryEventCandidateMember Member)> Entries)>();
 

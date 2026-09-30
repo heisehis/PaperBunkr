@@ -73,7 +73,7 @@ public class HomeScreenViewModelTests : IDisposable
         var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
 
         var card = Assert.Single(vm.ContinueReading);
-        Assert.Equal("In Progress", card.Series.Name);
+        Assert.Equal("In Progress", card.Comic!.Series.Name);
         Assert.Equal(issueId, card.ResumeIssueId);
         Assert.True(vm.HasContinueReading);
     }
@@ -241,12 +241,16 @@ public class HomeScreenViewModelTests : IDisposable
     [Fact]
     public void SetSpotlightItemCommand_JumpsTheCarouselToTheClickedItem()
     {
-        var seriesId = SeedSeriesWithIssue("Series").SeriesId;
+        SeedSeriesWithIssue("Series");
         using (var context = PaperbunkrDb.CreateContext())
         {
             for (int i = 0; i < 4; i++)
             {
-                var issue = new Issue { SeriesId = seriesId };
+                // One series each - the spotlight now takes at most one issue per series (2026-09-28 Home pitch, I4).
+                var series = new Series { Name = $"Series {i}" };
+                context.Series.Add(series);
+                context.SaveChanges();
+                var issue = new Issue { SeriesId = series.Id };
                 issue.MergeFrom(IssueTagField.Genre, new[] { $"Genre{i}" });
                 context.Issues.Add(issue);
             }
@@ -405,39 +409,31 @@ public class HomeScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void HasBooksLibrary_FalseWithNoBooks_TrueWithAny()
+    public void ContinueReading_MergesStartedBooksWithComics_NewestFirst()
     {
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
-        Assert.False(vm.HasBooksLibrary);
-
-        SeedBook("Dune");
-        vm.LoadFromDatabase();
-        Assert.True(vm.HasBooksLibrary);
-    }
-
-    [Fact]
-    public void ContinueReadingBooks_IncludesOnlyStartedNotFinished_NewestFirst()
-    {
+        // Books and comics share one row now (docs/superpowers/specs/2026-09-28-home-improvements-design.md I2).
         SeedBook("Old Progress", lastOpened: new DateTime(2024, 1, 1), lastChapter: 3);
+        SeedSeriesWithIssue("Comic In Progress", lastPageRead: 20, pageCount: 100, openedTime: new DateTime(2024, 3, 1, 0, 0, 0, DateTimeKind.Utc));
         SeedBook("New Progress", lastOpened: new DateTime(2024, 6, 1), lastChapter: 2);
         SeedBook("Finished One", lastOpened: new DateTime(2024, 5, 1), lastChapter: 9, finished: true);
         SeedBook("Never Opened");
 
         var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
 
-        Assert.Equal(new[] { "New Progress", "Old Progress" }, vm.ContinueReadingBooks.Select(c => c.Title));
-        Assert.True(vm.HasContinueReadingBooks);
+        Assert.Equal(new[] { "New Progress", "Comic In Progress", "Old Progress" }, vm.ContinueReading.Select(c => c.Title));
+        Assert.True(vm.ContinueReading[0].IsBook);
+        Assert.False(vm.ContinueReading[1].IsBook);
     }
 
     [Fact]
-    public void OpenContinueReadingBookCommand_InvokesCallback_WithIdAndFormat()
+    public void OpenResumeCommand_ForABook_InvokesTheBookReader_WithIdAndFormat()
     {
         int id = SeedBook("PDF Novel", lastOpened: DateTime.UtcNow, lastChapter: 1,
             format: Paperbunkr.Data.Entities.BookFormat.Pdf);
         (int Id, Paperbunkr.Data.Entities.BookFormat Format)? captured = null;
         var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (bookId, fmt) => captured = (bookId, fmt));
 
-        vm.OpenContinueReadingBookCommand.Execute(vm.ContinueReadingBooks.Single());
+        vm.OpenResumeCommand.Execute(vm.ContinueReading.Single());
 
         Assert.Equal((id, Paperbunkr.Data.Entities.BookFormat.Pdf), captured);
     }

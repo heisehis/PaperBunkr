@@ -184,12 +184,26 @@ internal static class MediaRelationResolver
     private static bool MatchesSide(int? seriesId, int? collectionId, MediaRelationEndpointKind kind, int id) =>
         kind == MediaRelationEndpointKind.Series ? seriesId == id : collectionId == id;
 
-    /// <summary>Removes a <see cref="MediaRelation"/> (and cascades to its <see cref="RelationEvidence"/>) - a no-op if it no longer exists.</summary>
+    /// <summary>
+    /// Removes a <see cref="MediaRelation"/> (and cascades to its <see cref="RelationEvidence"/>) - a no-op if it no longer exists. A
+    /// series relation that came from a Grand Comics Database bond also leaves a <see cref="SeriesRelationDismissal"/>, so the bond
+    /// sync doesn't recreate it (docs/superpowers/specs/2026-09-27-gcd-data-design.md §4).
+    /// </summary>
     public static void Remove(PaperbunkrDbContext context, int mediaRelationId)
     {
         var relation = context.MediaRelations.Find(mediaRelationId);
         if (relation is not null)
         {
+            if (relation.SourceSeriesId is int a && relation.TargetSeriesId is int b && a != b
+                && context.RelationEvidence.Any(e => e.MediaRelationId == relation.Id && e.Provider == RelationEvidenceProvider.Gcd))
+            {
+                int lower = Math.Min(a, b), higher = Math.Max(a, b);
+                if (!context.SeriesRelationDismissals.Any(d => d.LowerSeriesId == lower && d.HigherSeriesId == higher))
+                {
+                    context.SeriesRelationDismissals.Add(new SeriesRelationDismissal { LowerSeriesId = lower, HigherSeriesId = higher });
+                }
+            }
+
             context.MediaRelations.Remove(relation);
             context.SaveChanges();
         }

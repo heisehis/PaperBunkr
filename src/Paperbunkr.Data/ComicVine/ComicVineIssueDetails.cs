@@ -51,7 +51,8 @@ public sealed record ComicVineIssueDetails(
     double? AverageRating = null,
     int? RatingCount = null,
     string? Imprint = null,
-    IReadOnlyList<ComicVineVariantCover>? Variants = null)
+    IReadOnlyList<ComicVineVariantCover>? Variants = null,
+    int? GcdId = null)
 {
     public IReadOnlyList<ComicVineIdName> Universes { get; init; } = Universes ?? Array.Empty<ComicVineIdName>();
 

@@ -8,12 +8,14 @@
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:beh="using:Paperbunkr.App.Behaviors"
+             xmlns:services="using:Paperbunkr.App.Services"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="500"
              x:Class="Paperbunkr.App.Views.DetailTabs"
              x:DataType="vm:DetailTabsViewModel"
              x:Name="Root"
+             ClipToBounds="False"
              pbc:ContextMenuHost.Provider="{Binding}">
 
     <UserControl.Styles>
@@ -80,6 +82,14 @@
             <Setter Property="FontSize" Value="11" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
             <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <!-- The pill around the segments clips (so the active fill follows its rounded corners), so an outside ring can't show: the
+             focus ring is drawn inside the segment instead. -->
+        <Style Selector="Button.segItem">
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+        </Style>
+        <Style Selector="Button.segItem:focus-visible /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRingInset}" />
         </Style>
         <Style Selector="Button.segItem.active">
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
@@ -550,10 +560,21 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:ExternalRelationPlaceholderSample">
                             <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}"
-                                    Padding="10,4" Margin="0,0,6,6" Opacity="0.6">
+                                    Padding="10,4" Margin="0,0,6,6">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="{Binding TargetTitle}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                     <TextBlock Text="{Binding RelationTypeLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding TargetTitle}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <!-- Grand Comics Database bonds (docs/superpowers/specs/2026-09-27-gcd-data-design.md §4): the source mark and a
+                                         link to the series' page, which is also the credit CC BY-SA asks for. -->
+                                    <Border IsVisible="{Binding HasSourceLabel}" Background="{DynamicResource PbAccentSoftBrush}"
+                                            CornerRadius="{StaticResource PbRadiusChip}" Padding="5,1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding SourceLabel}" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentBrush}" />
+                                    </Border>
+                                    <Button Classes="headerAction ghost" IsVisible="{Binding HasUrl}" Padding="4,1" VerticalAlignment="Center"
+                                            Command="{x:Static services:ExternalLinks.OpenWebCommand}" CommandParameter="{Binding TargetUrl}"
+                                            ToolTip.Tip="{Binding LinkTip}" AutomationProperties.Name="{Binding LinkTip}">
+                                        <fi:SymbolIcon Symbol="Open" FontSize="{StaticResource PbIconSizeXs}" />
+                                    </Button>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>

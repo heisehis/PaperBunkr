@@ -56,6 +56,73 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Grand Comics Database data (docs/superpowers/specs/2026-09-27-gcd-data-design.md §2): an optional download. Nothing
+                     goes online until Download / Check for update is clicked; the credit and licence are always visible (CC BY-SA 4.0). -->
+                <Border Classes="groupBox" Tag="connections.gcdData">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Grand Comics Database data" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="6" Spacing="6" DataContext="{Binding GcdData}" x:DataType="vm:GcdDataSettingsViewModel">
+                            <pref:SettingsRow Icon="DatabaseLink" Title="Series continuity and on-sale dates"
+                                              Description="Links series that continue each other (renumberings, renames, reboots) and orders story events by when issues went on sale. The data stays on this computer.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button Classes="headerAction primary" Command="{Binding DownloadCommand}" IsVisible="{Binding ShowDownload}"
+                                                AutomationProperties.AutomationId="GcdDataDownload" AutomationProperties.Name="{Binding DownloadLabel}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <fi:SymbolIcon Symbol="ArrowDownload" FontSize="{StaticResource PbIconSizeXs}" />
+                                                <TextBlock Text="{Binding DownloadLabel}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Classes="headerAction ghost" Command="{Binding CheckForUpdateCommand}" IsVisible="{Binding CanCheck}"
+                                                AutomationProperties.AutomationId="GcdDataCheck">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" />
+                                                <TextBlock Text="Check for update" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" BorderBrush="{DynamicResource PbDangerSoftBrush}"
+                                                Command="{Binding RemoveCommand}" IsVisible="{Binding CanRemove}"
+                                                AutomationProperties.AutomationId="GcdDataRemove" AutomationProperties.Name="Remove Grand Comics Database data">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                                <TextBlock Text="Remove" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <TextBlock Text="{Binding StateText}" FontSize="12" Margin="10,0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                       AutomationProperties.LiveSetting="Polite" />
+                            <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasStatus}" FontSize="12" Margin="10,0" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource PbTextBrush}" AutomationProperties.LiveSetting="Polite" />
+                            <WrapPanel Margin="10,2,10,4" Orientation="Horizontal">
+                                <TextBlock Text="{Binding Credit}" FontSize="11.5" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,8,0"
+                                           Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <Button Classes="headerAction ghost" Command="{Binding OpenGcdCommand}" ToolTip.Tip="https://www.comics.org">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="comics.org" />
+                                        <fi:SymbolIcon Symbol="Open" FontSize="{StaticResource PbIconSizeXs}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="headerAction ghost" Command="{Binding OpenLicenceCommand}" ToolTip.Tip="https://creativecommons.org/licenses/by-sa/4.0/">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="Licence" />
+                                        <fi:SymbolIcon Symbol="Open" FontSize="{StaticResource PbIconSizeXs}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="headerAction ghost" Command="{Binding OpenDataRepositoryCommand}" ToolTip.Tip="https://github.com/heisehis/paperbunkr-gcd-data">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="Data source" />
+                                        <fi:SymbolIcon Symbol="Open" FontSize="{StaticResource PbIconSizeXs}" />
+                                    </StackPanel>
+                                </Button>
+                            </WrapPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- Download automation (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 7) -->
                 <Border Classes="groupBox" Tag="connections.downloadAutomation">
                     <StackPanel>

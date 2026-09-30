@@ -4,7 +4,8 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="40"
-             x:Class="Paperbunkr.App.Views.Preferences.SettingsTabStrip">
+             x:Class="Paperbunkr.App.Views.Preferences.SettingsTabStrip"
+             ClipToBounds="False">
 
     <!-- Tab strip under a Preferences section's title (docs/superpowers/specs/2026-09-26-preferences-reader-organize-tabs-design.md).
          Same look as the Library Health / folder-management Button.segTab pair (selected = Surface3 fill, semibold), on a real
@@ -37,7 +38,7 @@
     </UserControl.Styles>
 
     <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
-        <TabStrip x:Name="PART_Strip" AutomationProperties.Name="Section tabs">
+        <TabStrip x:Name="PART_Strip" AutomationProperties.Name="Section tabs" ClipToBounds="False">
             <TabStrip.ItemsPanel>
                 <ItemsPanelTemplate>
                     <StackPanel Orientation="Horizontal" />

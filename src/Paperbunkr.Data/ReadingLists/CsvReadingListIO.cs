@@ -1,5 +1,7 @@
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.Data.ReadingLists;
 
@@ -68,10 +70,49 @@ public static class CsvReadingListIO
         }
 
         context.ReadingLists.Add(list);
+        // Lands at the end of the top level; the Reading screen moves it into the folder the user has selected (docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md §2).
+        ReadingListFolders.PlaceNewList(context, list, null);
         ReadingListManager.RecordCreatedWithItems(context, list);
         context.SaveChanges();
         return new CsvImportResult(list, list.Items.Count - placeholderCount, placeholderCount, skippedRows);
     }
+
+    /// <summary>
+    /// CSV export (docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md §6): the import's columns plus
+    /// <c>Read</c>, <c>Owned</c> and <c>Note</c>. <see cref="Import"/> finds columns by header name, so an exported file re-imports as-is.
+    /// A note's line breaks become spaces - the importer reads one record per line.
+    /// </summary>
+    public static string Write(PaperbunkrDbContext context, int readingListId)
+    {
+        var list = context.ReadingLists.AsNoTracking()
+            .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.Series)
+            .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.MetadataProposals)
+            .First(r => r.Id == readingListId);
+
+        var sb = new StringBuilder();
+        sb.Append("Series,Number,Volume,Year,Format,Read,Owned,Note").Append("\r\n");
+        foreach (var item in list.Items.OrderBy(i => i.SortOrder).ThenBy(i => i.Id))
+        {
+            var issue = item.Issue!;
+            string note = (item.Notes ?? string.Empty).Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ').Trim();
+            sb.AppendJoin(',', new[]
+            {
+                Quote(issue.Series?.Name ?? string.Empty),
+                Quote(issue.EffectiveNumber() ?? string.Empty),
+                Quote(issue.EffectiveVolume() ?? string.Empty),
+                issue.EffectiveYear()?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+                Quote(issue.Format ?? string.Empty),
+                issue.HasBeenRead() ? "yes" : "no",
+                issue.FileIsMissing ? "no" : "yes",
+                Quote(note),
+            }).Append("\r\n");
+        }
+
+        return sb.ToString();
+    }
+
+    private static string Quote(string value) =>
+        value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0 ? "\"" + value.Replace("\"", "\"\"") + "\"" : value;
 
     private static string? Field(List<string> fields, int index) => index >= 0 && index < fields.Count ? fields[index] : null;
 

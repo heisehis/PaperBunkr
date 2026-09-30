@@ -6,7 +6,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="60"
              x:Class="Paperbunkr.App.Views.Preferences.SettingsRow"
-             x:Name="Root">
+             x:Name="Root"
+             ClipToBounds="False">
 
     <!--
         Shared icon+title+description+control row (docs/superpowers/specs/2026-09-07-preferences-

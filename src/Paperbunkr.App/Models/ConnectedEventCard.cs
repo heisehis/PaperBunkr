@@ -13,4 +13,9 @@ public sealed class ConnectedEventCard
     public required int OtherEventId { get; init; }
     public required string Name { get; init; }
     public required string RelationLabel { get; init; }
+
+    /// <summary>"inferred" / "Wikidata" for a relation the smart connector made (docs/superpowers/specs/2026-09-27-continuity-map-design.md §4); null for yours.</summary>
+    public string? SourceLabel { get; init; }
+
+    public bool HasSourceLabel => SourceLabel is not null;
 }

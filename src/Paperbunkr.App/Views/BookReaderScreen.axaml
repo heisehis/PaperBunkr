@@ -25,7 +25,7 @@
          Styles/ReaderChrome.axaml (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-
          design.md), merged app-wide via App.axaml so PdfPageReaderScreen.axaml shares them too. -->
 
-    <Grid x:Name="RootGrid" Background="{Binding Settings.Background}" Focusable="True"
+    <Grid x:Name="RootGrid" Background="{Binding Settings.Background}" Focusable="True" FocusAdorner="{x:Null}"
           PointerMoved="OnRootPointerMoved" KeyDown="OnRootKeyDown">
 
         <!-- Reading pane - real markup rendered via NativeWebView (docs/superpowers/specs/2026-09-02-

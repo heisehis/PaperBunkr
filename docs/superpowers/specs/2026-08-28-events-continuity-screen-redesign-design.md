@@ -1,5 +1,7 @@
 # "Events & Continuity" Screen Redesign — Design
 
+> **Superseded 2026-09-28** by [the Continuity screen redesign](2026-09-28-continuity-screen-redesign-design.md): the screen, its sidebar and its view model were rebuilt (`EventsScreen` / `EventsScreenViewModel` are gone; see `ContinuityScreen` and its page view models). Kept for the reasoning behind the original layout.
+
 **Date:** 2026-08-28
 **Follows:** the Reading Lists redesign (`2026-08-28-reading-lists-screen-redesign-design.md`).
 Second of the two "remaining screens" in UI-rework Phase 7. The 4d–4g metadata work

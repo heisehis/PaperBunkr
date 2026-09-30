@@ -230,6 +230,16 @@ public sealed class ContextMenuHost
 
     private static bool TryParseGesture(string text, out KeyGesture? gesture)
     {
+        // A digit key ("Alt+Shift+3") parses as the enum's numeric value (3 = Tab), and "D3" displays as "D3" - so a digit
+        // gesture gets no hint rather than a wrong one, as does a range like "Alt+Shift+0…5"; the entry's tooltip/label carries it instead.
+        int plus = text.LastIndexOf('+');
+        string last = plus < 0 ? text : text[(plus + 1)..];
+        if ((last.Length == 1 && char.IsDigit(last[0])) || text.Contains('…'))
+        {
+            gesture = null;
+            return false;
+        }
+
         try
         {
             gesture = KeyGesture.Parse(text);

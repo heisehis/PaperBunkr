@@ -47,6 +47,7 @@
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
         </Style>
         <!-- The Fluent button template paints its own grey pointer-over/pressed background, which showed as a box behind the
              poster title (and a frame in the row gutters) under the glow ring. Cards signal hover/focus with the ring only. -->

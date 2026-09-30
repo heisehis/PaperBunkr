@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             x:Class="Paperbunkr.App.Views.ReadingListsScreen"
+             x:DataType="vm:ReadingListsScreenViewModel"
+             controls:ContextMenuHost.Provider="{Binding}">
+    <!-- The Reading Lists section (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md §1): the gallery home or an open list,
+         each fading in (opacity + a short rise) on switch. Both stay in the tree so the list's scroll position survives a trip to the
+         gallery and back. -->
+    <UserControl.Styles>
+        <Style Selector="views|ReadingGalleryView, views|ReadingListPageView">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="views|ReadingGalleryView.hidden, views|ReadingListPageView.hidden">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="RenderTransform" Value="translateY(12px)" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+        <Style Selector="views|ReadingGalleryView, views|ReadingListPageView">
+            <Setter Property="RenderTransform" Value="translateY(0px)" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel>
+        <views:ReadingGalleryView DataContext="{Binding Gallery}" Classes.hidden="{Binding $parent[views:ReadingListsScreen].((vm:ReadingListsScreenViewModel)DataContext).IsListMode}"
+                                  IsVisible="{Binding $parent[views:ReadingListsScreen].((vm:ReadingListsScreenViewModel)DataContext).IsGalleryMode}" />
+        <views:ReadingListPageView DataContext="{Binding List}" Classes.hidden="{Binding $parent[views:ReadingListsScreen].((vm:ReadingListsScreenViewModel)DataContext).IsGalleryMode}"
+                                   IsVisible="{Binding $parent[views:ReadingListsScreen].((vm:ReadingListsScreenViewModel)DataContext).IsListMode}" />
+    </Panel>
+</UserControl>

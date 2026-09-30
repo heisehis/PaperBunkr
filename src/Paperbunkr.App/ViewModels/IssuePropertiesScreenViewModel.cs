@@ -79,6 +79,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
 
             _isDirty = true;
         };
+        _clipboard.Changed += OnClipboardChanged;
     }
 
     /// <summary>
@@ -258,9 +259,11 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         var verified = await ArcExternalVerificationService.VerifyAsync(context, candidates, CancellationToken.None);
 
         int linked = 0;
+        var linkedEventIds = new List<int>();
         foreach (var candidate in verified)
         {
-            var storyEvent = StoryEventResolver.GetOrCreate(context, candidate.ArcName);
+            var storyEvent = StoryEventResolver.GetOrCreateForIssues(context, candidate.ArcName, candidate.Members.Select(m => m.Issue.Id));
+            linkedEventIds.Add(storyEvent.Id);
             storyEvent.ComicVineArcId ??= candidate.ComicVineArcId;
             storyEvent.MetronArcId ??= candidate.MetronArcId;
             context.SaveChanges();
@@ -273,6 +276,31 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         }
 
         _notify?.Invoke("Story event linked", linked == 1 ? "Linked to 1 story event." : $"Linked to {linked} story events.");
+
+        // Story Event resolver (docs/superpowers/specs/2026-09-27-story-event-resolver-design.md §4): id completion and duplicate matching
+        // for the linked events, in the background; the Story Events screen shows the result next time it refreshes.
+        var contextFactory = _contextFactory;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                IReadOnlyDictionary<ComicProvider, IArcIdentitySource> sources;
+                using (var sourceContext = contextFactory())
+                {
+                    sources = ProviderArcIdentitySource.CreateAvailable(sourceContext);
+                }
+
+                var summary = await StoryEventIdentitySweep.RunAsync(contextFactory, sources, linkedEventIds, linkedEventIds.Count, null, CancellationToken.None);
+                if (summary.Merges.Count > 0)
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => _notify?.Invoke("Duplicate story event merged", summary.MergeDetails));
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsService.LogMilestone($"Story event identity check after look-up failed ({ex.GetType().Name}: {ex.Message}).");
+            }
+        });
     }
 
     // ===================== Autocomplete / dropdown vocabulary (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md) =====================
@@ -405,26 +433,33 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     /// <c>ComicBookDialog.cs</c>/<c>MultipleComicBooksDialog.cs</c>) - it's a deliberate Paperbunkr
     /// addition per docs/ce-feature-inventory.md's 2026-08-07 triage, not a port.
     /// </summary>
-    private sealed record FieldClipboard(
-        int? MyRating, int? CommunityRating,
-        string Number, string VolumeText, string CountText, string Title, string AlternateSeries,
-        string AlternateNumber, string AlternateCountText, string StoryArc, string StoryArcNumber, string SeriesGroup,
-        string Publisher, string Imprint, string Format, string BookAge, string YearText, string MonthText,
-        string DayText, string Genre, string Tags, string Writer, string Penciller, string Inker,
-        string Colorist, string Letterer, string CoverArtist, string Editor, string Translator,
-        string AgeRating, string LanguageIso, string ColorModeText, bool? IsFinalIssue,
-        string Characters, string Teams, string MainCharacterOrTeam, string Locations, string Web,
-        string ScanInformation, string Summary, string Notes, string Review);
-
     /// <summary>
-    /// Lives on this ViewModel instance, not a static/app-wide field - <see cref="MainViewModel"/>
-    /// constructs exactly one <see cref="IssuePropertiesScreenViewModel"/> for the whole app session
-    /// and reuses it across every edit (<see cref="Load"/> just re-populates it), so an instance
-    /// field already survives "copy from book A, close, open book B" without needing global state.
+    /// The app-wide Copy Data clipboard (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §1) - shared with the Library's
+    /// Copy Data / Paste Data, keyed by <see cref="BulkFieldRegistry"/> label. Still excludes the Summary tab's read-only file info and the
+    /// Genre/Tags Category/Weight sub-rows (<see cref="GenreTagRows"/>/<see cref="TagsTagRows"/> re-derive from whichever Genre/Tags CSV
+    /// value ends up staged, same as a fresh <see cref="Load"/> would). A test can swap the instance.
     /// </summary>
-    private FieldClipboard? _clipboard;
+    internal MetadataClipboardService Clipboard
+    {
+        get => _clipboard;
+        set
+        {
+            _clipboard.Changed -= OnClipboardChanged;
+            _clipboard = value;
+            _clipboard.Changed += OnClipboardChanged;
+            OnClipboardChanged(this, EventArgs.Empty);
+        }
+    }
 
-    public bool HasClipboard => _clipboard is not null;
+    private MetadataClipboardService _clipboard = MetadataClipboardService.Shared;
+
+    public bool HasClipboard => _clipboard.HasContent;
+
+    private void OnClipboardChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(HasClipboard));
+        PasteFieldsCommand.NotifyCanExecuteChanged();
+    }
 
     // --- Plugin API v2 Editor hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §3) ---
 
@@ -477,69 +512,134 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     [RelayCommand]
     private void CopyFields()
     {
-        _clipboard = new FieldClipboard(
-            MyRating, CommunityRating, Number, VolumeText, CountText, Title, AlternateSeries,
-            AlternateNumber, AlternateCountText, StoryArc, StoryArcNumber, SeriesGroup, Publisher, Imprint, Format, BookAge,
-            YearText, MonthText, DayText, Genre, Tags, Writer, Penciller, Inker, Colorist, Letterer,
-            CoverArtist, Editor, Translator, AgeRating, LanguageIso, ColorModeText, IsFinalIssue,
-            Characters, Teams, MainCharacterOrTeam, Locations, Web, ScanInformation, Summary, Notes,
-            Review);
-        OnPropertyChanged(nameof(HasClipboard));
-        PasteFieldsCommand.NotifyCanExecuteChanged();
+        static string? N(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+        var fields = new Dictionary<string, string?>
+        {
+            ["My Rating"] = MyRating?.ToString(),
+            ["Community Rating"] = CommunityRating?.ToString(),
+            ["Number"] = N(Number),
+            ["Volume"] = N(VolumeText),
+            ["Count"] = N(CountText),
+            ["Title"] = N(Title),
+            ["Alternate Series"] = N(AlternateSeries),
+            ["Alternate Number"] = N(AlternateNumber),
+            ["Alternate Count"] = N(AlternateCountText),
+            ["Story Arc"] = N(StoryArc),
+            [MetadataClipboardService.StoryArcNumberKey] = N(StoryArcNumber),
+            ["Series Group"] = N(SeriesGroup),
+            ["Publisher"] = N(Publisher),
+            ["Imprint"] = N(Imprint),
+            ["Format"] = N(Format),
+            ["Book Age"] = N(BookAge),
+            ["Year"] = N(YearText),
+            ["Month"] = N(MonthText),
+            ["Day"] = N(DayText),
+            ["Genre"] = N(Genre),
+            ["Tags"] = N(Tags),
+            ["Writer"] = N(Writer),
+            ["Penciller"] = N(Penciller),
+            ["Inker"] = N(Inker),
+            ["Colorist"] = N(Colorist),
+            ["Letterer"] = N(Letterer),
+            ["Cover Artist"] = N(CoverArtist),
+            ["Editor"] = N(Editor),
+            ["Translator"] = N(Translator),
+            ["Age Rating"] = N(AgeRating),
+            ["Language (ISO)"] = N(LanguageIso),
+            ["Color Mode"] = N(ColorModeText),
+            [MetadataClipboardService.FinalIssueKey] = IsFinalIssue?.ToString(),
+            ["Characters"] = N(Characters),
+            ["Teams"] = N(Teams),
+            ["Main Character or Team"] = N(MainCharacterOrTeam),
+            ["Locations"] = N(Locations),
+            ["Web"] = N(Web),
+            ["Scan Information"] = N(ScanInformation),
+            ["Summary"] = N(Summary),
+            ["Notes"] = N(Notes),
+            ["Review"] = N(Review),
+        };
+        _clipboard.Set(new MetadataClipboardContent(HeaderLabel, fields));
     }
 
     private bool CanPasteFields() => HasClipboard;
 
+    /// <summary>Stages every copied field into the editor (saved only on Save, as before). A key the copy doesn't carry - e.g. the
+    /// editor-only Story Arc Number when the copy came from the Library - leaves that field as it is.</summary>
     [RelayCommand(CanExecute = nameof(CanPasteFields))]
     private void PasteFields()
     {
-        if (_clipboard is not { } c)
+        if (_clipboard.Content is not { } content)
         {
             return;
         }
 
-        MyRating = c.MyRating;
-        CommunityRating = c.CommunityRating;
-        Number = c.Number;
-        VolumeText = c.VolumeText;
-        CountText = c.CountText;
-        Title = c.Title;
-        AlternateSeries = c.AlternateSeries;
-        AlternateNumber = c.AlternateNumber;
-        AlternateCountText = c.AlternateCountText;
-        StoryArc = c.StoryArc;
-        StoryArcNumber = c.StoryArcNumber;
-        SeriesGroup = c.SeriesGroup;
-        Publisher = c.Publisher;
-        Imprint = c.Imprint;
-        Format = c.Format;
-        BookAge = c.BookAge;
-        YearText = c.YearText;
-        MonthText = c.MonthText;
-        DayText = c.DayText;
-        Genre = c.Genre;
-        Tags = c.Tags;
-        Writer = c.Writer;
-        Penciller = c.Penciller;
-        Inker = c.Inker;
-        Colorist = c.Colorist;
-        Letterer = c.Letterer;
-        CoverArtist = c.CoverArtist;
-        Editor = c.Editor;
-        Translator = c.Translator;
-        AgeRating = c.AgeRating;
-        LanguageIso = c.LanguageIso;
-        ColorModeText = c.ColorModeText;
-        IsFinalIssue = c.IsFinalIssue;
-        Characters = c.Characters;
-        Teams = c.Teams;
-        MainCharacterOrTeam = c.MainCharacterOrTeam;
-        Locations = c.Locations;
-        Web = c.Web;
-        ScanInformation = c.ScanInformation;
-        Summary = c.Summary;
-        Notes = c.Notes;
-        Review = c.Review;
+        var c = content.Fields;
+        void Text(string key, Action<string> set)
+        {
+            if (c.TryGetValue(key, out var value))
+            {
+                set(value ?? string.Empty);
+            }
+        }
+
+        if (c.TryGetValue("My Rating", out var myRating))
+        {
+            MyRating = int.TryParse(myRating, out int r) ? r : null;
+        }
+
+        if (c.TryGetValue("Community Rating", out var communityRating))
+        {
+            CommunityRating = int.TryParse(communityRating, out int r) ? r : null;
+        }
+
+        Text("Number", v => Number = v);
+        Text("Volume", v => VolumeText = v);
+        Text("Count", v => CountText = v);
+        Text("Title", v => Title = v);
+        Text("Alternate Series", v => AlternateSeries = v);
+        Text("Alternate Number", v => AlternateNumber = v);
+        Text("Alternate Count", v => AlternateCountText = v);
+        Text("Story Arc", v => StoryArc = v);
+        Text(MetadataClipboardService.StoryArcNumberKey, v => StoryArcNumber = v);
+        Text("Series Group", v => SeriesGroup = v);
+        Text("Publisher", v => Publisher = v);
+        Text("Imprint", v => Imprint = v);
+        Text("Format", v => Format = v);
+        Text("Book Age", v => BookAge = v);
+        Text("Year", v => YearText = v);
+        Text("Month", v => MonthText = v);
+        Text("Day", v => DayText = v);
+        Text("Genre", v => Genre = v);
+        Text("Tags", v => Tags = v);
+        Text("Writer", v => Writer = v);
+        Text("Penciller", v => Penciller = v);
+        Text("Inker", v => Inker = v);
+        Text("Colorist", v => Colorist = v);
+        Text("Letterer", v => Letterer = v);
+        Text("Cover Artist", v => CoverArtist = v);
+        Text("Editor", v => Editor = v);
+        Text("Translator", v => Translator = v);
+        Text("Age Rating", v => AgeRating = v);
+        Text("Language (ISO)", v => LanguageIso = v);
+        if (c.TryGetValue("Color Mode", out var colorMode) && !string.IsNullOrEmpty(colorMode))
+        {
+            ColorModeText = colorMode;
+        }
+
+        if (c.TryGetValue(MetadataClipboardService.FinalIssueKey, out var finalIssue))
+        {
+            IsFinalIssue = bool.TryParse(finalIssue, out bool f) ? f : null;
+        }
+
+        Text("Characters", v => Characters = v);
+        Text("Teams", v => Teams = v);
+        Text("Main Character or Team", v => MainCharacterOrTeam = v);
+        Text("Locations", v => Locations = v);
+        Text("Web", v => Web = v);
+        Text("Scan Information", v => ScanInformation = v);
+        Text("Summary", v => Summary = v);
+        Text("Notes", v => Notes = v);
+        Text("Review", v => Review = v);
     }
 
     // ===================== Templated/token text field editor (docs/ce-feature-inventory.md §A) =====================

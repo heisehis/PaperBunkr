@@ -26,7 +26,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 {
     /// <summary>Right-click/Menu-key menu for the Events &amp; Continuity sidebar rows
     /// (docs/superpowers/specs/2026-08-31-keyboard-operability-design.md) - lives here rather than on
-    /// <see cref="EventsScreenViewModel"/> because the sidebar itself is declared in
+    /// <see cref="ContinuityScreenViewModel"/> because the sidebar itself is declared in
     /// <c>MainWindow.axaml</c> with this class as its <c>DataContext</c> (see
     /// <see cref="EventsCardContextMenuBuilder"/>'s own doc comment).</summary>
     IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
@@ -209,7 +209,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         _themeService.MatrixRainEnabledChanged += OnMatrixRainEnabledChanged;
         OnThemeAppliedForMatrixRain(); // initialize from whatever ApplyPersistedSettings already applied at startup, before this subscription existed
         OnMatrixRainEnabledChanged();
-        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection, themeService, loadOnConstruction: false);
+        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection, themeService, loadOnConstruction: false,
+            toastHost: new DispatcherToastHost(ShowToast, CloseToast), goInsights: GoInsights, goPreferencesAnchor: GoPreferencesAnchor);
         Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook, promptForName: PromptWorkspaceName, enqueueMetadataWriteBack: EnqueueMetadataWriteBack, activity: Activity, loadOnConstruction: false, trackerAutoSync: TrackerAutoSync);
         // Debounced, off-UI-thread search/filter/sort rebuilds (docs/superpowers/specs/2026-09-19-
         // library-search-perf-design.md §1). Set after construction, not passed through the ctor: the
@@ -268,9 +269,20 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         BulkIssueProperties = new BulkIssuePropertiesScreenViewModel(CloseBulkIssuePropertiesOverlayAndReload, ShowToast, enqueueMetadataWriteBack: id => EnqueueMetadataWriteBack(id));
         BulkSeriesProperties = new BulkSeriesPropertiesScreenViewModel(CloseBulkSeriesPropertiesOverlayAndReload, id => EnqueueMetadataWriteBack(id));
         Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook, loadOnConstruction: false);
-        Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, activity: Activity, loadOnConstruction: false, trackerAutoSync: TrackerAutoSync);
-        Events = new EventsScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast, activity: Activity, loadOnConstruction: false);
-        Insights = new InsightsScreenViewModel(GoReaderForIssue, GoDetailForSeries, GoLibraryWithSearch, OpenNewGoalDialog, Dialogs, ReadingEvents, activity: Activity);
+        Reading = new ReadingListsScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, activity: Activity, loadOnConstruction: false, trackerAutoSync: TrackerAutoSync, dialogs: Dialogs);
+        // "from <continuity>" on a continuity-built list (docs/superpowers/specs/2026-09-28-reading-lists-build-from-events-design.md §2).
+        Reading.OpenContinuity = id =>
+        {
+            GoEventsCommand.Execute(null);
+            Events.LoadContinuity(id);
+        };
+        Events = new ContinuityScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast, activity: Activity, loadOnConstruction: false)
+        {
+            GoToReaderInEvent = GoReaderForIssueInStoryEvent,
+            ReaderIssueId = () => Reader.LoadedIssue?.Id,
+        };
+        Insights = new InsightsScreenViewModel(GoReaderForIssue, GoDetailForSeries, GoLibraryWithSearch, OpenNewGoalDialog, Dialogs, ReadingEvents, activity: Activity,
+            goReaderForBook: GoBookReaderForBook, goBookDetailForBook: GoBookDetailForBook);
         Plugin = new PluginScreenViewModel(new FilePickerService(), Dialogs);
         // The review queues (docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md) - owned here,
         // hosted by Preferences → Library → Library Health; the migration overlay only gets it to refresh after a run.
@@ -298,6 +310,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         NewEventOrContinuity = new NewEventOrContinuityViewModel(OnEventOrContinuityCreated, CloseNewEventDialog);
         GoalEditor = new GoalEditorViewModel(OnGoalCreated, CloseNewGoalDialog);
         QuickRate = new QuickRateScreenViewModel(CloseQuickRateOverlay, id => EnqueueMetadataWriteBack(id));
+        WireLibraryBulkActions();
         DesignShowcase = new DesignShowcaseScreenViewModel();
 
         // Live folder-watch scanning (docs/superpowers/specs/
@@ -612,8 +625,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     public BulkSeriesPropertiesScreenViewModel BulkSeriesProperties { get; }
     public SmartScreenViewModel Smart { get; }
-    public ReadingScreenViewModel Reading { get; }
-    public EventsScreenViewModel Events { get; }
+    public ReadingListsScreenViewModel Reading { get; }
+    public ContinuityScreenViewModel Events { get; }
     public InsightsScreenViewModel Insights { get; }
     public PluginScreenViewModel Plugin { get; }
     public PreferencesScreenViewModel Preferences { get; }
@@ -932,7 +945,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     public bool IsBookSeriesProperties => IsBookSeriesPropertiesOverlayOpen;
 
-    public bool ShowContextualSidebar => IsLibrary || IsSmart || IsReading || IsEvents;
+    // Reading Lists has no shared sidebar since its redesign: the gallery is the home and a list has its own cover rail
+    // (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md §1, decision Q20).
+    public bool ShowContextualSidebar => IsLibrary || IsSmart || IsEvents;
 
     /// <summary>
     /// Drives <c>MatrixRainOverlay</c>'s <c>IsVisible</c> binding in MainWindow.axaml (docs/
@@ -1140,6 +1155,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void GoReading() => TryLeaveCurrentEditor(() =>
     {
+        Reading.InvalidateForecast();
         Reading.RefreshSidebar();
         Reading.EnsureListLoaded();
         CurrentScreen = "reading";
@@ -1161,6 +1177,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         Events.RefreshSidebar();
         Events.RefreshContinuitiesSidebar();
         Events.RefreshStoryEventCandidates();
+        Events.RefreshPossibleDuplicates();
         Events.EnsureEventLoaded();
         CurrentScreen = "events";
         ResetHistoryRoot("events");
@@ -1230,6 +1247,21 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Library's empty-state "Scan folders" action (docs/superpowers/specs/2026-08-27-
     /// library-browsing-4b-toolbar-rework-design.md §9) - opens Preferences straight to the
     /// Library section where folders are added/scanned.</summary>
+    /// <summary>Opens Preferences on the section that owns <paramref name="anchorKey"/> and scrolls it into view - Home's "choose what
+    /// to show" link (docs/superpowers/specs/2026-09-28-home-improvements-design.md I1).</summary>
+    private void GoPreferencesAnchor(string anchorKey) => TryLeaveCurrentEditor(() =>
+    {
+        Preferences.EnsureLoaded();
+        if (Models.PreferenceIndex.Find(anchorKey) is { } entry)
+        {
+            Preferences.ActiveSection = entry.Section;
+        }
+
+        CurrentScreen = "preferences";
+        ResetHistoryRoot("preferences");
+        Preferences.RequestScrollToAnchor(anchorKey);
+    });
+
     private void GoLibraryFoldersPreferences() => TryLeaveCurrentEditor(() =>
     {
         Preferences.EnsureLoaded();
@@ -1392,6 +1424,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         || IsBookPropertiesOverlayOpen || IsBulkBookPropertiesOverlayOpen || IsBookSeriesPropertiesOverlayOpen
         || IsReadingListPropertiesOverlayOpen || IsCollectionPropertiesOverlayOpen || IsWorkspaceNameOverlayOpen
         || IsNewReadingListDialogOpen || IsNewEventDialogOpen || IsNewGoalDialogOpen || IsMigrationOverlayOpen || IsQuickRateOverlayOpen
+        || IsPasteDataOverlayOpen || IsMergeSeriesOverlayOpen
         || IsWelcomeOverlayOpen || IsWelcomeTourOverlayOpen || IsWhatsNewOverlayOpen;
 
     /// <summary>Ctrl+P (docs/superpowers/specs/2026-09-03-quick-open-command-palette-design.md) - opens
@@ -1498,6 +1531,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void OnNewReadingListCreated(int listId)
     {
         IsNewReadingListDialogOpen = false;
+        Reading.PlaceCreatedList(listId);       // into the folder selected on the Reading screen (docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md §2)
         Reading.LoadReadingList(listId, triggerEntrance: true);
         CurrentScreen = "reading";
         ResetHistoryRoot("reading");
@@ -1541,7 +1575,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>"Edit details" from a sidebar row's right-click menu (docs/superpowers/specs/
     /// 2026-08-31-keyboard-operability-design.md) - composes the sidebar's own existing
-    /// <see cref="EventsScreenViewModel.SelectEventCommand"/> with <see cref="OpenEditEventDialog"/>
+    /// <see cref="ContinuityScreenViewModel.SelectEventCommand"/> with <see cref="OpenEditEventDialog"/>
     /// (which only ever acts on "whatever's currently active", no by-id overload) so a right-click
     /// on any row, not just the already-active one, opens that row's own edit dialog.</summary>
     [RelayCommand]
@@ -1846,8 +1880,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     private int? _currentBookReaderBookId;
 
-    private static bool IsMangaFamily(ContentType contentType) =>
-        contentType is ContentType.Manga or ContentType.Manhua or ContentType.Manhwa;
+    private static bool IsMangaFamily(ContentType contentType) => ContentTypeFamily.IsManga(contentType);
 
     private static ContentType LookupContentType(int seriesId)
     {
@@ -2013,6 +2046,16 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         PushHistory(new NavigationEntry("reader", NavigationEntryKind.Issue, issueId, Reader.IssueTitle));
     });
 
+    /// <summary>
+    /// Same as <see cref="GoReaderForIssueInReadingList"/> but anchors the Reader to a Story Event's own
+    /// Position order (docs/superpowers/specs/2026-09-25-event-map-design.md §5) - used only by the Event
+    /// Map's "Open reader". History replay doesn't restore the anchor, same as reading lists.
+    /// </summary>
+    private void GoReaderForIssueInStoryEvent(int issueId, int storyEventId) => RunDrill(DrillTransitionKind.Push, $"issue-cover:{issueId}", () =>
+    {
+        NavigateToReaderCore(issueId, readingListId: null, storyEventId: storyEventId);
+        PushHistory(new NavigationEntry("reader", NavigationEntryKind.Issue, issueId, Reader.IssueTitle));
+    });
 
     /// <summary>Book Details entry point (docs/superpowers/specs/2026-08-27-book-details-screen-
     /// design.md) - the Books grid card click lands here now, not straight in the reader.</summary>
@@ -2419,7 +2462,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         job.Succeed("Update downloaded", new ActivityLink(ActivityLinkKind.UpdateChangelog));
 
         ToastRequest? readyToast = null;
-        var restartCommand = new RelayCommand(() => _updateService.ApplyUpdatesAndRestart(item, downloadPath));
+        var restartCommand = new RelayCommand(() =>
+        {
+            if (_updateService.ApplyUpdatesAndRestart(item, downloadPath) is string failure)
+            {
+                Activity.RaiseAlert(new ActivityAlert
+                {
+                    Severity = ActivityAlertSeverity.Error,
+                    Title = "Update couldn't be installed",
+                    Detail = failure,
+                    DedupeKey = "update-install-failed",
+                });
+            }
+        });
         var laterCommand = new RelayCommand(() => CloseToast(readyToast!));
         var whatsNewCommand = new RelayCommand(() =>
         {
@@ -2938,6 +2993,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         {
             QuickRate.CancelCommand.Execute(null);
         }
+        else if (IsPasteDataOverlayOpen)
+        {
+            ClosePasteDataOverlay();
+        }
+        else if (IsMergeSeriesOverlayOpen)
+        {
+            CloseMergeSeriesOverlay();
+        }
         else if (IsDesignShowcaseOverlayOpen)
         {
             CloseDesignShowcaseOverlay();
@@ -2983,6 +3046,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         else if (Preferences.IsLegalDocumentViewerOpen)
         {
             Preferences.CloseLegalDocumentViewerCommand.Execute(null);
+        }
+        // Last: with nothing else to close, Esc clears the Library selection (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §2).
+        else if (IsLibrary && Library.HasAnySelection)
+        {
+            Library.ClearAnySelectionCommand.Execute(null);
         }
     }
 

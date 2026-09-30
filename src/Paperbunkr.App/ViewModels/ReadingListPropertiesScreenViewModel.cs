@@ -72,6 +72,14 @@ public partial class ReadingListPropertiesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private Bitmap? _coverPreview;
 
+    /// <summary>The list's blurred-cover backdrop for the header band (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md §10) -
+    /// the one the list page already made, or none.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasHeaderBackdrop))]
+    private Bitmap? _headerBackdrop;
+
+    public bool HasHeaderBackdrop => HeaderBackdrop is not null;
+
     /// <summary>Plain CSV add/remove box, same idiom as the Issue Properties Editor's Genre/Tags fields.</summary>
     [ObservableProperty]
     private string _tagsText = string.Empty;
@@ -102,6 +110,7 @@ public partial class ReadingListPropertiesScreenViewModel : ViewModelBase
         }
 
         HeaderLabel = $"Edit \"{list.Name}\"";
+        HeaderBackdrop = ReadingListPageViewModel.CachedBackdrop(readingListId);
         Name = list.Name;
         Description = list.Description ?? string.Empty;
         TypeText = list.Type.ToString();

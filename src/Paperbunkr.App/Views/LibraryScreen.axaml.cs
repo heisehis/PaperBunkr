@@ -20,9 +20,18 @@ public partial class LibraryScreen : UserControl
 {
     private readonly TypeAheadSearch.Buffer _typeAheadBuffer = new();
 
+    /// <summary>Puts focus back in the active grid whenever it should have some and doesn't - view-mode/granularity/grouping switches and
+    /// search/filter/sort resets all swap out the active ItemsControl's content in place while LibraryScreen itself stays attached and
+    /// visible throughout (docs/superpowers/specs/2026-09-28-keyboard-focus-reclaim-design.md, Phase 1). See <see cref="FocusReclaimer"/>.</summary>
+    private readonly FocusReclaimer _focus;
+
+    private int? _lastGridIndex;
+
     public LibraryScreen()
     {
         InitializeComponent();
+        _focus = new FocusReclaimer(this, () => ActiveGridItemsControl() is not null,
+            () => VirtualizedFocus.FocusIndex(ActiveGridItemsControl()!, _lastGridIndex ?? 0, 1));
         // Tunnel so Escape closes the Add-issue overlay even while a field inside it has focus
         // (the series-name SuggestBox otherwise swallows Escape to close its own dropdown).
         AddHandler(KeyDownEvent, OnLibraryScreenKeyDown, RoutingStrategies.Tunnel);
@@ -36,6 +45,20 @@ public partial class LibraryScreen : UserControl
         ApplySelectionCheckboxSetting();
         // Any inner ScrollViewer (grids, list boxes) bubbles this - keeps the A-Z rail's current letter in step (cosmetics pitch 2 #26).
         AddHandler(ScrollViewer.ScrollChangedEvent, OnAnyScrollChanged);
+        AddHandler(GotFocusEvent, (_, _) =>
+        {
+            if (ActiveGridItemsControl() is { } active && VirtualizedFocus.FocusedIndex(active) is var index and >= 0)
+            {
+                _lastGridIndex = index;
+            }
+        });
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty && IsVisible)
+            {
+                _focus.Reclaim();
+            }
+        };
     }
 
     private string? _railCurrentLetter;
@@ -137,6 +160,7 @@ public partial class LibraryScreen : UserControl
         AsyncCoverImage.NoteRenderScaling(TopLevel.GetTopLevel(this)?.RenderScaling);
         CosmeticThumbnailSettings.OverlaySettingsChanged += ApplySelectionCheckboxSetting;
         ApplySelectionCheckboxSetting();
+        _focus.Reclaim();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -195,6 +219,16 @@ public partial class LibraryScreen : UserControl
                 {
                     SyncPreviewColumnWidth();
                 }
+
+                // A view-mode/granularity switch swaps out the active grid's content in place while
+                // LibraryScreen stays visible throughout - nothing else puts focus back (docs/
+                // superpowers/specs/2026-09-28-keyboard-focus-reclaim-design.md). Grouping is a
+                // separate subscription below - LibraryScreenViewModel.IsGrouped is a pure alias over
+                // IssueList.IsGrouped and never raises its own PropertyChanged.
+                if (args.PropertyName is nameof(vm.ViewMode) or nameof(vm.GridCoverFit) or nameof(vm.Granularity))
+                {
+                    _focus.Reclaim();
+                }
             };
             previewColumn.PropertyChanged += (_, args) =>
             {
@@ -211,6 +245,25 @@ public partial class LibraryScreen : UserControl
             // setting Offset against it).
             vm.GridCoverFitChanging += () => CaptureGridScrollPosition(vm.GridCoverFit, vm);
             vm.GridCoverFitChanged += () => Dispatcher.UIThread.Post(() => RestoreGridScrollPosition(vm.GridCoverFit, vm));
+
+            // Grouping - see the comment above on why this can't ride the vm.PropertyChanged handler above.
+            vm.IssueList.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(IssueListScreenViewModel.IsGrouped))
+                {
+                    _focus.Reclaim();
+                }
+            };
+
+            // A search/filter/sort reset swaps the active collection's content in place - the container that held focus is detached along
+            // with the old content. Library is a single stable instance for LibraryScreen's whole lifetime (this method's own doc comment),
+            // and these five collections are stable { get; }-only properties for the VM's lifetime too, so one subscription each is enough -
+            // no unsubscribe needed, matching every other subscription in this block.
+            vm.Covers.CollectionChanged += (_, _) => _focus.Reclaim();
+            vm.Groups.CollectionChanged += (_, _) => _focus.Reclaim();
+            vm.FlatCovers.CollectionChanged += (_, _) => _focus.Reclaim();
+            vm.IssueList.Rows.CollectionChanged += (_, _) => _focus.Reclaim();
+            vm.IssueList.FlatRows.CollectionChanged += (_, _) => _focus.Reclaim();
         }
     }
 
@@ -252,7 +305,15 @@ public partial class LibraryScreen : UserControl
             return;
         }
 
-        if (e.Key == Key.I && e.KeyModifiers == KeyModifiers.Control)
+        // The bulk-action shortcuts (Ctrl+I, Alt+Shift+0-5/R/U, Ctrl+G, Ctrl+C/V, Ctrl+Shift+C) come from LibraryActionCatalog.KeyMap -
+        // the same definitions the menu hints and bar tooltips show (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §1).
+        // Deferred like the bar's buttons: several of them rebuild the grid the focused tile lives in.
+        if (new ViewModels.LibraryActions.LibraryActionCatalog(vm).TryGetKeyCommand(e.Key, e.KeyModifiers, out var command, out var parameter))
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => command!.Execute(parameter));
+            e.Handled = true;
+        }
+        else if (e.Key == Key.I && e.KeyModifiers == KeyModifiers.Control)
         {
             vm.BulkEditCurrentSelectionCommand.Execute(null);
             e.Handled = true;
@@ -322,20 +383,29 @@ public partial class LibraryScreen : UserControl
         }
     }
 
-    /// <summary>
-    /// Return-focus target for <see cref="LibraryToolbar.FocusGridRequested"/> (Esc-with-text in the
-    /// search box, see <see cref="LibraryToolbar.axaml.cs"/>'s own doc comment). Finds whichever of
-    /// the 4 grid-family <see cref="ItemsControl"/>s is actually visible right now - same "only one
-    /// is ever real at a time" fact <see cref="OnCardKeyDown"/> above already documents - and focuses
-    /// its first realized item, rather than assuming a specific named control.
-    /// </summary>
+    /// <summary>Finds whichever of the grid-family <see cref="ItemsControl"/>s is actually visible right now - only one ever is at a time,
+    /// same fact <see cref="OnCardKeyDown"/> below already documents. Shared by <see cref="FocusFirstGridItem"/> and <see cref="_focus"/>'s
+    /// own fallback, rather than assuming a specific named control (Poster/Panorama/Tiles have ~10 unnamed nested ItemsControls between
+    /// view mode, granularity and grouping - this avoids needing to name and branch through every one of them).
+    /// <para>
+    /// Real bug, found writing the Phase 1 headless tests (docs/superpowers/specs/2026-09-28-keyboard-focus-reclaim-design.md): Details
+    /// mode's own column-header row is <em>also</em> an <see cref="ItemsControl"/> (over <c>DetailsColumns</c>), and it sits before the
+    /// actual data grid in document order - a plain "first visible ItemsControl with items" match picked the header instead, pre-existing
+    /// in <see cref="FocusFirstGridItem"/> too (this method is its exact prior body). Every real content grid's items are <c>Button.card</c>
+    /// (confirmed across every ItemTemplate in this file); the header's own items are <c>Button.detailsHeader</c> - checking the first
+    /// realized container actually holds a card excludes it.
+    /// </para></summary>
+    private ItemsControl? ActiveGridItemsControl() =>
+        this.GetVisualDescendants().OfType<ItemsControl>().FirstOrDefault(ic =>
+            ic.IsEffectivelyVisible && ic.ItemCount > 0 && ic.ContainerFromIndex(0) is { } first
+            && (first is Button { Classes: var classes } && classes.Contains("card")
+                || first.GetVisualDescendants().OfType<Button>().Any(b => b.Classes.Contains("card"))));
+
+    /// <summary>Return-focus target for <see cref="LibraryToolbar.FocusGridRequested"/> (Esc-with-text in the search box, see
+    /// <see cref="LibraryToolbar.axaml.cs"/>'s own doc comment) - focuses <see cref="ActiveGridItemsControl"/>'s first realized item.</summary>
     private void FocusFirstGridItem()
     {
-        var itemsControl = this.GetVisualDescendants()
-            .OfType<ItemsControl>()
-            .FirstOrDefault(ic => ic.IsEffectivelyVisible && ic.ItemCount > 0);
-
-        if (itemsControl?.ContainerFromIndex(0) is not Control container)
+        if (ActiveGridItemsControl()?.ContainerFromIndex(0) is not Control container)
         {
             return;
         }

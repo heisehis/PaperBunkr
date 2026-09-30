@@ -145,9 +145,9 @@ LicenseFile=publish\License.txt
 ; [Code] InitializeSetup gate below land back in the previously-used install directory - see
 ; design decision 7 ("falling through to the normal wizard").
 UsePreviousAppDir=yes
-; NetSparkle-driven auto-update (src/Paperbunkr.App/Services/UpdateService.cs) runs this same
-; installer over a copy of Paperbunkr that may still be mid-shutdown when Setup starts (NetSparkle
-; exits the app and launches Setup, but doesn't wait for the OS to release file locks). Restart
+; Auto-update (src/Paperbunkr.App/Services/UpdateService.cs) runs this same installer over a copy
+; of Paperbunkr that may still be mid-shutdown when Setup starts (the app launches Setup first, so
+; the UAC prompt gets the foreground, then exits; InitializeSetup waits for it below). Restart
 ; Manager integration below detects the app still holding {app}'s files open and closes it, instead
 ; of failing the file copy - the [Run] "launch after install" entry on the Finished page handles
 ; getting it running again, so RestartApplications is off to avoid a double-launch.
@@ -219,6 +219,9 @@ Name: "associatedjvu"; Description: ".djvu  (DjVu documents)";         GroupDesc
 Name: "associateepub"; Description: ".epub  (EPUB e-books)";                          GroupDescription: "Associate Book file types with {#MyAppName}:"; Flags: unchecked
 Name: "associatefb2";  Description: ".fb2, .zip  (FictionBook 2 - also claims plain .zip)"; GroupDescription: "Associate Book file types with {#MyAppName}:"; Flags: unchecked
 Name: "associatemobi"; Description: ".mobi, .azw, .azw3  (Kindle / MOBI)";            GroupDescription: "Associate Book file types with {#MyAppName}:"; Flags: unchecked
+; File Explorer cover thumbnails (docs/superpowers/specs/2026-09-30-explorer-cover-thumbnails-design.md,
+; decisions 13/17): one opt-in box; turns on every thumbnail type no other program already draws.
+Name: "explorerthumbnails"; Description: "Show comic and book covers as thumbnails in File Explorer"; GroupDescription: "File Explorer:"; Flags: unchecked
 
 [Files]
 ; The entire self-contained publish output (see installer\BuildInstaller.ps1) - exe, every
@@ -257,6 +260,8 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .dj
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .epub";     Tasks: associateepub; Flags: runhidden waituntilterminated; StatusMsg: "Registering .epub association..."
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .fb2 .zip"; Tasks: associatefb2;  Flags: runhidden waituntilterminated; StatusMsg: "Registering .fb2/.zip association..."
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .mobi .azw .azw3"; Tasks: associatemobi; Flags: runhidden waituntilterminated; StatusMsg: "Registering .mobi/.azw/.azw3 association..."
+; After the associations, so the handler is also registered under any Paperbunkr ProgID they just created.
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-thumbnails"; Tasks: explorerthumbnails; Flags: runhidden waituntilterminated; StatusMsg: "Registering File Explorer thumbnails..."
 ; Finished-page checkboxes (postinstall = rendered as a checkbox on the Finished page;
 ; skipifsilent = hidden for silent/auto-update runs). "Open Paperbunkr now" stays checked by
 ; default; "Browse the wiki" is opt-in (unchecked). The wiki entry is a URL opened via the shell
@@ -273,6 +278,9 @@ Filename: "{#MyAppURL}/wiki"; Description: "Browse the {#MyAppName} wiki"; Flags
 ; task state drifts across an upgrade/repair (e.g. a format associated by an older build whose
 ; task the user later unchecked). Runs before files are removed (Inno's UninstallRun ordering) so
 ; the exe still exists to call.
+; Thumbnails first, while Paperbunkr's ProgIDs still exist, so each type's previous thumbnail handler is put back
+; where it was (decision 7). Unconditional for the same reason as associations; a no-op if never enabled.
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-thumbnails"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterThumbnails"
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-file-associations"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterFileAssociations"
 
 [Code]
@@ -306,8 +314,24 @@ var
   OldVersion: String;
   ResultCode: Integer;
   Choice: Integer;
+  Waited: Integer;
 begin
   Result := True;
+
+  // Launched by the app's own Restart-to-update (UpdateService.ApplyUpdatesAndRestart), which
+  // starts Setup and then shuts down. Give that shutdown (exit handlers, auto-backup) up to 60s to
+  // release the AppMutex, so the user isn't shown the "Paperbunkr is running" prompt for an app
+  // that is already closing. This runs before Inno's own AppMutex check, which still catches an
+  // app that never exits. A manual run (no flag) skips the wait entirely.
+  if ExpandConstant('{param:PAPERBUNKRUPDATE|0}') = '1' then
+  begin
+    Waited := 0;
+    while CheckForMutexes('{#SetupSetting("AppMutex")}') and (Waited < 60000) do
+    begin
+      Sleep(250);
+      Waited := Waited + 250;
+    end;
+  end;
 
   UninstallString := GetPrevRegString('UninstallString');
   if UninstallString = '' then

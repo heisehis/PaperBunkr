@@ -924,6 +924,18 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     partial void OnGranularityChanged(LibraryContentGranularity value)
     {
+        // The two selections are separate id spaces and only one grid is ever shown - leaving the other kind selected meant the bar
+        // and Ctrl+I could act on items that are no longer on screen (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §1).
+        if (value == LibraryContentGranularity.Series)
+        {
+            ClearSelection();
+        }
+        else
+        {
+            ClearSeriesSelection();
+        }
+
+
         OnPropertyChanged(nameof(IsSeriesGranularity));
         OnPropertyChanged(nameof(IsIssueGranularity));
         OnPropertyChanged(nameof(HasAnyResults));
@@ -1040,7 +1052,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             c => c.IsSmart ? CollectionResolver.GetMembers(context, c.Id).Count : c.Items.Count);
 
         // "Add to Reading List" flyout (docs/superpowers/specs/2026-08-24-library-multiselect-
-        // slice2-design.md §2) - same ordering ReadingScreenViewModel's own sidebar uses. Its own
+        // slice2-design.md §2) - same ordering the Reading Lists gallery uses. Its own
         // table, so it only refreshes with a real reload, not on every RebuildView.
         ReadingLists.Clear();
         foreach (var list in context.ReadingLists.OrderBy(l => l.SortOrder))
@@ -1380,11 +1392,49 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
     }
 
+    /// <summary>
+    /// CE parity (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §1, Q12): a selected item the new view no longer shows
+    /// - filtered or searched away, or gone after an action like Mark Read under the Unread filter - leaves the selection, so no bulk action
+    /// ever reaches something the user can't see.
+    /// </summary>
+    private void PruneSelectionTo(LibraryViewResult result)
+    {
+        if (Selection.Count > 0)
+        {
+            var visibleIssueIds = new HashSet<int>(result.Rows.Select(r => r.Id));
+            foreach (var group in result.RowGroups)
+            {
+                visibleIssueIds.UnionWith(group.Items.Select(r => r.Id));
+            }
+
+            if (Selection.PruneTo(visibleIssueIds))
+            {
+                SelectionCount = Selection.Count;
+            }
+        }
+
+        if (SeriesSelection.Count > 0)
+        {
+            var visibleSeriesIds = new HashSet<int>(result.Cards.Select(c => c.SeriesId));
+            foreach (var group in result.CardGroups)
+            {
+                visibleSeriesIds.UnionWith(group.Items.Select(c => c.SeriesId));
+            }
+
+            if (SeriesSelection.PruneTo(visibleSeriesIds))
+            {
+                SeriesSelectionCount = SeriesSelection.Count;
+            }
+        }
+    }
+
     /// <summary>Diff-only sync of <c>IsSelected</c> from the authoritative selection sets. UI thread only:
     /// the rows/cards are <c>ObservableObject</c>s bound to checkboxes, so a write raises
     /// <c>PropertyChanged</c>. Writes nothing on the common path.</summary>
     private void SyncSelection(LibraryViewResult result)
     {
+        PruneSelectionTo(result);
+
         foreach (var row in result.Rows)
         {
             SyncRow(row);
@@ -2600,7 +2650,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         // Job-tracked, not a fire-and-forget toast (docs/superpowers/specs/2026-09-06-feedback-
-        // notification-system-design.md §6) - same reasoning as ReadingScreenViewModel's own
+        // notification-system-design.md §6) - same reasoning as ReadingListPageViewModel's own
         // ImportDroppedPathsAsync: DragImportService has no progress callback, so this is an
         // indeterminate job, but completion now follows the normal toast-policy path.
         using var job = _activity.StartJob(ActivityJobKind.Import, "Importing dropped files");
@@ -3031,7 +3081,13 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             return Selection.SelectedIds.ToList();
         }
 
-        var seriesIds = SeriesSelection.SelectedIds.ToList();
+        return ExpandSeriesToIssueIds(SeriesSelection.SelectedIds.ToList());
+    }
+
+    /// <summary>Every issue of <paramref name="seriesIds"/>, in on-screen card order then issue-number order - the order
+    /// <see cref="SelectionBarIssueIds"/> has always used, shared with the target-based actions of the bulk-actions design.</summary>
+    internal IReadOnlyList<int> ExpandSeriesToIssueIds(IReadOnlyList<int> seriesIds)
+    {
         if (seriesIds.Count == 0)
         {
             return Array.Empty<int>();
@@ -3256,7 +3312,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     }
 
     /// <summary>"New Reading List…" flyout entry - creates a list the same way
-    /// <c>ReadingScreenViewModel.CreateNew</c> does, then immediately adds the current selection to it.</summary>
+    /// <c>ReadingListsScreenViewModel.CreateNew</c> does, then immediately adds the current selection to it.</summary>
     [RelayCommand]
     private void CreateReadingListAndAddSelection()
     {
@@ -3490,6 +3546,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(DeleteConfirmLabel));
         OnPropertyChanged(nameof(RemoveKeepFileLabel));
         RaisePreviewSelectionStrip();
+        RaiseBarItems();
     }
 
     /// <summary>Series-granularity counterpart to <see cref="ToggleIssueSelection"/> - same
@@ -3541,6 +3598,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(DeleteSeriesConfirmLabel));
         OnPropertyChanged(nameof(RemoveSeriesKeepFilesLabel));
         RaisePreviewSelectionStrip();
+        RaiseBarItems();
     }
 
     /// <summary>Action bar's "Bulk Edit" button (series granularity) - opens

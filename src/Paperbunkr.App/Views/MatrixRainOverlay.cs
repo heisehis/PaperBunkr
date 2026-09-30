@@ -256,7 +256,7 @@ public sealed class MatrixRainOverlay : Control
             return;
         }
 
-        bool reducedMotion = Application.Current?.Resources["PbMotionFast"] is TimeSpan { Ticks: 0 };
+        bool reducedMotion = Application.Current?.TryGetResource("PbMotionFast", null, out var fast) == true && fast is TimeSpan { Ticks: 0 };
 
         bool shouldRun = IsVisible && !reducedMotion && !_lastThrottled;
         _visual.SendHandlerMessage(new MatrixRainRunState(shouldRun));

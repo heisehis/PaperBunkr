@@ -1,6 +1,6 @@
 # Open-Source Notices
 
-**Last updated:** 2026-09-26
+**Last updated:** 2026-09-30
 
 Paperbunkr is built on open-source software written by other people. This file lists the
 third-party software, fonts and artwork that ship with the app, and the licenses they come under.
@@ -29,8 +29,17 @@ end; the other licenses are linked to their official text.
 - **MySqlConnector**: copyright © Bradley Grainger.
 - **Makaretu.Dns.Multicast.New** (mDNS): copyright © Richard Schneider, jdomnitz.
 - **flag-icons** (country flags): copyright © Panayiotis Lipiridis.
+- **ONNX Runtime** (Microsoft.ML.OnnxRuntime): copyright © Microsoft Corporation. Runs the guided-view
+  panel detector on your computer; nothing is sent anywhere.
 
 ## Apache License 2.0
+
+- **Manga Panel and Text Detector (YOLO26-nano)** (`Models/panel-detector.onnx`, guided-view panel
+  detection): model by Leandro Narosky ([leoxs22/manga-panel-detector-yolo26n](https://huggingface.co/leoxs22/manga-panel-detector-yolo26n)),
+  built on Ultralytics YOLO, distributed here as the unchanged ONNX export
+  [mednasserallah/manga-panel-detector-yolo26n-onnx](https://huggingface.co/mednasserallah/manga-panel-detector-yolo26n-onnx),
+  Apache 2.0. Paperbunkr does not retrain or modify its weights. It was trained on the Manga109-s dataset,
+  credited under Data below.
 
 - **ImageSharp** 2.1: copyright © Six Labors.
 - **IronPython**: copyright © .NET Foundation and Contributors.
@@ -56,6 +65,14 @@ builds of the same libraries.
 - **x265** (`libx265.dll`, shipped with the libheif native package): copyright © MulticoreWare,
   [GNU GPL 2.0 or later](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html), used here under
   its "or later" terms, which are compatible with Paperbunkr's AGPL 3.0.
+- **DjVuLibre** 3.5.29 (`Resources\ddjvu.exe`, `djvm.exe`, `c44.exe` and `libdjvulibre.dll`, used
+  to open DjVu files): copyright © Léon Bottou and Yann Le Cun, © AT&T, and © LizardTech Software,
+  [GNU GPL 2.0 or later](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html) (the full text ships
+  as `Resources\DjVuLibre-COPYING.txt`), used here under its "or later" terms, which are compatible
+  with Paperbunkr's AGPL 3.0. These are the unmodified programs from the official Windows release,
+  which Paperbunkr runs as separate processes. Source for this version:
+  [DjVuLibre 3.5.29](https://sourceforge.net/projects/djvu/files/DjVuLibre/3.5.29/), from
+  [djvu.sourceforge.net](https://djvu.sourceforge.net).
 
 ## Other licenses
 
@@ -67,7 +84,32 @@ builds of the same libraries.
 - **ANGLE** (`av_libglesv2.dll`, graphics): copyright © The ANGLE Project Authors,
   [BSD 3-Clause License](https://chromium.googlesource.com/angle/angle/+/main/LICENSE).
 - **SQLite** (`e_sqlite3.dll`): in the public domain.
+- **libjpeg** (`Resources\libjpeg.dll`, shipped with DjVuLibre): this software is based in part on the
+  work of the Independent JPEG Group, under the [IJG License](https://www.ijg.org).
+- **LibTIFF** (`Resources\libtiff.dll`, shipped with DjVuLibre): copyright © Sam Leffler and
+  © Silicon Graphics, Inc., under the [LibTIFF License](https://libtiff.gitlab.io/libtiff/project/license.html).
+- **zlib** (`Resources\libz.dll`, shipped with DjVuLibre): copyright © Jean-loup Gailly and Mark Adler,
+  under the [zlib License](https://zlib.net/zlib_license.html).
+- **Microsoft Visual C++ runtime** (`Resources\vcruntime140.dll`, `msvcp140.dll`, which the DjVuLibre
+  tools need): copyright © Microsoft Corporation, redistributed under the Visual Studio
+  redistributable terms.
 - **VersOne.Epub**: released into the public domain under [The Unlicense](https://unlicense.org).
+
+## Data
+
+- **Manga109-s**: the panel detector above was trained on the [Manga109-s](https://huggingface.co/datasets/hal-utokyo/Manga109-s)
+  dataset (Aizawa et al., "Building a Manga Dataset 'Manga109' with Annotations for Multimedia Applications",
+  IEEE MultiMedia 27(2), 2020; Matsui et al., "Sketch-based Manga Retrieval using Manga109 Dataset",
+  Multimedia Tools and Applications 76(20), 2017). The dataset's terms allow models trained on it to be
+  used commercially when its use is indicated, which this entry does. Paperbunkr does not ship the dataset.
+- **Grand Comics Database™** (optional download under Preferences → Connections): series names, issue
+  numbers, on-sale and key dates, and series bonds from the [Grand Comics Database](https://www.comics.org),
+  licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The downloaded extract is
+  itself CC BY-SA 4.0, is published at [heisehis/paperbunkr-gcd-data](https://github.com/heisehis/paperbunkr-gcd-data)
+  (which also says what was changed from the GCD dump), and records the dump it was made from; Preferences
+  shows that date. Lines
+  that come from it are marked GCD and link to their page on comics.org. The Grand Comics Database does
+  not endorse Paperbunkr.
 
 ## Fonts
 

@@ -37,7 +37,7 @@ public partial class NewReadingListViewModel : ViewModelBase
         _filePicker = filePicker;
         _onCreated = onCreated;
         _onCancel = onCancel;
-        ArcSourceOptions = ReadingScreenViewModel.ArcSourceOptions;
+        ArcSourceOptions = ReadingListsScreenViewModel.ArcSourceOptions;
         ArcSourceNames = ArcSourceOptions.Select(o => o.DisplayName).ToArray();
         _selectedArcSource = ArcSourceOptions[0];
     }
@@ -232,7 +232,7 @@ public partial class NewReadingListViewModel : ViewModelBase
         set => SelectedStoryEvent = StoryEventOptions.FirstOrDefault(o => o.Name == value);
     }
 
-    // --- Story arc search (its own minimal copy - screen-state on ReadingScreenViewModel isn't reusable here) ---
+    // --- Story arc search (its own minimal copy - screen-state on ReadingListPageViewModel isn't reusable here) ---
 
     public ArcSourceOption[] ArcSourceOptions { get; }
 

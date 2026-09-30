@@ -170,6 +170,9 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
     public bool HasExternalRelationPlaceholders => ExternalRelationPlaceholders.Count > 0;
 
+    /// <summary>Opens the installed Grand Comics Database data for the Related tab's GCD lines; tests point it elsewhere.</summary>
+    internal Func<Paperbunkr.Data.Gcd.GcdDataStore?> OpenGcd { get; set; } = () => Paperbunkr.Data.Gcd.GcdDataStore.TryOpen();
+
     /// <summary>
     /// Real data as of docs/superpowers/specs/2026-08-17-metadata-model-phase4a-continuity-
     /// design.md - other series sharing at least one <see cref="Data.Entities.Continuity"/> with
@@ -581,7 +584,13 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     {
         Related.Clear();
         RelatedRail.Clear();
-        foreach (var endpoint in MediaRelationResolver.GetRelatedFromSeries(context, seriesId))
+        var endpoints = MediaRelationResolver.GetRelatedFromSeries(context, seriesId).ToList();
+        var relationIds = endpoints.Select(e => e.MediaRelationId).ToList();
+        var fromGcd = context.RelationEvidence
+            .Where(e => e.Provider == RelationEvidenceProvider.Gcd && relationIds.Contains(e.MediaRelationId))
+            .Select(e => e.MediaRelationId)
+            .ToHashSet();
+        foreach (var endpoint in endpoints)
         {
             RelatedSeriesSample sample;
             Avalonia.Media.Imaging.Bitmap? coverImage;
@@ -592,7 +601,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
                 {
                     Title = otherSeries.Name,
                     Name = otherSeries.Name,
-                    Note = RelationTypeOption.FormatLabel(endpoint.DisplayType),
+                    Note = RelationTypeOption.FormatLabel(endpoint.DisplayType) + (fromGcd.Contains(endpoint.MediaRelationId) ? " · GCD" : string.Empty),
                     CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
                     Kind = MediaRelationEndpointKind.Series,
                     RelatedSeriesId = otherSeries.Id,
@@ -656,6 +665,11 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
                 RelationTypeLabel = RelationTypeOption.FormatLabel(placeholder.RelationType),
                 TargetUrl = placeholder.TargetUrl,
             });
+        }
+
+        foreach (var line in Paperbunkr.App.Services.Gcd.GcdRelationLines.For(context, seriesId, OpenGcd))
+        {
+            ExternalRelationPlaceholders.Add(line);
         }
 
         OnPropertyChanged(nameof(HasRelated));
@@ -1173,8 +1187,10 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         // LINQ query projecting both entity types into a shared anonymous type before
         // materializing - that shape needs a typed null literal for whichever entity type isn't
         // present in a given row, which most EF Core providers refuse to translate to SQL.
+        // ItemType filter is required: a Novel row's SeriesId is a BookSeries id, a separate id
+        // space that can collide with this comic Series id.
         var readingEvents = context.ReadingEvents
-            .Where(e => e.SeriesId == seriesId)
+            .Where(e => e.SeriesId == seriesId && e.ItemType == ReadingItemType.Comic)
             .OrderByDescending(e => e.TimestampUtc)
             .Take(20)
             .ToList();

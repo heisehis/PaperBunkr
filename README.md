@@ -218,6 +218,8 @@ A cover-forward dashboard driven by a relationship-aware recommendation engine.
 * Bulk selection, continuity editing and merging, and cross-event relations.
 * Format-signal grouping suggestions.
 * An age / appearance timeline for tracking a character or continuity across events.
+* Event and continuity maps, with events ordered by a smart connector, and optional
+  [Grand Comics Database data](https://github.com/heisehis/paperbunkr-gcd-data) for series continuity and on-sale dates.
 
 ### Insights
 
@@ -373,6 +375,8 @@ Paperbunkr stands on a lot of prior work:
   **[MangaUpdates](https://www.mangaupdates.com/)**, **[MangaDex](https://mangadex.org/)**,
   **[Kitsu](https://kitsu.io/)**, and **[ComicVine](https://comicvine.gamespot.com/)** — the
   metadata sources behind online lookups and tracking.
+* The **[Grand Comics Database™](https://www.comics.org)**: series continuity and on-sale dates, as an optional
+  CC BY-SA 4.0 download published at [paperbunkr-gcd-data](https://github.com/heisehis/paperbunkr-gcd-data).
 * **[Inno Setup](https://jrsoftware.org/isinfo.php)** — the Windows installer.
 * **[Tachiyomi](https://tachiyomi.org/) / [Mihon](https://mihon.app/)** — inspiration for the
   manga library and reading model.

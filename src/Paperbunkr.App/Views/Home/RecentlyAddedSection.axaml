@@ -1,0 +1,44 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:fi="using:FluentIcons.Avalonia"
+                    xmlns:vm="using:Paperbunkr.App.ViewModels"
+                    xmlns:home="using:Paperbunkr.App.ViewModels.Home"
+                    xmlns:models="using:Paperbunkr.App.Models"
+                    xmlns:views="using:Paperbunkr.App.Views"
+                    xmlns:controls="using:Paperbunkr.App.Controls">
+
+    <!-- Recently Added - the "NEW" corner ribbon marks series whose newest issue arrived in the last 7 days (docs/superpowers/
+         specs/2026-09-28-home-cosmetics-design.md C5); the badge always shows the issue count now. -->
+    <DataTemplate x:Key="HomeSection.recentlyAdded" DataType="home:RecentlyAddedSectionViewModel">
+        <StackPanel Spacing="12" controls:ScrollReveal.Enabled="True">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <fi:SymbolIcon Classes="sectionIcon" Symbol="{Binding Icon}" />
+                    <controls:SplitText Classes="heading" Text="{Binding Title}" AutomationProperties.AutomationId="{Binding HeaderAutomationId}" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="viewAllLink" Content="View Library →"
+                        Command="{Binding Home.GoToLibraryCommand}" AutomationProperties.AutomationId="HomeViewLibraryLink" />
+            </Grid>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8,-8,-8,0" IsVisible="{Binding Home.HasRecentlyAdded}">
+                <ItemsControl ItemsSource="{Binding Home.RecentlyAdded}" Margin="2,2,2,6" AutomationProperties.AutomationId="HomeRecentlyAddedList"
+                              controls:EntranceAnimation.Enabled="{Binding Home.PlayEntranceAnimation}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:SeriesCardSample">
+                            <views:PosterTile
+                                CoverSource="{Binding CoverKey, Converter={x:Static views:CoverImageConverter.Instance}}"
+                                TitleText="{Binding Name}"
+                                BadgeText="{Binding IssueCountLabel}"
+                                ShowNewRibbon="{Binding IsRecentlyAdded}"
+                                Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
+                                CommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <TextBlock Text="Nothing added yet" Classes="emptyState" IsVisible="{Binding !Home.HasRecentlyAdded}" />
+        </StackPanel>
+    </DataTemplate>
+</ResourceDictionary>

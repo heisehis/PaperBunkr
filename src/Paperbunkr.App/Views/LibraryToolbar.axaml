@@ -6,7 +6,6 @@
              xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:entities="using:Paperbunkr.Data.Entities"
-             xmlns:plugins="using:Paperbunkr.Plugins"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -129,17 +128,6 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="2,0,0,0" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-
-        <Style Selector="Button.selAction">
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-            <Setter Property="Padding" Value="12,5" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
     </UserControl.Styles>
@@ -284,34 +272,9 @@
         <!-- ============ Selection second row ============ -->
         <Border IsVisible="{Binding HasAnySelection}" Padding="24,10"
                 Background="{DynamicResource PbAccentSoftBrush}" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="0,1,0,1">
-            <!-- One bar for both selection kinds: Mark Read/Unread and Add to List are shared (a series selection acts on
-                 every issue of the selected series - LibraryScreenViewModel.SelectionBarIssueIds); count, Bulk Edit, Delete
-                 and Clear swap per kind. Plugins stays issue-only (its hook takes issue selections). -->
-            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <TextBlock Text="{Binding SelectionCount, StringFormat='{}{0} selected'}" FontSize="13" FontWeight="SemiBold"
-                           Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" IsVisible="{Binding HasSelection}" />
-                <TextBlock Text="{Binding SeriesSelectionCount, StringFormat='{}{0} series selected'}" FontSize="13" FontWeight="SemiBold"
-                           Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" IsVisible="{Binding !HasSelection}" />
-                <Button Classes="selAction" Command="{Binding BulkEditSelectionCommand}" Content="Bulk Edit" IsVisible="{Binding HasSelection}" />
-                <Button Classes="selAction" Command="{Binding BulkEditSeriesSelectionCommand}" Content="Bulk Edit" IsVisible="{Binding !HasSelection}" />
-                <Button x:Name="LibraryPluginsButton" Classes="selAction" Classes.open="{Binding IsLibraryPluginMenuOpen}"
-                        Command="{Binding ToggleLibraryPluginMenuCommand}" Content="Plugins ▾">
-                    <Button.IsVisible>
-                        <MultiBinding Converter="{x:Static BoolConverters.And}">
-                            <Binding Path="HasSelection" />
-                            <Binding Path="HasLibraryPluginCommands" />
-                        </MultiBinding>
-                    </Button.IsVisible>
-                </Button>
-                <Button Classes="selAction" Command="{Binding MarkSelectionReadCommand}" Content="Mark Read" />
-                <Button Classes="selAction" Command="{Binding MarkSelectionUnreadCommand}" Content="Mark Unread" />
-                <Button x:Name="AddToListButton" Classes="selAction" Classes.open="{Binding IsAddToListOpen}"
-                        Command="{Binding ToggleAddToListCommand}" Content="Add to List ▾" />
-                <Button Classes="selAction" Command="{Binding DeleteSelectionCommand}" Content="Delete" IsVisible="{Binding HasSelection}" />
-                <Button Classes="selAction" Command="{Binding DeleteSeriesSelectionCommand}" Content="Delete" IsVisible="{Binding !HasSelection}" />
-                <Button Classes="selAction" Command="{Binding ClearSelectionCommand}" Content="Clear" IsVisible="{Binding HasSelection}" />
-                <Button Classes="selAction" Command="{Binding ClearSeriesSelectionCommand}" Content="Clear" IsVisible="{Binding !HasSelection}" />
-            </StackPanel>
+            <!-- One bar for both selection kinds, built from LibraryActionCatalog (docs/superpowers/specs/2026-09-29-library-bulk-actions-
+                 design.md §1): the actions, their order, labels and shortcuts are the right-click menu's own. -->
+            <views:SelectionActionBar />
         </Border>
 
         <!-- ============ Popups ============ -->
@@ -606,44 +569,6 @@
                       </Panel>
                     </ScrollViewer>
                 </DockPanel>
-            </Border>
-        </Popup>
-
-        <Popup PlacementTarget="{Binding #AddToListButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
-               IsOpen="{Binding IsAddToListOpen}" IsLightDismissEnabled="True">
-            <Border Classes="dropdown" Width="220">
-                <StackPanel Spacing="1">
-                    <Button Classes="modeOption" Content="+ New Reading List…" Command="{Binding CreateReadingListAndAddSelectionCommand}" />
-                    <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,4" />
-                    <ItemsControl ItemsSource="{Binding ReadingLists}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:ReadingListOption">
-                                <Button Classes="modeOption"
-                                        Content="{Binding Name}"
-                                        Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).AddSelectionToReadingListCommand}"
-                                        CommandParameter="{Binding Id}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-        </Popup>
-
-        <!-- One row per enabled Library-hook plugin command (docs: PluginHostService.GetLibraryCommands's
-             own doc comment) - replaces the earlier single hardcoded "Find Duplicates" button that ran
-             every enabled command at once. -->
-        <Popup PlacementTarget="{Binding #LibraryPluginsButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
-               IsOpen="{Binding IsLibraryPluginMenuOpen}" IsLightDismissEnabled="True">
-            <Border Classes="dropdown" MinWidth="200">
-                <ItemsControl ItemsSource="{Binding LibraryPluginCommands}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="plugins:Command">
-                            <Button Classes="modeOption" Content="{Binding Name}"
-                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginOnSelectionCommand}"
-                                    CommandParameter="{Binding}" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
             </Border>
         </Popup>
 

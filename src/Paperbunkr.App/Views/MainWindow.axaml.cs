@@ -59,9 +59,31 @@ public partial class MainWindow : Window
     /// </summary>
     private readonly DispatcherTimer _railCollapseTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
 
+    /// <summary>Restores keyboard focus to the contextual sidebar when a row it held is removed by a list reload or delete (the list's own
+    /// handler detaches the focused row before ours runs, so focus is simply gone). Only fires when focus was last in the sidebar -
+    /// see docs/superpowers/specs/2026-09-29-keyboard-focus-reclaim-phases-2-6-design.md.</summary>
+    private readonly FocusReclaimer _sidebarFocus;
+
+    private bool _sidebarHadFocus;
+    private int _sidebarLastRowIndex;
+
     public MainWindow()
     {
         InitializeComponent();
+
+        _sidebarFocus = new FocusReclaimer(ContextualSidebar, () => DataContext is MainViewModel { ShowContextualSidebar: true }, FocusSidebarRow);
+        AddHandler(GotFocusEvent, OnAnyGotFocus);
+        foreach (var name in new[]
+                 {
+                     "LibraryCollections", "LibraryContentTypes", "BuiltInSmartLists", "CustomSmartLists", "MaintenanceSmartLists",
+                     "SeriesSmartLists", "NovelSmartLists", "PluginSmartLists", "ContinuityList", "StoryEvents",
+                 })
+        {
+            if (this.FindControl<ItemsControl>(name) is { } list)
+            {
+                WatchSidebarList(list);
+            }
+        }
 
         // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - registered
         // once, here, before any navigation can occur. SharedElementTransitionService.Shared is the
@@ -434,6 +456,66 @@ public partial class MainWindow : Window
 
         GridKeyboardNavigation.Navigate(rows, focusedButton, direction.Value).Focus();
         e.Handled = true;
+    }
+
+    private System.Collections.Generic.List<Button> SidebarRows() =>
+        ContextualSidebar.GetVisualDescendants().OfType<Button>()
+            .Where(b => b.Classes.Contains("sideItemButton") && b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Focusable)
+            .ToList();
+
+    private void OnAnyGotFocus(object? sender, RoutedEventArgs e)
+    {
+        var inSidebar = e.Source is Visual v && v.GetSelfAndVisualAncestors().Any(a => ReferenceEquals(a, ContextualSidebar));
+        _sidebarHadFocus = inSidebar;
+        if (inSidebar && e.Source is Button button && SidebarRows().IndexOf(button) is var index and >= 0)
+        {
+            _sidebarLastRowIndex = index;
+        }
+    }
+
+    private void FocusSidebarRow()
+    {
+        var rows = SidebarRows();
+        if (rows.Count > 0)
+        {
+            rows[Math.Min(_sidebarLastRowIndex, rows.Count - 1)].Focus(NavigationMethod.Directional);
+        }
+    }
+
+    private void WatchSidebarList(ItemsControl list)
+    {
+        System.Collections.Specialized.INotifyCollectionChanged? current = null;
+        void OnChanged(object? s, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            if (_sidebarHadFocus)
+            {
+                _sidebarFocus.ReclaimIfFocusLost();
+            }
+        }
+
+        void Attach()
+        {
+            if (current is not null)
+            {
+                current.CollectionChanged -= OnChanged;
+            }
+
+            current = list.ItemsSource as System.Collections.Specialized.INotifyCollectionChanged;
+            if (current is not null)
+            {
+                current.CollectionChanged += OnChanged;
+            }
+        }
+
+        list.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == ItemsControl.ItemsSourceProperty)
+            {
+                Attach();
+                OnChanged(list, null!);
+            }
+        };
+        Attach();
     }
 
     private static Rect BoundsRelativeTo(Control control, Visual ancestor)

@@ -137,4 +137,18 @@ public class SkinColors
 
     /// <summary>Hero-art vignette gradient end stop - opaque <see cref="Surface0"/>, not a tinted color, per the design doc's "dark vignette" direction.</summary>
     public string HeroGradientEnd { get; set; } = "#FF000000";
+
+    // Comic-age colours for the Continuity screen's Timeline (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md,
+    // "Colour tokens"). Optional: null means the built-in default for the theme's mode (a dark and a light set), with Modern following
+    // the accent - so no existing theme.json needs editing. Keys: eraPlatinum, eraGolden, eraSilver, eraBronze, eraModern.
+
+    public string? EraPlatinum { get; set; }
+
+    public string? EraGolden { get; set; }
+
+    public string? EraSilver { get; set; }
+
+    public string? EraBronze { get; set; }
+
+    public string? EraModern { get; set; }
 }

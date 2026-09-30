@@ -163,6 +163,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         // per-Kind template binds to these instead of a hardcoded per-provider command name. Command
         // bodies are unchanged.
         Acquisition = new AcquisitionSettingsViewModel(_contextFactory, () => ActiveSection = PreferencesSection.Connections);
+        GcdData = new GcdDataSettingsViewModel(_contextFactory, _activity);
         OrganizeScrape = new OrganizeScrapeSettingsViewModel(
             _contextFactory, () => ActiveSection = PreferencesSection.Connections,
             new Scraper.ProfileManagerViewModel(
@@ -419,6 +420,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public OrganizeScrapeSettingsViewModel OrganizeScrape { get; }
 
     public AcquisitionSettingsViewModel Acquisition { get; }
+
+    /// <summary>Connections → Grand Comics Database data (docs/superpowers/specs/2026-09-27-gcd-data-design.md §2).</summary>
+    public GcdDataSettingsViewModel GcdData { get; }
     public bool IsPluginsSection => ActiveSection == PreferencesSection.Plugins;
     public bool IsAdvancedSection => ActiveSection == PreferencesSection.Advanced;
     public bool IsAboutSection => ActiveSection == PreferencesSection.About;
@@ -870,6 +874,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsReaderSection));
         OnPropertyChanged(nameof(IsKeyboardShortcutsSection));
         OnPropertyChanged(nameof(IsConnectionsSection));
+        if (value == PreferencesSection.Connections)
+        {
+            GcdData?.Refresh();   // null only while the constructor is still running
+        }
+
         OnPropertyChanged(nameof(IsAcquisitionSection));
         OnPropertyChanged(nameof(IsOrganizeScrapeSection));
         OnPropertyChanged(nameof(IsSharingSection));
@@ -942,7 +951,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [RelayCommand]
     private void GoAbout() => ActiveSection = PreferencesSection.About;
 
-    /// <summary>Lazily loads skins/fonts the first time the screen is navigated to, same pattern as SmartScreenViewModel/ReadingScreenViewModel's EnsureListLoaded.</summary>
+    /// <summary>Lazily loads skins/fonts the first time the screen is navigated to, same pattern as SmartScreenViewModel/ReadingListsScreenViewModel's EnsureListLoaded.</summary>
     public void EnsureLoaded()
     {
         if (_isLoaded)
@@ -996,6 +1005,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ShowSelectionCheckbox = settings.ShowSelectionCheckbox;
         HeroBackdrop = settings.HeroBackdrop;
         SeriesAccentColor = settings.SeriesAccentColor;
+        HomePrefs.Load();
         OpenLastPage = settings.OpenLastPage;
         AutoNavigateComics = settings.AutoNavigateComics;
         ReverseRtlNavigation = settings.ReverseRtlNavigation;
@@ -1107,7 +1117,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     /// <summary>Real gap closed, not a restyle (docs/superpowers/specs/2026-08-25-reader-chrome-
     /// design.md) - confirmed via grep this never existed anywhere in the codebase before. Mirrors
-    /// ReadingScreenViewModel's ImportCbl/ExportCbl shape exactly (same _filePicker calls, same
+    /// ReadingListPageViewModel's ImportCbl/ExportCbl shape exactly (same _filePicker calls, same
     /// open-context-then-call-IO-class structure).</summary>
     [RelayCommand]
     private async Task ImportKeyBindings()
@@ -1281,6 +1291,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         CosmeticThumbnailSettings.ProgressRing = value;
         PersistBehaviorSetting(s => s.ProgressRing = value);
     }
+
+    /// <summary>Preferences › Appearance › Home (docs/superpowers/specs/2026-09-28-home-improvements-design.md I1/I5) - kept in its own
+    /// class so this one only gains this property.</summary>
+    public Home.HomePreferencesViewModel HomePrefs => _homePrefs ??= new Home.HomePreferencesViewModel(_contextFactory);
+
+    private Home.HomePreferencesViewModel? _homePrefs;
 
     /// <summary>Blurred cover backdrop behind the Detail hero (default on).</summary>
     [ObservableProperty]
@@ -2680,13 +2696,63 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public ObservableCollection<FileAssociationSummary> FileAssociations { get; }
 
+    /// <summary>File Explorer cover thumbnails (docs/superpowers/specs/2026-09-30-explorer-cover-thumbnails-design.md) -
+    /// the "Thumbnail" column on these same rows. Settable so tests can swap in a fake registry.</summary>
+    internal ThumbnailHandlerService ThumbnailHandlers { get; set; } = new ThumbnailHandlerService();
+
     private void RefreshFileAssociations()
     {
         FileAssociations.Clear();
         foreach (var format in _fileAssociationService.GetAvailableFormats())
         {
-            FileAssociations.Add(format);
+            FileAssociations.Add(WithThumbnailState(format));
         }
+    }
+
+    private FileAssociationSummary WithThumbnailState(FileAssociationSummary row)
+    {
+        var thumbnailExtensions = row.Extensions.Where(ThumbnailHandlers.IsSupported).ToList();
+        if (thumbnailExtensions.Count == 0)
+        {
+            return row;
+        }
+
+        bool enabled = thumbnailExtensions.All(ThumbnailHandlers.IsEnabled);
+        return new FileAssociationSummary
+        {
+            Name = row.Name,
+            ExtensionList = row.ExtensionList,
+            Extensions = row.Extensions,
+            IsAssociated = row.IsAssociated,
+            ThumbnailExtensions = thumbnailExtensions,
+            IsThumbnailEnabled = enabled,
+            ThumbnailOwner = enabled ? null : thumbnailExtensions.Select(ThumbnailHandlers.GetOtherOwner).FirstOrDefault(o => o is not null),
+        };
+    }
+
+    /// <summary>
+    /// Per-row Thumbnail toggle. The .cbr extension sits on two rows (eComic RAR / RAR5); both read the same
+    /// per-extension state, so flipping either flips both (decision 20). Deferred refresh: the toggle lives inside
+    /// the row being rebuilt (CLAUDE.md, "don't remove/detach a control from inside a routed event").
+    /// </summary>
+    [RelayCommand]
+    private void ToggleThumbnail(FileAssociationSummary format)
+    {
+        if (!format.HasThumbnail)
+        {
+            return;
+        }
+
+        try
+        {
+            ThumbnailHandlers.SetEnabled(format.ThumbnailExtensions, !format.IsThumbnailEnabled);
+        }
+        catch (Exception ex)
+        {
+            _showToast("Couldn't update File Explorer thumbnails", ex.Message);
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(RefreshFileAssociations);
     }
 
     /// <summary>
@@ -2704,13 +2770,15 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         try
         {
             _fileAssociationService.SetAssociated(format.Name, !format.IsAssociated);
+            ThumbnailHandlers.ReapplyAfterAssociationChange();
         }
         catch (Exception ex)
         {
             _showToast("Couldn't update file association", ex.Message);
         }
 
-        RefreshFileAssociations();
+        // Deferred for the same reason as ToggleThumbnail: this button lives inside the row the refresh rebuilds.
+        Avalonia.Threading.Dispatcher.UIThread.Post(RefreshFileAssociations);
     }
 
     // ===================== Backup Manager (docs/superpowers/specs/2026-08-07-preferences-advanced-tab-design.md §3) =====================

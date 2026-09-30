@@ -10,7 +10,7 @@ namespace Paperbunkr.App.Tests;
 /// Exercises <see cref="ReadingListPropertiesScreenViewModel"/>'s buffered Load/Save/Cancel
 /// (docs/superpowers/specs/2026-08-23-reading-list-tags-design.md), including the fields this
 /// screen newly consolidates (Name/Description/Type/arc-link had no prior editing UI at all -
-/// Type was the only one previously edited inline on <see cref="ReadingScreenViewModel"/>) and the
+/// Type was the only one previously edited inline on the old Reading screen) and the
 /// cover picker's buffered-with-precedence behavior.
 /// </summary>
 [Collection(nameof(AvaloniaTestCollection))]

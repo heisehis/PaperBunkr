@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:pbc="using:Paperbunkr.App.Controls"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:conv="using:Avalonia.Data.Converters"
@@ -11,19 +12,43 @@
              x:DataType="vm:NewReadingListViewModel">
 
     <UserControl.Styles>
+        <!-- Build-method option cards (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md §10): a 2x2 grid of icon cards;
+             same four methods and behaviour as before. -->
         <Style Selector="Button.method">
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Top" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="Padding" Value="11" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="MinHeight" Value="104" />
             <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.method:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbTextFaintBrush}" />
         </Style>
         <Style Selector="Button.method.active">
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        </Style>
+        <Style Selector="Button.method.active:pointerover /template/ ContentPresenter">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        </Style>
+        <Style Selector="Border.methodIcon">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style Selector="Button.method.active Border.methodIcon">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
         </Style>
         <Style Selector="TextBlock.fieldLabel">
             <Setter Property="FontSize" Value="10" />
@@ -32,11 +57,14 @@
         </Style>
     </UserControl.Styles>
 
-    <Border Classes="floatingPanel" Width="460" MaxHeight="640">
+    <Border Classes="floatingPanel" Width="540" MaxHeight="680">
         <Grid RowDefinitions="Auto,*,Auto">
 
             <Border Grid.Row="0" Padding="18,15" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
-                <TextBlock Classes="pbTextHeading" Text="NEW READING LIST" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <fi:SymbolIcon Symbol="TextBulletListSquare" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbAccentBrush}" VerticalAlignment="Center" />
+                    <TextBlock Classes="pbTextHeading" Text="NEW READING LIST" VerticalAlignment="Center" />
+                </StackPanel>
             </Border>
 
             <ScrollViewer Grid.Row="1" Padding="18,16">
@@ -48,36 +76,40 @@
 
                     <StackPanel>
                         <TextBlock Classes="fieldLabel" Text="BUILD IT FROM…" />
-                        <StackPanel Spacing="7">
-                            <Button Classes="method" Classes.active="{Binding IsBlankMethod}"
+                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
+                            <Button Grid.Row="0" Grid.Column="0" Classes="method" Classes.active="{Binding IsBlankMethod}"
                                     Command="{Binding SelectMethodCommand}" CommandParameter="Blank">
                                 <StackPanel>
-                                    <TextBlock Text="Start blank" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
-                                    <TextBlock Text="Add issues yourself, one at a time." FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                    <Border Classes="methodIcon"><fi:SymbolIcon Symbol="DocumentAdd" FontSize="{StaticResource PbIconSizeSm}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                                    <TextBlock Text="Start blank" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock Text="Add issues yourself, one at a time." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </Button>
-                            <Button Classes="method" Classes.active="{Binding IsImportMethod}"
+                            <Button Grid.Row="0" Grid.Column="1" Classes="method" Classes.active="{Binding IsImportMethod}"
                                     Command="{Binding SelectMethodCommand}" CommandParameter="Import">
                                 <StackPanel>
-                                    <TextBlock Text="Import a file" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
-                                    <TextBlock Text="A .CBL or .CSV reading list." FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                    <Border Classes="methodIcon"><fi:SymbolIcon Symbol="ArrowImport" FontSize="{StaticResource PbIconSizeSm}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                                    <TextBlock Text="Import a file" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock Text="A .CBL or .CSV reading list." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </Button>
-                            <Button Classes="method" Classes.active="{Binding IsArcMethod}"
+                            <Button Grid.Row="1" Grid.Column="0" Classes="method" Classes.active="{Binding IsArcMethod}"
                                     Command="{Binding SelectMethodCommand}" CommandParameter="Arc">
                                 <StackPanel>
-                                    <TextBlock Text="A published story arc" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
-                                    <TextBlock Text="Search ComicVine, Metron &amp; reading-order sites; matched to your library." FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                    <Border Classes="methodIcon"><fi:SymbolIcon Symbol="Globe" FontSize="{StaticResource PbIconSizeSm}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                                    <TextBlock Text="A published story arc" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock Text="Search ComicVine, Metron &amp; reading-order sites; matched to your library." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </Button>
-                            <Button Classes="method" Classes.active="{Binding IsEventMethod}"
+                            <Button Grid.Row="1" Grid.Column="1" Classes="method" Classes.active="{Binding IsEventMethod}"
                                     Command="{Binding SelectMethodCommand}" CommandParameter="Event">
                                 <StackPanel>
-                                    <TextBlock Text="An existing story event" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
-                                    <TextBlock Text="Pull in every issue tied to one of your Story Events." FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                    <Border Classes="methodIcon"><fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeSm}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                                    <TextBlock Text="An existing story event" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock Text="Pull in every issue tied to one of your Story Events." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </Button>
-                        </StackPanel>
+                        </Grid>
                     </StackPanel>
 
                     <!-- Arc sub-panel -->

@@ -1,4 +1,6 @@
 using System;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
@@ -58,17 +60,9 @@ public class UpdateService
         TmpDownloadFilePath = Paperbunkr.Data.AppDataPaths.Combine("updates"),
     };
 
-    public UpdateService()
+    private static void CloseApplication()
     {
-        // With UIFactory null, NetSparkle's QuitApplication() has nothing to call unless a
-        // CloseApplication handler is registered - it silently does nothing. The hidden installer
-        // script it generates then waits up to 90s for this process to exit before launching the
-        // installer, so without this the "Restart" button froze the app and never ran the installer.
-        _sparkle.CloseApplicationAsync += CloseApplicationAsync;
-    }
-
-    private static Task CloseApplicationAsync()
-    {
+        // Posted so the shutdown runs after the Restart button's click has finished routing.
         Dispatcher.UIThread.Post(() =>
         {
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -82,7 +76,6 @@ public class UpdateService
                 Environment.Exit(0);
             }
         });
-        return Task.CompletedTask;
     }
 
     public Task<UpdateInfo> CheckForUpdatesAsync() => _sparkle.CheckForUpdatesQuietly();
@@ -113,5 +106,53 @@ public class UpdateService
         }
     }
 
-    public void ApplyUpdatesAndRestart(AppCastItem item, string downloadPath) => _sparkle.InstallUpdate(item, downloadPath);
+    /// <summary>
+    /// Verifies and starts the downloaded installer, then closes Paperbunkr. Returns null once the
+    /// installer is running, or why it couldn't start (Paperbunkr then stays open).
+    ///
+    /// Deliberately not <see cref="SparkleUpdater.InstallUpdate"/>: that closes the app first and
+    /// runs the installer from a hidden cmd script afterwards. The installer needs admin rights
+    /// (Installer.iss PrivilegesRequired=admin), and Windows shows a UAC request from a windowless
+    /// background process only as a flashing taskbar button, not a prompt. The
+    /// script also gives up silently if this process takes over 90s to exit. Starting it here,
+    /// while Paperbunkr still owns the foreground, puts the UAC prompt in front; the installer's
+    /// InitializeSetup then waits for this process's AppMutex to clear before touching files.
+    /// </summary>
+    public string? ApplyUpdatesAndRestart(AppCastItem item, string downloadPath)
+    {
+        if (!File.Exists(downloadPath))
+        {
+            return "The downloaded installer is missing. Check for updates again to re-download it.";
+        }
+
+        ValidationResult validation;
+        try
+        {
+            validation = _sparkle.SignatureVerifier.VerifySignatureOfFile(item.DownloadSignature ?? string.Empty, downloadPath);
+        }
+        catch (Exception)
+        {
+            // A malformed signature throws (e.g. wrong length) rather than returning Invalid.
+            validation = ValidationResult.Invalid;
+        }
+
+        if (validation != ValidationResult.Valid)
+        {
+            return "The downloaded installer failed its signature check, so it wasn't run.";
+        }
+
+        try
+        {
+            // /PAPERBUNKRUPDATE=1 is read by Installer.iss's InitializeSetup (the mutex wait).
+            Process.Start(new ProcessStartInfo(downloadPath, "/PAPERBUNKRUPDATE=1") { UseShellExecute = true });
+        }
+        catch (Win32Exception ex)
+        {
+            // Includes ERROR_CANCELLED when the user declines the UAC prompt.
+            return $"The installer didn't start: {ex.Message}";
+        }
+
+        CloseApplication();
+        return null;
+    }
 }

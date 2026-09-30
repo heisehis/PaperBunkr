@@ -30,6 +30,10 @@ public sealed class ReadingListMemberContextMenuBuilder
         // hiding a real edge case, just satisfying the same nullable-return shape ContextMenuEntry.SubMenu
         // always has (same tolerated pattern already in BooksContextMenuBuilder).
         ContextMenuEntry.SubMenu("Set Role", RoleChildren(row))!,
+        ContextMenuEntry.Item("Add a Note", row.BeginNoteCommand),
+        ContextMenuEntry.Separator,
+        ContextMenuEntry.Item("Move Up", row.MoveUpCommand),
+        ContextMenuEntry.Item("Move Down", row.MoveDownCommand),
         ContextMenuEntry.Separator,
         ContextMenuEntry.Item("Remove from List", row.RemoveCommand, isDanger: true),
     };

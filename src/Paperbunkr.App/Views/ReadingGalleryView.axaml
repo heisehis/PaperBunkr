@@ -1,0 +1,173 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             x:Class="Paperbunkr.App.Views.ReadingGalleryView"
+             x:DataType="vm:ReadingGalleryViewModel">
+    <!-- The Reading Lists gallery home (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md §2, H1): header + breadcrumb,
+         tag chips, "Continue reading", then one grid of folder and list tiles. Tiles drag to reorder or into folders (code-behind); a
+         dropped directory of .cbl files imports as a folder. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/ReadingListsChrome.axaml" />
+    </UserControl.Styles>
+
+    <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Disabled" DragDrop.AllowDrop="True">
+        <StackPanel Margin="32,26,32,40" Spacing="18">
+
+            <!-- Header -->
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <StackPanel Grid.Column="0" Spacing="4">
+                    <ItemsControl ItemsSource="{Binding Breadcrumb}" IsVisible="{Binding IsInFolder}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:ReadingBreadcrumb">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <Button Classes="headerAction ghost" Padding="2,0" FontSize="12" Content="{Binding Name}"
+                                            Command="{Binding $parent[views:ReadingGalleryView].((vm:ReadingGalleryViewModel)DataContext).OpenCrumbCommand}"
+                                            CommandParameter="{Binding}" IsEnabled="{Binding !IsLast}" />
+                                    <TextBlock Text="›" Classes="rlFaint" VerticalAlignment="Center" IsVisible="{Binding !IsLast}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Classes="pbTextHeading" FontSize="34" LineHeight="40" Text="Reading Lists" IsVisible="{Binding !IsInFolder}" />
+                    <TextBlock Classes="pbTextHeading" FontSize="34" LineHeight="40" Text="{Binding CurrentFolderName}" IsVisible="{Binding IsInFolder}" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                    <Button Classes="headerAction secondary" Command="{Binding CreateFolderCommand}" CommandParameter="{x:Null}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <fi:SymbolIcon Symbol="FolderAdd" FontSize="{StaticResource PbIconSizeXs}" />
+                            <TextBlock Text="Folder" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="headerAction primary"
+                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenNewReadingListDialogCommand}"
+                            AutomationProperties.AutomationId="NewReadingListButton">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                            <TextBlock Text="New list" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="headerAction ghost" Padding="8,6" ToolTip.Tip="More" AutomationProperties.Name="More reading list actions">
+                        <fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeSm}" />
+                        <Button.Flyout>
+                            <MenuFlyout>
+                                <MenuItem Header="Import folder of .CBL…" Command="{Binding ImportFolderCommand}" />
+                                <MenuItem Header="Export this folder as .CBL…" Command="{Binding ExportFolderCommand}" CommandParameter="{x:Null}" IsVisible="{Binding IsInFolder}" />
+                                <MenuItem Header="Sort A–Z" Command="{Binding SortFolderCommand}" CommandParameter="{x:Null}" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- Tag chips -->
+            <ItemsControl ItemsSource="{Binding TagChips}" IsVisible="{Binding TagChips.Count}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:ReadingTagChip">
+                        <Button Classes="rlChip" Classes.on="{Binding IsActive}" Margin="0,0,6,6" Content="{Binding Label}"
+                                Command="{Binding $parent[views:ReadingGalleryView].((vm:ReadingGalleryViewModel)DataContext).SelectTagCommand}"
+                                CommandParameter="{Binding}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Continue reading -->
+            <StackPanel Spacing="8" IsVisible="{Binding ShowContinueRow}">
+                <TextBlock Classes="rlCaption" Text="CONTINUE READING" />
+                <ItemsControl ItemsSource="{Binding ContinueCards}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:ReadingContinueCard">
+                            <Button Classes="rlContinue" Margin="0,0,10,10" AutomationProperties.Name="{Binding Name}"
+                                    Command="{Binding $parent[views:ReadingGalleryView].((vm:ReadingGalleryViewModel)DataContext).OpenContinueCommand}"
+                                    CommandParameter="{Binding}">
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <Border Grid.Column="0" Width="34" Height="51" CornerRadius="3" ClipToBounds="True" Background="{DynamicResource PbSurface3Brush}">
+                                        <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
+                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                                        <TextBlock Text="{Binding NextLine}" Classes="rlFaint" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- Grid -->
+            <ItemsControl x:Name="TileGrid" ItemsSource="{Binding Tiles}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:ReadingGalleryTile">
+                        <Border Classes="rlTileHost" Width="164" Margin="0,0,18,20" DragDrop.AllowDrop="True" Background="Transparent">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <Border Grid.Column="0" Classes="rlDropBar dropBefore" Margin="0,0,4,0" />
+                                <Button Grid.Column="1" Classes="rlTile" Command="{Binding $parent[views:ReadingGalleryView].((vm:ReadingGalleryViewModel)DataContext).OpenTileCommand}"
+                                        CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}">
+                                    <StackPanel Spacing="6">
+                                        <!-- 148, not 152: the ring's 4px spread needs its own room (Primitives.axaml's Border.posterCover doc
+                                             comment - without a gutter the glow renders as a barely-visible sliver, not a ring), reserved here
+                                             via Border.rlTileCover's own Margin so the 164px host still has slack on every side. -->
+                                        <Border Classes="rlTileCover" Width="148" Height="148">
+                                            <Panel>
+                                                <Image Source="{Binding ArcCover}" Stretch="UniformToFill" IsVisible="{Binding ArcCover, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                                                <ItemsControl ItemsSource="{Binding CoverKeys}" IsVisible="{Binding ShowMosaic}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate><UniformGrid Columns="{Binding CoverColumns}" /></ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="x:String">
+                                                            <Image views:AsyncCoverImage.SourceId="{Binding}" Stretch="UniformToFill" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <fi:SymbolIcon Symbol="{Binding IsFolder, Converter={x:Static views:ReadingGalleryView.TileGlyph}}" FontSize="36"
+                                                               Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                               IsVisible="{Binding ShowGlyph}" />
+                                                <!-- a folder badge over its mosaic -->
+                                                <Border IsVisible="{Binding IsFolder}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8"
+                                                        Background="{DynamicResource PbSurface1Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="6,3">
+                                                    <fi:SymbolIcon Symbol="Folder" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                </Border>
+                                            </Panel>
+                                        </Border>
+                                        <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
+                                                   TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"
+                                                   IsVisible="{Binding !IsRenaming}" />
+                                        <TextBox Classes="rlRename" Text="{Binding RenameText}" IsVisible="{Binding IsRenaming}" FontSize="12"
+                                                 AutomationProperties.Name="Name" />
+                                        <TextBlock Text="{Binding SubLine}" Classes="rlFaint" />
+                                        <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" Height="3" MinWidth="0" IsVisible="{Binding ShowProgress}" />
+                                    </StackPanel>
+                                </Button>
+                                <Border Grid.Column="2" Classes="rlDropBar dropAfter" Margin="4,0,0,0" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Empty states (Q18) -->
+            <StackPanel Spacing="12" HorizontalAlignment="Center" Margin="0,40,0,0" IsVisible="{Binding HasNoLists}">
+                <controls:EmptyIllustration Kind="Bookmark" HorizontalAlignment="Center" />
+                <TextBlock Text="No reading lists yet" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Text="Build one from a story arc, import a .CBL, or start a blank list." Classes="rlFaint" HorizontalAlignment="Center" />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                    <Button Classes="headerAction primary" Content="＋ New list"
+                            Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenNewReadingListDialogCommand}" />
+                    <Button Classes="headerAction secondary" Content="Import folder of .CBL…" Command="{Binding ImportFolderCommand}" />
+                </StackPanel>
+            </StackPanel>
+            <TextBlock Text="This folder is empty. Drag lists here, or create one." Classes="rlFaint" FontSize="12.5" IsVisible="{Binding IsEmptyFolder}" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

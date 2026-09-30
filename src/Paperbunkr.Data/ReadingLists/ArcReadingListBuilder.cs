@@ -55,6 +55,8 @@ public static class ArcReadingListBuilder
         DetectRoles(created.Select(c => (c.Arc, c.Issue, c.Item)).ToList());
 
         context.ReadingLists.Add(list);
+        // Lands at the end of the top level; the Reading screen moves it into the folder the user has selected (docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md §2).
+        ReadingListFolders.PlaceNewList(context, list, null);
         ReadingListManager.RecordCreatedWithItems(context, list);
         context.SaveChanges();
         return list;
@@ -76,90 +78,25 @@ public static class ArcReadingListBuilder
         var source = sourceOverride ?? ReadingListSourceRegistry.Get(context, list.Source)
             ?? throw new InvalidOperationException($"'{list.Source}' is unavailable - check its credentials in Preferences.");
 
-        // Defensive cleanup: a prior bug (or race) could have left more than one ReadingListItem
-        // pointing at the same Issue within this list, which crashes the ToDictionary below with
-        // "An item with the same key has already been added." Keep the oldest (lowest Id), remove
-        // the rest, before anything else reads list.Items.
-        foreach (var duplicateGroup in list.Items.GroupBy(i => i.IssueId).Where(g => g.Count() > 1).ToList())
-        {
-            foreach (var extra in duplicateGroup.OrderBy(i => i.Id).Skip(1).ToList())
-            {
-                context.ReadingListItems.Remove(extra);
-                list.Items.Remove(extra);
-            }
-        }
-
         var arcIssues = await source.GetArcIssuesInOrderAsync(list.ArcId, cancellationToken).ConfigureAwait(false);
         var overview = await TryGetOverviewAsync(source, list.ArcId, cancellationToken).ConfigureAwait(false);
 
-        var oldByIssueId = list.Items.ToDictionary(i => i.IssueId);
-        var keptIssueIds = new HashSet<int>();
-        int addedCount = 0;
-        int sortOrder = 0;
+        // Two arc entries can resolve to the same local Issue (e.g. a punctuation-variant series name both folding to the same
+        // series via ReadingListMatcher's cascade) - the first occurrence wins, in the reconciler and for role detection alike.
+        var resolved = arcIssues.Select(a => (Arc: a, Issue: ResolveArcIssue(context, a))).ToList();
 
-        // What this refresh actually changed, announced once at the end as a single compound change
-        // (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §5.4).
-        var addedIssueIds = new List<int>();
-        var removedIssueIds = new List<int>();
-        bool reordered = false;
+        // Reorder/add/remove/orphaned-placeholder cleanup is shared with a continuity list's Rebuild; Role/Notes/GroupLabel are
+        // never touched by refresh.
+        var reconciled = ReadingListReconciler.Reconcile(context, list, resolved.Select(r => r.Issue.Id).ToList());
 
-        var detectable = new List<(ArcIssue Arc, Issue Issue, ReadingListItem Item)>();
-        foreach (var arcIssue in arcIssues)
-        {
-            var resolved = ResolveArcIssue(context, arcIssue);
-            if (!keptIssueIds.Add(resolved.Id))
-            {
-                // Two arc entries resolved to the same local Issue (e.g. a punctuation-variant
-                // series name both folding to the same series via ReadingListMatcher's cascade) -
-                // already handled by the first occurrence this pass; adding/touching it again
-                // would create exactly the duplicate-key row this method just cleaned up above.
-                continue;
-            }
-
-            if (oldByIssueId.TryGetValue(resolved.Id, out var existingItem))
-            {
-                // Already in the list (real or still a placeholder) - just move it to the arc's
-                // current position. Role/Notes/GroupLabel are never touched by refresh.
-                if (existingItem.SortOrder != sortOrder)
-                {
-                    reordered = true;
-                }
-
-                existingItem.SortOrder = sortOrder++;
-                detectable.Add((arcIssue, resolved, existingItem));
-            }
-            else
-            {
-                var newItem = new ReadingListItem { ReadingListId = list.Id, IssueId = resolved.Id, SortOrder = sortOrder++ };
-                context.ReadingListItems.Add(newItem);
-                addedCount++;
-                addedIssueIds.Add(resolved.Id);
-                detectable.Add((arcIssue, resolved, newItem));
-            }
-        }
+        var seen = new HashSet<int>();
+        var detectable = resolved
+            .Where(r => seen.Add(r.Issue.Id))
+            .Select(r => (r.Arc, r.Issue, Item: reconciled.ItemsByIssue[r.Issue.Id]))
+            .ToList();
 
         // Refresh never overwrites a role the user set: detection only fills an empty/automatic slot, otherwise it leaves a suggestion.
         var roles = DetectRoles(detectable);
-
-        int replacedPlaceholderCount = 0;
-        foreach (var oldItem in list.Items.Where(i => !keptIssueIds.Contains(i.IssueId)).ToList())
-        {
-            var orphanedIssue = oldItem.Issue;
-            int oldItemId = oldItem.Id;
-            context.ReadingListItems.Remove(oldItem);
-            removedIssueIds.Add(oldItem.IssueId);
-
-            if (orphanedIssue is { IsPlaceholder: true })
-            {
-                replacedPlaceholderCount++;
-                bool referencedElsewhere = context.ReadingListItems
-                    .Any(i => i.IssueId == orphanedIssue.Id && i.Id != oldItemId);
-                if (!referencedElsewhere)
-                {
-                    context.Issues.Remove(orphanedIssue);
-                }
-            }
-        }
 
         if (!string.IsNullOrEmpty(overview?.Description))
         {
@@ -169,25 +106,10 @@ public static class ArcReadingListBuilder
         {
             list.CoverImageUrl = overview.CoverImageUrl;
         }
-        list.UpdatedAt = DateTime.UtcNow;
 
-        var kind = ReadingListChangeKind.None;
-        if (addedIssueIds.Count > 0)
-        {
-            kind |= ReadingListChangeKind.Added;
-        }
-
-        if (removedIssueIds.Count > 0)
-        {
-            kind |= ReadingListChangeKind.Removed;
-        }
-
-        if (reordered)
-        {
-            kind |= ReadingListChangeKind.Reordered;
-        }
-
-        ReadingListManager.Record(context, list, kind, addedIssueIds, removedIssueIds);
+        // What this refresh actually changed, announced once as a single compound change
+        // (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §5.4).
+        ReadingListManager.Record(context, list, reconciled.Kind, reconciled.AddedIssueIds, reconciled.RemovedIssueIds);
 
         context.SaveChanges();
 
@@ -195,7 +117,7 @@ public static class ArcReadingListBuilder
             .Include(i => i.Issue)
             .Count(i => i.ReadingListId == list.Id && i.Issue!.IsPlaceholder);
 
-        return new ArcRefreshResult(list, addedCount, replacedPlaceholderCount, stillMissingCount, roles);
+        return new ArcRefreshResult(list, reconciled.AddedIssueIds.Count, reconciled.ReplacedPlaceholderCount, stillMissingCount, roles);
     }
 
     private static RoleDetectionSummary DetectRoles(IReadOnlyList<(ArcIssue Arc, Issue Issue, ReadingListItem Item)> members)

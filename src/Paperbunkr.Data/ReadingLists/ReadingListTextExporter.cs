@@ -32,7 +32,12 @@ public static class ReadingListTextExporter
             var issue = items[i].Issue!;
             string series = issue.Series?.Name ?? "Unknown Series";
             string year = issue.EffectiveYear() is int y ? $" ({y})" : string.Empty;
-            sb.AppendLine($"{i + 1}. {series} #{issue.EffectiveNumber()}{year}");
+            // Per-item notes ride along (docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md §6) - on one line,
+            // so the numbered list still reads as plain text and Markdown.
+            string note = string.IsNullOrWhiteSpace(items[i].Notes)
+                ? string.Empty
+                : " — " + items[i].Notes!.Replace("\r\n", " ").Replace('\n', ' ').Trim();
+            sb.AppendLine($"{i + 1}. {series} #{issue.EffectiveNumber()}{year}{note}");
         }
 
         return sb.ToString();

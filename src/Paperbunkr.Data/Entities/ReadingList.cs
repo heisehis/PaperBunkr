@@ -57,6 +57,20 @@ public class ReadingList
 
     public StoryEvent? StoryEvent { get; set; }
 
+    /// <summary>The sidebar folder this list sits in, or null at the top level (docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md §1).
+    /// <see cref="SortOrder"/> orders the lists within that folder.</summary>
+    public int? FolderId { get; set; }
+
+    public ReadingListFolder? Folder { get; set; }
+
+    /// <summary>The Continuity this list was built from, kept so it can be rebuilt (docs/superpowers/specs/2026-09-28-reading-lists-build-from-events-design.md §2).</summary>
+    public int? ContinuityId { get; set; }
+
+    public Continuity? Continuity { get; set; }
+
+    /// <summary>Which order <see cref="ContinuityId"/>'s list was built in; null when not continuity-linked.</summary>
+    public ContinuityOrderKind? ContinuityOrderKind { get; set; }
+
     public List<ReadingListItem> Items { get; set; } = new();
 
     /// <summary>Weighted/categorized tags on the list itself (docs/superpowers/specs/2026-08-23-reading-list-tags-design.md) - distinct from member issues' own <see cref="IssueTag"/>s.</summary>

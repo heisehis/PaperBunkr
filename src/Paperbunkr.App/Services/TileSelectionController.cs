@@ -137,6 +137,44 @@ public sealed class TileSelectionController<TCard> where TCard : class, ISelecta
     }
 
     /// <summary>
+    /// Drops every selected id that is not in <paramref name="visibleIds"/> - CE parity (docs/superpowers/specs/2026-09-29-library-
+    /// bulk-actions-design.md §1): CE rebuilds its list on every search/filter change and a book that is no longer shown is no longer
+    /// selected (<c>ItemView.cs:2276-2281</c>), so no action ever reaches a book the user can't see. Returns whether anything was dropped.
+    /// The range anchor is reset when something goes, since its index may now point at a different item.
+    /// </summary>
+    public bool PruneTo(IReadOnlySet<int> visibleIds)
+    {
+        int removed = _selectedIds.RemoveWhere(id => !visibleIds.Contains(id));
+        if (removed > 0)
+        {
+            _lastToggledIndex = null;
+        }
+
+        return removed > 0;
+    }
+
+    /// <summary>"Invert Selection" (CE's <c>itemView.InvertSelection</c>) within the displayed <paramref name="visibleItems"/>: selected
+    /// ones are deselected, the rest selected. Also flips each item's visible <see cref="ISelectableCard.IsSelected"/> flag.</summary>
+    public void InvertWithin(IEnumerable<TCard> visibleItems)
+    {
+        foreach (var item in visibleItems)
+        {
+            bool nowSelected = !_selectedIds.Contains(item.Id);
+            item.IsSelected = nowSelected;
+            if (nowSelected)
+            {
+                _selectedIds.Add(item.Id);
+            }
+            else
+            {
+                _selectedIds.Remove(item.Id);
+            }
+        }
+
+        _lastToggledIndex = null;
+    }
+
+    /// <summary>
     /// The ids that a right-click action on <paramref name="rightClickedId"/> should operate on:
     /// the current selection plus the right-clicked item, deduplicated - so right-clicking a lone
     /// unselected tile with nothing else selected still acts on just that one, but right-clicking

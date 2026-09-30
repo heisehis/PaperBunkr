@@ -3,6 +3,7 @@ using System.Linq;
 using FluentIcons.Common;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.ViewModels.LibraryActions;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -23,184 +24,19 @@ public sealed class LibraryContextMenuBuilder
 
     public LibraryContextMenuBuilder(LibraryScreenViewModel vm) => _vm = vm;
 
-    public IReadOnlyList<ContextMenuEntry>? Build(object? target) => target switch
-    {
-        IssueListRow row => BuildIssueMenu(row),
-        SeriesCardSample card => BuildSeriesMenu(card),
-        null => BuildEmptyMenu(),
-        _ => null,
-    };
-
     /// <summary>
-    /// A book from a remote library (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md section 7.2): read it, keep
-    /// your own read state, find its series - and nothing that would change or delete it. Every entry that is missing here is one the
-    /// view model would refuse anyway; hiding it means nobody has to find that out by trying.
+    /// Issue and series menus come from <see cref="LibraryActionCatalog"/> (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md
+    /// §1) - the same definitions the selection bar and the keyboard use. The empty-space and preview-panel menus stay here.
     /// </summary>
-    private IReadOnlyList<ContextMenuEntry> BuildRemoteIssueMenu(IssueListRow row)
+    public IReadOnlyList<ContextMenuEntry>? Build(object? target)
     {
-        bool multi = _vm.Selection.IsSelected(row.Id) && _vm.Selection.Count > 1;
-        int n = _vm.Selection.Count;
-
-        var entries = new List<ContextMenuEntry?>
+        if (target is null)
         {
-            ContextMenuEntry.Item("Open", _vm.IssueList.OpenIssueCommand, row, Symbol.Open, inputGesture: "Enter"),
-            ContextMenuEntry.Separator,
-            ContextMenuEntry.SubMenu(
-                multi ? $"Mark {n} as" : "Mark as",
-                new[]
-                {
-                    ContextMenuEntry.Item("Read", _vm.MarkIssueReadCommand, row.Id, Symbol.CheckmarkCircle),
-                    ContextMenuEntry.Item("Unread", _vm.MarkIssueUnreadCommand, row.Id, Symbol.Circle),
-                },
-                Symbol.Checkmark),
-            ContextMenuEntry.Item("Go to Series", _vm.GoToSeriesCommand, row.SeriesId, Symbol.ArrowForward),
-            ContextMenuEntry.Separator,
-            ContextMenuEntry.Item("Select All", _vm.SelectAllVisibleIssuesCommand, icon: Symbol.SelectAllOn),
-            ContextMenuEntry.Item("Clear Selection", _vm.ClearSelectionCommand, icon: Symbol.SelectAllOff, isEnabled: _vm.HasSelection),
-        };
-
-        return ContextMenuEntry.Compact(entries);
-    }
-
-    /// <summary>A series from a remote library: open it and select it, nothing else (see <see cref="BuildRemoteIssueMenu"/>).</summary>
-    private IReadOnlyList<ContextMenuEntry> BuildRemoteSeriesMenu(SeriesCardSample card)
-    {
-        var entries = new List<ContextMenuEntry?>
-        {
-            ContextMenuEntry.Item("Open Series", _vm.SelectCardCommand, card, Symbol.Open),
-            ContextMenuEntry.Separator,
-            ContextMenuEntry.Item("Select All", _vm.SelectAllVisibleSeriesCommand, icon: Symbol.SelectAllOn),
-            ContextMenuEntry.Item("Clear Selection", _vm.ClearSelectionCommand, icon: Symbol.SelectAllOff, isEnabled: _vm.HasSelection),
-        };
-
-        return ContextMenuEntry.Compact(entries);
-    }
-
-    private IReadOnlyList<ContextMenuEntry> BuildIssueMenu(IssueListRow row)
-    {
-        if (row.IsRemote)
-        {
-            return BuildRemoteIssueMenu(row);
+            return BuildEmptyMenu();
         }
 
-        bool multi = _vm.Selection.IsSelected(row.Id) && _vm.Selection.Count > 1;
-        int n = _vm.Selection.Count;
-        string plural = multi ? $" {n} comics" : "";
-
-        var entries = new List<ContextMenuEntry?>
-        {
-            ContextMenuEntry.Item("Open", _vm.IssueList.OpenIssueCommand, row, Symbol.Open, inputGesture: "Enter"),
-            ContextMenuEntry.Separator,
-            ContextMenuEntry.Item("Edit Properties…", _vm.EditIssuePropertiesCommand, row.Id, Symbol.Info, inputGesture: "Ctrl+I"),
-            ContextMenuEntry.Item("Quick Rate…", _vm.OpenQuickRateCommand, row.Id, Symbol.Star),
-            ContextMenuEntry.SubMenu(
-                multi ? $"Mark {n} as" : "Mark as",
-                new[]
-                {
-                    ContextMenuEntry.Item("Read", _vm.MarkIssueReadCommand, row.Id, Symbol.CheckmarkCircle),
-                    ContextMenuEntry.Item("Unread", _vm.MarkIssueUnreadCommand, row.Id, Symbol.Circle),
-                },
-                Symbol.Checkmark),
-            ContextMenuEntry.SubMenu(
-                multi ? $"Add {n} to Reading List" : "Add to Reading List",
-                ReadingListChildren(row.Id),
-                Symbol.TextBulletListAdd),
-            ContextMenuEntry.SubMenu(
-                multi ? $"Add {n} to Collection" : "Add to Collection",
-                CollectionChildren(row.Id, _vm.AddIssueToCollectionCommand, _vm.CreateCollectionAndAddIssueCommand),
-                Symbol.CollectionsAdd),
-            ContextMenuEntry.Separator,
-            ContextMenuEntry.Item("Go to Series", _vm.GoToSeriesCommand, row.SeriesId, Symbol.ArrowForward),
-            ContextMenuEntry.SubMenu(
-                "Series",
-                new[]
-                {
-                    ContextMenuEntry.SubMenu("Content Type", ContentTypeChildren(row.SeriesId, row.ContentTypeLabel)),
-                    ContextMenuEntry.SubMenu(
-                        "Reading Direction",
-                        ReadingDirectionChildren(row.SeriesId, row.ReadingDirectionLabel),
-                        isVisible: row.IsMangaFamily),
-                    ContextMenuEntry.SubMenu("Publication Status", PublicationStatusChildren(row.SeriesId, row.SeriesStatusLabel)),
-                    ContextMenuEntry.SubMenu("Reading Status", ReadingStatusChildren(row.SeriesId, row.ReadingStatusLabel)),
-                },
-                Symbol.Library),
-            ContextMenuEntry.Separator,
-            ContextMenuEntry.Item(multi ? $"Scrape {n}…" : "Scrape…", _vm.ScrapeWithComicVineCommand, row.Id, Symbol.ArrowDownload),
-            ContextMenuEntry.Item(multi ? $"Organize {n}…" : "Organize…", _vm.OrganizeWithProfileCommand, row.Id, Symbol.FolderArrowRight),
-            ContextMenuEntry.Item("Show in Explorer", _vm.RevealIssueCommand, row.Id, Symbol.FolderOpen, isEnabled: row.HasFile),
-            // Exactly two selected: put the two files side by side (docs/superpowers/specs/2026-09-26-comic-reader-compare-design.md #11).
-            multi && n == 2 ? ContextMenuEntry.Item("Compare files…", _vm.CompareSelectedIssuesCommand, row.Id, Symbol.ArrowSwap) : null,
-            _vm.CanWriteMetadataToFiles
-                ? ContextMenuEntry.Item(multi ? $"Write metadata to {n} files" : "Write metadata to file", _vm.WriteIssueMetadataToFilesCommand, row.Id, Symbol.Save, isEnabled: row.HasFile)
-                : null,
-            ContextMenuEntry.SubMenu(
-                "Plugins",
-                LibraryPluginChildren(row.Id),
-                Symbol.Apps,
-                isVisible: _vm.HasLibraryPluginCommands),
-            ContextMenuEntry.Separator,
-            ContextMenuEntry.Item("Select All", _vm.SelectAllVisibleIssuesCommand, icon: Symbol.SelectAllOn),
-            ContextMenuEntry.Item("Clear Selection", _vm.ClearSelectionCommand, icon: Symbol.SelectAllOff, isEnabled: _vm.HasSelection),
-            ContextMenuEntry.Separator,
-            ContextMenuEntry.SubMenu(
-                multi ? $"Delete{plural}…" : "Delete…",
-                new[]
-                {
-                    ContextMenuEntry.Item(_vm.RemoveKeepFileLabel, _vm.RemoveIssueKeepFileCommand, row.Id),
-                    ContextMenuEntry.Item(_vm.DeleteConfirmLabel, _vm.DeleteIssueCommand, row.Id),
-                },
-                Symbol.Delete,
-                isDanger: true),
-        };
-
-        return ContextMenuEntry.Compact(entries);
-    }
-
-    private IReadOnlyList<ContextMenuEntry> BuildSeriesMenu(SeriesCardSample card)
-    {
-        if (card.IsRemote)
-        {
-            return BuildRemoteSeriesMenu(card);
-        }
-
-        bool multi = _vm.SeriesSelection.IsSelected(card.SeriesId) && _vm.SeriesSelection.Count > 1;
-        int n = _vm.SeriesSelection.Count;
-
-        var entries = new List<ContextMenuEntry?>
-        {
-            ContextMenuEntry.Item("Open Series", _vm.SelectCardCommand, card, Symbol.Open),
-            ContextMenuEntry.Item(multi ? $"Scrape {n} series…" : "Scrape…", _vm.ScrapeSeriesWithComicVineCommand, card.SeriesId, Symbol.ArrowDownload),
-            ContextMenuEntry.Item(multi ? $"Organize {n} series…" : "Organize…", _vm.OrganizeSeriesWithProfileCommand, card.SeriesId, Symbol.FolderArrowRight),
-            ContextMenuEntry.SubMenu(
-                multi ? $"Add {n} to Collection" : "Add to Collection",
-                CollectionChildren(card.SeriesId, _vm.AddSeriesToCollectionCommand, _vm.CreateCollectionAndAddSeriesCommand),
-                Symbol.CollectionsAdd),
-            ContextMenuEntry.Separator,
-            ContextMenuEntry.SubMenu("Content Type", ContentTypeChildren(card.SeriesId, card.ContentTypeLabel)),
-            ContextMenuEntry.SubMenu(
-                "Reading Direction",
-                ReadingDirectionChildren(card.SeriesId, card.ReadingDirectionLabel),
-                isVisible: card.IsMangaFamily),
-            ContextMenuEntry.SubMenu("Publication Status", PublicationStatusChildren(card.SeriesId, card.SeriesStatusLabel)),
-            ContextMenuEntry.SubMenu("Reading Status", ReadingStatusChildren(card.SeriesId, card.ReadingStatusLabel)),
-            ContextMenuEntry.Separator,
-            ContextMenuEntry.Item("Show in Explorer", _vm.RevealSeriesCommand, card, Symbol.FolderOpen, isEnabled: card.HasFile),
-            _vm.CanWriteMetadataToFiles
-                ? ContextMenuEntry.Item("Write metadata to files", _vm.WriteSeriesMetadataToFilesCommand, card.SeriesId, Symbol.Save)
-                : null,
-            ContextMenuEntry.Separator,
-            ContextMenuEntry.SubMenu(
-                multi ? $"Delete {n} Series…" : "Delete Series…",
-                new[]
-                {
-                    ContextMenuEntry.Item(_vm.RemoveSeriesKeepFilesLabel, _vm.RemoveSeriesKeepFilesCommand, card.SeriesId),
-                    ContextMenuEntry.Item(_vm.DeleteSeriesConfirmLabel, _vm.DeleteSeriesCommand, card.SeriesId),
-                },
-                Symbol.Delete,
-                isDanger: true),
-        };
-
-        return ContextMenuEntry.Compact(entries);
+        var catalog = new LibraryActionCatalog(_vm);
+        return catalog.ForMenu(target) is { } context ? catalog.BuildMenu(context) : null;
     }
 
     private IReadOnlyList<ContextMenuEntry>? BuildEmptyMenu()
@@ -209,28 +45,6 @@ public sealed class LibraryContextMenuBuilder
             ? ContextMenuEntry.Item("Select All", _vm.SelectAllVisibleSeriesCommand, icon: Symbol.SelectAllOn)
             : ContextMenuEntry.Item("Select All", _vm.SelectAllVisibleIssuesCommand, icon: Symbol.SelectAllOn);
         return new[] { entry };
-    }
-
-    /// <summary>One row per enabled Library-hook plugin command (design note: see
-    /// <c>PluginHostService.GetLibraryCommands</c>'s own doc comment for why this replaced a single
-    /// hardcoded "Find Duplicates" entry) - each command carries the right-clicked row's id alongside
-    /// itself since <see cref="ContextMenuEntry"/> only has one <c>CommandParameter</c> slot.</summary>
-    private IEnumerable<ContextMenuEntry?> LibraryPluginChildren(int issueId) =>
-        _vm.LibraryPluginCommands.Select(c => ContextMenuEntry.Item(c.Name, _vm.RunLibraryPluginCommand, (issueId, c)));
-
-    private IEnumerable<ContextMenuEntry?> ReadingListChildren(int issueId)
-    {
-        foreach (var list in _vm.ReadingLists)
-        {
-            yield return ContextMenuEntry.Item(list.Name, _vm.AddIssueToReadingListCommand, (issueId, list.Id));
-        }
-
-        if (_vm.ReadingLists.Count > 0)
-        {
-            yield return ContextMenuEntry.Separator;
-        }
-
-        yield return ContextMenuEntry.Item("New List…", _vm.CreateReadingListAndAddIssueCommand, issueId);
     }
 
     /// <summary>
@@ -297,43 +111,4 @@ public sealed class LibraryContextMenuBuilder
 
         yield return ContextMenuEntry.Item("New collection…", createCommand, targetId);
     }
-
-    private IEnumerable<ContextMenuEntry?> ContentTypeChildren(int seriesId, string? current) => new[]
-    {
-        Radio("Comic", "Comic", current, _vm.SetSeriesContentTypeComicCommand, seriesId),
-        Radio("Manga", "Manga", current, _vm.SetSeriesContentTypeMangaCommand, seriesId),
-        Radio("Manhua", "Manhua", current, _vm.SetSeriesContentTypeManhuaCommand, seriesId),
-        Radio("Manhwa", "Manhwa", current, _vm.SetSeriesContentTypeManhwaCommand, seriesId),
-    };
-
-    private IEnumerable<ContextMenuEntry?> ReadingDirectionChildren(int seriesId, string? current) => new[]
-    {
-        Radio("Left to Right", "LeftToRight", current, _vm.SetSeriesReadingModeLeftToRightCommand, seriesId),
-        Radio("Right to Left", "RightToLeft", current, _vm.SetSeriesReadingModeRightToLeftCommand, seriesId),
-    };
-
-    private IEnumerable<ContextMenuEntry?> PublicationStatusChildren(int seriesId, string? current) => new[]
-    {
-        Radio("Unknown", "Unknown", current, _vm.SetSeriesStatusUnknownCommand, seriesId),
-        Radio("Ongoing", "Ongoing", current, _vm.SetSeriesStatusOngoingCommand, seriesId),
-        Radio("Completed", "Completed", current, _vm.SetSeriesStatusCompletedCommand, seriesId),
-        Radio("Cancelled", "Cancelled", current, _vm.SetSeriesStatusCancelledCommand, seriesId),
-        Radio("Hiatus", "Hiatus", current, _vm.SetSeriesStatusHiatusCommand, seriesId),
-    };
-
-    private IEnumerable<ContextMenuEntry?> ReadingStatusChildren(int seriesId, string? current) => new[]
-    {
-        Radio("Unknown", "Unknown", current, _vm.SetSeriesReadingStatusUnknownCommand, seriesId),
-        Radio("Planned", "Planned", current, _vm.SetSeriesReadingStatusPlannedCommand, seriesId),
-        Radio("Reading", "Reading", current, _vm.SetSeriesReadingStatusReadingCommand, seriesId),
-        Radio("Completed", "Completed", current, _vm.SetSeriesReadingStatusCompletedCommand, seriesId),
-        Radio("Paused", "Paused", current, _vm.SetSeriesReadingStatusPausedCommand, seriesId),
-        Radio("Dropped", "Dropped", current, _vm.SetSeriesReadingStatusDroppedCommand, seriesId),
-        Radio("Re-reading", "ReReading", current, _vm.SetSeriesReadingStatusReReadingCommand, seriesId),
-    };
-
-    private static ContextMenuEntry Radio(
-        string header, string enumName, string? current, System.Windows.Input.ICommand command, int seriesId) =>
-        ContextMenuEntry.Item(header, command, seriesId, isChecked: string.Equals(current, enumName, System.StringComparison.Ordinal));
-
 }

@@ -189,6 +189,7 @@ public partial class ReaderScreenViewModel
         Add("Toggle thumbnail rail", "View", null, () => ToggleRailCommand.Execute(null));
         Add("Show tap zones", "View", null, ShowTapZoneFlash);
         Add("Show detected panels", "View", null, () => ShowDetectedPanelsCommand.Execute(null));
+        Add("Report bad panel detection (save this page)", "View", null, () => ReportBadPanelsCommand.Execute(null));
         Add("Zoom in", "View", KeyboardCommandRegistry.ReaderZoomIn, () => ZoomInCommand.Execute(null));
         Add("Zoom out", "View", KeyboardCommandRegistry.ReaderZoomOut, () => ZoomOutCommand.Execute(null));
         Add("Zoom: reset to fit (100%)", "View", null, () => ResetZoomCommand.Execute(null));

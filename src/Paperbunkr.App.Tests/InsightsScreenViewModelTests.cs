@@ -216,6 +216,33 @@ public class InsightsScreenViewModelTests : IDisposable
         Assert.True(vm.IsRecapTabSelected);
     }
 
+    [Fact]
+    public void Tabs_AreMutuallyExclusive_IncludingHistory()
+    {
+        var history = new HistoryTabViewModel(_ => { }, _ => { }, (_, _) => { }, _ => { }, new FakeDialogService(),
+            runInBackground: work => Task.FromResult(work()), post: a => a());
+        var vm = new InsightsScreenViewModel(_ => { }, _ => { }, _ => { }, () => { }, new FakeDialogService(),
+            nowUtc: () => new DateTime(2026, 9, 5, 12, 0, 0, DateTimeKind.Utc), history: history);
+
+        vm.SelectHistoryTabCommand.Execute(null);
+        Assert.True(vm.IsHistoryTabSelected);
+        Assert.False(vm.IsTodayTabSelected);
+        Assert.True(history.IsActive);
+        Assert.True(history.IsLoaded);
+
+        vm.SelectTrendsTabCommand.Execute(null);
+        Assert.False(vm.IsHistoryTabSelected);
+        Assert.False(history.IsActive);
+        Assert.True(vm.IsTrendsTabSelected);
+
+        vm.SelectHistoryTabCommand.Execute(null);
+        Assert.False(vm.IsTrendsTabSelected);
+
+        vm.SelectTodayTabCommand.Execute(null);
+        Assert.False(vm.IsHistoryTabSelected);
+        Assert.True(vm.IsTodayTabSelected);
+    }
+
     private sealed class FakeRecorder : IReadingEventRecorder
     {
         public event Action? ReadingEventRecorded;

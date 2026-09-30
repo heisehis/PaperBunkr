@@ -3,6 +3,63 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.5-beta] - 2026-09-30
+
+### Added
+
+- **Continuity screen.** Replaces the Story Events screen. A Continuities | Events sidebar with publisher
+  logos, one **Suggestions & checks** panel, a continuity page (cover collage, stats, Continue, series as
+  runs, events in order, Compare & merge) and an event page (Follows / Followed by, a filtered reading
+  list with read ticks, related events), plus a timeline with a year histogram and era colours.
+- **Event Map.** Story events get **Members | Map | Timeline**: the event's spine series, tie-ins and
+  sequences as connected lanes, three density stops, filters, an inspector, keyboard navigation, and
+  reading straight through the event in its own order.
+- **Continuity map.** Every issue of every event in a continuity on one map, in chronological order,
+  with connectors between events and "Between events" bands for everything else.
+- **Smarter story events.** Duplicate events from ComicVine and Metron are matched and merged (or
+  offered for review), and likely sequels are suggested ("Looks like the sequel of ...") from local clues
+  and Wikidata. A weekly **Check story events** task runs both.
+- **Grand Comics Database data.** An optional download (Preferences → Connections) that links series to
+  the GCD: publication bonds become series relations, the Related tab shows GCD issues you don't own,
+  and on-sale dates order events and continuities.
+- **Reading Lists redesign.** A gallery home with a Continue row, and a list page that's a journey path or
+  a cover wall. Lists can live in folders, print as a checklist PDF, and a list built from a continuity
+  keeps itself in story order.
+- **Home.** Home is now sections you can reorder or hide (Preferences → Appearance → Home), with a
+  spotlight accordion, a "because you read" row seeded by a series, and a Needs Attention banner.
+- **Insights History.** A History tab lists what you read, newest first, one row per series or book, with
+  resume / read next. Removing rows only hides them; stats and goals don't change.
+- **Library bulk actions.** One set of actions for right-click menus, the selection bar and the keyboard:
+  rate a selection (**Alt+Shift+0-5**), Mark read up to here, Copy / Paste / Clear data (CE's field
+  picker), re-read info from files, Merge series, Invert selection, copy file paths, and more.
+- **File Explorer cover thumbnails.** Comic and book files (.cbz, .cbr, .cb7, .cbt, .pdf, .djvu, .epub,
+  .mobi, .azw, .azw3) can show their cover in File Explorer, anywhere on your PC. Turn it on per type in
+  Preferences → Advanced → File Types (new "Thumbnail" column) or with the installer's new checkbox.
+  Another program's thumbnails for a type are shown by name and restored when you turn Paperbunkr's off.
+- **Keyboard reach.** Focus stays inside the screen you're on, arrow keys move through grids and lists on
+  every main screen, and Paperbunkr's glow ring replaces the theme's focus frame everywhere.
+
+### Changed
+
+- **Guided view finds panels far more often.** A bundled panel-detection model runs first (about 93% of
+  pages on a test library, up from 14%), with the old gutter detector as a fallback and a separate
+  detector for webtoon strips. Detection can take about half a second on a new page. Palette:
+  **Report bad panel detection**.
+- **Library Health keeps dismissed rows findable.** Missing Files and Empty Rows each get a collapsed
+  **Dismissed** group with Restore, Relink and Remove, and a dismissal clears itself once the file is back.
+- Preferences → Advanced's **File Association** group is now **File Types**, with "Open with" and
+  "Thumbnail" columns.
+
+### Fixed
+
+- **DjVu files open again.** The DjVuLibre tools that read DjVu pages were never included in the app,
+  so .djvu comics couldn't be added or read. Paperbunkr now ships DjVuLibre 3.5.29 with everything it
+  needs to run.
+- **Reveal in Explorer no longer crashes** on a comic whose file has moved or been deleted; it shows a
+  "File not found" notice linking to Library Health instead.
+- **Updating from inside the app** launches the installer before closing, so its permission prompt shows.
+- Novels you read no longer appear in a comic series' Activity feed.
+
 ## [0.7.3-beta] - 2026-09-26
 
 ### Added

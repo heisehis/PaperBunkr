@@ -21,6 +21,7 @@
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
         </Style>
 
         <!-- Cover treatment shared with Library's 4a poster tiles: token radius + scrim + amber

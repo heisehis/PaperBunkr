@@ -1,0 +1,99 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:fi="using:FluentIcons.Avalonia"
+                    xmlns:home="using:Paperbunkr.App.ViewModels.Home"
+                    xmlns:homeviews="using:Paperbunkr.App.Views.Home"
+                    xmlns:controls="using:Paperbunkr.App.Controls">
+
+    <!--
+        Spotlight accordion (docs/superpowers/specs/2026-09-29-home-spotlight-accordion-design.md), modelled on the "Stripe Sessions
+        style Flex Carousel": eight picks in a row, one open at 400px (the whole cover plus its details), the rest darkened slivers.
+        AccordionPanel animates the widths itself; hover peeks a sliver, a click/Enter/keyboard focus opens it, clicking the open one
+        reads it. Over a blurred copy of the open pick's cover. Hovering the band pauses auto-advance.
+    -->
+    <DataTemplate x:Key="HomeSection.spotlight" DataType="home:SpotlightSectionViewModel">
+        <StackPanel Spacing="12" controls:ScrollReveal.Enabled="True">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <fi:SymbolIcon Classes="sectionIcon" Symbol="{Binding Icon}" />
+                    <controls:SplitText Classes="heading" Text="{Binding Title}" AutomationProperties.AutomationId="{Binding HeaderAutomationId}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" IsVisible="{Binding Home.HasSpotlight}">
+                    <Button Classes="spotlightNav" Command="{Binding Home.PreviousSpotlightCommand}" ToolTip.Tip="Previous"
+                            AutomationProperties.Name="Previous pick" AutomationProperties.AutomationId="HomeSpotlightPrevious">
+                        <fi:SymbolIcon Symbol="ChevronLeft" FontSize="{StaticResource PbIconSizeSm}" />
+                    </Button>
+                    <Button Classes="spotlightNav" Command="{Binding Home.NextSpotlightCommand}" ToolTip.Tip="Next"
+                            AutomationProperties.Name="Next pick" AutomationProperties.AutomationId="HomeSpotlightNext">
+                        <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeSm}" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <Border Classes="spotlightBand" IsVisible="{Binding Home.HasSpotlight}" homeviews:SpotlightHoverPause.Enabled="True">
+                <Panel>
+                    <!-- Blurred copy of the open pick's cover (pre-blurred by BackdropBlurRenderer) under a wash toward the page. -->
+                    <Image Source="{Binding Home.CurrentSpotlight.BackdropImage}" Stretch="UniformToFill" />
+                    <Border Classes="spotlightWash" />
+
+                    <ItemsControl ItemsSource="{Binding Home.SpotlightPanels}" Margin="14" AutomationProperties.AutomationId="HomeSpotlightPanels">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <controls:AccordionPanel OpenIndex="{Binding Home.SpotlightIndex}" OpenWidth="400" MinItemWidth="44" Spacing="8"
+                                                         ActivateCommand="{Binding Home.ActivateSpotlightPanelCommand}" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="home:SpotlightPanelViewModel">
+                                <Button Classes="spotlightPanel" Classes.open="{Binding IsOpen}"
+                                        Command="{Binding $parent[ItemsControl].((home:SpotlightSectionViewModel)DataContext).Home.ActivateSpotlightPanelCommand}"
+                                        CommandParameter="{Binding}"
+                                        ToolTip.Tip="{Binding Tooltip}" AutomationProperties.Name="{Binding Tooltip}">
+                                    <!-- A Button clips to its rectangle; this Border clips to the rounded corners. -->
+                                    <Border CornerRadius="{DynamicResource PbRadius}" ClipToBounds="True">
+                                    <Panel>
+                                        <!-- Sliver: the cover, centre-cropped to whatever width the panel has, darkened. -->
+                                        <Panel Classes="sliverLayer">
+                                            <Image Source="{Binding Sample.CoverImage}" Stretch="UniformToFill" />
+                                            <Border Classes="sliverShade" />
+                                        </Panel>
+
+                                        <!-- Open: a fixed 400px layout the widening panel reveals (the demo's fixed-width image
+                                             idea) - the whole 2:3 cover, then the details, which slide in. -->
+                                        <Grid Classes="openLayer" Width="400" HorizontalAlignment="Left" ColumnDefinitions="181,*"
+                                              IsVisible="{Binding IsOpen}" Background="{DynamicResource PbSurface2Brush}">
+                                            <Border Grid.Column="0" Background="{Binding Sample.CoverBrush}" ClipToBounds="True">
+                                                <Image Source="{Binding Sample.CoverImage}" Stretch="UniformToFill" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" Classes="caption" Margin="16,18,14,16" Spacing="4">
+                                                <TextBlock Text="{Binding Sample.SeriesName}" FontSize="11" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource PbAccentTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                <controls:SplitText Text="{Binding Sample.Title}" FontSize="24" Foreground="{DynamicResource PbTextBrush}" />
+                                                <TextBlock Text="{Binding Sample.Meta}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Sample.Synopsis}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                           TextWrapping="Wrap" MaxLines="6" TextTrimming="CharacterEllipsis" Margin="0,6,0,0"
+                                                           ToolTip.Tip="{Binding Sample.Synopsis}" />
+                                                <Button Classes="primary" Margin="0,10,0,0"
+                                                        Command="{Binding $parent[ItemsControl].((home:SpotlightSectionViewModel)DataContext).Home.ReadSpotlightPanelCommand}"
+                                                        CommandParameter="{Binding}" AutomationProperties.AutomationId="HomeSpotlightCard">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <fi:SymbolIcon Symbol="Play" FontSize="{StaticResource PbIconSizeSm}" />
+                                                        <TextBlock Text="Read now" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Panel>
+                                    </Border>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Panel>
+            </Border>
+            <TextBlock AutomationProperties.AutomationId="HomeSpotlightHeader"
+                       Text="Your library's all caught up" Classes="emptyState" IsVisible="{Binding !Home.HasSpotlight}" />
+        </StackPanel>
+    </DataTemplate>
+</ResourceDictionary>

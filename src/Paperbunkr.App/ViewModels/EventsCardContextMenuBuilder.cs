@@ -9,7 +9,7 @@ namespace Paperbunkr.App.ViewModels;
 /// Builds the Events &amp; Continuity sidebar's row right-click menu as plain
 /// <see cref="ContextMenuEntry"/> data (docs/superpowers/specs/2026-08-31-keyboard-operability-
 /// design.md) - a new menu, this sidebar had none before (only its own inline Open/Delete buttons).
-/// Lives on <see cref="MainViewModel"/>, not <see cref="EventsScreenViewModel"/> - the sidebar itself
+/// Lives on <see cref="MainViewModel"/>, not <see cref="ContinuityScreenViewModel"/> - the sidebar itself
 /// is declared in <c>MainWindow.axaml</c> with <see cref="MainViewModel"/> as its <c>DataContext</c>
 /// (confirmed by reading the file: the Events/Continuities <c>ItemsControl</c>s bind
 /// <c>Events.SelectEventCommand</c>/<c>Events.SelectContinuityCommand</c> through

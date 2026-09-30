@@ -20,4 +20,7 @@ public sealed class TimelineIssueCard
     public required IBrush CoverBrush { get; init; }
     public Bitmap? CoverImage { get; init; }
     public string? YearLabel { get; init; }
+
+    /// <summary>The cover year - what the timeline's year histogram jumps to.</summary>
+    public int? Year { get; init; }
 }

@@ -266,7 +266,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         IDialogService? dialogService = null,
         Action? reloadFolderWatch = null,
         Action<int, bool>? enqueueMetadataWriteBack = null,
-        Action<int, int>? openIssueAtPage = null)
+        Action<int, int>? openIssueAtPage = null,
+        FakeThumbnailRegistry? thumbnailRegistry = null)
     {
         var themeService = new ThemeService(() => new PaperbunkrDbContext(_dbOptions));
         var scanner = new LibraryFolderScanner(() => new PaperbunkrDbContext(_dbOptions));
@@ -291,7 +292,92 @@ public class PreferencesScreenViewModelTests : IDisposable
             new UpdateService(),
             () => new PaperbunkrDbContext(_dbOptions),
             enqueueMetadataWriteBack ?? ((_, _) => { }),
-            openIssueAtPage: openIssueAtPage);
+            openIssueAtPage: openIssueAtPage)
+        {
+            // Never the real registry in tests (docs/superpowers/specs/2026-09-30-explorer-cover-thumbnails-design.md).
+            ThumbnailHandlers = new ThumbnailHandlerService(thumbnailRegistry ?? new FakeThumbnailRegistry(), FakeThumbnailRegistry.CreateAppDirectory()),
+        };
+    }
+
+    // ===================== Keyboard focus reclaim (docs/superpowers/specs/2026-09-29-keyboard-focus-reclaim-phases-2-6-design.md) =====================
+
+    private static (Avalonia.Controls.Window Window, Paperbunkr.App.Views.PreferencesScreen Screen, Avalonia.Controls.Button Sibling) ShowPreferences(
+        PreferencesScreenViewModel vm)
+    {
+        var screen = new Paperbunkr.App.Views.PreferencesScreen { DataContext = vm };
+        var sibling = new Avalonia.Controls.Button { Content = "Rail" };
+        var grid = new Avalonia.Controls.Grid { RowDefinitions = new Avalonia.Controls.RowDefinitions("Auto,*") };
+        grid.Children.Add(sibling);
+        Avalonia.Controls.Grid.SetRow(screen, 1);
+        grid.Children.Add(screen);
+        var window = new Avalonia.Controls.Window { Content = grid, Width = 1300, Height = 900 };
+        window.Show();
+        FocusTestHarness.RunLayout(window);
+        return (window, screen, sibling);
+    }
+
+    [Fact]
+    public void Screen_FocusRings_AreNotClipped()
+    {
+        FocusTestHarness.WithThemeAndTokens(() =>
+        {
+            using var styles = FocusTestHarness.AppStyles();
+            var vm = CreateViewModel();
+            var (window, screen, _) = ShowPreferences(vm);
+            var clipped = new List<string>();
+            foreach (var section in new[] { PreferencesSection.Appearance, PreferencesSection.Reader, PreferencesSection.General })
+            {
+                vm.ActiveSection = section;
+                FocusTestHarness.RunLayout(window);
+                clipped.AddRange(FocusTestHarness.ClippedFocusRings(window, screen).Select(c => $"[{section}] {c}"));
+            }
+
+            window.Close();
+            Assert.True(clipped.Count == 0, string.Join(Environment.NewLine, clipped));
+        });
+    }
+
+    [Fact]
+    public void Screen_NoPriorClick_FocusLandsOnTheActiveNavItem_AndSurvivesSectionSwitches()
+    {
+        FocusTestHarness.WithThemeAndTokens(() =>
+        {
+            var vm = CreateViewModel();
+            var (window, screen, _) = ShowPreferences(vm);
+
+            Assert.True(FocusTestHarness.FocusIsInside(window, screen), $"focus on {FocusTestHarness.Focused(window)}");
+            var nav = Assert.IsType<Avalonia.Controls.Button>(FocusTestHarness.Focused(window));
+            Assert.Contains("prefNavItem", nav.Classes);
+            Assert.Contains("active", nav.Classes);
+
+            foreach (var section in new[] { PreferencesSection.Appearance, PreferencesSection.Reader, PreferencesSection.General })
+            {
+                vm.ActiveSection = section;
+                FocusTestHarness.RunLayout(window);
+                Assert.True(FocusTestHarness.FocusIsInside(window, screen), $"focus on {FocusTestHarness.Focused(window)} after switching to {section}");
+            }
+
+            window.Close();
+        });
+    }
+
+    [Fact]
+    public void Screen_ASectionSwitch_DoesNotStealFocusFromASiblingRegion()
+    {
+        FocusTestHarness.WithThemeAndTokens(() =>
+        {
+            var vm = CreateViewModel();
+            var (window, _, sibling) = ShowPreferences(vm);
+            sibling.Focus();
+            FocusTestHarness.RunLayout(window);
+            Assert.Same(sibling, FocusTestHarness.Focused(window));
+
+            vm.ActiveSection = PreferencesSection.Reader;
+            FocusTestHarness.RunLayout(window);
+
+            Assert.Same(sibling, FocusTestHarness.Focused(window));
+            window.Close();
+        });
     }
 
     // ===================== Sidebar hard-switch (reverted back from the single-scroll shell -
@@ -3163,9 +3249,55 @@ public class PreferencesScreenViewModelTests : IDisposable
         var format = vm.FileAssociations[0];
 
         vm.ToggleFileAssociationCommand.Execute(format);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs(); // the list refresh is deferred - the toggle lives in the row
 
         Assert.True(vm.FileAssociations[0].IsAssociated);
         Assert.True(shell.RefreshCalled);
+    }
+
+    // ===================== File Explorer thumbnails column (docs/superpowers/specs/2026-09-30-explorer-cover-thumbnails-design.md, layout B) =====================
+
+    [Fact]
+    public void FileTypes_OnlyThumbnailTypesGetAThumbnailToggle()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.Contains(vm.FileAssociations, f => f.ExtensionList.Contains(".pdf") && f.HasThumbnail);
+        Assert.Contains(vm.FileAssociations, f => f.ExtensionList == ".zip" && !f.HasThumbnail);
+        Assert.Contains(vm.FileAssociations, f => f.ExtensionList.Contains(".fb2") && !f.HasThumbnail);
+        Assert.DoesNotContain(vm.FileAssociations, f => f.ExtensionList.Contains(".djvu") && f.HasThumbnail); // no ddjvu.exe
+    }
+
+    [Fact]
+    public void ToggleThumbnail_EnablesTheType_AndBothCbrRowsFollow()
+    {
+        var registry = new FakeThumbnailRegistry();
+        var vm = CreateViewModel(thumbnailRegistry: registry);
+        vm.EnsureLoaded();
+        var cbrRows = vm.FileAssociations.Where(f => f.Extensions.Contains(".cbr")).ToList();
+        Assert.Equal(2, cbrRows.Count);
+
+        vm.ToggleThumbnailCommand.Execute(cbrRows[0]);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.All(vm.FileAssociations.Where(f => f.Extensions.Contains(".cbr")), f => Assert.True(f.IsThumbnailEnabled));
+        Assert.Contains(".cbr", registry.SavedExtensions());
+    }
+
+    [Fact]
+    public void FileTypes_ShowWhichOtherProgramOwnsAThumbnailType()
+    {
+        var registry = new FakeThumbnailRegistry();
+        const string sumatra = "{11111111-2222-3333-4444-555555555555}";
+        registry.Machine[@".pdf\ShellEx\" + ThumbnailHandlerService.ThumbnailProviderKey] = sumatra;
+        registry.Descriptions[sumatra] = "SumatraPDF";
+        var vm = CreateViewModel(thumbnailRegistry: registry);
+        vm.EnsureLoaded();
+
+        var pdf = vm.FileAssociations.Single(f => f.Extensions.Contains(".pdf"));
+        Assert.False(pdf.IsThumbnailEnabled);
+        Assert.Equal("Thumbnail: SumatraPDF", pdf.ThumbnailOwnerLabel);
     }
 
     [Fact]

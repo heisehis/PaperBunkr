@@ -139,6 +139,12 @@ public class Series
     /// </summary>
     public List<CollectionItem> CollectionItems { get; set; } = new();
 
+    /// <summary>The Grand Comics Database series this is (docs/superpowers/specs/2026-09-27-gcd-data-design.md §3); null = not matched.</summary>
+    public int? GcdSeriesId { get; set; }
+
+    /// <summary>How <see cref="GcdSeriesId"/> was found: Metron's own <c>gcd_id</c>, or a unique name match. A Metron match is never replaced by a name match.</summary>
+    public Gcd.GcdMatchSourceKind? GcdMatchSource { get; set; }
+
     public List<TrackingLink> TrackingLinks { get; set; } = new();
 
     /// <summary>M:M with <see cref="Continuity"/> (docs/superpowers/specs/2026-08-17-metadata-model-phase4a-continuity-design.md) - a series can belong to more than one continuity. Through the explicit <see cref="ContinuityMembership"/> join entity since docs/superpowers/specs/2026-08-28-continuity-editing-design.md.</summary>

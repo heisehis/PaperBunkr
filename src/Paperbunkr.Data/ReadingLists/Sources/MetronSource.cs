@@ -124,7 +124,10 @@ public sealed class MetronSource : IReadingListSource
             return null;
         }
 
-        return new ArcOverviewInfo(detail["desc"]?.GetValue<string>(), detail["image"]?.GetValue<string>());
+        // cv_id: Metron's ArcSerializer fields are (id, name, desc, image, cv_id, gcd_id, resource_url, modified) - checked against
+        // Metron-Project/metron api/v1_0/serializers/arc.py for the Story Event resolver (docs/superpowers/specs/2026-09-27-story-event-resolver-design.md §3).
+        string? cvId = detail["cv_id"] is JsonValue cv && long.TryParse(cv.ToString(), out long parsedCv) && parsedCv > 0 ? parsedCv.ToString() : null;
+        return new ArcOverviewInfo(detail["desc"]?.GetValue<string>(), detail["image"]?.GetValue<string>(), cvId);
     }
 
     private static int? ParseYearFromDate(string? date)

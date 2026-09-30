@@ -1,0 +1,74 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.ContinuityCompareOverlay"
+             x:DataType="vm:ContinuityPageViewModel">
+
+    <!-- Compare & merge (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md, R5): this continuity on the left, the
+         chosen other on the right, what they share in the middle; Merge into … keeps today's two-click confirm. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/ContinuityChrome.axaml" />
+    </UserControl.Styles>
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="NameRow" x:DataType="models:SeriesCardSample">
+            <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                       Margin="0,2" ToolTip.Tip="{Binding Name}" />
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <!-- The app's shared overlay (scrim, Esc / click-outside to close, close button) around the compare card -->
+    <controls:OverlayShell IsOpen="{Binding IsComparing}" CloseCommand="{Binding ToggleCompareCommand}">
+        <Border Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                CornerRadius="{DynamicResource PbRadius}" Padding="20" Margin="40" MaxWidth="980" MaxHeight="680"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+                <TextBlock Classes="pbTextHeading" FontSize="18" Text="Compare &amp; merge" />
+
+                <!-- The other continuities sharing series with this one -->
+                <ItemsControl Grid.Row="1" ItemsSource="{Binding OverlappingContinuities}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:ContinuityOverlapCard">
+                            <Button Classes="filterChip" Margin="0,0,6,6"
+                                    Command="{Binding $parent[ItemsControl].((vm:ContinuityPageViewModel)DataContext).CompareWithCommand}"
+                                    CommandParameter="{Binding}">
+                                <TextBlock>
+                                    <Run Text="{Binding Name, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding SharedSeriesLabel, Mode=OneWay}" />
+                                </TextBlock>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Grid Grid.Row="2" ColumnDefinitions="*,*,*" ColumnSpacing="16" IsVisible="{Binding HasComparison}">
+                    <StackPanel Grid.Column="0" Spacing="6">
+                        <TextBlock Classes="csSection" Text="{Binding Name, StringFormat='Only in {0}'}" TextTrimming="CharacterEllipsis" />
+                        <ScrollViewer MaxHeight="420"><ItemsControl ItemsSource="{Binding OnlyHereSeries}" ItemTemplate="{StaticResource NameRow}" /></ScrollViewer>
+                    </StackPanel>
+                    <Border Grid.Column="1" Background="{DynamicResource PbAccentSoftBrush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="10">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="csSection" Text="Shared" />
+                            <ScrollViewer MaxHeight="400"><ItemsControl ItemsSource="{Binding SharedSeries}" ItemTemplate="{StaticResource NameRow}" /></ScrollViewer>
+                        </StackPanel>
+                    </Border>
+                    <StackPanel Grid.Column="2" Spacing="6">
+                        <TextBlock Classes="csSection" Text="{Binding CompareName, StringFormat='Only in {0}'}" TextTrimming="CharacterEllipsis" />
+                        <ScrollViewer MaxHeight="420"><ItemsControl ItemsSource="{Binding OnlyThereSeries}" ItemTemplate="{StaticResource NameRow}" /></ScrollViewer>
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" IsVisible="{Binding HasComparison}">
+                    <TextBlock Text="Merging moves this continuity's series into the other and deletes this one." Classes="csFaint" VerticalAlignment="Center" />
+                    <Button Classes="headerAction primary" Content="{Binding MergeConfirm.Label}" Command="{Binding MergeConfirm.TriggerCommand}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </controls:OverlayShell>
+</UserControl>

@@ -99,8 +99,9 @@ public class LibraryContextMenuBuilderTests : IDisposable
 
         Assert.Equal(new[]
         {
-            "Open", "Edit Properties…", "Quick Rate…", "Mark as", "Add to Reading List", "Add to Collection",
-            "Go to Series", "Series", "Scrape…", "Organize…", "Show in Explorer", "Select All", "Clear Selection", "Delete…",
+            "Open", "Edit Properties…", "My Rating", "Mark as", "Add to Reading List", "Add to Collection", "Show in List",
+            "Go to Series", "Series", "Scrape…", "Organize…", "Copy Data", "Paste Data…", "Clear Data…", "Refresh",
+            "Show in Explorer", "Copy file path", "Select All", "Invert Selection", "Clear Selection", "Delete…",
         }, headers);
     }
 
@@ -111,7 +112,8 @@ public class LibraryContextMenuBuilderTests : IDisposable
         var vm = NewVm();
         var row = Assert.Single(vm.IssueList.Rows);
 
-        foreach (var leaf in Flatten(Menu(vm, row)).Where(e => !e.IsSeparator && e.Children is null))
+        // Disabled placeholders ("(Not in any list)") are the one leaf kind with nothing to run.
+        foreach (var leaf in Flatten(Menu(vm, row)).Where(e => !e.IsSeparator && e.Children is null && e.IsEnabled))
         {
             Assert.True(leaf.Command is not null, $"'{leaf.Header}' has no command");
         }
@@ -232,8 +234,10 @@ public class LibraryContextMenuBuilderTests : IDisposable
         Assert.Equal(new[] { "Favorites", null, "New collection…" }, childHeaders);
     }
 
+    /// <summary>Right-clicking a tile outside the selection acts on the selection ∪ that tile (UnionForAction) - the label now says so
+    /// (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §1). It used to read "Mark as" while marking both.</summary>
     [Fact]
-    public void SingularLabels_WhenTargetOutsideSelection()
+    public void Labels_CountTheUnion_WhenTargetOutsideSelection()
     {
         Seed("One");
         Seed("Two");
@@ -241,6 +245,20 @@ public class LibraryContextMenuBuilderTests : IDisposable
         // Select only "Two"; right-click "One".
         var two = vm.IssueList.Rows.Single(r => r.SeriesName == "Two");
         vm.ToggleIssueSelection(two, isShiftHeld: false);
+        var one = vm.IssueList.Rows.Single(r => r.SeriesName == "One");
+
+        var headers = Flatten(Menu(vm, one)).Select(e => e.Header).ToList();
+
+        Assert.Contains("Mark 2 as", headers);
+        Assert.Contains("Delete 2 comics…", headers);
+    }
+
+    [Fact]
+    public void SingularLabels_WhenNothingElseSelected()
+    {
+        Seed("One");
+        Seed("Two");
+        var vm = NewVm();
         var one = vm.IssueList.Rows.Single(r => r.SeriesName == "One");
 
         var headers = Flatten(Menu(vm, one)).Select(e => e.Header).ToList();
@@ -260,8 +278,10 @@ public class LibraryContextMenuBuilderTests : IDisposable
 
         Assert.Equal(new[]
         {
-            "Open Series", "Scrape…", "Organize…", "Add to Collection", "Content Type", "Publication Status", "Reading Status",
-            "Show in Explorer", "Delete Series…",
+            "Open Series", "Bulk Edit…", "Mark as", "Add to Reading List", "Add to Collection",
+            "Content Type", "Publication Status", "Reading Status",
+            "Scrape…", "Organize…", "Refresh", "Show in Explorer", "Copy file paths",
+            "Select All", "Invert Selection", "Clear Selection", "Delete Series…",
         }, headers);
     }
 

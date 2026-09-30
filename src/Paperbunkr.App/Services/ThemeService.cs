@@ -76,6 +76,14 @@ public class ThemeService
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private readonly Func<DateTimeOffset> _now;
 
+    /// <summary>
+    /// Whether the active theme is a light one (<c>mode: "Light"</c>), read live from the <c>PbThemeIsLight</c> resource
+    /// <see cref="ApplyThemeResources"/> writes - Home's light-theme sky (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md
+    /// C2). False before the first apply and in hosts with no application.
+    /// </summary>
+    public static bool IsLightThemeActive
+        => Application.Current is { } app && app.Resources.TryGetResource("PbThemeIsLight", null, out var value) && value is true;
+
     public ThemeService()
         : this(PaperbunkrDb.CreateContext)
     {
@@ -582,6 +590,14 @@ public class ThemeService
         resources["PbHeroGradientStartColor"] = Color.Parse(theme.Colors.HeroGradientStart);
         resources["PbHeroGradientEndColor"] = Color.Parse(theme.Colors.HeroGradientEnd);
 
+        // Home pitch (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md C1/C2): the muted Home hero scrim is lighter on a
+        // light theme (the hero itself stays light-on-dark by design, it just stops reading as a slab), and PbThemeIsLight tells
+        // Home to swap the cover wall for the time-of-day sky.
+        bool isLightTheme = string.Equals(theme.Mode, "Light", StringComparison.OrdinalIgnoreCase);
+        resources["PbHeroScrimColor"] = isLightTheme ? Color.Parse("#1F000000") : Color.Parse("#59000000");
+        resources["PbThemeIsLight"] = isLightTheme;
+        ApplyEraColors(resources, EraColors(theme));
+
         ApplyAccentColor(theme.Colors.Accent);
 
         resources["PbSpacingUnit"] = theme.SpacingUnit;
@@ -702,7 +718,20 @@ public class ThemeService
         // A fixed Normal-tier copy for consumers that are not a hover/focus affordance - the reader's
         // bookmark-toggle pulse - so the user's glow tier (even Off) never disables their feedback.
         resources["PbGlowPulseRing"] = BuildGlowRing(glowColor, GlowTierNormal);
+
+        // Inside twin for controls clipped by their own container (a segmented control's pill), where an outside ring can't show.
+        resources["PbGlowRingInset"] = BuildGlowRingInset(glowColor, _glowTier);
     }
+
+    /// <summary>The inside counterpart of <see cref="BuildGlowRing"/>: same colour and tier, drawn within the control's own edge.</summary>
+    public static BoxShadows BuildGlowRingInset(Color glowColor, int tier) =>
+        NormalizeGlowTier(tier) switch
+        {
+            GlowTierOff => default,
+            GlowTierSubtle => new BoxShadows(new BoxShadow { Spread = 1.5, IsInset = true, Color = Color.FromArgb(0x66, glowColor.R, glowColor.G, glowColor.B) }),
+            GlowTierVivid => new BoxShadows(new BoxShadow { Spread = 2, IsInset = true, Color = Color.FromArgb(0xE6, glowColor.R, glowColor.G, glowColor.B) }),
+            _ => new BoxShadows(new BoxShadow { Spread = 2, IsInset = true, Color = Color.FromArgb(0x99, glowColor.R, glowColor.G, glowColor.B) }),
+        };
 
     /// <summary>Glow-intensity tiers (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #3).
     /// <see cref="GlowTierNormal"/> reproduces the ring exactly as it was before tiers existed.</summary>
@@ -786,6 +815,7 @@ public class ThemeService
         if (_glowColor is { } color && Application.Current is not null)
         {
             Application.Current.Resources["PbGlowRing"] = BuildGlowRing(color, _glowTier);
+            Application.Current.Resources["PbGlowRingInset"] = BuildGlowRingInset(color, _glowTier);
         }
 
         using var context = _contextFactory();
@@ -818,6 +848,54 @@ public class ThemeService
         var glow = Color.FromArgb(0x66, accentText.R, accentText.G, accentText.B);
         SetColorAndBrush(resources, "PbGlow", glow);
         ApplyGlowRing(resources, glow);
+        ApplyEraColors(resources, EraColors(theme, accentOverride: accent));   // Modern follows the accent unless the theme sets it
+    }
+
+    /// <summary>The built-in era colours (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md, "Colour tokens"), named
+    /// after the ages - platinum grey, gold, silver, bronze - in a set for dark themes and a deeper set that keeps contrast on light ones.
+    /// Modern has no fixed default: it follows the accent.</summary>
+    private static readonly (string Key, string Dark, string Light)[] s_eraDefaults =
+    {
+        ("Platinum", "#9AA5B1", "#5F6B78"),
+        ("Golden", "#D4A437", "#9A7310"),
+        ("Silver", "#B8C0CC", "#6E7886"),
+        ("Bronze", "#C07A45", "#96542A"),
+    };
+
+    /// <summary>
+    /// The five era colours for a theme, keyed Platinum…Modern: the theme's optional <c>era…</c> value when set and valid, else the
+    /// default for its mode; Modern falls back to <paramref name="accentOverride"/> (a user accent override) or the theme's accent.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, Color> EraColors(ThemeDefinition theme, Color? accentOverride = null)
+    {
+        bool light = string.Equals(theme.Mode, "Light", StringComparison.OrdinalIgnoreCase);
+        var colors = theme.Colors;
+        var result = new Dictionary<string, Color>();
+        foreach (var (key, dark, lightHex) in s_eraDefaults)
+        {
+            string? custom = key switch
+            {
+                "Platinum" => colors.EraPlatinum,
+                "Golden" => colors.EraGolden,
+                "Silver" => colors.EraSilver,
+                _ => colors.EraBronze,
+            };
+            result[key] = custom is not null && Color.TryParse(custom, out var parsed) ? parsed : Color.Parse(light ? lightHex : dark);
+        }
+
+        result["Modern"] = colors.EraModern is not null && Color.TryParse(colors.EraModern, out var modern) ? modern
+            : accentOverride ?? (Color.TryParse(colors.Accent, out var accent) ? accent : Color.Parse("#C9803F"));
+        return result;
+    }
+
+    /// <summary>Writes <c>PbEra{Age}Color/Brush</c> and the ~18%-alpha <c>PbEra{Age}SoftColor/Brush</c> tint for each era.</summary>
+    private static void ApplyEraColors(IResourceDictionary resources, IReadOnlyDictionary<string, Color> eras)
+    {
+        foreach (var (age, color) in eras)
+        {
+            SetColorAndBrush(resources, $"PbEra{age}", color);
+            SetColorAndBrush(resources, $"PbEra{age}Soft", Color.FromArgb(0x2E, color.R, color.G, color.B));
+        }
     }
 
     private static double RelativeLuminance(Color c)

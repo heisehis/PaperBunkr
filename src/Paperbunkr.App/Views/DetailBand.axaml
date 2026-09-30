@@ -12,6 +12,7 @@
              x:Class="Paperbunkr.App.Views.DetailBand"
              x:DataType="vm:DetailBandViewModel"
              x:Name="u"
+             ClipToBounds="False"
              pbc:ContextMenuHost.Provider="{Binding}">
 
     <!--

@@ -15,6 +15,7 @@ public partial class CompareScreen : UserControl
     {
         InitializeComponent();
         Focusable = true;
+        FocusAdorner = null;
         AddHandler(KeyDownEvent, OnCompareKeyDown, RoutingStrategies.Tunnel);
         AttachedToVisualTree += (_, _) => Focus();
     }

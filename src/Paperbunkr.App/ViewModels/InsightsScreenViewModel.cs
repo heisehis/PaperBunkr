@@ -19,7 +19,9 @@ namespace Paperbunkr.App.ViewModels;
 /// scattering related content across destinations" preference; tabs renamed Overview/Stats -> Today/
 /// Trends per docs/superpowers/specs/2026-09-23-insights-redesign-design.md). Two tabs sharing one
 /// nav-rail entry: **Today** (READING attention cards + Collection health - unchanged) and **Trends**
-/// (the MangaBaka-style analytics, hosted by <see cref="Stats"/>). All computation is in
+/// (the MangaBaka-style analytics, hosted by <see cref="Stats"/>), plus **History** (Mihon-style reading
+/// history, <see cref="History"/> - docs/superpowers/specs/2026-09-29-insights-reading-history-design.md)
+/// and the seasonal **Recap** (<see cref="Recap"/>). All computation is in
 /// <see cref="InsightsResolver"/>/<see cref="StatsResolver"/>; this class is presentation glue + the
 /// session cache for the Today tab (Stats owns its own cache).
 /// </summary>
@@ -40,7 +42,10 @@ public partial class InsightsScreenViewModel : ViewModelBase
         IDialogService dialogs,
         IReadingEventRecorder? readingEventRecorder = null,
         Func<DateTime>? nowUtc = null,
-        IActivityService? activity = null)
+        IActivityService? activity = null,
+        Action<int, BookFormat>? goReaderForBook = null,
+        Action<int>? goBookDetailForBook = null,
+        HistoryTabViewModel? history = null)
     {
         _goReaderForIssue = goReaderForIssue;
         _goDetailForSeries = goDetailForSeries;
@@ -50,6 +55,9 @@ public partial class InsightsScreenViewModel : ViewModelBase
         Stats = new StatsScreenViewModel(goLibraryWithSearch, readingEventRecorder, nowUtc);
         Recap = new RecapViewModel(readingEventRecorder, nowUtc);
         Goals = new GoalsViewModel(dialogs, readingEventRecorder, nowUtc) { Activity = activity };
+        History = history ?? new HistoryTabViewModel(
+            goReaderForIssue, goDetailForSeries, goReaderForBook ?? ((_, _) => { }), goBookDetailForBook ?? (_ => { }),
+            dialogs, readingEventRecorder, activity, nowUtc: nowUtc);
 
         if (readingEventRecorder is not null)
         {
@@ -88,6 +96,10 @@ public partial class InsightsScreenViewModel : ViewModelBase
     /// cards live on Overview itself.</summary>
     public GoalsViewModel Goals { get; }
 
+    /// <summary>The History tab's own view-model (docs/superpowers/specs/2026-09-29-insights-reading-history-
+    /// design.md §3) - its own cache, loaded only while the tab is selected.</summary>
+    public HistoryTabViewModel History { get; }
+
     [RelayCommand]
     private void AddGoal() => _openNewGoalDialog();
 
@@ -97,11 +109,15 @@ public partial class InsightsScreenViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isRecapTabSelected;
 
+    [ObservableProperty]
+    private bool _isHistoryTabSelected;
+
     partial void OnIsTrendsTabSelectedChanged(bool value)
     {
         if (value)
         {
             IsRecapTabSelected = false;
+            IsHistoryTabSelected = false;
         }
 
         Stats.IsActive = value;
@@ -118,6 +134,7 @@ public partial class InsightsScreenViewModel : ViewModelBase
         if (value)
         {
             IsTrendsTabSelected = false;
+            IsHistoryTabSelected = false;
         }
 
         Recap.IsActive = value;
@@ -129,19 +146,40 @@ public partial class InsightsScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsTodayTabSelected));
     }
 
-    /// <summary>True when neither the Trends nor the Recap tab is selected - the third, implicit state
+    partial void OnIsHistoryTabSelectedChanged(bool value)
+    {
+        if (value)
+        {
+            IsTrendsTabSelected = false;
+            IsRecapTabSelected = false;
+        }
+
+        History.IsActive = value;
+        if (value)
+        {
+            History.Refresh();
+        }
+
+        OnPropertyChanged(nameof(IsTodayTabSelected));
+    }
+
+    /// <summary>True when none of Trends / History / Recap is selected - the implicit default state
     /// of what used to be a plain <c>!IsTrendsTabSelected</c> 2-way toggle.</summary>
-    public bool IsTodayTabSelected => !IsTrendsTabSelected && !IsRecapTabSelected;
+    public bool IsTodayTabSelected => !IsTrendsTabSelected && !IsHistoryTabSelected && !IsRecapTabSelected;
 
     [RelayCommand]
     private void SelectTodayTab()
     {
         IsTrendsTabSelected = false;
+        IsHistoryTabSelected = false;
         IsRecapTabSelected = false;
     }
 
     [RelayCommand]
     private void SelectTrendsTab() => IsTrendsTabSelected = true;
+
+    [RelayCommand]
+    private void SelectHistoryTab() => IsHistoryTabSelected = true;
 
     [RelayCommand]
     private void SelectRecapTab()
@@ -247,6 +285,11 @@ public partial class InsightsScreenViewModel : ViewModelBase
         if (IsTrendsTabSelected)
         {
             Stats.Refresh();
+        }
+
+        if (IsHistoryTabSelected)
+        {
+            History.Refresh();
         }
 
         if (IsRecapTabSelected)

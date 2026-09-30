@@ -1,0 +1,166 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
+             x:Class="Paperbunkr.App.Views.ContinuityTimelineView"
+             x:DataType="vm:ContinuityTimelineViewModel">
+
+    <!-- The Timeline tab (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-progression-design.md; the histogram, era colours,
+         progress and folding from docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md). The connector line and node
+         come from the 2026-09-21 cosmetics pitch (#4); the node is filled while the era has unread issues, an outline once all are read.
+         CE has no timeline view at all. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/ContinuityChrome.axaml" />
+        <Style Selector="Button.yearBar">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Height" Value="{x:Static vm:ContinuityTimelineViewModel.HistogramHeight}" />
+            <Setter Property="Margin" Value="0,0,1,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="VerticalContentAlignment" Value="Bottom" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Button.yearBar:pointerover Border.bar">
+            <Setter Property="Background" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Margin="28,14,28,0" Spacing="10">
+        <TextBlock Text="{Binding Title}" Classes="pbTextBody" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+
+        <TextBlock Text="No issues here have a comic age yet." FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                   IsVisible="{Binding HasNoSections}" />
+
+        <!-- Issues per year: click a year to jump to it -->
+        <StackPanel Spacing="2" IsVisible="{Binding HasYearBars}">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding YearBars}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:TimelineYearBar">
+                            <StackPanel>
+                                <Button Classes="yearBar" Width="{Binding BarWidth}" ToolTip.Tip="{Binding Tooltip}" AutomationProperties.Name="{Binding Tooltip}"
+                                        IsEnabled="{Binding !IsEmpty}"
+                                        Command="{Binding $parent[ItemsControl].((vm:ContinuityTimelineViewModel)DataContext).JumpToYearCommand}"
+                                        CommandParameter="{Binding}">
+                                    <Border Classes="bar" Height="{Binding BarHeight}" VerticalAlignment="Bottom" CornerRadius="1,1,0,0"
+                                            Background="{DynamicResource PbAccentBrush}" />
+                                </Button>
+                                <Canvas Height="12" Width="{Binding BarWidth}">
+                                    <TextBlock Text="{Binding AxisLabel}" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                </Canvas>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
+
+        <!-- Review inferred ages -->
+        <StackPanel IsVisible="{Binding !HasNoInferredAges}">
+            <Button Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,4" Command="{Binding ToggleInferredAgesCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Review inferred ages" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                    <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding InferredAges.Count}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                </StackPanel>
+            </Button>
+            <StackPanel IsVisible="{Binding InferredAgesExpanded}" Margin="0,6,0,0">
+                <Button Classes="headerAction secondary" Content="Accept all" HorizontalAlignment="Left" Margin="0,0,0,8"
+                        Command="{Binding AcceptAllInferredAgesCommand}" />
+                <ItemsControl ItemsSource="{Binding InferredAges}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:InferredAgeRowViewModel">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding DisplayLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}">
+                                        <Run Text="{Binding YearLabel, Mode=OneWay}" /><Run Text=" → " /><Run Text="{Binding AgeLabel, Mode=OneWay}" />
+                                    </TextBlock>
+                                </StackPanel>
+                                <Button Grid.Column="1" Classes="headerAction secondary" Content="Accept" VerticalAlignment="Center" Command="{Binding AcceptCommand}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Eras -->
+        <ItemsControl ItemsSource="{Binding Sections}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:TimelineSectionViewModel">
+                    <Grid ColumnDefinitions="22,*">
+                        <Border Grid.Column="0" Width="2" HorizontalAlignment="Center" Background="{DynamicResource PbBorderBrush}" />
+                        <Ellipse Grid.Column="0" Width="11" Height="11" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,24,0,0"
+                                 StrokeThickness="2" Classes="eraDot"
+                                 Classes.allRead="{Binding !HasUnread}"
+                                 Classes.platinum="{Binding IsPlatinum}" Classes.golden="{Binding IsGolden}" Classes.silver="{Binding IsSilver}"
+                                 Classes.bronze="{Binding IsBronze}" Classes.modern="{Binding IsModern}" />
+                        <StackPanel Grid.Column="1" Margin="8,14,0,0">
+                            <Button Classes="panelHead" Padding="0" Command="{Binding ToggleFoldCommand}"
+                                    AutomationProperties.Name="{Binding HeaderLabel, StringFormat='{}{0}, fold or unfold'}">
+                                <Border Classes="eraHeader"
+                                        Classes.platinum="{Binding IsPlatinum}" Classes.golden="{Binding IsGolden}" Classes.silver="{Binding IsSilver}"
+                                        Classes.bronze="{Binding IsBronze}" Classes.modern="{Binding IsModern}">
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
+                                        <Panel Grid.Column="0" VerticalAlignment="Center">
+                                            <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsExpanded}" />
+                                            <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsFolded}" />
+                                        </Panel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding HeaderLabel}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                                            <TextBlock Text="{Binding CommonlyCitedRange}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                       VerticalAlignment="Center" IsVisible="{Binding HasCommonlyCitedRange}" ToolTip.Tip="The commonly cited range" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Text="{Binding CountsLabel}" Classes="csFaint" VerticalAlignment="Center" />
+                                        <ProgressBar Grid.Column="3" Classes="thin eraProgress" Width="90" VerticalAlignment="Center" Value="{Binding ReadFraction}"
+                                                     Classes.platinum="{Binding IsPlatinum}" Classes.golden="{Binding IsGolden}" Classes.silver="{Binding IsSilver}"
+                                                     Classes.bronze="{Binding IsBronze}" Classes.modern="{Binding IsModern}" />
+                                    </Grid>
+                                </Border>
+                            </Button>
+                            <ItemsControl ItemsSource="{Binding Issues}" Margin="0,8,0,0" IsVisible="{Binding IsExpanded}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:TimelineIssueCard">
+                                        <Button Background="Transparent" BorderThickness="0" Padding="0" Margin="0,0,10,12" Cursor="Hand"
+                                                AutomationProperties.Name="{Binding SeriesName}"
+                                                Command="{Binding $parent[UserControl].((vm:ContinuityTimelineViewModel)DataContext).OpenIssueCommand}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel Width="100">
+                                                <Panel>
+                                                    <Border Height="144" CornerRadius="5" ClipToBounds="True" Background="{Binding CoverBrush}">
+                                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                                    </Border>
+                                                    <Border Width="9" Height="9" CornerRadius="9" Background="{DynamicResource PbAccentBrush}"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="5"
+                                                            IsVisible="{Binding IsUnread}" ToolTip.Tip="Unread" />
+                                                    <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5" Padding="4,1" CornerRadius="3"
+                                                            Background="{DynamicResource PbBadgeBrush}" IsVisible="{Binding IsReducedConfidence}"
+                                                            ToolTip.Tip="{Binding ConfidenceReason}">
+                                                        <TextBlock Text="?" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                                    </Border>
+                                                </Panel>
+                                                <TextBlock Text="{Binding SeriesName}" FontSize="10" Foreground="{DynamicResource PbTextBrush}"
+                                                           TextTrimming="CharacterEllipsis" Margin="0,4,0,0" />
+                                                <TextBlock FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}">
+                                                    <Run Text="{Binding Title, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding YearLabel, Mode=OneWay}" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

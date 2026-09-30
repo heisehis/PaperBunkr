@@ -27,6 +27,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Paperbunkr.App\Paperbunkr.App.csproj" />
+    <!-- File Explorer thumbnail handler, referenced as a plain managed assembly (its Native AOT publish happens only
+         in installer/BuildInstaller.ps1). Aliased because it compiles in its own copies of cYo.Common.Text.ExtendedStringComparer
+         and the MOBI readers, which would otherwise collide with the Common/Engine originals the App brings in. -->
+    <ProjectReference Include="..\Paperbunkr.ShellThumbnails\Paperbunkr.ShellThumbnails.csproj" Aliases="thumbs" />
   </ItemGroup>
 
   <!-- The real, shipped Duplicate Finder plugin package (repo root sample-plugins/, not test

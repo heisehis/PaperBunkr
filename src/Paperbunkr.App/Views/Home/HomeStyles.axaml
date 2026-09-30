@@ -1,0 +1,188 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fi="using:FluentIcons.Avalonia"
+        xmlns:controls="using:Paperbunkr.App.Controls">
+    <!--
+        Styles shared by the Home masthead and every Home section template (docs/superpowers/specs/2026-09-28-home-improvements-
+        design.md, "Section model"). Moved out of HomeScreen.axaml when the sections became separate template files.
+    -->
+
+    <!-- Masthead wordmark: accent as before, but light on the light-theme night sky, whose top is dark (C2). -->
+    <Style Selector="controls|SplitText.wordmark">
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
+    <Style Selector="controls|SplitText.wordmark.nightSky">
+        <Setter Property="Foreground" Value="{DynamicResource PbSkyNightTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.emptyState">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+    </Style>
+
+    <!-- Section heading icon (C3). -->
+    <Style Selector="fi|SymbolIcon.sectionIcon">
+        <Setter Property="FontSize" Value="{StaticResource PbIconSizeSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="Button.viewAllLink">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.viewAllLink:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+
+    <!-- Plain icon+text header links (Refresh) - transparent, no chrome, just a hover color shift. -->
+    <Style Selector="Button.headerLink">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.headerLink:pointerover TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
+    <Style Selector="Button.headerLink:pointerover fi|SymbolIcon">
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBox.searchBox">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="TextBox.searchBox:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+
+    <Style Selector="Button.spotlightCard">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusLg}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Border.spotlightCover">
+        <Setter Property="CornerRadius" Value="7,0,0,7" />
+        <Setter Property="ClipToBounds" Value="True" />
+        <Setter Property="Width" Value="120" />
+        <Setter Property="Height" Value="172" />
+    </Style>
+
+    <!-- Needs Attention banner (I3). -->
+    <Style Selector="Button.attentionBanner">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+
+    <!-- Spotlight accordion (docs/superpowers/specs/2026-09-29-home-spotlight-accordion-design.md). -->
+    <Style Selector="Border.spotlightBand">
+        <Setter Property="Height" Value="300" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusLg}" />
+        <Setter Property="ClipToBounds" Value="True" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+    </Style>
+    <Style Selector="Border.spotlightWash">
+        <Setter Property="Background">
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                <GradientStop Offset="0" Color="{DynamicResource PbHeroScrimColor}" />
+                <GradientStop Offset="1" Color="{DynamicResource PbHeroGradientEndColor}" />
+            </LinearGradientBrush>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button.spotlightPanel">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="ClipToBounds" Value="True" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <!-- No Fluent hover/press fill on the cover panels - the widen is the hover feedback. -->
+    <Style Selector="Button.spotlightPanel:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.spotlightPanel:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.spotlightPanel:focus-visible">
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="ClipToBounds" Value="False" />
+    </Style>
+
+    <!-- Slivers: darkened, full colour. The shade lifts on hover and is gone once the panel opens. -->
+    <Style Selector="Border.sliverShade">
+        <Setter Property="Background" Value="#8C000000" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.spotlightPanel:pointerover Border.sliverShade">
+        <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="Button.spotlightPanel.open Border.sliverShade">
+        <Setter Property="Opacity" Value="0" />
+    </Style>
+
+    <!-- The open panel's details slide in from the left, like the demo's caption. Reduced Motion zeroes the token: they just appear. -->
+    <Style Selector="StackPanel.caption">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="RenderTransform" Value="translateX(-24px)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.spotlightPanel.open StackPanel.caption">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="RenderTransform" Value="none" />
+    </Style>
+
+    <Style Selector="Button.spotlightNav">
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+</Styles>

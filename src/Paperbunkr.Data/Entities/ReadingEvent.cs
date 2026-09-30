@@ -3,8 +3,11 @@ namespace Paperbunkr.Data.Entities;
 /// <summary>
 /// One reading act — an item opened for reading, or read through to the end
 /// (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §4). Append-only: rows are
-/// written where read-state already changes (the three reader view-models) and are never updated
-/// afterwards except for the one in-place <see cref="PagesRead"/> fill on session teardown.
+/// written where read-state already changes (the three reader view-models) and what they record is
+/// never changed afterwards. The only in-place writes are the one-time <see cref="PagesRead"/> fill on
+/// session teardown and the <see cref="HiddenFromHistory"/> flag set by the Insights History tab's
+/// Remove / Clear all (docs/superpowers/specs/2026-09-29-insights-reading-history-design.md) - a
+/// display flag only the History resolver reads; Stats / Goals / Recap / forecasts ignore it on purpose.
 ///
 /// A plain growable table (same category as <see cref="ActivityRun"/> / <see cref="Workspace"/> /
 /// <see cref="KeyBinding"/>), not part of <see cref="AppSettings"/>. Unlike <see cref="ActivityRun"/>
@@ -15,8 +18,9 @@ namespace Paperbunkr.Data.Entities;
 /// survive deletion of the item it describes, so lifetime totals don't drop when a file is removed
 /// from the library. The <see cref="SeriesId"/> / <see cref="Publisher"/> / <see cref="PrimaryGenre"/>
 /// columns are denormalised snapshots frozen at write time so the pace/composition queries stay flat
-/// and self-sufficient; everything else (titles, covers) is looked up live from the item when a tile
-/// needs to render it, and simply omitted if the item is gone.
+/// and self-sufficient. <see cref="SeriesTitle"/> / <see cref="ItemLabel"/> are display-name snapshots
+/// for the History tab's "no longer in library" rows; live surfaces still look titles and covers up
+/// from the item and fall back to the snapshot only when it's gone.
 /// </summary>
 public class ReadingEvent
 {
@@ -49,6 +53,22 @@ public class ReadingEvent
 
     /// <summary>Frozen first genre tag for a comic; null when none / for a novel.</summary>
     public string? PrimaryGenre { get; set; }
+
+    /// <summary>
+    /// Frozen display name of the row's History group at write time: <see cref="Series.Name"/> for a
+    /// comic, <see cref="BookSeries.Name"/> for a book in a series, <see cref="Book.Title"/> for a
+    /// standalone book. Null for rows whose item was already gone when the snapshot was taken.
+    /// </summary>
+    public string? SeriesTitle { get; set; }
+
+    /// <summary>
+    /// Frozen per-item label at write time: <c>#12</c> / <c>Vol. 2</c> / the issue title for a comic,
+    /// the book title for a book in a series, null for a standalone book (its title is <see cref="SeriesTitle"/>).
+    /// </summary>
+    public string? ItemLabel { get; set; }
+
+    /// <summary>Hidden from the Insights History tab by Remove / Clear all. Read only by the History resolver.</summary>
+    public bool HiddenFromHistory { get; set; }
 }
 
 public enum ReadingItemType

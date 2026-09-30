@@ -327,7 +327,7 @@
                         <DataTemplate x:DataType="models:SeriesCardSample">
                             <Button Classes="resultCard" Width="120"
                                     Command="{Binding #SeriesResultsList.((vm:SmartScreenViewModel)DataContext).SelectSeriesResultCommand}"
-                                    CommandParameter="{Binding}">
+                                    CommandParameter="{Binding}" KeyDown="OnResultCardKeyDown">
                                 <Border Classes="resultTile" Background="{Binding CoverBrush}">
                                     <Grid>
                                         <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
@@ -352,7 +352,7 @@
                         <DataTemplate x:DataType="models:BookCardSample">
                             <Button Classes="resultCard" Width="120"
                                     Command="{Binding #NovelResultsList.((vm:SmartScreenViewModel)DataContext).SelectNovelResultCommand}"
-                                    CommandParameter="{Binding}">
+                                    CommandParameter="{Binding}" KeyDown="OnResultCardKeyDown">
                                 <Border Classes="resultTile" Background="{Binding CoverBrush}">
                                     <Grid>
                                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
@@ -374,8 +374,8 @@
              floatingPanel pattern as LibraryScreen's Add-issue overlay. ============ -->
         <Border Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding IsGroupedReviewOpen}" Background="#B0000000"
                 PointerPressed="OnGroupedReviewBackdropPressed" />
-        <Border Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding IsGroupedReviewOpen}" Classes="floatingPanel"
-                Width="620" MaxHeight="720" Padding="0">
+        <Border x:Name="GroupedReviewPanel" Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding IsGroupedReviewOpen}" Classes="floatingPanel"
+                Width="620" MaxHeight="720" Padding="0" KeyboardNavigation.TabNavigation="Cycle" KeyDown="OnGroupedReviewKeyDown">
             <DockPanel LastChildFill="True">
                 <Grid DockPanel.Dock="Top" Margin="24,20,24,12" ColumnDefinitions="*,Auto">
                     <TextBlock Grid.Column="0" Text="Review duplicates" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />

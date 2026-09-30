@@ -13,7 +13,7 @@ namespace Paperbunkr.App.Tests;
 /// <summary>
 /// The New Reading List dialog (docs/superpowers/specs/2026-08-28-reading-lists-screen-redesign-
 /// design.md → v2). Redirects <see cref="PaperbunkrDbContext.DatabasePathOverride"/> to a temp
-/// SQLite file, same pattern as <see cref="ReadingScreenViewModelTests"/>.
+/// SQLite file, same pattern as <see cref="ReadingListsScreenViewModelTests"/>.
 /// </summary>
 [Collection(nameof(AvaloniaTestCollection))]
 public class NewReadingListViewModelTests : IDisposable

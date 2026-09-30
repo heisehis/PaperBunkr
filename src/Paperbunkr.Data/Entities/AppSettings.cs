@@ -813,6 +813,24 @@ public class AppSettings
     public string? LibraryHealthTab { get; set; }
 
     /// <summary>
+    /// The Continuity screen's sidebar tab last used ("Continuities" or "Events") - null until the user first switches, in which case
+    /// the sidebar opens on Continuities (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md).
+    /// </summary>
+    public string? ContinuitySidebarTab { get; set; }
+
+    /// <summary>
+    /// How an open reading list shows its issues: "Path" (the journey path) or "Covers" (the cover wall) - one remembered choice for every
+    /// list, null until first switched, which means Path (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md §5, Q7).
+    /// </summary>
+    public string? ReadingListViewMode { get; set; }
+
+    /// <summary>
+    /// The Library Paste Data dialog's ticked fields, comma-separated <c>BulkFieldRegistry</c> labels - CE's <c>Settings.PasteProperties</c>
+    /// (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §3). Null until first used, which means nothing ticked, as in CE.
+    /// </summary>
+    public string? PasteDataFields { get; set; }
+
+    /// <summary>
     /// Whether a Scan Now automatically runs Library Health's "Remove All Confirmed Missing" (same
     /// two-strikes eligibility, no confirmation dialog) once the scan completes (docs/superpowers/
     /// specs/2026-09-06-scan-missing-file-handling-design.md). CE: Settings
@@ -932,4 +950,20 @@ public class AppSettings
     /// original spacing), 2 Spacious. Scales the Library list/details row padding and the sidebar item padding.
     /// </summary>
     public int DensityPreset { get; set; } = 1;
+
+    /// <summary>
+    /// Home section order (docs/superpowers/specs/2026-09-28-home-improvements-design.md I1): comma-separated section keys
+    /// (<c>Paperbunkr.App.Models.HomeSectionKey</c>). Null = the default order. Unknown keys are ignored and keys missing from the list
+    /// are slotted in at their default position, so a section added later still shows up. Deliberate Paperbunkr addition (CE has no Home).
+    /// </summary>
+    public string? HomeSectionOrder { get; set; }
+
+    /// <summary>Home sections the user switched off (same spec, I1): comma-separated section keys. Null = nothing hidden.</summary>
+    public string? HomeHiddenSections { get; set; }
+
+    /// <summary>
+    /// Seasonal flourish on the Home masthead (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md C10) - a small icon and
+    /// greeting tint on a few calendar dates. Default false (opt-in, purely decorative).
+    /// </summary>
+    public bool HomeSeasonalFlourish { get; set; }
 }

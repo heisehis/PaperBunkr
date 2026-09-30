@@ -1,4 +1,5 @@
 using System;
+using Paperbunkr.App.Services.History;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Services;
@@ -28,6 +29,17 @@ public interface IReadingEventRecorder
     /// "pages read" metric captures sessions that ended without a finish. No-op if there's no such row.
     /// </summary>
     void UpdateSessionPages(ReadingItemType itemType, int itemId, int pagesRead);
+
+    /// <summary>
+    /// Sets <see cref="ReadingEvent.HiddenFromHistory"/> on every existing row of one Insights History
+    /// group, or on every row when <paramref name="group"/> is null (Clear all) - docs/superpowers/specs/
+    /// 2026-09-29-insights-reading-history-design.md §1. Hides only; never deletes, so Stats / Goals / Recap
+    /// are unaffected. Rows written later aren't hidden, so reading the series again brings it back. Raises
+    /// <see cref="ReadingEventRecorded"/>. The default is a no-op so test doubles needn't declare it.
+    /// </summary>
+    void HideFromHistory(ReadingHistoryGroupKey? group)
+    {
+    }
 
     /// <summary>Raised after any successful write. Handlers may be invoked from a background thread.</summary>
     event Action? ReadingEventRecorded;

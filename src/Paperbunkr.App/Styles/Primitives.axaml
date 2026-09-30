@@ -15,6 +15,28 @@
          container's computed per-index delay. A container this never touches is untagged and
          therefore always fully visible - the initial hidden/offset state below only ever applies to
          a container that's about to be animated in. -->
+    <!-- Keyboard focus ring, app-wide: Paperbunkr's glow ring (PbGlowRing, so it follows the glow-tier setting and the skin) replaces the
+         theme's white/black focus frame on every control. The outer Border is inflated 16px past the control (room for the Vivid tier's 12px halo) so the ring paints inside the
+         adorner's own bounds - Avalonia only repaints inside a visual's bounds, so a ring painted outside them shows partly or not at all
+         (the Library/Home lesson, 2026-09-26 and 2026-09-29). Controls with a ring of their own set FocusAdorner to null locally, which beats
+         this style. -->
+    <Style Selector=":is(Control)">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border Margin="-16" IsHitTestVisible="False">
+                    <Border Margin="16" CornerRadius="{DynamicResource PbRadiusSm}" BoxShadow="{DynamicResource PbGlowRing}" />
+                </Border>
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+
+    <!-- A plain ItemsControl clips to its bounds by default, which cuts the focus ring off every item along its edges (the first tile
+         of a Home shelf, the first card of a grid, a chip row). Nothing relies on that clip - scrolling lists (ListBox etc.) have their
+         own ScrollViewer, which still clips - so plain ItemsControls don't clip. -->
+    <Style Selector="ItemsControl">
+        <Setter Property="ClipToBounds" Value="False" />
+    </Style>
+
     <Style Selector="Control.entranceReady:not(.entered)">
         <Setter Property="Opacity" Value="0" />
         <Setter Property="RenderTransform" Value="translateY(8px)" />
@@ -47,6 +69,10 @@
     </Style>
     <Style Selector="Border.modalScrim.open">
         <Setter Property="Opacity" Value="1" />
+    </Style>
+    <!-- A closed modal is only faded out, not removed, so its buttons stayed Tab stops and directional-move targets. Disabled while closed. -->
+    <Style Selector="Border.modalScrim:not(.open)">
+        <Setter Property="IsEnabled" Value="False" />
     </Style>
     <Style Selector="Border.modalCard">
         <Setter Property="RenderTransform" Value="scale(0.96)" />
@@ -228,6 +254,9 @@
         <!-- Fixed Normal-tier twin of PbGlowRing for non-hover consumers (reader bookmark pulse) - the
              glow-tier setting only changes PbGlowRing. Overwritten at runtime by ThemeService.ApplyGlowRing. -->
         <BoxShadows x:Key="PbGlowPulseRing">0 0 0 4 #99E0995A</BoxShadows>
+        <!-- Inside twin of PbGlowRing for controls their own container clips (a segmented control's pill). Overwritten at runtime by
+             ThemeService.ApplyGlowRing / ApplyGlowTier. -->
+        <BoxShadows x:Key="PbGlowRingInset">inset 0 0 0 2 #99E0995A</BoxShadows>
     </Styles.Resources>
 
     <!-- PosterTile - see Views/PosterTile.axaml. Root there is a Border (not Button) specifically
@@ -267,11 +296,47 @@
          above this block) - only the widened ring VALUE changes, no animation added to it. The
          scale-pop is a separate RenderTransform, unaffected by that bug since it's a different
          property/compositor path. -->
-    <Style Selector="Border.posterTile.shelfCard:pointerover Border.posterCover">
-        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 4 #66E0995A" />
+    <!-- Home pitch (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md, "Card hover and shadow"): Home's cards get the
+         landing site's deeper resting shadow. Still static - only the value differs per state, nothing transitions it. -->
+    <Style Selector="Border.posterTile.shelfCard Border.posterCover">
+        <Setter Property="BoxShadow" Value="0 14 34 0 #66000000" />
     </Style>
-    <Style Selector="Border.posterTile.shelfCard:focus-visible Border.posterCover">
-        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 4 #66E0995A" />
+    <!-- Hover keeps its faint accent edge; keyboard focus gets the full PbGlowRing on the tileRing overlay (PosterTile.axaml), so a hovered
+         tile and the keyboard-focused tile never look the same. -->
+    <Style Selector="Border.posterTile.shelfCard:pointerover Border.posterCover">
+        <Setter Property="BoxShadow" Value="0 14 34 0 #66000000, 0 0 0 4 #66E0995A" />
+    </Style>
+    <Style Selector="Border.tileRing">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="Border.posterTile.shelfCard:focus-visible Border.tileRing">
+        <Setter Property="IsVisible" Value="True" />
+        <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
+    </Style>
+    <!-- Because-You-Read lead card (C8): an accent outline on the seed series' cover. -->
+    <Style Selector="Border.posterCover.outlined">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="BorderThickness" Value="2" />
+    </Style>
+    <!-- "NEW" ribbon (C5). -->
+    <Style Selector="Border.newRibbon">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Padding" Value="0,2" />
+    </Style>
+    <!-- "Not interested" ✕ (I5): only shows while the card is hovered or keyboard-focused. -->
+    <Style Selector="Button.posterDismiss">
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
+        <Setter Property="Background" Value="#B3000000" />
+        <Setter Property="Foreground" Value="#F0ECE7DB" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="Border.posterTile:pointerover Button.posterDismiss, Border.posterTile:focus-within Button.posterDismiss">
+        <Setter Property="Opacity" Value="1" />
     </Style>
     <Style Selector="Border.posterTile.shelfCard">
         <Setter Property="RenderTransform" Value="none" />

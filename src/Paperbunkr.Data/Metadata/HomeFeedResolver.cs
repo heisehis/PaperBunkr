@@ -13,6 +13,17 @@ namespace Paperbunkr.Data.Metadata;
 /// see docs/superpowers/specs/2026-08-18-home-screen-design.md Module 1).</summary>
 public sealed record ContinueReadingCandidate(Series Series, Issue ResumeIssue);
 
+/// <summary>One entry in Home's merged Continue Reading row (docs/superpowers/specs/2026-09-28-home-improvements-design.md I2) -
+/// either a comic (<see cref="Series"/> + <see cref="ResumeIssue"/>) or a book (<see cref="Book"/>), ordered by
+/// <see cref="LastTouchUtc"/>.</summary>
+public sealed record ResumeCandidate(Series? Series, Issue? ResumeIssue, Book? Book, DateTime LastTouchUtc)
+{
+    public bool IsBook => Book is not null;
+}
+
+/// <summary>Home's Needs Attention card (same spec, I3). <see cref="ResumeIssueId"/> null = the action opens the series instead.</summary>
+public sealed record HomeAttention(int SeriesId, string SeriesName, string Headline, string Reason, int? ResumeIssueId, string ActionLabel);
+
 /// <summary>
 /// Read-only query/pick logic for the Home screen's five modules (docs/superpowers/specs/
 /// 2026-08-18-home-screen-design.md) - mirrors <see cref="RecommendationResolver"/>'s shape (static,
@@ -98,15 +109,36 @@ public static class HomeFeedResolver
     /// picked), falls back to uniform-random-without-replacement for the rest. Returns fewer than
     /// <paramref name="count"/> items when the candidate pool itself is smaller; empty only when it's
     /// empty (every issue is either read or in progress).
+    /// 2026-09-28 relevance pass (docs/superpowers/specs/2026-09-28-home-improvements-design.md I4): at most one issue per series,
+    /// and up to <paramref name="newArrivalSlots"/> slots go to the newest unread issues added in the last
+    /// <paramref name="newArrivalDays"/> days; the weighted draw fills the rest and the two are interleaved.
     /// </summary>
-    public static IReadOnlyList<Issue> GetSpotlightPicks(PaperbunkrDbContext context, Random random, int count = 6)
+    public static IReadOnlyList<Issue> GetSpotlightPicks(PaperbunkrDbContext context, Random random, int count = 6,
+        DateTime nowUtc = default, int newArrivalSlots = 2, int newArrivalDays = 14)
     {
+        if (nowUtc == default)
+        {
+            nowUtc = DateTime.UtcNow;
+        }
+
         var allIssues = context.Issues.Include(i => i.Series).Include(i => i.Tags).ToList();
         var candidates = allIssues.Where(i => i.IsUnread()).ToList();
         if (candidates.Count == 0)
         {
             return Array.Empty<Issue>();
         }
+
+        // New arrivals first (docs/superpowers/specs/2026-09-28-home-improvements-design.md I4): the newest unread issue per
+        // series added in the window, most recent first, up to newArrivalSlots. One issue per series across the whole carousel.
+        DateTime cutoff = nowUtc.AddDays(-newArrivalDays);
+        var newArrivals = candidates
+            .Where(i => i.AddedTime is DateTime added && added >= cutoff)
+            .GroupBy(i => i.SeriesId)
+            .Select(g => g.OrderByDescending(i => i.AddedTime).First())
+            .OrderByDescending(i => i.AddedTime)
+            .Take(Math.Max(0, Math.Min(newArrivalSlots, count)))
+            .ToList();
+        var usedSeries = newArrivals.Select(i => i.SeriesId).ToHashSet();
 
         var genreFrequency = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var issue in allIssues.Where(i => i.HasBeenRead()))
@@ -118,11 +150,12 @@ public static class HomeFeedResolver
         }
 
         var remaining = candidates
+            .Where(c => !usedSeries.Contains(c.SeriesId))
             .Select(c => (Issue: c, Weight: TextTokenizer.Tokenize(c.JoinedGenre()).Sum(g => genreFrequency.GetValueOrDefault(g))))
             .ToList();
 
-        var picks = new List<Issue>();
-        while (picks.Count < count && remaining.Count > 0)
+        var weighted = new List<Issue>();
+        while (weighted.Count + newArrivals.Count < count && remaining.Count > 0)
         {
             int totalWeight = remaining.Sum(x => x.Weight);
             int index;
@@ -146,8 +179,25 @@ public static class HomeFeedResolver
                 index = random.Next(remaining.Count);
             }
 
-            picks.Add(remaining[index].Issue);
-            remaining.RemoveAt(index);
+            var pick = remaining[index].Issue;
+            weighted.Add(pick);
+            // Per-series cap: one issue per series, so a big unread run can't fill the whole carousel.
+            remaining.RemoveAll(x => x.Issue.SeriesId == pick.SeriesId);
+        }
+
+        // Interleave weighted, new, weighted, new... so new arrivals never always lead.
+        var picks = new List<Issue>(weighted.Count + newArrivals.Count);
+        for (int i = 0; i < Math.Max(weighted.Count, newArrivals.Count); i++)
+        {
+            if (i < weighted.Count)
+            {
+                picks.Add(weighted[i]);
+            }
+
+            if (i < newArrivals.Count)
+            {
+                picks.Add(newArrivals[i]);
+            }
         }
 
         return picks;
@@ -200,5 +250,66 @@ public static class HomeFeedResolver
             .OrderBy(c => c.SortOrder)
             .Take(limit)
             .ToList();
+    }
+
+    /// <summary>
+    /// Comics and books in one Continue Reading row (docs/superpowers/specs/2026-09-28-home-improvements-design.md I2): the two
+    /// existing queries, unchanged filters, merged by last-touch time (both UTC), newest first.
+    /// </summary>
+    public static IReadOnlyList<ResumeCandidate> GetContinueReadingMixed(PaperbunkrDbContext context, int limit = 10)
+    {
+        var comics = GetContinueReading(context, limit)
+            .Select(c => new ResumeCandidate(c.Series, c.ResumeIssue, null, c.ResumeIssue.OpenedTime ?? DateTime.MinValue));
+        var books = GetContinueReadingBooks(context, limit)
+            .Select(b => new ResumeCandidate(null, null, b, b.LastOpenedTime ?? DateTime.MinValue));
+
+        return comics.Concat(books)
+            .OrderByDescending(c => c.LastTouchUtc)
+            .Take(limit)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The single most useful "needs attention" item for Home (same spec, I3), reusing <see cref="InsightsResolver"/>'s lists:
+    /// Almost Done first, then a stalled in-progress series, then the closest-to-complete gap. Null when all three are empty.
+    /// </summary>
+    public static HomeAttention? GetTopAttention(PaperbunkrDbContext context, DateTime nowUtc)
+    {
+        var snapshot = InsightsResolver.Build(context, nowUtc);
+
+        if (snapshot.AlmostDone.Count > 0)
+        {
+            var a = snapshot.AlmostDone[0];
+            return new HomeAttention(a.SeriesId, a.SeriesName, $"{a.Subtitle} in {a.SeriesName}",
+                "You're close to finishing this run", a.ResumeIssueId, ResumeLabel(context, a.ResumeIssueId));
+        }
+
+        if (snapshot.Continue.FirstOrDefault(c => c.IsStalled) is { } stalled)
+        {
+            return new HomeAttention(stalled.SeriesId, stalled.SeriesName, $"Pick {stalled.SeriesName} back up",
+                stalled.Subtitle, stalled.ResumeIssueId, ResumeLabel(context, stalled.ResumeIssueId));
+        }
+
+        if (snapshot.Gaps.Count > 0)
+        {
+            var g = snapshot.Gaps[0];
+            string shown = string.Join(", ", g.MissingNumbers.Take(3).Select(n => $"#{n}"));
+            string more = g.MissingNumbers.Count > 3 ? "…" : "";
+            return new HomeAttention(g.SeriesId, g.SeriesName, $"{g.MissingNumbers.Count} missing from {g.SeriesName}",
+                $"Missing {shown}{more}", null, "View series");
+        }
+
+        return null;
+    }
+
+    private static string ResumeLabel(PaperbunkrDbContext context, int? issueId)
+    {
+        if (issueId is not int id)
+        {
+            return "View series";
+        }
+
+        string? number = context.Issues.AsNoTracking().Where(i => i.Id == id).Select(i => i.Number).FirstOrDefault();
+        return string.IsNullOrWhiteSpace(number) ? "Resume" : $"Resume #{number}";
     }
 }

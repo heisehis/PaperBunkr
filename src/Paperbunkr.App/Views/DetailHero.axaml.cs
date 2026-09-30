@@ -29,15 +29,9 @@ public partial class DetailHero : UserControl
         set => SetValue(HeroHeightProperty, value);
     }
 
-    // Scroll-linked backdrop parallax (docs/superpowers/specs/2026-09-07-chrome-content-motion-
-    // polish-design.md item 2) removed 2026-09-08 (docs/superpowers/specs/2026-09-08-home-navrail-
-    // visual-v2-design.md §4 follow-up) - user-confirmed real bug, not a tuning issue: the backdrop
-    // Image fills its container exactly (Stretch="UniformToFill", no overscan margin) inside a
-    // ClipToBounds="True" Border, so translating it on scroll had no extra image to reveal - the
-    // edge it moved away from just showed empty space/the card's flat background instead of more
-    // art. A correct implementation needs the backdrop rendered oversized (e.g. ~1.2x its container)
-    // so there's always image to pan within; deferred to a future revision rather than fixed inline
-    // here. Until then this control has no scroll-tracking code at all - the backdrop is static.
+    // Scroll-linked backdrop parallax: removed 2026-09-08 (no spare image to pan within, so the edge showed), restored
+    // 2026-09-28 by the Home pitch (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md C9) through ParallaxBackdrop, which
+    // draws the backdrop oversized and clamps the drift to that margin. All scroll tracking lives in that control.
 
     public DetailHero()
     {

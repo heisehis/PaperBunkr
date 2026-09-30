@@ -92,14 +92,11 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     /// <summary>"1 issue" / "N issues" - the one pluralized count every series card, tile and detail header shares.</summary>
     public static string FormatIssueCount(int count) => count == 1 ? "1 issue" : $"{count:N0} issues";
 
-    /// <summary>Home screen's Recently Added row badge (docs/superpowers/specs/2026-08-24-home-
-    /// screen-design.md) - "New" when this series' newest issue was actually added recently (real
-    /// signal from <see cref="LastAddedTime"/>, not a hardcoded label), falling back to
-    /// <see cref="IssueCountLabel"/> once it ages out of that window. 7 days is a fresh, reasonable
-    /// default picked for this - no existing "recent" threshold precedent elsewhere in this codebase
-    /// to match (checked before picking a number).</summary>
-    public string RecentAddBadgeLabel =>
-        LastAddedTime is DateTime added && DateTime.UtcNow - added <= TimeSpan.FromDays(7) ? "New" : IssueCountLabel;
+    /// <summary>Home's Recently Added "NEW" ribbon (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md C5, replacing the old
+    /// "New"-instead-of-count badge label): this series' newest issue was added within the last 7 days (the window the old label
+    /// used). The badge now always shows <see cref="IssueCountLabel"/>.</summary>
+    public bool IsRecentlyAdded =>
+        LastAddedTime is DateTime added && DateTime.UtcNow - added <= TimeSpan.FromDays(7);
 
     public int UnreadCount { get; init; }
     public bool HasUnread => UnreadCount > 0;

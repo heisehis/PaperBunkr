@@ -10,7 +10,7 @@ namespace Paperbunkr.Data.Entities;
 /// Deliberately the same shape as <see cref="MediaRelation"/>, reusing <see cref="Entities.RelationType"/>
 /// and <see cref="RelationEvidenceProvider"/> wholesale rather than declaring near-identical
 /// duplicates. Only the creation-UI picker is scoped down to the subset that describes a
-/// relationship between two events (see <c>EventsScreenViewModel</c>) - the enum itself isn't split.
+/// relationship between two events (see the Continuity screen's <c>EventPageViewModel</c>) - the enum itself isn't split.
 /// </summary>
 public class EventRelation
 {

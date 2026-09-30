@@ -33,5 +33,36 @@ public class StoryEvent
     /// <summary>Metron's arc resource id, same posture as <see cref="ComicVineArcId"/>.</summary>
     public string? MetronArcId { get; set; }
 
+    /// <summary>
+    /// The series the Event Map draws as its trunk lane (docs/superpowers/specs/2026-09-25-event-map-design.md §1).
+    /// Null = pick automatically (a member series whose name matches the event's); 0 = never use a spine (relay
+    /// layout); any other value = the user's choice. No FK: a stale id is simply ignored by the map.
+    /// </summary>
+    public int? SpineSeriesId { get; set; }
+
+    /// <summary>
+    /// Who made this event (docs/superpowers/specs/2026-09-27-story-event-resolver-design.md §1): accepted/looked up from provider
+    /// data, or made or renamed by the user. Only two <see cref="StoryEventOrigin.Provider"/> events are ever merged silently.
+    /// </summary>
+    public StoryEventOrigin Origin { get; set; }
+
+    /// <summary>When id completion last ran for this event; null = never (or the last run failed and should be retried).</summary>
+    public DateTime? IdentityCheckedAt { get; set; }
+
+    /// <summary>Fingerprint of the member issue ids when id completion last ran; a different fingerprint means "check again".</summary>
+    public string? IdentityMemberKey { get; set; }
+
+    /// <summary>Set when provider sources disagree about this event's arc ids ("ComicVine arc 4512 vs 6620"); blocks silent merges and puts it in review.</summary>
+    public string? IdentityConflict { get; set; }
+
+    /// <summary>The Wikidata item matched to this event by the smart connector (docs/superpowers/specs/2026-09-27-continuity-map-design.md §1); null = not looked up or nothing found.</summary>
+    public string? WikidataQid { get; set; }
+
+    /// <summary>When the smart connector last looked this event up on Wikidata; rechecked after 30 days.</summary>
+    public DateTime? ChronologyCheckedAt { get; set; }
+
+    /// <summary>Other names this event is known by: merged-away events' names and the other provider's spelling.</summary>
+    public List<StoryEventAlias> Aliases { get; set; } = new();
+
     public List<EventMembership> Members { get; set; } = new();
 }

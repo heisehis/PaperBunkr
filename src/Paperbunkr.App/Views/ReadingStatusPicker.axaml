@@ -10,7 +10,8 @@
              mc:Ignorable="d" d:DesignWidth="220" d:DesignHeight="40"
              x:Class="Paperbunkr.App.Views.ReadingStatusPicker"
              x:DataType="vm:ReadingStatusPickerViewModel"
-             x:Name="Root">
+             x:Name="Root"
+             ClipToBounds="False">
 
     <!--
         Clickable reading-status chip + flyout, embedded in DetailHero and DetailBand

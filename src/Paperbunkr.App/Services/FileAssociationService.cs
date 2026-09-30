@@ -109,6 +109,7 @@ public class FileAssociationService
             Name = formatName,
             ExtensionList = string.Join(", ", extensions),
             IsAssociated = associated,
+            Extensions = extensions,
         };
     }
 

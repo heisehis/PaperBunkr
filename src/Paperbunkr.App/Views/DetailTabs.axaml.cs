@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.VisualTree;
@@ -9,9 +12,54 @@ namespace Paperbunkr.App.Views;
 
 public partial class DetailTabs : UserControl
 {
+    private readonly FocusReclaimer _focus;
+    private DetailTabsViewModel? _viewModel;
+
     public DetailTabs()
     {
         InitializeComponent();
+        _focus = new FocusReclaimer(this, () => _viewModel is { } vm && (vm.IsIssuesTab || vm.IsSpecialsTab), FocusFirstIssue);
+        DataContextChanged += (_, _) => Subscribe();
+        AttachedToVisualTree += (_, _) => _focus.Reclaim();
+    }
+
+    private void Subscribe()
+    {
+        if (_viewModel is { } old)
+        {
+            old.PropertyChanged -= OnViewModelPropertyChanged;
+            old.IssueGroups.CollectionChanged -= OnIssuesChanged;
+            old.Specials.CollectionChanged -= OnIssuesChanged;
+        }
+
+        _viewModel = DataContext as DetailTabsViewModel;
+        if (_viewModel is { } vm)
+        {
+            vm.PropertyChanged += OnViewModelPropertyChanged;
+            vm.IssueGroups.CollectionChanged += OnIssuesChanged;
+            vm.Specials.CollectionChanged += OnIssuesChanged;
+        }
+    }
+
+    private void OnIssuesChanged(object? sender, NotifyCollectionChangedEventArgs e) => _focus.ReclaimIfFocusWithinOrNowhere();
+
+    // A tab or view-mode switch hides the focused tile without detaching it; the switch control itself stays focusable, so only a real loss reclaims.
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(DetailTabsViewModel.ActiveTab) or nameof(DetailTabsViewModel.IssueViewMode))
+        {
+            _focus.ReclaimIfFocusLost();
+        }
+    }
+
+    private void FocusFirstIssue()
+    {
+        var tiles = this.GetVisualDescendants().OfType<Control>()
+            .Where(c => c.Focusable && c.DataContext is IssueCardSample && c.IsEffectivelyVisible && c.IsEffectivelyEnabled)
+            .ToList();
+        var target = tiles.FirstOrDefault(c => c.DataContext is IssueCardSample { IsSelected: true }) ?? tiles.FirstOrDefault();
+        target?.Focus(NavigationMethod.Directional);
+        target?.BringIntoView();
     }
 
     /// <summary>
@@ -62,21 +110,38 @@ public partial class DetailTabs : UserControl
     }
 
     /// <summary>
-    /// Keyboard equivalent of <see cref="OnIssueTilePointerPressed"/> (P5, docs/Paperbunkr-Roadmap.md) -
-    /// Enter/Space toggles the focused tile, Shift held extends the range. Other arrow/Home/End
-    /// keys delegate to <see cref="GridKeyboardNavigation"/> for spatial 2D movement, resolving the
-    /// active view mode's own <c>ItemsControl</c> from the focused tile rather than a fixed name.
+    /// Keyboard equivalent of <see cref="OnIssueTilePointerPressed"/> and <see cref="OnIssueTileDoubleTapped"/> (P5, docs/Paperbunkr-Roadmap.md):
+    /// Enter opens the issue in the reader, plain Space focuses it (drives the hero), Ctrl/Shift+Space toggles it in the bulk-edit selection.
+    /// Shift+arrow extends the range. Other arrow/Home/End keys delegate to <see cref="GridKeyboardNavigation"/> for spatial 2D movement,
+    /// resolving the active view mode's own <c>ItemsControl</c> from the focused tile rather than a fixed name.
     /// </summary>
     private void OnIssueTileKeyDown(object? sender, KeyEventArgs e)
     {
-        if (sender is not Control { DataContext: IssueCardSample issue } control || DataContext is not DetailTabsViewModel viewModel)
+        if (e.Handled || !ReferenceEquals(e.Source, sender) || sender is not Control { DataContext: IssueCardSample issue } control || DataContext is not DetailTabsViewModel viewModel)
         {
             return;
         }
 
-        if (e.Key == Key.Enter || e.Key == Key.Space)
+        bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        if (e.Key == Key.Enter && !shift && !ctrl)
         {
-            viewModel.ToggleIssueSelection(issue, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+            viewModel.OpenIssue(issue);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Space)
+        {
+            if (shift || ctrl)
+            {
+                viewModel.ToggleIssueSelection(issue, shift);
+            }
+            else
+            {
+                viewModel.FocusIssue(issue);
+            }
+
             e.Handled = true;
             return;
         }

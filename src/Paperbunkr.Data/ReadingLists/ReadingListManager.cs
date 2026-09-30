@@ -99,6 +99,72 @@ public static class ReadingListManager
     }
 
     /// <summary>
+    /// Moves <paramref name="itemIds"/> (kept in their current relative order) so they start at <paramref name="targetIndex"/> in the list
+    /// <em>without</em> them - the drag-and-drop and Ctrl+↑/↓ reorder of Edit mode (docs/superpowers/specs/2026-09-28-reading-lists-
+    /// redesign-design.md §8). Clamped; renumbers once and stages one <see cref="ReadingListChangeKind.Reordered"/> announcement. False
+    /// when nothing moved.
+    /// </summary>
+    public static bool MoveItemsTo(PaperbunkrDbContext context, int listId, IReadOnlyCollection<int> itemIds, int targetIndex, LibraryEvents? events = null)
+    {
+        context.MarkReadingListManaged(listId);
+        var items = context.ReadingListItems.Where(i => i.ReadingListId == listId).OrderBy(i => i.SortOrder).ThenBy(i => i.Id).ToList();
+        var moving = items.Where(i => itemIds.Contains(i.Id)).ToList();
+        if (moving.Count == 0)
+        {
+            return false;
+        }
+
+        var rest = items.Where(i => !itemIds.Contains(i.Id)).ToList();
+        rest.InsertRange(Math.Clamp(targetIndex, 0, rest.Count), moving);
+        bool changed = false;
+        for (int i = 0; i < rest.Count; i++)
+        {
+            if (rest[i].SortOrder != i)
+            {
+                changed = true;
+            }
+
+            rest[i].SortOrder = i;
+        }
+
+        if (!changed || rest.Select(i => i.Id).SequenceEqual(items.Select(i => i.Id)))
+        {
+            return false;
+        }
+
+        Touch(context, listId);
+        Stage(context, listId, ReadingListChangeKind.Reordered, Array.Empty<int>(), Array.Empty<int>(), events);
+        return true;
+    }
+
+    /// <summary>
+    /// Sets the chapter (group label) of <paramref name="itemIds"/> - Edit mode's chapter rename, "＋ Chapter" and "Move to chapter"
+    /// (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md §8). Membership doesn't change, so nothing is announced, but the
+    /// list is marked managed so the save backstop stays quiet. Blank means no chapter. Returns how many items changed.
+    /// </summary>
+    public static int SetGroupLabel(PaperbunkrDbContext context, int listId, IReadOnlyCollection<int> itemIds, string? label)
+    {
+        context.MarkReadingListManaged(listId);
+        string? value = string.IsNullOrWhiteSpace(label) ? null : label.Trim();
+        int changed = 0;
+        foreach (var item in context.ReadingListItems.Where(i => i.ReadingListId == listId && itemIds.Contains(i.Id)))
+        {
+            if (item.GroupLabel != value)
+            {
+                item.GroupLabel = value;
+                changed++;
+            }
+        }
+
+        if (changed > 0)
+        {
+            Touch(context, listId);
+        }
+
+        return changed;
+    }
+
+    /// <summary>
     /// Removes every list item that points at <paramref name="issueId"/> - what deleting an issue from
     /// the library needs (the FK is <c>Restrict</c>, so they must go first). Stages one
     /// <see cref="ReadingListChangeKind.Removed"/> announcement <em>per affected list</em>. Deliberately

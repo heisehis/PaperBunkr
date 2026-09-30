@@ -1,0 +1,246 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.Insights.InsightsHistoryView"
+             x:DataType="vm:HistoryTabViewModel"
+             controls:ContextMenuHost.Provider="{Binding}">
+
+    <!--
+        Insights -> History (docs/superpowers/specs/2026-09-29-insights-reading-history-design.md §4, mockup
+        .superpowers/brainstorm/935977-1790583264/content/row-anatomy-d.html). One virtualized ListBox over a flat
+        list of day headers + rows (Avalonia has no native grouped/sticky headers, so headers scroll with the
+        rows). Right-click menus come from HistoryTabViewModel via ContextMenuHost. Colors are Pb* resources
+        only, so skins restyle it live; no row entrance animation (recycled containers would replay it).
+    -->
+    <UserControl.Styles>
+        <Style Selector="ListBox.historyList">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="ListBox.historyList > ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalContentAlignment="Stretch"
+                                      VerticalContentAlignment="Stretch"
+                                      Padding="0" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
+
+        <Style Selector="TextBlock.dayHeader">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="LetterSpacing" Value="0.6" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Margin" Value="4,18,0,6" />
+        </Style>
+        <Style Selector="TextBlock.rowTitle">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.rowSub">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <Style Selector="Button.historyRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="Padding" Value="4,6" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.historyRow:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+        <Style Selector="Grid.gone">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+        <Style Selector="Grid.gone Button.historyRow">
+            <Setter Property="Cursor" Value="Arrow" />
+        </Style>
+        <Style Selector="Grid.gone Button.historyRow:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <Style Selector="Button.historyAction">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <!-- 36x36: the review checklist's desktop minimum for an icon-only hit target. -->
+            <Setter Property="MinWidth" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="9,0" />
+            <Setter Property="Margin" Value="8,0,4,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+
+        <Style Selector="Border.historyTag">
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
+            <Setter Property="Padding" Value="7,1" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.historyTag > TextBlock">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="LetterSpacing" Value="0.4" />
+        </Style>
+        <Style Selector="Border.historyTag.success">
+            <Setter Property="Background" Value="{DynamicResource PbSuccessSoftBrush}" />
+        </Style>
+        <Style Selector="Border.historyTag.success > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbSuccessBrush}" />
+        </Style>
+        <Style Selector="Border.historyTag.warning">
+            <Setter Property="Background" Value="{DynamicResource PbBadgeSoftBrush}" />
+        </Style>
+        <Style Selector="Border.historyTag.warning > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeBrush}" />
+        </Style>
+
+        <Style Selector="Button.pbChip.filterChip">
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="Padding" Value="11,4" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.pbChip.filterChip.active">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <!-- Text on an accent fill: the app's dark on-accent token (as FormControls' spinner hover), not
+                 PbAccentTextBrush, which is accent-coloured text meant for dark surfaces. -->
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- Toolbar: search, type chips, clear all -->
+        <!-- Search takes up to 420px on the left (3* weight so it keeps most of the room when narrow), the chips and
+             Clear all sit on the right. -->
+        <Grid Grid.Row="0" Margin="0,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="420" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox Grid.Column="0" HorizontalAlignment="Stretch"
+                     Text="{Binding SearchText}" PlaceholderText="Search history…"
+                     AutomationProperties.Name="Search history" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
+                <Button Classes="pbChip filterChip" Classes.active="{Binding IsAllFilter}" Content="All"
+                        Command="{Binding SetTypeFilterCommand}" CommandParameter="{x:Static models:HistoryTypeFilter.All}" />
+                <Button Classes="pbChip filterChip" Classes.active="{Binding IsComicsFilter}" Content="Comics"
+                        Command="{Binding SetTypeFilterCommand}" CommandParameter="{x:Static models:HistoryTypeFilter.Comics}" />
+                <Button Classes="pbChip filterChip" Classes.active="{Binding IsMangaFilter}" Content="Manga"
+                        Command="{Binding SetTypeFilterCommand}" CommandParameter="{x:Static models:HistoryTypeFilter.Manga}" />
+                <Button Classes="pbChip filterChip" Classes.active="{Binding IsBooksFilter}" Content="Books"
+                        Command="{Binding SetTypeFilterCommand}" CommandParameter="{x:Static models:HistoryTypeFilter.Books}" />
+            </StackPanel>
+            <Button Grid.Column="3" Classes="pbChip filterChip" MinWidth="36" Command="{Binding ClearAllCommand}"
+                    ToolTip.Tip="Clear all history" AutomationProperties.Name="Clear all history">
+                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeSm}" />
+            </Button>
+        </Grid>
+
+        <Panel Grid.Row="1">
+            <ListBox Classes="historyList" ItemsSource="{Binding Items}" IsVisible="{Binding !IsEmpty}">
+                <ListBox.DataTemplates>
+                    <DataTemplate DataType="models:HistoryDayHeader">
+                        <TextBlock Classes="dayHeader" Text="{Binding Label}" />
+                    </DataTemplate>
+
+                    <DataTemplate DataType="models:HistoryRowItem">
+                        <Grid ColumnDefinitions="*,Auto" Classes.gone="{Binding IsGone}" Margin="0,1,14,1">
+                            <Button Grid.Column="0" Classes="historyRow"
+                                    Command="{Binding $parent[ListBox].((vm:HistoryTabViewModel)DataContext).OpenRowCommand}"
+                                    CommandParameter="{Binding}"
+                                    AutomationProperties.Name="{Binding Title}">
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <Panel Grid.Column="0" Width="32" Height="46">
+                                        <views:CoverThumb CoverKey="{Binding CoverKey}" IsVisible="{Binding ShowIssueCover}" />
+                                        <Border CornerRadius="{DynamicResource PbRadius}" ClipToBounds="True"
+                                                Background="{DynamicResource PbSurface2Brush}" IsVisible="{Binding ShowBookCover}">
+                                            <Image Stretch="UniformToFill"
+                                                   Source="{Binding CoverKey, Converter={x:Static views:BookCoverImageConverter.Instance}}" />
+                                        </Border>
+                                        <!-- "No longer in library": hatched placeholder, no cover to show. -->
+                                        <Border CornerRadius="{DynamicResource PbRadius}" ClipToBounds="True" IsVisible="{Binding IsGone}">
+                                            <Border.Background>
+                                                <LinearGradientBrush SpreadMethod="Repeat" StartPoint="0,0" EndPoint="8,8">
+                                                    <GradientStop Offset="0" Color="{DynamicResource PbSurface3Color}" />
+                                                    <GradientStop Offset="0.5" Color="{DynamicResource PbSurface3Color}" />
+                                                    <GradientStop Offset="0.5" Color="{DynamicResource PbSurface2Color}" />
+                                                    <GradientStop Offset="1" Color="{DynamicResource PbSurface2Color}" />
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                    </Panel>
+                                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Spacing="3">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Classes="rowTitle" Text="{Binding Title}" ToolTip.Tip="{Binding Title}" />
+                                            <Border Grid.Column="1" Classes="historyTag"
+                                                    Classes.success="{Binding IsSuccessTag}" Classes.warning="{Binding IsWarningTag}"
+                                                    IsVisible="{Binding HasTag}">
+                                                <TextBlock Text="{Binding TagText}" />
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock Classes="rowSub" Text="{Binding Subtitle}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+
+                            <Button Grid.Column="1" Classes="historyAction" IsVisible="{Binding ShowPlay}"
+                                    ToolTip.Tip="{Binding PlayTooltip}" AutomationProperties.Name="{Binding PlayTooltip}"
+                                    Command="{Binding $parent[ListBox].((vm:HistoryTabViewModel)DataContext).PlayRowCommand}"
+                                    CommandParameter="{Binding}">
+                                <fi:SymbolIcon Symbol="Play" IconVariant="Filled" FontSize="{StaticResource PbIconSizeXs}" />
+                            </Button>
+                            <Button Grid.Column="1" Classes="historyAction" IsVisible="{Binding ShowOpen}" Content="Open"
+                                    ToolTip.Tip="Open (PDFs don't save a reading position yet)"
+                                    Command="{Binding $parent[ListBox].((vm:HistoryTabViewModel)DataContext).PlayRowCommand}"
+                                    CommandParameter="{Binding}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.DataTemplates>
+            </ListBox>
+
+            <TextBlock IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" TextAlignment="Center"
+                       Text="Nothing read yet — open something from the Library and it'll show up here." />
+            <TextBlock IsVisible="{Binding IsFilteredEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
+                       Text="No history matches your search." />
+        </Panel>
+    </Grid>
+</UserControl>

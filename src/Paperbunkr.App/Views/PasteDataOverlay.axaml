@@ -1,0 +1,78 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="520"
+             x:Class="Paperbunkr.App.Views.PasteDataOverlay"
+             x:DataType="vm:PasteDataScreenViewModel">
+
+    <!-- Paste Data (CE's ComicDataPasteDialog; docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §3): one checkbox per
+         book-owned field, semibold where the copied book has a value, the ticks remembered between uses. -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.groupLabel">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Margin" Value="0,12,0,4" />
+        </Style>
+        <Style Selector="CheckBox.field">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="MinHeight" Value="28" />
+        </Style>
+        <Style Selector="CheckBox.field.defined">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="640" Classes="floatingPanel">
+        <DockPanel Margin="20,18,20,16">
+            <StackPanel DockPanel.Dock="Top">
+                <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,14,0,0" />
+            </StackPanel>
+
+            <DockPanel DockPanel.Dock="Bottom" Margin="0,14,0,0">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="6">
+                    <Button Classes="ghost" FontSize="12.5" Content="Mark defined" Command="{Binding MarkDefinedCommand}"
+                            AutomationProperties.AutomationId="PasteDataMarkDefined" />
+                    <Button Classes="ghost" FontSize="12.5" Content="All" Command="{Binding SelectAllCommand}" />
+                    <Button Classes="ghost" FontSize="12.5" Content="None" Command="{Binding SelectNoneCommand}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <Button Classes="ghost" FontSize="12.5" Content="Cancel" Command="{Binding CancelCommand}" />
+                    <Button Classes="primary" FontSize="12.5" Content="{Binding PasteLabel}" Command="{Binding PasteCommand}"
+                            AutomationProperties.AutomationId="PasteDataConfirm" />
+                </StackPanel>
+            </DockPanel>
+
+            <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding Groups}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:PasteDataFieldGroup">
+                            <StackPanel>
+                                <TextBlock Classes="groupLabel" Text="{Binding Name}" />
+                                <ItemsControl ItemsSource="{Binding Fields}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="3" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:PasteDataFieldOption">
+                                            <CheckBox Classes="field" Classes.defined="{Binding HasValue}"
+                                                      Content="{Binding Label}" IsChecked="{Binding IsChecked}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

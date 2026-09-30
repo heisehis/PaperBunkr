@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -31,7 +33,13 @@ public sealed class HomeCollectionCard
 
     public Bitmap? CoverImage { get; init; }
 
-    public static HomeCollectionCard FromCollection(Collection collection, CollectionCoverHint hint)
+    /// <summary>2x2 collage covers (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md C6), exactly four entries, or null
+    /// to show the single <see cref="CoverImage"/>. Same fill rule as reading lists (<see cref="ReadingListCoverMosaic"/>).</summary>
+    public IReadOnlyList<IImage?>? MosaicCovers { get; init; }
+
+    public bool HasMosaic => MosaicCovers is not null;
+
+    public static HomeCollectionCard FromCollection(Collection collection, CollectionCoverHint hint, IReadOnlyList<CollectionMember>? members = null)
     {
         IBrush coverBrush = SeriesCardSample.CoverBrushFor(collection.Name);
         Bitmap? coverImage = null;
@@ -62,6 +70,33 @@ public sealed class HomeCollectionCard
             AccentColor = collection.AccentColor,
             CoverBrush = coverBrush,
             CoverImage = coverImage,
+            MosaicCovers = hint.ManualPath is null && members is not null ? BuildMosaic(members) : null,
         };
+    }
+
+    /// <summary>A manual cover always wins (checked by the caller); otherwise the members' covers through the shared fill rule.
+    /// Null when the rule says "single cover" (fewer than three distinct covers).</summary>
+    private static IReadOnlyList<IImage?>? BuildMosaic(IReadOnlyList<CollectionMember> members)
+    {
+        var imagesByKey = new Dictionary<string, IImage?>();
+        var keys = new List<string>();
+        foreach (var member in members)
+        {
+            var tile = LibraryTile.FromMember(member);
+            if (tile.CoverKey is not string key || imagesByKey.ContainsKey(key))
+            {
+                continue;
+            }
+
+            imagesByKey[key] = tile.CoverImage ?? CoverImageCache.Get(key);
+            keys.Add(key);
+            if (keys.Count == 4)
+            {
+                break;
+            }
+        }
+
+        var picked = ReadingListCoverMosaic.PickCoverKeys(keys);
+        return picked.Count == 4 ? picked.Select(k => imagesByKey[k]).ToList() : null;
     }
 }

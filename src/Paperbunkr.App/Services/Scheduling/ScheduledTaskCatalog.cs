@@ -27,6 +27,7 @@ public static class ScheduledTaskCatalog
     public const string VerifyCovers = "verify-covers";
     public const string GenerateCovers = "generate-covers";
     public const string StoryEventAutodetect = "story-event-autodetect";
+    public const string StoryEventIdentity = "story-event-identity";
     public const string ContinuityWikidataAutodetect = "continuity-wikidata-autodetect";
     public const string FollowArcs = "follow-arcs";
     public const string ComicVineScrape = "comicvine-scrape";
@@ -35,6 +36,7 @@ public static class ScheduledTaskCatalog
     public const string LibrarySnapshot = "library-snapshot";
     public const string GoalPaceCheck = "goal-pace-check";
     public const string DetectAdPages = "detect-ad-pages";
+    public const string GcdMatch = "gcd-match";
 
     public static IReadOnlyList<ScheduledTaskDescriptor> All { get; } = Build();
 
@@ -153,6 +155,25 @@ public static class ScheduledTaskCatalog
                 // (Interlocked-guarded), so that second call is a safe no-op.
                 var link = verified.Count > 0 ? new ActivityLink(ActivityLinkKind.StoryEventsScreen) : null;
                 handle.Succeed(summary, link);
+                return summary;
+            }),
+
+        // "Check story events": the Story Event resolver (docs/superpowers/specs/2026-09-27-story-event-resolver-design.md §4) - id
+        // completion in batches, then silent merges - followed by the smart connector (docs/superpowers/specs/2026-09-27-continuity-map-
+        // design.md §2), which only links events once duplicates are merged. A brand-new interval task has no last run, so this also
+        // runs on the first scheduler check after upgrading.
+        new ScheduledTaskDescriptor(
+            StoryEventIdentity, "Check story events",
+            "Looks up each story event's ComicVine and Metron arc ids, merges events that turn out to be the same arc (the two sites " +
+            "often spell one arc differently), then works out which events come before which (prequels, sequels, continuations) " +
+            "from your library and Wikidata. Unsure matches wait under Possible duplicates on the Story Events screen.",
+            ActivityJobKind.SyncMetadata, Priority: 17, SchedulerResourceClass.Network,
+            TimeSpan.FromDays(7), DefaultEnabled: true, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                string summary = await StoryEventChecks.RunAsync(
+                    new Progress<(int Done, int Total)>(p => handle.Report(p.Done, p.Total, "Checking story events")), ct);
+                handle.Succeed(summary, new ActivityLink(ActivityLinkKind.StoryEventsScreen));
                 return summary;
             }),
 
@@ -355,6 +376,17 @@ public static class ScheduledTaskCatalog
                     ? "No new ad pages found"
                     : $"Found {result.ProposalsCreated} possible ad page{Plural(result.ProposalsCreated)} - review them in Library Health";
             }),
+
+        // Grand Comics Database matching (docs/superpowers/specs/2026-09-27-gcd-data-design.md §3-§4): local except Metron's GCD ids for
+        // Metron-scraped series (a few dozen lookups a run at low priority). Does nothing until the data is downloaded in Preferences →
+        // Connections, which also runs this straight after installing.
+        new ScheduledTaskDescriptor(
+            GcdMatch, "Match series to GCD",
+            "Links your series and issues to the Grand Comics Database data (downloaded under Preferences → Connections) so continued " +
+            "series are linked and story events are ordered by on-sale dates. Uses Metron's GCD ids when you have a Metron login.",
+            ActivityJobKind.SyncMetadata, Priority: 18, SchedulerResourceClass.Network,
+            TimeSpan.FromDays(7), DefaultEnabled: true, ScheduleMode.Interval,
+            static (handle, ct) => Task.Run(() => Paperbunkr.App.Services.Gcd.GcdMatching.RunAsync(() => PaperbunkrDb.CreateContext(), handle, ct), ct)),
     };
 
     public static ScheduledTaskDescriptor? Find(string id)

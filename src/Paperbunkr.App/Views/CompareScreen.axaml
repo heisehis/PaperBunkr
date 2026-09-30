@@ -102,7 +102,7 @@
                     <TextBlock Text="A" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
                     <TextBlock Text="{Binding FactsA.ResolutionLabel, StringFormat='Page size: {0}'}" FontSize="12" />
                     <TextBlock FontSize="12">
-                        <Run Text="{Binding FactsA.SizeLabel, StringFormat='File: {0}'}" /><Run Text="  ·  " /><Run Text="{Binding FactsA.Format}" /><Run Text="  ·  " /><Run Text="{Binding FactsA.PageCount, StringFormat='{}{0} pages'}" />
+                        <Run Text="{Binding FactsA.SizeLabel, StringFormat='File: {0}', Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding FactsA.Format}" /><Run Text="  ·  " /><Run Text="{Binding FactsA.PageCount, StringFormat='{}{0} pages', Mode=OneWay}" />
                     </TextBlock>
                     <TextBlock Text="{Binding FactsA.BytesPerPageLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
                     <TextBlock Text="{Binding BadgesA}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentTextBrush}" />
@@ -111,7 +111,7 @@
                     <TextBlock Text="B" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
                     <TextBlock Text="{Binding FactsB.ResolutionLabel, StringFormat='Page size: {0}'}" FontSize="12" />
                     <TextBlock FontSize="12">
-                        <Run Text="{Binding FactsB.SizeLabel, StringFormat='File: {0}'}" /><Run Text="  ·  " /><Run Text="{Binding FactsB.Format}" /><Run Text="  ·  " /><Run Text="{Binding FactsB.PageCount, StringFormat='{}{0} pages'}" />
+                        <Run Text="{Binding FactsB.SizeLabel, StringFormat='File: {0}', Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding FactsB.Format}" /><Run Text="  ·  " /><Run Text="{Binding FactsB.PageCount, StringFormat='{}{0} pages', Mode=OneWay}" />
                     </TextBlock>
                     <TextBlock Text="{Binding FactsB.BytesPerPageLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
                     <TextBlock Text="{Binding BadgesB}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentTextBrush}" />

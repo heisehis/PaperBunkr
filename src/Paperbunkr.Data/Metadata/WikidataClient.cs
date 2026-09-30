@@ -25,7 +25,21 @@ public sealed record WikidataEntity(
     string? FromNarrativeUniverseQid,
     string? TakesPlaceInFictionalUniverseQid,
     IReadOnlyList<string> PublisherQids,
-    IReadOnlyList<string> GenreQids);
+    IReadOnlyList<string> GenreQids,
+    IReadOnlyList<string>? FollowsQids = null,
+    IReadOnlyList<string>? FollowedByQids = null,
+    IReadOnlyList<string>? ComicVineIds = null);
+
+/// <summary>What the smart connector asks Wikidata (docs/superpowers/specs/2026-09-27-continuity-map-design.md §2) - a seam so tests use a fake.</summary>
+public interface IWikidataLookup
+{
+    Task<IReadOnlyList<WikidataSearchResult>> SearchEntitiesAsync(string name, CancellationToken cancellationToken);
+
+    Task<WikidataEntity?> GetEntityAsync(string qid, CancellationToken cancellationToken);
+
+    /// <summary>Items whose Comic Vine ID (P5905) equals <paramref name="comicVineId"/>, e.g. "4045-56000" for a story arc.</summary>
+    Task<IReadOnlyList<string>> FindByComicVineIdAsync(string comicVineId, CancellationToken cancellationToken);
+}
 
 /// <summary>
 /// Thin wrapper over Wikidata's public `wbsearchentities`/EntityData APIs (docs/superpowers/specs/
@@ -34,7 +48,7 @@ public sealed record WikidataEntity(
 /// <see cref="AniListMetadataProvider"/>'s error-handling shape: a failed call returns null/empty
 /// rather than throwing, since there is no proactive "is online" check anywhere in this app.
 /// </summary>
-internal sealed class WikidataClient
+internal sealed class WikidataClient : IWikidataLookup
 {
     private const string ApiUrl = "https://www.wikidata.org/w/api.php";
     private const string EntityDataUrlTemplate = "https://www.wikidata.org/wiki/Special:EntityData/{0}.json";
@@ -91,7 +105,31 @@ internal sealed class WikidataClient
         string? takesPlaceIn = ReadItemIds(claims, "P1434").FirstOrDefault();
         var publishers = ReadItemIds(claims, "P123");
         var genres = ReadItemIds(claims, "P136");
-        return new WikidataEntity(qid, label, description, instanceOf, fromNarrativeUniverse, takesPlaceIn, publishers, genres);
+        return new WikidataEntity(qid, label, description, instanceOf, fromNarrativeUniverse, takesPlaceIn, publishers, genres,
+            ReadItemIds(claims, "P155"), ReadItemIds(claims, "P156"), ReadStrings(claims, "P5905"));
+    }
+
+    public async Task<IReadOnlyList<string>> FindByComicVineIdAsync(string comicVineId, CancellationToken cancellationToken)
+    {
+        // CirrusSearch's haswbstatement keyword matches an exact statement value.
+        string url = $"{ApiUrl}?action=query&list=search&srsearch={Uri.EscapeDataString($"haswbstatement:P5905={comicVineId}")}&srlimit=5&format=json";
+        var root = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
+        var hits = root?["query"]?["search"]?.AsArray() ?? new JsonArray();
+        return hits.Select(h => h?["title"]?.GetValue<string>()).OfType<string>().ToList();
+    }
+
+    private static IReadOnlyList<string> ReadStrings(JsonNode claims, string property)
+    {
+        var array = claims[property]?.AsArray();
+        if (array is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        return array.Select(c => c?["mainsnak"]?["datavalue"]?["value"])
+            .OfType<JsonValue>()
+            .Select(v => v.GetValue<string>())
+            .ToList();
     }
 
     private static IReadOnlyList<string> ReadItemIds(JsonNode claims, string property)

@@ -338,6 +338,7 @@
                  pre-approved fallback since precise zoom/fit-mode geometry isn't cheaply available
                  from a custom-drawn Control. -->
             <views:PageCanvas x:Name="PageCanvasControl"
+                              FocusAdorner="{x:Null}"
                               controls:SharedElement.Key="{Binding SharedElementKey}"
                               controls:SharedElement.ImageSource="{Binding CurrentPage}"
                               Page="{Binding CurrentPage}"

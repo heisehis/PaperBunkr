@@ -27,7 +27,7 @@ public enum IssueTileGlyph
 /// <summary>
 /// The single read-state rule behind every read-state glyph (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md
 /// #20): Read beats InProgress beats New beats Unread. "Recently added" is the same 7-day window
-/// <c>SeriesCardSample.RecentAddBadgeLabel</c> uses.
+/// <c>SeriesCardSample.IsRecentlyAdded</c> uses.
 /// </summary>
 public static class IssueTileGlyphs
 {

@@ -208,7 +208,7 @@
                                     <ItemsControl ItemsSource="{Binding Chapters}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="models:ChapterRowSample">
-                                                <Button Classes="chapterRow" Classes.read="{Binding IsRead}"
+                                                <Button Classes="chapterRow" Classes.read="{Binding IsRead}" KeyDown="OnChapterKeyDown"
                                                         Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).OpenChapterCommand}"
                                                         CommandParameter="{Binding}">
                                                     <Grid>

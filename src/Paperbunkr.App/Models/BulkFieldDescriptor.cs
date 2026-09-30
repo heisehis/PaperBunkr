@@ -76,6 +76,14 @@ public static class BulkFieldRegistry
     /// Throws on an unknown label (a programming error - every caller passes a compile-time-known
     /// literal) rather than returning null and deferring the failure to a confusing NullReferenceException.
     /// </summary>
+    /// <summary>The three fields that write through to the owning <see cref="Series"/> rather than the issue itself.</summary>
+    public static bool IsSeriesOwned(BulkFieldDescriptor field) => field.Label is ContentTypeLabel or "Status" or "Reading Status";
+
+    /// <summary>Every field that belongs to the book itself - what Library's Paste Data offers and Clear Data resets
+    /// (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §2/§3): a Paperbunkr series is its own record, not a text field
+    /// on each book, so pasting or clearing one book's data never rewrites its whole series.</summary>
+    public static IEnumerable<BulkFieldDescriptor> IssueOwned => All.Where(f => !IsSeriesOwned(f));
+
     public static BulkFieldDescriptor Find(string label) =>
         All.FirstOrDefault(f => f.Label == label)
         ?? throw new ArgumentException($"No BulkFieldDescriptor with label '{label}'.", nameof(label));

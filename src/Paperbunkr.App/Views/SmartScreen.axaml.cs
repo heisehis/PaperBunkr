@@ -1,3 +1,6 @@
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -10,6 +13,9 @@ namespace Paperbunkr.App.Views;
 public partial class SmartScreen : UserControl
 {
     private readonly TypeAheadSearch.Buffer _typeAheadBuffer = new();
+    private readonly FocusReclaimer _focus;
+    private SmartScreenViewModel? _viewModel;
+    private object? _focusBeforeGroupedReview;
 
     public SmartScreen()
     {
@@ -19,6 +25,111 @@ public partial class SmartScreen : UserControl
         // the clear-selection callback is a no-op.
         AddHandler(TextInputEvent, OnScreenTextInput, RoutingStrategies.Tunnel);
         AddHandler(KeyDownEvent, OnScreenKeyDownForBackspace, RoutingStrategies.Tunnel);
+
+        // Keyboard reach: the three result grids swap by IsVisible and are cleared-and-refilled in place on every list switch or run, which
+        // detaches whichever card held focus. See FocusReclaimer.
+        _focus = new FocusReclaimer(this, () => _viewModel is { HasResults: true }, FocusFirstResult);
+        KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
+        DataContextChanged += (_, _) =>
+        {
+            Subscribe(_viewModel, subscribe: false);
+            _viewModel = DataContext as SmartScreenViewModel;
+            Subscribe(_viewModel, subscribe: true);
+        };
+        AttachedToVisualTree += (_, _) => _focus.Reclaim();
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty && IsVisible)
+            {
+                _focus.Reclaim();
+            }
+        };
+    }
+
+    private void Subscribe(SmartScreenViewModel? vm, bool subscribe)
+    {
+        if (vm is null)
+        {
+            return;
+        }
+
+        foreach (INotifyCollectionChanged collection in new INotifyCollectionChanged[] { vm.Results, vm.SeriesResults, vm.NovelResults })
+        {
+            if (subscribe)
+            {
+                collection.CollectionChanged += OnResultsChanged;
+            }
+            else
+            {
+                collection.CollectionChanged -= OnResultsChanged;
+            }
+        }
+
+        if (subscribe)
+        {
+            vm.PropertyChanged += OnViewModelPropertyChanged;
+        }
+        else
+        {
+            vm.PropertyChanged -= OnViewModelPropertyChanged;
+        }
+    }
+
+    private void OnResultsChanged(object? sender, NotifyCollectionChangedEventArgs e) => _focus.ReclaimIfFocusWithinOrNowhere();
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(SmartScreenViewModel.IsGroupedReviewOpen) || _viewModel is null)
+        {
+            return;
+        }
+
+        // The Grouped Review overlay is a modal: focus goes into it when it opens and back to where it was when it closes.
+        if (_viewModel.IsGroupedReviewOpen)
+        {
+            _focusBeforeGroupedReview = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+            Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => FocusReclaimer.FocusFirstButton(GroupedReviewPanel), Avalonia.Threading.DispatcherPriority.Loaded);
+        }
+        else
+        {
+            var previous = _focusBeforeGroupedReview as InputElement;
+            _focusBeforeGroupedReview = null;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (previous is { IsEffectivelyVisible: true } && TopLevel.GetTopLevel(previous) is not null)
+                {
+                    previous.Focus(NavigationMethod.Directional);
+                }
+                else
+                {
+                    _focus.Reclaim();
+                }
+            }, Avalonia.Threading.DispatcherPriority.Loaded);
+        }
+    }
+
+    private void FocusFirstResult()
+    {
+        ItemsControl? list = new[] { ResultsList, SeriesResultsList, NovelResultsList }.FirstOrDefault(l => l.IsEffectivelyVisible && l.ItemCount > 0);
+        if (list is null)
+        {
+            return;
+        }
+
+        if (!GridFocusHelper.FocusItem(list, list.Items[0]!))
+        {
+            FocusReclaimer.FocusFirstButton(list);
+        }
+    }
+
+    private void OnGroupedReviewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None && _viewModel is not null)
+        {
+            _viewModel.CloseGroupedReviewCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 
     private bool HandleTypeAhead(char typedChar, object? source)

@@ -49,31 +49,50 @@
              redesign-design.md) - ToggleSwitch for consistency with every other boolean setting in
              Preferences (this was the one remaining CheckBox), plus a generic document icon (per-
              format branding isn't feasible - see the design doc's investigation). -->
+        <!-- File Explorer cover thumbnails (docs/superpowers/specs/2026-09-30-explorer-cover-thumbnails-design.md,
+             layout B): each file-type row carries two independent Windows settings - "Open with" (the association
+             above) and "Thumbnail". The row itself is no longer one big button; each switch is its own control.
+             Types the thumbnail handler doesn't draw show a faint dash (decision 19). -->
         <StackPanel Tag="advanced.fileAssociation">
-            <TextBlock Classes="settingsGroupCaption" Text="FILE ASSOCIATION" />
+            <TextBlock Classes="settingsGroupCaption" Text="FILE TYPES" />
+            <Grid ColumnDefinitions="Auto,*,76,76" Margin="10,0,10,4">
+                <TextBlock Grid.Column="2" Text="Open with" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                <TextBlock Grid.Column="3" Text="Thumbnail" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+            </Grid>
             <ItemsControl x:Name="FileAssociationsList" ItemsSource="{Binding FileAssociations}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="models:FileAssociationSummary">
-                        <Button Classes="sideItemButton" HorizontalAlignment="Stretch"
-                                Command="{Binding #FileAssociationsList.((vm:PreferencesScreenViewModel)DataContext).ToggleFileAssociationCommand}"
-                                CommandParameter="{Binding}">
-                            <Grid ColumnDefinitions="Auto,*,Auto">
-                                <Border Grid.Column="0" Width="26" Height="26" CornerRadius="7" Background="{DynamicResource PbSurface3Brush}">
-                                    <fi:SymbolIcon Symbol="Document" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Border>
-                                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
-                                    <TextBlock Text="{Binding ExtensionList}" FontSize="11" FontFamily="Consolas,monospace"
-                                               Foreground="{DynamicResource PbTextFaintBrush}" />
-                                </StackPanel>
-                                <ToggleSwitch Grid.Column="2" IsChecked="{Binding IsAssociated, Mode=OneWay}" IsHitTestVisible="False"
-                                              OnContent="{x:Null}" OffContent="{x:Null}" />
-                            </Grid>
-                        </Button>
+                        <Grid ColumnDefinitions="Auto,*,76,76" Margin="10,5">
+                            <Border Grid.Column="0" Width="26" Height="26" CornerRadius="7" Background="{DynamicResource PbSurface3Brush}" VerticalAlignment="Center">
+                                <fi:SymbolIcon Symbol="Document" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                                <TextBlock Text="{Binding ExtensionList}" FontSize="11" FontFamily="Consolas,monospace"
+                                           Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBlock Text="{Binding ThumbnailOwnerLabel}" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}"
+                                           IsVisible="{Binding HasThumbnailOwner}" />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          IsChecked="{Binding IsAssociated, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                          Command="{Binding #FileAssociationsList.((vm:PreferencesScreenViewModel)DataContext).ToggleFileAssociationCommand}"
+                                          CommandParameter="{Binding}"
+                                          AutomationProperties.Name="{Binding Name, StringFormat='Open {0} files with Paperbunkr'}" />
+                            <ToggleSwitch Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding HasThumbnail}"
+                                          IsChecked="{Binding IsThumbnailEnabled, Mode=OneWay}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                          Command="{Binding #FileAssociationsList.((vm:PreferencesScreenViewModel)DataContext).ToggleThumbnailCommand}"
+                                          CommandParameter="{Binding}"
+                                          AutomationProperties.Name="{Binding Name, StringFormat='Show {0} covers as File Explorer thumbnails'}" />
+                            <TextBlock Grid.Column="3" Text="—" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasThumbnail}"
+                                       ToolTip.Tip="Paperbunkr doesn't draw File Explorer thumbnails for this type" />
+                        </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <TextBlock Margin="10,6,10,0" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                       Text="Thumbnail shows each file's cover in File Explorer, even outside your library. Windows keeps thumbnails it has already made until a file changes; Disk Cleanup → Thumbnails refreshes them straight away." />
         </StackPanel>
 
         <StackPanel Tag="advanced.fileMetadata">

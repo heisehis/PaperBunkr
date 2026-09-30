@@ -7,7 +7,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="180"
              x:Class="Paperbunkr.App.Views.PosterRail"
-             x:Name="u">
+             x:Name="u"
+             ClipToBounds="False">
 
     <!--
         A titled horizontal cover rail (docs/superpowers/specs/2026-08-28-detail-screens-streaming-
@@ -64,8 +65,10 @@
                        VerticalAlignment="Center" IsVisible="{Binding #u.ContextLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
         </StackPanel>
 
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-            <StackPanel Orientation="Horizontal" Spacing="8">
+        <!-- The scroller reaches 8px past the rail and its content steps back in, so the first/last card's focus ring has room inside the
+             scroller's clip while the cards stay where they were (same as Home's shelves). -->
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8">
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="8">
                 <ItemsControl ItemsSource="{Binding #u.ItemsSource}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="8" /></ItemsPanelTemplate>

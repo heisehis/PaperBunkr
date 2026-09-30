@@ -142,7 +142,9 @@ public static class GridKeyboardNavigation
     {
         if (itemsControl.ItemsPanelRoot is INavigableContainer navigable)
         {
-            return TryHandleArrowKeyVirtualized(navigable, fromControl, key, onNavigated);
+            // The panel looks the starting point up among its own children, so hand it the item container, not the control inside it
+            // (a plain WrapPanel otherwise can't find it and jumps to its first child).
+            return TryHandleArrowKeyVirtualized(navigable, ContainerOf(fromControl, itemsControl.ItemsPanelRoot) ?? fromControl, key, onNavigated);
         }
 
         GridNavigationDirection? direction = key switch
@@ -180,7 +182,8 @@ public static class GridKeyboardNavigation
         onNavigated?.Invoke(target);
         if (itemsControl.ContainerFromItem(target) is Control targetContainer)
         {
-            targetContainer.Focus();
+            // Same trap as the virtualized path below: with a DataTemplate the container is a ContentPresenter, which can't take focus.
+            FocusInside(targetContainer);
         }
 
         return true;
@@ -214,15 +217,42 @@ public static class GridKeyboardNavigation
         // all. Walk into the returned container to find the real focusable element instead.
         if (navigable.GetControl(direction.Value, fromControl, wrap: false) is Control target)
         {
-            var focusable = target.Focusable ? target : target.GetVisualDescendants().OfType<InputElement>().FirstOrDefault(c => c.Focusable);
+            var focusable = FocusableIn(target);
             if (onNavigated is not null && (focusable?.DataContext ?? target.DataContext) is { } dataContext)
             {
                 onNavigated(dataContext);
             }
 
-            focusable?.Focus();
+            FocusInside(target);
         }
 
         return true;
+    }
+
+    private static Control? ContainerOf(Control control, Panel panel)
+    {
+        for (Visual? v = control; v is not null; v = v.GetVisualParent())
+        {
+            if (ReferenceEquals(v.GetVisualParent(), panel))
+            {
+                return v as Control;
+            }
+        }
+
+        return null;
+    }
+
+    private static Control? FocusableIn(Control container) =>
+        container.Focusable ? container : container.GetVisualDescendants().OfType<Control>().FirstOrDefault(c => c.Focusable && c.IsEffectivelyEnabled);
+
+    /// <summary>Focuses the focusable control in (or at) <paramref name="container"/> as a keyboard move, so its focus ring shows, and scrolls
+    /// it into view with room for that ring.</summary>
+    private static void FocusInside(Control container)
+    {
+        if (FocusableIn(container) is { } focusable)
+        {
+            focusable.Focus(NavigationMethod.Directional);
+            FocusReclaimer.BringIntoViewWithRing(focusable);
+        }
     }
 }

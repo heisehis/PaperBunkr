@@ -1,6 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="300"
@@ -20,7 +22,22 @@
                 </StackPanel>
                 <StackPanel Spacing="6" IsVisible="{Binding IsContinuity}">
                     <TextBlock Text="PUBLISHER" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
-                    <TextBox Text="{Binding Publisher}" Watermark="optional" />
+                    <!-- A suggestion box of the library's publishers, with the chosen one's logo (docs/superpowers/specs/
+                         2026-09-28-continuity-screen-redesign-design.md, R9). Not strict: a new publisher can still be typed. -->
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                        <controls:BrandMark Grid.Column="0" Family="Publisher" Value="{Binding Publisher}" MarkSize="20" MaxMarkWidth="60" ShowText="False" EnsureContrast="True"
+                                            VerticalAlignment="Center">
+                            <controls:BrandMark.IsVisible>
+                                <!-- only a real logo: a publisher with none would fall back to plain text, which reads as a stray mark here -->
+                                <MultiBinding Converter="{x:Static conv:BoolConverters.Or}">
+                                    <Binding Path="IsImage" RelativeSource="{RelativeSource Self}" />
+                                    <Binding Path="IsRaster" RelativeSource="{RelativeSource Self}" />
+                                </MultiBinding>
+                            </controls:BrandMark.IsVisible>
+                        </controls:BrandMark>
+                        <controls:SuggestBox Grid.Column="1" Text="{Binding Publisher}" Suggestions="{Binding PublisherSuggestions}"
+                                             Watermark="optional" AutomationProperties.Name="Publisher" />
+                    </Grid>
                 </StackPanel>
                 <StackPanel Spacing="6">
                     <TextBlock Text="DESCRIPTION" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />

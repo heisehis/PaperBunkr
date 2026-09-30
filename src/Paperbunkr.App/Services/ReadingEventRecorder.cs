@@ -1,7 +1,10 @@
 using System;
 using System.Linq;
+using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.Services.History;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Services;
 
@@ -88,11 +91,65 @@ public sealed class ReadingEventRecorder : IReadingEventRecorder
         ReadingEventRecorded?.Invoke();
     }
 
+    public void HideFromHistory(ReadingHistoryGroupKey? group)
+    {
+        using var context = _contextFactory();
+        var rows = context.ReadingEvents.Where(e => !e.HiddenFromHistory);
+        rows = group switch
+        {
+            null => rows,
+            { Kind: ReadingHistoryGroupKind.ComicSeries } => rows.Where(e => e.ItemType == ReadingItemType.Comic && e.SeriesId == group.Id),
+            { Kind: ReadingHistoryGroupKind.BookSeries } => rows.Where(e => e.ItemType == ReadingItemType.Novel && e.SeriesId == group.Id),
+            _ => rows.Where(e => e.ItemType == ReadingItemType.Novel && e.SeriesId == null && e.ItemId == group.Id),
+        };
+
+        rows.ExecuteUpdate(setters => setters.SetProperty(e => e.HiddenFromHistory, true));
+        ReadingEventRecorded?.Invoke();
+    }
+
     private void Insert(ReadingEvent readingEvent)
     {
         using var context = _contextFactory();
+        FillHistorySnapshot(context, readingEvent);
         context.ReadingEvents.Add(readingEvent);
         context.SaveChanges();
         ReadingEventRecorded?.Invoke();
+    }
+
+    /// <summary>
+    /// Freezes the History tab's display names onto the row (docs/superpowers/specs/2026-09-29-insights-
+    /// reading-history-design.md §1) so a "no longer in library" row can still be named after the item is
+    /// deleted. Best-effort: a failed or empty lookup leaves both null and never blocks the insert.
+    /// </summary>
+    private static void FillHistorySnapshot(PaperbunkrDbContext context, ReadingEvent readingEvent)
+    {
+        try
+        {
+            if (readingEvent.ItemType == ReadingItemType.Comic)
+            {
+                var issue = context.Issues.IgnoreQueryFilters().AsNoTracking()
+                    .Include(i => i.Series)
+                    .Include(i => i.MetadataProposals)
+                    .FirstOrDefault(i => i.Id == readingEvent.ItemId);
+                if (issue is not null)
+                {
+                    readingEvent.SeriesTitle = issue.Series?.Name;
+                    readingEvent.ItemLabel = ReadingHistoryLabels.IssueLabel(issue);
+                }
+            }
+            else
+            {
+                var book = context.Books.AsNoTracking().Include(b => b.BookSeries).FirstOrDefault(b => b.Id == readingEvent.ItemId);
+                if (book is not null)
+                {
+                    readingEvent.SeriesTitle = ReadingHistoryLabels.BookGroupTitle(book, book.BookSeries);
+                    readingEvent.ItemLabel = ReadingHistoryLabels.BookLabel(book, book.BookSeries);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Names are a display nicety for the History tab - never let them cost the reading event itself.
+        }
     }
 }

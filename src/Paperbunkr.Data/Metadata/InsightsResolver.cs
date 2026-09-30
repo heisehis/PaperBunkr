@@ -94,13 +94,15 @@ public static class InsightsResolver
             int read = group.Count(i => i.HasBeenRead());
             int total = group.Count();
             string subtitle = $"{read} of {total} read";
+            bool stalled = false;
             if (touch != DateTime.MinValue && touch < staleCutoff)
             {
+                stalled = true;
                 int weeks = Math.Max(1, (int)Math.Round((nowUtc - touch).TotalDays / 7.0));
                 subtitle += $" · dropped off {weeks}wk ago";
             }
 
-            result.Add((new AttentionSeries(series.Id, series.Name, subtitle, resume.Id), touch));
+            result.Add((new AttentionSeries(series.Id, series.Name, subtitle, resume.Id, stalled), touch));
         }
 
         return result
@@ -258,6 +260,8 @@ public sealed record InsightsSnapshot(
     IReadOnlyList<AttentionSeries> DiveIn,
     IReadOnlyList<CollectionGap> Gaps);
 
-public sealed record AttentionSeries(int SeriesId, string SeriesName, string Subtitle, int? ResumeIssueId);
+/// <param name="IsStalled">Continue only: last touched more than <see cref="InsightsResolver.StalledDays"/> days ago (Home's
+/// Needs Attention card, docs/superpowers/specs/2026-09-28-home-improvements-design.md I3).</param>
+public sealed record AttentionSeries(int SeriesId, string SeriesName, string Subtitle, int? ResumeIssueId, bool IsStalled = false);
 
 public sealed record CollectionGap(int SeriesId, string SeriesName, IReadOnlyList<int> MissingNumbers);

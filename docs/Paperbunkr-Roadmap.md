@@ -690,7 +690,9 @@ curated-browse-design.md`. **Not yet committed as of this write-up** — still s
 changes in this working tree.
 
 ### Remote/server library sharing
-> **Built 2026-09-20 on branch `feat/remote-library-sharing` (unmerged, not verified on-screen).** Design + plan:
+> Built 2026-09-20 on branch `feat/remote-library-sharing`. ~~unmerged, not verified on-screen~~ —
+> **merged to master 2026-09-21** (`dcaef82`, `v0.6.9.0`) **and confirmed on-screen by the user**;
+> branch/worktree removed (per `paperbunkr-todo.md`'s own session note, confirmed 2026-09-29). Design + plan:
 > `docs/superpowers/specs/2026-09-19-remote-library-sharing-{design,plan}.md`; the session note in `paperbunkr-todo.md` lists what was verified and the open follow-ups.
 > The paragraph below is the original pre-design note, kept for history.
 
@@ -2229,7 +2231,11 @@ continuity/metadata CE never had), 9 (biggest quality-of-life win for scanned li
 (cheapest, immediate for manga readers), then 4, 5, 10, 16, 19 as cheap flow wins.
 
 ### Insights pitch (unscoped, pitched 2026-09-21)
-Not started — needs its own brainstorm → design spec before implementation. Checked against the
+~~Not started~~ — **5 of 10 built** via the 2026-09-22 decomposition (see "Insights pitch, decomposed
+2026-09-22" in `paperbunkr-todo.md`, confirmed 2026-09-29): #1 year-in-review recap, #2 reading
+goals/challenges, #4 backlog burn-down (as the nightly-snapshot foundation), #6 period-over-period
+deltas, #9 recommendations surface. **Still not started:** #3 reading rhythm, #5 drop-off analysis,
+#7 creator/publisher affinity, #8 storage/format breakdown, #10 milestones timeline. Checked against the
 shipped Insights/Stats v2 sections above: none of these repeat the attention cards, streaks, pace
 chart, activity heatmap, library growth, breakdowns, top genres/creators, or highlights row.
 "You vs Community" stays deferred (needs adapter work to populate `ExternalRating`). New cards
@@ -2267,6 +2273,104 @@ control rendered blank from a self-referencing element binding).
 pitch; #3 shares its session-duration data with the comic reader session-stats HUD (item 17).
 *Suggested starting order (not a commitment):* 6 (cheapest), 1 and 2 (most delight), and item 4's
 snapshot table (foundation for several trend features).
+
+### Reading List / CBL Manager pitch (unscoped, pitched 2026-09-28)
+**Designed and built 2026-09-28**, then the whole screen **redesigned** the same day (`2026-09-28-reading-lists-redesign-design.md`); all uncommitted and not yet seen in the running app (see each spec's "Implementation notes"): spec A
+`docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md` (#2, #5 + CSV export, #6, #7) and spec B
+`…-build-from-events-design.md` (#10, #12, a grouping fix). #1 **dropped** (the GCD dump has only 582 story arcs and the extract
+has no arc tables). #4 **already existed** locally (`ReadingListItem.Notes`); "visible to remote viewers" moved to the
+remote-sharing follow-ups, since remote viewers see no reading lists at all. Original pitch text follows. Selected from a 15-idea
+pitch (2026-09-28); item numbers below are kept from that original pitch for traceability, so the
+list is non-sequential — items 3, 8, 9, 11, and 13–15 were not selected and are not carried over.
+Checked against what's shipped: the 6-source arc lookup + curated browsing, tag filtering, bulk
+select, drag-drop import, story-event linking, and the cover-mosaic display
+(`ShowCoverMosaic`/`CoverMosaicColumns` in `ReadingScreenViewModel.cs`) all already exist — none of
+these repeat that surface. Per the standing rule, items 1, 10, and 12 have no obvious CE precedent
+and need a look at `_reference/ComicRackCE` before any spec, since CBL itself is a CE-derived format
+and CE's own list tooling should be checked first.
+
+1. **GCD as a 7th arc source** — the GCD extract tool ([[project_paperbunkr_gcd_data]]) is built but
+   unwired into CBL Manager's arc lookup. Adding it as a source gives an offline-capable option
+   alongside the six web-scraped ones.
+2. **List folders** — group reading lists into folders ("Crisis Events", "X-Men reading order") the
+   way Collections already nest, instead of one flat sidebar.
+4. **Per-item free-text notes** — a short note per reading-list item ("skip, filler" / "read after
+   vol 3"), visible to remote-library viewers now that remote sharing has merged, without granting
+   full metadata-edit rights.
+5. **Printable/exportable checklist** — a clean print-friendly or PDF page of the list (order,
+   owned/missing status) for shopping or tracking away from the app.
+6. **Per-list completion forecast** — reuse the Insights pace math, scoped to just one list: "at your
+   current pace, you'll finish this list by [date]."
+7. **Cross-list duplicate/merge detector** — flag when two reading lists share more than some
+   percentage of the same issues, with a one-click merge or an "these overlap" banner; catches
+   redundant arc lists pulled from different sources.
+10. **Continuity-order auto-build** — build a reading list that walks a whole Continuity's
+    chronological order, using the Continuity map's smart connector ([[project_paperbunkr_continuity_map]]),
+    instead of only per-arc lookup.
+12. **Story-Event diff against canonical order** — when a Story Event has a canonical CV/Metron order
+    (from the Story Event resolver, [[project_paperbunkr_story_event_resolver]]), offer "insert
+    missing events" as a diff against the current list's order.
+
+*Suggested starting order (not a commitment):* 6 (cheapest — reuses existing Insights pace math)
+and 2 (straightforward sidebar/data-model change), then 1 given the GCD tool already exists.
+
+### Home screen pitch (unscoped, pitched 2026-09-28)
+**Designed and built 2026-09-28**, spotlight reworked into an accordion carousel 2026-09-29
+(`…-2026-09-29-home-spotlight-accordion-design.md`); uncommitted, **seen running by the user 2026-09-29**: spec A
+`docs/superpowers/specs/2026-09-28-home-cosmetics-design.md` (C1–C10 plus three landing-site effects: scroll-reveal, a
+perspective-tilted hero cover, a deeper card shadow), spec B `…-home-improvements-design.md` (I1–I5 and the new section model),
+plan `…-home-pitch-plan.md`; each spec ends with "Implementation notes". Pitch premises that were wrong: **C1** and **C7** were
+already built (hero backdrop, masthead tint, crossfade, Ken Burns) but defective, so both became polish-and-fix; **C5** already
+showed "New" in the badge; **C9** had shipped once and been removed (no overscan), now rebuilt properly and restored on the
+Detail screens too; **I5**'s engine was never backend-only (Home already used it). Grilled choices: sky gradient replaces the
+cover wall on any light theme, greeting in every theme ("Late-night reading?" after 9 pm), corner ribbon for NEW, the seed series
+leads each Because-You-Read row, section order/visibility lives in Preferences › Appearance › Home. Original pitch text follows.
+Previously: not started — needed its own brainstorm → design spec before implementation. Checked against what's
+shipped on `HomeScreenViewModel`: Spotlight header + rotation, Continue Reading (comics and books),
+Recently Added, Because You Read, Collections, and Reading List Spotlight. The Home dashboard is
+itself a deliberate CE deviation (CE has no home dashboard) — none of these need a CE-parity lookup,
+they're new deviation work on top of an already-deviated surface.
+
+**Cosmetics (10)**
+1. **Spotlight ambient backdrop** — blurred, color-graded version of the current spotlight cover
+   behind the header, same technique pitched for the Detail hero (Cosmetics pitch item 8), applied
+   to this surface; can share the extraction/cache logic.
+2. **Time-of-day greeting** — "Good evening" text plus a subtle sky-gradient header accent that
+   shifts through the day.
+3. **Section header micro-icons** — a small FluentIcons glyph next to each section title (Continue
+   Reading, Recently Added, Because You Read, Collections).
+4. **Continue Reading progress-bar restyle** — animated fill using `PbRadiusChip` shaping per the
+   squircle rule.
+5. **"New" ribbon on Recently Added** — small corner ribbon/badge on cards added within the last N
+   days, placed consistently the way `BrandMark` already is.
+6. **Collections cover collage** — 4-cover mosaic per Collections card instead of one representative
+   cover; reuses the reading-list mosaic already built in `ReadingScreenViewModel`.
+7. **Spotlight rotation transition polish** — crossfade or slow Ken Burns zoom on the auto-rotating
+   spotlight instead of a hard cut; gated on reduced motion.
+8. **Because-You-Read connector chip** — small connecting line/icon from the seed series to the row
+   it recommends, borrowing the Continuity timeline connector art idea.
+9. **Home hero parallax on scroll** — subtle depth between the backdrop and foreground cards while
+   scrolling; gated on reduced motion.
+10. **Seasonal accent flourish** — small, opt-in, off-by-default decorative touch tied to the real
+    calendar date; purely cosmetic.
+
+**Improvements (5)**
+1. **Section reordering and visibility** — drag Home's sections into a preferred order or hide unused
+   ones, stored per-user the way Saved List Layouts persists Library layout.
+2. **Unified "pick up where you left off" digest** — merge Continue Reading (comics), Continue
+   Reading (books), and in-progress reading lists into one compact list in true last-read order,
+   instead of three separate rows.
+3. **Top Needs Attention item on Home** — surface the single highest-priority Insights attention
+   card (a stalled series, or one close to finishing) directly on Home.
+4. **Spotlight relevance tuning** — blend Spotlight's picks with new arrivals in top genres or
+   Wanted's weekly releases, and avoid repeating already-opened titles.
+5. **Because-You-Read feedback control** — manual "shuffle"/"not interested" per row, feeding back
+   into the backend-only Phase 6a recommendation engine; interactive counterpart to the Insights
+   pitch's recommendations-surface item.
+
+*Suggested starting order (not a commitment):* cosmetics 4 and 5 are cheap and visible;
+improvement 1 (section reordering) and improvement 3 (attention item on Home) are small and
+immediately useful.
 
 ### Deferred / dropped (no action needed)
 - **News reader** (`Help > News` RSS) — deferred, live idea to repurpose the feed mechanism for

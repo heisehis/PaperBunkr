@@ -119,7 +119,15 @@ internal static class ArcExternalVerificationService
         // A result counts as a name match when it normalizes (case-insensitive, trimmed) to the
         // same string as the local group's arc name - the same normalization used for local
         // grouping, not a separate fuzzy-match threshold.
-        var match = results.FirstOrDefault(r => string.Equals(r.Name.Trim(), candidate.ArcName, StringComparison.OrdinalIgnoreCase));
+        // The Story Event resolver (docs/superpowers/specs/2026-09-27-story-event-resolver-design.md §4) widens this to the name keys:
+        // ComicVine's "Hulk: Planet Hulk" and Metron's "Planet Hulk" are the same arc when the candidate's issues come from Hulk. The
+        // issue-number overlap check below still has to pass.
+        var memberIds = candidate.Members.Select(m => m.Issue.Id).ToList();
+        var candidateSeries = context.Issues.Where(i => memberIds.Contains(i.Id)).Select(i => i.Series!.Name)
+            .AsEnumerable().OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var candidateKeys = EventNameKeys.For(candidate.ArcName, candidateSeries);
+        var match = results.FirstOrDefault(r => string.Equals(r.Name.Trim(), candidate.ArcName, StringComparison.OrdinalIgnoreCase))
+            ?? results.FirstOrDefault(r => EventNameKeys.For(r.Name, candidateSeries).Overlaps(candidateKeys));
         if (match is null)
         {
             RecordNegativeCache(context, candidate, sourceKind);

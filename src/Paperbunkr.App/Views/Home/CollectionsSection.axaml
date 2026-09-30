@@ -1,0 +1,43 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:fi="using:FluentIcons.Avalonia"
+                    xmlns:vm="using:Paperbunkr.App.ViewModels"
+                    xmlns:home="using:Paperbunkr.App.ViewModels.Home"
+                    xmlns:models="using:Paperbunkr.App.Models"
+                    xmlns:views="using:Paperbunkr.App.Views"
+                    xmlns:controls="using:Paperbunkr.App.Controls">
+
+    <!-- Collections - a 2x2 collage when the collection has enough covers (docs/superpowers/specs/2026-09-28-home-cosmetics-
+         design.md C6). Stays invisible on a library with no non-empty collections, as before. -->
+    <DataTemplate x:Key="HomeSection.collections" DataType="home:CollectionsSectionViewModel">
+        <StackPanel Spacing="12" IsVisible="{Binding Home.HasCollections}" controls:ScrollReveal.Enabled="True">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <fi:SymbolIcon Classes="sectionIcon" Symbol="{Binding Icon}" />
+                    <controls:SplitText Classes="heading" Text="{Binding Title}" AutomationProperties.AutomationId="{Binding HeaderAutomationId}" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="viewAllLink" Content="View Library →"
+                        Command="{Binding Home.GoToLibraryCommand}" AutomationProperties.AutomationId="HomeViewLibraryFromCollectionsLink" />
+            </Grid>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8,-8,-8,0">
+                <ItemsControl ItemsSource="{Binding Home.Collections}" Margin="2,2,2,6" AutomationProperties.AutomationId="HomeCollectionsList"
+                              controls:EntranceAnimation.Enabled="{Binding Home.PlayEntranceAnimation}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:HomeCollectionCard">
+                            <views:PosterTile
+                                CoverSource="{Binding CoverImage}"
+                                MosaicSources="{Binding MosaicCovers}"
+                                TitleText="{Binding Name}"
+                                BadgeText="{Binding Count, StringFormat='{}{0}'}"
+                                Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenCollectionCommand}"
+                                CommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
+    </DataTemplate>
+</ResourceDictionary>

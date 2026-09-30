@@ -8,5 +8,6 @@ public partial class DetailScreen : UserControl
     {
         InitializeComponent();
         DetailCosmetics.Attach(this);
+        KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
     }
 }

@@ -197,8 +197,17 @@ public class RemoteRowIsolationTests : IDisposable
             "InsightsResolver.cs", "StatsResolver.cs",
             // Year-in-review recap: same read-only (no-tracking) reading-history join as StatsResolver, reviewed 2026-09-27.
             "RecapResolver.cs",
+            // Insights History tab (docs/superpowers/specs/2026-09-29-insights-reading-history-design.md), reviewed 2026-09-29: the
+            // resolver's no-tracking lookups name and resume remote series you've read; the recorder only *reads* the item to
+            // snapshot its title onto the ReadingEvent row it writes. Neither writes a remote row.
+            "ReadingHistoryResolver.cs", "ReadingEventRecorder.cs",
             // Drops the stale covers of replaced remote books (looks their mirror rows up by remote id).
             "MainViewModel.cs",
+            // Library bulk actions (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md), reviewed 2026-09-30: Copy Data only
+            // *reads* the first selected issue into the clipboard (Paste/Clear Data use default contexts, so remote books stay
+            // read-only); "Mark read up to here" only reads the series order, then hands the ids to the Library's existing
+            // remote-aware mark-read path - the same opt-in the Detail screens' mark-read already has.
+            "LibraryScreenViewModel.DataTransfer.cs", "LibraryScreenViewModel.SelectionActions.cs",
         }.OrderBy(n => n).ToList();
         var unexpected = optIns.Except(allowed).ToList();
 

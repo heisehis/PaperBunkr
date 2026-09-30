@@ -253,7 +253,7 @@
                                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                                     <TextBlock FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center">
                                                         <Run Text="{Binding Name}" FontWeight="SemiBold" />
-                                                        <Run Text="{Binding RelationTypeLabel, StringFormat=' · {0}'}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                        <Run Text="{Binding RelationTypeLabel, StringFormat=' · {0}', Mode=OneWay}" Foreground="{DynamicResource PbTextFaintBrush}" />
                                                     </TextBlock>
                                                     <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
                                                             Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
@@ -312,7 +312,7 @@
                                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                                     <TextBlock FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center">
                                                         <Run Text="{Binding Name}" FontWeight="SemiBold" />
-                                                        <Run Text="{Binding RelationTypeLabel, StringFormat=' · {0}'}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                        <Run Text="{Binding RelationTypeLabel, StringFormat=' · {0}', Mode=OneWay}" Foreground="{DynamicResource PbTextFaintBrush}" />
                                                     </TextBlock>
                                                     <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
                                                             Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"

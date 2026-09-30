@@ -6,6 +6,8 @@
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
+             xmlns:homevm="using:Paperbunkr.App.ViewModels.Home"
+             xmlns:homeviews="using:Paperbunkr.App.Views.Home"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="720"
@@ -221,6 +223,74 @@
                     <ToggleSwitch IsChecked="{Binding SeriesAccentColor}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
+        </StackPanel>
+
+        <!-- Home (docs/superpowers/specs/2026-09-28-home-improvements-design.md I1/I5, 2026-09-28-home-cosmetics-design.md C10):
+             section order and visibility, the seasonal flourish, and the "Not interested" list. -->
+        <StackPanel Tag="appearance.home" Spacing="8">
+            <TextBlock Classes="settingsGroupCaption" Text="HOME" />
+            <pref:SettingsRow Icon="Home" Title="Sections"
+                               Description="Drag to reorder, untick to hide. The greeting and search always stay at the top.">
+                <pref:SettingsRow.SettingsContent>
+                    <Button Content="Reset to default" Command="{Binding HomePrefs.ResetLayoutCommand}"
+                            AutomationProperties.AutomationId="HomeSectionsReset" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <ItemsControl ItemsSource="{Binding HomePrefs.Sections}" Margin="12,0,0,0" AutomationProperties.AutomationId="HomeSectionsList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="homevm:HomeSectionRow">
+                        <Border Background="{DynamicResource PbSurface2Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="8,4" Margin="0,2"
+                                homeviews:HomeSectionRowDrag.Owner="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).HomePrefs}">
+                            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                                <Border Grid.Column="0" Background="Transparent" Cursor="SizeAll" Padding="4" ToolTip.Tip="Drag to reorder"
+                                        homeviews:HomeSectionRowDrag.Handle="True">
+                                    <fi:SymbolIcon Symbol="ReOrderDotsVertical" FontSize="{StaticResource PbIconSizeSm}"
+                                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                                </Border>
+                                <CheckBox Grid.Column="1" IsChecked="{Binding IsVisible}" Margin="6,0" VerticalAlignment="Center"
+                                          AutomationProperties.Name="{Binding Name}" />
+                                <TextBlock Grid.Column="2" Text="{Binding Name}" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <Button Grid.Column="3" Classes="ghost" Padding="6,2" ToolTip.Tip="Move up" AutomationProperties.Name="Move up"
+                                        Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).HomePrefs.MoveUpCommand}"
+                                        CommandParameter="{Binding}">
+                                    <fi:SymbolIcon Symbol="ArrowUp" FontSize="{StaticResource PbIconSizeXs}" />
+                                </Button>
+                                <Button Grid.Column="4" Classes="ghost" Padding="6,2" ToolTip.Tip="Move down" AutomationProperties.Name="Move down"
+                                        Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).HomePrefs.MoveDownCommand}"
+                                        CommandParameter="{Binding}">
+                                    <fi:SymbolIcon Symbol="ArrowDown" FontSize="{StaticResource PbIconSizeXs}" />
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <pref:SettingsRow Icon="Star" Title="Seasonal flourish"
+                               Description="A small icon and greeting tint on Free Comic Book Day, Halloween, the winter holidays and New Year.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding HomePrefs.SeasonalFlourish}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="EyeOff" Title="Hidden recommendations"
+                               Description="Series you marked &quot;Not interested&quot; on Home. Unhide one to see it recommended again." />
+            <TextBlock Text="Nothing hidden" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" Margin="12,0,0,0" IsVisible="{Binding !HomePrefs.HasHiddenRecommendations}" />
+            <ItemsControl ItemsSource="{Binding HomePrefs.HiddenRecommendations}" Margin="12,0,0,0"
+                          AutomationProperties.AutomationId="HomeHiddenRecommendationsList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="homevm:HiddenRecommendationRow">
+                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2">
+                            <TextBlock Grid.Column="0" Text="{Binding SeriesName}" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="1" Text="{Binding DismissedText}" VerticalAlignment="Center" Margin="12,0"
+                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <Button Grid.Column="2" Content="Unhide"
+                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).HomePrefs.UnhideCommand}"
+                                    CommandParameter="{Binding}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </StackPanel>
 
         <!-- Interface - Motion/Navigation/Developer consolidated from 3 single-row groups into one

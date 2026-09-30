@@ -9,4 +9,8 @@ public sealed class BecauseYouReadRow
 {
     public required string SeedSeriesName { get; init; }
     public required ObservableCollection<SeriesCardSample> Cards { get; init; }
+
+    /// <summary>The series the row is seeded from, shown as the row's outlined lead card (docs/superpowers/specs/
+    /// 2026-09-28-home-cosmetics-design.md C8). Null only in hand-built test rows.</summary>
+    public SeriesCardSample? SeedSeries { get; init; }
 }

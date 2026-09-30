@@ -10,7 +10,7 @@ using Paperbunkr.Data.Entities;
 namespace Paperbunkr.App.Tests;
 
 /// <summary>The New event / New continuity dialog (docs/superpowers/specs/2026-08-28-events-
-/// continuity-screen-redesign-design.md). Temp-DB pattern, same as <see cref="EventsScreenViewModelTests"/>.</summary>
+/// continuity-screen-redesign-design.md). Temp-DB pattern, same as <see cref="ContinuityScreen.ContinuityScreenTestBase"/>.</summary>
 [Collection(nameof(AvaloniaTestCollection))]
 public class NewEventOrContinuityViewModelTests : IDisposable
 {
@@ -71,6 +71,50 @@ public class NewEventOrContinuityViewModelTests : IDisposable
         var c = context.Continuities.Single(x => x.Id == created);
         Assert.Equal("Ultimate Universe", c.Name);
         Assert.Equal("Marvel", c.Publisher);
+    }
+
+    /// <summary>Carries the old sidebar "new continuity" test's intent (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md):
+    /// a name that already exists, in any case, opens that continuity instead of making a second one.</summary>
+    [Fact]
+    public void NewContinuity_WithAnExistingName_ReusesIt_CaseInsensitively()
+    {
+        var ids = new List<int>();
+        var vm = new NewEventOrContinuityViewModel((_, id) => ids.Add(id), () => { });
+        vm.Reset(NewEventOrContinuityViewModel.Kind.Continuity);
+        vm.Name = "Earth-616";
+        vm.CreateCommand.Execute(null);
+        vm.Reset(NewEventOrContinuityViewModel.Kind.Continuity);
+        vm.Name = "earth-616";
+        vm.Publisher = "Marvel";
+        vm.CreateCommand.Execute(null);
+
+        Assert.Equal(ids[0], ids[1]);
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Equal("Marvel", Assert.Single(context.Continuities).Publisher);     // filled in what it lacked
+    }
+
+    [Fact]
+    public void ContinuityDialog_SuggestsTheLibrarysPublishers()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var series = new Series { Name = "X-Men" };
+            series.Issues.Add(new Issue { Number = "1", Publisher = "Marvel" });
+            series.Issues.Add(new Issue { Number = "2", Publisher = "marvel" });
+            context.Series.Add(series);
+            context.Continuities.Add(new Continuity { Name = "Prime", Publisher = "DC Comics", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            context.SaveChanges();
+        }
+
+        var vm = new NewEventOrContinuityViewModel((_, _) => { }, () => { });
+        vm.Reset(NewEventOrContinuityViewModel.Kind.Continuity);
+
+        Assert.Equal(2, vm.PublisherSuggestions.Count);                        // "Marvel" and "marvel" are one publisher
+        Assert.Equal("DC Comics", vm.PublisherSuggestions[0]);
+        Assert.Equal("marvel", vm.PublisherSuggestions[1], ignoreCase: true);
+        Assert.False(vm.HasPublisher);
+        vm.Publisher = "Marvel";
+        Assert.True(vm.HasPublisher);
     }
 
     [Fact]

@@ -221,7 +221,7 @@ public sealed class RemoteLibraryUiIntegrationTests : IAsyncLifetime
         var remote = Headers(menus.Build(remoteCard)).Where(h => h is not null).ToList();
         var local = Headers(menus.Build(localCard)).Where(h => h is not null).ToList();
 
-        Assert.Equal(new[] { "Open Series", "Select All", "Clear Selection" }, remote);
+        Assert.Equal(new[] { "Open Series", "Select All", "Invert Selection", "Clear Selection" }, remote);
         Assert.Contains(local, h => h!.StartsWith("Delete"));
         Assert.Contains("Content Type", local);
     }

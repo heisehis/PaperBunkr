@@ -1,0 +1,44 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:fi="using:FluentIcons.Avalonia"
+                    xmlns:home="using:Paperbunkr.App.ViewModels.Home"
+                    xmlns:controls="using:Paperbunkr.App.Controls">
+
+    <!--
+        Needs Attention (docs/superpowers/specs/2026-09-28-home-improvements-design.md I3): the single most useful item from
+        Insights - almost done, then stalled, then a gap - as a slim banner with the series cover (round-3 mockup option B).
+        HomeScreenViewModel leaves this section out of the list entirely when there's nothing to show.
+    -->
+    <DataTemplate x:Key="HomeSection.needsAttention" DataType="home:NeedsAttentionSectionViewModel">
+        <StackPanel Spacing="10" controls:ScrollReveal.Enabled="True">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <fi:SymbolIcon Classes="sectionIcon" Symbol="{Binding Icon}" />
+                    <controls:SplitText Classes="heading" Text="{Binding Title}" AutomationProperties.AutomationId="{Binding HeaderAutomationId}" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="viewAllLink" Content="All in Insights →"
+                        Command="{Binding Home.OpenInsightsCommand}" AutomationProperties.AutomationId="HomeAttentionInsightsLink" />
+            </Grid>
+            <Button Classes="attentionBanner" Command="{Binding Home.OpenAttentionCommand}"
+                    AutomationProperties.AutomationId="HomeNeedsAttentionCard">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Border Grid.Column="0" Width="34" Height="48" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
+                            Background="{Binding Home.NeedsAttention.CoverBrush}">
+                        <Image Source="{Binding Home.NeedsAttention.CoverImage}" Stretch="UniformToFill" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding Home.NeedsAttention.Headline}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Home.NeedsAttention.Reason}" FontSize="11.5"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Home.NeedsAttention.ActionLabel}" FontSize="12.5" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                        <fi:SymbolIcon Symbol="ArrowRight" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentTextBrush}" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+        </StackPanel>
+    </DataTemplate>
+</ResourceDictionary>

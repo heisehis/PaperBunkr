@@ -298,7 +298,7 @@
              (an IsVisible-toggled element can't animate a width transition - it leaves/enters the
              layout tree instantly either way) - IsHitTestVisible bound the same as before so a
              collapsed, zero-width sidebar can't intercept input or receive focus. -->
-        <Border Classes="contextualSidebar" Classes.expanded="{Binding ShowContextualSidebar}"
+        <Border x:Name="ContextualSidebar" Classes="contextualSidebar" Classes.expanded="{Binding ShowContextualSidebar}"
                 DockPanel.Dock="Left" ClipToBounds="True" Background="{DynamicResource PbChromeBrush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
                 IsHitTestVisible="{Binding ShowContextualSidebar}"
@@ -656,80 +656,9 @@
                         </ItemsControl>
                     </StackPanel>
 
-                    <!-- Reading Lists sidebar (docs/superpowers/specs/2026-08-28-reading-lists-screen-redesign-design.md → v2) -->
-                    <StackPanel IsVisible="{Binding IsReading}" Spacing="1">
-                        <StackPanel.Styles>
-                            <Style Selector="Border.rlRow">
-                                <Setter Property="BorderBrush" Value="Transparent" />
-                            </Style>
-                            <Style Selector="Border.rlRow.active">
-                                <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-                                <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-                            </Style>
-                            <Style Selector="Border.rlRow Button.rlDelete">
-                                <Setter Property="Opacity" Value="0" />
-                                <Setter Property="IsHitTestVisible" Value="False" />
-                            </Style>
-                            <Style Selector="Border.rlRow:pointerover Button.rlDelete">
-                                <Setter Property="Opacity" Value="1" />
-                                <Setter Property="IsHitTestVisible" Value="True" />
-                            </Style>
-                        </StackPanel.Styles>
-
-                        <Grid ColumnDefinitions="*,Auto" Margin="8,0,6,14">
-                            <TextBlock Grid.Column="0" Text="Reading Lists" FontSize="16" FontWeight="Bold"
-                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                            <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6"
-                                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                                    Command="{Binding OpenNewReadingListDialogCommand}" ToolTip.Tip="New reading list"
-                                    AutomationProperties.AutomationId="NewReadingListButton">
-                                <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
-                            </Button>
-                        </Grid>
-
-                        <Border IsVisible="{Binding Reading.HasActiveTagFilter}" Background="{DynamicResource PbAccentSoftBrush}"
-                                CornerRadius="{StaticResource PbRadiusChip}" Padding="10,4" Margin="8,0,8,10">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" Text="{Binding Reading.ActiveTagFilter, StringFormat='Tag: {0}'}"
-                                           FontSize="11.5" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
-                                        Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbAccentTextBrush}"
-                                        Command="{Binding Reading.ClearTagFilterCommand}" ToolTip.Tip="Clear tag filter" />
-                            </Grid>
-                        </Border>
-
-                        <ItemsControl x:Name="ReadingLists" ItemsSource="{Binding Reading.Lists}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:ReadingListSummary">
-                                    <Border Classes="rlRow" Classes.active="{Binding IsActive}" CornerRadius="6" Margin="0,1"
-                                            BorderThickness="3,0,0,0" Padding="0">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <Button Grid.Column="0" Classes="sideItemButton" Padding="11,8"
-                                                    Command="{Binding #ReadingLists.((vm:MainViewModel)DataContext).Reading.SelectListCommand}"
-                                                    CommandParameter="{Binding}">
-                                                <StackPanel Spacing="6">
-                                                    <TextBlock Classes="sideItemLabel" Text="{Binding Name}" FontSize="12.5"
-                                                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"
-                                                               Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                    <ProgressBar Minimum="0" Maximum="1" Value="{Binding ProgressFraction}" Height="3" />
-                                                </StackPanel>
-                                            </Button>
-                                            <Button Grid.Column="1" Classes="headerAction ghost rlDelete" Padding="6" Margin="2,0,4,0"
-                                                    VerticalAlignment="Center"
-                                                    Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
-                                                <Panel>
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
-                                                </Panel>
-                                            </Button>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-
-                    <!-- Events & Continuity sidebar (docs/superpowers/specs/2026-08-28-events-continuity-screen-redesign-design.md) -->
+                    <!-- Continuity sidebar (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md): a Continuities | Events
+                         switch (remembered, Continuities first), continuity rows with the publisher logo and issue count, event rows with
+                         "start year · issues", and one Suggestions & checks row replacing the old suggestion and duplicate blocks. -->
                     <StackPanel IsVisible="{Binding IsEvents}" Spacing="1"
                                 controls:ContextMenuHost.Provider="{Binding}">
                         <StackPanel.Styles>
@@ -740,140 +669,152 @@
                             </Style>
                             <Style Selector="Border.ecRow Button.ecDelete"><Setter Property="Opacity" Value="0" /><Setter Property="IsHitTestVisible" Value="False" /></Style>
                             <Style Selector="Border.ecRow:pointerover Button.ecDelete"><Setter Property="Opacity" Value="1" /><Setter Property="IsHitTestVisible" Value="True" /></Style>
+                            <Style Selector="Button.ecTab">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="CornerRadius" Value="4" />
+                                <Setter Property="Padding" Value="8,4" />
+                                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                                <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+                                <Setter Property="Cursor" Value="Hand" />
+                            </Style>
+                            <Style Selector="Button.ecTab.on">
+                                <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+                            </Style>
                         </StackPanel.Styles>
 
-                        <Grid ColumnDefinitions="*,Auto" Margin="8,0,6,12">
-                            <TextBlock Grid.Column="0" Text="Events &amp; Continuity" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                        <Grid ColumnDefinitions="*,Auto" Margin="8,0,6,10">
+                            <TextBlock Grid.Column="0" Text="Continuity" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                             <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6"
-                                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" ToolTip.Tip="New...">
+                                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                    ToolTip.Tip="New..." AutomationProperties.Name="New continuity or event">
                                 <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
                                 <Button.Flyout>
                                     <MenuFlyout>
-                                        <MenuItem Header="New event" Command="{Binding OpenNewEventDialogCommand}" CommandParameter="Event" />
                                         <MenuItem Header="New continuity" Command="{Binding OpenNewEventDialogCommand}" CommandParameter="Continuity" />
+                                        <MenuItem Header="New event" Command="{Binding OpenNewEventDialogCommand}" CommandParameter="Event" />
                                     </MenuFlyout>
                                 </Button.Flyout>
                             </Button>
                         </Grid>
 
-                        <TextBlock Text="Events" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}" Margin="8,4" />
-                        <ItemsControl x:Name="StoryEvents" ItemsSource="{Binding Events.Events}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:StoryEventSummary">
-                                    <Border Classes="ecRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <Button Grid.Column="0" Classes="sideItemButton" Padding="11,7"
-                                                    Command="{Binding #StoryEvents.((vm:MainViewModel)DataContext).Events.SelectEventCommand}"
-                                                    CommandParameter="{Binding}">
-                                                <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}"
-                                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
-                                            </Button>
-                                            <Button Grid.Column="1" Classes="headerAction ghost ecDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
-                                                    Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
-                                                <Panel>
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
-                                                </Panel>
-                                            </Button>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <TextBlock Text="No events yet" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4"
-                                   IsVisible="{Binding Events.HasNoEvents}" />
+                        <!-- Continuities | Events -->
+                        <Border Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                CornerRadius="6" Padding="3" Margin="6,0,6,10">
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="2">
+                                <Button Grid.Column="0" Classes="ecTab" Classes.on="{Binding Events.Sidebar.IsContinuitiesTab}"
+                                        Command="{Binding Events.Sidebar.ShowContinuitiesTabCommand}" AutomationProperties.Name="Continuities">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <TextBlock Text="Continuities" FontSize="11.5" />
+                                        <TextBlock Text="{Binding Events.Sidebar.ContinuitiesCountLabel}" FontSize="10.5" Opacity="0.7" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Column="1" Classes="ecTab" Classes.on="{Binding Events.Sidebar.IsEventsTab}"
+                                        Command="{Binding Events.Sidebar.ShowEventsTabCommand}" AutomationProperties.Name="Events">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <TextBlock Text="Events" FontSize="11.5" />
+                                        <TextBlock Text="{Binding Events.Sidebar.EventsCountLabel}" FontSize="10.5" Opacity="0.7" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </Border>
 
-                        <TextBlock Text="Continuities" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}" Margin="8,12,8,4" />
-                        <ItemsControl x:Name="ContinuityList" ItemsSource="{Binding Events.Continuities}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:ContinuitySummary">
-                                    <Border Classes="ecRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <Button Grid.Column="0" Classes="sideItemButton" Padding="11,7"
-                                                    Command="{Binding #ContinuityList.((vm:MainViewModel)DataContext).Events.SelectContinuityCommand}"
-                                                    CommandParameter="{Binding}">
-                                                <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}"
-                                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
-                                            </Button>
-                                            <Button Grid.Column="1" Classes="headerAction ghost ecDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
-                                                    Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
-                                                <Panel>
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
-                                                </Panel>
-                                            </Button>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <TextBlock Text="No continuities yet" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4"
-                                   IsVisible="{Binding Events.HasNoContinuities}" />
+                        <!-- Continuities -->
+                        <StackPanel IsVisible="{Binding Events.Sidebar.IsContinuitiesTab}">
+                            <ItemsControl x:Name="ContinuityList" ItemsSource="{Binding Events.Sidebar.Continuities}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:ContinuitySummary">
+                                        <Border Classes="ecRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <Button Grid.Column="0" Classes="sideItemButton" Padding="9,7"
+                                                        Command="{Binding #ContinuityList.((vm:MainViewModel)DataContext).Events.SelectContinuityCommand}"
+                                                        CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}">
+                                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
+                                                        <controls:BrandMark Grid.Column="0" Family="Publisher" Value="{Binding Publisher}" MarkSize="14" MaxMarkWidth="34" ShowText="False" EnsureContrast="True"
+                                                                            VerticalAlignment="Center">
+                                                            <controls:BrandMark.IsVisible>
+                                                                <!-- only a real logo: a publisher with none would fall back to plain text, which reads as a stray mark here -->
+                                                                <MultiBinding Converter="{x:Static conv:BoolConverters.Or}">
+                                                                    <Binding Path="IsImage" RelativeSource="{RelativeSource Self}" />
+                                                                    <Binding Path="IsRaster" RelativeSource="{RelativeSource Self}" />
+                                                                </MultiBinding>
+                                                            </controls:BrandMark.IsVisible>
+                                                        </controls:BrandMark>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="2" Text="{Binding IssueCountLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                                   VerticalAlignment="Center" ToolTip.Tip="Issues across its series" />
+                                                    </Grid>
+                                                </Button>
+                                                <Button Grid.Column="1" Classes="headerAction ghost ecDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                                        Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}"
+                                                        AutomationProperties.Name="{Binding DeleteConfirm.Label}">
+                                                    <Panel>
+                                                        <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                        <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                    </Panel>
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="No continuities yet" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4"
+                                       IsVisible="{Binding Events.Sidebar.HasNoContinuities}" />
+                        </StackPanel>
 
-                        <!-- Story-event / shared-universe auto-population suggestions (docs/superpowers/specs/
-                             2026-09-17-storyevent-continuity-autopopulate-design.md) - "propose, don't assert":
-                             each row creates nothing until Accept, and Dismiss persists so it never resurfaces. -->
-                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" />
-                        <Grid ColumnDefinitions="*,Auto" Margin="8,10,6,4" IsVisible="{Binding !Events.HasNoNewStoryEventCandidates}">
-                            <TextBlock Grid.Column="0" Text="New story-event suggestions" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                            <Border Grid.Column="1" Classes="pbChip" Padding="5,1"><TextBlock Text="{Binding Events.NewStoryEventCandidates.Count}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
-                        </Grid>
-                        <ItemsControl ItemsSource="{Binding Events.NewStoryEventCandidates}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:StoryEventCandidateRowViewModel">
-                                    <Border Classes="ecRow" CornerRadius="6" Margin="0,1" Padding="11,7">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock Text="{Binding ArcName}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ArcName}" />
-                                            <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <Button Classes="headerAction ghost" Content="Accept" Command="{Binding AcceptCommand}" IsEnabled="{Binding !IsAccepting}" />
-                                                <Button Classes="headerAction ghost" Content="Dismiss" Command="{Binding DismissCommand}" IsEnabled="{Binding !IsAccepting}" />
-                                            </StackPanel>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <!-- Events -->
+                        <StackPanel IsVisible="{Binding Events.Sidebar.IsEventsTab}">
+                            <ItemsControl x:Name="StoryEvents" ItemsSource="{Binding Events.Sidebar.Events}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:StoryEventSummary">
+                                        <Border Classes="ecRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <Button Grid.Column="0" Classes="sideItemButton" Padding="11,7"
+                                                        Command="{Binding #StoryEvents.((vm:MainViewModel)DataContext).Events.SelectEventCommand}"
+                                                        CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}">
+                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="7">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding MetaLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                                   VerticalAlignment="Center" ToolTip.Tip="Start year · issues" />
+                                                    </Grid>
+                                                </Button>
+                                                <Button Grid.Column="1" Classes="headerAction ghost ecDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                                        Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}"
+                                                        AutomationProperties.Name="{Binding DeleteConfirm.Label}">
+                                                    <Panel>
+                                                        <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                        <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                    </Panel>
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="No events yet" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4"
+                                       IsVisible="{Binding Events.Sidebar.HasNoEvents}" />
+                        </StackPanel>
 
-                        <Grid ColumnDefinitions="*,Auto" Margin="8,12,6,4">
-                            <TextBlock Grid.Column="0" Text="Shared-universe suggestions" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                            <Button Grid.Column="1" Classes="headerAction ghost" Padding="6,2" FontSize="10"
-                                    Command="{Binding Events.CheckForWikidataSuggestionsCommand}" IsEnabled="{Binding !Events.IsCheckingWikidataSuggestions}">
-                                <StackPanel Orientation="Horizontal" Spacing="4">
-                                    <TextBlock Text="Checking…" IsVisible="{Binding Events.IsCheckingWikidataSuggestions}" />
-                                    <TextBlock Text="Check Wikidata" IsVisible="{Binding !Events.IsCheckingWikidataSuggestions}" />
-                                </StackPanel>
+                        <!-- Suggestions & checks -->
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,4" />
+                        <Border Classes="ecRow" Classes.active="{Binding Events.Sidebar.IsSuggestionsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                            <Button Classes="sideItemButton" Padding="11,7" Command="{Binding Events.OpenSuggestionsCommand}"
+                                    AutomationProperties.Name="Suggestions and checks">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                    <fi:SymbolIcon Grid.Column="0" Symbol="Lightbulb" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    <TextBlock Grid.Column="1" Text="Suggestions &amp; checks" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <Border Grid.Column="2" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{DynamicResource PbRadiusChip}" Padding="6,0"
+                                            IsVisible="{Binding Events.Sidebar.HasSuggestions}" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Events.Sidebar.SuggestionsCountLabel}" FontSize="10" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                    </Border>
+                                </Grid>
                             </Button>
-                        </Grid>
-                        <TextBlock Text="{Binding Events.WikidataCheckResult}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}"
-                                   Margin="8,0,6,4" TextWrapping="Wrap"
-                                   IsVisible="{Binding Events.WikidataCheckResult, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                        <ItemsControl ItemsSource="{Binding Events.NewContinuitySuggestions}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:ContinuitySuggestionRowViewModel">
-                                    <Border Classes="ecRow" CornerRadius="6" Margin="0,1" Padding="11,7">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis">
-                                                <Run Text="{Binding SeriesName}" /> <Run Text="→" /> <Run Text="{Binding UniverseLabel}" />
-                                            </TextBlock>
-                                            <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <Button Classes="headerAction ghost" Content="Accept" Command="{Binding AcceptCommand}" />
-                                                <Button Classes="headerAction ghost" Content="Dismiss" Command="{Binding DismissCommand}" />
-                                            </StackPanel>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <TextBlock Text="No suggestions yet - click Check Wikidata" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4">
-                            <TextBlock.IsVisible>
-                                <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
-                                    <Binding Path="Events.HasNoNewContinuitySuggestions" />
-                                    <Binding Path="Events.WikidataCheckResult" Converter="{x:Static conv:StringConverters.IsNullOrEmpty}" />
-                                </MultiBinding>
-                            </TextBlock.IsVisible>
-                        </TextBlock>
+                        </Border>
                     </StackPanel>
 
                 </StackPanel>
@@ -943,11 +884,11 @@
                     <DataTemplate DataType="vm:SmartScreenViewModel">
                         <views:SmartScreen />
                     </DataTemplate>
-                    <DataTemplate DataType="vm:ReadingScreenViewModel">
-                        <views:ReadingScreen />
+                    <DataTemplate DataType="vm:ReadingListsScreenViewModel">
+                        <views:ReadingListsScreen />
                     </DataTemplate>
-                    <DataTemplate DataType="vm:EventsScreenViewModel">
-                        <views:EventsScreen />
+                    <DataTemplate DataType="vm:ContinuityScreenViewModel">
+                        <views:ContinuityScreen />
                     </DataTemplate>
                     <DataTemplate DataType="vm:PreferencesScreenViewModel">
                         <views:PreferencesScreen />
@@ -1208,6 +1149,26 @@
         <controls:OverlayShell.ContentTemplate>
             <DataTemplate x:DataType="vm:MainViewModel">
                 <views:QuickRateOverlay DataContext="{Binding QuickRate}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
+    </controls:OverlayShell>
+
+    <!-- ============ Library bulk actions: Paste Data and Merge series (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §3)
+         - same backdrop-popup pattern as Quick Rate above ============ -->
+    <controls:OverlayShell IsOpen="{Binding IsPasteDataOverlayOpen}" CloseCommand="{Binding ClosePasteDataOverlayCommand}"
+                            CloseButtonAutomationId="PasteDataOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:PasteDataOverlay DataContext="{Binding PasteData}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
+    </controls:OverlayShell>
+
+    <controls:OverlayShell IsOpen="{Binding IsMergeSeriesOverlayOpen}" CloseCommand="{Binding CloseMergeSeriesOverlayCommand}"
+                            CloseButtonAutomationId="MergeSeriesOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:MergeSeriesOverlay DataContext="{Binding MergeSeries}" />
             </DataTemplate>
         </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>

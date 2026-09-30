@@ -55,7 +55,7 @@ public class TrackerAutoSyncWiringTests : IDisposable
         Assert.IsType<TrackerAutoSyncService>(vm.TrackerAutoSync);
         Assert.Same(vm.TrackerAutoSync, ServiceOf(vm.Reader));
         Assert.Same(vm.TrackerAutoSync, ServiceOf(vm.Library));
-        Assert.Same(vm.TrackerAutoSync, ServiceOf(vm.Reading));
+        Assert.Same(vm.TrackerAutoSync, ServiceOf(vm.Reading.List));      // the Reading Lists page (redesign 2026-09-28) holds it
         Assert.Same(vm.TrackerAutoSync, ServiceOf(vm.Detail.Tabs));
         Assert.Same(vm.TrackerAutoSync, ServiceOf(vm.MangaDetail));
         Assert.Same(vm.TrackerAutoSync, ServiceOf(vm.MangaDetail.Tabs));

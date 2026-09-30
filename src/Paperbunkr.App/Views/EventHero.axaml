@@ -1,0 +1,92 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:cs="using:Paperbunkr.App.Services.ContinuityScreen"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="220"
+             x:Class="Paperbunkr.App.Views.EventHero"
+             x:DataType="vm:EventPageViewModel">
+
+    <UserControl.Styles>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/ContinuityChrome.axaml" />
+    </UserControl.Styles>
+
+    <controls:HeroBand CoverKeys="{Binding CollageKeys}">
+        <StackPanel Spacing="6" Margin="0,0,250,0" MaxWidth="900" HorizontalAlignment="Left">
+            <TextBlock Classes="pbTextHeading" Text="{Binding Name}" TextWrapping="Wrap" />
+
+            <WrapPanel>
+                <TextBlock Text="{Binding StatsLine}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <Border Classes="heroChip" IsVisible="{Binding HasSourceLabel}" Margin="0,0,6,0" ToolTip.Tip="Where this event came from">
+                    <TextBlock Text="{Binding SourceLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                </Border>
+                <Button Classes="heroChip" Content="{Binding ContinuityChipLabel}" IsVisible="{Binding HasContinuity}" Margin="0,0,4,0"
+                        Command="{Binding OpenContinuityCommand}" CommandParameter="{Binding FirstContinuity}"
+                        ToolTip.Tip="Open this continuity" />
+                <Button Classes="heroChip" Content="{Binding MoreContinuitiesLabel}" IsVisible="{Binding HasMoreContinuities}"
+                        AutomationProperties.Name="Other continuities this event is in">
+                    <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedLeft">
+                            <ItemsControl ItemsSource="{Binding MoreContinuities}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="cs:EventContinuityRef">
+                                        <Button Classes="headerAction ghost" Content="{Binding Name}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                                Command="{Binding $parent[UserControl].((vm:EventPageViewModel)DataContext).OpenContinuityCommand}"
+                                                CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+                <TextBlock Text="Working out the overview…" Classes="csFaint" VerticalAlignment="Center" IsVisible="{Binding IsOverviewLoading}" />
+            </WrapPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasOverviewError}">
+                <TextBlock Text="{Binding OverviewError}" FontSize="11.5" Foreground="{DynamicResource PbDangerBrush}" VerticalAlignment="Center"
+                           TextWrapping="Wrap" MaxWidth="560" />
+                <Button Classes="headerAction secondary" Content="Retry" Command="{Binding RetryOverviewCommand}" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding HasDescription}" Spacing="2">
+                <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                           MaxWidth="640" HorizontalAlignment="Left" MaxLines="3" TextTrimming="CharacterEllipsis"
+                           IsVisible="{Binding !IsDescriptionExpanded}" />
+                <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                           MaxWidth="640" HorizontalAlignment="Left" IsVisible="{Binding IsDescriptionExpanded}" />
+                <Button Classes="headerAction ghost" Padding="0,2" FontSize="11" HorizontalAlignment="Left" Command="{Binding ToggleDescriptionCommand}">
+                    <Panel>
+                        <TextBlock Text="More" IsVisible="{Binding !IsDescriptionExpanded}" />
+                        <TextBlock Text="Less" IsVisible="{Binding IsDescriptionExpanded}" />
+                    </Panel>
+                </Button>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+                <Button Classes="headerAction primary" Command="{Binding ContinueReadingCommand}" IsVisible="{Binding HasContinue}"
+                        ToolTip.Tip="Opens the next unread issue, reading in the event's order">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <fi:SymbolIcon Symbol="Play" IconVariant="Filled" FontSize="{StaticResource PbIconSizeXs}" />
+                        <TextBlock Text="{Binding ContinueLabel}" MaxWidth="320" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Button>
+                <Button Classes="headerAction secondary" Content="＋ Add issues" Command="{Binding ToggleAddIssuesCommand}" />
+                <Button Classes="headerAction secondary" Content="⋯ Manage" AutomationProperties.Name="Manage event">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuItem Header="Edit details…"
+                                      Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenEditEventDialogCommand}" />
+                            <MenuItem Header="Detect roles" Command="{Binding DetectRolesCommand}" />
+                            <Separator />
+                            <MenuItem Header="{Binding DeleteConfirm.Label}" Command="{Binding DeleteConfirm.TriggerCommand}" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+            </StackPanel>
+        </StackPanel>
+    </controls:HeroBand>
+</UserControl>

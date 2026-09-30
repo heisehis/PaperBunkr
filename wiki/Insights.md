@@ -1,7 +1,7 @@
 # Insights
 
 **Insights** (navigation rail) shows what and how you read: what you're in the middle of, goals you've
-set, and how your reading and your library change over time. It has three tabs.
+set, what you've read lately, and how your reading and your library change over time. It has four tabs.
 
 ## Today
 
@@ -28,6 +28,24 @@ Charts over a range you choose, with **Export**:
 - **Library growth**, **Media type**, **Reading state**, **Content rating**, **Publication year**,
   **Score distribution**, and top **publishers**, **genres**, **tags**, **authors** and **artists**.
 - **Highlights**: longest journey, fastest completion, most reread, highest rated.
+
+## History
+
+Everything you've been reading, newest first, one row per series (or per book, for a book that isn't in a
+series), grouped under **Today**, **Yesterday**, the day of the week, then the date. Reading a series again moves it
+back to the top.
+
+- Each row shows the cover, the issue or chapter you last read, how far in you are, and when.
+- **▶** picks up where you stopped. If you finished that issue, it opens the next one instead. When there's
+  nothing after it, the row says **Caught up**. PDFs show **Open**, because the PDF reader doesn't remember
+  your page yet.
+- Click a row to open the series (or book) page. Right-click for the same actions plus **Remove from history**.
+- Search by title, and narrow the list with **All**, **Comics**, **Manga** and **Books**.
+- Something you've since deleted from your library stays in the list, greyed out and marked **No longer in
+  library**.
+- **Remove from history** and the bin button (**Clear all history**) only hide entries from this list. Your
+  stats, streaks, goals and Recap still count everything you read. A removed series comes back the next time
+  you read it.
 
 ## Recap
 

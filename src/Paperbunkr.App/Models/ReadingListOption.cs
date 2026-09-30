@@ -2,7 +2,7 @@ namespace Paperbunkr.App.Models;
 
 /// <summary>
 /// One entry in Library's "Add to Reading List" flyout (docs/superpowers/specs/2026-08-24-library-
-/// multiselect-slice2-design.md §2) - deliberately not <see cref="ReadingListSummary"/>, which
+/// multiselect-slice2-design.md §2) - deliberately not <see cref="ReadingGalleryTile"/>, which
 /// carries Reading screen sidebar-only required fields (<c>DeleteConfirm</c>, <c>HasTag</c>) that
 /// have no meaning in a simple pick-a-list menu.
 /// </summary>

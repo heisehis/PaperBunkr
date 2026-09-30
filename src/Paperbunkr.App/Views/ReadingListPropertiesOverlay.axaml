@@ -40,10 +40,29 @@
     <Border Width="620" MaxHeight="720" Classes="floatingPanel">
         <DockPanel LastChildFill="True">
 
-            <StackPanel DockPanel.Dock="Top" Margin="20,18,20,0">
-                <TextBlock Text="{Binding HeaderLabel}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,14,0,0" />
-            </StackPanel>
+            <!-- Header band (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md §10): the list's blurred-cover backdrop (when the
+                 list page has made one) under the skin's hero gradient, the cover, and the title. Fields below are unchanged. -->
+            <Panel DockPanel.Dock="Top" Height="120" ClipToBounds="True">
+                <Image Source="{Binding HeaderBackdrop}" Stretch="UniformToFill" IsVisible="{Binding HasHeaderBackdrop}" />
+                <Border>
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                            <GradientStop Offset="0.0" Color="{DynamicResource PbHeroGradientStartColor}" />
+                            <GradientStop Offset="1.0" Color="{DynamicResource PbSurface1Color}" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+                <StackPanel Orientation="Horizontal" Spacing="14" Margin="20,0,20,14" VerticalAlignment="Bottom">
+                    <Border Width="52" Height="78" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" Background="{DynamicResource PbSurface2Brush}"
+                            BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" BoxShadow="{StaticResource PbElevationShadow}">
+                        <Image Source="{Binding CoverPreview}" Stretch="UniformToFill" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Bottom" Spacing="2">
+                        <TextBlock Text="LIST DETAILS" FontSize="10" FontWeight="Bold" LetterSpacing="0.8" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Classes="pbTextHeading" Text="{Binding HeaderLabel}" FontSize="22" TextTrimming="CharacterEllipsis" MaxWidth="500" />
+                    </StackPanel>
+                </StackPanel>
+            </Panel>
 
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
                         HorizontalAlignment="Right" Margin="20,0,20,18">

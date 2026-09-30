@@ -88,6 +88,29 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# File Explorer cover thumbnails (docs/superpowers/specs/2026-09-30-explorer-cover-thumbnails-design.md): the
+# handler is a separate Native AOT DLL that Windows loads into its thumbnail surrogate, so it is published on
+# its own and copied next to the exe (ThumbnailHandlerService looks for it there). Native AOT needs the MSVC
+# linker: GitHub's windows-latest runner has it, so a failure there fails the release; on a PC without the
+# "Desktop development with C++" workload the installer is still built, just without Explorer thumbnails.
+$thumbnailsOut = Join-Path $installerDir "publish\shell-thumbnails"
+# The ILCompiler link step calls vswhere.exe by bare name; a normal Visual Studio install doesn't put it on PATH.
+$vsInstallerDir = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer"
+if ((Test-Path $vsInstallerDir) -and -not ($env:PATH -split ";" -contains $vsInstallerDir)) {
+    $env:PATH = "$env:PATH;$vsInstallerDir"
+}
+Write-Output "Publishing Native AOT thumbnail handler..."
+dotnet publish (Join-Path $repoRoot "src\Paperbunkr.ShellThumbnails\Paperbunkr.ShellThumbnails.csproj") `
+    -c Release -r win-x64 -o $thumbnailsOut
+if ($LASTEXITCODE -eq 0) {
+    Copy-Item (Join-Path $thumbnailsOut "Paperbunkr.ShellThumbnails.dll") $publishDir -Force
+} elseif ($env:GITHUB_ACTIONS -eq "true") {
+    Write-Error "Native AOT publish of the thumbnail handler failed."
+    exit 1
+} else {
+    Write-Warning "Thumbnail handler not built (Native AOT needs the MSVC C++ build tools) - this installer will not offer File Explorer thumbnails."
+}
+
 # Generate the combined license file (Installer.iss's LicenseFile, shown before the install-dir
 # step - see docs/superpowers/specs/2026-09-09-installer-redesign-design.md decision 3). Inno's
 # LicenseFile is a single accept-gate for exactly one document, but the repo has two: LICENSE

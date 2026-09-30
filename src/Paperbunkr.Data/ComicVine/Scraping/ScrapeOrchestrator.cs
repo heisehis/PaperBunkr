@@ -876,6 +876,12 @@ public sealed class ScrapeOrchestrator
             ComicMetadataExternalIdSync.SyncFromIssueDetails(context, tracked.Id, Provider, details);
             ContinuityMetronMatchResolver.SyncFromIssueDetails(context, tracked.SeriesId, Provider, details.Universes);
             IssueVariantCoverSync.SyncFromIssueDetails(context, tracked.Id, details.Variants);
+
+            // Metron carries the Grand Comics Database id on every issue (docs/superpowers/specs/2026-09-27-gcd-data-design.md §3).
+            if (details.GcdId is int gcdIssueId)
+            {
+                tracked.GcdIssueId = gcdIssueId;
+            }
         }
     }
 

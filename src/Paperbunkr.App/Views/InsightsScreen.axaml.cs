@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
+using Avalonia.VisualTree;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
@@ -14,7 +15,7 @@ namespace Paperbunkr.App.Views;
 
 /// <summary>
 /// Code-behind for the Insights screen. Explicit partial class in the same commit as the .axaml per
-/// the AVLN2000 build gotcha (see <see cref="EventsScreen"/>'s note). Owns rendering the Stats tab's
+/// the AVLN2000 build gotcha (see <see cref="ContinuityScreen"/>'s note). Owns rendering the Stats tab's
 /// two ScottPlot bar charts (Reading pace, Publication year) - ScottPlot's API is imperative, so the
 /// data can't be data-bound; <see cref="StatsScreenViewModel.ChartsChanged"/> fires after each Stats
 /// refresh and this redraws them (docs/superpowers/specs/2026-09-08-stats-v2-mangabaka-design.md §9).
@@ -22,6 +23,10 @@ namespace Paperbunkr.App.Views;
 public partial class InsightsScreen : UserControl
 {
     private InsightsScreenViewModel? _subscribed;
+
+    // Today/Trends/Recap bodies (and their range chips) are permanently attached and toggled by IsVisible, so a tab switch hides whatever
+    // held focus. Falls back to the active tab header (docs/superpowers/specs/2026-09-29-keyboard-focus-reclaim-detail-home-smart-design.md).
+    private readonly FocusReclaimer _focus;
 
     // What each chart is currently showing, so a hover can be described (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #16).
     private IReadOnlyList<(string Label, int Value)> _paceBars = Array.Empty<(string, int)>();
@@ -33,7 +38,18 @@ public partial class InsightsScreen : UserControl
     public InsightsScreen()
     {
         InitializeComponent();
+        _focus = new FocusReclaimer(this, () => DataContext is InsightsScreenViewModel,
+            () => FocusReclaimer.FocusFirstButton(this, b => b.Classes.Contains("tab") && b.Classes.Contains("active")));
+        KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
         DataContextChanged += (_, _) => Rebind();
+        AttachedToVisualTree += (_, _) => _focus.Reclaim();
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty && IsVisible)
+            {
+                _focus.Reclaim();
+            }
+        };
 
         AttachHover(PaceChart, (x, y) => InsightsChartHover.DescribeBar(x, y, _paceBars, "finished"));
         AttachHover(PublicationYearChart, (x, y) => InsightsChartHover.DescribeBar(x, y, _yearBars, "issues"));
@@ -101,17 +117,27 @@ public partial class InsightsScreen : UserControl
         };
     }
 
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(InsightsScreenViewModel.IsTodayTabSelected) or nameof(InsightsScreenViewModel.IsTrendsTabSelected) or nameof(InsightsScreenViewModel.IsHistoryTabSelected) or nameof(InsightsScreenViewModel.IsRecapTabSelected))
+        {
+            _focus.ReclaimIfFocusLost();
+        }
+    }
+
     private void Rebind()
     {
         if (_subscribed is not null)
         {
             _subscribed.Stats.ChartsChanged -= RenderCharts;
+            _subscribed.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
         _subscribed = DataContext as InsightsScreenViewModel;
         if (_subscribed is not null)
         {
             _subscribed.Stats.ChartsChanged += RenderCharts;
+            _subscribed.PropertyChanged += OnViewModelPropertyChanged;
             if (_subscribed.Stats.Snapshot is { } snap)
             {
                 RenderCharts(snap);

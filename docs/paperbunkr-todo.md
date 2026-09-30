@@ -35,7 +35,8 @@ this file itself already did once (see the note below).
 > year-in-review recap/recommendations surface/redesign, Metron API utilization (5 phases), ComicVine
 > scraper fidelity, comic reader Performance (steps 1-7), publisher icons + reader textures, reading-
 > list role detection, library organizer audit fixes. **Event Map** (`2026-09-25-event-map-design.md`)
-> remains a draft awaiting review — no plan doc, zero source, confirmed by grep.
+> remains a draft awaiting review — no plan doc, zero source, confirmed by grep. *(Superseded 2026-09-27: built, see
+> "2026-09-27 - Event Map" below.)*
 
 > **Manual session note (2026-09-24, ComicVine scraper fidelity audit — uncommitted, working tree
 > shared with other concurrent sessions):** the user supplied the real, original ComicRack CE
@@ -398,6 +399,48 @@ this file itself already did once (see the note below).
 > field); backlog burn-down (needs a nightly library snapshot); drop-off analysis; period-over-period
 > deltas + sparklines; creator/publisher affinity linked to Wanted; storage/format breakdown;
 > recommendations surface (UI for the backend-only Phase 6a engine); milestones timeline.
+> **Reading List / CBL Manager pitch (8 items, 2026-09-28, idea capture; numbers kept from a 15-idea
+> pitch, non-sequential — items 3, 8, 9, 11, 13–15 not selected; detail in the Roadmap's "Reading
+> List / CBL Manager pitch"):** 1) GCD as a 7th arc source; 2) list folders; 4) per-item free-text
+> notes (visible to remote-library viewers); 5) printable/exportable checklist; 6) per-list
+> completion forecast (reuses Insights pace math); 7) cross-list duplicate/merge detector; 10)
+> Continuity-order auto-build (uses the Continuity map's smart connector); 12) Story-Event diff
+> against canonical CV/Metron order. CE-parity lookup owed for 1, 10, 12 before any spec.
+> **→ Built 2026-09-28, uncommitted, not yet seen in the running app.** Grilled into two specs:
+> `docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md` (A: #2, #5 + CSV export, #6, #7) and
+> `…-build-from-events-design.md` (B: #10, #12, plus a grouping fix). The plan is `…-reading-lists-pitch-plan.md`, and each spec
+> ends with "Implementation notes". CE-parity check done: CE has list folders (built, minus combine modes) and has none of #5,
+> #6 or #7. #1 **dropped**: the GCD dump has only 582 arcs, and the extract has no arc tables. #4 **already existed**
+> (`ReadingListItem.Notes`); remote viewers see no reading lists at all, so that part moves to the remote-sharing follow-ups.
+> One new migration, `AddReadingListFolders`, which the user's DB applies on next launch. Verified with Data and App unit tests,
+> headless XAML-load tests and headless renders.
+> **→ Then fully redesigned 2026-09-28** (`docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md`, approach 2: new
+> screen swapped in, old deleted; uncommitted, not yet seen in the running app): gallery home with Continue row and folder tiles, a
+> cover rail, a streaming-style hero, a journey path with chapters and an Up next card, a Path | Covers toggle, the Checks strip,
+> an explicit Edit mode (drag reorder, bulk bar, chapters) and an Add-issues drawer. One more migration: `AddReadingListViewMode`.
+> **Home spotlight → accordion carousel, BUILT 2026-09-29** (`docs/superpowers/specs/2026-09-29-home-spotlight-accordion-design.md`,
+> uncommitted): eight picks, one open at 400px (cover + details), the rest darkened slivers, animated by a custom `AccordionPanel`;
+> replaces the two-layer crossfade/zoom/tilt/dots below. **Seen running by the user 2026-09-29** (accordion, hover tooltip, NEW
+> ribbons, collages, Preferences › Appearance › Home tab) - no issues raised.
+> **Home screen pitch → designed and BUILT 2026-09-28** (uncommitted, not yet seen in the running app): specs
+> `docs/superpowers/specs/2026-09-28-home-cosmetics-design.md` (A) and `…-home-improvements-design.md` (B), plan
+> `…-home-pitch-plan.md`. Home is now an ordered list of sections (reorder/hide in Preferences › Appearance › Home), with a
+> time-of-day greeting, a light-theme sky, an opt-in seasonal flourish, a real two-layer spotlight crossfade + zoom, a tilted
+> hero cover, parallax (restored on Detail too), scroll-reveal, one Continue Reading row for comics and books, a Needs Attention
+> banner, one-per-series spotlight with new-arrival slots, and "Not interested" with Undo. One migration: `AddHomeCustomization`.
+> Verified: Data.Tests 2026/2026, App.Tests for every touched area 866/866 (the full App run was stopped at 31 min, not
+> repeated), and headless renders of the real screen in light/dark/night/hover. First on-screen look by the user 2026-09-29 led to
+> three fixes (tilt strength, ribbon text contrast, night-sky wordmark). **Still to look at on screen:** light vs dark masthead, the crossfade/zoom on
+> rotation, the tilt + hover, parallax on Home and a Detail screen, the NEW ribbon, the collage, the Because-You-Read lead card
+> and ✕, the Needs Attention banner, and the Preferences Home tab (drag, ↑/↓, hide, Unhide).
+> Original idea capture: **Home screen pitch (10 cosmetic + 5 improvement items, 2026-09-28, idea capture; detail in the
+> Roadmap's "Home screen pitch"):** Cosmetics — spotlight ambient backdrop; time-of-day greeting;
+> section header micro-icons; Continue Reading progress-bar restyle; "new" ribbon on Recently Added;
+> Collections cover collage; spotlight rotation transition polish; Because-You-Read connector chip;
+> Home hero parallax on scroll; seasonal accent flourish. Improvements — section reordering/
+> visibility; unified "pick up where you left off" digest; top Needs Attention item on Home;
+> Spotlight relevance tuning; Because-You-Read feedback control. Whole Home dashboard is itself a
+> deliberate CE deviation, so no CE-parity lookup owed.
 > **Insights pitch, decomposed 2026-09-22 into a 5-item queue** (#9 recommendations surface brought back
 > into scope during the brainstorm, slotted last): 1) #6 period-over-period deltas + sparklines, 2) #4's
 > nightly snapshot table (foundation), 3) #1 year-in-review recap, 4) #2 reading goals/challenges, 5) #9
@@ -686,6 +729,13 @@ this file itself already did once (see the note below).
 > `GuidedViewOnOpen` + profile field. **#14 smart double-click zoom:** double-click/tap zooms to the panel under the pointer, second one returns, falls back to 200%; in guided view it toggles panel/whole page;
 > `SmartDoubleClickZoom` (on). Fixes a pre-existing flaw: the first click of a double-click turned the page before the zoom, now undone. **Tuning aid:** palette "Show detected panels". Migration
 > `AddGuidedViewSettings`. Verified by unit, view-model and headless canvas tests only (synthetic pages); **the detector on real comics/manga, the eased steps and the log slider are not viewed or felt.**
+> **Guided view detection upgrade — built 2026-09-29 (uncommitted; on-screen check by the user outstanding):** spec `docs/superpowers/specs/2026-09-28-guided-view-detection-upgrade-design.md` (with measured
+> Results), plan `...-plan.md`. The slice-D gutter detector worked on about 14% of a 624-page sample of the user's library (`tools/Paperbunkr.PanelHarness`, not in the sln). Now: `PanelDetectionService` runs
+> the bundled **ONNX model** first (`PanelModel/panel-detector.onnx`, YOLO26-nano by Leandro Narosky, Apache-2.0, trained on Manga109-s; credited in THIRD-PARTY-NOTICES.md; `Microsoft.ML.OnnxRuntime`, CPU),
+> then the gutter heuristic (now analysed at 1000 px, finer min gutter) when the model finds nothing or fails to load, then the whole page. `OnnxPanelDetector` adds borderless bands the model misses;
+> `PanelOrdering` owns reading order; tall webtoon strips take `PanelDetector.DetectStrip` (cuts at full-width empty bands). Palette: "Report bad panel detection" saves the page + detection JSON to
+> `panel-reports` next to the database. **Not done:** performance (about 300 ms per cold page on CPU, run on the UI thread by `EnsurePanels`; deferred by the user), the heuristic's adaptive-background/skew
+> upgrades (not needed once the model is primary), on-screen use. Numbers and caveats are in the spec's Results.
 > **Comic reader pitch, slice C "Image quality" — built 2026-09-26 (uncommitted; on-screen checks by the user outstanding):** spec `docs/superpowers/specs/2026-09-26-comic-reader-image-quality-design.md`, plan `...-plan.md`,
 > deviations in the spec's "Implementation notes". **#2** turned out mostly built (sliders, warm tint): the new work is CE's **auto levels** (per-page black/white points, true levels stretch, baked into the display bitmap
 > in the reader pipeline, `PageId.Variant` in the cache identity) and **sharpen 0-3** (CE's kernel, a live paint-level convolution), on the usual layers (Preferences default, per-issue override, reader profile, palette, drawer
@@ -2014,6 +2064,17 @@ Base audit shipped via `8e1bf55`; 2D grid navigation follow-up shipped today via
 - [x] Spatial 2D arrow-key movement through Library cards and Detail issue tiles (follow-up beyond
       the original P5 scope, per docs/superpowers/specs/
       2026-08-09-reader-gestures-and-grid-navigation-design.md)
+- [x] 2026-09-29/30 follow-up (uncommitted): a shared `FocusReclaimer` keeps focus inside a screen across
+      tab/section/collection resets - Library, Continuity, Books, Preferences, Wanted, the contextual sidebar, Home,
+      Smart Lists, Detail, Manga/Book detail, Insights. Home keyboard reach (tiles, shelves, Spotlight carousel) is
+      **user-confirmed on screen**. Paperbunkr's glow ring now replaces the theme's focus frame app-wide (one adorner
+      style in `Primitives.axaml`, painted inside its own bounds; plain `ItemsControl`s and edge-hugging UserControls
+      no longer clip it). Fixed along the way: arrow keys dead in every `WrapPanel` grid (`GridKeyboardNavigation`
+      focused the item container) and in the Spotlight; closed modals' buttons were still Tab stops. App tokens moved
+      to `Styles/AppTokens.axaml` so headless tests load the real ones. Verified: ring-clipping audit on 11 screens,
+      render tests, mutation-checked key tests, full suite 4876/4876. Still to see on screen: every screen except Home,
+      the sidebar path, reader focus-frame suppression. No headless setup: publisher/character detail, Plugin screen.
+      Specs: docs/superpowers/specs/2026-09-29-keyboard-focus-reclaim-*.md
 
 ---
 
@@ -2423,6 +2484,201 @@ Not committed. From a gap audit of the Library screen (user screenshot + code re
 - **Verified:** build clean; new tests `LibraryAuditFixesTests`, `IssueFileStatsTests` (Data), 2 series-selection tests in
   `LibraryScreenViewModelTests`, 4 new `AlphabetIndexEntryTests` rows.
 - **Not verified:** on screen - sidebar rows, popup fade, series selection bar; the startup backfill against the real library.
+
+## 2026-09-27 - Event Map
+
+Design [2026-09-25-event-map-design.md](superpowers/specs/2026-09-25-event-map-design.md), plan alongside it. Not committed.
+- **Built:** Map view for Story Events (**Members | Map | Timeline**). There's a spine (trunk) lane when a member series matches the event
+  name, otherwise a relay chain, with compact column packing. It has tie-in, sequence and continuity edges, three density stops,
+  All / Spine only / Hide optional filters, and a spine picker saved as `StoryEvent.SpineSeriesId` (migration `AddStoryEventSpine`;
+  null = auto, 0 = forced relay). Cards are virtualized, real controls (UIA names). A custom-drawn edge layer reads skin colours
+  at render time, with caches dropped on skin or theme change. There's an inspector drawer (connections, segment order, open reader,
+  mark read/unread, series details), keyboard navigation, Ctrl+wheel density, and "Events in this continuity" with **Open map** on
+  continuities. The reader now takes an explicit story-event anchor: paging, the staged next issue, the end card and the context strip
+  follow the event's order when it's opened from the map.
+- **Verified:** App builds with 0 errors, and the compiled-XAML index contains `EventMapView` and its themes. Final targeted run:
+  590/590 (all Event Map tests, `ReadingOrderResolverTests` incl. 6 new event-anchor tests, `ReaderScreenViewModelTests`,
+  `NextIssueStager*`, `EventsScreenViewModelTests`, `MainViewModelTests`). The migration is a single `AddColumn`; its forward-only
+  test passes. Data suite: 1851 pass, 6 fail, all pre-existing down-migration failures (see the 2026-09-26 preview-panel entry).
+- **Not verified:** on screen - look and feel, scroll smoothness at the Covers stop, reader round trip. A full App-suite run died
+  about 61 minutes in on "not enough space on the disk": `%TEMP%` holds ~56k leftover `paperbunkr_*` test files (9.3 GB). The failures
+  it reported were re-run: all pass except two load-timing flakes (a remote-reading loopback timeout, and one guided-view test that
+  passes on its own).
+- **Deviations:** see the design's "Implementation notes" (year-stripping name match, "Series details" instead of "Issue details",
+  no tracker auto-sync on map mark-read, and more).
+
+## 2026-09-27 - Story Event resolver (ComicVine/Metron duplicate events)
+
+Design [2026-09-27-story-event-resolver-design.md](superpowers/specs/2026-09-27-story-event-resolver-design.md), plan alongside it. Not committed.
+First of two sub-projects; the continuity-wide map is next.
+- **Built:**
+  - **Id completion** (`StoryEventIdCompletion`): member issues' arc credits > Metron `cv_id` > a name search checked against the
+    arc's issue list. Metron's ArcSerializer carrying `cv_id` was verified against Metron's source.
+  - **Matching and merging** (`EventNameKeys`, `StoryEventIdentityResolver`, `StoryEventMerger`): silent merges only between two
+    provider-origin events that share an id or match name + ≥ 50 % issues; everything else goes to review.
+  - **The sweep** (`StoryEventIdentitySweep`) and the weekly **Match duplicate story events** task (priority 17, default on).
+  - **Sidebar:** "Possible duplicates" (Merge / Not the same / Check again, deferred), plus **Find duplicate events**.
+  - **Prevention:** create-or-reuse, suggestion grouping and verification match name keys and aliases, so a merged-away
+    spelling isn't re-created.
+  - **Other:** a rename marks an event User; a background check runs after accept/look-up.
+  - **Migration** `AddStoryEventIdentity`: `Origin` backfilled Provider where an arc id exists, alias and dismissal tables.
+- **Verified:**
+  - Data: 60/60 (new resolver tests, migration test, existing resolver/grouping/verification suites).
+  - App: 237/237 (`EventsScreenIdentityTests`, `EventsScreenViewModelTests`, Event Map, scheduled-task catalogue checks, Issue Properties, organizer).
+  - The migration `Up` holds only these changes.
+- **Not verified:** live ComicVine/Metron behaviour on your library (no network in tests); the sidebar on screen.
+
+## 2026-09-27 - Continuity map + smart connector
+
+Design [2026-09-27-continuity-map-design.md](superpowers/specs/2026-09-27-continuity-map-design.md), plan alongside it. Not committed.
+Second of three sub-projects (resolver done; a bundled GCD extract is next - the user has a GCD account and will provide the dump).
+- **Built:**
+  - **Continuity map:** continuities get **Series | Map | Timeline**. Every issue of every event touching the continuity, with events
+    in chronological order and loose issues in "Between events" bands (publication order in year bands when there are no events).
+    It has event bands on the ruler (click opens that event's map), connector arrows/brackets between bands (hover for the
+    reason), Also-in links, outside-continuity lanes, an Events picker, Events only, and a pending-duplicates note.
+  - **Smart connector:** local inference (direct continuation, name patterns, shared-series order; weak same-name / date+word /
+    crossover suggestions) and Wikidata follows/followed-by. Strong results are saved as inferred/Wikidata relations; weak ones
+    appear as typed "Looks like the sequel of …" suggestions (Accept / Dismiss). Removing an automatic relation dismisses the pair.
+  - **Other:** the weekly task and sidebar button are now **Check story events** (resolver, then connector). Migration
+    `AddEventChronology`.
+- **Verified:**
+  - Data: 123/123. App: 349/349 (Event Map + continuity map, Events screen, identity, scheduled tasks, Issue Properties,
+    resolver, MainViewModel).
+  - Live Wikidata, read-only: Planet Hulk (Q2526264) → World War Hulk (Q1048144), including the "nothing" placeholder.
+  - Migration `Up` holds only these changes.
+- **Not verified:** on screen (bands, connectors, hover, the Events flyout); the Wikidata matching against the real library.
+
+## 2026-09-27 - Grand Comics Database data
+
+Design [2026-09-27-gcd-data-design.md](superpowers/specs/2026-09-27-gcd-data-design.md) (implementation notes at its end), plan
+alongside it. Not committed. Third of three sub-projects.
+- **Built:**
+  - **Tool** `tools/Paperbunkr.GcdExtract`: dump → extract + zip + `gcd-data.json`. Run on the 2026-09-15 dump: 229,836 series,
+    2,203,939 issues and 6,798 bonds; 97.7 MB extract, 33.7 MB zip. The manifest is at the repo root and embedded in the app.
+  - **Optional download:** Preferences → Connections → **Grand Comics Database data** (Download / Check for update / Remove,
+    credit and licence), installed to `%AppData%/Paperbunkr/gcd` after size, SHA-256 and schema checks.
+  - **Matching:** the scraper stores Metron's GCD issue id. Series are matched by those ids, by Metron's series record (capped),
+    or by a unique name + start year + publisher. Issues are matched by number. Weekly task **Match series to GCD**.
+  - **Uses:** GCD bonds become Continuation / Reboot / Related series relations with GCD evidence, and deleted ones stay deleted.
+    The Related tab shows a GCD mark and "Not in your library" lines with comics.org links. Matched issues' on-sale dates drive
+    event chronology and continuity-map order. Continued series sit in adjacent lanes marked "continues as ↓".
+  - **Credit:** a Data section in `THIRD-PARTY-NOTICES.md`; `PRIVACY.md` updated, including the weekly "Check story events"
+    Wikidata lookup it had been missing.
+  - Migrations `AddGcdIds` and `AddSeriesRelationDismissals`.
+- **Verified:**
+  - Data: the full suite, 1971/1971. An earlier run had one failure that didn't come back on the re-run; its name wasn't
+    captured, and every group these changes touch (migrations, relations, chronology, connector, Metron, scraping: 329 tests)
+    passed on its own.
+  - App: 398/398 (installer with a fake HTTP handler, Preferences row states, Related-tab GCD lines, scheduled tasks, Preferences,
+    About, Detail tabs) and 113/113 Event Map / continuity map.
+  - The real extract was spot-checked: counts match the trial, and the meta table carries the licence and dump date.
+  - Both migrations' `Up` hold only these changes.
+  - **Published** 2026-09-27 at [heisehis/paperbunkr-gcd-data](https://github.com/heisehis/paperbunkr-gcd-data) (public, CC BY-SA 4.0,
+    homepage → Paperbunkr): release `gcd-2026-09-15` with the zip. The raw manifest and the zip's size and SHA-256 were checked by
+    downloading them. The app's manifest URL and the bundled `gcd-data.json` point there.
+- **Not verified:** on screen (the Preferences row, the Related-tab chips, the lane marker); a download from inside the app;
+  matching against your own library.
+
+## 2026-09-28 - Continuity screen redesign
+
+Design [2026-09-28-continuity-screen-redesign-design.md](superpowers/specs/2026-09-28-continuity-screen-redesign-design.md)
+(implementation notes at its end), plan alongside it. Not committed.
+- **Built:** a new ContinuityScreen replaces the Story Events screen, all five phases, old screen deleted.
+  - **Sidebar:** Continuities | Events switch (remembered, AppSettings.ContinuitySidebarTab), publisher logos and issue counts,
+    one **Suggestions & checks** row + panel replacing the three sidebar queues.
+  - **Continuity page:** hero band (cover collage, stats, GCD chip, Continue, Add series, Manage), Needs attention, series as runs
+    with GCD "Not in your library" placeholders or a draggable custom wall, Events in order, Compare & merge overlay.
+  - **Event page:** hero (stats, source and continuity chips, Continue), Follows / Followed by strip, Needs attention, filtered
+    reading list with read ticks, Related events, Issue suggestions.
+  - **Timeline:** year histogram, era counts / progress / colours (PbEra* tokens, optional 	heme.json keys), folding.
+  - Publisher suggestion box with logo in the New/Edit continuity dialog.
+- **Verified:** App 423/423 across everything touched after the deletion; a full App run before it was 4,660/4,679, with every
+  failure outside this work (scratch-OutDir path/pdfium tests and timing tests that pass on re-run). Data migration test 2/2.
+- **On screen (the user):** works. Follow-up fixes: hero height, publisher logos (text off, contrast plate), a stack-overflow crash
+  in Related events (two-way `Run` binding with StringFormat), clipped attention flyouts, wider histogram bars on short spans.
+- **Not verified:** drag-to-reorder, compare overlay, light-skin era colours, keyboard/screen-reader passes.
+
+## 2026-09-29 - Insights History tab (Mihon-style reading history)
+
+Design [2026-09-29-insights-reading-history-design.md](superpowers/specs/2026-09-29-insights-reading-history-design.md),
+plan alongside it. Not committed. CE has no equivalent (only a Recent Books menu and a "Recently Read" smart list), so this is a
+deliberate deviation.
+- **Built:** a new **History** tab on Insights (Today · Trends · History · Recap).
+  - **Rows:** one per comic series / book series / standalone book at its latest read, under TODAY / YESTERDAY / weekday / date headers.
+  - **Filtering:** search plus All / Comics / Manga / Books chips.
+  - **Actions:** ▶ resumes, or reads the next issue once one is finished; PDFs get Open; "CAUGHT UP" when there's nothing next.
+  - **Removed items:** deleted series/books stay as greyed "NO LONGER IN LIBRARY" rows.
+  - **Remove / Clear all:** these only *hide* rows. A new `ReadingEvent.HiddenFromHistory` flag is read by History alone, so stats, goals and Recap never change.
+  - **Migration:** `AddReadingHistoryColumns` adds `SeriesTitle`/`ItemLabel` name snapshots (filled by the recorder, backfilled for existing rows) plus the flag.
+- **Verified:** new/affected suites green:
+  - Data 5/5 (backfill, migration, existing ReadingEvent backfill/migration);
+  - App 62/62 across recorder, resolver, History VM, Insights VM/focus and a headless view render.
+  - The view was also rendered headlessly to PNG and eyeballed.
+  - Full suites: Data 2,028/2,029 and App 4,848/4,850.
+    - The Data failure was `RemoteRowIsolationTests`' opt-in allowlist catching the two new `IgnoreQueryFilters` sites (resolver + recorder). Both were reviewed as read-only and added to the allowlist, and it now passes.
+    - The two App failures (`MatrixRainOverlayRenderTests`, `ReaderScreenPanelTests` guided-view double-click) pass on re-run and sit outside this work.
+- **Not verified:** on screen in the running app, light skins, keyboard/screen-reader passes, a real large library.
+- **Backlog it created:** save the PDF reader's position (PDF rows get a real Resume); a book-series reading order (so finished books get
+  Read next); incognito reading; "clear history older than X"; clickable Trends heatmap days jumping into History.
+
+## 2026-09-29 - Library bulk actions
+
+Design [2026-09-29-library-bulk-actions-design.md](superpowers/specs/2026-09-29-library-bulk-actions-design.md), plan alongside it. Not
+committed. Every CE behavior was checked in `_reference/ComicRackCE` (`ComicBrowserControl.cs`, `ComicDataPasteDialog.cs`, `MainForm.cs`
+RatingEditor, `ComicBook.ResetProperties`/`RefreshInfoFromFile`, `ItemView` selection).
+- **One action catalog** (`ViewModels/LibraryActions/LibraryActionCatalog.cs`) now feeds the right-click menus, the selection bar and the
+  keyboard. Labels count the set actually acted on, which fixes the old "Mark as" label on an unselected tile inside a selection.
+- **New actions:** My Rating ▸ None–5 on a selection (Alt+Shift+0–5, one undo step); Mark as ▸ Read up to here; Show in List ▸; Copy Data
+  (Ctrl+C) / Paste Data… (Ctrl+V, CE's field-picker dialog, ticks remembered in the new `AppSettings.PasteDataFields`, migration
+  `AddPasteDataFields`) / Clear Data…; Refresh ▸ thumbnails / Re-read info from file… (Activity Center jobs, re-read undoable); Show in
+  Explorer on many (Ctrl+G); Copy file paths (Ctrl+Shift+C); Merge series… (new dialog choosing the target; `SeriesMergeHelper`); Invert
+  Selection; Esc clears the selection. Series ▸ setters now apply to every selected series; the series menu gained Mark as, Add to Reading
+  List, Bulk Edit, Plugins, Refresh, Copy paths.
+- **Selection bar** is icon-only (`Views/SelectionActionBar`), built from the catalog; its Delete ▾ now has the keep-file variant (closes the
+  2026-09-25 "Not done" for the action bar - Book screens still have none).
+- **CE parity change:** a search/filter change drops selected items it hides (CE's `ItemView` does the same); switching issue/series view
+  clears the other kind's selection.
+- **Found on the way:** Avalonia's `KeyGesture.Parse("Alt+Shift+3")` binds Alt+Shift+**Tab** (a bare digit is read as the enum value);
+  the catalog maps digits itself, and `ContextMenuHost` no longer shows a wrong hint for digit gestures.
+- **Verified:** new `LibraryBulkActionsTests` (25) and `SelectionActionBarViewTests` (3, headless render: one named 36 px button per action,
+  Alt+Shift+3 rates, Ctrl+C in the search box doesn't copy data); full App suite 4,904/4,905 - the one failure was
+  `RemoteLibraryUiIntegrationTests` expecting the old remote series menu, updated and green; Data migration tests 150/150.
+- **Not verified:** nothing seen on screen in the running app yet (bar look at real widths, the two dialogs, flyout placement, light skins);
+  keyboard shortcuts only exercised headlessly. Dead code left for a follow-up: the old bar's Plugins/Add-to-List popup toggles and
+  `…Selection` commands the new bar no longer uses.
+
+## 2026-09-30 - File Explorer cover thumbnails
+
+Design [2026-09-30-explorer-cover-thumbnails-design.md](superpowers/specs/2026-09-30-explorer-cover-thumbnails-design.md), plan alongside
+it. Not committed. Not a CE feature (CE has no thumbnail handler) - modelled on CDisplayEx's Thumbnails checklist.
+- **Handler:** new `src/Paperbunkr.ShellThumbnails`, a Native AOT COM DLL (`IInitializeWithStream` + `IThumbnailProvider`, raw-vtable
+  WIC, PDFium via `LibraryImport`, SharpCompress, linked engine sources for the natural sort and MOBI reader). Windows runs it in its
+  thumbnail surrogate. Covers .cbz/.cbr/.cb7/.cbt (same page 0 as the library), .epub (declared cover, else first image in reading
+  order), .mobi/.azw/.azw3 (EXTH cover), .pdf (page 1), .djvu (page 1 via `Resources\ddjvu.exe`). 3 s budget; no image, DRM or damage =
+  Windows' normal icon.
+- **App:** `ThumbnailHandlerService` (+ `IThumbnailRegistry`) registers per-user, also under Paperbunkr's own ProgID, saves and restores
+  the previous handler, names another owner. Preferences › Advanced: FILE ASSOCIATION → **FILE TYPES** with "Open with" / "Thumbnail"
+  columns (layout B). CLI `--register-thumbnails` / `--unregister-thumbnails`; installer task `explorerthumbnails` (unticked) + uninstall
+  step; `BuildInstaller.ps1` AOT-publishes the DLL (fatal in CI, warning locally).
+- **Found on the way:** Paperbunkr ships no `ddjvu.exe`/DjVuLibre, so its own DjVu reader likely can't decode pages (flagged as a separate
+  task). DjVu thumbnails are only offered once that tool is present. The WebP SkiaSharp fallback was dropped: SkiaSharp isn't marked
+  AOT-compatible and libwebp isn't shipped, so WebP covers rely on Windows' WebP codec. The existing Open-with toggle's list refresh is now
+  deferred a tick (same routed-event detach trap as CLAUDE.md describes).
+- **Verified (2026-09-30, real Windows):** MSVC tools + Windows SDK added to VS 2022 Community on the dev laptop; Native AOT publish
+  links cleanly with no IL/AOT warnings (9.3 MB with `OptimizationPreference=Size`, exports `DllGetClassObject`/`DllCanUnloadNow`, OS
+  imports only). Registered via `--register-thumbnails`, then thumbnails requested through the shell (`IShellItemImageFactory`,
+  thumbnail-only) for real library files: CBZ, CBR (taking over from CDisplayEx), EPUB and PDF all came back from our handler
+  inside dllhost.exe (opt-in trace confirmed), right covers. `AssocQueryString` showed ours as the effective handler for every type,
+  so the feared ProgID shadowing did not happen here. `--unregister-thumbnails` restored CDisplayEx for .cbz/.cbr and removed
+  everything else. Owner label reads "Thumbnail: CDisplayEx". 298 tests green (handler, service, Preferences, associations).
+- **Bugs the real test found, fixed:** `IInitializeWithStream` carried `IInitializeWithFile`'s IID (managed tests and the direct
+  harness shared the mistake - now pinned by `ComInterfaces_UseWindowsOwnIids`); inside the surrogate `AppContext.BaseDirectory` is
+  System32, so pdfium.dll/ddjvu.exe are now located from the module itself (`ModuleLocation`); the opt-in trace lives in
+  `%TEMP%\Paperbunkr\thumbnails.trace` because the surrogate couldn't resolve AppData. `BuildInstaller.ps1` puts the VS Installer
+  folder (vswhere.exe) on PATH - ILCompiler's link step needs it.
+- **Not verified:** the Preferences toggle in the running app (tested through the CLI + service), .cb7/.cbt/.mobi/.azw3 through the
+  shell (unit-tested only), DjVu (no ddjvu.exe shipped), a full installer build/uninstall.
 
 ## Explicitly not in scope here
 

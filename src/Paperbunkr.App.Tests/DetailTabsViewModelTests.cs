@@ -1062,6 +1062,60 @@ public class DetailTabsViewModelTests : IDisposable
         Assert.Empty(context.MediaRelations);
     }
 
+    // --- Grand Comics Database lines (docs/superpowers/specs/2026-09-27-gcd-data-design.md §4) ---
+
+    [Fact]
+    public void Related_GcdBonds_ToSeriesNotOwned_ShowAsLinkedLines_AndOwnedOnesAsMarkedRelations()
+    {
+        // This series is GCD 20 (Hulk 2008): it continues GCD 10 (not owned) and is rebooted as GCD 30 (owned, related already).
+        int owned = AddOtherSeries("Hulk (2014)");
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.Series.Single(s => s.Id == _seriesId).GcdSeriesId = 20;
+            context.Series.Single(s => s.Id == owned).GcdSeriesId = 30;
+            context.SaveChanges();
+        }
+
+        using var extract = new Paperbunkr.App.Tests.Gcd.GcdTestExtract()
+            .Series(10, "The Incredible Hulk", 1999).Series(20, "Hulk", 2008).Series(30, "Hulk", 2014)
+            .Bond(10, 20, "major_name_numbering_continues").Bond(20, 30, "reboot");
+        using (var store = Paperbunkr.Data.Gcd.GcdDataStore.TryOpen(extract.ExtractPath)!)
+        {
+            Paperbunkr.Data.Gcd.GcdBondSync.Run(() => new PaperbunkrDbContext(_dbOptions), store);
+        }
+
+        var vm = CreateViewModel();
+        vm.OpenGcd = () => Paperbunkr.Data.Gcd.GcdDataStore.TryOpen(extract.ExtractPath);
+        vm.LoadSeries(LoadSeriesEntity());
+
+        var line = Assert.Single(vm.ExternalRelationPlaceholders);
+        Assert.Equal("Continues", line.RelationTypeLabel);
+        Assert.Equal("The Incredible Hulk (1999)", line.TargetTitle);
+        Assert.Equal("https://www.comics.org/series/10/", line.TargetUrl);
+        Assert.Equal("GCD", line.SourceLabel);
+
+        var related = Assert.Single(vm.Related);
+        Assert.Equal(owned, related.RelatedSeriesId);
+        Assert.EndsWith("· GCD", related.Note);
+    }
+
+    [Fact]
+    public void Related_NoGcdMatch_OpensNoGcdData()
+    {
+        var vm = CreateViewModel();
+        bool opened = false;
+        vm.OpenGcd = () =>
+        {
+            opened = true;
+            return null;
+        };
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.False(opened);
+        Assert.Empty(vm.ExternalRelationPlaceholders);
+    }
+
     // --- Collection nodes (docs/superpowers/specs/2026-08-30-media-relation-collection-nodes-
     // design.md) ---
 

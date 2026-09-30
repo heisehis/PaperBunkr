@@ -60,6 +60,13 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ReadingListTag> ReadingListTags => Set<ReadingListTag>();
 
+    public DbSet<ReadingListFolder> ReadingListFolders => Set<ReadingListFolder>();
+
+    public DbSet<ReadingListOverlapDismissal> ReadingListOverlapDismissals => Set<ReadingListOverlapDismissal>();
+
+    /// <summary>Home "Not interested" dismissals (docs/superpowers/specs/2026-09-28-home-improvements-design.md I5).</summary>
+    public DbSet<DismissedRecommendation> DismissedRecommendations => Set<DismissedRecommendation>();
+
     public DbSet<SeriesConflict> SeriesConflicts => Set<SeriesConflict>();
 
     public DbSet<MetadataProposal> MetadataProposals => Set<MetadataProposal>();
@@ -81,6 +88,14 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<EventRelationEvidence> EventRelationEvidence => Set<EventRelationEvidence>();
 
     public DbSet<EventSuggestionDismissal> EventSuggestionDismissals => Set<EventSuggestionDismissal>();
+
+    public DbSet<StoryEventAlias> StoryEventAliases => Set<StoryEventAlias>();
+
+    public DbSet<StoryEventDuplicateDismissal> StoryEventDuplicateDismissals => Set<StoryEventDuplicateDismissal>();
+
+    public DbSet<EventRelationDismissal> EventRelationDismissals => Set<EventRelationDismissal>();
+
+    public DbSet<SeriesRelationDismissal> SeriesRelationDismissals => Set<SeriesRelationDismissal>();
 
     public DbSet<StoryEventCandidateDismissal> StoryEventCandidateDismissals => Set<StoryEventCandidateDismissal>();
 
@@ -546,6 +561,8 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(s => s.Id);
             builder.Property(s => s.Name).IsRequired();
+            builder.Property(s => s.GcdMatchSource).HasConversion<string>().HasMaxLength(16);   // GCD data (2026-09-27-gcd-data-design.md §3)
+            builder.HasIndex(s => s.GcdSeriesId);
             builder.Property(s => s.ContentType).HasConversion<string>().HasMaxLength(32);
             builder.Property(s => s.ReadingMode).HasConversion<string>().HasMaxLength(32);
             builder.Property(s => s.PageLayoutMode).HasConversion<string>().HasMaxLength(32);
@@ -608,6 +625,7 @@ public class PaperbunkrDbContext : DbContext
         modelBuilder.Entity<Issue>(builder =>
         {
             builder.HasKey(i => i.Id);
+            builder.HasIndex(i => i.GcdIssueId);
             builder.Property(i => i.ReadingModeOverride).HasConversion<string>().HasMaxLength(32);
             builder.Property(i => i.PageFitModeOverride).HasConversion<string>().HasMaxLength(32);
             builder.Property(i => i.PageLayoutModeOverride).HasConversion<string>().HasMaxLength(32);
@@ -913,6 +931,48 @@ public class PaperbunkrDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(r => r.StoryEventId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md §1 - SetNull is only a backstop:
+            // ReadingListFolders.Delete re-parents a folder's lists before removing it.
+            builder.HasOne(r => r.Folder)
+                .WithMany()
+                .HasForeignKey(r => r.FolderId)
+                .OnDelete(DeleteBehavior.SetNull);
+            builder.HasIndex(r => r.FolderId);
+
+            // docs/superpowers/specs/2026-09-28-reading-lists-build-from-events-design.md §2 - a deleted continuity leaves a plain list.
+            builder.HasOne(r => r.Continuity)
+                .WithMany()
+                .HasForeignKey(r => r.ContinuityId)
+                .OnDelete(DeleteBehavior.SetNull);
+            builder.Property(r => r.ContinuityOrderKind).HasConversion<string>().HasMaxLength(32);
+        });
+
+        // Brand-new tables (docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md §1, §7).
+        modelBuilder.Entity<ReadingListFolder>(builder =>
+        {
+            builder.HasKey(f => f.Id);
+            builder.Property(f => f.Name).IsRequired();
+            builder.HasOne(f => f.ParentFolder)
+                .WithMany()
+                .HasForeignKey(f => f.ParentFolderId)
+                .OnDelete(DeleteBehavior.Restrict);
+            builder.HasIndex(f => f.ParentFolderId);
+        });
+
+        modelBuilder.Entity<DismissedRecommendation>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => d.SeriesId).IsUnique();
+            builder.HasOne<Series>().WithMany().HasForeignKey(d => d.SeriesId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ReadingListOverlapDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => new { d.ListAId, d.ListBId }).IsUnique();
+            builder.HasOne<ReadingList>().WithMany().HasForeignKey(d => d.ListAId).OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<ReadingList>().WithMany().HasForeignKey(d => d.ListBId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ReadingListItem>(builder =>
@@ -1085,9 +1145,79 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(e => e.Name).IsRequired();
             builder.HasIndex(e => e.Name);
 
+            // Story Event resolver (docs/superpowers/specs/2026-09-27-story-event-resolver-design.md §1). Origin has no model
+            // default: the AddStoryEventIdentity migration adds it as "User" and backfills "Provider" where an arc id exists.
+            builder.Property(e => e.Origin).HasConversion<string>().HasMaxLength(16);
+            builder.Property(e => e.IdentityMemberKey).HasMaxLength(64);
+            builder.Property(e => e.IdentityConflict).HasMaxLength(200);
+            builder.Property(e => e.WikidataQid).HasMaxLength(32);
+
             builder.HasMany(e => e.Members)
                 .WithOne(m => m.StoryEvent)
                 .HasForeignKey(m => m.StoryEventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(e => e.Aliases)
+                .WithOne(a => a.StoryEvent)
+                .HasForeignKey(a => a.StoryEventId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<StoryEventAlias>(builder =>
+        {
+            builder.HasKey(a => a.Id);
+            builder.Property(a => a.Name).IsRequired().HasMaxLength(300);
+            builder.Property(a => a.Key).IsRequired().HasMaxLength(300);
+            builder.Property(a => a.Source).HasConversion<string>().HasMaxLength(16);
+            builder.HasIndex(a => new { a.StoryEventId, a.Key }).IsUnique();
+            builder.HasIndex(a => a.Key);
+        });
+
+        modelBuilder.Entity<EventRelationDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => new { d.LowerEventId, d.HigherEventId }).IsUnique();
+
+            builder.HasOne(d => d.LowerEvent)
+                .WithMany()
+                .HasForeignKey(d => d.LowerEventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(d => d.HigherEvent)
+                .WithMany()
+                .HasForeignKey(d => d.HigherEventId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SeriesRelationDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => new { d.LowerSeriesId, d.HigherSeriesId }).IsUnique();
+
+            builder.HasOne(d => d.LowerSeries)
+                .WithMany()
+                .HasForeignKey(d => d.LowerSeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(d => d.HigherSeries)
+                .WithMany()
+                .HasForeignKey(d => d.HigherSeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<StoryEventDuplicateDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => new { d.LowerEventId, d.HigherEventId }).IsUnique();
+
+            builder.HasOne(d => d.LowerEvent)
+                .WithMany()
+                .HasForeignKey(d => d.LowerEventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(d => d.HigherEvent)
+                .WithMany()
+                .HasForeignKey(d => d.HigherEventId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -1895,6 +2025,13 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(e => e.Kind).HasConversion<string>().HasMaxLength(16);
             builder.Property(e => e.Publisher).HasMaxLength(256);
             builder.Property(e => e.PrimaryGenre).HasMaxLength(128);
+            // Reading History name snapshots (docs/superpowers/specs/2026-09-29-insights-reading-history-design.md §1).
+            builder.Property(e => e.SeriesTitle).HasMaxLength(512);
+            builder.Property(e => e.ItemLabel).HasMaxLength(512);
+            // A real SQL default so raw-SQL inserts (the AddReadingEventLog backfill, tests) that don't name
+            // the column still work. false == the CLR default, so the HasDefaultValue sentinel gotcha
+            // (a non-zero default swallowing explicit zeroes) can't bite here.
+            builder.Property(e => e.HiddenFromHistory).HasDefaultValue(false);
             builder.HasIndex(e => e.TimestampUtc);
             builder.HasIndex(e => new { e.ItemType, e.ItemId });
         });

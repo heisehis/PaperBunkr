@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Avalonia.Input;
 using Avalonia.Media.Imaging;
@@ -8,6 +11,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services.Reader.Panels;
+using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels;
@@ -109,7 +113,10 @@ public partial class ReaderScreenViewModel
         });
     }
 
-    /// <summary>Makes <see cref="CurrentPagePanels"/> available now, detecting on the calling thread if it is not cached (a few milliseconds): the smart double-click when guided view is off.</summary>
+    /// <summary>
+    /// Makes <see cref="CurrentPagePanels"/> available now, detecting on the calling thread if it is not cached: the smart double-click when guided view is off. With the ONNX model that is a few
+    /// hundred milliseconds on a cold page (about 150 ms for a webtoon strip), a visible hitch; moving it off the UI thread is part of the deferred performance pass.
+    /// </summary>
     [RelayCommand]
     private void EnsurePanels()
     {
@@ -168,6 +175,50 @@ public partial class ReaderScreenViewModel
 
         _panelFlashTimer.Stop();
         _panelFlashTimer.Start();
+    }
+
+    /// <summary>Where "Report bad panel detection" saves pages (a test seam; the default is a <c>panel-reports</c> folder next to the library database).</summary>
+    internal Func<string> PanelReportFolder { get; set; } = () => Path.Combine(Path.GetDirectoryName(PaperbunkrDbContext.GetDefaultDatabasePath()) ?? Path.GetTempPath(), "panel-reports");
+
+    /// <summary>
+    /// Saves the page on screen and what panel detection made of it, so a page it got wrong can be kept as a test case (docs/superpowers/specs/2026-09-28-guided-view-detection-upgrade-design.md step 4).
+    /// Two files in a new timestamped subfolder: <c>page.png</c> and <c>detection.json</c> (panel rectangles as fractions of the page, in reading order). Nothing leaves the computer.
+    /// </summary>
+    [RelayCommand]
+    private void ReportBadPanels()
+    {
+        if (CurrentPage is not { } page || _loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        EnsurePanels();
+        var panels = CurrentPagePanels ?? PagePanels.Whole;
+        try
+        {
+            string folder = Path.Combine(PanelReportFolder(), $"{DateTime.Now:yyyyMMdd-HHmmss}-issue{issueId}-page{_currentPageIndex + 1}");
+            Directory.CreateDirectory(folder);
+            using (var file = File.Create(Path.Combine(folder, "page.png")))
+            {
+                page.Save(file);
+            }
+
+            var json = JsonSerializer.Serialize(new
+            {
+                issueId,
+                pageNumber = _currentPageIndex + 1,
+                rightToLeft = PanelsRightToLeft,
+                confident = panels.Confident,
+                modelAvailable = PanelDetectionService.OnnxAvailable,
+                panels = panels.Rects.Select(r => new { r.X, r.Y, r.Width, r.Height }),
+            }, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(Path.Combine(folder, "detection.json"), json);
+            ToastRequested?.Invoke(new ToastRequest("Page saved for panel tuning", folder));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ObjectDisposedException)
+        {
+            ToastRequested?.Invoke(new ToastRequest("Couldn't save the page", ex.Message));
+        }
     }
 
     /// <summary>Test seam, same rationale as <see cref="OnSkippedPagesHintExpired"/>.</summary>

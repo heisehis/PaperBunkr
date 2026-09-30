@@ -1,11 +1,17 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="140" d:DesignHeight="210"
              x:Class="Paperbunkr.App.Views.PosterTile"
-             x:Name="ThisControl">
+             x:Name="ThisControl"
+             Padding="6">
+
+    <!-- The 6px padding is the focus ring's gutter: Avalonia only repaints inside a control's own bounds, so the ring (PbGlowRing's 4px
+         spread plus the focus pop's scale) has to fit inside the tile - the same fix Library's cards needed (2026-09-26). The Home shelves
+         take the gutter back out of their margins and spacing, so covers stay where they were. -->
 
     <!--
         PosterTile primitive (docs/superpowers/specs/2026-08-24-design-language-foundation-design.md),
@@ -22,13 +28,39 @@
          Border.posterTile/posterCover class names LibraryScreen.axaml's separately-authored card
          templates also use - PosterTile is Home-only (per this file's own header comment), so it's
          safe to hardcode here rather than make every consumer opt in. -->
-    <Border x:Name="Root" Classes="posterTile shelfCard" Focusable="True" AutomationProperties.AutomationId="PosterTileCard">
+    <Border x:Name="Root" Classes="posterTile shelfCard" Focusable="True" FocusAdorner="{x:Null}" AutomationProperties.AutomationId="PosterTileCard"
+            AutomationProperties.Name="{Binding #ThisControl.TitleText}">
         <Grid RowDefinitions="*,Auto" Width="140">
-            <Border Grid.Row="0" Classes="posterCover" Height="196" ClipToBounds="True" CornerRadius="{DynamicResource PbRadiusSm}">
+            <Border Grid.Row="0" Classes="posterCover" Classes.outlined="{Binding #ThisControl.Outlined}" Height="196" ClipToBounds="True" CornerRadius="{DynamicResource PbRadiusSm}">
                 <Grid>
-                    <Image Source="{Binding #ThisControl.CoverSource}" Stretch="UniformToFill" />
+                    <Image Source="{Binding #ThisControl.CoverSource}" Stretch="UniformToFill"
+                           IsVisible="{Binding #ThisControl.MosaicSources, Converter={x:Static conv:ObjectConverters.IsNull}}" />
+
+                    <!-- 2x2 collage (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md C6) - Collections cards only. -->
+                    <ItemsControl ItemsSource="{Binding #ThisControl.MosaicSources}"
+                                  IsVisible="{Binding #ThisControl.MosaicSources, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><UniformGrid Columns="2" Rows="2" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Image Source="{Binding}" Stretch="UniformToFill" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
                     <Border Classes="posterScrim" />
+
+                    <!-- "NEW" corner ribbon (C5). Top-left: the badge below already owns top-right. Clipped by the cover's own
+                         ClipToBounds, so only the diagonal band inside the corner shows. -->
+                    <Border Classes="newRibbon" IsVisible="{Binding #ThisControl.ShowNewRibbon}"
+                            HorizontalAlignment="Left" VerticalAlignment="Top" Width="92" Margin="-26,14,0,0">
+                        <Border.RenderTransform>
+                            <RotateTransform Angle="-45" />
+                        </Border.RenderTransform>
+                        <TextBlock Text="NEW" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" LetterSpacing="0.6"
+                                   Foreground="{DynamicResource PbBadgeTextBrush}" />
+                    </Border>
 
                     <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7" Padding="7,2"
                             CornerRadius="{StaticResource PbRadiusChip}" Background="{DynamicResource PbBadgeBrush}"
@@ -37,15 +69,38 @@
                                    Foreground="{DynamicResource PbBadgeTextBrush}" />
                     </Border>
 
-                    <Border VerticalAlignment="Bottom" Margin="7,0,7,7" Height="3" CornerRadius="999"
-                            ClipToBounds="True" Background="#59000000"
+                    <!-- Book marker in the merged Continue Reading row (I2). -->
+                    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7" Padding="4,3"
+                            CornerRadius="{StaticResource PbRadiusChip}" Background="#99000000"
+                            IsVisible="{Binding #ThisControl.ShowBookGlyph}" ToolTip.Tip="Book">
+                        <fi:SymbolIcon Symbol="Book" FontSize="12" Foreground="#F0ECE7DB" />
+                    </Border>
+
+                    <!-- "Not interested" (I5): hover-only, top-left (the count badge owns top-right), and a real Button so its own press never
+                         reaches the tile's open handler. -->
+                    <Button Classes="posterDismiss" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6" Focusable="False"
+                            IsVisible="{Binding #ThisControl.DismissCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                            Command="{Binding #ThisControl.DismissCommand}" CommandParameter="{Binding #ThisControl.CommandParameter}"
+                            ToolTip.Tip="Not interested" AutomationProperties.Name="Not interested"
+                            AutomationProperties.AutomationId="PosterTileDismiss">
+                        <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                    </Button>
+
+                    <!-- Inset progress (C4): squircle track, and a fill that grows in once when the tile first appears
+                         (PosterTile.axaml.cs) - a ScaleX render transform, never an animated Width. -->
+                    <Border x:Name="ProgressTrack" VerticalAlignment="Bottom" Margin="7,0,7,7" Height="3"
+                            CornerRadius="{StaticResource PbRadiusChip}" ClipToBounds="True" Background="#59000000"
                             IsVisible="{Binding #ThisControl.ShowProgress}">
-                        <ProgressBar Minimum="0" Maximum="1" Height="3"
-                                     Value="{Binding #ThisControl.ProgressFraction}"
-                                     Background="Transparent" Foreground="{DynamicResource PbAccentTextBrush}" />
+                        <Border x:Name="ProgressFill" CornerRadius="{StaticResource PbRadiusChip}"
+                                Background="{DynamicResource PbAccentTextBrush}" RenderTransformOrigin="0%,50%" />
                     </Border>
                 </Grid>
             </Border>
+
+            <!-- Hover/focus ring: PbGlowRing (so it follows the glow-tier setting), on its own overlay because the cover clips to bounds and
+                 already carries the drop shadow. Hidden until the tile is hovered or keyboard-focused (Primitives.axaml). -->
+            <Border Grid.Row="0" Classes="tileRing" Height="196" IsHitTestVisible="False"
+                    CornerRadius="{DynamicResource PbRadiusSm}" />
 
             <StackPanel Grid.Row="1" Margin="0,9,0,0" Spacing="1">
                 <TextBlock Text="{Binding #ThisControl.TitleText}" FontWeight="SemiBold" FontSize="12"

@@ -83,6 +83,16 @@ public partial class EventMemberRowViewModel : ViewModelBase, Models.ISelectable
         ? Services.CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize)
         : null;
 
+    /// <summary>Read to the CE threshold - the cover's read tick (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md).</summary>
+    public bool IsRead => Member.Issue?.HasBeenRead() ?? false;
+
+    /// <summary>Opened but not finished - the cover shows a progress ring instead of the tick.</summary>
+    public bool IsInProgress => Member.Issue is { } issue && issue.IsInProgress();
+
+    public double ReadFraction => (Member.Issue?.ReadPercentage() ?? 0) / 100.0;
+
+    public bool IsMissing => Member.Issue?.FileIsMissing ?? true;
+
     public bool HasRole => true; // role is always set on an EventMembership (no "unset" state)
 
     /// <summary>The role, with a small "auto" marker when detection (not the user) chose it.</summary>

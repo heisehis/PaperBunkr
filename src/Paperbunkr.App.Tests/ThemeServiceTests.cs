@@ -154,6 +154,54 @@ public class ThemeServiceTests : IDisposable
         Assert.Equal(key, service.GetAvailableThemes().Single(t => t.IsActive).Key);
     }
 
+    // --- Era colours (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md, "Colour tokens") ---
+
+    [Fact]
+    public void EraColors_DefaultPerMode_ModernFollowsTheAccent()
+    {
+        var dark = new Paperbunkr.App.Models.ThemeDefinition { Mode = "Dark" };
+        dark.Colors.Accent = "#112233";
+        var light = new Paperbunkr.App.Models.ThemeDefinition { Mode = "Light" };
+
+        var darkEras = ThemeService.EraColors(dark);
+        var lightEras = ThemeService.EraColors(light);
+
+        Assert.Equal(new[] { "Platinum", "Golden", "Silver", "Bronze", "Modern" }, darkEras.Keys);
+        Assert.Equal(Avalonia.Media.Color.Parse("#D4A437"), darkEras["Golden"]);
+        Assert.NotEqual(darkEras["Golden"], lightEras["Golden"]);             // a deeper set keeps contrast on light themes
+        Assert.Equal(Avalonia.Media.Color.Parse("#112233"), darkEras["Modern"]);
+        Assert.Equal(Avalonia.Media.Colors.Red, ThemeService.EraColors(dark, accentOverride: Avalonia.Media.Colors.Red)["Modern"]);
+    }
+
+    [Fact]
+    public void EraColors_ThemeKeysOverrideTheDefaults_AndBadValuesFallBack()
+    {
+        var theme = new Paperbunkr.App.Models.ThemeDefinition { Mode = "Dark" };
+        theme.Colors.EraGolden = "#FFD700";
+        theme.Colors.EraModern = "#00FF00";
+        theme.Colors.EraSilver = "not a colour";
+
+        var eras = ThemeService.EraColors(theme, accentOverride: Avalonia.Media.Colors.Red);
+
+        Assert.Equal(Avalonia.Media.Color.Parse("#FFD700"), eras["Golden"]);
+        Assert.Equal(Avalonia.Media.Color.Parse("#00FF00"), eras["Modern"]);    // an explicit Modern beats the accent
+        Assert.Equal(Avalonia.Media.Color.Parse("#B8C0CC"), eras["Silver"]);
+    }
+
+    [Fact]
+    public void ApplyTheme_WritesTheEraTokens()
+    {
+        CreateService().ApplyTheme("vintage_paperback");
+
+        var resources = Application.Current!.Resources;
+        foreach (var age in new[] { "Platinum", "Golden", "Silver", "Bronze", "Modern" })
+        {
+            Assert.True(resources.ContainsKey($"PbEra{age}Brush"));
+            var soft = Assert.IsType<Avalonia.Media.Color>(resources[$"PbEra{age}SoftColor"]);
+            Assert.Equal(0x2E, soft.A);
+        }
+    }
+
     /// <summary>
     /// A consumer that bakes a theme color into a raster (docs/superpowers/specs/
     /// 2026-09-08-home-navrail-visual-v2-design.md §3 - the Home masthead cover-wall) needs to know

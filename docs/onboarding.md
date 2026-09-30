@@ -79,6 +79,7 @@ Every image codec/archive provider wraps a native (non-.NET) binary, and all are
 | JPEG XL | `jxl.dll` | `.dll` extension hardcoded into a `const string` | High |
 | 7-Zip | `7z.dll` (x86/x64) | Path via `Assembly.GetExecutingAssembly().Location` + hardcoded path | Highest |
 | PDF (Pdfium) | `pdfium.dll` (x86/x64) | Bundled via post-build `xcopy` in the `.csproj` | Highest |
+| DjVu | DjVuLibre `ddjvu.exe`/`djvm.exe`/`c44.exe` (x86) | Separate processes, `Resources\` next to the Engine assembly via `Assembly.GetExecutingAssembly().Location`. Shipped since 2026-09-30 from the official 3.5.29 release with app-local VC++ x86 runtime (`src/Paperbunkr.App/Resources/DjVuLibre/README.md`) | Resolved |
 
 For the **net8 retarget (near-term, Windows-first)**: low risk — modern .NET still honors this `DllImport` style. Worth modernizing to `NativeLibrary.SetDllImportResolver` while this code is being touched anyway. For **true cross-platform (later)**: distinct scope — sourcing/building `.so`/`.dylib` builds and wiring per-RID resolution for five different native libraries.
 

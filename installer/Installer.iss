@@ -219,6 +219,9 @@ Name: "associatedjvu"; Description: ".djvu  (DjVu documents)";         GroupDesc
 Name: "associateepub"; Description: ".epub  (EPUB e-books)";                          GroupDescription: "Associate Book file types with {#MyAppName}:"; Flags: unchecked
 Name: "associatefb2";  Description: ".fb2, .zip  (FictionBook 2 - also claims plain .zip)"; GroupDescription: "Associate Book file types with {#MyAppName}:"; Flags: unchecked
 Name: "associatemobi"; Description: ".mobi, .azw, .azw3  (Kindle / MOBI)";            GroupDescription: "Associate Book file types with {#MyAppName}:"; Flags: unchecked
+; File Explorer cover thumbnails (docs/superpowers/specs/2026-09-30-explorer-cover-thumbnails-design.md,
+; decisions 13/17): one opt-in box; turns on every thumbnail type no other program already draws.
+Name: "explorerthumbnails"; Description: "Show comic and book covers as thumbnails in File Explorer"; GroupDescription: "File Explorer:"; Flags: unchecked
 
 [Files]
 ; The entire self-contained publish output (see installer\BuildInstaller.ps1) - exe, every
@@ -257,6 +260,8 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .dj
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .epub";     Tasks: associateepub; Flags: runhidden waituntilterminated; StatusMsg: "Registering .epub association..."
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .fb2 .zip"; Tasks: associatefb2;  Flags: runhidden waituntilterminated; StatusMsg: "Registering .fb2/.zip association..."
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .mobi .azw .azw3"; Tasks: associatemobi; Flags: runhidden waituntilterminated; StatusMsg: "Registering .mobi/.azw/.azw3 association..."
+; After the associations, so the handler is also registered under any Paperbunkr ProgID they just created.
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-thumbnails"; Tasks: explorerthumbnails; Flags: runhidden waituntilterminated; StatusMsg: "Registering File Explorer thumbnails..."
 ; Finished-page checkboxes (postinstall = rendered as a checkbox on the Finished page;
 ; skipifsilent = hidden for silent/auto-update runs). "Open Paperbunkr now" stays checked by
 ; default; "Browse the wiki" is opt-in (unchecked). The wiki entry is a URL opened via the shell
@@ -273,6 +278,9 @@ Filename: "{#MyAppURL}/wiki"; Description: "Browse the {#MyAppName} wiki"; Flags
 ; task state drifts across an upgrade/repair (e.g. a format associated by an older build whose
 ; task the user later unchecked). Runs before files are removed (Inno's UninstallRun ordering) so
 ; the exe still exists to call.
+; Thumbnails first, while Paperbunkr's ProgIDs still exist, so each type's previous thumbnail handler is put back
+; where it was (decision 7). Unconditional for the same reason as associations; a no-op if never enabled.
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-thumbnails"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterThumbnails"
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-file-associations"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterFileAssociations"
 
 [Code]

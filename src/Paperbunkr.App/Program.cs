@@ -60,6 +60,37 @@ sealed class Program
             fileAssociationService.SetComicAssociationsFor(requestedExtensions, associate);
             fileAssociationService.SetBookAssociationsFor(requestedExtensions, associate);
 
+            // An association change moves which ProgID Windows checks first for thumbnails - keep any enabled
+            // Explorer thumbnails registered where Windows will look.
+            new ThumbnailHandlerService().ReapplyAfterAssociationChange();
+
+            return;
+        }
+
+        // Headless File Explorer thumbnail (un)registration for installer\Installer.iss
+        // (docs/superpowers/specs/2026-09-30-explorer-cover-thumbnails-design.md). With no extensions, register
+        // turns on every thumbnail type no other program already draws (decision 13); unregister removes all of
+        // Paperbunkr's registrations and restores whatever handler each type had before (decision 7).
+        if (args.Length > 0 && (args[0] == "--register-thumbnails" || args[0] == "--unregister-thumbnails"))
+        {
+            var thumbnails = new ThumbnailHandlerService();
+            try
+            {
+                if (args[0] == "--unregister-thumbnails")
+                {
+                    thumbnails.DisableAll();
+                }
+                else
+                {
+                    thumbnails.SetEnabled(args.Length > 1 ? args[1..] : thumbnails.UnownedExtensions(), enabled: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Never fail an install/uninstall over thumbnails; the Preferences toggle can retry.
+                Console.Error.WriteLine(ex.Message);
+            }
+
             return;
         }
 

@@ -5,4 +5,7 @@ public enum ArcVerificationSource
 {
     ComicVine,
     Metron,
+
+    /// <summary>A Wikidata item lookup for the smart connector (docs/superpowers/specs/2026-09-27-continuity-map-design.md §1).</summary>
+    Wikidata,
 }

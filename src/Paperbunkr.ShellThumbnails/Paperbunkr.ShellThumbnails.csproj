@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- File Explorer cover thumbnails (docs/superpowers/specs/2026-09-30-explorer-cover-thumbnails-design.md).
+       Published as a Native AOT DLL that Windows loads into its thumbnail surrogate (dllhost.exe), so it must
+       not reference Paperbunkr.Engine/Common (built-in [ComImport] COM, SqlClient, ...) - the few pure files it
+       shares are compiled in as linked sources below. `dotnet build` produces an ordinary managed assembly
+       (what the tests reference); only `dotnet publish -r win-x64` does the AOT link, which needs MSVC. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PublishAot>true</PublishAot>
+    <NativeLib>Shared</NativeLib>
+    <SelfContained>true</SelfContained>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <!-- Linked engine sources carry their own XML doc cross-references to types that aren't compiled in here. -->
+    <NoWarn>$(NoWarn);CS1574;CS1580</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpCompress" Version="0.48.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Same natural sort the library uses to pick page 0, so the Explorer thumbnail is the library cover. -->
+    <Compile Include="..\Paperbunkr.Common\Text\ExtendedStringComparer.cs" Link="Linked\ExtendedStringComparer.cs" />
+    <Compile Include="..\Paperbunkr.Common\Text\ExtendedStringComparison.cs" Link="Linked\ExtendedStringComparison.cs" />
+    <!-- Same MOBI/AZW cover-record lookup the Books reader uses. -->
+    <Compile Include="..\Paperbunkr.Engine\IO\Provider\Books\Mobi\MobiHeaderReader.cs" Link="Linked\MobiHeaderReader.cs" />
+    <Compile Include="..\Paperbunkr.Engine\IO\Provider\Books\Mobi\PalmDbReader.cs" Link="Linked\PalmDbReader.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Paperbunkr.App.Tests" />
+  </ItemGroup>
+
+</Project>

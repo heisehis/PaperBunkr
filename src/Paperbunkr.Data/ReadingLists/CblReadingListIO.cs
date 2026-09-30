@@ -41,6 +41,8 @@ public static class CblReadingListIO
         }
 
         context.ReadingLists.Add(list);
+        // Lands at the end of the top level; the Reading screen moves it into the folder the user has selected (docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md §2).
+        ReadingListFolders.PlaceNewList(context, list, null);
         ReadingListManager.RecordCreatedWithItems(context, list);
         context.SaveChanges();
         return list;

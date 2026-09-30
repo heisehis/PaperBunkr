@@ -258,7 +258,8 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
 
         int? year = o["year_began"] is { } y && int.TryParse(y.ToString(), out int parsedYear) ? parsedYear : null;
         int? cvId = o["cv_id"] is { } c && int.TryParse(c.ToString(), out int parsedCv) && parsedCv > 0 ? parsedCv : null;
-        return new PullListSeriesInfo(seriesId, CleanName(o["name"]?.GetValue<string>() ?? string.Empty, year), (o["publisher"] as JsonObject)?["name"]?.GetValue<string>(), year, cvId);
+        // gcd_id: every Metron record carries the Grand Comics Database id (docs/superpowers/specs/2026-09-27-gcd-data-design.md §3).
+        return new PullListSeriesInfo(seriesId, CleanName(o["name"]?.GetValue<string>() ?? string.Empty, year), (o["publisher"] as JsonObject)?["name"]?.GetValue<string>(), year, cvId, PositiveInt(o["gcd_id"]));
     }
 
     public async Task<ComicVineIssueDetails?> GetIssueDetailsAsync(int issueId, CancellationToken cancellationToken)
@@ -360,8 +361,11 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
             AverageRating: o["average_rating"] is { } avgNode && double.TryParse(avgNode.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out double avg) ? avg : null,
             RatingCount: o["rating_count"] is { } rc && int.TryParse(rc.ToString(), out int count) ? count : null,
             Imprint: (o["imprint"] as JsonObject)?["name"]?.GetValue<string>(),
-            Variants: variants);
+            Variants: variants,
+            GcdId: PositiveInt(o["gcd_id"]));
     }
+
+    private static int? PositiveInt(JsonNode? node) => node is not null && int.TryParse(node.ToString(), out int value) && value > 0 ? value : null;
 
     private static IReadOnlyList<ComicVineIdName> IdNames(JsonNode? array) =>
         array is JsonArray items

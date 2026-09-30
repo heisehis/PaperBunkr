@@ -1,0 +1,414 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:cs="using:Paperbunkr.App.Services.ContinuityScreen"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="900"
+             x:Class="Paperbunkr.App.Views.EventOverviewView"
+             x:DataType="vm:EventPageViewModel">
+
+    <!-- An event's Overview (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md, "Event page"): Add issues (when
+         open), Follows ← This event → Followed by, Needs attention, the reading list with its filter chips, Related events and
+         Issue suggestions. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/ContinuityChrome.axaml" />
+    </UserControl.Styles>
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="NeighbourTemplate" x:DataType="cs:EventNeighbour">
+            <Button Classes="headerAction secondary" Margin="0,0,6,6" MinWidth="150" HorizontalContentAlignment="Left"
+                    AutomationProperties.Name="{Binding Name, StringFormat='Open {0}'}"
+                    Command="{Binding $parent[views:EventOverviewView].((vm:EventPageViewModel)DataContext).OpenNeighbourCommand}"
+                    CommandParameter="{Binding}">
+                <Button.ContextFlyout>
+                    <MenuFlyout>
+                        <MenuItem Header="Unlink" Command="{Binding $parent[views:EventOverviewView].((vm:EventPageViewModel)DataContext).UnlinkNeighbourCommand}"
+                                  CommandParameter="{Binding}" />
+                    </MenuFlyout>
+                </Button.ContextFlyout>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" MaxWidth="220" TextTrimming="CharacterEllipsis" />
+                        <fi:SymbolIcon Symbol="CheckmarkCircle" IconVariant="Filled" FontSize="{StaticResource PbIconSizeXs}"
+                                       Foreground="{DynamicResource PbSuccessBrush}" IsVisible="{Binding IsRead}" ToolTip.Tip="Read" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Years}" Classes="csFaint" />
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <StackPanel Margin="28,16,28,0" Spacing="16">
+
+        <!-- Add issues -->
+        <Border Background="{DynamicResource PbSurface2Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="12"
+                IsVisible="{Binding IsAddingIssues}">
+            <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBox Grid.Column="0" Classes="searchBox" Watermark="Search your library by series or number…" Text="{Binding SearchQuery}">
+                        <TextBox.InnerLeftContent>
+                            <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" Margin="8,0,2,0" />
+                        </TextBox.InnerLeftContent>
+                        <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
+                        </TextBox.KeyBindings>
+                    </TextBox>
+                    <controls:SuggestBox Grid.Column="1" Margin="8,0,0,0" MinWidth="120" FontSize="12" IsStrict="True"
+                                         Suggestions="{Binding RoleNames}" Text="{Binding SelectedRoleOptionText}" />
+                </Grid>
+                <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="5" Padding="8,6" IsVisible="{Binding AnySearchSelected}">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="{Binding SearchSelectionSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                        <Button Classes="headerAction primary" Padding="10,4" FontSize="11" Content="Add selected" Command="{Binding AddSelectedMembersCommand}" />
+                        <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Clear" Command="{Binding ClearSearchSelectionCommand}" />
+                    </StackPanel>
+                </Border>
+                <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding SearchResults}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:IssueSearchResult">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,2,6,2" ColumnSpacing="8">
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=OneWay}" VerticalAlignment="Center" MinWidth="0" Padding="0"
+                                              AutomationProperties.Name="{Binding DisplayLabel}"
+                                              Command="{Binding $parent[ItemsControl].((vm:EventPageViewModel)DataContext).ToggleSearchSelectionCommand}"
+                                              CommandParameter="{Binding}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding DisplayLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <Button Grid.Column="2" Classes="headerAction ghost" Padding="6,3" FontSize="10.5" Content="＋ series"
+                                            ToolTip.Tip="Add every issue of this series"
+                                            Command="{Binding $parent[ItemsControl].((vm:EventPageViewModel)DataContext).AddAllOfSeriesCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Grid.Column="3" Classes="headerAction ghost" Content="Add"
+                                            Command="{Binding $parent[ItemsControl].((vm:EventPageViewModel)DataContext).AddIssueCommand}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+
+        <!-- Follows ← This event → Followed by -->
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto,*" IsVisible="{Binding HasNeighbours}">
+            <StackPanel Grid.Column="0" Spacing="4" HorizontalAlignment="Right">
+                <TextBlock Text="Follows" Classes="csFaint" HorizontalAlignment="Right" IsVisible="{Binding HasFollows}" />
+                <ItemsControl ItemsSource="{Binding Follows}" ItemTemplate="{StaticResource NeighbourTemplate}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel HorizontalAlignment="Right" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </StackPanel>
+            <fi:SymbolIcon Grid.Column="1" Symbol="ArrowRight" FontSize="{StaticResource PbIconSizeSm}" Margin="6,0"
+                           Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" IsVisible="{Binding HasFollows}" />
+            <Border Grid.Column="2" Background="{DynamicResource PbAccentSoftBrush}" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="1"
+                    CornerRadius="{DynamicResource PbRadiusSm}" Padding="12,6" VerticalAlignment="Center" Margin="0,0,0,6">
+                <StackPanel>
+                    <TextBlock Text="This event" Classes="csFaint" />
+                    <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentTextBrush}"
+                               MaxWidth="220" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Border>
+            <fi:SymbolIcon Grid.Column="3" Symbol="ArrowRight" FontSize="{StaticResource PbIconSizeSm}" Margin="6,0"
+                           Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" IsVisible="{Binding HasFollowedBy}" />
+            <StackPanel Grid.Column="4" Spacing="4">
+                <TextBlock Text="Followed by" Classes="csFaint" IsVisible="{Binding HasFollowedBy}" />
+                <ItemsControl ItemsSource="{Binding FollowedBy}" ItemTemplate="{StaticResource NeighbourTemplate}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </StackPanel>
+        </Grid>
+
+        <!-- Needs attention -->
+        <Border Classes="attention" IsVisible="{Binding HasAttention}">
+            <WrapPanel>
+                <TextBlock Text="Needs attention" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
+                           VerticalAlignment="Center" Margin="0,0,10,0" />
+                <ItemsControl ItemsSource="{Binding Attention}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="cs:AttentionItem">
+                            <Button Classes="attentionItem" Content="{Binding Text}"
+                                    Command="{Binding $parent[ItemsControl].((vm:EventPageViewModel)DataContext).OpenAttentionCommand}"
+                                    CommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </WrapPanel>
+        </Border>
+
+        <!-- Reading list -->
+        <StackPanel Spacing="8">
+            <WrapPanel IsVisible="{Binding !HasNoMembers}">
+                <Button Classes="filterChip" Classes.on="{Binding IsAllFilter}" Content="{Binding AllFilterLabel}" Margin="0,0,6,4"
+                        Command="{Binding SetFilterCommand}" CommandParameter="{x:Static models:EventMemberFilter.All}" />
+                <Button Classes="filterChip" Classes.on="{Binding IsCoreFilter}" Content="{Binding CoreFilterLabel}" Margin="0,0,6,4"
+                        Command="{Binding SetFilterCommand}" CommandParameter="{x:Static models:EventMemberFilter.Core}" />
+                <Button Classes="filterChip" Classes.on="{Binding IsHideOptionalFilter}" Content="Hide optional" Margin="0,0,6,4"
+                        Command="{Binding SetFilterCommand}" CommandParameter="{x:Static models:EventMemberFilter.HideOptional}" />
+                <Button Classes="filterChip" Classes.on="{Binding IsUnreadFilter}" Content="{Binding UnreadFilterLabel}" Margin="0,0,6,4"
+                        Command="{Binding SetFilterCommand}" CommandParameter="{x:Static models:EventMemberFilter.Unread}" />
+                <Button Classes="filterChip" Classes.on="{Binding IsNeedsReviewFilter}" Content="{Binding NeedsReviewFilterLabel}" Margin="0,0,6,4"
+                        IsVisible="{Binding HasRoleSuggestions}"
+                        Command="{Binding SetFilterCommand}" CommandParameter="{x:Static models:EventMemberFilter.NeedsReview}" />
+            </WrapPanel>
+
+            <StackPanel Spacing="10" Margin="0,16,0,8" HorizontalAlignment="Center" IsVisible="{Binding HasNoMembers}">
+                <controls:EmptyIllustration Kind="Stack" HorizontalAlignment="Center" />
+                <TextBlock Text="No issues yet — Add issues to get started." FontSize="12.5" HorizontalAlignment="Center"
+                           Foreground="{DynamicResource PbTextFaintBrush}" />
+                <Button Classes="headerAction secondary" Content="＋ Add issues" HorizontalAlignment="Center" Command="{Binding ToggleAddIssuesCommand}" />
+            </StackPanel>
+            <TextBlock Text="Nothing matches this filter." Classes="csFaint" IsVisible="{Binding HasNoVisibleMembers}" />
+
+            <Border Background="{DynamicResource PbSurface2Brush}" CornerRadius="5" Padding="8,6" IsVisible="{Binding AnyMembersSelected}">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="{Binding MemberSelectionSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                    <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Remove" Command="{Binding RemoveSelectedMembersCommand}" />
+                    <controls:SuggestBox IsStrict="True" Suggestions="{Binding RoleNames}" Text="{Binding BulkRoleText}"
+                                         FontSize="11" MinWidth="110" Watermark="Set role" />
+                    <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Apply" Command="{Binding SetRoleForSelectedMembersCommand}" />
+                    <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Clear" Command="{Binding ClearMemberSelectionCommand}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Virtualized: a big event runs to hundreds of issues (review checklist: virtualize lists of 100+) -->
+            <ItemsControl ItemsSource="{Binding VisibleMembers}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:EventMemberRowViewModel">
+                        <Border Classes="itemRow">
+                            <Grid ColumnDefinitions="22,28,46,*,Auto,Auto">
+                                <CheckBox Grid.Column="0" Classes="rowManage rowPick"
+                                          Classes.pinned="{Binding $parent[views:EventOverviewView].((vm:EventPageViewModel)DataContext).AnyMembersSelected}"
+                                          IsChecked="{Binding IsSelected, Mode=OneWay}" VerticalAlignment="Center" MinWidth="0" Padding="0"
+                                          AutomationProperties.Name="{Binding TitleLine, StringFormat='Select {0}'}"
+                                          Command="{Binding $parent[views:EventOverviewView].((vm:EventPageViewModel)DataContext).ToggleMemberSelectionCommand}"
+                                          CommandParameter="{Binding}" />
+                                <TextBlock Grid.Column="1" Classes="pbTextHeading" Text="{Binding Position}" FontSize="15"
+                                           VerticalAlignment="Center" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <Panel Grid.Column="2" Width="42" Height="63" Margin="0,0,12,0">
+                                    <Border CornerRadius="3" ClipToBounds="True" Background="{DynamicResource PbSurface3Brush}">
+                                        <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                                    </Border>
+                                    <!-- read tick, or a progress ring while part-read -->
+                                    <Border Width="16" Height="16" CornerRadius="8" Background="{DynamicResource PbSuccessBrush}"
+                                            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-4,-4"
+                                            IsVisible="{Binding IsRead}" ToolTip.Tip="Read">
+                                        <fi:SymbolIcon Symbol="Checkmark" FontSize="10" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                    </Border>
+                                    <controls:ProgressArcRing Width="18" Height="18" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-5,-5"
+                                                              Fraction="{Binding ReadFraction}" IsVisible="{Binding IsInProgress}" ToolTip.Tip="Part-read" />
+                                </Panel>
+                                <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding TitleLine}" FontSize="13.5" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding SeriesLine}" FontSize="11" Margin="0,1,0,0" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0,0,0">
+                                    <Border Classes="pbChip" Padding="8,3" ToolTip.Tip="{Binding RoleReasonText}">
+                                        <TextBlock Text="{Binding RoleChipLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    </Border>
+                                    <Border Classes="pbChip" Padding="8,2" IsVisible="{Binding HasRoleSuggestion}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding SuggestionText}" FontSize="10" FontStyle="Italic" MaxWidth="240" TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" ToolTip.Tip="{Binding SuggestionText}" />
+                                            <Button Classes="headerAction ghost" Content="Accept" Padding="6,1" FontSize="10"
+                                                    Command="{Binding AcceptSuggestionCommand}" AutomationProperties.Name="Accept the suggested role" />
+                                            <Button Classes="headerAction ghost" Content="Dismiss" Padding="6,1" FontSize="10"
+                                                    Command="{Binding DismissSuggestionCommand}" AutomationProperties.Name="Dismiss the suggested role" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                                <Button Grid.Column="5" Classes="rowManage headerAction ghost" Padding="7,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                        ToolTip.Tip="More" AutomationProperties.Name="More actions">
+                                    <fi:SymbolIcon Symbol="MoreVertical" FontSize="{StaticResource PbIconSizeSm}" />
+                                    <Button.Flyout>
+                                        <MenuFlyout>
+                                            <MenuItem Header="Set role">
+                                                <MenuItem Header="Prologue" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.Prologue}" />
+                                                <MenuItem Header="Core" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.Core}" />
+                                                <MenuItem Header="Tie-in" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.TieIn}" />
+                                                <MenuItem Header="Epilogue" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.Epilogue}" />
+                                                <MenuItem Header="Optional" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.Optional}" />
+                                                <MenuItem Header="Aftermath" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.Aftermath}" />
+                                            </MenuItem>
+                                            <MenuItem Header="Clear detected role" Command="{Binding ClearAutoRoleCommand}" IsVisible="{Binding IsAutoRole}" />
+                                            <Separator />
+                                            <MenuItem Header="Move up" Command="{Binding MoveUpCommand}" />
+                                            <MenuItem Header="Move down" Command="{Binding MoveDownCommand}" />
+                                            <Separator />
+                                            <MenuItem Header="Remove from event" Command="{Binding RemoveCommand}" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- Related events: crossovers and other non-directional links (before/after live in the strip above) -->
+        <StackPanel x:Name="RelatedPanel" IsVisible="{Binding !HasNoMembers}">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" />
+            <Button Classes="panelHead" Command="{Binding ToggleRelatedEventsCommand}">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="Related events" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="{Binding RelatedEventsSummary}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !RelatedEventsExpanded}" />
+                        <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding RelatedEventsExpanded}" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+            <StackPanel IsVisible="{Binding RelatedEventsExpanded}" Margin="8,0,0,8" Spacing="4">
+                <ItemsControl ItemsSource="{Binding ConnectedEvents}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:ConnectedEventCard">
+                            <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2">
+                                <Button Grid.Column="0" Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,3"
+                                        Command="{Binding $parent[ItemsControl].((vm:EventPageViewModel)DataContext).OpenConnectedEventCommand}"
+                                        CommandParameter="{Binding}">
+                                    <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                                </Button>
+                                <Border Grid.Column="1" Classes="pbChip" Padding="7,2" VerticalAlignment="Center" Margin="6,0">
+                                    <TextBlock FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}">
+                                        <Run Text="{Binding RelationLabel, Mode=OneWay}" /><Run Text="{Binding SourceLabel, StringFormat=' · {0}', TargetNullValue='', Mode=OneWay}" />
+                                    </TextBlock>
+                                </Border>
+                                <Button Grid.Column="2" Classes="headerAction ghost" Padding="5" ToolTip.Tip="Unlink" AutomationProperties.Name="Unlink"
+                                        Command="{Binding $parent[ItemsControl].((vm:EventPageViewModel)DataContext).RemoveConnectedEventCommand}"
+                                        CommandParameter="{Binding}">
+                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" />
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="Suggested" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}"
+                           Margin="0,6,0,2" IsVisible="{Binding !HasNoConnectionSuggestions}" />
+                <ItemsControl ItemsSource="{Binding ConnectionSuggestions}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:EventConnectionSuggestionCard">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Headline}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="2">
+                                    <Button Classes="headerAction ghost" Content="Accept" IsVisible="{Binding IsTyped}"
+                                            Command="{Binding $parent[ItemsControl].((vm:EventPageViewModel)DataContext).ConnectSuggestedEventCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Dismiss" IsVisible="{Binding IsTyped}"
+                                            Command="{Binding $parent[ItemsControl].((vm:EventPageViewModel)DataContext).DismissSuggestedConnectionCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Connect" IsVisible="{Binding !IsTyped}"
+                                            Command="{Binding $parent[ItemsControl].((vm:EventPageViewModel)DataContext).ConnectSuggestedEventCommand}"
+                                            CommandParameter="{Binding}" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,4" Content="＋ Connect an event…"
+                        Command="{Binding ToggleConnectEventCommand}" />
+                <StackPanel IsVisible="{Binding IsConnectingEvent}" Spacing="6" Margin="0,4,0,0">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Grid.Column="0" Classes="searchBox" Watermark="Search story events…" Text="{Binding ConnectEventQuery}" />
+                        <controls:SuggestBox Grid.Column="1" Margin="8,0,0,0" MinWidth="120" FontSize="12" IsStrict="True"
+                                             Suggestions="{Binding RelationTypeNames}" Text="{Binding SelectedRelationTypeOptionText}" />
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding EventSearchResults}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:StoryEventSearchResult">
+                                <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Classes="headerAction ghost" Content="Connect"
+                                            Command="{Binding $parent[ItemsControl].((vm:EventPageViewModel)DataContext).ConnectEventCommand}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+                <Button Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,4"
+                        Command="{Binding ToggleEventFamilyCommand}" IsVisible="{Binding HasEventChain}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <TextBlock Text="Event chain" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !EventFamilyExpanded}" />
+                        <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding EventFamilyExpanded}" />
+                    </StackPanel>
+                </Button>
+                <ItemsControl ItemsSource="{Binding EventFamily}" IsVisible="{Binding EventFamilyExpanded}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:EventFamilyNodeCard">
+                            <Button Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,3"
+                                    Command="{Binding $parent[ItemsControl].((vm:EventPageViewModel)DataContext).OpenFamilyEventCommand}"
+                                    CommandParameter="{Binding}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Width="{Binding Indent}" />
+                                    <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Issue suggestions -->
+        <StackPanel x:Name="IssuesPanel" IsVisible="{Binding !HasNoSuggestions}">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" />
+            <Button Classes="panelHead" Command="{Binding ToggleIssueSuggestionsCommand}">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="Issue suggestions" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="{Binding IssueSuggestionsSummary}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !IssueSuggestionsExpanded}" />
+                        <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IssueSuggestionsExpanded}" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+            <StackPanel IsVisible="{Binding IssueSuggestionsExpanded}" Margin="8,0,0,8">
+                <ItemsControl ItemsSource="{Binding SuggestedIssues}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SuggestedIssueRowViewModel">
+                            <Grid ColumnDefinitions="*,120,Auto,Auto" Margin="0,3">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding DisplayLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <controls:SuggestBox Grid.Column="1" IsStrict="True" Suggestions="{Binding RoleNames}"
+                                                     Text="{Binding SelectedRoleOptionText}" FontSize="11" VerticalAlignment="Center" Margin="8,0" />
+                                <Button Grid.Column="2" Classes="headerAction ghost" Content="Add" VerticalAlignment="Center" Command="{Binding AddCommand}" />
+                                <Button Grid.Column="3" Classes="headerAction ghost" Content="Dismiss" VerticalAlignment="Center" Command="{Binding DismissCommand}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,4"
+                        Command="{Binding ToggleDismissedCommand}" IsVisible="{Binding !HasNoDismissed}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <TextBlock Text="Dismissed" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <Border Classes="pbChip" Padding="5,1"><TextBlock Text="{Binding DismissedSuggestions.Count}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                    </StackPanel>
+                </Button>
+                <ItemsControl ItemsSource="{Binding DismissedSuggestions}" IsVisible="{Binding DismissedExpanded}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:DismissedSuggestionCard">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Classes="headerAction ghost" Content="Restore"
+                                        Command="{Binding $parent[ItemsControl].((vm:EventPageViewModel)DataContext).RestoreDismissedCommand}"
+                                        CommandParameter="{Binding}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

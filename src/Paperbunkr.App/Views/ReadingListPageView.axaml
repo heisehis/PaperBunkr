@@ -1,0 +1,721 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             x:Class="Paperbunkr.App.Views.ReadingListPageView"
+             x:DataType="vm:ReadingListPageViewModel"
+             Focusable="True">
+    <!-- An open reading list (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md §3-§9): the cover rail, the blurred-cover
+         hero, the Checks strip, the journey path (or the cover wall), Edit mode's bars, and the Add-issues drawer. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/ReadingListsChrome.axaml" />
+    </UserControl.Styles>
+
+    <Grid ColumnDefinitions="60,*">
+        <!-- ===== Cover rail (Q10) ===== -->
+        <Border Grid.Column="0" x:Name="CoverRail" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
+            <ScrollViewer VerticalScrollBarVisibility="Hidden">
+                <StackPanel Spacing="12" Margin="0,14,0,14" HorizontalAlignment="Center">
+                    <Button Classes="headerAction ghost" Padding="8" HorizontalAlignment="Center" Command="{Binding OpenGalleryHomeCommand}"
+                            ToolTip.Tip="All reading lists" AutomationProperties.Name="All reading lists">
+                        <fi:SymbolIcon Symbol="Home" FontSize="{StaticResource PbIconSizeSm}" />
+                    </Button>
+                    <ItemsControl ItemsSource="{Binding RailLists}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="12" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ReadingRailItem">
+                                <Button Classes="rlRail" ToolTip.Tip="{Binding Tooltip}" AutomationProperties.Name="{Binding Name}"
+                                        Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).OpenRailListCommand}"
+                                        CommandParameter="{Binding}">
+                                    <Panel>
+                                        <Border Classes="rlRailCover" Classes.active="{Binding IsActive}" Width="40" Height="56" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Panel>
+                                                <Image Source="{Binding ArcCover}" Stretch="UniformToFill"
+                                                       IsVisible="{Binding ArcCover, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                                                <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" IsVisible="{Binding ShowCoverKey}" />
+                                            </Panel>
+                                        </Border>
+                                        <controls:ProgressRing Width="16" Height="16" Value="{Binding Progress}" StrokeThickness="2.5"
+                                                               HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-5,-5"
+                                                               Foreground="{DynamicResource PbAccentBrush}" TrackBrush="{DynamicResource PbSurface3Brush}"
+                                                               Fill="{DynamicResource PbChromeBrush}" />
+                                    </Panel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Panel Grid.Column="1" x:Name="MainArea" DragDrop.AllowDrop="True">
+            <Grid RowDefinitions="Auto,Auto,*">
+                <!-- ===== Hero (L1, Q6) - sized by its content (the blurred backdrop is a brush, so it never sets the height) ===== -->
+                <Border Grid.Row="0" ClipToBounds="True">
+                    <Border.Background>
+                        <ImageBrush Source="{Binding HeroBackdrop}" Stretch="UniformToFill" />
+                    </Border.Background>
+                    <Border>
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                <GradientStop Offset="0.0" Color="{DynamicResource PbHeroGradientStartColor}" />
+                                <GradientStop Offset="0.35" Color="#55000000" />
+                                <GradientStop Offset="1.0" Color="{DynamicResource PbBgColor}" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="18" Margin="24,20,24,14">
+                        <Border Grid.Column="0" Width="74" Height="110" CornerRadius="{DynamicResource PbRadius}" ClipToBounds="True" VerticalAlignment="Top"
+                                BoxShadow="{StaticResource PbElevationShadow}" Background="{DynamicResource PbSurface2Brush}"
+                                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+                            <Panel>
+                                <fi:SymbolIcon Symbol="TextBulletListSquare" FontSize="26" Foreground="{DynamicResource PbTextFaintBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding ShowCoverGlyph}" />
+                                <ItemsControl ItemsSource="{Binding CoverMosaicKeys}" IsVisible="{Binding ShowCoverMosaic}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="{Binding CoverMosaicColumns}" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String"><Image views:AsyncCoverImage.SourceId="{Binding}" Stretch="UniformToFill" /></DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Image Source="{Binding ArcCoverImage}" Stretch="UniformToFill"
+                                       IsVisible="{Binding ArcCoverImage, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                            </Panel>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Top">
+                            <!-- caption line: folder link · type · via source · tags -->
+                            <WrapPanel Orientation="Horizontal">
+                                <Button Classes="headerAction ghost" Padding="0" FontSize="11" Content="{Binding FolderName}" IsVisible="{Binding HasFolder}"
+                                        Command="{Binding OpenFolderCommand}" ToolTip.Tip="Back to this folder" Margin="0,0,6,0" />
+                                <TextBlock Text="·" Classes="rlFaint" Margin="0,0,6,0" VerticalAlignment="Center" IsVisible="{Binding ShowFolderSeparator}" />
+                                <TextBlock Text="{Binding TypeLabel}" Classes="rlFaint" VerticalAlignment="Center" Margin="0,0,6,0" IsVisible="{Binding ShowTypeLabel}" />
+                                <TextBlock Text="{Binding ArcSourceLabel}" Classes="rlFaint" VerticalAlignment="Center" Margin="0,0,8,0" IsVisible="{Binding IsArcLinked}" />
+                            </WrapPanel>
+                            <!-- LineHeight set here: the display style pins it to its own 22px size, which clips the tops of larger capitals -->
+                            <TextBlock Classes="pbTextHeading" FontSize="28" LineHeight="34" Text="{Binding ListName}" TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding ListName}" />
+                            <WrapPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding MetaLine}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                <Button Classes="headerAction ghost" Padding="6,0,0,0" FontSize="12" Content="{Binding ContinuityLinkLabel}"
+                                        Command="{Binding OpenLinkedContinuityCommand}" IsVisible="{Binding IsContinuityLinked}" ToolTip.Tip="Open this continuity" />
+                                <Button Classes="headerAction ghost" Padding="6,0,0,0" FontSize="12" IsVisible="{Binding HasLinkedStoryEvent}"
+                                        Command="{Binding UnlinkStoryEventCommand}" ToolTip.Tip="Unlink this story event">
+                                    <TextBlock Text="{Binding LinkedStoryEventName, StringFormat='· event: {0} ✕'}" />
+                                </Button>
+                            </WrapPanel>
+                            <!-- the list's own tags: click searches the gallery, right-click reweights or removes, "+ Tag" adds inline -->
+                            <WrapPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                <ItemsControl ItemsSource="{Binding Tags}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:TagPillViewModel">
+                                            <Button Classes="tagPill" Margin="0,0,5,4" Command="{Binding SearchCommand}" ToolTip.Tip="Show every list with this tag (right-click to weight or remove)">
+                                                <TextBlock Classes="tagPillText" Text="{Binding Value}" FontWeight="{Binding TextWeight}" Opacity="{Binding WeightOpacity}" />
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Classes="tagPill rlAddTag" Margin="0,0,5,4" Command="{Binding BeginAddTagCommand}" IsVisible="{Binding !IsAddingTag}"
+                                        ToolTip.Tip="Tag this list" AutomationProperties.Name="Add a tag">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <fi:SymbolIcon Symbol="Add" FontSize="10" />
+                                        <TextBlock Classes="tagPillText" Text="Tag" />
+                                    </StackPanel>
+                                </Button>
+                                <TextBox Classes="rlTagEntry" Text="{Binding NewTagText}" IsVisible="{Binding IsAddingTag}" Width="200" FontSize="11" Margin="0,0,5,4"
+                                         MinHeight="0" Padding="8,3" Watermark="Tag name (commas for several)" AutomationProperties.Name="New tag" />
+                            </WrapPanel>
+
+                            <!-- synopsis: heading lines dropped, three lines collapsed, "more" expands (scrolling past ~9 lines) -->
+                            <StackPanel IsVisible="{Binding HasSynopsis}" MaxWidth="760" HorizontalAlignment="Left" Spacing="1">
+                                <ScrollViewer MaxHeight="170" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                    <TextBlock Text="{Binding SynopsisText}" FontSize="12" LineHeight="17" Foreground="{DynamicResource PbTextMutedBrush}"
+                                               TextWrapping="Wrap" MaxLines="{Binding SynopsisMaxLines}" TextTrimming="CharacterEllipsis" />
+                                </ScrollViewer>
+                                <Button Classes="headerAction ghost" Padding="0,1" FontSize="11" HorizontalAlignment="Left" Content="{Binding SynopsisToggleLabel}"
+                                        Command="{Binding ToggleSynopsisCommand}" IsVisible="{Binding IsSynopsisLong}" AutomationProperties.Name="Show more or less of the description" />
+                            </StackPanel>
+
+                            <!-- reading-mode buttons -->
+                            <Grid x:Name="HeroActions" ColumnDefinitions="Auto,*,Auto" Margin="0,8,0,0" IsVisible="{Binding !IsEditing}">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                    <Button Classes="headerAction primary" Command="{Binding ContinueCommand}" IsVisible="{Binding HasContinueTarget}"
+                                            AutomationProperties.AutomationId="ReadingListContinueButton">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <fi:SymbolIcon Symbol="Play" IconVariant="Filled" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                            <TextBlock Text="{Binding ContinueLabel}" MaxWidth="360" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Classes="headerAction secondary" Command="{Binding ToggleAddIssuesCommand}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
+                                            <TextBlock Text="Add issues" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Classes="headerAction secondary" Command="{Binding BeginEditCommand}" AutomationProperties.AutomationId="ReadingListEditButton">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeXs}" />
+                                            <TextBlock Text="Edit list" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Classes="headerAction secondary" Padding="9,6" ToolTip.Tip="Manage" AutomationProperties.Name="Manage this list">
+                                        <fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeSm}" />
+                                        <Button.Flyout>
+                                            <MenuFlyout>
+                                                <MenuItem Header="Import .CBL…" Command="{Binding ImportCblCommand}" />
+                                                <MenuItem Header="Import .CSV…" Command="{Binding ImportCsvCommand}" />
+                                                <MenuItem Header="Build from a story arc…" Command="{Binding ToggleArcSearchCommand}" />
+                                                <MenuItem Header="Link story event…" Command="{Binding ToggleLinkStoryEventCommand}" />
+                                                <MenuItem Header="Refresh from source" Command="{Binding RefreshArcListCommand}" IsVisible="{Binding IsArcLinked}" />
+                                                <MenuItem Header="Follow this arc" ToggleType="CheckBox" IsChecked="{Binding FollowArc, Mode=TwoWay}" IsVisible="{Binding IsArcLinked}" />
+                                                <MenuItem Header="Rebuild from continuity" Command="{Binding RebuildFromContinuityCommand}" IsVisible="{Binding IsContinuityLinked}" />
+                                                <MenuItem Header="{Binding CheckCanonicalLabel}" Command="{Binding CheckCanonicalCommand}" IsVisible="{Binding CanCheckCanonical}" />
+                                                <Separator />
+                                                <MenuItem Header="Detect roles" Command="{Binding DetectRolesCommand}" />
+                                                <MenuItem Header="Request missing issues" Command="{Binding RequestMissingFromArcCommand}" IsVisible="{Binding IsArcLinked}" />
+                                                <Separator />
+                                                <MenuItem Header="Export">
+                                                    <MenuItem Header="As .CBL…" Command="{Binding ExportCblCommand}" />
+                                                    <MenuItem Header="As .CSV…" Command="{Binding ExportCsvCommand}" />
+                                                    <MenuItem Header="As plain text…" Command="{Binding ExportAsTextCommand}" />
+                                                    <MenuItem Header="Printable checklist (PDF)…" Command="{Binding ExportChecklistCommand}" />
+                                                    <MenuItem Header="Copy as text" Command="{Binding CopyAsTextCommand}" />
+                                                </MenuItem>
+                                                <Separator />
+                                                <MenuItem Header="Edit details…" Command="{Binding OpenPropertiesCommand}" />
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                </StackPanel>
+                                <Border Grid.Column="2" Background="{DynamicResource PbSurface2Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <Button Classes="segToggle" Classes.on="{Binding IsPathMode}" Command="{Binding SetViewModeCommand}" CommandParameter="Path"
+                                                AutomationProperties.Name="Show as a path">
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <fi:SymbolIcon Symbol="AppsList" FontSize="{StaticResource PbIconSizeXs}" />
+                                                <TextBlock Text="Path" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Classes="segToggle" Classes.on="{Binding IsCoversMode}" Command="{Binding SetViewModeCommand}" CommandParameter="Covers"
+                                                AutomationProperties.Name="Show as covers">
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <fi:SymbolIcon Symbol="Grid" FontSize="{StaticResource PbIconSizeXs}" />
+                                                <TextBlock Text="Covers" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <!-- Edit mode's bar (Q14) -->
+                            <Border x:Name="EditBar" Classes="rlBar accent" Margin="0,6,0,0" IsVisible="{Binding IsEditing}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                    <fi:SymbolIcon Grid.Column="0" Symbol="Edit" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding ListName, StringFormat='Editing {0}'}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="Drag ⠿ to reorder (Ctrl+↑/↓ with the keyboard) · select rows for bulk actions · Esc when done" Classes="rlFaint" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                                        <Button Classes="headerAction secondary" Content="＋ Add issues" Command="{Binding ToggleAddIssuesCommand}" />
+                                        <Button Classes="headerAction secondary" Content="＋ Chapter from selection" Command="{Binding AddChapterCommand}"
+                                                ToolTip.Tip="The selected issues become a new chapter" />
+                                        <Button Classes="headerAction primary" Content="Done" Command="{Binding EndEditCommand}" AutomationProperties.AutomationId="ReadingListDoneButton" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                    </Border>
+                </Border>
+
+                <!-- ===== Checks strip (K1), bulk bar, story-event search, status ===== -->
+                <StackPanel Grid.Row="1" Margin="28,6,28,6" Spacing="8">
+                    <Border Classes="rlBar accent" IsVisible="{Binding AnyMembersSelected}" Padding="10,6">
+                        <WrapPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding MemberSelectionSummary}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                            <controls:SuggestBox IsStrict="True" Suggestions="{Binding BulkRoleNames}" Text="{Binding BulkRoleText}" FontSize="11" MinWidth="120"
+                                                 Watermark="Set role" Margin="0,0,4,0" />
+                            <Button Classes="headerAction ghost" Padding="8,4" Content="Apply role" Command="{Binding SetRoleForSelectedMembersCommand}" />
+                            <Button Classes="headerAction ghost" Padding="8,4" Content="Move to chapter ▾">
+                                <Button.Flyout>
+                                    <Flyout Placement="BottomEdgeAlignedLeft">
+                                        <ItemsControl ItemsSource="{Binding MoveToChapterChoices}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="x:String">
+                                                    <Button Classes="headerAction ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="{Binding}"
+                                                            Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).MoveSelectionToChapterCommand}"
+                                                            CommandParameter="{Binding}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                            <Button Classes="headerAction ghost" Padding="8,4" Content="Mark read" Command="{Binding MarkSelectedReadCommand}" />
+                            <Button Classes="headerAction ghost" Padding="8,4" Content="Mark unread" Command="{Binding MarkSelectedUnreadCommand}" />
+                            <Button Classes="headerAction danger" Padding="8,4" Content="Remove" Command="{Binding RemoveSelectedMembersCommand}" />
+                            <Button Classes="headerAction ghost" Padding="8,4" Content="Clear" Command="{Binding ClearMemberSelectionCommand}" />
+                        </WrapPanel>
+                    </Border>
+
+                    <Border Classes="rlStrip" IsVisible="{Binding HasChecks}" AutomationProperties.AutomationId="ReadingListChecksStrip">
+                        <StackPanel>
+                            <!-- overlap -->
+                            <Border Classes="rlStripLine first" IsVisible="{Binding HasOverlap}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                    <fi:SymbolIcon Grid.Column="0" Symbol="CopySelect" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding OverlapText}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding OverlapText}" VerticalAlignment="Center" />
+                                        <Button Classes="headerAction ghost" Padding="4,0" FontSize="11" Content="{Binding MoreOverlapsLabel}" IsVisible="{Binding HasMoreOverlaps}">
+                                            <Button.Flyout>
+                                                <Flyout Placement="BottomEdgeAlignedLeft">
+                                                    <ItemsControl ItemsSource="{Binding OverlapPartners}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="vm:OverlapPartner">
+                                                                <Button Classes="headerAction ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="{Binding MenuLabel}"
+                                                                        Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).SelectOverlapPartnerCommand}"
+                                                                        CommandParameter="{Binding}" />
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </Flyout>
+                                            </Button.Flyout>
+                                        </Button>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                        <Button Classes="headerAction secondary" Padding="9,3" FontSize="11" Content="Compare" Command="{Binding CompareOverlapCommand}" />
+                                        <Button Classes="headerAction secondary" Padding="9,3" FontSize="11" Content="Merge…" Command="{Binding MergeOverlapCommand}" />
+                                        <Button Classes="headerAction ghost" Padding="9,3" FontSize="11" Content="Not a duplicate" Command="{Binding DismissOverlapCommand}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <!-- ComicVine/Metron -->
+                            <Border Classes="rlStripLine" Classes.first="{Binding !HasOverlap}" IsVisible="{Binding HasCanonicalPanel}">
+                                <StackPanel Spacing="6">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                        <fi:SymbolIcon Grid.Column="0" Symbol="ArrowSort" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding CanonicalSummary}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                            <Button Classes="headerAction primary" Padding="9,3" FontSize="11" Content="{Binding InsertMissingLabel}" Command="{Binding InsertCanonicalMissingCommand}"
+                                                    IsVisible="{Binding HasCanonicalMissing}" />
+                                            <Button Classes="headerAction secondary" Padding="9,3" FontSize="11" Content="Reorder" Command="{Binding ReorderCanonicalCommand}" IsVisible="{Binding CanReorderToMatch}" />
+                                            <Button Classes="headerAction ghost" Padding="9,3" FontSize="11" Content="Details" Command="{Binding ToggleCanonicalDetailsCommand}" IsVisible="{Binding HasCanonicalMissing}" />
+                                            <Button Classes="headerAction ghost" Padding="9,3" FontSize="11" Content="{Binding SwitchCanonicalSourceLabel}" Command="{Binding SwitchCanonicalSourceCommand}"
+                                                    IsVisible="{Binding CanSwitchCanonicalSource}" />
+                                            <Button Classes="headerAction ghost" Padding="5" Command="{Binding DismissCanonicalCommand}" ToolTip.Tip="Dismiss" AutomationProperties.Name="Dismiss">
+                                                <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                    <ItemsControl ItemsSource="{Binding CanonicalMissingLines}" IsVisible="{Binding CanonicalDetailsOpen}" Margin="28,0,0,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String"><TextBlock Text="{Binding}" Classes="rlFaint" Margin="0,1" /></DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                            <!-- rebuilt note -->
+                            <Border Classes="rlStripLine" Classes.first="{Binding !HasOverlap}" IsVisible="{Binding HasRebuildNote}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                    <fi:SymbolIcon Grid.Column="0" Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding RebuildNote}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                    <Button Grid.Column="2" Classes="headerAction ghost" Padding="5" Command="{Binding DismissRebuildNoteCommand}" ToolTip.Tip="Dismiss" AutomationProperties.Name="Dismiss">
+                                        <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Link story event search -->
+                    <Border Classes="rlBar" IsVisible="{Binding IsLinkingStoryEvent}">
+                        <StackPanel Spacing="8">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBox Classes="searchBox" Watermark="Search for a story event to link…" Text="{Binding StoryEventSearchQuery}" />
+                                <Button Grid.Column="1" Classes="headerAction ghost" Content="Cancel" Command="{Binding ToggleLinkStoryEventCommand}" />
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding StoryEventSearchResults}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:StoryEventSearchResult">
+                                        <Button Classes="headerAction ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Content="{Binding Name}"
+                                                Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).LinkStoryEventCommand}"
+                                                CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Background="{DynamicResource PbAccentSoftBrush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="10,6" IsVisible="{Binding HasStatusMessage}">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                            <fi:SymbolIcon Grid.Column="0" Symbol="Info" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <Button Grid.Column="2" Classes="headerAction ghost" Padding="5" Command="{Binding DismissStatusCommand}" ToolTip.Tip="Dismiss" AutomationProperties.Name="Dismiss">
+                                <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                            </Button>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <!-- ===== The path (§4) ===== -->
+                <ItemsControl Grid.Row="2" x:Name="PathList" ItemsSource="{Binding PathItems}" IsVisible="{Binding IsPathMode}" Padding="20,4,28,40"
+                              controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}">
+                    <ItemsControl.Template>
+                        <ControlTemplate>
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                                <ItemsPresenter Margin="{TemplateBinding Padding}" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                            </ScrollViewer>
+                        </ControlTemplate>
+                    </ItemsControl.Template>
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.DataTemplates>
+                        <!-- chapter header -->
+                        <DataTemplate DataType="vm:ChapterHeaderItem">
+                            <Grid ColumnDefinitions="40,*" MinHeight="34">
+                                <Panel Grid.Column="0">
+                                    <Border Classes="rlSpine" Classes.lit="{Binding SpineLit}" />
+                                    <Border Classes="rlDiamond" Classes.lit="{Binding SpineLit}" />
+                                </Panel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="4,8,0,4" VerticalAlignment="Center">
+                                    <Button Classes="rlChapter" Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).ToggleChapterCommand}"
+                                            CommandParameter="{Binding}" IsVisible="{Binding !IsRenaming}" ToolTip.Tip="Collapse or expand this chapter">
+                                        <TextBlock Text="{Binding Caption}" FontSize="11" FontWeight="Bold" LetterSpacing="0.6" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    </Button>
+                                    <TextBox Classes="rlChapterRename" Text="{Binding RenameText}" IsVisible="{Binding IsRenaming}" MinWidth="220" FontSize="12"
+                                             AutomationProperties.Name="Chapter name" />
+                                    <Button Classes="headerAction ghost" Padding="5,2" ToolTip.Tip="Rename this chapter" AutomationProperties.Name="Rename chapter"
+                                            IsVisible="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).IsEditing}"
+                                            Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).BeginChapterRenameCommand}"
+                                            CommandParameter="{Binding}">
+                                        <fi:SymbolIcon Symbol="Rename" FontSize="{StaticResource PbIconSizeXs}" />
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+
+                        <!-- a track row, reading mode: deliberately light (no hidden edit controls, no ancestor bindings). The whole row is one card
+                             like Library's: a click focuses it, double-click / Enter / Space reads (the code-behind), the ring shows hover and focus. -->
+                        <DataTemplate DataType="vm:PathRowItem">
+                            <Grid ColumnDefinitions="40,*">
+                                <Panel Grid.Column="0">
+                                    <Border Classes="rlSpine" Classes.lit="{Binding SpineLit}" />
+                                    <Border Classes="rlDot" Classes.read="{Binding DotRead}" Classes.missing="{Binding DotMissing}" />
+                                </Panel>
+                                <Button Grid.Column="1" Classes="rlCard" AutomationProperties.Name="{Binding Row.TitleLine}">
+                                <Border Classes="rlRow pathRow" Classes.read="{Binding Row.IsRead}" Padding="4,3">
+                                    <StackPanel>
+                                        <Grid ColumnDefinitions="34,32,*,96,48,190,34">
+                                            <TextBlock Grid.Column="0" Text="{Binding Row.Position}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                                            <Border Grid.Column="1" Width="22" Height="33" CornerRadius="3" ClipToBounds="True" Background="{DynamicResource PbSurface3Brush}" VerticalAlignment="Center">
+                                                <Panel>
+                                                    <Image views:AsyncCoverImage.SourceId="{Binding Row.CoverKey}" Stretch="UniformToFill" IsVisible="{Binding !Row.IsMissing}" />
+                                                    <Rectangle Stroke="{DynamicResource PbTextFaintBrush}" StrokeThickness="1" StrokeDashArray="3,2" IsVisible="{Binding Row.IsMissing}" />
+                                                </Panel>
+                                            </Border>
+                                            <StackPanel Grid.Column="2" Margin="10,0,8,0" VerticalAlignment="Center">
+                                                <TextBlock Classes="rlTitle" Text="{Binding Row.TitleLine}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Row.SeriesLine}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <Border Grid.Column="3" Classes="pbChip" Padding="7,2" HorizontalAlignment="Left" VerticalAlignment="Center" IsVisible="{Binding Row.HasRole}"
+                                                    ToolTip.Tip="{Binding Row.RoleReasonText}">
+                                                <TextBlock Text="{Binding Row.RoleChipLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            </Border>
+                                            <TextBlock Grid.Column="4" Text="{Binding YearText}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                            <Panel Grid.Column="5" VerticalAlignment="Center" Margin="4,0,4,0">
+                                                <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbSuccessBrush}" IsVisible="{Binding Row.IsRead}"
+                                                               HorizontalAlignment="Left" />
+                                                <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding Row.IsMissing}">
+                                                    <TextBlock Text="missing ·" Classes="rlFaint" VerticalAlignment="Center" />
+                                                    <Button Classes="headerAction ghost" Padding="4,1" FontSize="11" Content="Find &amp; link" Command="{Binding Row.LinkCommand}" />
+                                                    <Button Classes="headerAction ghost" Padding="4,1" FontSize="11" Content="Request" Command="{Binding Row.RequestCommand}" IsVisible="{Binding Row.CanRequest}"
+                                                            AutomationProperties.Name="Request this missing issue" />
+                                                </StackPanel>
+                                            </Panel>
+                                            <!-- ⋯ opens the shared row menu on demand (no per-row MenuFlyout built while scrolling) -->
+                                            <Button Grid.Column="6" Classes="headerAction ghost rlHover rlMore" Padding="6,2" VerticalAlignment="Center" ToolTip.Tip="More" AutomationProperties.Name="More">
+                                                <fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeSm}" />
+                                            </Button>
+                                        </Grid>
+                                        <TextBlock Text="{Binding Row.Notes}" FontSize="11" FontStyle="Italic" Margin="76,0,0,2" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                   TextWrapping="Wrap" IsVisible="{Binding HasNote}" />
+                                    </StackPanel>
+                                </Border>
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+
+                        <!-- a track row, Edit mode: handle, checkbox, role picker, suggestion, note, remove -->
+                        <DataTemplate DataType="vm:PathEditRowItem">
+                            <Grid ColumnDefinitions="40,*">
+                                <Panel Grid.Column="0">
+                                    <Border Classes="rlSpine" Classes.lit="{Binding SpineLit}" />
+                                    <Border Classes="rlDot" Classes.read="{Binding DotRead}" Classes.missing="{Binding DotMissing}" />
+                                </Panel>
+                                <StackPanel Grid.Column="1">
+                                    <Border Classes="rlInsertLine" />
+                                    <Border Classes="rlRow pathRow" Classes.read="{Binding Row.IsRead}" Classes.selected="{Binding Row.IsSelected}" DragDrop.AllowDrop="True" Padding="4,3">
+                                        <StackPanel>
+                                            <Grid ColumnDefinitions="Auto,Auto,34,32,*,48,34,34">
+                                                <TextBlock Grid.Column="0" Classes="rlHandle" Text="⠿" FontSize="14" Margin="2,0,6,0" VerticalAlignment="Center" Cursor="SizeAll"
+                                                           Foreground="{DynamicResource PbTextFaintBrush}" ToolTip.Tip="Drag to reorder (or Ctrl+↑/↓)" />
+                                                <CheckBox Grid.Column="1" IsChecked="{Binding Row.IsSelected}" MinWidth="0" Padding="0" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                          Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).ToggleMemberSelectionCommand}"
+                                                          CommandParameter="{Binding Row}" AutomationProperties.Name="{Binding Row.TitleLine}" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Row.Position}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0" />
+                                                <Border Grid.Column="3" Width="22" Height="33" CornerRadius="3" ClipToBounds="True" Background="{DynamicResource PbSurface3Brush}" VerticalAlignment="Center">
+                                                    <Panel>
+                                                        <Image views:AsyncCoverImage.SourceId="{Binding Row.CoverKey}" Stretch="UniformToFill" IsVisible="{Binding !Row.IsMissing}" />
+                                                        <Rectangle Stroke="{DynamicResource PbTextFaintBrush}" StrokeThickness="1" StrokeDashArray="3,2" IsVisible="{Binding Row.IsMissing}" />
+                                                    </Panel>
+                                                </Border>
+                                                <StackPanel Grid.Column="4" Margin="10,0,8,0" VerticalAlignment="Center">
+                                                    <TextBlock Classes="rlTitle" Text="{Binding Row.TitleLine}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Row.SeriesLine}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="5" Text="{Binding YearText}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                                <Button Grid.Column="6" Classes="headerAction ghost" Padding="5,2" Command="{Binding Row.BeginNoteCommand}" ToolTip.Tip="Note" AutomationProperties.Name="Edit note">
+                                                    <fi:SymbolIcon Symbol="Note" FontSize="{StaticResource PbIconSizeXs}" />
+                                                </Button>
+                                                <Button Grid.Column="7" Classes="headerAction ghost" Padding="5,2" Command="{Binding Row.RemoveCommand}" ToolTip.Tip="Remove from list" AutomationProperties.Name="Remove from list">
+                                                    <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                                                </Button>
+                                            </Grid>
+                                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="76,4,0,2">
+                                                <controls:SuggestBox IsStrict="True" Suggestions="{Binding Row.RoleOptionNames}" Text="{Binding Row.SelectedRoleOptionText}"
+                                                                     FontSize="10.5" MinWidth="110" Watermark="Role" />
+                                                <Border Classes="pbChip" Padding="8,2" IsVisible="{Binding Row.HasRoleSuggestion}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Text="{Binding Row.SuggestionText}" FontSize="10" FontStyle="Italic" MaxWidth="260" TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" ToolTip.Tip="{Binding Row.SuggestionText}" />
+                                                        <Button Classes="headerAction ghost" Content="Accept" Padding="6,1" FontSize="10" Command="{Binding Row.AcceptSuggestionCommand}" />
+                                                        <Button Classes="headerAction ghost" Content="Dismiss" Padding="6,1" FontSize="10" Command="{Binding Row.DismissSuggestionCommand}" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Row.Notes}" FontSize="11" FontStyle="Italic" Margin="76,0,0,2" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                       TextWrapping="Wrap" IsVisible="{Binding HasNote}" />
+                                            <TextBox Text="{Binding Row.Notes}" Watermark="Add a note…" FontSize="11" Margin="76,2,0,2" IsVisible="{Binding Row.NoteEditing}"
+                                                     AutomationProperties.Name="Note" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+
+                        <!-- Up next -->
+                        <DataTemplate DataType="vm:UpNextItem">
+                            <Grid ColumnDefinitions="40,*">
+                                <Grid Grid.Column="0" RowDefinitions="*,*">
+                                    <Border Grid.Row="0" Classes="rlSpine lit" />
+                                    <Border Grid.Row="1" Classes="rlSpine" />
+                                    <Border Grid.RowSpan="2" Classes="rlDot current" />
+                                </Grid>
+                                <Button Grid.Column="1" Classes="rlCard" AutomationProperties.Name="{Binding Row.TitleLine, StringFormat='Up next: {0}'}">
+                                <Border Classes="rlUpNext" Margin="4,6,4,6">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                                        <Border Grid.Column="0" Width="56" Height="84" CornerRadius="4" ClipToBounds="True" Background="{DynamicResource PbSurface3Brush}">
+                                            <Image views:AsyncCoverImage.SourceId="{Binding Row.CoverKey}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Caption}" FontSize="10" FontWeight="Bold" LetterSpacing="0.6" Foreground="{DynamicResource PbAccentTextBrush}" />
+                                            <TextBlock Text="{Binding Row.TitleLine}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Summary}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" MaxLines="2"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="640" HorizontalAlignment="Left" IsVisible="{Binding HasSummary}" />
+                                            <TextBlock Text="{Binding Row.Notes}" FontSize="11" FontStyle="Italic" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNote}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Classes="headerAction primary" VerticalAlignment="Center" Command="{Binding Row.OpenCommand}"
+                                                AutomationProperties.Name="Read the next issue">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <fi:SymbolIcon Symbol="Play" IconVariant="Filled" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                                <TextBlock Text="Read" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+
+                        <!-- empty list -->
+                        <DataTemplate DataType="vm:EmptyListItem">
+                            <Border Margin="40,20,0,0" Padding="28" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}">
+                                <StackPanel HorizontalAlignment="Center" Spacing="12">
+                                    <controls:EmptyIllustration Kind="List" HorizontalAlignment="Center" />
+                                    <TextBlock Text="Add issues to get started" FontSize="14" Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                        <Button Classes="headerAction primary" Content="＋ Add issues"
+                                                Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).ToggleAddIssuesCommand}" />
+                                        <Button Classes="headerAction secondary" Content="Import .CBL"
+                                                Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).ImportCblCommand}" />
+                                        <Button Classes="headerAction secondary" Content="Build from a story arc"
+                                                Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).ToggleArcSearchCommand}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.DataTemplates>
+                </ItemsControl>
+
+                <!-- ===== Covers (D2, §5) ===== -->
+                <ItemsControl Grid.Row="2" x:Name="CoverWall" ItemsSource="{Binding CoverTiles}" IsVisible="{Binding IsCoversMode}" Padding="28,4,28,40">
+                    <ItemsControl.Template>
+                        <ControlTemplate>
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                                <ItemsPresenter Margin="{TemplateBinding Padding}" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                            </ScrollViewer>
+                        </ControlTemplate>
+                    </ItemsControl.Template>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="108" ItemHeight="194" ItemSpacing="10" LineSpacing="12" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CoverTileItem">
+                            <Button Classes="rlCard" AutomationProperties.Name="{Binding Row.TitleLine}" ToolTip.Tip="{Binding Row.TitleLine}">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="{Binding ChapterCaption}" Height="15" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <Panel Width="100" Height="150">
+                                        <Border Classes="rlCoverArt" Background="{DynamicResource PbSurface3Brush}" Opacity="{Binding CoverOpacity}">
+                                            <Image views:AsyncCoverImage.SourceId="{Binding Row.CoverKey}" Stretch="UniformToFill" IsVisible="{Binding !Row.IsMissing}" />
+                                        </Border>
+                                        <Rectangle RadiusX="4" RadiusY="4" Stroke="{DynamicResource PbTextFaintBrush}" StrokeThickness="1.5" StrokeDashArray="4,3" IsVisible="{Binding Row.IsMissing}" />
+                                        <Border CornerRadius="4" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="3" IsVisible="{Binding IsNextUp}" />
+                                    </Panel>
+                                    <TextBlock Text="{Binding Caption}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
+
+            <!-- ===== Add-issues drawer (Q15) ===== -->
+            <Border Classes="rlDrawer" Classes.open="{Binding IsDrawerOpen}" Width="380" HorizontalAlignment="Right">
+                <Grid RowDefinitions="Auto,Auto,*" Margin="16,16,16,12" RowSpacing="12">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                        <TextBlock Classes="pbTextHeading" FontSize="22" LineHeight="28" Text="Add issues" IsVisible="{Binding !IsLinking}" />
+                        <TextBlock FontSize="14" FontWeight="SemiBold" Text="{Binding LinkingBannerText}" TextWrapping="Wrap" IsVisible="{Binding IsLinking}"
+                                   Foreground="{DynamicResource PbTextBrush}" />
+                        <Button Grid.Column="1" Classes="headerAction ghost" Padding="6" Command="{Binding CloseDrawerCommand}" ToolTip.Tip="Close" AutomationProperties.Name="Close">
+                            <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeSm}" />
+                        </Button>
+                    </Grid>
+                    <Border Grid.Row="1" Background="{DynamicResource PbSurface2Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="2" HorizontalAlignment="Left"
+                            IsVisible="{Binding !IsLinking}">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <Button Classes="segToggle" Classes.on="{Binding IsLibraryTab}" Content="Library" Command="{Binding OpenDrawerCommand}" CommandParameter="Library" />
+                            <Button Classes="segToggle" Classes.on="{Binding IsArcTab}" Content="Story arc" Command="{Binding OpenDrawerCommand}" CommandParameter="Arc" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Library tab -->
+                    <Grid Grid.Row="2" RowDefinitions="Auto,Auto,*" RowSpacing="8" IsVisible="{Binding IsLibraryTab}">
+                        <TextBox Grid.Row="0" Classes="searchBox" Watermark="Search your library by series or number…" Text="{Binding SearchQuery}">
+                            <TextBox.InnerLeftContent>
+                                <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" Margin="8,0,2,0" />
+                            </TextBox.InnerLeftContent>
+                        </TextBox>
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" IsVisible="{Binding AnySearchSelected}">
+                            <Button Classes="headerAction primary" Content="{Binding AddSelectedLabel}" Command="{Binding AddSelectedIssuesCommand}" IsEnabled="{Binding !IsLinking}" />
+                            <Button Classes="headerAction ghost" Content="Clear" Command="{Binding ClearSearchSelectionCommand}" />
+                        </StackPanel>
+                        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding SearchResults}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:IssueSearchResult">
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6" Margin="0,2">
+                                            <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" MinWidth="0" VerticalAlignment="Center"
+                                                      IsVisible="{Binding !$parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).IsLinking}"
+                                                      Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).ToggleSearchSelectionCommand}"
+                                                      CommandParameter="{Binding}" AutomationProperties.Name="Select" />
+                                            <TextBlock Grid.Column="1" Text="{Binding DisplayLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <Button Grid.Column="2" Classes="headerAction ghost" Padding="6,2" FontSize="10.5" Content="＋ series" ToolTip.Tip="Add every issue of this series"
+                                                    IsVisible="{Binding !$parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).IsLinking}"
+                                                    Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).AddAllOfSeriesCommand}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button Grid.Column="3" Classes="headerAction secondary" Padding="8,2" FontSize="11"
+                                                    Content="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).AddResultButtonLabel}"
+                                                    Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).AddIssueCommand}"
+                                                    CommandParameter="{Binding}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+
+                    <!-- Story arc tab -->
+                    <Grid Grid.Row="2" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="8" IsVisible="{Binding IsArcTab}">
+                        <controls:SuggestBox Grid.Row="0" IsStrict="True" Suggestions="{Binding ArcSourceNames}" Text="{Binding SelectedArcSourceText}" />
+                        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBox Classes="searchBox" Text="{Binding ArcSearchQuery}" Watermark="Story arc or event name…">
+                                <TextBox.KeyBindings><KeyBinding Gesture="Enter" Command="{Binding SearchArcCommand}" /></TextBox.KeyBindings>
+                            </TextBox>
+                            <Button Grid.Column="1" Classes="headerAction primary" Content="Search" Command="{Binding SearchArcCommand}" />
+                        </Grid>
+                        <TextBlock Grid.Row="2" Text="{Binding ArcSearchStatus}" Classes="rlFaint" TextWrapping="Wrap"
+                                   IsVisible="{Binding ArcSearchStatus, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                        <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding ArcSearchResults}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:ArcSearchResultRow">
+                                        <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Margin="0,0,0,6">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding Summary}" Classes="rlFaint" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Classes="headerAction primary" Content="Use" VerticalAlignment="Center"
+                                                        Command="{Binding $parent[views:ReadingListPageView].((vm:ReadingListPageViewModel)DataContext).UseArcCommand}"
+                                                        CommandParameter="{Binding}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- ===== Compare overlay (Q25) ===== -->
+            <controls:OverlayShell IsOpen="{Binding IsComparing}" CloseCommand="{Binding CloseCompareCommand}">
+                <Border Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                        CornerRadius="{DynamicResource PbRadius}" Padding="20" Margin="40" MaxWidth="980" MaxHeight="680"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Grid RowDefinitions="Auto,*,Auto" RowSpacing="12" DataContext="{Binding Compare}" x:DataType="vm:ReadingListCompareViewModel">
+                        <TextBlock Grid.Row="0" Classes="pbTextHeading" FontSize="20" LineHeight="26" Text="Compare reading lists" />
+                        <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="14">
+                            <DockPanel Grid.Column="0">
+                                <TextBlock DockPanel.Dock="Top" Classes="rlCaption" Text="{Binding OnlyHereHeader}" Margin="0,0,0,6" TextTrimming="CharacterEllipsis" />
+                                <ScrollViewer><ItemsControl ItemsSource="{Binding OnlyHere}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{Binding}" FontSize="12" Margin="0,2" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                </DataTemplate></ItemsControl.ItemTemplate></ItemsControl></ScrollViewer>
+                            </DockPanel>
+                            <DockPanel Grid.Column="1">
+                                <TextBlock DockPanel.Dock="Top" Classes="rlCaption" Text="{Binding InBothHeader}" Margin="0,0,0,6" />
+                                <ScrollViewer><ItemsControl ItemsSource="{Binding InBoth}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{Binding}" FontSize="12" Margin="0,2" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                                </DataTemplate></ItemsControl.ItemTemplate></ItemsControl></ScrollViewer>
+                            </DockPanel>
+                            <DockPanel Grid.Column="2">
+                                <TextBlock DockPanel.Dock="Top" Classes="rlCaption" Text="{Binding OnlyThereHeader}" Margin="0,0,0,6" TextTrimming="CharacterEllipsis" />
+                                <ScrollViewer><ItemsControl ItemsSource="{Binding OnlyThere}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{Binding}" FontSize="12" Margin="0,2" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                </DataTemplate></ItemsControl.ItemTemplate></ItemsControl></ScrollViewer>
+                            </DockPanel>
+                        </Grid>
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                            <Button Classes="headerAction ghost" Content="Close" Command="{Binding CloseCommand}" />
+                            <Button Classes="headerAction primary" Content="Merge…" Command="{Binding MergeCommand}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </controls:OverlayShell>
+        </Panel>
+    </Grid>
+</UserControl>

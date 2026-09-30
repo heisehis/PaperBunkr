@@ -36,7 +36,7 @@ public class ReadingListMemberContextMenuBuilderTests
 
         Assert.NotNull(entries);
         var headers = entries!.Select(e => e.IsSeparator ? null : e.Header).ToList();
-        Assert.Equal(new[] { "Open", "Mark as Read", "Set Role", null, "Remove from List" }, headers);
+        Assert.Equal(new[] { "Open", "Mark as Read", "Set Role", "Add a Note", null, "Move Up", "Move Down", null, "Remove from List" }, headers);
     }
 
     [Fact]

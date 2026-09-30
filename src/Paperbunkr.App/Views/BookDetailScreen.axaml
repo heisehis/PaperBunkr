@@ -111,7 +111,7 @@
                             <ItemsControl ItemsSource="{Binding Chapters}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:BookChapterSummary">
-                                        <Button Classes="listRow"
+                                        <Button Classes="listRow" KeyDown="OnRowKeyDown"
                                                 Command="{Binding $parent[ItemsControl].((vm:BookDetailScreenViewModel)DataContext).OpenChapterCommand}"
                                                 CommandParameter="{Binding}">
                                             <DockPanel LastChildFill="True">
@@ -142,7 +142,7 @@
                             <ItemsControl ItemsSource="{Binding Bookmarks}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:BookBookmarkSummary">
-                                        <Button Classes="listRow"
+                                        <Button Classes="listRow" KeyDown="OnRowKeyDown"
                                                 Command="{Binding $parent[ItemsControl].((vm:BookDetailScreenViewModel)DataContext).OpenBookmarkCommand}"
                                                 CommandParameter="{Binding}">
                                             <Grid ColumnDefinitions="Auto,*">

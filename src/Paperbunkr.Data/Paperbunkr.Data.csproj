@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -40,7 +40,7 @@
     Granted to the app (its IMetadataGraph/IRulesEngine adapters) and the first-party test
     assemblies - never to Paperbunkr.Plugins.
     (Deviation from the spec's literal "App + Data.Tests only": Paperbunkr.App.Tests also calls
-    ContinuityResolver directly - EventsScreenViewModelTests / DetailTabsViewModelTests - so it
+    ContinuityResolver directly - ContinuityPageViewModelTests / DetailTabsViewModelTests - so it
     needs the same test-assembly access as Data.Tests.)
   -->
   <ItemGroup>

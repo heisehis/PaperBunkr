@@ -1,6 +1,6 @@
 # Privacy Notice
 
-**Last updated:** 2026-09-26
+**Last updated:** 2026-09-27
 
 Paperbunkr is a desktop app that runs on your own computer. There is no Paperbunkr account, no
 Paperbunkr server, and no telemetry: the app never reports usage, analytics or crashes to the
@@ -19,6 +19,13 @@ project. This notice explains what stays on your computer, what can leave it, an
   Wikidata to suggest shared-universe continuities. The searches contain series names and the names
   of each series' most frequent characters. No account or key is involved. Turn it off under
   Preferences → Automation → **Find shared-universe suggestions**.
+- **Story event checks.** Once a week, **Check story events** looks up your story events' ComicVine and
+  Metron arc IDs (with your own key or login) and asks Wikidata which events follow which. The
+  lookups contain story event names and those IDs. Turn it off under Preferences → Automation →
+  **Check story events**.
+- **Grand Comics Database matching.** Once you have downloaded the GCD data, a weekly task matches
+  your series against it on your computer. For series scraped from Metron it asks Metron (with your
+  login) for their GCD ID. Turn it off under Preferences → Automation → **Match series to GCD**.
 
 ### Only when you use them
 
@@ -39,6 +46,9 @@ project. This notice explains what stays on your computer, what can leave it, an
   choose to share (see below).
 - **Plugins.** A plugin you install runs inside Paperbunkr with the same access the app has,
   including the network. Only install plugins you trust; the project does not review them.
+- **Grand Comics Database data.** Downloading it, or checking for newer data, under Preferences →
+  Connections fetches a small description file and the data itself from GitHub. Nothing about your
+  library is sent.
 - **Books.** The book reader shows EPUB and FB2 pages in Microsoft's WebView2. If a book's pages
   point to images or styles on the web, WebView2 may load them.
 
@@ -50,6 +60,10 @@ and each service handles what it receives under its own privacy policy.
 - Your library database, cover cache, backups, plugins and logs are in `%AppData%\Paperbunkr`.
   The book reader's WebView2 profile is in `%LocalAppData%\Paperbunkr\WebView2`. Preferences →
   About → **Logs and data** opens these folders.
+- Every time you open or finish something, Paperbunkr adds a line to a reading log in that database, with the
+  title as it was at the time. Insights (stats, goals, Recap and History) is built from it. **Remove from
+  history** and **Clear all history** only hide entries from the History list; the log itself, and your stats,
+  are kept.
 - API keys, passwords and tracker sign-ins are encrypted with Windows (DPAPI) so that only your
   Windows account on this computer can read them. A database copied to another account or computer
   will ask for them again. A library-sharing password is stored only as a salted hash.

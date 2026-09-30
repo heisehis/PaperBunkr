@@ -1,0 +1,88 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:fi="using:FluentIcons.Avalonia"
+                    xmlns:conv="using:Avalonia.Data.Converters"
+                    xmlns:vm="using:Paperbunkr.App.ViewModels"
+                    xmlns:home="using:Paperbunkr.App.ViewModels.Home"
+                    xmlns:models="using:Paperbunkr.App.Models"
+                    xmlns:views="using:Paperbunkr.App.Views"
+                    xmlns:controls="using:Paperbunkr.App.Controls">
+
+    <!--
+        Because You Read. Each row leads with the series it's seeded from - a smaller, accent-outlined cover captioned "you read",
+        an arrow, then the recommendations (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md C8). Recommendation cards
+        get a hover ✕ and a right-click "Not interested" (docs/superpowers/specs/2026-09-28-home-improvements-design.md I5); the
+        lead card never does. No section-level heading: every row already has its own "Because you read X".
+    -->
+    <DataTemplate x:Key="HomeSection.becauseYouRead" DataType="home:BecauseYouReadSectionViewModel">
+        <StackPanel controls:ScrollReveal.Enabled="True">
+            <ItemsControl ItemsSource="{Binding Home.BecauseYouRead}" IsVisible="{Binding Home.HasBecauseYouRead}" ClipToBounds="False"
+                          AutomationProperties.AutomationId="HomeBecauseYouReadSection">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:BecauseYouReadRow">
+                        <StackPanel Spacing="12" Margin="0,0,0,20">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <fi:SymbolIcon Classes="sectionIcon" Symbol="Lightbulb" />
+                                <controls:SplitText Classes="heading" Text="{Binding SeedSeriesName, StringFormat='Because you read {0}'}" />
+                            </StackPanel>
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8,-8,-8,0">
+                                <StackPanel Orientation="Horizontal" Spacing="10" Margin="2,2,2,6">
+                                    <StackPanel Spacing="4" VerticalAlignment="Top"
+                                                IsVisible="{Binding SeedSeries, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                                        <LayoutTransformControl>
+                                            <LayoutTransformControl.LayoutTransform>
+                                                <ScaleTransform ScaleX="0.75" ScaleY="0.75" />
+                                            </LayoutTransformControl.LayoutTransform>
+                                            <views:PosterTile
+                                                CoverSource="{Binding SeedSeries.CoverKey, Converter={x:Static views:CoverImageConverter.Instance}}"
+                                                Outlined="True"
+                                                AutomationProperties.AutomationId="HomeBecauseYouReadSeedCard"
+                                                Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
+                                                CommandParameter="{Binding SeedSeries}" />
+                                        </LayoutTransformControl>
+                                        <TextBlock Text="you read" FontSize="10.5" HorizontalAlignment="Center"
+                                                   Foreground="{DynamicResource PbAccentTextBrush}" />
+                                    </StackPanel>
+                                    <fi:SymbolIcon Symbol="ArrowRight" FontSize="18" VerticalAlignment="Center" Margin="0,0,0,40"
+                                                   Foreground="{DynamicResource PbAccentTextBrush}"
+                                                   IsVisible="{Binding SeedSeries, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                                    <ItemsControl ItemsSource="{Binding Cards}"
+                                                  controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).PlayEntranceAnimation}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:SeriesCardSample">
+                                                <views:PosterTile
+                                                    CoverSource="{Binding CoverKey, Converter={x:Static views:CoverImageConverter.Instance}}"
+                                                    TitleText="{Binding Name}"
+                                                    BadgeText="{Binding IssueCountLabel}"
+                                                    DismissCommand="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).NotInterestedCommand}"
+                                                    Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
+                                                    CommandParameter="{Binding}">
+                                                    <views:PosterTile.ContextMenu>
+                                                        <ContextMenu>
+                                                            <MenuItem Header="Open series"
+                                                                      Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
+                                                                      CommandParameter="{Binding}" />
+                                                            <MenuItem Header="Not interested"
+                                                                      Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).NotInterestedCommand}"
+                                                                      CommandParameter="{Binding}" />
+                                                        </ContextMenu>
+                                                    </views:PosterTile.ContextMenu>
+                                                </views:PosterTile>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="No recommendations yet — link related series from a series' Detail screen to see them here."
+                       Classes="emptyState" TextWrapping="Wrap" IsVisible="{Binding !Home.HasBecauseYouRead}"
+                       AutomationProperties.AutomationId="HomeBecauseYouReadEmptyState" />
+        </StackPanel>
+    </DataTemplate>
+</ResourceDictionary>

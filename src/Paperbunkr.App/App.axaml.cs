@@ -202,7 +202,7 @@ public partial class App : Application
         var transitionCoordinator = new NavigationTransitionCoordinator(
             SharedElementTransitionService.Shared,
             isReducedMotion: themeService.GetReducedMotion,
-            flightDuration: () => (TimeSpan)(Application.Current!.Resources["PbMotionLarge"] ?? TimeSpan.FromMilliseconds(320)),
+            flightDuration: () => Application.Current!.TryGetResource("PbMotionLarge", null, out var large) && large is TimeSpan d ? d : TimeSpan.FromMilliseconds(320),
             easing: new CubicEaseOut());
         DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] transition coordinator ready; constructing MainViewModel...");
         var mainViewModel = new MainViewModel(transitionCoordinator.RunAsync, themeService);

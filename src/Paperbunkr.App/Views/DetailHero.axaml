@@ -39,10 +39,18 @@
 
     <Border Height="{Binding #Hero.HeroHeight}" ClipToBounds="True" Background="{Binding CoverBrush}">
         <Grid>
-            <Image x:Name="Backdrop" Source="{Binding BackdropImage}" Stretch="UniformToFill"
-                   IsVisible="{Binding BackdropImage, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+            <!-- Scroll parallax done properly (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md C9): ParallaxBackdrop draws
+                 the blurred cover with spare image above and below and drifts it within that margin, so the edge never shows - the
+                 2026-09-07 version (a plain UniformToFill Image) had no spare image and was removed for exactly that. -->
+            <controls:ParallaxBackdrop x:Name="Backdrop" Source="{Binding BackdropImage}"
+                                       IsVisible="{Binding BackdropImage, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
 
-            <Border Background="#59000000" IsVisible="{Binding #Hero.MutedBackdrop}" />
+            <!-- Home's extra muted scrim, now a per-theme-mode token (C1): lighter on light themes so the hero stops reading as a slab. -->
+            <Border IsVisible="{Binding #Hero.MutedBackdrop}">
+                <Border.Background>
+                    <SolidColorBrush Color="{DynamicResource PbHeroScrimColor}" />
+                </Border.Background>
+            </Border>
 
             <Border>
                 <Border.Background>

@@ -8,6 +8,7 @@
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:insights="using:Paperbunkr.App.Views.Insights"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="900"
@@ -116,6 +117,7 @@
             <StackPanel Grid.Column="0" Orientation="Horizontal">
                 <Button Classes="tab" Classes.active="{Binding IsTodayTabSelected}" Content="Today" Command="{Binding SelectTodayTabCommand}" />
                 <Button Classes="tab" Classes.active="{Binding IsTrendsTabSelected}" Content="Trends" Command="{Binding SelectTrendsTabCommand}" />
+                <Button Classes="tab" Classes.active="{Binding IsHistoryTabSelected}" Content="History" Command="{Binding SelectHistoryTabCommand}" />
                 <Button Classes="tab" Classes.active="{Binding IsRecapTabSelected}" Content="Recap" Command="{Binding SelectRecapTabCommand}"
                         IsVisible="{Binding IsRecapAvailable}" />
             </StackPanel>
@@ -149,7 +151,7 @@
 
         <!-- Today tab -->
         <ScrollViewer Grid.Row="2" IsVisible="{Binding IsTodayTabSelected}">
-            <StackPanel Margin="28,4,28,28" Spacing="20">
+            <StackPanel Margin="28,8,28,28" Spacing="20">
 
                 <!-- Today hero row (docs/superpowers/specs/2026-09-23-insights-redesign-design.md) -
                      goal progress, continue-reading, and the top recommendation, each a glow-tier
@@ -368,7 +370,7 @@
 
         <!-- Trends tab -->
         <ScrollViewer Grid.Row="2" IsVisible="{Binding IsTrendsTabSelected}">
-            <StackPanel Margin="28,4,28,28" Spacing="16">
+            <StackPanel Margin="28,8,28,28" Spacing="16">
 
                 <!-- Trends group pill sub-nav (docs/superpowers/specs/2026-09-23-insights-redesign-
                      design.md) - a pure display-side partition of the cards below into three groups,
@@ -742,8 +744,15 @@
              otherwise-empty full-width screen wasted almost the whole tab. All 9 stats now show at once
              in a single grid instead of paging through them; Items Finished keeps a headline-sized spot
              (row-span 2, wide column) the way it did as slide 1/poster tile 0. -->
+        <!-- History tab (docs/superpowers/specs/2026-09-29-insights-reading-history-design.md §4). Not inside a
+             ScrollViewer: its ListBox scrolls itself, and nesting would defeat virtualization. The Panel carries
+             IsVisible so that binding still resolves against this screen, not the History DataContext. -->
+        <Panel Grid.Row="2" IsVisible="{Binding IsHistoryTabSelected}" Margin="28,0,28,12">
+            <insights:InsightsHistoryView DataContext="{Binding History}" />
+        </Panel>
+
         <ScrollViewer Grid.Row="2" IsVisible="{Binding IsRecapTabSelected}">
-            <StackPanel Margin="28,4,28,28" Spacing="16">
+            <StackPanel Margin="28,8,28,28" Spacing="16">
 
                 <Grid ColumnDefinitions="1.4*,*,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="12" MaxWidth="900">
                     <Border Grid.Column="0" Grid.Row="0" Grid.RowSpan="2" Classes="card">

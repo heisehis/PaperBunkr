@@ -18,6 +18,22 @@ public sealed class EventConnectionSuggestionCard
     public required int CandidateEventId { get; init; }
     public required string Name { get; init; }
     public required string Reason { get; init; }
+
+    /// <summary>
+    /// Set for the smart connector's typed suggestions (docs/superpowers/specs/2026-09-27-continuity-map-design.md §2): Accept creates
+    /// exactly this relation (<see cref="SourceEventId"/> → <see cref="TargetEventId"/>). Null for the older untyped "looks connected"
+    /// suggestions, which use the relation picker.
+    /// </summary>
+    public Paperbunkr.Data.Entities.RelationType? SuggestedType { get; init; }
+
+    public int SourceEventId { get; init; }
+
+    public int TargetEventId { get; init; }
+
+    public bool IsTyped => SuggestedType is not null;
+
+    /// <summary>"Looks like the sequel of Planet Hulk" (typed) or just the event's name.</summary>
+    public string Headline { get; init; } = string.Empty;
 }
 
 /// <summary>One issue the user has dismissed from an event's suggestion queue, restorable (docs/superpowers/specs/2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md).</summary>

@@ -1,0 +1,393 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:em="using:Paperbunkr.App.Controls.EventMap"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:eventMap="using:Paperbunkr.App.Services.EventMap"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="640"
+             x:Class="Paperbunkr.App.Views.EventMapView"
+             x:DataType="vm:EventMapViewModel">
+
+    <!-- The Event Map (docs/superpowers/specs/2026-09-25-event-map-design.md §3-§4). Toolbar, then a 2×2 grid: corner
+         label / pinned ruler / pinned lane headers / two-axis ScrollViewer holding the virtualized surface, with the
+         340 px inspector drawer on the right. Colours are skin tokens only - no hex. -->
+
+    <UserControl.Resources>
+        <!-- Card themes, one per density stop; EventMapSurface assigns EventMapCard{Density}Theme. The shared states
+             (:selected, :dimmed, :missing, :focus-visible, hover) live on the base theme. -->
+        <ControlTheme x:Key="EventMapCardBaseTheme" TargetType="em:EventMapCard">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
+            <Style Selector="^:dimmed">
+                <Setter Property="Opacity" Value="0.25" />
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#PART_Frame">
+                <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            </Style>
+            <Style Selector="^:selected /template/ Border#PART_Frame">
+                <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style Selector="^:focus-visible /template/ Border#PART_Frame">
+                <Setter Property="BorderBrush" Value="{DynamicResource PbAccentTextBrush}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style Selector="^:missing /template/ Panel#PART_Content">
+                <Setter Property="Opacity" Value="0.55" />
+            </Style>
+            <Style Selector="^:trunk /template/ Border#PART_Frame">
+                <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="EventMapCardCompactTheme" TargetType="em:EventMapCard" BasedOn="{StaticResource EventMapCardBaseTheme}">
+            <Setter Property="Template">
+                <ControlTemplate x:DataType="vm:EventMapCardViewModel">
+                    <Border Name="PART_Frame" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                            BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True">
+                        <Panel Name="PART_Content">
+                            <Grid ColumnDefinitions="3,*,Auto">
+                                <Border Grid.Column="0" em:EventMapLaneBrush.ColorIndex="{Binding ColorIndex}" />
+                                <TextBlock Grid.Column="1" Text="{Binding Badge}" FontSize="11" FontWeight="SemiBold" Margin="6,0,2,0"
+                                           Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <Panel Grid.Column="2" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center">
+                                    <Ellipse Width="8" Height="8" Stroke="{DynamicResource PbTextMutedBrush}" StrokeThickness="1.25" IsVisible="{Binding IsUnread}" />
+                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource PbAccentBrush}" IsVisible="{Binding IsInProgress}" />
+                                    <fi:SymbolIcon Symbol="Checkmark" FontSize="12" Foreground="{DynamicResource PbSuccessBrush}" IsVisible="{Binding IsRead}" />
+                                </Panel>
+                            </Grid>
+                            <fi:SymbolIcon Symbol="Warning" FontSize="10" Foreground="{DynamicResource PbDangerBrush}" IsVisible="{Binding IsMissing}"
+                                           HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,2,0" />
+                        </Panel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+
+        <ControlTheme x:Key="EventMapCardStandardTheme" TargetType="em:EventMapCard" BasedOn="{StaticResource EventMapCardBaseTheme}">
+            <Setter Property="Template">
+                <ControlTemplate x:DataType="vm:EventMapCardViewModel">
+                    <Border Name="PART_Frame" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                            BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True">
+                        <Panel Name="PART_Content">
+                            <Grid ColumnDefinitions="3,Auto,*">
+                                <Border Grid.Column="0" em:EventMapLaneBrush.ColorIndex="{Binding ColorIndex}" />
+                                <Border Grid.Column="1" Width="36" Height="54" Margin="5,0,0,0" CornerRadius="3" ClipToBounds="True"
+                                        Background="{DynamicResource PbSurface2Brush}" VerticalAlignment="Center">
+                                    <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="2" Margin="7,4,6,4" VerticalAlignment="Center" Spacing="1">
+                                    <TextBlock Text="{Binding SeriesName}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Number, StringFormat='#{0}'}" FontSize="11" Foreground="{DynamicResource PbTextBrush}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <Panel Width="12" Height="12" VerticalAlignment="Center">
+                                            <Ellipse Width="8" Height="8" Stroke="{DynamicResource PbTextMutedBrush}" StrokeThickness="1.25" IsVisible="{Binding IsUnread}" />
+                                            <Ellipse Width="8" Height="8" Fill="{DynamicResource PbAccentBrush}" IsVisible="{Binding IsInProgress}" />
+                                            <fi:SymbolIcon Symbol="Checkmark" FontSize="12" Foreground="{DynamicResource PbSuccessBrush}" IsVisible="{Binding IsRead}" />
+                                        </Panel>
+                                        <TextBlock Text="{Binding CoverDate}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                            <fi:SymbolIcon Symbol="Warning" FontSize="12" Foreground="{DynamicResource PbDangerBrush}" IsVisible="{Binding IsMissing}"
+                                           HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,3,4,0" />
+                        </Panel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+
+        <ControlTheme x:Key="EventMapCardCoversTheme" TargetType="em:EventMapCard" BasedOn="{StaticResource EventMapCardBaseTheme}">
+            <Setter Property="Template">
+                <ControlTemplate x:DataType="vm:EventMapCardViewModel">
+                    <Border Name="PART_Frame" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                            BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True">
+                        <Panel Name="PART_Content">
+                            <Grid RowDefinitions="*,Auto">
+                                <Panel Grid.Row="0" Background="{DynamicResource PbSurface2Brush}">
+                                    <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                                </Panel>
+                                <Border Grid.Row="0" Height="3" VerticalAlignment="Top" em:EventMapLaneBrush.ColorIndex="{Binding ColorIndex}" />
+                                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="6,4">
+                                    <TextBlock Grid.Column="0" Text="{Binding Badge}" FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <Panel Grid.Column="1" Width="12" Height="12" VerticalAlignment="Center">
+                                        <Ellipse Width="8" Height="8" Stroke="{DynamicResource PbTextMutedBrush}" StrokeThickness="1.25" IsVisible="{Binding IsUnread}" />
+                                        <Ellipse Width="8" Height="8" Fill="{DynamicResource PbAccentBrush}" IsVisible="{Binding IsInProgress}" />
+                                        <fi:SymbolIcon Symbol="Checkmark" FontSize="12" Foreground="{DynamicResource PbSuccessBrush}" IsVisible="{Binding IsRead}" />
+                                    </Panel>
+                                </Grid>
+                            </Grid>
+                            <fi:SymbolIcon Symbol="Warning" FontSize="14" Foreground="{DynamicResource PbDangerBrush}" IsVisible="{Binding IsMissing}"
+                                           HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,6,0" />
+                        </Panel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Button.mapLink">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.mapLink:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+        <Style Selector="Border.segmentRow.current">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- ===== Toolbar ===== -->
+        <WrapPanel Grid.Row="0" Margin="28,0,28,10" Orientation="Horizontal" ItemSpacing="14" LineSpacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding IsSpinePickerVisible}">
+                <TextBlock Text="Spine" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                <controls:SuggestBox MinWidth="220" FontSize="12" IsStrict="True" AutomationProperties.Name="Spine series"
+                                     Suggestions="{Binding SpineOptions}" Text="{Binding SpineText}" />
+            </StackPanel>
+
+            <Border Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                    BorderThickness="1" CornerRadius="6" Padding="3" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                    <Button Classes="segToggle" Classes.on="{Binding IsFilterAll}" Content="All"
+                            Command="{Binding SetFilterCommand}" CommandParameter="{x:Static eventMap:EventMapFilter.All}" />
+                    <Button Classes="segToggle" Classes.on="{Binding IsFilterSpineOnly}" Content="Spine only" IsVisible="{Binding CanFilterSpineOnly}"
+                            Command="{Binding SetFilterCommand}" CommandParameter="{x:Static eventMap:EventMapFilter.SpineOnly}" />
+                    <Button Classes="segToggle" Classes.on="{Binding IsFilterHideOptional}" Content="Hide optional"
+                            Command="{Binding SetFilterCommand}" CommandParameter="{x:Static eventMap:EventMapFilter.HideOptional}" />
+                    <Button Classes="segToggle" Classes.on="{Binding IsFilterEventsOnly}" Content="Events only" IsVisible="{Binding CanFilterEventsOnly}"
+                            ToolTip.Tip="Hide the issues that are in no event"
+                            Command="{Binding SetFilterCommand}" CommandParameter="{x:Static eventMap:EventMapFilter.EventsOnly}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Continuity map: hide whole events (docs/superpowers/specs/2026-09-27-continuity-map-design.md §4) -->
+            <Button Classes="headerAction secondary" VerticalAlignment="Center" IsVisible="{Binding HasEventChoices}"
+                    AutomationProperties.Name="Choose which events to show">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Events" VerticalAlignment="Center" />
+                    <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" />
+                </StackPanel>
+                <Button.Flyout>
+                    <Flyout Placement="BottomEdgeAlignedLeft">
+                        <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding EventChoices}" MinWidth="220">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:EventMapEventChoice">
+                                        <CheckBox Content="{Binding Name}" IsChecked="{Binding IsShown}" Margin="2,1" FontSize="12" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" ToolTip.Tip="Density (Ctrl + mouse wheel)">
+                <TextBlock Text="Density" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                <Slider Width="110" Minimum="0" Maximum="2" TickFrequency="1" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+                        AutomationProperties.Name="Map density: compact, standard or covers" Value="{Binding DensityIndex}" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <Button Classes="headerAction secondary" VerticalAlignment="Center" Command="{Binding JumpToFirstUnreadCommand}"
+                    AutomationProperties.Name="Jump to first unread" ToolTip.Tip="Jump to first unread">
+                <fi:SymbolIcon Symbol="ArrowNext" FontSize="{StaticResource PbIconSizeSm}" />
+            </Button>
+
+            <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" MaxWidth="520" />
+
+            <Button Classes="headerAction ghost" VerticalAlignment="Center" IsVisible="{Binding HasPendingDuplicates}"
+                    Command="{Binding ShowDuplicatesCommand}" ToolTip.Tip="These pairs wait under Possible duplicates in the sidebar">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" />
+                    <TextBlock Text="{Binding PendingDuplicatesText}" FontSize="11" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </WrapPanel>
+
+        <!-- ===== Map + inspector ===== -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+            <Border Grid.Column="0" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0">
+                <Panel>
+                    <!-- The map -->
+                    <Grid RowDefinitions="Auto,*" ColumnDefinitions="180,*" IsVisible="{Binding HasMap}">
+                        <Border Grid.Row="0" Grid.Column="0" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                                BorderThickness="0,0,1,1" Padding="12,0" Height="{Binding RulerHeight}">
+                            <TextBlock Text="{Binding CornerLabel}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </Border>
+                        <Border Grid.Row="0" Grid.Column="1" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                                BorderThickness="0,0,0,1" Height="{Binding RulerHeight}">
+                            <em:EventMapRuler Name="Ruler" Layout="{Binding Layout}" Cards="{Binding Cards}" Connectors="{Binding Connectors}" />
+                        </Border>
+                        <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                                BorderThickness="0,0,1,0" ClipToBounds="True">
+                            <!-- The headers are shifted up by the map's scroll offset (code-behind). A Canvas lets the list keep its full height:
+                                 as a direct child of the Border it was arranged at the visible height, so every lane below the first screen was
+                                 clipped away once the map scrolled. The Border still clips to the visible area. -->
+                            <Canvas Name="LaneHeaderHost">
+                            <ItemsControl Name="LaneHeaders" ItemsSource="{Binding LaneHeaders}"
+                                          Width="{Binding #LaneHeaderHost.Bounds.Width}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:EventMapLaneHeader">
+                                        <Grid Height="{Binding Height}" ColumnDefinitions="4,*" ToolTip.Tip="{Binding FullName}">
+                                            <Border Grid.Column="0" Margin="0,8" CornerRadius="2" em:EventMapLaneBrush.ColorIndex="{Binding ColorIndex}" />
+                                            <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center" Spacing="1">
+                                                <TextBlock Text="{Binding Label}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}"
+                                                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding CountLabel}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            </Canvas>
+                        </Border>
+                        <ScrollViewer Name="Scroller" Grid.Row="1" Grid.Column="1"
+                                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                            <em:EventMapSurface Name="Surface" Layout="{Binding Layout}" Cards="{Binding Cards}" RelatedSet="{Binding RelatedSet}"
+                                                AutomationProperties.Name="{Binding SurfaceAutomationName}"
+                                                HorizontalAlignment="Left" VerticalAlignment="Top" />
+                        </ScrollViewer>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="Nothing to show - change the filters" FontSize="12.5" Margin="28,40"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" VerticalAlignment="Top"
+                                   IsVisible="{Binding IsFilteredEmpty}" />
+                    </Grid>
+
+                    <!-- No members -->
+                    <StackPanel Spacing="10" Margin="28,40" HorizontalAlignment="Center" VerticalAlignment="Top" IsVisible="{Binding IsEmpty}">
+                        <controls:EmptyIllustration Kind="Stack" HorizontalAlignment="Center" />
+                        <TextBlock Text="{Binding EmptyText}" FontSize="12.5" HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <Button Classes="headerAction secondary" Content="＋ Add issues" HorizontalAlignment="Center" Command="{Binding AddIssuesCommand}"
+                                IsVisible="{Binding IsAddIssuesVisible}" />
+                    </StackPanel>
+
+                    <!-- Load failure (also raised as an Activity Center alert) -->
+                    <StackPanel Spacing="8" Margin="28,40" HorizontalAlignment="Center" VerticalAlignment="Top" IsVisible="{Binding HasError}">
+                        <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbDangerBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="{Binding ErrorText}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                                   MaxWidth="520" HorizontalAlignment="Center" TextAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Text="Loading map…" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" Margin="28,40"
+                               HorizontalAlignment="Center" VerticalAlignment="Top" IsVisible="{Binding IsLoading}" />
+                </Panel>
+            </Border>
+
+            <!-- ===== Inspector drawer ===== -->
+            <Border Grid.Column="1" Width="340" IsVisible="{Binding IsInspectorOpen}" Background="{DynamicResource PbChromeBrush}"
+                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1,1,0,0">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,10,8,0">
+                        <TextBlock Text="Issue" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="headerAction ghost" Padding="5" Command="{Binding CloseInspectorCommand}"
+                                AutomationProperties.Name="Close inspector" ToolTip.Tip="Close (Esc)">
+                            <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                        </Button>
+                    </Grid>
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="16,6,16,20" Spacing="10">
+                            <Border Width="120" Height="180" HorizontalAlignment="Left" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
+                                    Background="{DynamicResource PbSurface2Brush}">
+                                <Image views:AsyncCoverImage.SourceId="{Binding SelectedCard.CoverKey}" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="{Binding SelectedCard.Title}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding SelectedCard.CoverDate}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                           IsVisible="{Binding SelectedCard.HasCoverDate}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Border Classes="pbChip" Padding="8,3">
+                                    <TextBlock Text="{Binding SelectedCard.RoleLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                </Border>
+                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                    <Panel Width="12" Height="12" VerticalAlignment="Center">
+                                        <Ellipse Width="8" Height="8" Stroke="{DynamicResource PbTextMutedBrush}" StrokeThickness="1.25" IsVisible="{Binding SelectedCard.IsUnread}" />
+                                        <Ellipse Width="8" Height="8" Fill="{DynamicResource PbAccentBrush}" IsVisible="{Binding SelectedCard.IsInProgress}" />
+                                        <fi:SymbolIcon Symbol="Checkmark" FontSize="12" Foreground="{DynamicResource PbSuccessBrush}" IsVisible="{Binding SelectedCard.IsRead}" />
+                                    </Panel>
+                                    <TextBlock Text="{Binding SelectedCard.ReadStateLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="{Binding SelectedCard.IsMissing}">
+                                    <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                    <TextBlock Text="File missing" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                </StackPanel>
+                            </StackPanel>
+                            <TextBlock Text="Outside this continuity: its series isn't a member." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                       TextWrapping="Wrap" IsVisible="{Binding SelectedCard.IsOutsideContinuity}" />
+                            <TextBlock Text="{Binding SelectedCard.Summary}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                                       MaxLines="6" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SelectedCard.Summary}"
+                                       IsVisible="{Binding SelectedCard.HasSummary}" />
+                            <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                <Button Classes="headerAction primary" Command="{Binding OpenReaderCommand}" ToolTip.Tip="Read in event order (Ctrl+Enter)">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeXs}" />
+                                        <TextBlock Text="Open reader" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="headerAction secondary" Content="{Binding SelectedCard.MarkReadLabel}" Command="{Binding ToggleReadCommand}" />
+                                <Button Classes="headerAction ghost" Content="Series details" Command="{Binding OpenSeriesDetailCommand}" />
+                            </WrapPanel>
+
+                            <StackPanel Spacing="4" IsVisible="{Binding HasConnections}">
+                                <TextBlock Text="Connections" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,0" />
+                                <ItemsControl ItemsSource="{Binding Connections}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:EventMapLinkViewModel">
+                                            <Button Classes="mapLink" Command="{Binding $parent[UserControl].((vm:EventMapViewModel)DataContext).SelectLinkCommand}"
+                                                    CommandParameter="{Binding}" AutomationProperties.Name="{Binding Title, StringFormat='Go to {0}'}">
+                                                <Grid ColumnDefinitions="110,*">
+                                                    <TextBlock Grid.Column="0" Text="{Binding Relation}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <StackPanel Spacing="4" IsVisible="{Binding HasSegmentOrder}">
+                                <TextBlock Text="Segment order" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,0" />
+                                <ItemsControl ItemsSource="{Binding SegmentOrder}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:EventMapLinkViewModel">
+                                            <Border Classes="segmentRow" Classes.current="{Binding IsCurrent}" CornerRadius="{DynamicResource PbRadiusSm}">
+                                                <Button Classes="mapLink" Command="{Binding $parent[UserControl].((vm:EventMapViewModel)DataContext).SelectLinkCommand}"
+                                                        CommandParameter="{Binding}" AutomationProperties.Name="{Binding Title, StringFormat='Go to {0}'}">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Title}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding RoleLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="8,0,0,0" />
+                                                    </Grid>
+                                                </Button>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

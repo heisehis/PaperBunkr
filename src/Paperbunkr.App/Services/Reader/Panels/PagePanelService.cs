@@ -8,8 +8,8 @@ using SkiaSharp;
 namespace Paperbunkr.App.Services.Reader.Panels;
 
 /// <summary>
-/// Runs <see cref="PanelDetector"/> on a page the reader already holds (docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md section 3): the bitmap is scaled down to
-/// <see cref="PanelDetector.AnalysisSize"/> on its long side, turned into luminance and detected. Cheap enough (a few milliseconds) that nothing is stored on disk.
+/// Runs <see cref="PanelDetectionService"/> on a page the reader already holds (docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md section 3): the bitmap is scaled down to
+/// <see cref="OnnxPanelDetector.InputSize"/> on its long side (tall strips are analysed at a fixed narrow width) and detected. Detections are only cached in memory, never stored on disk.
 /// </summary>
 public static class PagePanelAnalyzer
 {
@@ -24,7 +24,9 @@ public static class PagePanelAnalyzer
                 return PagePanels.Whole;
             }
 
-            double scale = Math.Min(1.0, PanelDetector.AnalysisSize / (double)Math.Max(size.Width, size.Height));
+            // Tall strips are analysed at a fixed narrow width; everything else is scaled to the model's input size.
+            bool tall = size.Height > PanelDetectionService.TallAspect * size.Width;
+            double scale = Math.Min(1.0, tall ? SkPanelAnalyzer.StripAnalysisWidth / (double)size.Width : OnnxPanelDetector.InputSize / (double)Math.Max(size.Width, size.Height));
             var target = new PixelSize(Math.Max(16, (int)Math.Round(size.Width * scale)), Math.Max(16, (int)Math.Round(size.Height * scale)));
 
             using var scaled = page.CreateScaledBitmap(target, BitmapInterpolationMode.MediumQuality);
@@ -37,7 +39,7 @@ public static class PagePanelAnalyzer
                 return PagePanels.Whole;
             }
 
-            return Analyze(sk, rightToLeft);
+            return PanelDetectionService.Detect(sk, rightToLeft);
         }
         catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or ArgumentException or IOException)
         {
@@ -45,41 +47,8 @@ public static class PagePanelAnalyzer
         }
     }
 
-    /// <summary>Detects the panels of an already-decoded Skia page (scaled first if it is larger than the analysis size).</summary>
-    public static PagePanels Analyze(SKBitmap page, bool rightToLeft)
-    {
-        SKBitmap? resized = null;
-        try
-        {
-            var source = page;
-            int longSide = Math.Max(page.Width, page.Height);
-            if (longSide > PanelDetector.AnalysisSize)
-            {
-                double scale = PanelDetector.AnalysisSize / (double)longSide;
-                resized = page.Resize(new SKImageInfo(Math.Max(16, (int)Math.Round(page.Width * scale)), Math.Max(16, (int)Math.Round(page.Height * scale))), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
-                source = resized ?? page;
-            }
-
-            int width = source.Width;
-            int height = source.Height;
-            var luma = new byte[width * height];
-            var pixels = source.Pixels;
-            for (int i = 0; i < luma.Length; i++)
-            {
-                var c = pixels[i];
-                // Transparent pixels count as white paper; the rest use Rec. 601 luma.
-                double alpha = c.Alpha / 255.0;
-                double value = ((0.299 * c.Red) + (0.587 * c.Green) + (0.114 * c.Blue)) * alpha + (255 * (1 - alpha));
-                luma[i] = (byte)Math.Clamp((int)Math.Round(value), 0, 255);
-            }
-
-            return PanelDetector.Detect(luma, width, height, rightToLeft);
-        }
-        finally
-        {
-            resized?.Dispose();
-        }
-    }
+    /// <summary>Detects the panels of an already-decoded Skia page.</summary>
+    public static PagePanels Analyze(SKBitmap page, bool rightToLeft) => PanelDetectionService.Detect(page, rightToLeft);
 }
 
 /// <summary>

@@ -19,7 +19,7 @@ public static class MotionTokens
     public static bool IsReducedMotion() => GetStandard() == TimeSpan.Zero;
 
     private static TimeSpan Get(string key, TimeSpan fallback) =>
-        Application.Current!.Resources.TryGetValue(key, out var resource) && resource is TimeSpan value
+        Application.Current!.TryGetResource(key, null, out var resource) && resource is TimeSpan value
             ? value
             : fallback;
 }

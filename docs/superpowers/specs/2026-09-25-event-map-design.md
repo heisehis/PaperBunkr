@@ -1,5 +1,7 @@
 # Event Map (swimlane reading-order view for Story Events) — design
 
+*Update 2026-09-28: the event page's Members tab is now **Overview** (Overview | Map | Timeline), and the continuity page's "Events in this continuity" list became "Events in order" ([continuity screen redesign](2026-09-28-continuity-screen-redesign-design.md)). The map itself is unchanged.*
+
 *Status (2026-09-27): **built, not committed, not yet seen on screen** - plan in `2026-09-25-event-map-plan.md`,
 deviations in "Implementation notes" at the end.*
 

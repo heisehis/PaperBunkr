@@ -67,11 +67,13 @@ public class RoleDetectionUiTests : IDisposable
         return storyEvent.Id;
     }
 
-    private static EventsScreenViewModel OpenEvent(int eventId)
+    /// <summary>The event's page on the Continuity screen (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md), with
+    /// a synchronous overview runner and no GCD extract so nothing leaves the test thread.</summary>
+    private static EventPageViewModel OpenEvent(int eventId)
     {
-        var vm = new EventsScreenViewModel();
-        vm.SelectEventCommand.Execute(new StoryEventSummary { Id = eventId, Name = "Big Event", DeleteConfirm = new TwoStepConfirm(() => { }) });
-        return vm;
+        var screen = new ContinuityScreenViewModel(runner: work => Task.FromResult(work()), openGcd: () => null);
+        screen.LoadEvent(eventId);
+        return screen.EventPage;
     }
 
     // -- events --
@@ -193,14 +195,42 @@ public class RoleDetectionUiTests : IDisposable
         var events = OpenEvent(eventId);
         events.DetectRolesCommand.Execute(null);
         TestDispatcher.Drain();
-        Assert.NotNull(new Views.EventsScreen { DataContext = events }.Content);
+        Assert.NotNull(new Views.EventOverviewView { DataContext = events }.Content);
 
         int listId = SeedList(SeedIssue("Thor", "1", title: "Aftermath"));
-        var reading = new ReadingScreenViewModel(new NoFilePicker(), (_, _) => { });
+        var reading = new ReadingListsScreenViewModel(new NoFilePicker(), (_, _) => { });
         reading.LoadReadingList(listId);
-        reading.DetectRolesCommand.Execute(null);
+        reading.List.DetectRolesCommand.Execute(null);
         TestDispatcher.Drain();
-        Assert.NotNull(new Views.ReadingScreen { DataContext = reading }.Content);
+
+        // The redesigned page's chrome reads app tokens (App.axaml isn't loaded headless) - add any missing, as the other view tests do.
+        var resources = Avalonia.Application.Current!.Resources;
+        var tokens = new Dictionary<string, object>
+        {
+            ["PbMotionEase"] = new Avalonia.Animation.Easings.CubicEaseOut(),
+            ["PbIconSizeXs"] = 14d,
+            ["PbIconSizeSm"] = 16d,
+            ["PbIconSizeLg"] = 24d,
+            ["PbRadiusChip"] = new Avalonia.CornerRadius(6),
+            ["PbElevationShadow"] = Avalonia.Media.BoxShadows.Parse("0 2 8 0 #40000000"),
+        };
+        var added = tokens.Keys.Where(k => !resources.ContainsKey(k)).ToList();
+        foreach (var key in added)
+        {
+            resources[key] = tokens[key];
+        }
+
+        try
+        {
+            Assert.NotNull(new Views.ReadingListPageView { DataContext = reading.List }.Content);
+        }
+        finally
+        {
+            foreach (var key in added)
+            {
+                resources.Remove(key);
+            }
+        }
     }
 
     // -- reading lists --
@@ -220,16 +250,16 @@ public class RoleDetectionUiTests : IDisposable
         return list.Id;
     }
 
-    private static IEnumerable<ReadingListItemRowViewModel> Rows(ReadingScreenViewModel vm) => vm.Groups.SelectMany(g => g.Rows);
+    private static IEnumerable<ReadingListItemRowViewModel> Rows(ReadingListsScreenViewModel vm) => vm.List.Rows;
 
     [Fact]
     public void DetectRolesOnAList_FillsAnEmptyItemAsAutomatic_AndShowsWhy()
     {
         int listId = SeedList(SeedIssue("Spider-Man", "1", title: "Aftermath"), SeedIssue("Spider-Man", "2"));
-        var vm = new ReadingScreenViewModel(new NoFilePicker(), (_, _) => { });
+        var vm = new ReadingListsScreenViewModel(new NoFilePicker(), (_, _) => { });
         vm.LoadReadingList(listId);
 
-        vm.DetectRolesCommand.Execute(null);
+        vm.List.DetectRolesCommand.Execute(null);
         TestDispatcher.Drain();
 
         var row = Rows(vm).First();
@@ -238,20 +268,20 @@ public class RoleDetectionUiTests : IDisposable
         Assert.Equal("Aftermath · auto", row.RoleChipLabel);
         Assert.Contains("aftermath", row.RoleReasonText, StringComparison.OrdinalIgnoreCase);
         Assert.False(Rows(vm).Last().HasRole);
-        Assert.Equal("1 role detected, 0 need review.", vm.StatusMessage);
+        Assert.Equal("1 role detected, 0 need review.", vm.List.StatusMessage);
     }
 
     [Fact]
     public void ClearingADetectedListRole_LeavesTheItemWithoutARole_AndItStaysCleared()
     {
         int listId = SeedList(SeedIssue("Spider-Man", "1", title: "Aftermath"));
-        var vm = new ReadingScreenViewModel(new NoFilePicker(), (_, _) => { });
+        var vm = new ReadingListsScreenViewModel(new NoFilePicker(), (_, _) => { });
         vm.LoadReadingList(listId);
-        vm.DetectRolesCommand.Execute(null);
+        vm.List.DetectRolesCommand.Execute(null);
         TestDispatcher.Drain();
 
         Rows(vm).First().ClearAutoRoleCommand.Execute(null);
-        vm.DetectRolesCommand.Execute(null);
+        vm.List.DetectRolesCommand.Execute(null);
         TestDispatcher.Drain();
 
         Assert.False(Rows(vm).First().HasRole);
@@ -265,11 +295,11 @@ public class RoleDetectionUiTests : IDisposable
     public void ARoleTheUserSetOnAListItem_IsOnlyEverSuggestedAgainst()
     {
         int listId = SeedList(SeedIssue("Spider-Man", "1", title: "Aftermath"));
-        var vm = new ReadingScreenViewModel(new NoFilePicker(), (_, _) => { });
+        var vm = new ReadingListsScreenViewModel(new NoFilePicker(), (_, _) => { });
         vm.LoadReadingList(listId);
         Rows(vm).First().SetRoleForTest(EventMembershipRole.Core);
 
-        vm.DetectRolesCommand.Execute(null);
+        vm.List.DetectRolesCommand.Execute(null);
         TestDispatcher.Drain();
 
         var row = Rows(vm).First();

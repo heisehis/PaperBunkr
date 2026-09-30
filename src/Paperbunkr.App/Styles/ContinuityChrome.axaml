@@ -1,0 +1,270 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Paperbunkr.App.Controls"
+        xmlns:views="using:Paperbunkr.App.Views">
+    <!--
+        The Continuity screen's shared chrome (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md). Included locally
+        by each of the screen's views (StyleInclude in UserControl.Styles), not app-wide, so these class names can't restyle other
+        screens. Every colour is a DynamicResource token so skins and light/dark switch it live.
+    -->
+
+    <!-- Buttons -->
+    <Style Selector="Button.headerAction">
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.headerAction.ghost">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+    </Style>
+    <Style Selector="Button.headerAction.secondary">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="Button.headerAction.primary">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+    </Style>
+
+    <!-- Overview | Map | Timeline -->
+    <Style Selector="Button.segToggle">
+        <Setter Property="Padding" Value="12,5" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.segToggle.on">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- Section headings -->
+    <Style Selector="TextBlock.csSection">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.csFaint">
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+    </Style>
+
+    <!-- Hero chips (GCD, source, "in Earth-616") - squircle, never an oval -->
+    <Style Selector="Border.heroChip">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusChip}" />
+        <Setter Property="Padding" Value="6,1" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.heroChip">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusChip}" />
+        <Setter Property="Padding" Value="6,1" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Needs attention strip -->
+    <Style Selector="Border.attention">
+        <Setter Property="Background" Value="{DynamicResource PbBadgeSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBadgeBrush}" />
+        <Setter Property="BorderThickness" Value="1,0,0,0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Padding" Value="10,6" />
+    </Style>
+    <Style Selector="Button.attentionItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="4,2" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.attentionItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+    </Style>
+
+    <!-- Reading-list filter chips -->
+    <Style Selector="Button.filterChip">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusChip}" />
+        <Setter Property="Padding" Value="9,3" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.filterChip.on">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
+
+    <!-- List rows: calm at rest, manage controls on hover -->
+    <Style Selector="Border.itemRow">
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Padding" Value="6,7" />
+        <Setter Property="Margin" Value="0,1" />
+    </Style>
+    <Style Selector="Border.itemRow:pointerover">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+    </Style>
+    <Style Selector="Border.itemRow :is(Control).rowManage">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style Selector="Border.itemRow:pointerover :is(Control).rowManage, Border.itemRow:focus-within :is(Control).rowManage">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="IsHitTestVisible" Value="True" />
+    </Style>
+    <Style Selector="CheckBox.rowPick.pinned">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="IsHitTestVisible" Value="True" />
+    </Style>
+
+    <!-- Posters: hover actions and the multi-select tick -->
+    <Style Selector="Panel.posterCell :is(Control).posterHover">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style Selector="Panel.posterCell:pointerover :is(Control).posterHover, Panel.posterCell:focus-within :is(Control).posterHover">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="IsHitTestVisible" Value="True" />
+    </Style>
+    <Style Selector="CheckBox.posterPick.pinned">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="IsHitTestVisible" Value="True" />
+    </Style>
+    <Style Selector="Border.posterScrimButton">
+        <Setter Property="Background" Value="#B0000000" />
+        <Setter Property="CornerRadius" Value="4" />
+    </Style>
+    <Style Selector="Border.dropTarget">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+
+    <!-- Folding panel header -->
+    <Style Selector="Button.panelHead">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="8,9" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.panelHead:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+    </Style>
+
+    <!-- Suggestions & checks cards -->
+    <Style Selector="Border.reviewCard">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+
+    <!-- Timeline eras: tint, left edge and node in the era's own colour (PbEra…) -->
+    <Style Selector="Border.eraHeader">
+        <Setter Property="BorderThickness" Value="3,0,0,0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Padding" Value="10,6" />
+    </Style>
+    <Style Selector="Border.eraHeader.platinum"><Setter Property="Background" Value="{DynamicResource PbEraPlatinumSoftBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource PbEraPlatinumBrush}" /></Style>
+    <Style Selector="Border.eraHeader.golden"><Setter Property="Background" Value="{DynamicResource PbEraGoldenSoftBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource PbEraGoldenBrush}" /></Style>
+    <Style Selector="Border.eraHeader.silver"><Setter Property="Background" Value="{DynamicResource PbEraSilverSoftBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource PbEraSilverBrush}" /></Style>
+    <Style Selector="Border.eraHeader.bronze"><Setter Property="Background" Value="{DynamicResource PbEraBronzeSoftBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource PbEraBronzeBrush}" /></Style>
+    <Style Selector="Border.eraHeader.modern"><Setter Property="Background" Value="{DynamicResource PbEraModernSoftBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource PbEraModernBrush}" /></Style>
+    <Style Selector="Ellipse.eraDot.platinum"><Setter Property="Fill" Value="{DynamicResource PbEraPlatinumBrush}" /><Setter Property="Stroke" Value="{DynamicResource PbEraPlatinumBrush}" /></Style>
+    <Style Selector="Ellipse.eraDot.golden"><Setter Property="Fill" Value="{DynamicResource PbEraGoldenBrush}" /><Setter Property="Stroke" Value="{DynamicResource PbEraGoldenBrush}" /></Style>
+    <Style Selector="Ellipse.eraDot.silver"><Setter Property="Fill" Value="{DynamicResource PbEraSilverBrush}" /><Setter Property="Stroke" Value="{DynamicResource PbEraSilverBrush}" /></Style>
+    <Style Selector="Ellipse.eraDot.bronze"><Setter Property="Fill" Value="{DynamicResource PbEraBronzeBrush}" /><Setter Property="Stroke" Value="{DynamicResource PbEraBronzeBrush}" /></Style>
+    <Style Selector="Ellipse.eraDot.modern"><Setter Property="Fill" Value="{DynamicResource PbEraModernBrush}" /><Setter Property="Stroke" Value="{DynamicResource PbEraModernBrush}" /></Style>
+    <!-- An era with everything read: outline only -->
+    <Style Selector="Ellipse.eraDot.allRead">
+        <Setter Property="Fill" Value="{DynamicResource PbSurface2Brush}" />
+    </Style>
+    <Style Selector="ProgressBar.eraProgress.platinum"><Setter Property="Foreground" Value="{DynamicResource PbEraPlatinumBrush}" /></Style>
+    <Style Selector="ProgressBar.eraProgress.golden"><Setter Property="Foreground" Value="{DynamicResource PbEraGoldenBrush}" /></Style>
+    <Style Selector="ProgressBar.eraProgress.silver"><Setter Property="Foreground" Value="{DynamicResource PbEraSilverBrush}" /></Style>
+    <Style Selector="ProgressBar.eraProgress.bronze"><Setter Property="Foreground" Value="{DynamicResource PbEraBronzeBrush}" /></Style>
+    <Style Selector="ProgressBar.eraProgress.modern"><Setter Property="Foreground" Value="{DynamicResource PbEraModernBrush}" /></Style>
+
+    <!-- Thin read-progress bars -->
+    <Style Selector="ProgressBar.thin">
+        <Setter Property="MinHeight" Value="3" />
+        <Setter Property="Height" Value="3" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Minimum" Value="0" />
+        <Setter Property="Maximum" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="CornerRadius" Value="2" />
+    </Style>
+
+    <Styles.Resources>
+        <!-- HeroBand: collage + skin fade + the page's own foreground -->
+        <ControlTheme x:Key="{x:Type controls:HeroBand}" TargetType="controls:HeroBand">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="Padding" Value="28,22,28,18" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}" ClipToBounds="True">
+                        <Grid>
+                            <!-- The collage sits in a Canvas (zero desired size) sized to the band, so the covers' natural height never
+                                 makes the hero taller than its text - the same trick the continuity map's lane headers use. -->
+                            <Canvas x:Name="CollageHost" IsHitTestVisible="False">
+                            <ItemsControl ItemsSource="{TemplateBinding CoverKeys}" Opacity="0.32" IsHitTestVisible="False"
+                                          Width="{Binding #CollageHost.Bounds.Width}" Height="{Binding #CollageHost.Bounds.Height}">
+                                <ItemsControl.Effect>
+                                    <BlurEffect Radius="6" />
+                                </ItemsControl.Effect>
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <Image views:AsyncCoverImage.SourceId="{Binding}" Stretch="UniformToFill" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            </Canvas>
+                            <!-- Fade into the page on the left, same skin pair the detail heroes use -->
+                            <Border IsHitTestVisible="False">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                        <GradientStop Offset="0.0" Color="{DynamicResource PbHeroGradientEndColor}" />
+                                        <GradientStop Offset="0.38" Color="{DynamicResource PbHeroGradientEndColor}" />
+                                        <GradientStop Offset="1.0" Color="{DynamicResource PbHeroGradientStartColor}" />
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              Padding="{TemplateBinding Padding}" />
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </Styles.Resources>
+</Styles>

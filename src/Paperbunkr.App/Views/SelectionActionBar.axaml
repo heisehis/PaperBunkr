@@ -1,0 +1,89 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:la="using:Paperbunkr.App.ViewModels.LibraryActions"
+             x:Class="Paperbunkr.App.Views.SelectionActionBar"
+             x:DataType="vm:LibraryScreenViewModel">
+
+    <!-- The Library selection bar (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §1, option C): icon-only buttons built
+         from LibraryActionCatalog.BuildBar - the same definitions as the right-click menu and the keyboard. Every button carries a tooltip
+         (label + shortcut) and an automation name; a chevron marks a button that opens a menu. -->
+    <UserControl.Styles>
+        <Style Selector="Button.barAction">
+            <Setter Property="MinWidth" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.barAction:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        </Style>
+        <Style Selector="Button.barAction.danger">
+            <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
+        </Style>
+        <Style Selector="Button.barAction.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbDangerSoftBrush}" />
+        </Style>
+        <Style Selector="Button.barAction:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+        </Style>
+        <Style Selector="Button.barAction fi|SymbolIcon.glyph">
+            <Setter Property="FontSize" Value="{DynamicResource PbIconSizeMd}" />
+        </Style>
+        <Style Selector="Button.barAction fi|SymbolIcon.chevron">
+            <Setter Property="FontSize" Value="{DynamicResource PbIconSizeXs}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <UserControl.DataTemplates>
+        <DataTemplate x:DataType="la:LibraryBarItem">
+            <Panel Margin="0,2,4,2">
+                <Border IsVisible="{Binding IsSeparator}" Width="1" Height="20" Margin="6,0"
+                        VerticalAlignment="Center" Background="{DynamicResource PbBorderBrush}" />
+                <Button IsVisible="{Binding !IsSeparator}" Classes="barAction" Classes.danger="{Binding IsDanger}"
+                        IsEnabled="{Binding IsEnabled}" ToolTip.Tip="{Binding ToolTip}"
+                        AutomationProperties.Name="{Binding Label}"
+                        AutomationProperties.AutomationId="{Binding AutomationId}"
+                        Click="OnBarButtonClick">
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                        <fi:SymbolIcon Classes="glyph" Symbol="{Binding Icon}" />
+                        <fi:SymbolIcon Classes="chevron" Symbol="ChevronDown" IsVisible="{Binding HasChildren}" />
+                    </StackPanel>
+                </Button>
+            </Panel>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+
+    <DockPanel>
+        <TextBlock DockPanel.Dock="Left" Text="{Binding SelectionCountLabel}" FontSize="13" FontWeight="SemiBold"
+                   Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" Margin="0,0,14,0"
+                   AutomationProperties.AutomationId="LibrarySelectionCount" />
+        <ItemsControl DockPanel.Dock="Right" ItemsSource="{Binding BarTrailingItems}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
+        <!-- Wraps to a second row when the window is too narrow for every button (the checklist's 800 px floor). -->
+        <ItemsControl ItemsSource="{Binding BarLeadingItems}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
+    </DockPanel>
+</UserControl>

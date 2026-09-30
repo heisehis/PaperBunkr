@@ -34,6 +34,13 @@
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
+        <!-- Nav items fill the sidebar edge to edge, so an outside focus ring would be cut by the sidebar: draw it inside instead. -->
+        <Style Selector="Button.prefNavItem">
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+        </Style>
+        <Style Selector="Button.prefNavItem:focus-visible /template/ ContentPresenter">
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRingInset}" />
+        </Style>
         <Style Selector="Button.prefNavItem:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
         </Style>

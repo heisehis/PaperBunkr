@@ -246,10 +246,9 @@ public class HomeFeedResolverTests : IDisposable
     public void GetSpotlightPicks_RespectsCountLimit()
     {
         using var context = new PaperbunkrDbContext(_dbOptions);
-        int seriesId = SeedSeries(context, "Series");
         for (int i = 0; i < 5; i++)
         {
-            SeedIssue(context, seriesId, lastPageRead: null);
+            SeedIssue(context, SeedSeries(context, $"Series {i}"), lastPageRead: null); // one per series - picks are capped per series
         }
 
         var picks = HomeFeedResolver.GetSpotlightPicks(context, new Random(1), count: 2);
@@ -261,10 +260,9 @@ public class HomeFeedResolverTests : IDisposable
     public void GetSpotlightPicks_NeverReturnsDuplicates_AndCapsAtAvailableCandidates()
     {
         using var context = new PaperbunkrDbContext(_dbOptions);
-        int seriesId = SeedSeries(context, "Series");
-        SeedIssue(context, seriesId, lastPageRead: null, genre: "Action");
-        SeedIssue(context, seriesId, lastPageRead: null, genre: "Action");
-        SeedIssue(context, seriesId, lastPageRead: null); // no genre - exercises the uniform-fallback tail
+        SeedIssue(context, SeedSeries(context, "A"), lastPageRead: null, genre: "Action");
+        SeedIssue(context, SeedSeries(context, "B"), lastPageRead: null, genre: "Action");
+        SeedIssue(context, SeedSeries(context, "C"), lastPageRead: null); // no genre - exercises the uniform-fallback tail
 
         var picks = HomeFeedResolver.GetSpotlightPicks(context, new Random(1), count: 10);
 

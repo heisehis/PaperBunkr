@@ -6,7 +6,7 @@ namespace Paperbunkr.Data.ComicVine;
 public sealed record PullListEntry(int IssueId, int SeriesId, string SeriesName, string IssueNumber, DateTime StoreDate, DateTime? CoverDate, string? ImageUrl, DateTime? FocDate = null);
 
 /// <summary>A series' publisher and cross-reference ids, which a release list item doesn't carry.</summary>
-public sealed record PullListSeriesInfo(int SeriesId, string Name, string? Publisher, int? YearBegan, int? ComicVineId);
+public sealed record PullListSeriesInfo(int SeriesId, string Name, string? Publisher, int? YearBegan, int? ComicVineId, int? GcdId = null);
 
 /// <summary>A source that can list every release in a store-date window: Metron (preferred, it lists by date across publishers) or ComicVine (its issues filter takes a store-date range too, at a much smaller request budget).</summary>
 public interface IPullListSource

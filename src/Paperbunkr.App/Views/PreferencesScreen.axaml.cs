@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -13,10 +14,44 @@ public partial class PreferencesScreen : UserControl
     private DispatcherTimer? _pulseTimer;
     private Control? _pulsing;
 
+    /// <summary>Keeps keyboard focus inside the screen (docs/superpowers/specs/2026-09-29-keyboard-focus-reclaim-phases-2-6-design.md):
+    /// the sections are permanently attached and toggled by <c>IsVisible</c>, and opening a search result hides the very row that was
+    /// clicked. Falls back to the active nav item, or the first search result while searching.</summary>
+    private readonly FocusReclaimer _focus;
+
     public PreferencesScreen()
     {
         InitializeComponent();
+        _focus = new FocusReclaimer(this, () => DataContext is PreferencesScreenViewModel, FocusFallback);
         DataContextChanged += OnDataContextChanged;
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty && IsVisible)
+            {
+                _focus.Reclaim();
+            }
+        };
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _focus.Reclaim();
+    }
+
+    private void FocusFallback()
+    {
+        if (_vm?.IsSearching == true)
+        {
+            if (this.FindControl<ItemsControl>("SearchResultsList") is { } results)
+            {
+                FocusReclaimer.FocusFirstButton(results);
+            }
+
+            return;
+        }
+
+        FocusReclaimer.FocusFirstButton(this, b => b.Classes.Contains("prefNavItem") && b.Classes.Contains("active"));
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
@@ -24,6 +59,7 @@ public partial class PreferencesScreen : UserControl
         if (_vm is not null)
         {
             _vm.ScrollToAnchorRequested -= OnScrollToAnchorRequested;
+            _vm.PropertyChanged -= OnVmPropertyChanged;
         }
 
         _vm = DataContext as PreferencesScreenViewModel;
@@ -31,6 +67,15 @@ public partial class PreferencesScreen : UserControl
         if (_vm is not null)
         {
             _vm.ScrollToAnchorRequested += OnScrollToAnchorRequested;
+            _vm.PropertyChanged += OnVmPropertyChanged;
+        }
+    }
+
+    private void OnVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(PreferencesScreenViewModel.ActiveSection) or nameof(PreferencesScreenViewModel.IsSearching))
+        {
+            _focus.ReclaimIfFocusWithinOrNowhere();
         }
     }
 

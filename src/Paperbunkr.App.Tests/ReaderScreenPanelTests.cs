@@ -553,6 +553,38 @@ public class ReaderScreenPanelTests : IDisposable
         }
     }
 
+    // ===== Report bad panel detection =====
+
+    [Fact]
+    public void ReportBadPanels_SavesThePageAndTheDetection_AndIsInThePalette()
+    {
+        var (window, vm, _) = Open();
+        string root = Path.Combine(Path.GetTempPath(), $"panel-report-test-{Guid.NewGuid():N}");
+        try
+        {
+            vm.PanelReportFolder = () => root;
+            var toasts = new List<Paperbunkr.App.Models.ToastRequest>();
+            vm.ToastRequested += toasts.Add;
+            Assert.Contains(vm.BuildPaletteEntries(), e => e.Title.StartsWith("Report bad panel detection"));
+
+            vm.ReportBadPanelsCommand.Execute(null);
+
+            var folder = Assert.Single(Directory.GetDirectories(root));
+            Assert.True(File.Exists(Path.Combine(folder, "page.png")));
+            using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "detection.json")));
+            Assert.Equal(4, json.RootElement.GetProperty("panels").GetArrayLength());
+            Assert.Equal("Page saved for panel tuning", Assert.Single(toasts).Title);
+        }
+        finally
+        {
+            window.Close();
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     // ===== Arrow keys and the wheel in guided view; turning the page from a zoomed page; the zoom glide =====
 
     [Fact]

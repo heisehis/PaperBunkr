@@ -8,7 +8,7 @@
     <!-- Single source of truth for the release version (docs/superpowers/specs/
          2026-09-01-auto-update-and-changelog-design.md). CI derives the SemVer release tag/appcast
          version from this by dropping the trailing revision segment and appending "-beta". -->
-    <Version>0.7.3.0</Version>
+    <Version>0.7.5.0</Version>
     <!-- We stamp InformationalVersion ourselves in _PbStampBuildMetadata below; turn off the SDK's
          own SourceLink-driven "+<SourceRevisionId>" append so it can't double-stamp. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -39,6 +39,9 @@
   <ItemGroup>
     <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" />
+    <!-- The Grand Comics Database data manifest this build knows about (docs/superpowers/specs/2026-09-27-gcd-data-design.md §2):
+         lets Preferences show the download without going online; the live copy is fetched only when you download or check. -->
+    <EmbeddedResource Include="..\..\gcd-data.json" LogicalName="gcd-data.json" Condition="Exists('..\..\gcd-data.json')" />
   </ItemGroup>
 
   <ItemGroup>
@@ -59,6 +62,18 @@
          via NativeInterop.ResolveNativeAssetPath's {baseDir}/x64/ search
          (docs/superpowers/specs/2026-08-06-reader-canvas-alpha-design.md §1). -->
     <Content Include="x64\7z.dll" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Panel detection model for guided view (docs/superpowers/specs/2026-09-28-guided-view-detection-upgrade-design.md step 3):
+         manga-panel-detector-yolo26n exported to ONNX (Apache-2.0, trained on Manga109-s; credited in THIRD-PARTY-NOTICES.md).
+         PanelDetectionService loads it from {baseDir}/Models/ and falls back to the gutter heuristic when it is missing. -->
+    <None Include="PanelModel\panel-detector.onnx" CopyToOutputDirectory="PreserveNewest" Link="Models\panel-detector.onnx" />
+    <!-- DjVuLibre 3.5.29 command-line tools (GPL 2.0 or later; official 32-bit Windows release,
+         unpacked from its installer) plus their DLLs and the app-local VC++ 2015-2022 x86 runtime
+         they link against. The engine (ported as-is from CE) runs them from Resources\ next to
+         Paperbunkr.Engine.dll: djvm.exe lists pages (DjvuComicProvider.IsValid gates the .djvu
+         provider on it), ddjvu.exe renders one (DjVuImage.GetBitmap), c44.exe encodes one
+         (DjVuImage.SaveDjVu). Same Resources\ layout as CE's own Output folder. Provenance and
+         hashes: Resources\DjVuLibre\README.md. -->
+    <Content Include="Resources\DjVuLibre\*.exe;Resources\DjVuLibre\*.dll;Resources\DjVuLibre\DjVuLibre-COPYING.txt" Link="Resources\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <!-- Changelog source of truth (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-
          design.md) - bundled so the About section can render full update history offline; only the
          "is there a newer version" check itself needs a network call. -->
@@ -103,6 +118,8 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="DialogHost.Avalonia" Version="0.12.3" />
     <PackageReference Include="FluentAvaloniaUI" Version="3.1.0" />
+    <!-- Runs the guided-view panel detector (Services/Reader/Panels/OnnxPanelDetector.cs); CPU provider only. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
     <PackageReference Include="FluentIcons.Avalonia" Version="2.1.337" />
     <PackageReference Include="FluentIcons.Avalonia.Fluent" Version="2.1.337" />
     <PackageReference Include="Optris.Icons.Avalonia" Version="12.0.7" />

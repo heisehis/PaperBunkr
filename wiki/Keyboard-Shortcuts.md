@@ -25,6 +25,7 @@ never fire while you are typing in a text box, except `Esc`, the browser-back ke
 | Previous / next tab | `Ctrl+PageUp` / `Ctrl+PageDown`, or the controller's bumpers. On a screen with tabs (detail screens, Insights, Wanted, Continuity, the editors, Preferences' sections) they switch tab; Home steps the spotlight; elsewhere they switch screen |
 | Pin / unpin the sidebar | `Shift+F6` |
 | Quit | `Ctrl+Q` |
+| Move around the left-hand rail | `↑` `↓`, `Home`, `End`; `→` goes into the screen; `Enter` / `Space` opens the screen. From inside a screen, `←` at its left edge returns to the rail |
 | Move up/down in the sidebar | `↑` `↓`, `Home`, `End` (fixed) |
 
 ## Library grid
@@ -59,6 +60,7 @@ Menu entries and the selection bar show whatever you have bound, so they stay co
 |---|---|
 | Continue reading | `Ctrl+Enter` |
 | Edit properties of the selected issues | `Ctrl+I` |
+| Back to the previous screen | `Backspace`, or `Esc` |
 
 ## Smart Lists
 

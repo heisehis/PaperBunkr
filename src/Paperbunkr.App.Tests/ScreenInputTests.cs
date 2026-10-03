@@ -500,4 +500,34 @@ public class ScreenInputTests : IDisposable
             }
         });
     }
+
+    [Fact]
+    public void Detail_Backspace_GoesBack()
+    {
+        WithThemeAndTokens(() =>
+        {
+            using var styles = AppStyles();
+            using var tokens = AppResources();
+            int seriesId;
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                var series = new Series { Name = "Back Series" };
+                context.Series.Add(series);
+                context.SaveChanges();
+                context.Issues.Add(new Issue { SeriesId = series.Id, Number = "1" });
+                context.SaveChanges();
+                seriesId = series.Id;
+            }
+
+            int wentBack = 0;
+            var vm = new DetailScreenViewModel(goBack: () => wentBack++, goToReader: _ => { }, goToProperties: _ => { }, goToBulkProperties: _ => { });
+            vm.LoadSeries(seriesId);
+            var screen = new DetailScreen { DataContext = vm };
+            using var stage = new Stage(screen, i => screen.InputService = i);
+
+            stage.Press(Key.Back, RawInputModifiers.None, PhysicalKey.Backspace);
+
+            Assert.Equal(1, wentBack);
+        });
+    }
 }

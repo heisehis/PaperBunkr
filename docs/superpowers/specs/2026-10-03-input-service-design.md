@@ -576,3 +576,19 @@ editors are covered by the smoke test (they register and decline when empty) but
     ring (painted outside the control) was cut down to a corner dot (the Insights tabs) wherever a control relied on the app-wide adorner. `AdornerLayer.IsClipEnabled="False"` on the
     adorner template fixes it for every such control. The Home carousel had added its own inner 2px border on focus, which insets the cover by its thickness and left a dark gap, and
     would now double the ring; it was removed. `FocusRingPaintTests` checks pixels outside a focused button.
+
+### 14.2 Keyboard gaps found by hand (2026-10-03)
+
+11. **Plain-wrap grids ignored Up/Down.** `GridKeyboardNavigation` gave every `INavigableContainer` panel to Avalonia's own navigation, but a plain `WrapPanel` implements that interface and its
+    `GetControl` ignores Up and Down. Only virtualizing panels (whose unrealised items the spatial search cannot see) take that path now.
+12. **A Button handles Enter and Space before a XAML `KeyDown=` handler on it runs** (and a left press before a XAML `PointerPressed=`). The Library cards lost their bound `Command` when a
+    click stopped navigating, so Enter and Space no longer opened a tile. `LibraryScreen` now tunnels both from the screen root to `OnCardKeyDown`. Cards that still have a `Command`
+    (Books, Smart Lists, Book/Manga detail) are unaffected: the Button's own click runs it.
+13. **Detail pages:** Esc leaves a detail page when nothing else is open and there is somewhere to go back to (`MainViewModel.Escape`), and `Detail.Back` (Backspace) does the same from the
+    comic, manga and book detail screens. Backspace stays out of text boxes (the service suppresses it) and out of the Library/Books type-ahead (it is a Detail-scope action).
+14. **Arrow keys on every screen and the rail.** Continuity, Wanted, Preferences and the three editors got the directional fallback the other screens already had. `MainWindow` handles arrows
+    nothing else used: on the nav rail Up/Down/Home/End step through the buttons and Right goes into the screen (its contextual sidebar, else the first non-text control); anywhere else a Left that
+    nothing used lands on the rail. Enter and Space on a rail button open its screen. A text box still keeps Left and Right for its caret.
+
+The headless harness does not click a plain Button on Space (with or without the input host), so Space on a rail button is not covered by a test; Space on a Library card is (it goes through the
+tunnelled handler, not the Button).

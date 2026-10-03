@@ -33,6 +33,7 @@ public partial class MangaDetailScreen : UserControl
         {
             [InputActionIds.TabNext] = () => TabStrip.Step(this, 1),
             [InputActionIds.TabPrevious] = () => TabStrip.Step(this, -1),
+            [InputActionIds.DetailBack] = () => _viewModel is { } vm && vm.GoBackCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.GoBackCommand.Execute(null)),
             [InputActionIds.DetailContinue] = () => _viewModel is { } vm && vm.ContinueCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.ContinueCommand.Execute(null)),
             [InputActionIds.DetailEdit] = () => _viewModel is { } vm && vm.EditCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.EditCommand.Execute(null)),
         });

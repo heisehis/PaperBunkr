@@ -113,6 +113,9 @@ public partial class MainWindow : Window
         _inputHost = InputHost.Attach(this, _input);
         _globalInput = _input.Register(InputScope.Global, OnGlobalInputAction);
 
+        // Arrow keys that nothing inside a screen used: they move around the nav rail, and a Left that runs out of screen lands on the rail. Bubble, so any control that wants an arrow gets it first.
+        AddHandler(KeyDownEvent, OnArrowKeyFallback, RoutingStrategies.Bubble);
+
         // One controller poller for the whole app, running while the setting is on and this window is active (it used to belong to the comic reader alone).
         _gamepadHost = new AppGamepadHost(this, _input, new XInputSource());
     }
@@ -387,6 +390,90 @@ public partial class MainWindow : Window
     /// button's origin into the shared <paramref name="sender"/> (<c>sidebarBorder</c>) coordinate
     /// space before building the <see cref="GridKeyboardNavigation.GridItem{T}"/> list.
     /// </summary>
+    /// <summary>
+    /// Where Right from the rail lands in the screen: its first focusable control, top-left first, skipping text boxes (a text box keeps the Left and Right keys for its caret, so landing in
+    /// one would leave no arrow key to come back with) and anything in the rail or the contextual sidebar.
+    /// </summary>
+    private Control? FirstScreenControl() =>
+        this.GetVisualDescendants().OfType<Control>()
+            .Where(c => c.Focusable && c.IsTabStop && c is not TextBox && c.IsEffectivelyVisible && c.IsEffectivelyEnabled && c.Bounds.Width > 0
+                        && !NavRail.IsVisualAncestorOf(c) && !ContextualSidebar.IsVisualAncestorOf(c))
+            .Select(c => (Control: c, Origin: c.TranslatePoint(default, this)))
+            .Where(x => x.Origin is not null && x.Origin.Value.X > NavRail.Bounds.Right - 1)
+            .OrderBy(x => Math.Round(x.Origin!.Value.Y / 8))
+            .ThenBy(x => x.Origin!.Value.X)
+            .Select(x => x.Control)
+            .FirstOrDefault();
+
+    /// <summary>The rail's buttons in on-screen order: the visible, enabled ones classed <c>rail</c>.</summary>
+    private List<Button> RailButtons() =>
+        NavRail.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("rail") && b.IsEffectivelyVisible && b.IsEffectivelyEnabled).ToList();
+
+    /// <summary>
+    /// Arrow keys no control took (docs/superpowers/specs/2026-10-03-input-service-design.md §14.2). On the nav rail: Up and Down (and Home and End) step through the buttons, and Right
+    /// goes on into the screen (its sidebar first, when it has one). Anywhere else a Left that no control or screen used goes to the rail, so the keyboard and the controller's D-pad can
+    /// reach it from any screen. Enter and Space on a rail button already open its screen; the screen takes focus as it appears.
+    /// </summary>
+    private void OnArrowKeyFallback(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || e.KeyModifiers != KeyModifiers.None || e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down or Key.Home or Key.End)
+            || e.Source is not Visual source || !NavRail.IsEffectivelyVisible || NavRail.Bounds.Width <= 0)
+        {
+            return;
+        }
+
+        var rail = RailButtons();
+        if (rail.Count == 0)
+        {
+            return;
+        }
+
+        if (NavRail.IsVisualAncestorOf(source) || ReferenceEquals(source, NavRail))
+        {
+            if (e.Source is not Button { } focused || !rail.Contains(focused))
+            {
+                return;
+            }
+
+            switch (e.Key)
+            {
+                case Key.Up or Key.Down or Key.Home or Key.End:
+                    var direction = e.Key switch
+                    {
+                        Key.Up => GridNavigationDirection.Up,
+                        Key.Down => GridNavigationDirection.Down,
+                        Key.Home => GridNavigationDirection.Home,
+                        _ => GridNavigationDirection.End,
+                    };
+                    var items = rail.Select(b => new GridKeyboardNavigation.GridItem<Button>(b, BoundsRelativeTo(b, NavRail))).ToList();
+                    GridKeyboardNavigation.Navigate(items, focused, direction).Focus(NavigationMethod.Directional);
+                    e.Handled = true;
+                    break;
+                case Key.Right:
+                    // Into the screen: its contextual sidebar when one is showing, otherwise whatever is nearest to the right.
+                    if (ContextualSidebar.Bounds.Width > 0 && ContextualSidebar.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Classes.Contains("sideItemButton") && b.IsEffectivelyVisible && b.IsEffectivelyEnabled) is { } side)
+                    {
+                        side.Focus(NavigationMethod.Directional);
+                    }
+                    else if (FirstScreenControl() is { } entry)
+                    {
+                        entry.Focus(NavigationMethod.Directional);
+                    }
+
+                    e.Handled = true;
+                    break;
+            }
+
+            return;
+        }
+
+        if (e.Key == Key.Left && source is not TextBox)
+        {
+            (rail.FirstOrDefault(b => b.Classes.Contains("active")) ?? rail[0]).Focus(NavigationMethod.Directional);
+            e.Handled = true;
+        }
+    }
+
     private void OnSidebarKeyDown(object? sender, KeyEventArgs e)
     {
         GridNavigationDirection? direction = e.Key switch

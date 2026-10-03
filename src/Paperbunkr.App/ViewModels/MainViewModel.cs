@@ -3051,6 +3051,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         {
             Library.ClearAnySelectionCommand.Execute(null);
         }
+        // A detail page has nothing of its own to cancel, so Esc leaves it, the way its back link does.
+        else if (CurrentScreen is "detail" or "mangaDetail" or "bookDetail" or "metadataEntity" && CanNavigateBack)
+        {
+            NavigateBackCommand.Execute(null);
+        }
     }
 
     /// <summary>

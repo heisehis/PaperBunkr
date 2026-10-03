@@ -24,6 +24,7 @@ public partial class DetailScreen : UserControl
         {
             [InputActionIds.TabNext] = () => TabStrip.Step(this, 1),
             [InputActionIds.TabPrevious] = () => TabStrip.Step(this, -1),
+            [InputActionIds.DetailBack] = () => DataContext is DetailScreenViewModel vm && vm.GoBackCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.GoBackCommand.Execute(null)),
             [InputActionIds.DetailContinue] = () => DataContext is DetailScreenViewModel vm && vm.ContinueCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.ContinueCommand.Execute(null)),
             [InputActionIds.DetailEdit] = () => DataContext is DetailScreenViewModel vm && vm.EditCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.EditCommand.Execute(null)),
         });

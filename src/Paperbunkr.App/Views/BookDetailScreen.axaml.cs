@@ -33,6 +33,7 @@ public partial class BookDetailScreen : UserControl
         InitializeComponent();
         _screenInput = ScreenInput.Attach(this, InputScope.Detail, new Dictionary<string, Func<bool>>
         {
+            [InputActionIds.DetailBack] = () => DataContext is BookDetailScreenViewModel vm && vm.GoBackCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.GoBackCommand.Execute(null)),
             [InputActionIds.DetailContinue] = () => DataContext is BookDetailScreenViewModel vm && vm.ContinueCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.ContinueCommand.Execute(null)),
             [InputActionIds.DetailEdit] = () => DataContext is BookDetailScreenViewModel vm && vm.EditCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.EditCommand.Execute(null)),
         });

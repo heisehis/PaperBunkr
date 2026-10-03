@@ -47,6 +47,7 @@ public partial class LibraryScreen : UserControl
         // (the series-name SuggestBox otherwise swallows Escape to close its own dropdown).
         AddHandler(KeyDownEvent, OnLibraryScreenKeyDown, RoutingStrategies.Tunnel);
         AddHandler(PointerPressedEvent, OnScreenPointerPressedTunnel, RoutingStrategies.Tunnel);
+        AddHandler(KeyDownEvent, OnScreenCardKeyDownTunnel, RoutingStrategies.Tunnel);
         _libraryInput = new AttachedInputRegistration(this, InputScope.Library, OnLibraryInputAction, service: InputServiceLocator.Current, focusRoot: () => this);
         // Type-ahead (docs/superpowers/specs/2026-09-12-grid-typeahead-rangeselect-quit-design.md) -
         // Tunnel from the screen root rather than per-template, so it works regardless of which of
@@ -623,6 +624,19 @@ public partial class LibraryScreen : UserControl
             case SeriesCardSample:
                 OnSeriesTilePointerPressed(button, e);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Enter and Space open the focused tile. A Button handles both keys itself before a handler declared in XAML on it runs, and these tiles have no bound Command (a click used to navigate, which
+    /// made keyboard grid navigation unusable), so <see cref="OnCardKeyDown"/> never saw them and the keys did nothing. Tunnelling from the screen root runs first and hands them to it.
+    /// </summary>
+    private void OnScreenCardKeyDownTunnel(object? sender, KeyEventArgs e)
+    {
+        if (!e.Handled && e.KeyModifiers == KeyModifiers.None && e.Key is Key.Enter or Key.Space
+            && e.Source is Button { DataContext: IssueListRow or SeriesCardSample } button && button.Classes.Contains("card"))
+        {
+            OnCardKeyDown(button, e);
         }
     }
 

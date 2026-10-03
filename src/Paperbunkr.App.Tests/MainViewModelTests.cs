@@ -336,6 +336,34 @@ public class MainViewModelTests : IDisposable
         Assert.True(vm.IsDetail);
     }
 
+    [Fact]
+    public void Escape_OnADetailPage_LeavesItForThePreviousScreen()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Escape Series");
+        var vm = new MainViewModel();
+        vm.GoLibraryCommand.Execute(null);
+        vm.Library.GoToSeriesCommand.Execute(seriesId);
+        Assert.True(vm.IsDetail);
+
+        vm.EscapeCommand.Execute(null);
+
+        Assert.True(vm.IsLibrary);
+    }
+
+    [Fact]
+    public void Escape_OnADetailPageWithNowhereToGoBack_DoesNothing()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Escape Series Two");
+        var vm = new MainViewModel();
+        vm.Detail.LoadSeries(seriesId);
+        vm.CurrentScreen = "detail";            // reached without a history entry
+        Assert.False(vm.CanNavigateBack);
+
+        vm.EscapeCommand.Execute(null);
+
+        Assert.True(vm.IsDetail);
+    }
+
     /// <summary>docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - rail-order comparison driving the directional slide, pure C# with no Avalonia visual-tree dependency.</summary>
     [Fact]
     public void GoEvents_FromHome_IsForward_NotReversed()

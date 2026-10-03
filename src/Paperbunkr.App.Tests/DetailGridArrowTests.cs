@@ -102,6 +102,9 @@ public class DetailGridArrowTests : IDisposable
     [InlineData("Continuity")]
     [InlineData("Wanted")]
     [InlineData("Preferences")]
+    [InlineData("IssueProperties")]
+    [InlineData("BulkIssueProperties")]
+    [InlineData("BulkSeriesProperties")]
     public void TheScreensKeyHandler_MovesFocusBetweenControlsInsideIt(string screenName)
     {
         WithThemeAndTokens(() =>
@@ -112,6 +115,9 @@ public class DetailGridArrowTests : IDisposable
             {
                 "Continuity" => new Paperbunkr.App.Views.ContinuityScreen(),
                 "Wanted" => new WantedScreen(),
+                "IssueProperties" => new IssuePropertiesScreen(),
+                "BulkIssueProperties" => new BulkIssuePropertiesScreen(),
+                "BulkSeriesProperties" => new BulkSeriesPropertiesScreen(),
                 _ => new PreferencesScreen(),
             };
             var window = new Window { Content = screen, Width = 1300, Height = 900 };
@@ -120,7 +126,7 @@ public class DetailGridArrowTests : IDisposable
 
             // Two live buttons, side by side, added inside the screen: whatever the screen's own buttons are doing without a view model, an arrow press on one of these has to reach the screen's
             // directional handler and move focus to the other.
-            var root = Assert.IsAssignableFrom<Panel>(((UserControl)screen).Content);
+            var root = screen.GetVisualDescendants().OfType<Panel>().First(p => p.IsEffectivelyVisible && p.Bounds.Width > 100);
             var row = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 40, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top };
             var left = new Button { Content = "left", Focusable = true };
             var right = new Button { Content = "right", Focusable = true };

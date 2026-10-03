@@ -141,6 +141,8 @@ shortcuts for a *hotkey* on a screen.
 - **The app-wide focus ring is an adorner, and Avalonia clips an adorner to its adorned control's clip.** Buttons clip to their bounds, which is why the ring template sets
   `AdornerLayer.IsClipEnabled="False"`. Don't add a second hand-rolled inner border on `:focus-visible` (it insets the content and doubles the ring); if a control needs a different ring,
   set its `FocusAdorner` to null and draw one inside its own bounds.
+- **A Button also swallows Enter and Space** before a XAML `KeyDown=` handler on it runs. A card that opens with Enter must either keep a bound `Command` or have the key tunnelled from an
+  ancestor (`LibraryScreen.OnScreenCardKeyDownTunnel`).
 - **A Button swallows a left press** (Avalonia 12): an instance `PointerPressed` handler declared in XAML on a `Button` never sees it. Tunnel from an ancestor instead (see
   `LibraryScreen.OnScreenPointerPressedTunnel`).
 - **What stays a control's own key handler:** arrow navigation among a list's items, Enter/Space/Delete/F2 on the focused item, type-ahead,

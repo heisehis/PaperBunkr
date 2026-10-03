@@ -20,6 +20,7 @@ public partial class BulkSeriesPropertiesScreen : UserControl
     public BulkSeriesPropertiesScreen()
     {
         InitializeComponent();
+        KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
         _screenInput = ScreenInput.Attach(this, InputScope.Editor, new Dictionary<string, Func<bool>>
         {
             // Ctrl+S saves even from inside a text field; the editors close themselves, so the rebuild runs after the key press has finished routing.

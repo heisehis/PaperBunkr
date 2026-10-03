@@ -180,7 +180,7 @@
         <!-- ToolTip.ServiceEnabled (inherited attached property) set once here disables tooltips
              for every button inside while expanded - the label already showing the same text made
              the floating tooltip bubble redundant, found via direct user testing. -->
-        <Border Classes="navRail" Classes.expanded="{Binding IsNavRailExpanded}"
+        <Border x:Name="NavRail" Classes="navRail" Classes.expanded="{Binding IsNavRailExpanded}"
                 DockPanel.Dock="Left" Background="{DynamicResource PbChromeBrush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
                 IsVisible="{Binding !IsInReader}"

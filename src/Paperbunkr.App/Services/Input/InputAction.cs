@@ -242,6 +242,9 @@ public static class InputActionIds
     // --- Detail screens (comic series, manga, book) ---
 
     public const string DetailContinue = "Detail.Continue";
+
+    /// <summary>Leaves a detail page for the one before it (Backspace; Esc does the same through <see cref="CloseCurrentView"/>).</summary>
+    public const string DetailBack = "Detail.Back";
     public const string DetailEdit = "Detail.Edit";
 
     // --- Smart lists ---

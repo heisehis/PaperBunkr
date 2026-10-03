@@ -193,6 +193,7 @@ public static class InputActions
             App(InputActionIds.BooksDeleteSelection, BooksGroup, "Remove the selection", InputScope.Books, false, K(Key.Delete)),
 
             // ----- Detail screens -----
+            App(InputActionIds.DetailBack, DetailGroup, "Back to the previous screen", InputScope.Detail, false, K(Key.Back)),
             App(InputActionIds.DetailContinue, DetailGroup, "Continue reading", InputScope.Detail, false, K(Key.Enter, Ctrl)),
             App(InputActionIds.DetailEdit, DetailGroup, "Edit properties of the selected issues", InputScope.Detail, false, K(Key.I, Ctrl)),
 

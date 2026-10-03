@@ -140,7 +140,10 @@ public static class GridKeyboardNavigation
     /// </summary>
     public static bool TryHandleArrowKey(ItemsControl itemsControl, Control fromControl, Key key, Action<object>? onNavigated = null)
     {
-        if (itemsControl.ItemsPanelRoot is INavigableContainer navigable)
+        // Only a virtualizing panel takes this path: its unrealized items are not in the visual tree, so the spatial search below cannot see them. A plain WrapPanel also implements
+        // INavigableContainer, but its GetControl ignores Up and Down (a horizontal wrap only steps through the children one by one), which made up and down do nothing in a grid of
+        // ordinary tiles while still reporting the key as handled.
+        if (itemsControl.ItemsPanelRoot is VirtualizingPanel and INavigableContainer navigable)
         {
             // The panel looks the starting point up among its own children, so hand it the item container, not the control inside it
             // (a plain WrapPanel otherwise can't find it and jumps to its first child).

@@ -37,6 +37,7 @@ public partial class WantedScreen : UserControl
             [InputActionIds.Refresh] = () => DataContext is WantedScreenViewModel vm && ScreenInput.Deferred(vm.Refresh),
         });
         _focus = new FocusReclaimer(this, () => DataContext is WantedScreenViewModel, FocusFallback);
+        KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
         DataContextChanged += OnDataContextChanged;
         AddHandler(GotFocusEvent, (_, _) =>
         {

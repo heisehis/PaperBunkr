@@ -42,6 +42,7 @@ public partial class PreferencesScreen : UserControl
             [InputActionIds.TabPrevious] = () => TabStrip.Step(this, -1),
         });
         _focus = new FocusReclaimer(this, () => DataContext is PreferencesScreenViewModel, FocusFallback);
+        KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
         DataContextChanged += OnDataContextChanged;
         PropertyChanged += (_, e) =>
         {

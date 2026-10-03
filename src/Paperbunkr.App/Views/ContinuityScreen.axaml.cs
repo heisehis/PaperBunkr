@@ -35,6 +35,7 @@ public partial class ContinuityScreen : UserControl
         });
         _focus = new FocusReclaimer(this, () => DataContext is ContinuityScreenViewModel,
             () => FocusReclaimer.FocusFirstButton(this, b => b.Classes.Contains("segToggle") && b.Classes.Contains("on")));
+        KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
         DataContextChanged += OnDataContextChanged;
         PropertyChanged += (_, e) =>
         {

@@ -58,6 +58,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private bool _suppressVirtualTagApply;
     private bool _suppressBackupSettingsApply;
     private bool _suppressThemeOptionsApply;
+    private readonly IInputService _input;
     private Issue _previewIssue = SampleIssue();
     private Series? _previewSeries = new() { Name = "Sample Series" };
 
@@ -120,6 +121,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _fileAssociationService = fileAssociationService;
         _backupService = backupService;
         Shortcuts = new ShortcutsEditorViewModel(input, filePicker, showToast);
+        _input = input;
         _updateService = updateService;
         _showToast = showToast;
         NeedsReview = needsReview;
@@ -1428,6 +1430,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnGamepadEnabledChanged(bool value)
     {
         PersistBehaviorSetting(s => s.GamepadEnabled = value);
+        _input.GamepadEnabled = value;
         ReaderDisplaySettingsChanged?.Invoke();
     }
 

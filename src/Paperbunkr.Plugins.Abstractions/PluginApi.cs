@@ -11,8 +11,8 @@ namespace Paperbunkr.Plugins;
 /// </summary>
 public static class PluginApi
 {
-    /// <summary>The current API version. 4.1 added <c>IPluginEnvironment.Activity</c> (the Activity reporter); 4.2 added <c>IPluginEnvironment.Log</c> (the per-plugin logger).</summary>
-    public static readonly Version Current = new(4, 2);
+    /// <summary>The current API version. 4.1 added <c>IPluginEnvironment.Activity</c> (the Activity reporter); 4.2 added <c>IPluginEnvironment.Log</c> (the per-plugin logger); 4.3 added the <c>shortcut</c> manifest attribute (and <c>INativeCommandRegistrar.OnLibrary</c>'s <c>shortcut</c> parameter), which turns a Library command into a remappable keyboard action.</summary>
+    public static readonly Version Current = new(4, 3);
 }
 
 /// <summary>How a manifest's declared <c>requiresApi</c> relates to the host's API version.</summary>

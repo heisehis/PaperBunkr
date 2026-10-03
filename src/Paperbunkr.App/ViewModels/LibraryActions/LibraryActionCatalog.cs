@@ -500,7 +500,7 @@ public sealed class LibraryActionCatalog
 
         yield return new("plugins", local, c => ContextMenuEntry.SubMenu(
             "Plugins",
-            _vm.LibraryPluginCommands.Select(p => ContextMenuEntry.Item(p.Name, _vm.RunLibraryPluginOnTargetCommand, (c.Target, p))),
+            _vm.LibraryPluginCommands.Select(p => ContextMenuEntry.Item(p.Name, _vm.RunLibraryPluginOnTargetCommand, (c.Target, p), inputGesture: Hint(Paperbunkr.App.Services.Input.PluginInputActions.IdFor(p)))),
             Symbol.PuzzlePiece,
             isVisible: _vm.HasLibraryPluginCommands));
 

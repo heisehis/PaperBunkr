@@ -5,6 +5,8 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Paperbunkr.App.ViewModels;
+using System.Collections.Generic;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Views;
 
@@ -19,9 +21,26 @@ public partial class PreferencesScreen : UserControl
     /// clicked. Falls back to the active nav item, or the first search result while searching.</summary>
     private readonly FocusReclaimer _focus;
 
+    private readonly AttachedInputRegistration _screenInput;
+
+    /// <summary>The input service this screen's actions arrive through: the application's, unless a test supplies its own.</summary>
+    public IInputService InputService
+    {
+        get => _screenInput.Service;
+        set => _screenInput.Service = value;
+    }
+
     public PreferencesScreen()
     {
         InitializeComponent();
+        _screenInput = ScreenInput.Attach(this, InputScope.Preferences, new Dictionary<string, Func<bool>>
+        {
+            [InputActionIds.FocusSearch] = () => ScreenInput.FocusTextBox(this, "PreferencesSearchBox"),
+
+            // The bumpers (and Ctrl+PageUp/PageDown) step through the sections in the list on the left.
+            [InputActionIds.TabNext] = () => TabStrip.Step(this, 1),
+            [InputActionIds.TabPrevious] = () => TabStrip.Step(this, -1),
+        });
         _focus = new FocusReclaimer(this, () => DataContext is PreferencesScreenViewModel, FocusFallback);
         DataContextChanged += OnDataContextChanged;
         PropertyChanged += (_, e) =>

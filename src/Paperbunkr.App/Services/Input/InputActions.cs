@@ -20,6 +20,10 @@ public static class InputActions
     public const string GamepadGroup = "Gamepad";
     public const string BookReaderGroup = "Book reader";
     public const string CompareGroup = "Compare";
+    public const string AllScreensGroup = "All screens";
+    public const string BooksGroup = "Books";
+    public const string SmartListsGroup = "Smart lists";
+    public const string DetailGroup = "Detail screens";
 
     /// <summary>Every built-in action, in the order Preferences lists them within a group.</summary>
     public static IReadOnlyList<InputActionInfo> Core { get; } = Build();
@@ -37,6 +41,10 @@ public static class InputActions
 
     private static InputActionInfo App(string id, string group, string label, InputScope scope, bool firesInTextInput, params InputBinding[] defaults) =>
         new(id, group, label, scope, InputContext.Always, defaults, FiresInTextInput: firesInTextInput);
+
+    /// <summary>An "every screen" action with a canonical key: the key the focused controls already understand, bound by default, plus any controller inputs.</summary>
+    private static InputActionInfo Canon(string id, string label, Key canonical, params InputBinding[] extras) =>
+        new(id, AllScreensGroup, label, InputScope.Global, InputContext.Always, [K(canonical), .. extras], CanonicalKey: canonical);
 
     private static IReadOnlyList<InputActionInfo> Build()
     {
@@ -128,10 +136,10 @@ public static class InputActions
             new(InputActionIds.ZoomAxis, GamepadGroup, "Zoom (triggers)", InputScope.Reader, Always, [Pad(GamepadInput.Triggers)], InputActionKind.Axis),
 
             // ----- Global and layout. Escape, the browser-back key and quick open also work while a text box has focus, as the old shell handler allowed. -----
-            App(InputActionIds.CloseCurrentView, GeneralGroup, "Close the current overlay or view", InputScope.Global, true, K(Key.Escape)),
+            App(InputActionIds.CloseCurrentView, GeneralGroup, "Close the current overlay or view", InputScope.Global, true, K(Key.Escape), Pad(GamepadInput.B)),
             App(InputActionIds.NavigateBack, GeneralGroup, "Navigate back", InputScope.Global, true, K(Key.BrowserBack), Mouse(MouseButton.XButton1), Wheel(WheelDirection.Left)),
             App(InputActionIds.NavigateForward, GeneralGroup, "Navigate forward", InputScope.Global, false, K(Key.BrowserForward), Mouse(MouseButton.XButton2), Wheel(WheelDirection.Right)),
-            App(InputActionIds.OpenQuickOpen, GeneralGroup, "Quick open", InputScope.Global, true, K(Key.P, Ctrl)),
+            App(InputActionIds.OpenQuickOpen, GeneralGroup, "Quick open", InputScope.Global, true, K(Key.P, Ctrl), Pad(GamepadInput.Start)),
             App(InputActionIds.OpenSettings, GeneralGroup, "Open Preferences", InputScope.Global, false, K(Key.OemComma, Ctrl)),
             App(InputActionIds.CycleScreenForward, GeneralGroup, "Next screen", InputScope.Global, false, K(Key.Tab, Ctrl)),
             App(InputActionIds.CycleScreenBackward, GeneralGroup, "Previous screen", InputScope.Global, false, K(Key.Tab, Ctrl | Shift)),
@@ -140,6 +148,29 @@ public static class InputActions
             App(InputActionIds.Quit, GeneralGroup, "Quit", InputScope.Global, false, K(Key.Q, Ctrl)),
             App(InputActionIds.FocusSearch, GeneralGroup, "Focus the search box", InputScope.Global, false, K(Key.F, Ctrl), K(Key.OemQuestion)),
             App(InputActionIds.ToggleSidebar, GeneralGroup, "Toggle the sidebar", InputScope.Global, false, K(Key.F6, Shift)),
+
+            // ----- Every screen. Keyboard arrows, Enter, Space, F2 and Delete already work on the focused control, so those actions have no key by default: they exist so the controller
+            // can send the same keys, and so a user can bind any other input to one. -----
+            Canon(InputActionIds.FocusUp, "Move up", Key.Up, Pad(GamepadInput.DPadUp), Pad(GamepadInput.LeftStickUp)),
+            Canon(InputActionIds.FocusDown, "Move down", Key.Down, Pad(GamepadInput.DPadDown), Pad(GamepadInput.LeftStickDown)),
+            Canon(InputActionIds.FocusLeft, "Move left", Key.Left, Pad(GamepadInput.DPadLeft), Pad(GamepadInput.LeftStickLeft)),
+            Canon(InputActionIds.FocusRight, "Move right", Key.Right, Pad(GamepadInput.DPadRight), Pad(GamepadInput.LeftStickRight)),
+            Canon(InputActionIds.FocusFirst, "Go to the first item", Key.Home),
+            Canon(InputActionIds.FocusLast, "Go to the last item", Key.End),
+            Canon(InputActionIds.ItemPageUp, "Page up in a list or grid", Key.PageUp),
+            Canon(InputActionIds.ItemPageDown, "Page down in a list or grid", Key.PageDown),
+            Canon(InputActionIds.Activate, "Open / press the focused item", Key.Enter, Pad(GamepadInput.A)),
+            Canon(InputActionIds.ToggleSelect, "Toggle the focused item", Key.Space),
+            Canon(InputActionIds.RenameItem, "Rename the focused item", Key.F2),
+            Canon(InputActionIds.DeleteItem, "Remove the focused item", Key.Delete),
+            App(InputActionIds.ContextMenu, AllScreensGroup, "Open the context menu", InputScope.Global, false, Pad(GamepadInput.Y)),
+            new(InputActionIds.Refresh, AllScreensGroup, "Refresh the screen", InputScope.Global, Always, [K(Key.F5)], FormerIds: ["Library.Refresh"]),
+            App(InputActionIds.NewItem, AllScreensGroup, "New list, collection or item", InputScope.Global, false, K(Key.N, Ctrl)),
+            App(InputActionIds.Save, AllScreensGroup, "Save", InputScope.Global, true, K(Key.S, Ctrl)),
+            App(InputActionIds.TabPrevious, AllScreensGroup, "Previous tab", InputScope.Global, false, K(Key.PageUp, Ctrl), Pad(GamepadInput.LeftShoulder)),
+            App(InputActionIds.TabNext, AllScreensGroup, "Next tab", InputScope.Global, false, K(Key.PageDown, Ctrl), Pad(GamepadInput.RightShoulder)),
+            new(InputActionIds.ScrollVertical, AllScreensGroup, "Scroll up / down (right stick)", InputScope.Global, Always, [Pad(GamepadInput.RightStickY)], InputActionKind.Axis),
+            new(InputActionIds.ScrollHorizontal, AllScreensGroup, "Scroll left / right (right stick)", InputScope.Global, Always, [Pad(GamepadInput.RightStickX)], InputActionKind.Axis),
 
             // ----- Book reader. Right/PageDown/Space and Left/PageUp turn pages (a real gap found by manual testing 2026-09-02: the reader had no keyboard paging at all). -----
             new(InputActionIds.BookNextPage, BookReaderGroup, "Next page", InputScope.BookReader, Always, [K(Key.Right), K(Key.PageDown), K(Key.Space)]),
@@ -156,8 +187,19 @@ public static class InputActions
             new(InputActionIds.CompareKeepA, CompareGroup, "Keep A", InputScope.Compare, Always, [K(Key.D1)]),
             new(InputActionIds.CompareKeepB, CompareGroup, "Keep B", InputScope.Compare, Always, [K(Key.D2)]),
 
+            // ----- Books -----
+            App(InputActionIds.BooksSelectAll, BooksGroup, "Select all", InputScope.Books, false, K(Key.A, Ctrl)),
+            App(InputActionIds.BooksEditSelection, BooksGroup, "Edit properties of the selection", InputScope.Books, false, K(Key.I, Ctrl)),
+            App(InputActionIds.BooksDeleteSelection, BooksGroup, "Remove the selection", InputScope.Books, false, K(Key.Delete)),
+
+            // ----- Detail screens -----
+            App(InputActionIds.DetailContinue, DetailGroup, "Continue reading", InputScope.Detail, false, K(Key.Enter, Ctrl)),
+            App(InputActionIds.DetailEdit, DetailGroup, "Edit properties of the selected issues", InputScope.Detail, false, K(Key.I, Ctrl)),
+
+            // ----- Smart lists -----
+            App(InputActionIds.SmartDuplicate, SmartListsGroup, "Duplicate the smart list", InputScope.SmartLists, false, K(Key.D, Ctrl)),
+
             // ----- Library -----
-            App(InputActionIds.RefreshLibrary, LibraryGroup, "Refresh", InputScope.Library, false, K(Key.F5)),
             App(InputActionIds.ToggleLibraryPreview, LibraryGroup, "Toggle the preview panel", InputScope.Library, false, K(Key.B, Ctrl)),
 
             // The selection actions: what each runs for the issues or series currently selected is LibraryActionCatalog's call, so the menu, the bar and these keys cannot drift apart.

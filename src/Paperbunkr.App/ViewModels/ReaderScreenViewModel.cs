@@ -286,10 +286,6 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private bool _extraMouseButtonsTurnPages = true;
 
-    /// <summary>An XInput controller drives the reader while it is showing (<see cref="AppSettings.GamepadEnabled"/>); the screen's poller starts and stops on it.</summary>
-    [ObservableProperty]
-    private bool _gamepadEnabled = true;
-
     /// <summary>Tap/click zone layouts and inversion for paged and continuous modes (design 2026-09-25 F1 section 4), refreshed live by <see cref="RefreshDisplaySettings"/>.</summary>
     [ObservableProperty]
     private TapZoneLayout _pagedTapZoneLayout = TapZoneLayout.Default;
@@ -781,7 +777,6 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         ContinuousTapZoneInvert = effective.ContinuousTapZoneInvert;
         TapZonesForMouse = appSettings.TapZonesForMouse;
         ExtraMouseButtonsTurnPages = appSettings.ExtraMouseButtonsTurnPages;
-        GamepadEnabled = appSettings.GamepadEnabled;
         ApplyComfortSettings(appSettings, effective);
         if (!_preOpenNextIssue)
         {

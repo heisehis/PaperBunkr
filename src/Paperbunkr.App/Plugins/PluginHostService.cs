@@ -80,6 +80,9 @@ public sealed class PluginHostService
     /// </summary>
     public void RediscoverPlugins() => DiscoverAndApplyOverrides();
 
+    /// <summary>Raised after the set of enabled commands may have changed: a discovery pass, or a command or package switched on or off. The keyboard-shortcut list follows it.</summary>
+    public event Action? CommandsChanged;
+
     /// <summary>Test seam - sets the environment used by <see cref="RediscoverPlugins"/>/discovery without going through the full <see cref="Initialize"/> path (no real <c>MainViewModel</c>/<c>Window</c> needed) and runs an initial discovery immediately.</summary>
     internal void InitializeForTests(IPluginEnvironment environment)
     {
@@ -99,6 +102,7 @@ public sealed class PluginHostService
             Engine.Discover(PluginPaths.RootDirectory, _environment);
             RejectNativePluginsWithTwoSettingsDefinitions();
             ApplyPersistedOverrides();
+            CommandsChanged?.Invoke();
         }
         catch (Exception ex)
         {
@@ -370,6 +374,8 @@ public sealed class PluginHostService
         {
             SetCommandEnabled(command, enabled);
         }
+
+        CommandsChanged?.Invoke();
     }
 
     /// <summary>Persists a user toggle and applies it immediately (docs §3's <see cref="PluginCommandState"/> sparse-table convention) - called from the Plugin screen.</summary>
@@ -394,6 +400,7 @@ public sealed class PluginHostService
         }
 
         context.SaveChanges();
+        CommandsChanged?.Invoke();
     }
 
     private void ApplyPersistedOverrides()

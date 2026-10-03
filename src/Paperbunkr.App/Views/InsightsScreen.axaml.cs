@@ -10,6 +10,7 @@ using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data.Metadata;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Views;
 
@@ -35,9 +36,24 @@ public partial class InsightsScreen : UserControl
     private IReadOnlyList<(string Name, double[] Values)> _growthSeries = Array.Empty<(string, double[])>();
     private ScottPlot.Plottables.VerticalLine? _growthCursor;
 
+    private readonly AttachedInputRegistration _screenInput;
+
+    /// <summary>The input service this screen's actions arrive through: the application's, unless a test supplies its own.</summary>
+    public IInputService InputService
+    {
+        get => _screenInput.Service;
+        set => _screenInput.Service = value;
+    }
+
     public InsightsScreen()
     {
         InitializeComponent();
+        _screenInput = ScreenInput.Attach(this, InputScope.Insights, new Dictionary<string, Func<bool>>
+        {
+            [InputActionIds.TabNext] = () => TabStrip.Step(this, 1),
+            [InputActionIds.TabPrevious] = () => TabStrip.Step(this, -1),
+            [InputActionIds.Refresh] = () => DataContext is InsightsScreenViewModel vm && ScreenInput.Deferred(vm.Refresh),
+        });
         _focus = new FocusReclaimer(this, () => DataContext is InsightsScreenViewModel,
             () => FocusReclaimer.FocusFirstButton(this, b => b.Classes.Contains("tab") && b.Classes.Contains("active")));
         KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);

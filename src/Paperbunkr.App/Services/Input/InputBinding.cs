@@ -74,6 +74,14 @@ public enum GamepadInput
     Triggers,
 }
 
+/// <summary>Facts about <see cref="GamepadInput"/> values.</summary>
+public static class GamepadInputs
+{
+    /// <summary>True for the analogue axes (a stick's X or Y, the triggers), which carry a continuous value rather than a press.</summary>
+    public static bool IsAxis(GamepadInput input) =>
+        input is GamepadInput.LeftStickX or GamepadInput.LeftStickY or GamepadInput.RightStickX or GamepadInput.RightStickY or GamepadInput.Triggers;
+}
+
 /// <summary>
 /// One physical input in the unified gesture space (docs/superpowers/specs/2026-10-03-input-service-design.md §5.3): a key with modifiers, a mouse button
 /// (single or double click) with modifiers, a wheel direction with modifiers, or a gamepad input. Mirrors ComicRack's <c>CommandKey</c>, which puts keys, mouse

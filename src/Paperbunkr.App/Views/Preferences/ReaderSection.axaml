@@ -167,7 +167,7 @@
                             </pref:SettingsRow.SettingsContent>
                         </pref:SettingsRow>
                         <pref:SettingsRow Icon="Games" Title="Use a game controller"
-                                          Description="An Xbox or other XInput controller drives the reader while it is open: D-pad or A/B and the bumpers turn pages, sticks pan and scroll, triggers zoom, Y toggles the toolbar, X fullscreen, Start opens the command palette, Back leaves.">
+                                          Description="An Xbox or other XInput controller drives the whole app: the D-pad moves, A opens, B goes back, Y opens the context menu, the bumpers switch tabs and the right stick scrolls. In the reader the D-pad or A/B and the bumpers turn pages, sticks pan and scroll, triggers zoom, X is fullscreen and Start opens the command palette. Every button can be remapped in Keyboard Shortcuts.">
                             <pref:SettingsRow.SettingsContent>
                                 <ToggleSwitch IsChecked="{Binding GamepadEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
                             </pref:SettingsRow.SettingsContent>

@@ -10,7 +10,7 @@ namespace Paperbunkr.App.Controls;
 
 /// <summary>
 /// The "press your combination" box in Preferences &gt; Keyboard Shortcuts: once shown it takes focus and reports the next key (with its modifiers), middle or thumb mouse button
-/// press, or wheel turn as an <see cref="InputBinding"/> through <see cref="CaptureCommand"/>. Escape cancels (through <see cref="CancelCommand"/>), as does clicking away. It
+/// press, wheel turn or controller button as an <see cref="InputBinding"/> through <see cref="CaptureCommand"/>. Escape cancels (through <see cref="CancelCommand"/>), as does clicking away. It
 /// declares itself an <see cref="InputSuppression.All"/> suppressor, so the input service lets every key, button and wheel turn through to it instead of acting on them: pressing
 /// Escape or Mouse 4 here does not close the screen or navigate back. Left and right clicks are ignored (a click is how the box gets focus), and a bare modifier key waits for the key
 /// it modifies. ComicRack's own shortcut editor offers the same capture dialog; this replaces the curated key list the previous editor used, which could not express a mouse binding.
@@ -32,14 +32,22 @@ public sealed class BindingCaptureBox : Border, IInputSuppressor
         BackgroundProperty.OverrideDefaultValue<BindingCaptureBox>(Avalonia.Media.Brushes.Transparent);
     }
 
+    private readonly TextBlock _prompt;
+    private IDisposable? _padCapture;
+
+    /// <summary>The service the controller is read through while the box is waiting; the application's unless a test supplies its own.</summary>
+    public IInputService? InputService { get; set; }
+
     public BindingCaptureBox()
     {
-        Child = new TextBlock
+        _prompt = new TextBlock
         {
-            Text = "Press a key, a mouse button, or turn the wheel…  (Esc cancels)",
             FontSize = 12,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
         };
+        Child = _prompt;
+        UpdatePrompt();
 
         // Clicking away abandons the capture. The event rather than an override: the override's parameter type differs between Avalonia versions.
         LostFocus += (_, _) => Cancel();
@@ -63,12 +71,51 @@ public sealed class BindingCaptureBox : Border, IInputSuppressor
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == IsVisibleProperty && change.GetNewValue<bool>())
+        if (change.Property == IsVisibleProperty)
         {
-            // Deferred: the box becomes visible in the same layout pass that makes it focusable.
-            Dispatcher.UIThread.Post(() => Focus());
+            if (change.GetNewValue<bool>())
+            {
+                // Deferred: the box becomes visible in the same layout pass that makes it focusable.
+                Dispatcher.UIThread.Post(() => Focus());
+                StartListeningToController();
+            }
+            else
+            {
+                StopListeningToController();
+            }
         }
     }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        StopListeningToController();
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    /// <summary>
+    /// While the box is showing, the next controller button goes to it rather than to the action it would normally trigger. The app-wide poller only runs while "Use a game controller" is on,
+    /// so the prompt says so when it is off instead of waiting for a press that cannot arrive.
+    /// </summary>
+    private void StartListeningToController()
+    {
+        StopListeningToController();
+        UpdatePrompt();
+        var input = InputService ?? InputServiceLocator.Current;
+        _padCapture = input.BeginGamepadCapture(pad =>
+            // Deferred like every other report from this box: hiding it inside the poller's tick is harmless, but the command may rebuild the row.
+            Dispatcher.UIThread.Post(() => Capture(InputBinding.ForPad(pad))));
+    }
+
+    private void StopListeningToController()
+    {
+        _padCapture?.Dispose();
+        _padCapture = null;
+    }
+
+    private void UpdatePrompt() =>
+        _prompt.Text = (InputService ?? InputServiceLocator.Current).GamepadEnabled
+            ? "Press a key, a mouse button or a controller button, or turn the wheel…  (Esc cancels)"
+            : "Press a key, a mouse button, or turn the wheel…  (Esc cancels). To use a controller button, turn on 'Use a game controller' first.";
 
     protected override void OnKeyDown(KeyEventArgs e)
     {

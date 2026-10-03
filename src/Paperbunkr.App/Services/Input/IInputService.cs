@@ -20,6 +20,15 @@ public interface IInputService
     /// <summary>Raised after any binding is added, changed or reset, including a reload from disk.</summary>
     event EventHandler? BindingsChanged;
 
+    /// <summary>Raised from <see cref="ProcessGamepad"/> whenever a snapshot has a button or stick away from rest, claimed or not (the reader counts it as the reader being present).</summary>
+    event EventHandler? GamepadActivity;
+
+    /// <summary>Whether a connected controller drives the app (Preferences &gt; Reader &gt; "Use a game controller"). The app-wide poller starts and stops on it.</summary>
+    bool GamepadEnabled { get; set; }
+
+    /// <summary>Raised when <see cref="GamepadEnabled"/> changes.</summary>
+    event EventHandler? GamepadEnabledChanged;
+
     /// <summary>The actions the app knows about (built-in and plugin-registered).</summary>
     IInputActionCatalog Actions { get; }
 
@@ -53,6 +62,12 @@ public interface IInputService
 
     /// <summary>Forgets held pad buttons and repeat timers; the poller calls it when the controller disappears or it stops, so nothing sticks.</summary>
     void ResetGamepad();
+
+    /// <summary>
+    /// Routes controller presses to <paramref name="onInput"/> instead of to actions until the returned token is disposed: how Preferences records "the button you press" for a new binding.
+    /// Each press of a button, the D-pad or a stick direction is reported once (an analogue axis is not, since a binding for one is fixed); nothing else happens while it is active.
+    /// </summary>
+    IDisposable BeginGamepadCapture(Action<GamepadInput> onInput);
 
     // ----- Programmatic dispatch: toolbar buttons, the command palette, plugins, future devices. -----
 

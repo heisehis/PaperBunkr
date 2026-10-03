@@ -23,7 +23,7 @@
     <Style Selector=":is(Control)">
         <Setter Property="FocusAdorner">
             <FocusAdornerTemplate>
-                <Border Margin="-16" IsHitTestVisible="False">
+                <Border Margin="-16" IsHitTestVisible="False" AdornerLayer.IsClipEnabled="False">
                     <Border Margin="16" CornerRadius="{DynamicResource PbRadiusSm}" BoxShadow="{DynamicResource PbGlowRing}" />
                 </Border>
             </FocusAdornerTemplate>

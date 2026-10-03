@@ -70,6 +70,22 @@ public sealed class InputActionCatalog : IInputActionCatalog
         }
     }
 
+    public bool Unregister(string id)
+    {
+        if (!_byId.Remove(id, out var info))
+        {
+            return false;
+        }
+
+        _all.Remove(info);
+        foreach (string old in (info.FormerIds ?? []).Where(o => _formerIds.TryGetValue(o, out var owner) && owner == id).ToList())
+        {
+            _formerIds.Remove(old);
+        }
+
+        return true;
+    }
+
     /// <summary>Convenience for tests and plugin hosts: the registered ids, in order.</summary>
     internal IReadOnlyList<string> Ids => _all.Select(i => i.Id).ToList();
 }

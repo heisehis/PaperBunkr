@@ -44,7 +44,8 @@ internal sealed class NativeCommandRegistrar : INativeCommandRegistrar
         string name,
         Func<INativePluginEnvironment, IReadOnlyList<Issue>, Task<object?>> handler,
         string? description = null,
-        bool confirmWrites = false)
+        bool confirmWrites = false,
+        string? shortcut = null)
     {
         _commands.Add(new NativeCommand(globals =>
         {
@@ -57,6 +58,7 @@ internal sealed class NativeCommandRegistrar : INativeCommandRegistrar
             Key = key,
             Name = name,
             Description = description,
+            Shortcut = shortcut,
             ConfirmWrites = confirmWrites,
         });
     }

@@ -78,6 +78,17 @@ public sealed class InputService : IInputService
             inner.Register(info);
             registered();
         }
+
+        public bool Unregister(string id)
+        {
+            bool removed = inner.Unregister(id);
+            if (removed)
+            {
+                registered();
+            }
+
+            return removed;
+        }
     }
 
     private readonly IInputActionCatalog _catalog;
@@ -112,6 +123,27 @@ public sealed class InputService : IInputService
     public event EventHandler<InputActionEventArgs>? ActionTriggered;
 
     public event EventHandler? BindingsChanged;
+
+    public event EventHandler? GamepadActivity;
+
+    public event EventHandler? GamepadEnabledChanged;
+
+    private bool _gamepadEnabled;
+
+    public bool GamepadEnabled
+    {
+        get => _gamepadEnabled;
+        set
+        {
+            if (_gamepadEnabled == value)
+            {
+                return;
+            }
+
+            _gamepadEnabled = value;
+            GamepadEnabledChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     public IInputActionCatalog Actions => _observedCatalog;
 
@@ -196,8 +228,35 @@ public sealed class InputService : IInputService
 
     public bool ProcessKey(Key key, KeyModifiers modifiers) => ProcessKey(key, modifiers, null);
 
-    internal bool ProcessKey(Key key, KeyModifiers modifiers, InputSuppression? suppression) =>
-        DeliverBinding(InputBinding.ForKey(key, modifiers), InputDevice.Keyboard, suppression, 1, default, modifiers, null, default);
+    internal bool ProcessKey(Key key, KeyModifiers modifiers, InputSuppression? suppression)
+    {
+        if (DeliverBinding(InputBinding.ForKey(key, modifiers), InputDevice.Keyboard, suppression, 1, default, modifiers, null, default))
+        {
+            return true;
+        }
+
+        // Nothing took the key. If it is the plain key an "every screen" action works through (Enter, an arrow, Delete, ...) and the user has taken it off that action, it does nothing:
+        // that is what unbinding means. A key the service itself is sending on to a control (UiNavigation) is never swallowed, or an action moved to another key could not reach its control.
+        return modifiers == KeyModifiers.None && suppression != InputSuppression.All && !UiNavigation.IsSending && IsUnboundCanonicalKey(key, suppression);
+    }
+
+    private bool IsUnboundCanonicalKey(Key key, InputSuppression? suppression)
+    {
+        foreach (var info in _catalog.All)
+        {
+            if (info.CanonicalKey != key || (suppression == InputSuppression.TextEntry && !info.FiresInTextInput))
+            {
+                continue;
+            }
+
+            if (!GetBindings(info.Action).Contains(InputBinding.ForKey(key)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     internal bool ProcessWheel(Vector delta, KeyModifiers modifiers, Func<Visual, Point>? position)
     {
@@ -225,9 +284,25 @@ public sealed class InputService : IInputService
 
     public bool ProcessGamepad(GamepadState state, TimeSpan elapsed)
     {
+        if (state.HasInput(Tuning))
+        {
+            GamepadActivity?.Invoke(this, EventArgs.Empty);
+        }
+
         bool claimed = false;
         foreach (var signal in _pad.Update(state, elapsed, Tuning))
         {
+            if (_padCapture is { } capture)
+            {
+                if (!GamepadInputs.IsAxis(signal.Input))
+                {
+                    capture(signal.Input);
+                }
+
+                claimed = true;
+                continue;
+            }
+
             claimed |= DeliverBinding(InputBinding.ForPad(signal.Input), InputDevice.Gamepad, null, signal.Value, default, KeyModifiers.None, null, elapsed);
         }
 
@@ -235,6 +310,21 @@ public sealed class InputService : IInputService
     }
 
     public void ResetGamepad() => _pad.Reset();
+
+    private Action<GamepadInput>? _padCapture;
+
+    public IDisposable BeginGamepadCapture(Action<GamepadInput> onInput)
+    {
+        ArgumentNullException.ThrowIfNull(onInput);
+        _padCapture = onInput;
+        return new Token(() =>
+        {
+            if (ReferenceEquals(_padCapture, onInput))
+            {
+                _padCapture = null;
+            }
+        });
+    }
 
     public bool Dispatch(InputAction action, InputPayload payload = default) =>
         Deliver([action], default, InputDevice.Programmatic, null, payload.Value ?? 1, payload.WheelDelta, payload.Modifiers, payload.PositionResolver, default);
@@ -384,6 +474,12 @@ public sealed class InputService : IInputService
             }
 
             if (suppression == InputSuppression.TextEntry && !info.FiresInTextInput)
+            {
+                continue;
+            }
+
+            // The plain key an "every screen" action stands for already works on the focused control, so while it is bound to the action the key goes through untouched.
+            if (device == InputDevice.Keyboard && info.CanonicalKey is { } canonical && binding.Kind == InputBindingKind.Key && binding.Key == canonical && binding.Modifiers == KeyModifiers.None)
             {
                 continue;
             }

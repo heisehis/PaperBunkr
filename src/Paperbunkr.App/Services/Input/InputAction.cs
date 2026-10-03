@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Avalonia.Input;
 
 namespace Paperbunkr.App.Services.Input;
 
@@ -151,6 +152,52 @@ public static class InputActionIds
     public const string CycleScreenBackward = "App.CycleScreenBackward";
     public const string ToggleLibraryPreview = "App.ToggleLibraryPreview";
 
+    // --- Every screen: moving around and acting on the focused item, by keyboard, mouse or controller. These forward the key the control already understands (docs/superpowers/specs/2026-10-03-input-service-design.md §14). ---
+
+    /// <summary>Moves focus (or the caret-free arrow key a control uses) one step up; the controller's D-pad and left stick.</summary>
+    public const string FocusUp = "App.FocusUp";
+
+    public const string FocusDown = "App.FocusDown";
+    public const string FocusLeft = "App.FocusLeft";
+    public const string FocusRight = "App.FocusRight";
+
+    /// <summary>Opens or presses the focused item: sends it Enter. The controller's A button.</summary>
+    public const string Activate = "App.Activate";
+
+    /// <summary>Toggles the focused item: sends it Space.</summary>
+    public const string ToggleSelect = "App.ToggleSelect";
+
+    /// <summary>Renames the focused item: sends it F2.</summary>
+    public const string RenameItem = "App.RenameItem";
+
+    /// <summary>Removes the focused item: sends it Delete.</summary>
+    public const string DeleteItem = "App.DeleteItem";
+
+    /// <summary>Opens the focused item's context menu.</summary>
+    public const string ContextMenu = "App.ContextMenu";
+
+    /// <summary>Previous tab (or, on a screen with none, the previous screen).</summary>
+    public const string TabPrevious = "App.TabPrevious";
+
+    /// <summary>Next tab (or, on a screen with none, the next screen).</summary>
+    public const string TabNext = "App.TabNext";
+
+    /// <summary>Scrolls the focused area up or down (the controller's right stick).</summary>
+    public const string ScrollVertical = "App.ScrollVertical";
+
+    /// <summary>Jumps the focused list or grid to its first item (Home).</summary>
+    public const string FocusFirst = "App.FocusFirst";
+
+    /// <summary>Jumps the focused list or grid to its last item (End).</summary>
+    public const string FocusLast = "App.FocusLast";
+
+    /// <summary>Moves a page up in the focused list or grid (Page Up).</summary>
+    public const string ItemPageUp = "App.ItemPageUp";
+
+    public const string ItemPageDown = "App.ItemPageDown";
+
+    public const string ScrollHorizontal = "App.ScrollHorizontal";
+
     // --- Book reader (EPUB, FB2, MOBI): its page turns and the screen-reader "where am I?" announcement ---
 
     public const string BookNextPage = "BookReader.NextPage";
@@ -174,7 +221,32 @@ public static class InputActionIds
 
     public const string NavigateBack = "App.NavigateBack";
     public const string NavigateForward = "App.NavigateForward";
-    public const string RefreshLibrary = "Library.Refresh";
+
+    // --- Shared across screens: each screen that has the thing handles it (docs/superpowers/specs/2026-10-03-input-service-design.md §14) ---
+
+    /// <summary>Reloads what the screen shows (F5). Was <c>Library.Refresh</c>; the old id is a former id, so a remap carries over.</summary>
+    public const string Refresh = "App.Refresh";
+
+    /// <summary>Starts a new list, collection or item on the current screen (Ctrl+N).</summary>
+    public const string NewItem = "App.NewItem";
+
+    /// <summary>Saves the edit in progress on the current screen (Ctrl+S).</summary>
+    public const string Save = "App.Save";
+
+    // --- Books ---
+
+    public const string BooksEditSelection = "Books.EditSelection";
+    public const string BooksDeleteSelection = "Books.DeleteSelection";
+    public const string BooksSelectAll = "Books.SelectAll";
+
+    // --- Detail screens (comic series, manga, book) ---
+
+    public const string DetailContinue = "Detail.Continue";
+    public const string DetailEdit = "Detail.Edit";
+
+    // --- Smart lists ---
+
+    public const string SmartDuplicate = "SmartLists.Duplicate";
 
     // --- Library: actions on the current selection (formerly LibraryActionCatalog.KeyMap; the catalog still decides what each one runs for the selection at hand) ---
 
@@ -215,6 +287,11 @@ public enum InputActionKind
 /// <param name="Kind">Whether it is a discrete press or an analogue axis.</param>
 /// <param name="FiresInTextInput">True for the few actions that must still work while a text box has focus (Escape, the browser-back key, quick open).</param>
 /// <param name="FormerIds">Ids this action replaces; an override saved under one of them is re-keyed to <see cref="Action"/> on load, so a rename never drops a user's binding.</param>
+/// <param name="CanonicalKey">
+/// For the "every screen" actions only: the plain key the focused controls already understand for this action (Enter for activate, an arrow for a move). The service passes that key
+/// through untouched while it is bound to the action, forwards the action as that key when the user has bound something else to it, and swallows the plain key when the user has taken
+/// it away, so remapping applies to every control without each one asking the keymap (docs/superpowers/specs/2026-10-03-input-service-design.md §14).
+/// </param>
 public sealed record InputActionInfo(
     InputAction Action,
     string Group,
@@ -224,7 +301,8 @@ public sealed record InputActionInfo(
     IReadOnlyList<InputBinding> Defaults,
     InputActionKind Kind = InputActionKind.Button,
     bool FiresInTextInput = false,
-    IReadOnlyList<string>? FormerIds = null)
+    IReadOnlyList<string>? FormerIds = null,
+    Key? CanonicalKey = null)
 {
     /// <summary>The persisted id, shorthand for <c>Action.Id</c>.</summary>
     public string Id => Action.Id;
@@ -248,4 +326,10 @@ public interface IInputActionCatalog
     /// (which would make a saved override ambiguous).
     /// </exception>
     void Register(InputActionInfo info);
+
+    /// <summary>
+    /// Removes a runtime-registered action (a plugin command that was switched off or uninstalled). Returns false when no such action is registered. A user's saved override for it is
+    /// kept, so switching the plugin back on restores their shortcut.
+    /// </summary>
+    bool Unregister(string id);
 }

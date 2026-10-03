@@ -127,6 +127,22 @@ shortcuts for a *hotkey* on a screen.
   `InputActions.Core`; handle it in the owning view with an `AttachedInputRegistration` (`focusRoot: () => this` keeps it quiet while a dialog
   or popup has focus). Preferences > Keyboard Shortcuts, conflict detection, import/export and the user's `keymap.json` pick it up with no other
   change. Reader-state variants are separate actions (`PageTurnRight` / `PanRight` / `ScrollRight`), selected by the scope's `InputContext`.
+- **A new screen gets shortcuts the same way every screen does** (design §14): in its constructor,
+  `ScreenInput.Attach(this, InputScope.X, new Dictionary<string, Func<bool>> { [InputActionIds.Refresh] = () => ... })`, plus an `InputService` property for tests. A handler
+  returns false to decline, so the shared actions (`Refresh` F5, `NewItem` Ctrl+N, `Save` Ctrl+S, `FocusSearch` Ctrl+F, `TabNext`/`TabPrevious`) are claimed only when the screen can do them
+  right now; anything it declines reaches the next screen or the shell. Run commands that rebuild the focused row's collections through `ScreenInput.Deferred`. A tab strip needs no code:
+  give its buttons the class `tab` (or `segToggle`/`ipTab`/`prefNavItem`) and `active`/`on`, and `TabStrip.Step` drives it from the bumpers and Ctrl+PageUp/PageDown.
+- **The controller is app-wide** (`AppGamepadHost`): its D-pad, A, Y and right stick are the `App.Focus*`/`Activate`/`ContextMenu`/`Scroll*` actions, which send the focused control the key
+  it already handles. So a new control needs no controller code; it only has to work from the keyboard.
+- **Item keys are remappable already.** Don't add a hardcoded Enter/Delete/F2/arrow check expecting it to be the only path: the user may have moved the action to another key, in which case the
+  service sends your control the *canonical* key (design §14, `InputActionInfo.CanonicalKey`). Keep handling the plain key and it works with any binding.
+- **Plugin commands are actions** (`PluginInputActions`, Plugin API 4.3): a Library-hook command shows up in Preferences > Keyboard Shortcuts without the plugin doing anything; its manifest
+  `shortcut` attribute only sets the default.
+- **The app-wide focus ring is an adorner, and Avalonia clips an adorner to its adorned control's clip.** Buttons clip to their bounds, which is why the ring template sets
+  `AdornerLayer.IsClipEnabled="False"`. Don't add a second hand-rolled inner border on `:focus-visible` (it insets the content and doubles the ring); if a control needs a different ring,
+  set its `FocusAdorner` to null and draw one inside its own bounds.
+- **A Button swallows a left press** (Avalonia 12): an instance `PointerPressed` handler declared in XAML on a `Button` never sees it. Tunnel from an ancestor instead (see
+  `LibraryScreen.OnScreenPointerPressedTunnel`).
 - **What stays a control's own key handler:** arrow navigation among a list's items, Enter/Space/Delete/F2 on the focused item, type-ahead,
   Enter-to-commit/Esc-to-cancel in a text box, drag mechanics. If the behavior needs the *focused item*, it is the control's, not an action.
 - **Text boxes:** the service already ignores keyboard actions while a `TextBox` (or anything implementing `IInputSuppressor`) has focus, except

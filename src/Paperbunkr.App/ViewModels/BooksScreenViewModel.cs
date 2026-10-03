@@ -116,6 +116,14 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(SelectionCountLabel));
     }
 
+    /// <summary>Ctrl+A: selects every card currently shown.</summary>
+    [RelayCommand]
+    private void SelectAllVisible()
+    {
+        Selection.SelectAll(OrderedCards);
+        RaiseSelectionChanged();
+    }
+
     [RelayCommand]
     private void ClearSelection()
     {

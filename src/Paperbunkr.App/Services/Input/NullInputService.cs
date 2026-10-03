@@ -30,7 +30,13 @@ public sealed class NullInputService : IInputService
     public event EventHandler<InputActionEventArgs>? ActionTriggered;
 
     public event EventHandler? BindingsChanged;
+
+    public event EventHandler? GamepadActivity;
+
+    public event EventHandler? GamepadEnabledChanged;
 #pragma warning restore CS0067
+
+    public bool GamepadEnabled { get; set; }
 
     public IInputActionCatalog Actions { get; } = new InputActionCatalog();
 
@@ -49,6 +55,8 @@ public sealed class NullInputService : IInputService
     public void ResetGamepad()
     {
     }
+
+    public IDisposable BeginGamepadCapture(Action<GamepadInput> onInput) => Noop;
 
     public bool Dispatch(InputAction action, InputPayload payload = default) => false;
 

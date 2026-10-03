@@ -73,6 +73,7 @@ public partial class MainWindow : Window
 
     private readonly InputHost _inputHost;
     private readonly IDisposable _globalInput;
+    private readonly AppGamepadHost _gamepadHost;
 
     public MainWindow()
     {
@@ -111,6 +112,9 @@ public partial class MainWindow : Window
         _input = InputServiceLocator.Current;
         _inputHost = InputHost.Attach(this, _input);
         _globalInput = _input.Register(InputScope.Global, OnGlobalInputAction);
+
+        // One controller poller for the whole app, running while the setting is on and this window is active (it used to belong to the comic reader alone).
+        _gamepadHost = new AppGamepadHost(this, _input, new XInputSource());
     }
 
     /// <summary>
@@ -186,11 +190,27 @@ public partial class MainWindow : Window
                 viewModel.ToggleNavRailPinCommand.Execute(null);
                 e.Handled = true;
                 break;
+
+            // The "every screen" actions (docs/superpowers/specs/2026-10-03-input-service-design.md §14) send the focused control the key it already understands; a screen with its own
+            // meaning for one (tabs, say) registers in its own scope, which is asked first, so what reaches here is the fallback.
+            case InputActionIds.TabNext:
+                viewModel.CycleScreenForwardCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            case InputActionIds.TabPrevious:
+                viewModel.CycleScreenBackCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            default:
+                e.Handled = UiNavigation.TryHandle(this, e);
+                break;
         }
     }
-
     protected override void OnClosed(EventArgs e)
     {
+        _gamepadHost?.Dispose();
         _globalInput?.Dispose();
         _inputHost?.Dispose();
         base.OnClosed(e);

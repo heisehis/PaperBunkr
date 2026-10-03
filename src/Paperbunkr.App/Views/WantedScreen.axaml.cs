@@ -4,6 +4,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.VisualTree;
 using Paperbunkr.App.ViewModels;
+using System.Collections.Generic;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Views;
 
@@ -16,9 +18,24 @@ public partial class WantedScreen : UserControl
 
     private int? _lastRowIndex;
 
+    private readonly AttachedInputRegistration _screenInput;
+
+    /// <summary>The input service this screen's actions arrive through: the application's, unless a test supplies its own.</summary>
+    public IInputService InputService
+    {
+        get => _screenInput.Service;
+        set => _screenInput.Service = value;
+    }
+
     public WantedScreen()
     {
         InitializeComponent();
+        _screenInput = ScreenInput.Attach(this, InputScope.Wanted, new Dictionary<string, Func<bool>>
+        {
+            [InputActionIds.TabNext] = () => TabStrip.Step(this, 1),
+            [InputActionIds.TabPrevious] = () => TabStrip.Step(this, -1),
+            [InputActionIds.Refresh] = () => DataContext is WantedScreenViewModel vm && ScreenInput.Deferred(vm.Refresh),
+        });
         _focus = new FocusReclaimer(this, () => DataContext is WantedScreenViewModel, FocusFallback);
         DataContextChanged += OnDataContextChanged;
         AddHandler(GotFocusEvent, (_, _) =>

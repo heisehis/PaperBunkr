@@ -293,7 +293,7 @@ public class InputWiringTests
             window.Close();
         }
 
-        Assert.Equal([InputActionIds.RefreshLibrary, InputActionIds.RefreshLibrary], seen);
+        Assert.Equal([InputActionIds.Refresh, InputActionIds.Refresh], seen);
     }
 
     [Fact]

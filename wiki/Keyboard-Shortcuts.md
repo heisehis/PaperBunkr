@@ -18,7 +18,11 @@ never fire while you are typing in a text box, except `Esc`, the browser-back ke
 | Open Preferences | `Ctrl+,` |
 | Cycle screens forward / back | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
 | Undo / redo a metadata edit | `Ctrl+Z` / `Ctrl+Y` |
-| Focus the search box | `Ctrl+F` (or `/` in the Library) |
+| Focus the search box | `Ctrl+F` (or `/` in the Library); Home, Books, Library and Preferences have one |
+| Refresh the screen | `F5` (Library, Books, Home, Insights, Wanted, Smart Lists, Reading Lists, Continuity) |
+| New list / collection | `Ctrl+N` (Smart Lists, Reading Lists) |
+| Save | `Ctrl+S` (the editors and Smart Lists, even from inside a text field) |
+| Previous / next tab | `Ctrl+PageUp` / `Ctrl+PageDown`, or the controller's bumpers. On a screen with tabs (detail screens, Insights, Wanted, Continuity, the editors, Preferences' sections) they switch tab; Home steps the spotlight; elsewhere they switch screen |
 | Pin / unpin the sidebar | `Shift+F6` |
 | Quit | `Ctrl+Q` |
 | Move up/down in the sidebar | `↑` `↓`, `Home`, `End` (fixed) |
@@ -40,6 +44,29 @@ never fire while you are typing in a text box, except `Esc`, the browser-back ke
 | Clear search and return to grid | `Esc` (while the search box has text) |
 
 Menu entries and the selection bar show whatever you have bound, so they stay correct after a remap.
+
+## Books grid
+
+| Action | Default |
+|---|---|
+| Select all | `Ctrl+A` |
+| Edit properties of the selection | `Ctrl+I` |
+| Remove the selection | `Delete` |
+
+## Detail screens
+
+| Action | Default |
+|---|---|
+| Continue reading | `Ctrl+Enter` |
+| Edit properties of the selected issues | `Ctrl+I` |
+
+## Smart Lists
+
+| Action | Default |
+|---|---|
+| New smart list | `Ctrl+N` |
+| Duplicate the open list | `Ctrl+D` |
+| Save the open list | `Ctrl+S` |
 
 ## Reader
 
@@ -99,7 +126,21 @@ pages** is on (the default); with it off they go back / forward like everywhere 
 
 ### Controller (Xbox / XInput)
 
-Active while a reader is open and **Preferences → Reader → Use a game controller** is on.
+The controller works in the **whole app**, not just the reader, while **Preferences → Reader → Use a game controller** is on and the PaperBunkr window is the active one.
+
+Everywhere:
+
+| Action | Default |
+|---|---|
+| Move | D-pad or left stick |
+| Open / press the focused item | `A` |
+| Back / close | `B` |
+| Context menu | `Y` |
+| Previous / next tab (or screen) | left / right bumper |
+| Scroll | right stick |
+| Quick open | `Start` |
+
+In the reader these are replaced by the reading controls:
 
 | Action | Default |
 |---|---|
@@ -111,6 +152,8 @@ Active while a reader is open and **Preferences → Reader → Use a game contro
 | Fullscreen | `X` |
 | Command palette | `Start` |
 | Close the reader | `Back` |
+
+Every controller button can be changed in **Preferences → Keyboard Shortcuts**: click **Add shortcut…** on a row and press the controller button (the controller must be switched on in Preferences → Reader). The "All screens" group lists the shared ones, including the arrows, Enter, Space, F2, Delete, Home, End, Page Up and Page Down that act on whatever has focus; moving one of those to another key makes that key do it everywhere. Rename, remove and toggle-the-focused-item have no controller button by default, so you can give them one if you want them.
 
 ## Books (EPUB, FB2, MOBI)
 
@@ -132,6 +175,10 @@ These work whether the focus is on the reader's toolbar or inside the page itsel
 | Switch comparison mode | `M` |
 | Reset zoom and pan | `0` |
 | Keep A / keep B | `1` / `2` |
+
+## Plugin commands
+
+Every enabled **Library** plugin command gets a shortcut that runs it on the selected issues: `Ctrl+Shift+F1` to `F12` for the first twelve, or the key the plugin asks for in its manifest (`shortcut="Ctrl+Alt+K"`). They appear under **Plugins** in Preferences → Keyboard Shortcuts, where you can change or remove them, and next to the command in the right-click **Plugins** menu. Your choice is kept if you switch the plugin off and on again.
 
 ## Remapping
 

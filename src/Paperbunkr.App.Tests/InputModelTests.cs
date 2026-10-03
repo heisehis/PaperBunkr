@@ -27,7 +27,8 @@ public class InputModelTests
         {
             Assert.False(string.IsNullOrWhiteSpace(id));
             Assert.True(
-                id.StartsWith("Reader.") || id.StartsWith("App.") || id.StartsWith("Library.") || id.StartsWith("BookReader.") || id.StartsWith("Compare."),
+                id.StartsWith("Reader.") || id.StartsWith("App.") || id.StartsWith("Library.") || id.StartsWith("BookReader.") || id.StartsWith("Compare.")
+                || id.StartsWith("Books.") || id.StartsWith("Detail.") || id.StartsWith("SmartLists.") || id.StartsWith("Plugin."),
                 $"'{id}' has no recognised prefix");
         });
     }

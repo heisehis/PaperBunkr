@@ -3031,6 +3031,23 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         await RunLibraryPluginOn(Selection.SelectedIds.ToList(), command);
     }
 
+    /// <summary>
+    /// Runs the Library plugin command behind a <c>Plugin.*</c> keyboard action on the current selection (Plugin API 4.3). False, and nothing runs, when no enabled command has that id or nothing
+    /// is selected, so the key is left for whoever else wants it.
+    /// </summary>
+    public bool RunPluginAction(string actionId)
+    {
+        var command = LibraryPluginCommands.FirstOrDefault(c => Services.Input.PluginInputActions.IdFor(c) == actionId);
+        var ids = SelectionBarIssueIds();
+        if (command is null || ids.Count == 0)
+        {
+            return false;
+        }
+
+        _ = RunLibraryPluginOn(ids, command);
+        return true;
+    }
+
     private async Task RunLibraryPluginOn(IReadOnlyList<int> issueIds, Command command)
     {
         if (_pluginHost is null || issueIds.Count == 0)

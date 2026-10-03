@@ -20,14 +20,13 @@ namespace Paperbunkr.App.Views;
 public partial class ReaderScreen : UserControl
 {
     private ReaderScreenViewModel? _viewModel;
-    private GamepadPoller? _gamepad;
     private Window? _hostWindow;
     private readonly AttachedInputRegistration _readerInput;
     private readonly AttachedInputRegistration _overlayInput;
 
     /// <summary>
     /// The rail-nav switcher only toggles <c>IsVisible</c> on this screen's host and Avalonia 12 raises no public change notification for <c>IsEffectivelyVisible</c>, so a
-    /// half-second supervisor decides whether the 60 Hz poller should run (visible, window active, setting on). It costs one property read twice a second.
+    /// half-second supervisor decides whether the reader counts as being looked at (visible and the window active), for the reading-session clock.
     /// </summary>
     private DispatcherTimer? _gamepadSupervisor;
 
@@ -72,7 +71,7 @@ public partial class ReaderScreen : UserControl
         AddHandler(KeyDownEvent, OnPaletteKeyDown, RoutingStrategies.Tunnel);
     }
 
-    // ===================== Gamepad (reach design 3): polled only while this screen is visible and its window active =====================
+    // ===================== Presence: the reading-session clock only runs while this screen is visible and its window active =====================
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
@@ -83,7 +82,7 @@ public partial class ReaderScreen : UserControl
             _hostWindow.PropertyChanged += OnHostWindowPropertyChanged;
         }
 
-        UpdateGamepadRunning();
+        UpdatePresence();
         _gamepadSupervisor ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _gamepadSupervisor.Tick -= OnGamepadSupervisorTick;
         _gamepadSupervisor.Tick += OnGamepadSupervisorTick;
@@ -99,53 +98,32 @@ public partial class ReaderScreen : UserControl
             _hostWindow = null;
         }
 
-        _gamepad?.Stop();
         base.OnDetachedFromVisualTree(e);
     }
 
-    private void OnGamepadSupervisorTick(object? sender, EventArgs e) => UpdateGamepadRunning();
+    private void OnGamepadSupervisorTick(object? sender, EventArgs e) => UpdatePresence();
 
     private void OnHostWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
         if (e.Property == Window.IsActiveProperty)
         {
-            UpdateGamepadRunning();
+            UpdatePresence();
         }
     }
 
-    private void UpdateGamepadRunning()
+    private void UpdatePresence()
     {
         bool present = IsEffectivelyVisible && _hostWindow is { IsActive: true };
         _viewModel?.SetUserPresent(present);
-        bool run = _viewModel is { GamepadEnabled: true } && present;
-        if (run)
-        {
-            _gamepad ??= new GamepadPoller(new XInputSource(), OnGamepadState, () => _viewModel?.Input.ResetGamepad());
-            _gamepad.Start();
-        }
-        else
-        {
-            _gamepad?.Stop();
-        }
     }
 
-    /// <summary>
-    /// One controller snapshot from the poller. It goes to the input service, which does the edge detection and key-repeat and resolves buttons and axes to actions through the
-    /// keymap (docs/superpowers/specs/2026-10-03-input-service-design.md §5.5); this screen only counts a touched pad as the reader being present (the reading-session clock).
-    /// </summary>
-    private void OnGamepadState(GamepadState state, TimeSpan elapsed)
+    /// <summary>A controller button or stick was touched (the app-wide poller feeds the input service): counts as the reader being present, for the reading-session clock.</summary>
+    private void OnGamepadActivity(object? sender, EventArgs e)
     {
-        if (_viewModel is not { } vm)
+        if (IsEffectivelyVisible)
         {
-            return;
+            _viewModel?.NoteReaderInput();
         }
-
-        if (state.HasInput(vm.Input.Tuning))
-        {
-            vm.NoteReaderInput();
-        }
-
-        vm.Input.ProcessGamepad(state, elapsed);
     }
 
     /// <summary>
@@ -371,6 +349,7 @@ public partial class ReaderScreen : UserControl
             _viewModel.CurrentPageIndexChanged -= OnCurrentPageIndexChanged;
             _viewModel.ReflowTransitionRequested -= OnReflowTransitionRequested;
             _viewModel.Palette.PropertyChanged -= OnPalettePropertyChanged;
+            _viewModel.Input.GamepadActivity -= OnGamepadActivity;
         }
 
         _viewModel = DataContext as ReaderScreenViewModel;
@@ -388,10 +367,11 @@ public partial class ReaderScreen : UserControl
             _viewModel.ZoomResetRequested += OnZoomResetRequested;
             _viewModel.CurrentPageIndexChanged += OnCurrentPageIndexChanged;
             _viewModel.ReflowTransitionRequested += OnReflowTransitionRequested;
+            _viewModel.Input.GamepadActivity += OnGamepadActivity;
             _viewModel.Palette.PropertyChanged += OnPalettePropertyChanged;
         }
 
-        UpdateGamepadRunning();
+        UpdatePresence();
     }
 
     /// <summary>
@@ -557,12 +537,6 @@ public partial class ReaderScreen : UserControl
             PanelFlashOverlay.PageRect = PageCanvasControl.GetPageScreenRect();
             PanelFlashOverlay.Panels = PageCanvasControl.GetShownPanels();
             PanelFlashOverlay.Confident = flashVm.CurrentPagePanels?.Confident ?? false;
-            return;
-        }
-
-        if (e.PropertyName == nameof(ReaderScreenViewModel.GamepadEnabled))
-        {
-            UpdateGamepadRunning();
             return;
         }
 

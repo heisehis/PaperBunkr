@@ -28,11 +28,14 @@ public interface INativeCommandRegistrar
     /// route writes through <c>IMetadataWriter</c> at all (v4 §2), so this flag is accepted for
     /// symmetry/manifest-shape purposes only and currently has no gating effect for a native command;
     /// it exists so a future tightening of native-plugin write auditing has somewhere to attach to
-    /// without a breaking interface change.</summary>
+    /// without a breaking interface change. <paramref name="shortcut"/> is the manifest attribute of the
+    /// same name (Plugin API 4.3): the command's preferred default keyboard shortcut as text, e.g.
+    /// <c>Ctrl+Alt+K</c>; the host falls back to its own default when it is null or unusable.</summary>
     void OnLibrary(
         string key,
         string name,
         Func<INativePluginEnvironment, IReadOnlyList<Issue>, Task<object?>> handler,
         string? description = null,
-        bool confirmWrites = false);
+        bool confirmWrites = false,
+        string? shortcut = null);
 }

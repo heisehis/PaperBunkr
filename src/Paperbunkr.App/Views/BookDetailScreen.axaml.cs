@@ -5,6 +5,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.VisualTree;
 using Paperbunkr.App.ViewModels;
+using System;
+using System.Collections.Generic;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Views;
 
@@ -16,9 +19,23 @@ public partial class BookDetailScreen : UserControl
     private readonly FocusReclaimer _focus;
     private BookDetailScreenViewModel? _viewModel;
 
+    private readonly AttachedInputRegistration _screenInput;
+
+    /// <summary>The input service this screen's actions arrive through: the application's, unless a test supplies its own.</summary>
+    public IInputService InputService
+    {
+        get => _screenInput.Service;
+        set => _screenInput.Service = value;
+    }
+
     public BookDetailScreen()
     {
         InitializeComponent();
+        _screenInput = ScreenInput.Attach(this, InputScope.Detail, new Dictionary<string, Func<bool>>
+        {
+            [InputActionIds.DetailContinue] = () => DataContext is BookDetailScreenViewModel vm && vm.ContinueCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.ContinueCommand.Execute(null)),
+            [InputActionIds.DetailEdit] = () => DataContext is BookDetailScreenViewModel vm && vm.EditCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.EditCommand.Execute(null)),
+        });
         DetailCosmetics.Attach(this);
         _focus = new FocusReclaimer(this, () => _viewModel is not null, FocusDefault);
         KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);

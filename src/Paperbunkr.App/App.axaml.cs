@@ -181,6 +181,11 @@ public partial class App : Application
                 DiagnosticsService.LogMilestone($"Imported {imported} keyboard shortcut(s) from the previous settings.");
             }
 
+            using (var settingsContext = PaperbunkrDb.CreateContext())
+            {
+                inputService.GamepadEnabled = settingsContext.GetOrCreateAppSettings().GamepadEnabled;
+            }
+
             Services.Input.InputServiceLocator.Current = inputService;
         }
         catch (Exception ex)
@@ -358,6 +363,10 @@ public partial class App : Application
         // shown, so plugin precompile janks a visible window rather than delaying its appearance.
         var pluginHost = new PluginHostService();
         pluginHost.Initialize(mainViewModel, mainWindow);
+        // Plugin commands are keyboard actions too (Plugin API 4.3): the Library-hook ones are listed in Preferences > Keyboard Shortcuts and follow the plugin list as commands are switched on and off.
+        void SyncPluginShortcuts() => Services.Input.PluginInputActions.Sync(Services.Input.InputServiceLocator.Current.Actions, System.Linq.Enumerable.ToList(pluginHost.GetLibraryCommands()));
+        pluginHost.CommandsChanged += SyncPluginShortcuts;
+        SyncPluginShortcuts();
         mainViewModel.Plugin.AttachHost(pluginHost);
         mainViewModel.Library.AttachHost(pluginHost);
         mainViewModel.Books.AttachHost(pluginHost);

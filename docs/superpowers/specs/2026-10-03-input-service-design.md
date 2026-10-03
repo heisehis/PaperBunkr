@@ -521,3 +521,58 @@ development database.
     controller-quiet.
 11. **Not verified on screen.** Everything is covered by headless tests, but no on-screen pass (real keyboard, mouse thumb buttons, a real
     controller, the web view's key forwarding) was possible in this environment; those are the checks to do by hand.
+
+## 14. Every screen and the controller (2026-10-03, follow-up)
+
+The first migration (§9) moved window-level shortcuts and left each screen's focused-item keys with its controls, which meant most screens had
+nothing registered and the controller only worked inside the comic reader. Decisions (user, 2026-10-03: "go with recommended"):
+
+1. **All screens are in scope.** Home, Books, Reading Lists, Smart Lists, the comic/manga/book detail screens, Continuity, Insights, Wanted,
+   Preferences and the three editors now register a scope. Not wired: the metadata-entity detail page (no code-behind to hang a registration on)
+   and the PDF reader, whose page canvas already registers the Reader scope and so has the reader's keys, zoom and thumb buttons.
+2. **Per-item keys are remappable without touching the controls.** `FocusUp/Down/Left/Right`, `FocusFirst/Last` (Home/End), `ItemPageUp/Down`, `Activate` (Enter),
+   `ToggleSelect` (Space), `RenameItem` (F2) and `DeleteItem` (Delete) each have a *canonical key* (`InputActionInfo.CanonicalKey`): the plain key every focused control already
+   understands (`OnCardKeyDown`, `FocusReclaimer`, the grid and list handlers). Three rules in `InputService.ProcessKey` make them remappable everywhere at once:
+   (a) while the canonical key is bound to its action, the key passes through untouched (default behaviour is unchanged); (b) a key the user binds instead is delivered as the action,
+   and the global handler *sends the canonical key* to the focused control (`UiNavigation.SendKey`), so a control that only knows Enter still opens on `Q`; (c) when the user takes the
+   plain key off the action it does nothing (swallowed), except in a text box, with a modifier, or while the service itself is sending a key (`UiNavigation.IsSending`).
+   Controller defaults: D-pad and left stick move, A activates, Y opens the context menu; Rename, Delete and Toggle have no pad button by default so nothing destructive sits on a pad.
+   If no handler takes a sent arrow, `Move` falls back to a plain directional focus move, and with nothing focused it focuses the first element. A text box is always left (a pad
+   has no caret). Type-ahead is typing, not a shortcut, so it stays with the control.
+3. **Shared screen actions are Global, handled per screen.** `Refresh` (F5; the old `Library.Refresh` is a `FormerId`, so a saved remap
+   carries over), `NewItem` (Ctrl+N), `Save` (Ctrl+S, fires in text input), plus the existing `FocusSearch`. A Global action reaches the handlers
+   of every active scope, most specific first, so each screen claims what it can do *right now* and returns false otherwise (the next screen, or
+   the shell's fallback, then sees it). Remapping Ctrl+F once applies everywhere.
+4. **Tabs.** `TabPrevious`/`TabNext` (left/right bumper, Ctrl+PageUp/PageDown). `TabStrip.Step` walks the visible buttons classed `tab`,
+   `segToggle`, `ipTab` or `prefNavItem` and runs the next one's command, wrapping; Home steps its spotlight carousel instead. On a screen with
+   no strip the action falls to `MainWindow`, which cycles screens, so the bumpers always do something.
+5. **Controller is app-wide.** `AppGamepadHost` (owned by `MainWindow`) is the one poller: it runs while `IInputService.GamepadEnabled` (the
+   Preferences > Reader toggle, now app-wide) is on and the window is active, and hands each snapshot to the service. The reader's own poller is
+   gone; the reader counts a touched pad as presence through `IInputService.GamepadActivity`. `B` also closes the current view (the reader's
+   own `B` = previous page still wins there, because the reader scope is asked first), `Start` opens quick open (the reader's palette wins in
+   the reader), and the right stick scrolls the nearest scroll viewer (`ScrollVertical`/`ScrollHorizontal` axes).
+6. **Per-screen extras:** Books `SelectAll`/`EditSelection`/`DeleteSelection` (Ctrl+A / Ctrl+I / Delete, acting only with a selection); Smart
+   Lists `Duplicate` (Ctrl+D), `NewItem`, `Save` (user lists only); detail screens `Continue` (Ctrl+Enter) and `Edit` (Ctrl+I, the selected
+   issues, as the toolbar button does); Reading Lists `NewItem` runs the gallery button's command; editors `Save`.
+7. **Also fixed on the way:** Library tiles are `Button`s and a Button marks a left press handled in its own class handler before instance
+   handlers run, so Ctrl/Shift-click selection in the Library never ran. `LibraryScreen` now tunnels the press from the screen root and
+   forwards to the existing tile handlers.
+
+Verified by headless tests only (`UiNavigationTests`, `ScreenInputTests`); not seen on screen. Wanted, Continuity, Manga/Book detail and the
+editors are covered by the smoke test (they register and decline when empty) but not driven with real data.
+
+### 14.1 Follow-up: controller capture, plugin actions, focus rings (2026-10-03)
+
+8. **Controller buttons can be added in Preferences.** `IInputService.BeginGamepadCapture` routes presses to a callback instead of to actions until disposed; `BindingCaptureBox` uses it
+   while it is showing, so "Add shortcut…" records a pad button as well as a key, mouse button or wheel turn. Analogue axes are not offered (an axis binding is fixed). The app-wide poller
+   only runs while "Use a game controller" is on, and the box's prompt says so when it is off.
+9. **Plugin commands are actions (Plugin API 4.3).** Every enabled, working `Library`-hook command becomes `Plugin.{pluginKey}.{commandKey}` in the Library scope under "Plugins"
+   (`PluginInputActions`). Default binding: the manifest's new `shortcut` attribute (or `INativeCommandRegistrar.OnLibrary(..., shortcut:)`) when it parses, otherwise, as in CE's
+   `PluginEngine` (Ctrl+Shift+F1 to F12 for the first twelve enabled commands), the next free Ctrl+Shift+F key. The action runs the command on the current selection, and the Plugins
+   submenu shows the shortcut. `PluginHostService.CommandsChanged` (discovery, a command or package switched on or off) re-syncs the catalog through the new
+   `IInputActionCatalog.Unregister`; a user's remap is stored under the same id, so it survives the plugin being switched off and on. Only Library-hook commands are covered: the
+   other hooks do not operate on a selection.
+10. **The shared focus ring was clipped to a speck on every plain Button.** A `Button` clips to its own bounds, and Avalonia clips an adorner to its adorned element's clip, so the
+    ring (painted outside the control) was cut down to a corner dot (the Insights tabs) wherever a control relied on the app-wide adorner. `AdornerLayer.IsClipEnabled="False"` on the
+    adorner template fixes it for every such control. The Home carousel had added its own inner 2px border on focus, which insets the cover by its thickness and left a dark gap, and
+    would now double the ring; it was removed. `FocusRingPaintTests` checks pixels outside a focused button.

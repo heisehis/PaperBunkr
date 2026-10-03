@@ -2705,8 +2705,16 @@ mouse buttons 4/5; Ctrl+F, F5, Shift+F6, Ctrl+wheel zoom, MouseButton4/5 = previ
 - **Not verified:** nothing seen or driven in the running app - real keyboard / thumb buttons / wheel-zoom anchor in the reader, the
   Book reader's key forwarding in a real WebView, a real XInput controller, the Preferences editor look, remap persisting across a
   restart, FlaUI `KeyboardShortcutDiagnosticTests` (compile-only).
-- **Limits / follow-ups:** the gamepad poller still starts and stops with the reader; no way to *add* a pad binding in Preferences yet
-  (view / remove only); plugin-facing action registration is only the `IInputActionCatalog.Register` seam.
+- **Follow-up, same day ("all screens", spec §14):** every screen now registers a scope (Home, Books, Reading Lists, Smart Lists, the detail screens, Continuity, Insights, Wanted, Preferences,
+  the editors); the controller is app-wide (`AppGamepadHost`: D-pad/A/B/Y/bumpers/right stick work everywhere, reader keeps its own); shared actions `Refresh` F5, `NewItem` Ctrl+N, `Save` Ctrl+S,
+  tabs on Ctrl+PageUp/PageDown and the bumpers (`TabStrip.Step`). Item keys (arrows, Enter, Space, F2, Delete, Home/End/Page) are remappable through canonical-key pass-through / forward / swallow
+  rules with no per-control edits. Controller buttons can be captured in Preferences. Plugin commands are actions (Plugin API 4.3, manifest `shortcut`, CE's Ctrl+Shift+F1-F12 defaults).
+  Fixed on the way: Library Ctrl/Shift-click selection (a Button handles the press first) and the shared focus ring being clipped to a speck on plain Buttons (Insights tabs, Home carousel; plus a
+  double ring/gap on the carousel). Tests: `UiNavigationTests`, `ScreenInputTests`, `InputFollowUpTests`, `FocusRingPaintTests` (pixels).
+- **Not verified on screen** (as above, plus): the controller driving non-reader screens with a real pad, capturing a pad button in the Preferences box, a real plugin's shortcut running, and how the
+  focus ring now looks on every other page that uses the shared adorner (rendered headlessly only for Insights and the Home carousel).
+- **Limits / follow-ups:** the metadata-entity detail page has no code-behind to register a scope on; the PDF reader relies on its page canvas's Reader scope; only Library-hook plugin commands become
+  actions (the other hooks do not operate on a selection); Wanted, Continuity, Manga/Book detail and the editors are smoke-tested (register, decline when empty), not driven with real data.
 
 ## Explicitly not in scope here
 

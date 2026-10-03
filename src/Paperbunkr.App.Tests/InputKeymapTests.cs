@@ -114,7 +114,7 @@ public class InputKeymapTests : IDisposable
         Assert.Contains(InputBinding.ForMouseButton(MouseButton.XButton2), keymap.GetBindings(InputActionIds.NavigateForward));
         Assert.Contains(Key_(Key.Escape), keymap.GetBindings(InputActionIds.CloseCurrentView));
         Assert.Contains(Key_(Key.F, KeyModifiers.Control), keymap.GetBindings(InputActionIds.FocusSearch));
-        Assert.Contains(Key_(Key.F5), keymap.GetBindings(InputActionIds.RefreshLibrary));
+        Assert.Contains(Key_(Key.F5), keymap.GetBindings(InputActionIds.Refresh));
         Assert.Empty(keymap.GetBindings(InputActionIds.ToggleDoublePageMode));
     }
 

@@ -29,6 +29,19 @@ public readonly record struct InputScope(string Name, int Priority, bool IsModal
     public static readonly InputScope Global = new("Global", GlobalPriority);
 
     public static readonly InputScope Library = new("Library", ScreenPriority);
+    public static readonly InputScope Home = new("Home", ScreenPriority);
+    public static readonly InputScope SmartLists = new("SmartLists", ScreenPriority);
+    public static readonly InputScope Insights = new("Insights", ScreenPriority);
+    public static readonly InputScope Wanted = new("Wanted", ScreenPriority);
+    public static readonly InputScope Continuity = new("Continuity", ScreenPriority);
+
+    /// <summary>The comic, manga and book detail screens and the metadata entity (creator, publisher, ...) page.</summary>
+    public static readonly InputScope Detail = new("Detail", ScreenPriority);
+
+    public static readonly InputScope Preferences = new("Preferences", ScreenPriority);
+
+    /// <summary>The issue properties, bulk issue and bulk series editors.</summary>
+    public static readonly InputScope Editor = new("Editor", ScreenPriority);
     public static readonly InputScope Books = new("Books", ScreenPriority);
     public static readonly InputScope ReadingLists = new("ReadingLists", ScreenPriority);
 

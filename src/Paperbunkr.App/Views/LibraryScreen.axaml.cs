@@ -303,7 +303,7 @@ public partial class LibraryScreen : UserControl
                 vm.ToggleLibraryPreviewPanelCommand.Execute(null);
                 e.Handled = true;
                 return;
-            case InputActionIds.RefreshLibrary:
+            case InputActionIds.Refresh:
                 // Reloading clears and repopulates the very collections the focused tile lives in, so it runs after the key press has finished routing.
                 Dispatcher.UIThread.Post(vm.LoadFromDatabase);
                 e.Handled = true;
@@ -316,6 +316,19 @@ public partial class LibraryScreen : UserControl
                 vm.DeleteCurrentSelectionCommand.Execute(null);
                 e.Handled = true;
                 return;
+        }
+
+        if (PluginInputActions.IsPluginAction(e.Action.Id))
+        {
+            // Deferred like the other selection actions: a plugin may rewrite the library under the focused tile.
+            if (vm.LibraryPluginCommands.Any(c => PluginInputActions.IdFor(c) == e.Action.Id) && vm.SelectionBarIssueIds().Count > 0)
+            {
+                string pluginActionId = e.Action.Id;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => vm.RunPluginAction(pluginActionId));
+                e.Handled = true;
+            }
+
+            return;
         }
 
         if (!LibraryActionCatalog.KeyActions.ContainsKey(e.Action.Id))

@@ -90,6 +90,8 @@
         <!-- Selection checkbox - hidden until hover, forced visible once anything's selected
              (own copy of LibraryScreen's tileSelect, same per-UserControl precedent). -->
         <Style Selector="CheckBox.tileSelect">
+            <!-- A mouse affordance: the keyboard selects with Shift+arrows. As a tab stop it also sat "above" the neighbouring card for the arrow keys, so Up from a card landed on the next card's checkbox. -->
+            <Setter Property="Focusable" Value="False" />
             <Setter Property="Opacity" Value="0" />
             <Setter Property="Transitions">
                 <Transitions><DoubleTransition Property="Opacity" Duration="0:0:0.12" /></Transitions>

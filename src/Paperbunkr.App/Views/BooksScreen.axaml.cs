@@ -47,6 +47,8 @@ public partial class BooksScreen : UserControl
             [InputActionIds.BooksDeleteSelection] = () => DataContext is BooksScreenViewModel { HasSelection: true } vm && ScreenInput.Deferred(() => vm.DeleteSelectionCommand.Execute(null)),
         });
         _focus = new FocusReclaimer(this, () => ActiveCardList() is not null, FocusFallback);
+        // Arrows a card did not use (at the edge of its grid, or from the toolbar) move on to the nearest control that way: across the series groups and between the toolbar and the grid.
+        KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
         DataContextChanged += OnDataContextChanged;
         AddHandler(GotFocusEvent, (_, _) =>
         {

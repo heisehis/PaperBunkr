@@ -182,6 +182,8 @@ These work whether the focus is on the reader's toolbar or inside the page itsel
 
 Every enabled **Library** plugin command gets a shortcut that runs it on the selected issues: `Ctrl+Shift+F1` to `F12` for the first twelve, or the key the plugin asks for in its manifest (`shortcut="Ctrl+Alt+K"`). They appear under **Plugins** in Preferences → Keyboard Shortcuts, where you can change or remove them, and next to the command in the right-click **Plugins** menu. Your choice is kept if you switch the plugin off and on again.
 
+Dropdown boxes open when you click them, or press `Enter`, `Space` or `Alt+↓` while they have focus; the arrow keys alone just move on to the next control.
+
 ## Remapping
 
 1. **Preferences → Keyboard Shortcuts**. Every action is listed under its group, with one chip for

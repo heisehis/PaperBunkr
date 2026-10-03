@@ -318,8 +318,35 @@ public partial class ReadingGalleryView : UserControl
             }
         }
 
-        // 164px tiles + 18px gap. Arrows are always used here, even at an edge, so focus never drifts out to the app's nav rail.
-        if (ReadingListKeyboard.HandleNavigationKey(TileGrid, e, ReadingListKeyboard.Columns(TileGrid, 182), 0)
+        // Not on a tile: the Continue Reading card and the header buttons. Up and down between them and into the grid is the screen's ordinary directional move.
+        if (index < 0)
+        {
+            if (FocusReclaimer.TryMoveDirectionally(this, e))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        // 164px tiles + 18px gap.
+        int columns = ReadingListKeyboard.Columns(TileGrid, 182);
+        if (e.KeyModifiers == KeyModifiers.None)
+        {
+            // Up from the first row goes on up to the Continue Reading card or the header; Left from the first column is left for the nav rail.
+            if (e.Key == Key.Up && index < columns && FocusReclaimer.TryMoveDirectionally(this, e))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.Left && index % columns == 0)
+            {
+                return;
+            }
+        }
+
+        if (ReadingListKeyboard.HandleNavigationKey(TileGrid, e, columns, 0)
             || (e.KeyModifiers == KeyModifiers.None && e.Key is Key.Left or Key.Right))
         {
             e.Handled = true;

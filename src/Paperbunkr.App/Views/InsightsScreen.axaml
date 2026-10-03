@@ -55,6 +55,16 @@
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         </Style>
+        <!-- A hero tile whose whole face is a Button: the Button fills the card (the card has no padding of its own), so the keyboard focus ring is drawn on the card's edge instead of inside
+             its padding. -->
+        <Style Selector="Border.heroTile.faceButton">
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="Border.heroTile.faceButton > Button.attnRow">
+            <Setter Property="Padding" Value="14,18" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        </Style>
         <Style Selector="Button.attnRow">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -194,7 +204,7 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Classes="heroTile attnCard" IsVisible="{Binding !ContinueEmpty}">
+                        <Border Classes="heroTile attnCard faceButton" IsVisible="{Binding !ContinueEmpty}">
                             <Button Classes="attnRow" Command="{Binding OpenContinueCommand}" CommandParameter="{Binding PrimaryContinueRow}">
                                 <Grid ColumnDefinitions="Auto,*">
                                     <views:CoverThumb Grid.Column="0" Width="46" Height="64" CoverKey="{Binding PrimaryContinueRow.CoverKey}" />
@@ -207,7 +217,7 @@
                             </Button>
                         </Border>
 
-                        <Border Classes="heroTile attnCard" IsVisible="{Binding HasRecommendations}">
+                        <Border Classes="heroTile attnCard faceButton" IsVisible="{Binding HasRecommendations}">
                             <Button Classes="attnRow" Command="{Binding OpenSeriesCommand}" CommandParameter="{Binding PrimaryRecommendation.Card.SeriesId}">
                                 <Grid ColumnDefinitions="Auto,*">
                                     <views:CoverThumb Grid.Column="0" Width="46" Height="64" CoverKey="{Binding PrimaryRecommendation.Card.CoverKey}" />

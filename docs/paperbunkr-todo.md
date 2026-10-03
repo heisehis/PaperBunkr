@@ -2711,6 +2711,9 @@ mouse buttons 4/5; Ctrl+F, F5, Shift+F6, Ctrl+wheel zoom, MouseButton4/5 = previ
   rules with no per-control edits. Controller buttons can be captured in Preferences. Plugin commands are actions (Plugin API 4.3, manifest `shortcut`, CE's Ctrl+Shift+F1-F12 defaults).
   Fixed on the way: Library Ctrl/Shift-click selection (a Button handles the press first) and the shared focus ring being clipped to a speck on plain Buttons (Insights tabs, Home carousel; plus a
   double ring/gap on the carousel). Tests: `UiNavigationTests`, `ScreenInputTests`, `InputFollowUpTests`, `FocusRingPaintTests` (pixels).
+- **Later the same day (spec §14.2, §14.3):** Library Enter/Space on tiles, Esc/Backspace to leave detail pages, arrows in the editors and on the nav rail, Up/Down in the Detail grid and Wanted,
+  Reading Lists gallery Up to Continue Reading, Books edge navigation, SuggestBox no longer opening itself on focus/arrow, Continuity sidebar Right/Enter, the focus-ring clipping side effect
+  (`FocusRingAdorner`), doubled/hardcoded rings (Detail, carousel, Insights), the Library empty-state Clear button, and real covers in the Merge series dialog.
 - **Not verified on screen** (as above, plus): the controller driving non-reader screens with a real pad, capturing a pad button in the Preferences box, a real plugin's shortcut running, and how the
   focus ring now looks on every other page that uses the shared adorner (rendered headlessly only for Insights and the Home carousel).
 - **Limits / follow-ups:** the metadata-entity detail page has no code-behind to register a scope on; the PDF reader relies on its page canvas's Reader scope; only Library-hook plugin commands become

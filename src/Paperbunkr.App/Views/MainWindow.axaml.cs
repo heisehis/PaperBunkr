@@ -115,6 +115,16 @@ public partial class MainWindow : Window
 
         // Arrow keys that nothing inside a screen used: they move around the nav rail, and a Left that runs out of screen lands on the rail. Bubble, so any control that wants an arrow gets it first.
         AddHandler(KeyDownEvent, OnArrowKeyFallback, RoutingStrategies.Bubble);
+        // Tunnel: a Button handles Enter and Space itself, so a bubbling handler would never see them.
+        ContextualSidebar.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.KeyModifiers == KeyModifiers.None && e.Key is Key.Enter or Key.Space && e.Source is Button { Classes: var rowClasses } && rowClasses.Contains("sideItemButton"))
+            {
+                _sidebarKeyActivated = true;
+            }
+        }, RoutingStrategies.Tunnel);
+        ContextualSidebar.AddHandler(Button.ClickEvent, OnSidebarClick, RoutingStrategies.Bubble, handledEventsToo: true);
+        ContextualSidebar.AddHandler(KeyUpEvent, (_, _) => Dispatcher.UIThread.Post(() => _sidebarKeyActivated = false, DispatcherPriority.Background), RoutingStrategies.Bubble, handledEventsToo: true);
 
         // One controller poller for the whole app, running while the setting is on and this window is active (it used to belong to the comic reader alone).
         _gamepadHost = new AppGamepadHost(this, _input, new XInputSource());
@@ -455,9 +465,9 @@ public partial class MainWindow : Window
                     {
                         side.Focus(NavigationMethod.Directional);
                     }
-                    else if (FirstScreenControl() is { } entry)
+                    else
                     {
-                        entry.Focus(NavigationMethod.Directional);
+                        EnterScreen();
                     }
 
                     e.Handled = true;
@@ -474,8 +484,51 @@ public partial class MainWindow : Window
         }
     }
 
+    private bool _sidebarKeyActivated;
+
+    /// <summary>Moves focus from the sidebar or rail into the current screen: the Continuity screen's own landing, otherwise its first non-text control.</summary>
+    private void EnterScreen()
+    {
+        if (DataContext is MainViewModel { IsEvents: true } && this.GetVisualDescendants().OfType<ContinuityScreen>().FirstOrDefault(s => s.IsEffectivelyVisible) is { } continuity)
+        {
+            continuity.FocusEntry();
+            return;
+        }
+
+        FirstScreenControl()?.Focus(NavigationMethod.Directional);
+    }
+
+    /// <summary>
+    /// A sidebar row activated from the keyboard (Enter, or Space on key-up) opens its event or continuity but left focus on the row, so the arrow keys went on moving through the sidebar while the
+    /// screen had changed. On the Continuity screen, focus now follows into it. The flag is set by the key press and cleared after the click it leads to, so a mouse click never moves focus.
+    /// </summary>
+    private void OnSidebarClick(object? sender, RoutedEventArgs e)
+    {
+        if (!_sidebarKeyActivated)
+        {
+            return;
+        }
+
+        _sidebarKeyActivated = false;
+        if (DataContext is MainViewModel { IsEvents: true })
+        {
+            Dispatcher.UIThread.Post(EnterScreen, DispatcherPriority.Background);
+        }
+    }
+
     private void OnSidebarKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.KeyModifiers == KeyModifiers.None && e.Source is Button { Classes: var sideClasses } && sideClasses.Contains("sideItemButton"))
+        {
+            if (e.Key == Key.Right)
+            {
+                // Right goes on into the screen, the same way it does from the rail.
+                EnterScreen();
+                e.Handled = true;
+                return;
+            }
+        }
+
         GridNavigationDirection? direction = e.Key switch
         {
             Key.Up => GridNavigationDirection.Up,

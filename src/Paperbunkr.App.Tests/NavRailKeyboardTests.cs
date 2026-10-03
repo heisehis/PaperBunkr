@@ -4,6 +4,7 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.VisualTree;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.Services;
 using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
@@ -115,6 +116,74 @@ public class NavRailKeyboardTests : IDisposable
 
             RunLayout(window);
             Assert.True(vm.IsLibrary);
+            window.Close();
+        });
+    }
+
+    [Fact]
+    public void RightFromASidebarRow_EntersTheScreen()
+    {
+        WithThemeAndTokens(() =>
+        {
+            using var styles = AppStyles();
+            using var tokens = AppResources();
+            var vm = new MainViewModel();
+            var window = new MainWindow { DataContext = vm, Width = 1400, Height = 900 };
+            window.Show();
+            vm.GoLibraryCommand.Execute(null);
+            RunLayout(window);
+
+            var sidebar = window.FindControl<Border>("ContextualSidebar")!;
+            var row = sidebar.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("sideItemButton") && b.IsEffectivelyVisible && b.IsEffectivelyEnabled);
+            row.Focus(NavigationMethod.Tab);
+            RunLayout(window);
+            Assert.Same(row, window.FocusManager!.GetFocusedElement());
+
+            window.KeyPress(Key.Right, RawInputModifiers.None, PhysicalKey.ArrowRight, null);
+            RunLayout(window);
+
+            var now = window.FocusManager!.GetFocusedElement() as Visual;
+            Assert.NotNull(now);
+            Assert.False(sidebar.IsVisualAncestorOf(now!) || ReferenceEquals(sidebar, now), "Right left the sidebar");
+            window.Close();
+        });
+    }
+
+    [Fact]
+    public void EnterOnAContinuitySidebarEvent_OpensItAndMovesFocusIntoTheScreen()
+    {
+        WithThemeAndTokens(() =>
+        {
+            using var styles = AppStyles();
+            using var tokens = AppResources();
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                context.StoryEvents.Add(new Paperbunkr.Data.Entities.StoryEvent { Name = "Age of Revelation", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+                context.SaveChanges();
+            }
+
+            var vm = new MainViewModel();
+            var window = new MainWindow { DataContext = vm, Width = 1400, Height = 900 };
+            window.Show();
+            vm.GoEventsCommand.Execute(null);
+            RunLayout(window);
+            Assert.True(vm.IsEvents);
+
+            var sidebar = window.FindControl<Border>("ContextualSidebar")!;
+            var row = sidebar.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Classes.Contains("sideItemButton") && b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.DataContext is Paperbunkr.App.Models.StoryEventSummary);
+            Assert.NotNull(row);
+            row!.Focus(NavigationMethod.Tab);
+            RunLayout(window);
+            Assert.Same(row, window.FocusManager!.GetFocusedElement());
+
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            RunLayout(window);
+            TestDispatcher.Drain();
+            RunLayout(window);
+
+            var now = window.FocusManager!.GetFocusedElement() as Visual;
+            Assert.NotNull(now);
+            Assert.False(sidebar.IsVisualAncestorOf(now!) || ReferenceEquals(sidebar, now), "focus stayed in the sidebar after Enter opened the event");
             window.Close();
         });
     }

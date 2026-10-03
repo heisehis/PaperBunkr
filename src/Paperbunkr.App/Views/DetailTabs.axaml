@@ -30,9 +30,11 @@
             <Setter Property="BorderThickness" Value="2" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
-        <Style Selector="Border.issueTile:focus-visible">
-            <Setter Property="BorderThickness" Value="2" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <!-- Keyboard focus is the app-wide glow ring (Primitives.axaml). A second 2px border on :focus-visible used to be drawn here as well, which doubled the ring. Selection keeps its border above. -->
+        <!-- A selected tile that also has keyboard focus (plain click and the arrow keys select the tile they land on) shows the glow ring alone: its accent border as well read as two rings.
+             The border keeps its 2px so the tile does not shift, it just stops being drawn. -->
+        <Style Selector="Border.issueTile.selected:focus-visible">
+            <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
         <Style Selector="Border.issueTile.current">
             <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />

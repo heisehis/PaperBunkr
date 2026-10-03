@@ -2795,10 +2795,22 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     private bool FiltersOrSearchActive => HasActiveFilters || !string.IsNullOrWhiteSpace(SearchQuery);
 
-    public string EmptyStateActionLabel => FiltersOrSearchActive ? "Clear filters" : "Scan folders";
+    /// <summary>
+    /// What the empty state offers. It has to undo whatever made the list empty: the filter toggles <em>and</em> the search text (<see cref="ClearAllFilters"/> alone leaves the search alone, by
+    /// design, so a button that only ran it did nothing when a search was the only cause).
+    /// </summary>
+    public string EmptyStateActionLabel => HasActiveFilters ? "Clear filters" : !string.IsNullOrWhiteSpace(SearchQuery) ? "Clear search" : "Scan folders";
 
     public IRelayCommand EmptyStateActionCommand =>
-        FiltersOrSearchActive ? ClearAllFiltersCommand : OpenLibraryFoldersCommand;
+        FiltersOrSearchActive ? ClearFiltersAndSearchCommand : OpenLibraryFoldersCommand;
+
+    /// <summary>The empty state's action: clears the filter toggles, the search scope and the search text.</summary>
+    [RelayCommand]
+    private void ClearFiltersAndSearch()
+    {
+        ClearAllFilters();
+        SearchQuery = string.Empty;
+    }
 
     /// <summary>Empty-state "Scan folders" action - hands off to Preferences → Libraries via the
     /// ctor callback (no-op default keeps the VM standalone-testable).</summary>

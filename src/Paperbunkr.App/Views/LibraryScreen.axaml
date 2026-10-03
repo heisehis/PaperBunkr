@@ -221,6 +221,8 @@
              toggled from LibraryScreenViewModel.HasSelection) so the whole active selection stays
              visible/adjustable without hunting for hover targets. -->
         <Style Selector="CheckBox.tileSelect">
+            <!-- A mouse affordance: the keyboard selects with Shift+arrows. As a tab stop it also sat "above" the neighbouring card for the arrow keys, so Up from a card landed on the next card's checkbox. -->
+            <Setter Property="Focusable" Value="False" />
             <Setter Property="Opacity" Value="0" />
             <Setter Property="Transitions">
                 <Transitions>

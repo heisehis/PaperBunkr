@@ -139,8 +139,11 @@ shortcuts for a *hotkey* on a screen.
 - **Plugin commands are actions** (`PluginInputActions`, Plugin API 4.3): a Library-hook command shows up in Preferences > Keyboard Shortcuts without the plugin doing anything; its manifest
   `shortcut` attribute only sets the default.
 - **The app-wide focus ring is an adorner, and Avalonia clips an adorner to its adorned control's clip.** Buttons clip to their bounds, which is why the ring template sets
-  `AdornerLayer.IsClipEnabled="False"`. Don't add a second hand-rolled inner border on `:focus-visible` (it insets the content and doubles the ring); if a control needs a different ring,
+  `AdornerLayer.IsClipEnabled="False"`; `Controls/FocusRingAdorner` (the template root) puts back only the clip to the enclosing `ScrollViewer` viewports, so a half-scrolled control's ring does not draw over a
+  header. Don't add a second hand-rolled inner border on `:focus-visible` (it insets the content and doubles the ring); if a control needs a different ring,
   set its `FocusAdorner` to null and draw one inside its own bounds.
+- **A read-only `SuggestBox` must not open itself on keyboard focus or a bare Down** (arrowing through a form would pop every dropdown open): it opens on a click, Enter, Space or Alt+Down.
+- **Don't make a control inside a card focusable unless the keyboard needs it** (the tile-select checkboxes are mouse-only): the arrow keys' directional search treats a nested control as a neighbour.
 - **A Button also swallows Enter and Space** before a XAML `KeyDown=` handler on it runs. A card that opens with Enter must either keep a bound `Command` or have the key tunnelled from an
   ancestor (`LibraryScreen.OnScreenCardKeyDownTunnel`).
 - **A Button swallows a left press** (Avalonia 12): an instance `PointerPressed` handler declared in XAML on a `Button` never sees it. Tunnel from an ancestor instead (see

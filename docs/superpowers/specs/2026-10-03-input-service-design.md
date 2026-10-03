@@ -592,3 +592,24 @@ editors are covered by the smoke test (they register and decline when empty) but
 
 The headless harness does not click a plain Button on Space (with or without the input host), so Space on a rail button is not covered by a test; Space on a Library card is (it goes through the
 tunnelled handler, not the Button).
+
+### 14.3 More gaps found by hand (2026-10-03, later)
+
+15. **The focus-ring fix from §14 (item 10) had a side effect.** Turning off the adorner's clipping let the ring of a control *partly* scrolled out of its list draw over the page header (the
+    "invisible focus at the top" in Continuity). `Controls/FocusRingAdorner` is now the root of the ring template: still unclipped by the adorned control itself (so a Button's ring shows), but clipped to
+    the viewport of every `ScrollViewer` the control sits in. `FocusRingPaintTests` covers both directions (ring visible outside a button; no ring over the header for a half-scrolled one).
+16. **Other doubled or misplaced rings.** The Home carousel and Detail issue tiles each drew a hand-made 2px accent border on `:focus-visible` as well as the shared glow; both borders are gone (a
+    selected Detail tile that has focus hides its selection border so the glow stands alone). The Insights hero tiles hardcoded an orange ring for hover and focus, so they ignored the skin's accent;
+    they now use the `PbGlowRing` token, and the two tiles whose face is a Button let that Button fill the card so the ring sits on the card's edge instead of inside its padding.
+17. **Up/Down in Wanted and other row lists.** Avalonia's directional search only weighs controls that overlap the focused one horizontally, so it could skip a whole row whose buttons were in
+    other columns, or find nothing. `FocusReclaimer.TryMoveDirectionally` now also looks for the nearest row above or below and takes whichever is nearer, and scrolls half a viewport (then
+    retries) when a virtualizing list has no row left to land on.
+18. **Edges of a grid.** `GridKeyboardNavigation` returns false at the edge instead of swallowing the key, so Up from the first row and Left from the first column carry on (to the Reading Lists
+    Continue Reading card, the Books toolbar, the nav rail). Tile-select checkboxes (Books, Library) are mouse-only now: as tab stops they also sat "above" the neighbouring card for the arrows.
+19. **Dropdowns.** A read-only `SuggestBox` opened its list merely by receiving keyboard focus, and Down on a closed one opened it and swallowed the key, so arrowing or tabbing through a form popped
+    each dropdown open. It now opens on a click, Enter, Space or Alt+Down; a bare Down passes through for navigation; its chevron button is not a tab stop. Open dropdowns still keep the arrows.
+20. **Continuity.** Enter or Space on a sidebar event or continuity opens it and now moves focus into the screen (`ContinuityScreen.FocusEntry`), and Right from any contextual-sidebar row enters the
+    current screen, as it does from the rail. (A Button handles Enter and Space before an ancestor's bubbling handler runs, so the activation flag is set from a tunnel handler.)
+21. **Not keyboard, found in the same pass.** The Library empty state's button ran `ClearAllFilters`, which by design leaves the search text alone, so it did nothing when a search was the only cause;
+    it now clears the filters and the search ("Clear search" when only a search is active). The Merge series dialog showed placeholder gradients instead of covers; its rows now carry the cover key
+    of each series' cover issue and load the real cover.

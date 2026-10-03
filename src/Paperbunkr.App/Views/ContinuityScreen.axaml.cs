@@ -46,6 +46,9 @@ public partial class ContinuityScreen : UserControl
         };
     }
 
+    /// <summary>Puts keyboard focus inside the screen, on its usual landing (the active view-toggle chip, or the empty prompt's first button): where the sidebar sends focus after an event or continuity is opened from it.</summary>
+    public void FocusEntry() => _focus.Reclaim();
+
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);

@@ -2680,6 +2680,34 @@ it. Not committed. Not a CE feature (CE has no thumbnail handler) - modelled on 
 - **Not verified:** the Preferences toggle in the running app (tested through the CLI + service), .cb7/.cbt/.mobi/.azw3 through the
   shell (unit-tested only), DjVu (no ddjvu.exe shipped), a full installer build/uninstall.
 
+## 2026-10-03 - Input service (one app-wide keyboard / mouse / gamepad layer)
+
+Design [2026-10-03-input-service-design.md](superpowers/specs/2026-10-03-input-service-design.md) (§13 lists where the build differs
+from the plan). Not committed. CE precedent checked in `_reference/ComicRackCE` (`CommandKey` is one gesture space for keys, wheel and
+mouse buttons 4/5; Ctrl+F, F5, Shift+F6, Ctrl+wheel zoom, MouseButton4/5 = previous/next list).
+- **Service:** `Services/Input/` - `IInputService` takes keys, wheel, pointer buttons and gamepad state, resolves them against a keymap
+  to string-id `InputAction`s, and delivers them to handlers by scope (Global / screens / modal Overlay) and context (paged,
+  zoomed, continuous). One root Tunnel hook in `MainWindow` (`InputHost.Attach`); no per-page `KeyBindings` left in XAML. Text boxes
+  swallow actions unless the action says `FiresInTextInput`.
+- **Replaced** (deleted): `KeyboardCommandRegistry`, `KeyBindingService`, `KeyBindingIO`, `KeyOption`, `KeyCommandBinding`,
+  `KeyBindingRowViewModel`, `GamepadMapper`, `PageCanvas.KeyBindings`. The DB `KeyBinding` table is read once by
+  `LegacyKeyBindingImporter` and deliberately kept (worktrees share the dev DB).
+- **Config:** overrides-only `keymap.json` next to the DB (temp+replace writes, bad file kept as `.bad`, schema migration chain).
+  Preferences › Keyboard Shortcuts is rebuilt data-driven (chips, capture box for keys / middle + side buttons / wheel, per-row reset,
+  conflict banner, layout import/export - old exports still import).
+- **Migrated:** MainWindow shell shortcuts, reader (`PageCanvas`, `ReaderScreen`: keys, Ctrl+wheel zoom at cursor, thumb buttons, pad),
+  Library actions, Book reader (incl. JS key forwarding via `WebKeyMap`), Compare. Focused-item widget keys (arrow nav among tiles,
+  Enter/Delete/F2 on a row, type-ahead, EventMap) deliberately stay with their controls - spec §9.
+- **Verified:** new/rewritten tests for the model, binding parser, keymap, service routing/scopes/suppression, gamepad processor, legacy
+  import, editor view model, host wiring and capture box; whole solution builds with 0 errors; full App suite 5,193/5,194 - the one
+  failure (`SelectionActionBarViewTests.AltShift3_OnACard_RatesTheSelection`, its window had no `InputHost`/real service) was fixed and
+  re-run green together with `LibraryBulkActionsTests` (29/29). Other test projects were not re-run (Data only got a doc-comment edit).
+- **Not verified:** nothing seen or driven in the running app - real keyboard / thumb buttons / wheel-zoom anchor in the reader, the
+  Book reader's key forwarding in a real WebView, a real XInput controller, the Preferences editor look, remap persisting across a
+  restart, FlaUI `KeyboardShortcutDiagnosticTests` (compile-only).
+- **Limits / follow-ups:** the gamepad poller still starts and stops with the reader; no way to *add* a pad binding in Preferences yet
+  (view / remove only); plugin-facing action registration is only the `IInputActionCatalog.Register` seam.
+
 ## Explicitly not in scope here
 
 - **Content-type classification manual dropdown** — flagged as a known gap, but the real

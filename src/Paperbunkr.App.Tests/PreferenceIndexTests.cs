@@ -81,12 +81,33 @@ public class PreferenceIndexTests
     [Fact]
     public void EveryEntryAnchorResolvesToATagInItsSection()
     {
+        // Keyboard Shortcuts builds one group per input-service action group (docs/superpowers/specs/2026-10-03-input-service-design.md §9), so a plugin's actions get a section with no XAML
+        // change, and tags each with ShortcutGroupViewModel.TagFor. Those anchors are checked against the real action catalog; "shortcuts.io" is a literal Tag like every other.
+        var generated = Paperbunkr.App.Services.Input.InputActions.Core.Select(i => i.Group).Distinct().Select(Paperbunkr.App.ViewModels.ShortcutGroupViewModel.TagFor).ToHashSet();
         foreach (var entry in PreferenceIndex.Entries)
         {
             string axaml = ReadSectionAxaml(entry.Section);
+            if (entry.Section == PreferencesSection.KeyboardShortcuts && generated.Contains(entry.AnchorKey))
+            {
+                Assert.Contains("Tag=\"{Binding Tag}\"", axaml);
+                continue;
+            }
+
             Assert.True(
                 axaml.Contains($"Tag=\"{entry.AnchorKey}\"", StringComparison.Ordinal),
                 $"Anchor '{entry.AnchorKey}' ({entry.Section}/{entry.GroupTitle}) has no matching Tag in {SectionFiles[entry.Section]}");
+        }
+    }
+
+    [Fact]
+    public void EveryShortcutActionGroupHasAnIndexEntry_SoSearchCanJumpToIt()
+    {
+        var indexed = PreferenceIndex.Entries.Select(e => e.AnchorKey).ToHashSet();
+
+        foreach (string group in Paperbunkr.App.Services.Input.InputActions.Core.Select(i => i.Group).Distinct())
+        {
+            string tag = Paperbunkr.App.ViewModels.ShortcutGroupViewModel.TagFor(group);
+            Assert.True(indexed.Contains(tag), $"Shortcut group '{group}' (tag '{tag}') has no PreferenceIndex entry");
         }
     }
 }

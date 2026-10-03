@@ -108,7 +108,10 @@ public class SelectionActionBarViewTests : IDisposable
             History = new MetadataEditHistoryService(),
             MetadataClipboard = new MetadataClipboardService(),
         };
-        var window = new Window { Content = new LibraryScreen { DataContext = vm }, Width = 1400, Height = 900 };
+        // Keys reach the Library through the input service, so attach a real one the way MainWindow does.
+        var input = ReaderTestInput.Create();
+        var window = new Window { Content = new LibraryScreen { DataContext = vm, InputService = input }, Width = 1400, Height = 900 };
+        Services.Input.InputHost.Attach(window, input);
         window.Show();
         RunLayout(window);
         vm.SelectAllVisibleIssuesCommand.Execute(null);

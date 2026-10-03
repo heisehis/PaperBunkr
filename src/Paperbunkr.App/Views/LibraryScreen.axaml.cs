@@ -11,7 +11,9 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.ViewModels;
+using Paperbunkr.App.ViewModels.LibraryActions;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Views;
@@ -27,6 +29,15 @@ public partial class LibraryScreen : UserControl
 
     private int? _lastGridIndex;
 
+    private readonly AttachedInputRegistration _libraryInput;
+
+    /// <summary>The input service this screen's actions arrive through: the application's, unless a test supplies its own.</summary>
+    public IInputService InputService
+    {
+        get => _libraryInput.Service;
+        set => _libraryInput.Service = value;
+    }
+
     public LibraryScreen()
     {
         InitializeComponent();
@@ -35,6 +46,7 @@ public partial class LibraryScreen : UserControl
         // Tunnel so Escape closes the Add-issue overlay even while a field inside it has focus
         // (the series-name SuggestBox otherwise swallows Escape to close its own dropdown).
         AddHandler(KeyDownEvent, OnLibraryScreenKeyDown, RoutingStrategies.Tunnel);
+        _libraryInput = new AttachedInputRegistration(this, InputScope.Library, OnLibraryInputAction, service: InputServiceLocator.Current, focusRoot: () => this);
         // Type-ahead (docs/superpowers/specs/2026-09-12-grid-typeahead-rangeselect-quit-design.md) -
         // Tunnel from the screen root rather than per-template, so it works regardless of which of
         // the 5 view modes is currently active, same "resolve the real ItemsControl from e.Source"
@@ -267,76 +279,78 @@ public partial class LibraryScreen : UserControl
         }
     }
 
-    private void OnLibraryScreenKeyDown(object? sender, KeyEventArgs e)
+    /// <summary>
+    /// The Library's shortcuts, as input-service actions in the Library scope (docs/superpowers/specs/2026-10-03-input-service-design.md §9): focus the search box (CE's quick search, plus
+    /// the long-standing "/"), refresh, toggle the preview panel, select all, delete, and the selection actions that <see cref="LibraryActionCatalog"/> also puts on the right-click menu and
+    /// the bar, so the three can't drift apart. Escape never reaches here: it is the global CloseCurrentView action and <c>MainViewModel.Escape()</c> clears the selection last. Typing
+    /// in a text box never steals these (the service ignores keyboard actions under a text field), and neither does a dialog or popup that has focus (this registration is dormant then).
+    /// </summary>
+    private void OnLibraryInputAction(InputActionEventArgs e)
     {
         if (DataContext is not LibraryScreenViewModel vm)
         {
             return;
         }
 
-        // Escape for the Add-issue overlay is now handled centrally in MainViewModel.Escape()
-        // (docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md's own
-        // investigation) - MainWindow's Tunnel KeyDown handler runs before this one and always
-        // consumes Escape, so a duplicate check here would never actually be reached.
-
-        // docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md - "/"
-        // focuses the search box from anywhere in the grid. e.Source (not sender - this fires on the
-        // Tunnel pass, before the target's own handlers) is checked so typing "/" inside some other
-        // TextBox still types a literal "/" instead of stealing focus.
-        if (e.Key == Key.OemQuestion && e.KeyModifiers == KeyModifiers.None && e.Source is not TextBox)
+        switch (e.Action.Id)
         {
-            Toolbar.FocusSearchBox();
-            e.Handled = true;
+            case InputActionIds.FocusSearch:
+                Toolbar.FocusSearchBox();
+                e.Handled = true;
+                return;
+            case InputActionIds.ToggleLibraryPreview:
+                vm.ToggleLibraryPreviewPanelCommand.Execute(null);
+                e.Handled = true;
+                return;
+            case InputActionIds.RefreshLibrary:
+                // Reloading clears and repopulates the very collections the focused tile lives in, so it runs after the key press has finished routing.
+                Dispatcher.UIThread.Post(vm.LoadFromDatabase);
+                e.Handled = true;
+                return;
+            case InputActionIds.LibrarySelectAll:
+                vm.SelectAllVisibleCommand.Execute(null);
+                e.Handled = true;
+                return;
+            case InputActionIds.LibraryDeleteSelection:
+                vm.DeleteCurrentSelectionCommand.Execute(null);
+                e.Handled = true;
+                return;
+        }
+
+        if (!LibraryActionCatalog.KeyActions.ContainsKey(e.Action.Id))
+        {
             return;
         }
 
-        // Real accelerator for the context menu's "Edit Properties… (Ctrl+I)" hint (CE parity -
-        // miProperties.ShortcutKeys), plus Select All / Delete (docs/superpowers/specs/2026-08-31-
-        // app-wide-and-library-keyboard-shortcuts-design.md). Wired here as a plain KeyDown handler,
-        // not <UserControl.KeyBindings>, matching PageCanvas's/this file's own already-proven Escape/
-        // "/" pattern above. Ctrl+I dispatches through BulkEditCurrentSelectionCommand, not
-        // BulkEditSelectionCommand directly - the latter only ever reads issue-granularity
-        // Selection.SelectedIds, so pressing Ctrl+I with a real series selected (SeriesSelection)
-        // silently no-opped, a genuine pre-existing bug found via live diagnostic logging this
-        // session, unrelated to key routing itself. e.Source, not sender, so typing into a TextBox
-        // (e.g. the search box) never steals these.
-        if (e.Source is TextBox)
-        {
-            return;
-        }
-
-        // The bulk-action shortcuts (Ctrl+I, Alt+Shift+0-5/R/U, Ctrl+G, Ctrl+C/V, Ctrl+Shift+C) come from LibraryActionCatalog.KeyMap -
-        // the same definitions the menu hints and bar tooltips show (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §1).
-        // Deferred like the bar's buttons: several of them rebuild the grid the focused tile lives in.
-        if (new ViewModels.LibraryActions.LibraryActionCatalog(vm).TryGetKeyCommand(e.Key, e.KeyModifiers, out var command, out var parameter))
+        // Deferred like the bar's buttons: several of these rebuild the grid the focused tile lives in.
+        if (new LibraryActionCatalog(vm, _libraryInput.Service).TryGetKeyCommand(e.Action.Id, out var command, out var parameter))
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() => command!.Execute(parameter));
             e.Handled = true;
         }
-        else if (e.Key == Key.I && e.KeyModifiers == KeyModifiers.Control)
+        else if (e.Action.Id == InputActionIds.LibraryEdit)
         {
+            // Ctrl+I dispatches through BulkEditCurrentSelectionCommand when the catalog has nothing to run: BulkEditSelectionCommand only reads issue-granularity selection, so a real series
+            // selection silently no-opped (a pre-existing bug found via live diagnostic logging, docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md).
             vm.BulkEditCurrentSelectionCommand.Execute(null);
             e.Handled = true;
         }
-        else if (e.Key == Key.A && e.KeyModifiers == KeyModifiers.Control)
+    }
+
+    /// <summary>
+    /// Type-ahead backspace - Avalonia's TextInput event doesn't fire for Backspace (unlike WinForms KeyPress, which is why CE's own KeySearch could treat it as just another character); handled
+    /// here instead, sharing the same Buffer/matching logic. This is control behavior, not a shortcut, so it stays a key handler rather than an input-service action.
+    /// </summary>
+    private void OnLibraryScreenKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Source is TextBox || e.Key != Key.Back || e.KeyModifiers != KeyModifiers.None)
         {
-            vm.SelectAllVisibleCommand.Execute(null);
-            e.Handled = true;
+            return;
         }
-        else if (e.Key == Key.Delete && e.KeyModifiers == KeyModifiers.None)
+
+        if (HandleTypeAhead('', e.Source))
         {
-            vm.DeleteCurrentSelectionCommand.Execute(null);
             e.Handled = true;
-        }
-        // Type-ahead backspace - Avalonia's TextInput event doesn't fire for Backspace (unlike
-        // WinForms KeyPress, which is why CE's own KeySearch could treat it as just another
-        // character); handled here instead, sharing the same Buffer/matching logic.
-        else if (e.Key == Key.Back && e.KeyModifiers == KeyModifiers.None)
-        {
-            if (HandleTypeAhead('\b', e.Source))
-            {
-                e.Handled = true;
-            }
         }
     }
 

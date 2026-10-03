@@ -35,9 +35,6 @@ public partial class PageCanvas
     public static readonly StyledProperty<ICommand?> EnsurePanelsCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(EnsurePanelsCommand));
 
-    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ToggleGuidedViewGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ToggleGuidedViewGesture), defaultValue: []);
-
     public static readonly StyledProperty<ICommand?> ToggleGuidedViewCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ToggleGuidedViewCommand));
 
@@ -63,12 +60,6 @@ public partial class PageCanvas
     {
         get => GetValue(EnsurePanelsCommandProperty);
         set => SetValue(EnsurePanelsCommandProperty, value);
-    }
-
-    public IReadOnlyList<KeyGesture> ToggleGuidedViewGesture
-    {
-        get => GetValue(ToggleGuidedViewGestureProperty);
-        set => SetValue(ToggleGuidedViewGestureProperty, value);
     }
 
     public ICommand? ToggleGuidedViewCommand

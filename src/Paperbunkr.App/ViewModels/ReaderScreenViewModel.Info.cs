@@ -25,18 +25,6 @@ public partial class ReaderScreenViewModel
     /// <summary>Raised with the issue id when "Edit properties" is chosen in the panel; the shell opens Issue Properties.</summary>
     public event Action<int>? EditPropertiesRequested;
 
-    /// <summary>Keys for the reader commands that are only "a key runs a command" (info panel, pin, clip); the canvas checks them in order.</summary>
-    [ObservableProperty]
-    private IReadOnlyList<KeyCommandBinding> _extraKeyBindings = [];
-
-    /// <summary>The info panel's own gesture, also shown in the drawer button's tooltip.</summary>
-    [ObservableProperty]
-    private IReadOnlyList<Avalonia.Input.KeyGesture> _toggleInfoPanelKey = [new(Avalonia.Input.Key.I)];
-
-    /// <summary>The clip command's gesture, for tooltips.</summary>
-    [ObservableProperty]
-    private IReadOnlyList<Avalonia.Input.KeyGesture> _clipRegionKey = [new(Avalonia.Input.Key.C, Avalonia.Input.KeyModifiers.Control | Avalonia.Input.KeyModifiers.Shift)];
-
     [RelayCommand]
     private void ToggleInfoPanel()
     {
@@ -76,19 +64,5 @@ public partial class ReaderScreenViewModel
         var tags = context.IssueTags.Where(t => t.IssueId == issue.Id && t.Field == IssueTagField.Tags).Select(t => t.Value).ToList();
         Info.IsOpen = false;
         Info.Set(ReaderInfoBuilder.Build(issue, series.Name, context0, genres, tags), context.GetOrCreateAppSettings().InfoPanelShowSummary);
-    }
-
-    /// <summary>Reads the remappable keys of the in-reader reference commands and rebuilds <see cref="ExtraKeyBindings"/>.</summary>
-    private void RefreshExtraKeyBindings(PaperbunkrDbContext context)
-    {
-        ToggleInfoPanelKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleInfoPanel);
-        PinPageKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPinPage);
-        ClipRegionKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderClipRegion);
-        ExtraKeyBindings =
-        [
-            new KeyCommandBinding(ToggleInfoPanelKey, ToggleInfoPanelCommand),
-            new KeyCommandBinding(PinPageKey, PinCurrentPageCommand),
-            new KeyCommandBinding(ClipRegionKey, ToggleClipModeCommand),
-        ];
     }
 }

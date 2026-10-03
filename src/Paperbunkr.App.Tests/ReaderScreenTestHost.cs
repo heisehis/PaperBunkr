@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Media;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
 
@@ -53,6 +54,7 @@ internal static class ReaderScreenTestHost
     {
         var screen = CreateScreen(vm);
         var window = new Window { Width = 900, Height = 700, Content = screen };
+        InputHost.Attach(window, vm.Input);   // what MainWindow does for the app: key, wheel and pointer events go to the input service first
         window.Show();
         vm.LoadIssue(issueId);
         screen.PageCanvasControl.Focus();
@@ -77,4 +79,10 @@ internal static class ReaderScreenTestHost
         string physical = key is Key.Left or Key.Right or Key.Up or Key.Down ? $"Arrow{key}" : key.ToString();
         window.KeyPress(key, modifiers, (PhysicalKey)Enum.Parse(typeof(PhysicalKey), physical), null);
     }
+}
+
+internal static class ReaderTestInput
+{
+    /// <summary>A real input service with the default keymap and nothing persisted, for tests that press keys through the reader.</summary>
+    public static InputService Create() => new(InputActionCatalog.CreateWithCoreActions(), new MemoryKeymapStore(), new AvaloniaInputSuppressionProbe());
 }

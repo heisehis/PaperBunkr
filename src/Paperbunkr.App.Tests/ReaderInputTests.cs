@@ -1,40 +1,19 @@
 using Avalonia.Input;
-using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Controls;
 using Paperbunkr.App.Models;
-using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.Views;
-using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Tests;
 
-/// <summary>Reading-order page commands, their extra default gestures, conflict contexts and the tap zone overlay geometry (docs/superpowers/specs/2026-09-25-comic-reader-reach-design.md).</summary>
-public class ReaderInputTests : IDisposable
+/// <summary>
+/// Reading-order page commands, their extra default bindings and reader-state contexts, and the tap zone overlay geometry (docs/superpowers/specs/2026-09-25-comic-reader-reach-design.md,
+/// docs/superpowers/specs/2026-10-03-input-service-design.md). Originally written against the keyboard command registry and its database table; the bindings now live in the input service.
+/// </summary>
+public class ReaderInputTests
 {
-    private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_input_test_{Guid.NewGuid():N}.db");
-    private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
-
-    public ReaderInputTests()
-    {
-        _dbOptions = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
-        using var context = new PaperbunkrDbContext(_dbOptions);
-        context.Database.EnsureCreated();
-    }
-
-    public void Dispose()
-    {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        try
-        {
-            if (File.Exists(_dbPath)) File.Delete(_dbPath);
-        }
-        catch (IOException)
-        {
-        }
-    }
-
-    private KeyBindingService CreateService() => new(() => new PaperbunkrDbContext(_dbOptions));
+    private static InputService CreateService() => new(InputActionCatalog.CreateWithCoreActions(), new MemoryKeymapStore());
 
     [Fact]
     public void NextAndPreviousPage_ShipClickerMediaAndSpaceDefaults()
@@ -42,79 +21,68 @@ public class ReaderInputTests : IDisposable
         var service = CreateService();
 
         Assert.Equal(
-            [new KeyGesture(Key.PageDown), new KeyGesture(Key.Space), new KeyGesture(Key.MediaNextTrack)],
-            service.GetKeys(KeyboardCommandRegistry.ReaderNextPage));
+            [InputBinding.ForKey(Key.PageDown), InputBinding.ForKey(Key.Space), InputBinding.ForKey(Key.MediaNextTrack),
+             InputBinding.ForPad(GamepadInput.A), InputBinding.ForPad(GamepadInput.RightShoulder), InputBinding.ForMouseButton(MouseButton.XButton2)],
+            service.GetBindings(InputActionIds.NextPage));
         Assert.Equal(
-            [new KeyGesture(Key.PageUp), new KeyGesture(Key.Space, KeyModifiers.Shift), new KeyGesture(Key.MediaPreviousTrack)],
-            service.GetKeys(KeyboardCommandRegistry.ReaderPreviousPage));
+            [InputBinding.ForKey(Key.PageUp), InputBinding.ForKey(Key.Space, KeyModifiers.Shift), InputBinding.ForKey(Key.MediaPreviousTrack),
+             InputBinding.ForPad(GamepadInput.B), InputBinding.ForPad(GamepadInput.LeftShoulder), InputBinding.ForMouseButton(MouseButton.XButton1)],
+            service.GetBindings(InputActionIds.PreviousPage));
     }
 
     [Fact]
-    public void StoredRows_ReplaceTheAdditionalDefaults()
+    public void ACustomBinding_ReplacesTheAdditionalDefaults()
     {
         var service = CreateService();
 
-        service.AddKey(KeyboardCommandRegistry.ReaderNextPage, new KeyGesture(Key.D));
+        service.SetBindings(InputActionIds.NextPage, [InputBinding.ForKey(Key.D)]);
 
-        Assert.Equal([new KeyGesture(Key.D)], service.GetKeys(KeyboardCommandRegistry.ReaderNextPage));
+        Assert.Equal([InputBinding.ForKey(Key.D)], service.GetBindings(InputActionIds.NextPage));
     }
 
     [Fact]
-    public void ResetToDefaults_RestoresTheAdditionalDefaults()
+    public void ResetAll_RestoresTheAdditionalDefaults()
     {
         var service = CreateService();
-        service.ReplaceKeys(KeyboardCommandRegistry.ReaderNextPage, [new KeyGesture(Key.D)]);
+        service.SetBindings(InputActionIds.NextPage, [InputBinding.ForKey(Key.D)]);
 
-        service.ResetToDefaults();
+        service.ResetAll();
 
-        Assert.Equal(3, service.GetKeys(KeyboardCommandRegistry.ReaderNextPage).Count);
+        Assert.Equal(6, service.GetBindings(InputActionIds.NextPage).Count);
     }
 
     [Fact]
     public void ReadingOrderCommands_AreBoundToPagedModeOnly()
     {
-        Assert.All(
-            KeyboardCommandRegistry.Commands.Where(c => c.Id is KeyboardCommandRegistry.ReaderNextPage or KeyboardCommandRegistry.ReaderPreviousPage),
-            c => Assert.Equal(ConflictContext.Paged, c.Context));
+        var catalog = InputActionCatalog.CreateWithCoreActions();
+
+        Assert.Equal(InputContext.Paged, catalog.Find(InputActionIds.NextPage)!.Context);
+        Assert.Equal(InputContext.Paged, catalog.Find(InputActionIds.PreviousPage)!.Context);
     }
 
     [Theory]
-    [InlineData(ConflictContext.Always, ConflictContext.Continuous, true)]
-    [InlineData(ConflictContext.Paged, ConflictContext.PagedUnzoomed, true)]
-    [InlineData(ConflictContext.PagedZoomed, ConflictContext.Paged, true)]
-    [InlineData(ConflictContext.Paged, ConflictContext.Paged, true)]
-    [InlineData(ConflictContext.Paged, ConflictContext.Continuous, false)]
-    [InlineData(ConflictContext.PagedUnzoomed, ConflictContext.PagedZoomed, false)]
-    [InlineData(ConflictContext.Continuous, ConflictContext.Continuous, true)]
-    public void MayOverlap_MatchesRuntimeExclusivity(ConflictContext a, ConflictContext b, bool expected) =>
-        Assert.Equal(expected, ConflictContexts.MayOverlap(a, b));
+    [InlineData(InputContext.Always, InputContext.Continuous, true)]
+    [InlineData(InputContext.Paged, InputContext.PagedUnzoomed, true)]
+    [InlineData(InputContext.PagedZoomed, InputContext.Paged, true)]
+    [InlineData(InputContext.Paged, InputContext.Paged, true)]
+    [InlineData(InputContext.Paged, InputContext.Continuous, false)]
+    [InlineData(InputContext.PagedUnzoomed, InputContext.PagedZoomed, false)]
+    [InlineData(InputContext.Continuous, InputContext.Continuous, true)]
+    public void Overlaps_MatchesRuntimeExclusivity(InputContext a, InputContext b, bool expected) =>
+        Assert.Equal(expected, a.Overlaps(b));
 
     [Fact]
-    public void NoTwoCommandsThatCanBeActiveTogetherShareADefaultGesture()
+    public void NoTwoActionsThatCanBeActiveTogetherShareADefaultBinding()
     {
-        var all = KeyboardCommandRegistry.Commands;
-        for (int i = 0; i < all.Count; i++)
+        var catalog = InputActionCatalog.CreateWithCoreActions();
+        var keymap = new InputKeymap(catalog, new KeymapConfig());
+
+        foreach (var info in catalog.All)
         {
-            for (int j = i + 1; j < all.Count; j++)
+            foreach (var binding in info.Defaults)
             {
-                if (!ConflictContexts.MayOverlap(all[i].Context, all[j].Context))
-                {
-                    continue;
-                }
-
-                var shared = all[i].AllDefaults.Intersect(all[j].AllDefaults).ToList();
-                Assert.True(shared.Count == 0, $"{all[i].Id} and {all[j].Id} both default to {string.Join(", ", shared)}");
+                Assert.Empty(keymap.FindConflicts(info.Action, binding));
             }
-        }
-    }
-
-    [Fact]
-    public void KeyOptions_ContainEveryShippedDefault()
-    {
-        var offered = KeyOptions.All.Select(o => o.Gesture).ToHashSet();
-        foreach (var command in KeyboardCommandRegistry.Commands.Where(c => c.AdditionalDefaults is { Count: > 0 }))
-        {
-            Assert.All(command.AllDefaults, g => Assert.Contains(g, offered));
         }
     }
 

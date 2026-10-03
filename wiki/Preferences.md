@@ -113,7 +113,7 @@ Seven tabs.
 - **Auto-crop** — trim plain white or black scan borders from comic pages (off by default).
 - **Background & Margin** — canvas background (*Auto* app background, a fixed **color**, or a
   **Background texture**, including ComicRack CE's textures), optional **margin around the page**.
-- **Keyboard Shortcuts** — remap every reader command; **Import Layout… / Export
+- **Keyboard Shortcuts** — remap every key, mouse button, wheel direction and controller button; **Import Layout… / Export
   Layout…**. See [Keyboard Shortcuts](Keyboard-Shortcuts).
 
 ## Advanced

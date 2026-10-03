@@ -316,7 +316,7 @@ public class ReaderNotesAndClipsTests : IDisposable
     [Fact]
     public void DraggingARectangleWithClipModeOn_SavesAClipOfThePage()
     {
-        var vm = new ReaderScreenViewModel(goBack: () => { });
+        var vm = new ReaderScreenViewModel(goBack: () => { }, ReaderTestInput.Create());
         var (window, screen, canvas) = ReaderScreenTestHost.Open(vm, _issueId);
         try
         {

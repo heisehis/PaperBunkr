@@ -13,7 +13,7 @@ namespace Paperbunkr.App.Views;
 /// <summary>
 /// Code-behind for the Event Map (docs/superpowers/specs/2026-09-25-event-map-design.md §3-§4): wires the surface's card
 /// presses to the view model, keeps the pinned ruler and lane headers in step with the scroll offset, handles the
-/// map's own keyboard (not registered in <c>KeyboardCommandRegistry</c> - it only applies while the map has focus),
+/// map's own keyboard (control behavior rather than an input-service action - it only applies while the map has focus),
 /// Ctrl+wheel density and Shift+wheel horizontal scroll, and scrolls cards into view.
 /// </summary>
 public partial class EventMapView : UserControl

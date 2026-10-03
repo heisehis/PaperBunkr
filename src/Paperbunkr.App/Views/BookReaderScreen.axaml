@@ -13,13 +13,8 @@
              x:Class="Paperbunkr.App.Views.BookReaderScreen"
              x:DataType="vm:BookReaderScreenViewModel">
 
-    <!-- "Where am I?" heading trail (docs/superpowers/specs/2026-09-01-books-reader-screen-reader-
-         accessibility-design.md) - deliberately not Thorium's Ctrl+F10, which has no meaning here.
-         Same UserControl.KeyBindings mechanism LibraryScreen.axaml already uses for its own
-         gesture-to-command bindings. -->
-    <UserControl.KeyBindings>
-        <KeyBinding Gesture="Ctrl+Shift+W" Command="{Binding AnnounceReadingPositionCommand}" />
-    </UserControl.KeyBindings>
+    <!-- "Where am I?" heading trail (docs/superpowers/specs/2026-09-01-books-reader-screen-reader-accessibility-design.md): Ctrl+Shift+W is the BookReader.AnnouncePosition input-service
+         action now (Preferences > Keyboard Shortcuts), so there is no UserControl.KeyBindings here. -->
 
     <!-- chromeIcon/tocRow/resultRow/deleteRow/sheetOption/themeSwatch styles moved to
          Styles/ReaderChrome.axaml (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-

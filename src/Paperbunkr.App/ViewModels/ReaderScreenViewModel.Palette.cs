@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
-using Avalonia.Input;
+using System.Linq;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.Services.Reader;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
@@ -23,13 +24,10 @@ public partial class ReaderScreenViewModel
     /// <summary>The Ctrl+K palette and Ctrl+G go-to-page prompt state, bound by the in-canvas overlay in <c>ReaderScreen.axaml</c>.</summary>
     public ReaderCommandPaletteViewModel Palette => _palette ??= new ReaderCommandPaletteViewModel(BuildPaletteEntries, () => PageCount, GoToPageFromPalette);
 
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _commandPaletteKey = [new(Key.K, KeyModifiers.Control)];
+    /// <summary>True while the palette or the bad-page reason picker is showing: both take the keyboard (and the controller) for themselves, so the reader's own shortcuts stand down.</summary>
+    public bool IsKeyboardOverlayOpen => Palette.IsOpen || IsReportPickerOpen;
 
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _goToPageKey = [new(Key.G, KeyModifiers.Control)];
-
-    public string CommandPaletteHint => GetShortcutHint(KeyboardCommandRegistry.ReaderCommandPalette);
+    public string CommandPaletteHint => GetShortcutHint(InputActionIds.CommandPalette);
 
     [RelayCommand]
     private void ToggleCommandPalette() => Palette.Toggle();
@@ -44,13 +42,6 @@ public partial class ReaderScreenViewModel
         }
 
         Palette.OpenGoToPage();
-    }
-
-    /// <summary>Loads the palette's two remappable keys; called from <see cref="Load"/> with the context it already has open.</summary>
-    private void LoadPaletteKeys(PaperbunkrDbContext context)
-    {
-        CommandPaletteKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderCommandPalette);
-        GoToPageKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderGoToPage);
     }
 
     /// <summary>A jump chosen in the palette: continuous mode scrolls to the page, paged mode goes through <see cref="JumpToPage"/> so a big jump shows the "Back to page N" chip.</summary>
@@ -70,6 +61,30 @@ public partial class ReaderScreenViewModel
         {
             JumpToPage(pageIndex);
         }
+    }
+
+    /// <summary>Jumps to the first page (Home); false when there is nothing loaded to jump within.</summary>
+    public bool GoToFirstPage()
+    {
+        if (PageCount <= 0)
+        {
+            return false;
+        }
+
+        GoToPageFromPalette(0);
+        return true;
+    }
+
+    /// <summary>Jumps to the last page (End); false when there is nothing loaded to jump within.</summary>
+    public bool GoToLastPage()
+    {
+        if (PageCount <= 0)
+        {
+            return false;
+        }
+
+        GoToPageFromPalette(PageCount - 1);
+        return true;
     }
 
     private static readonly (ReadingMode Mode, string Label)[] PaletteReadingModes =
@@ -96,35 +111,24 @@ public partial class ReaderScreenViewModel
     internal IReadOnlyList<ReaderPaletteEntry> BuildPaletteEntries()
     {
         var entries = new List<ReaderPaletteEntry>();
-        using var context = PaperbunkrDb.CreateContext();
 
-        void Add(string title, string group, string? commandId, Action run)
+        void Add(string title, string group, string? actionId, Action run)
         {
-            string? shortcut = null;
-            if (commandId is not null)
-            {
-                try
-                {
-                    shortcut = _keyBindings.GetKeys(context, commandId)[0].ToString();
-                }
-                catch (InvalidOperationException)
-                {
-                    // Not a registry command: no shortcut to show.
-                }
-            }
+            // The first keyboard binding reads best as a hint; an unbound action (or one with no action id) shows none.
+            string? shortcut = actionId is null ? null : Input.ShortcutText(actionId);
 
             entries.Add(new ReaderPaletteEntry(title, group, shortcut, run));
         }
 
         // Navigate
-        Add("Next page", "Navigate", KeyboardCommandRegistry.ReaderNextPage, () => NextPageCommand.Execute(null));
-        Add("Previous page", "Navigate", KeyboardCommandRegistry.ReaderPreviousPage, () => PreviousPageCommand.Execute(null));
-        Add("Go to page…", "Navigate", KeyboardCommandRegistry.ReaderGoToPage, () => Palette.OpenGoToPage());
-        Add("Back to previous position", "Navigate", KeyboardCommandRegistry.ReaderJumpBack, () => JumpBackCommand.Execute(null));
+        Add("Next page", "Navigate", InputActionIds.NextPage, () => NextPageCommand.Execute(null));
+        Add("Previous page", "Navigate", InputActionIds.PreviousPage, () => PreviousPageCommand.Execute(null));
+        Add("Go to page…", "Navigate", InputActionIds.GoToPage, () => Palette.OpenGoToPage());
+        Add("Back to previous position", "Navigate", InputActionIds.JumpBack, () => JumpBackCommand.Execute(null));
         Add("Next chapter", "Navigate", null, () => NextChapterCommand.Execute(null));
         Add("Previous chapter", "Navigate", null, () => PreviousChapterCommand.Execute(null));
-        Add("Next bookmark", "Navigate", KeyboardCommandRegistry.ReaderNextBookmark, () => NextBookmarkCommand.Execute(null));
-        Add("Previous bookmark", "Navigate", KeyboardCommandRegistry.ReaderPreviousBookmark, () => PreviousBookmarkCommand.Execute(null));
+        Add("Next bookmark", "Navigate", InputActionIds.NextBookmark, () => NextBookmarkCommand.Execute(null));
+        Add("Previous bookmark", "Navigate", InputActionIds.PreviousBookmark, () => PreviousBookmarkCommand.Execute(null));
 
         // Reading
         Add("Toggle reading direction (left-to-right / right-to-left)", "Reading", null, () => ToggleReadingModeCommand.Execute(null));
@@ -134,12 +138,12 @@ public partial class ReaderScreenViewModel
             Add($"Reading mode: {label}", "Reading", null, () => SetReadingModeCommand.Execute(captured));
         }
 
-        Add("Guided view (panel by panel)", "Reading", KeyboardCommandRegistry.ReaderToggleGuidedView, () => ToggleGuidedViewCommand.Execute(null));
-        Add("Info panel (summary, credits, characters)", "Reading", KeyboardCommandRegistry.ReaderToggleInfoPanel, () => ToggleInfoPanelCommand.Execute(null));
+        Add("Guided view (panel by panel)", "Reading", InputActionIds.ToggleGuidedView, () => ToggleGuidedViewCommand.Execute(null));
+        Add("Info panel (summary, credits, characters)", "Reading", InputActionIds.ToggleInfoPanel, () => ToggleInfoPanelCommand.Execute(null));
         Add("Note on this page", "Reading", null, () => NoteOnThisPageCommand.Execute(null));
-        Add("Clip a region of this page", "Reading", KeyboardCommandRegistry.ReaderClipRegion, () => ToggleClipModeCommand.Execute(null));
+        Add("Clip a region of this page", "Reading", InputActionIds.ClipRegion, () => ToggleClipModeCommand.Execute(null));
         Add("Export notes and clips…", "Reading", null, () => ExportNotesCommand.Execute(null));
-        Add("Pin this page as a reference", "Reading", KeyboardCommandRegistry.ReaderPinPage, () => PinCurrentPageCommand.Execute(null));
+        Add("Pin this page as a reference", "Reading", InputActionIds.PinPage, () => PinCurrentPageCommand.Execute(null));
         Add("Unpin the reference page", "Reading", null, () => UnpinPageCommand.Execute(null));
         Add("Pinned page: next size", "Reading", null, () => CyclePinSizeCommand.Execute(null));
         Add("Auto levels", "View", null, () => ToggleAutoLevelsCommand.Execute(null));
@@ -155,11 +159,11 @@ public partial class ReaderScreenViewModel
             var captured = mode;
             string? id = mode switch
             {
-                ImageFitMode.Original => KeyboardCommandRegistry.ReaderFitOriginal,
-                ImageFitMode.Fit => KeyboardCommandRegistry.ReaderFitAll,
-                ImageFitMode.FitWidth => KeyboardCommandRegistry.ReaderFitWidth,
-                ImageFitMode.FitHeight => KeyboardCommandRegistry.ReaderFitHeight,
-                _ => KeyboardCommandRegistry.ReaderFitBest,
+                ImageFitMode.Original => InputActionIds.FitOriginal,
+                ImageFitMode.Fit => InputActionIds.FitAll,
+                ImageFitMode.FitWidth => InputActionIds.FitWidth,
+                ImageFitMode.FitHeight => InputActionIds.FitHeight,
+                _ => InputActionIds.FitBest,
             };
             Add($"Fit: {label}", "Reading", id, () => SetFitModeCommand.Execute(captured));
         }
@@ -172,7 +176,7 @@ public partial class ReaderScreenViewModel
         }
 
         // Profiles (design 2026-09-25 F2 section 3)
-        Add("Profile: Standard", "Profile", KeyboardCommandRegistry.ReaderNextProfile, () => ApplySessionProfile(ReaderProfileSelector.StandardSessionId, "Standard"));
+        Add("Profile: Standard", "Profile", InputActionIds.NextProfile, () => ApplySessionProfile(ReaderProfileSelector.StandardSessionId, "Standard"));
         foreach (var profile in _profileService.List(WorkspaceScreen.Reader))
         {
             var captured = profile;
@@ -184,27 +188,27 @@ public partial class ReaderScreenViewModel
         Add("Use the current profile as my default", "Profile", null, () => UseProfileAsDefaultCommand.Execute(null));
 
         // View
-        Add("Toggle fullscreen", "View", KeyboardCommandRegistry.ReaderToggleFullscreen, () => ToggleFullscreenCommand.Execute(null));
+        Add("Toggle fullscreen", "View", InputActionIds.ToggleFullscreen, () => ToggleFullscreenCommand.Execute(null));
         Add("Toggle toolbar", "View", null, () => ToggleChromeCommand.Execute(null));
         Add("Toggle thumbnail rail", "View", null, () => ToggleRailCommand.Execute(null));
         Add("Show tap zones", "View", null, ShowTapZoneFlash);
         Add("Show detected panels", "View", null, () => ShowDetectedPanelsCommand.Execute(null));
         Add("Report bad panel detection (save this page)", "View", null, () => ReportBadPanelsCommand.Execute(null));
-        Add("Zoom in", "View", KeyboardCommandRegistry.ReaderZoomIn, () => ZoomInCommand.Execute(null));
-        Add("Zoom out", "View", KeyboardCommandRegistry.ReaderZoomOut, () => ZoomOutCommand.Execute(null));
+        Add("Zoom in", "View", InputActionIds.ZoomIn, () => ZoomInCommand.Execute(null));
+        Add("Zoom out", "View", InputActionIds.ZoomOut, () => ZoomOutCommand.Execute(null));
         Add("Zoom: reset to fit (100%)", "View", null, () => ResetZoomCommand.Execute(null));
-        Add("Rotate clockwise", "View", KeyboardCommandRegistry.ReaderRotateClockwise, () => RotateClockwiseCommand.Execute(null));
-        Add("Rotate counter-clockwise", "View", KeyboardCommandRegistry.ReaderRotateCounterClockwise, () => RotateCounterClockwiseCommand.Execute(null));
+        Add("Rotate clockwise", "View", InputActionIds.RotateClockwise, () => RotateClockwiseCommand.Execute(null));
+        Add("Rotate counter-clockwise", "View", InputActionIds.RotateCounterClockwise, () => RotateCounterClockwiseCommand.Execute(null));
         if (IsContinuousMode)
         {
-            Add("Toggle auto-scroll", "View", KeyboardCommandRegistry.ReaderToggleAutoScroll, () => ToggleAutoScrollCommand.Execute(null));
+            Add("Toggle auto-scroll", "View", InputActionIds.ToggleAutoScroll, () => ToggleAutoScrollCommand.Execute(null));
         }
 
         // Page
         Add("Rate this issue…", "Page", null, () => EndCardRateCommand.Execute(null));
-        Add("Report a bad page…", "Page", KeyboardCommandRegistry.ReaderReportBadPage, () => ReportBadPageCommand.Execute(null));
+        Add("Report a bad page…", "Page", InputActionIds.ReportBadPage, () => ReportBadPageCommand.Execute(null));
         Add("Toggle bookmark on this page", "Page", null, () => ToggleBookmarkCommand.Execute(null));
-        Add("Copy page", "Page", KeyboardCommandRegistry.ReaderCopyPage, () => CopyPageCommand.Execute(null));
+        Add("Copy page", "Page", InputActionIds.CopyPage, () => CopyPageCommand.Execute(null));
         if (IsSpreadShowing)
         {
             Add("Copy spread", "Page", null, () => CopySpreadCommand.Execute(null));
@@ -214,8 +218,8 @@ public partial class ReaderScreenViewModel
 
         Add("Save page as PNG…", "Page", null, () => SavePageAsPngCommand.Execute(null));
         Add("Save page as JPEG…", "Page", null, () => SavePageAsJpegCommand.Execute(null));
-        Add("Toggle reading stats", "View", KeyboardCommandRegistry.ReaderToggleSessionHud, () => ToggleSessionHudCommand.Execute(null));
-        Add("Toggle warm tint", "View", KeyboardCommandRegistry.ReaderToggleWarmShift, () => ToggleWarmShiftCommand.Execute(null));
+        Add("Toggle reading stats", "View", InputActionIds.ToggleSessionHud, () => ToggleSessionHudCommand.Execute(null));
+        Add("Toggle warm tint", "View", InputActionIds.ToggleWarmShift, () => ToggleWarmShiftCommand.Execute(null));
 
         // Leave
         Add("Back to the library", "Leave", null, () => GoBackCommand.Execute(null));

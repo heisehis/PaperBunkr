@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using NetSparkleUpdater.Enums;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.Services.Reader;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Credentials;
@@ -41,7 +42,6 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private readonly Action<int, int> _openIssueAtPage;
     private readonly FileAssociationService _fileAssociationService;
     private readonly BackupService _backupService;
-    private readonly KeyBindingService _keyBindingService;
     private readonly UpdateService _updateService;
     private readonly Action<string, string> _showToast;
     private readonly Action<int, bool> _enqueueMetadataWriteBack;
@@ -67,7 +67,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         LibraryFolderScanner libraryScanner,
         FileAssociationService fileAssociationService,
         BackupService backupService,
-        KeyBindingService keyBindingService,
+        IInputService input,
         Action<string, string> showToast,
         NeedsReviewViewModel needsReview,
         PluginScreenViewModel plugin,
@@ -80,7 +80,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         Action<int, bool>? enqueueMetadataWriteBack = null,
         LibraryHealthService? libraryHealth = null,
         Action<int, int>? openIssueAtPage = null)
-        : this(themeService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, needsReview, plugin, openMigration, activity, dialogService, reloadFolderWatch, openDesignShowcase, updateService, PaperbunkrDb.CreateContext, enqueueMetadataWriteBack, libraryHealth, openIssueAtPage)
+        : this(themeService, filePicker, libraryScanner, fileAssociationService, backupService, input, showToast, needsReview, plugin, openMigration, activity, dialogService, reloadFolderWatch, openDesignShowcase, updateService, PaperbunkrDb.CreateContext, enqueueMetadataWriteBack, libraryHealth, openIssueAtPage)
     {
     }
 
@@ -91,7 +91,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         LibraryFolderScanner libraryScanner,
         FileAssociationService fileAssociationService,
         BackupService backupService,
-        KeyBindingService keyBindingService,
+        IInputService input,
         Action<string, string> showToast,
         NeedsReviewViewModel needsReview,
         PluginScreenViewModel plugin,
@@ -119,7 +119,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _libraryHealth = libraryHealth ?? new LibraryHealthService(contextFactory);
         _fileAssociationService = fileAssociationService;
         _backupService = backupService;
-        _keyBindingService = keyBindingService;
+        Shortcuts = new ShortcutsEditorViewModel(input, filePicker, showToast);
         _updateService = updateService;
         _showToast = showToast;
         NeedsReview = needsReview;
@@ -137,9 +137,6 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         BookFolders = new ObservableCollection<BookFolderSummary>();
         FileAssociations = new ObservableCollection<FileAssociationSummary>();
         Backups = new ObservableCollection<BackupRowViewModel>();
-        NavigationKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
-        ZoomFitKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
-        DisplayKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
         ScheduledTasks = new ObservableCollection<ScheduledTaskRow>();
         MissingFileItems = new ObservableCollection<MissingFileRowViewModel>();
         PageReportItems = new ObservableCollection<PageReportRowViewModel>();
@@ -839,24 +836,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// </summary>
     public static readonly string[] BackgroundColorPresets = ["White", "WhiteSmoke", "Beige", "Wheat", "LightGray", "Gray", "DarkSlateGray", "Black"];
 
-    /// <summary>
-    /// Every registered <see cref="KeyboardCommandRegistry"/> command, split into three UI
-    /// sections by <see cref="KeyboardCommandDescriptor.Group"/> - data-driven so a future command
-    /// needs no Preferences-side change beyond a new registry entry - see
-    /// <see cref="KeyboardCommandRegistry"/>'s remarks.
-    /// </summary>
-    public ObservableCollection<KeyBindingRowViewModel> NavigationKeyBindings { get; }
-
-    public ObservableCollection<KeyBindingRowViewModel> ZoomFitKeyBindings { get; }
-
-    public ObservableCollection<KeyBindingRowViewModel> DisplayKeyBindings { get; }
-
-    [ObservableProperty]
-    private string? _keyBindingConflictError;
-
-    public bool HasKeyBindingConflictError => !string.IsNullOrEmpty(KeyBindingConflictError);
-
-    partial void OnKeyBindingConflictErrorChanged(string? value) => OnPropertyChanged(nameof(HasKeyBindingConflictError));
+    /// <summary>Preferences &gt; Keyboard Shortcuts: one row per input-service action, grouped, with capture, conflicts, reset and layout import/export.</summary>
+    public ShortcutsEditorViewModel Shortcuts { get; }
 
     [ObservableProperty]
     private string? _installSkinError;
@@ -1085,143 +1066,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _suppressBackupSettingsApply = false;
         RefreshBackups();
 
-        RefreshKeyBindings();
+        Shortcuts.Refresh();
         RefreshSourceCredentials(context);
         RefreshTrackerConnectionState(context);
         RefreshLibraryHealth(context);
-    }
-
-    // ===================== Keyboard Shortcuts (docs/Paperbunkr-Roadmap.md P5 follow-up) =====================
-
-    private void RefreshKeyBindings()
-    {
-        NavigationKeyBindings.Clear();
-        ZoomFitKeyBindings.Clear();
-        DisplayKeyBindings.Clear();
-
-        foreach (var (command, currentKeys) in _keyBindingService.GetAllBindings())
-        {
-            var row = new KeyBindingRowViewModel(command, currentKeys, _keyBindingService, RecomputeKeyBindingConflict);
-            var targetCollection = command.Group switch
-            {
-                KeyboardCommandRegistry.NavigationGroup => NavigationKeyBindings,
-                KeyboardCommandRegistry.ZoomFitGroup => ZoomFitKeyBindings,
-                KeyboardCommandRegistry.DisplayGroup => DisplayKeyBindings,
-                _ => throw new InvalidOperationException($"Unrecognized keyboard command group \"{command.Group}\" - add a matching Preferences section for it."),
-            };
-            targetCollection.Add(row);
-        }
-
-        RecomputeKeyBindingConflict();
-    }
-
-    /// <summary>Real gap closed, not a restyle (docs/superpowers/specs/2026-08-25-reader-chrome-
-    /// design.md) - confirmed via grep this never existed anywhere in the codebase before. Mirrors
-    /// ReadingListPageViewModel's ImportCbl/ExportCbl shape exactly (same _filePicker calls, same
-    /// open-context-then-call-IO-class structure).</summary>
-    [RelayCommand]
-    private async Task ImportKeyBindings()
-    {
-        string? path = await _filePicker.PickOpenFileAsync("Import Keyboard Shortcuts", "json", "Keyboard Shortcut Layout");
-        if (path is null)
-        {
-            return;
-        }
-
-        int applied;
-        try
-        {
-            applied = KeyBindingIO.Import(_keyBindingService, path);
-        }
-        catch (InvalidDataException ex)
-        {
-            _showToast("Couldn't import keyboard shortcuts", ex.Message);
-            return;
-        }
-
-        RefreshKeyBindings();
-        _showToast("Keyboard shortcuts imported", $"Applied {applied} binding{(applied == 1 ? "" : "s")}.");
-    }
-
-    [RelayCommand]
-    private async Task ExportKeyBindings()
-    {
-        string? path = await _filePicker.PickSaveFileAsync("Export Keyboard Shortcuts", "paperbunkr-shortcuts.json", "json", "Keyboard Shortcut Layout");
-        if (path is null)
-        {
-            return;
-        }
-
-        KeyBindingIO.Export(_keyBindingService, path);
-        _showToast("Keyboard shortcuts exported", $"Saved to {path}.");
-    }
-
-    /// <summary>
-    /// Whole-layout revert (docs/superpowers/specs/2026-09-07-keyboard-shortcuts-redesign-design.md)
-    /// - matches CE's own "Restore Default Keyboard Layout" menu action. No confirmation dialog:
-    /// this section already applies every change immediately with no Save/Cancel step, and the
-    /// action is fully recoverable via Import if the user has a previously-exported layout.
-    /// </summary>
-    [RelayCommand]
-    private void ResetKeyBindings()
-    {
-        _keyBindingService.ResetToDefaults();
-        RefreshKeyBindings();
-        _showToast("Keyboard shortcuts reset", "Every shortcut is back to its default.");
-    }
-
-    /// <summary>
-    /// Soft validation, not a hard block - the row already persisted its new key by the time this
-    /// runs (matches every other Preferences toggle's immediate-persist behavior). Two commands
-    /// conflict iff any of their gestures are equal AND (their <see cref="ConflictContext"/>s match
-    /// OR either is <see cref="ConflictContext.Always"/>) - see that enum's own doc comment for why:
-    /// mode-specific contexts (paged/zoomed/continuous) are mutually exclusive at runtime, so
-    /// sharing a gesture across two of them is never actually reachable, but an Always command
-    /// unconditionally shadows every mode-specific one it collides with. Every conflicting row gets
-    /// <see cref="KeyBindingRowViewModel.IsConflicted"/> flagged (docs/superpowers/specs/2026-09-07-
-    /// keyboard-shortcuts-redesign-design.md §4) - the loop doesn't return on the first match so a
-    /// row conflicting with more than one other row (more likely now that multi-binding exists)
-    /// still ends up correctly flagged, even though only the first conflict's message shows in the
-    /// single-line banner.
-    /// </summary>
-    private void RecomputeKeyBindingConflict()
-    {
-        var all = NavigationKeyBindings.Concat(ZoomFitKeyBindings).Concat(DisplayKeyBindings).ToList();
-        foreach (var row in all)
-        {
-            row.IsConflicted = false;
-        }
-
-        string? firstConflict = null;
-        for (int i = 0; i < all.Count; i++)
-        {
-            for (int j = i + 1; j < all.Count; j++)
-            {
-                var a = all[i];
-                var b = all[j];
-                if (!ConflictContexts.MayOverlap(a.Context, b.Context))
-                {
-                    continue;
-                }
-
-                foreach (var keyA in a.BoundKeys)
-                {
-                    foreach (var keyB in b.BoundKeys)
-                    {
-                        if (keyA.Gesture != keyB.Gesture)
-                        {
-                            continue;
-                        }
-
-                        a.IsConflicted = true;
-                        b.IsConflicted = true;
-                        firstConflict ??= $"\"{keyA.Label}\" is assigned to both \"{a.Label}\" and \"{b.Label}\".";
-                    }
-                }
-            }
-        }
-
-        KeyBindingConflictError = firstConflict;
     }
 
     // Changelog + legal viewer: PreferencesScreenViewModel.About.cs.

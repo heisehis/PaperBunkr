@@ -5,6 +5,7 @@ using Paperbunkr.App.Services.Reader;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Tests;
 
@@ -204,11 +205,11 @@ public class ReaderInfoPanelTests : IDisposable
     [Fact]
     public void ThePaletteAndTheKeyRegistry_KnowThePanel()
     {
-        var vm = new ReaderScreenViewModel(goBack: () => { });
+        var vm = new ReaderScreenViewModel(goBack: () => { }, new InputService(InputActionCatalog.CreateWithCoreActions(), new MemoryKeymapStore()));
         vm.LoadIssue(_issueId);
 
         Assert.Contains(vm.BuildPaletteEntries(), e => e.Title.StartsWith("Info panel"));
-        Assert.Contains(vm.ExtraKeyBindings, b => b.Gestures.Any(g => g.Key == Key.I));
+        Assert.Equal([InputBinding.ForKey(Key.I)], vm.Input.GetBindings(InputActionIds.ToggleInfoPanel));
     }
 
     // ===== On screen =====
@@ -216,7 +217,7 @@ public class ReaderInfoPanelTests : IDisposable
     [Fact]
     public void PressingI_TogglesThePanel_OnTheRealScreen()
     {
-        var vm = new ReaderScreenViewModel(goBack: () => { });
+        var vm = new ReaderScreenViewModel(goBack: () => { }, ReaderTestInput.Create());
         var (window, _, canvas) = ReaderScreenTestHost.Open(vm, _issueId);
         try
         {

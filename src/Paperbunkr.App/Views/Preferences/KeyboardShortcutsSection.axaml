@@ -3,7 +3,6 @@
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
-             xmlns:models="using:Paperbunkr.App.Models"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
@@ -11,9 +10,8 @@
              x:DataType="vm:PreferencesScreenViewModel">
 
     <UserControl.Styles>
-        <!-- Keyboard Shortcuts redesign (docs/superpowers/specs/2026-09-07-keyboard-shortcuts-
-             redesign-design.md) - a row's whole Border gets tinted when one of its bound gestures
-             collides with another row's, in addition to the banner text at the top of the page. -->
+        <!-- A row's whole Border gets tinted when one of its bound inputs collides with another row's (docs/superpowers/specs/2026-09-07-keyboard-shortcuts-redesign-design.md),
+             in addition to the banner text at the top of the page. -->
         <Style Selector="Border.ksConflict">
             <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
             <Setter Property="Background" Value="{DynamicResource PbDangerSoftBrush}" />
@@ -23,86 +21,103 @@
             <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
             <Setter Property="Padding" Value="8,3" />
         </Style>
+        <!-- The "press your combination" box (docs/superpowers/specs/2026-10-03-input-service-design.md §9). -->
+        <Style Selector="controls|BindingCaptureBox">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
     </UserControl.Styles>
 
     <UserControl.Resources>
-        <!-- One row template shared by all three groups (docs/superpowers/specs/2026-09-07-
-             keyboard-shortcuts-redesign-design.md §2) - a command may have more than one bound
-             gesture; each renders as a removable chip, plus a trailing "Add shortcut…" picker. -->
-        <DataTemplate x:Key="KeyBindingRowTemplate" x:DataType="vm:KeyBindingRowViewModel">
+        <!-- One row template for every group: an action's label, a removable chip per bound input (key, mouse button, wheel direction or gamepad input), and either an
+             "Add shortcut…" button that opens the capture box or, for the controller's analogue axes, nothing (those bindings are fixed). -->
+        <DataTemplate x:Key="ShortcutRowTemplate" x:DataType="vm:ShortcutRowViewModel">
             <Border Classes="ksConflict" Classes.ksConflict="{Binding IsConflicted}"
                     BorderThickness="1" CornerRadius="{StaticResource PbRadiusSm}" Padding="8,6" Margin="0,0,0,6">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="{Binding Label}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    <ItemsControl ItemsSource="{Binding BoundKeys}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:KeyOption">
-                                <Border Classes="ksChip" Margin="0,0,6,6">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <TextBlock Text="{Binding Label}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                                        <Button Classes="headerAction ghost" Padding="2" MinWidth="0" MinHeight="0"
-                                                Command="{Binding $parent[ItemsControl].((vm:KeyBindingRowViewModel)DataContext).RemoveKeyCommand}"
-                                                CommandParameter="{Binding}"
-                                                IsVisible="{Binding $parent[ItemsControl].((vm:KeyBindingRowViewModel)DataContext).BoundKeys.Count, Converter={x:Static vm:KeyBindingRowViewModel.CountGreaterThanOne}}"
-                                                AutomationProperties.Name="Remove this shortcut" ToolTip.Tip="Remove this shortcut">
-                                            <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                        </Button>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <controls:SuggestBox IsStrict="True" Suggestions="{Binding AvailableKeyOptionNames}" Text="{Binding PendingAddText}"
-                                         Watermark="Add shortcut…" Width="160" HorizontalAlignment="Left" />
-                </StackPanel>
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Spacing="6">
+                        <TextBlock Text="{Binding Label}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        <ItemsControl ItemsSource="{Binding Chips}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ShortcutChip">
+                                    <Border Classes="ksChip" Margin="0,0,6,6">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding Label}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                            <Button Classes="headerAction ghost" Padding="2" MinWidth="0" MinHeight="0"
+                                                    Command="{Binding $parent[ItemsControl].((vm:ShortcutRowViewModel)DataContext).RemoveChipCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    AutomationProperties.Name="Remove this shortcut" ToolTip.Tip="Remove this shortcut">
+                                                <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                            </Button>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="Not set" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoBindings}" />
+                        <StackPanel IsVisible="{Binding CanCapture}">
+                            <Button Classes="headerAction ghost" Content="Add shortcut…" HorizontalAlignment="Left"
+                                    Command="{Binding BeginCaptureCommand}" IsVisible="{Binding !IsCapturing}" />
+                            <controls:BindingCaptureBox IsVisible="{Binding IsCapturing}"
+                                                        CaptureCommand="{Binding AddBindingCommand}"
+                                                        CancelCommand="{Binding CancelCaptureCommand}"
+                                                        AutomationProperties.Name="Press the new shortcut" />
+                        </StackPanel>
+                    </StackPanel>
+                    <Button Grid.Column="1" Classes="headerAction ghost" Content="Reset" VerticalAlignment="Top"
+                            Command="{Binding ResetRowCommand}" IsVisible="{Binding IsCustomised}"
+                            ToolTip.Tip="Put this action back to its default shortcuts" />
+                </Grid>
             </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ShortcutGroupTemplate" x:DataType="vm:ShortcutGroupViewModel">
+            <StackPanel Tag="{Binding Tag}" Spacing="8" Margin="0,0,0,20">
+                <TextBlock Text="{Binding Caption}" Classes="pbTextCaption" FontWeight="Bold" />
+                <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource ShortcutRowTemplate}" />
+            </StackPanel>
         </DataTemplate>
     </UserControl.Resources>
 
     <ScrollViewer>
-        <StackPanel Margin="28,20,28,40" Spacing="20">
-            <TextBlock Classes="pbTextHeading" Text="Keyboard Shortcuts" />
+        <StackPanel Margin="28,20,28,40" Spacing="0">
+            <TextBlock Classes="pbTextHeading" Text="Keyboard Shortcuts" Margin="0,0,0,20" />
 
-            <StackPanel Tag="shortcuts.io" Spacing="10">
+            <StackPanel Tag="shortcuts.io" Spacing="10" Margin="0,0,0,20">
                 <WrapPanel>
                     <Button Classes="headerAction ghost" Margin="0,0,8,0" Content="Import Layout…"
-                            Command="{Binding ImportKeyBindingsCommand}"
+                            Command="{Binding Shortcuts.ImportLayoutCommand}"
                             AutomationProperties.AutomationId="ImportKeyBindingsButton" />
                     <Button Classes="headerAction ghost" Margin="0,0,8,0" Content="Export Layout…"
-                            Command="{Binding ExportKeyBindingsCommand}"
+                            Command="{Binding Shortcuts.ExportLayoutCommand}"
                             AutomationProperties.AutomationId="ExportKeyBindingsButton" />
                     <Button Classes="headerAction ghost" Content="Reset to Defaults"
-                            Command="{Binding ResetKeyBindingsCommand}"
+                            Command="{Binding Shortcuts.ResetAllCommand}"
                             AutomationProperties.AutomationId="ResetKeyBindingsButton" />
                 </WrapPanel>
 
-                <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasKeyBindingConflictError}">
+                <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Shortcuts.HasConflictError}">
                     <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
-                    <TextBlock Text="{Binding KeyBindingConflictError}" Foreground="{DynamicResource PbDangerBrush}" FontSize="12" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Shortcuts.ConflictError}" Foreground="{DynamicResource PbDangerBrush}" FontSize="12" TextWrapping="Wrap" />
                 </StackPanel>
+
+                <TextBlock Text="Every key, mouse button, wheel direction and controller button below can be changed. Choose Add shortcut…, then press the key, click the middle or a side mouse button, or turn the wheel (hold Ctrl, Shift or Alt for a combination)."
+                           FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
             </StackPanel>
 
-            <StackPanel Tag="shortcuts.navigation" Spacing="8">
-                <TextBlock Text="NAVIGATION" Classes="pbTextCaption" FontWeight="Bold" />
-                <ItemsControl ItemsSource="{Binding NavigationKeyBindings}" ItemTemplate="{StaticResource KeyBindingRowTemplate}" />
-            </StackPanel>
+            <ItemsControl ItemsSource="{Binding Shortcuts.Groups}" ItemTemplate="{StaticResource ShortcutGroupTemplate}" />
 
-            <StackPanel Tag="shortcuts.zoomFit" Spacing="8">
-                <TextBlock Text="ZOOM &amp; FIT" Classes="pbTextCaption" FontWeight="Bold" />
-                <ItemsControl ItemsSource="{Binding ZoomFitKeyBindings}" ItemTemplate="{StaticResource KeyBindingRowTemplate}" />
-            </StackPanel>
-
-            <StackPanel Tag="shortcuts.display" Spacing="8">
-                <TextBlock Text="DISPLAY" Classes="pbTextCaption" FontWeight="Bold" />
-                <ItemsControl ItemsSource="{Binding DisplayKeyBindings}" ItemTemplate="{StaticResource KeyBindingRowTemplate}" />
-                <TextBlock Text="Also everywhere: Tab / Shift+Tab moves focus, Enter or Space activates the focused control, Esc cancels or closes the current editor."
-                           FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
-            </StackPanel>
+            <TextBlock Text="Also everywhere: Tab / Shift+Tab moves focus, Enter or Space activates the focused control, Esc cancels or closes the current editor."
+                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

@@ -12,6 +12,7 @@ using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.ViewModels.LibraryActions;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Tests;
 
@@ -130,13 +131,46 @@ public class LibraryBulkActionsTests : IDisposable
     // ===================== Catalog =====================
 
     [Fact]
-    public void KeyMap_GesturesAreUniqueAndParse()
+    public void KeyActions_AreAllRegisteredLibraryActions_WithUniqueDefaultBindings()
     {
-        var parsed = LibraryActionCatalog.KeyMap.Select(k => LibraryActionCatalog.ParseGesture(k.Gesture)).ToList();
-        Assert.Equal(parsed.Count, parsed.Select(g => (g.Key, g.KeyModifiers)).Distinct().Count());
-        // Avalonia's own parser reads a bare "3" as Key.Tab - the catalog's must not.
-        Assert.Equal(Key.D3, LibraryActionCatalog.ParseGesture("Alt+Shift+3").Key);
-        Assert.DoesNotContain(parsed, g => g.Key == Key.Tab);
+        var catalog = InputActionCatalog.CreateWithCoreActions();
+
+        // Every selection action the Library catalog can run has an input-service action, with a keyboard default and a Library scope.
+        foreach (var (inputActionId, _) in LibraryActionCatalog.KeyActions)
+        {
+            var info = catalog.Find(inputActionId);
+            Assert.NotNull(info);
+            Assert.Equal(InputScope.Library.Name, info!.Scope.Name);
+            Assert.NotEmpty(info.Defaults);
+        }
+
+        // No two Library actions share a default (the bindings themselves are checked for conflicts across the whole keymap elsewhere).
+        var defaults = catalog.All.Where(i => i.Scope.Name == InputScope.Library.Name).SelectMany(i => i.Defaults).ToList();
+        Assert.Equal(defaults.Count, defaults.Distinct().Count());
+
+        // The star shortcuts are Alt+Shift+digit - Avalonia's own gesture parser reads a bare "3" as Key.Tab, so the digit keys must be spelled D0-D5.
+        Assert.Equal(InputBinding.ForKey(Key.D3, KeyModifiers.Alt | KeyModifiers.Shift), Assert.Single(catalog.Find(InputActionIds.LibraryRate3)!.Defaults));
+        Assert.DoesNotContain(defaults, d => d.Kind == InputBindingKind.Key && d.Key == Key.Tab);
+    }
+
+    [Fact]
+    public void MenuShortcutHints_FollowTheInputServiceBindings()
+    {
+        SeedSeries("Alpha");
+        var vm = NewVm();
+        vm.SelectAllVisibleIssuesCommand.Execute(null);
+        var input = new InputService(InputActionCatalog.CreateWithCoreActions(), new MemoryKeymapStore());
+        var catalog = new LibraryActionCatalog(vm, input);
+        var context = catalog.ForSelection()!;
+        string? Hint(string id) => catalog.BuildMenu(context).SelectMany(e => new[] { e }.Concat(e.Children ?? [])).FirstOrDefault(e => e.Header is not null && e.Header.Contains(id))?.InputGesture;
+
+        Assert.Equal("Ctrl+I", Hint("Edit"));
+
+        input.SetBindings(InputActionIds.LibraryEdit, [InputBinding.ForKey(Key.E, KeyModifiers.Control)]);
+        Assert.Equal("Ctrl+E", Hint("Edit"));
+
+        input.SetBindings(InputActionIds.LibraryEdit, []);
+        Assert.Null(Hint("Edit"));
     }
 
     [Fact]
@@ -198,7 +232,7 @@ public class LibraryBulkActionsTests : IDisposable
         var vm = NewVm();
         vm.SelectAllVisibleIssuesCommand.Execute(null);
 
-        Assert.True(new LibraryActionCatalog(vm).TryGetKeyCommand(Key.D3, KeyModifiers.Alt | KeyModifiers.Shift, out var command, out var parameter));
+        Assert.True(new LibraryActionCatalog(vm).TryGetKeyCommand(InputActionIds.LibraryRate3, out var command, out var parameter));
         command!.Execute(parameter);
         TestDispatcher.Drain();
 
@@ -211,7 +245,7 @@ public class LibraryBulkActionsTests : IDisposable
         SeedSeries("Alpha");
         var vm = NewVm();
 
-        Assert.False(new LibraryActionCatalog(vm).TryGetKeyCommand(Key.G, KeyModifiers.Control, out _, out _));
+        Assert.False(new LibraryActionCatalog(vm).TryGetKeyCommand(InputActionIds.LibraryReveal, out _, out _));
     }
 
     // ===================== Selection =====================

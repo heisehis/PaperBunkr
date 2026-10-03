@@ -10,7 +10,7 @@ namespace Paperbunkr.App.Services;
 /// <summary>
 /// CRUD for saved <see cref="Workspace"/> rows (docs/superpowers/specs/2026-09-03-library-saved-
 /// workspaces-design.md). Same no-DI, own-context-per-call, <see cref="Func{PaperbunkrDbContext}"/>
-/// test-seam shape as <see cref="KeyBindingService"/>.
+/// test-seam shape as the former KeyBindingService.
 ///
 /// <see cref="Workspace.IsBuiltIn"/> is enforced here, not just in the UI - a stale command or a
 /// test can't rename / re-point / delete a seeded starter.

@@ -115,6 +115,28 @@ load or apply this skill's guidance here even though its name matches. If a futu
 considers adopting Zafiro for real, that's a brainstorming-level architecture decision, not
 something to slide in via skill auto-routing.
 
+## Input handling — one service, no per-screen key handlers
+
+All keyboard, mouse-button, wheel and gamepad input goes through `IInputService` (`src/Paperbunkr.App/Services/Input/`, design:
+[docs/superpowers/specs/2026-10-03-input-service-design.md](docs/superpowers/specs/2026-10-03-input-service-design.md)). `MainWindow` forwards
+its Tunnel events to it; the service resolves a physical input to a semantic `InputAction` through the keymap, and screens/controls
+**register a handler for the actions they own**. Do not add `KeyDown` handlers, `KeyBindings`, `KeyGesture`s or `PointerWheelChanged`
+shortcuts for a *hotkey* on a screen.
+
+- **Adding a shortcut:** add a `const` to `InputActionIds` and one `InputActionInfo` (scope, reader-state context, default bindings) to
+  `InputActions.Core`; handle it in the owning view with an `AttachedInputRegistration` (`focusRoot: () => this` keeps it quiet while a dialog
+  or popup has focus). Preferences > Keyboard Shortcuts, conflict detection, import/export and the user's `keymap.json` pick it up with no other
+  change. Reader-state variants are separate actions (`PageTurnRight` / `PanRight` / `ScrollRight`), selected by the scope's `InputContext`.
+- **What stays a control's own key handler:** arrow navigation among a list's items, Enter/Space/Delete/F2 on the focused item, type-ahead,
+  Enter-to-commit/Esc-to-cancel in a text box, drag mechanics. If the behavior needs the *focused item*, it is the control's, not an action.
+- **Text boxes:** the service already ignores keyboard actions while a `TextBox` (or anything implementing `IInputSuppressor`) has focus, except
+  actions flagged `FiresInTextInput` (Escape, browser-back, quick open). A control that must see every key, mouse button and wheel turn
+  (a capture box) implements `IInputSuppressor` with `InputSuppression.All`.
+- **Headless tests that press keys** attach the window with `InputHost.Attach(window, service)` and pass the service to the view model — the same
+  thing `MainWindow` does. The default `InputServiceLocator.Current` is the do-nothing service, so anything not given a real one ignores keys.
+- **Persistence:** user remaps are `keymap.json` next to the database (overrides only). The old `KeyBinding` table is read once by
+  `LegacyKeyBindingImporter` and is left in place on purpose (worktrees share the dev DB) — don't write to it, don't drop it casually.
+
 ## Build gotcha: adding a new Avalonia View
 
 Adding a brand-new `.axaml` file with a fresh `x:Class` (a View not previously compiled in this

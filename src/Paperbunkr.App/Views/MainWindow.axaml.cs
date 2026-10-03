@@ -12,6 +12,7 @@ using Avalonia.VisualTree;
 using Paperbunkr.App.Controls;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.ViewModels;
 
 namespace Paperbunkr.App.Views;
@@ -67,6 +68,12 @@ public partial class MainWindow : Window
     private bool _sidebarHadFocus;
     private int _sidebarLastRowIndex;
 
+    /// <summary>The application's input service, which every key, mouse-button and wheel event in this window is forwarded to.</summary>
+    private readonly IInputService _input;
+
+    private readonly InputHost _inputHost;
+    private readonly IDisposable _globalInput;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -97,151 +104,96 @@ public partial class MainWindow : Window
         _trayIconService.ExitRequested += ExitFromTray;
         PropertyChanged += OnWindowPropertyChanged;
         Closing += OnWindowClosing;
-        PointerWheelChanged += OnWindowPointerWheelChanged;
 
-        // Shell-wide shortcuts (Escape/Back: P5, docs/Paperbunkr-Roadmap.md +
-        // docs/superpowers/specs/2026-08-30-app-shell-navigation-history-design.md; Ctrl+,/Ctrl+Tab/
-        // Ctrl+Shift+Tab: docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-
-        // design.md) - a plain Tunnel KeyDown handler, not <Window.KeyBindings>, matching the same
-        // mechanism PageCanvas's own reader shortcuts (and LibraryScreen's pre-existing Escape/`/`
-        // handling) already use successfully. Confirmed via live diagnostic logging this session
-        // (KBDIAG entries in startup.log, since removed) that Tunnel-phase routing itself is correct
-        // end-to-end, including Ctrl+letter gestures - the actual bugs found this session were (1)
-        // Key.Back genuinely being the literal Backspace key, not a "browser back" key (see
-        // Key.BrowserBack below), and (2) LibraryScreenViewModel.BulkEditCurrentSelection not
-        // dispatching by granularity the way its sibling commands already did. Neither was a
-        // KeyBindings-vs-KeyDown-handler routing problem per se.
-        AddHandler(KeyDownEvent, OnMainWindowKeyDown, RoutingStrategies.Tunnel);
-    }
-
-    private void OnMainWindowKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (DataContext is not MainViewModel viewModel)
-        {
-            return;
-        }
-
-        if (e.Key == Key.Escape)
-        {
-            viewModel.EscapeCommand.Execute(null);
-            e.Handled = true;
-            return;
-        }
-
-        // Real bug found via manual testing: Key.Back is the literal Backspace key in Avalonia -
-        // NOT a semantically-distinct "browser back" key. The pre-existing <Window.KeyBindings>
-        // Gesture="Back" (docs/superpowers/specs/2026-08-30-app-shell-navigation-history-design.md)
-        // had this exact defect from day one; it just never surfaced because that declarative
-        // mechanism never fired reliably (see MainWindow's own OnMainWindowKeyDown doc comment for
-        // the KeyBindings investigation this session), so nothing ever actually consumed Backspace
-        // app-wide until this handler started genuinely working - at which point it started eating
-        // every Backspace press everywhere, including inside text fields, before the TextBox itself
-        // ever saw the key. Key.BrowserBack is Avalonia's actual distinct member for a keyboard's
-        // dedicated browser-back key (confirmed via reflection against the installed
-        // Avalonia.Base.dll - Key.Back and Key.BrowserBack are separate enum members).
-        if (e.Key == Key.BrowserBack && e.KeyModifiers == KeyModifiers.None)
-        {
-            viewModel.NavigateBackCommand.Execute(null);
-            e.Handled = true;
-            return;
-        }
-
-        // Ctrl+P command palette (docs/superpowers/specs/2026-09-03-quick-open-command-palette-
-        // design.md) - before the TextBox early-return so it fires with the Library/Books search
-        // box focused, same as Escape/BrowserBack above. Inert inside the reader, which keeps its
-        // own dense keymap.
-        if (e.Key == Key.P && e.KeyModifiers == KeyModifiers.Control)
-        {
-            if (viewModel.CurrentScreen is not ("reader" or "bookReader" or "pdfReader"))
-            {
-                viewModel.OpenQuickOpenCommand.Execute(null);
-                e.Handled = true;
-            }
-
-            return;
-        }
-
-        if (e.Source is TextBox)
-        {
-            return;
-        }
-
-        if (e.Key == Key.OemComma && e.KeyModifiers == KeyModifiers.Control)
-        {
-            viewModel.GoPreferencesCommand.Execute(null);
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Tab && e.KeyModifiers == KeyModifiers.Control)
-        {
-            viewModel.CycleScreenForwardCommand.Execute(null);
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Tab && e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift))
-        {
-            viewModel.CycleScreenBackCommand.Execute(null);
-            e.Handled = true;
-        }
-        // Metadata-edit Undo/Redo (docs/ce-feature-inventory.md §A) - added 2026-09-05 as this
-        // app's first keyboard access to it, replacing the rail's own Undo/Redo buttons (removed
-        // the same day - the rail was getting cluttered and this is the standard shortcut anyway).
-        else if (e.Key == Key.Z && e.KeyModifiers == KeyModifiers.Control)
-        {
-            viewModel.UndoCommand.Execute(null);
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Y && e.KeyModifiers == KeyModifiers.Control)
-        {
-            viewModel.RedoCommand.Execute(null);
-            e.Handled = true;
-        }
-        // Ctrl+Q quit (docs/superpowers/specs/2026-09-12-grid-typeahead-rangeselect-quit-design.md) -
-        // CE's File>Exit menu accelerator (MainForm.Designer.cs). Close() already flows through
-        // OnWindowClosing's tray-aware logic below, matching CE's own Exit semantics exactly.
-        else if (e.Key == Key.Q && e.KeyModifiers == KeyModifiers.Control)
-        {
-            Close();
-            e.Handled = true;
-        }
-        // Ctrl+B toggles the Library live preview panel (docs/superpowers/specs/2026-09-14-library-
-        // visual-redesign-design.md §4) - verified unbound anywhere else in this app before picking
-        // it (Ctrl+P is already Quick Open). Library-only, matching the Ctrl+P handler's own
-        // screen-gating convention above.
-        else if (e.Key == Key.B && e.KeyModifiers == KeyModifiers.Control && viewModel.IsLibrary)
-        {
-            viewModel.Library.ToggleLibraryPreviewPanelCommand.Execute(null);
-            e.Handled = true;
-        }
+        // All keyboard, mouse-button and wheel input goes through the input service (docs/superpowers/specs/2026-10-03-input-service-design.md): three Tunnel handlers at the
+        // root forward to it, so a shortcut fires whatever has focus, and the shell-wide actions it resolves (Escape, back/forward, quick open, ...) are handled in
+        // OnGlobalInputAction below. This replaced a hardcoded key chain here and a separate horizontal-swipe wheel handler.
+        _input = InputServiceLocator.Current;
+        _inputHost = InputHost.Attach(this, _input);
+        _globalInput = _input.Register(InputScope.Global, OnGlobalInputAction);
     }
 
     /// <summary>
-    /// Trackpad two-finger horizontal swipe → Back/Forward (docs/superpowers/specs/2026-08-30-app-
-    /// shell-navigation-history-design.md) - best-effort, not a guaranteed mechanism. Avalonia has no
-    /// first-class desktop "swipe" gesture API; on Windows, a precision-touchpad two-finger
-    /// horizontal swipe arrives as a <see cref="PointerWheelEventArgs"/> with a horizontal
-    /// <c>Delta.X</c>, the same signal ordinary horizontal scrolling produces - the threshold below
-    /// (one large delta, not the smaller accumulated deltas of deliberate horizontal scroll) is a
-    /// heuristic. An ordinary vertical mouse wheel reports <c>Delta.X == 0</c>, so this is inert for
-    /// normal scrolling. Direction convention (swipe left = Back) is a judgment call, unverified on
-    /// real hardware - same standing caveat as every other desktop-gesture spec in this project (no
-    /// unattended GUI automation available in this environment); flip the two comparisons below if it
-    /// turns out backwards once someone tries it on a real trackpad.
+    /// The shell-wide actions, mapped onto the same <see cref="MainViewModel"/> commands the old hardcoded key chain called (Escape/Back: docs/superpowers/specs/2026-08-30-app-shell-
+    /// navigation-history-design.md; Ctrl+, / Ctrl+Tab: 2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md; Undo/Redo: docs/ce-feature-inventory.md §A; Ctrl+Q:
+    /// 2026-09-12-grid-typeahead-rangeselect-quit-design.md). Whether a key reaches here while a text box has focus is the service's call (an action's
+    /// <c>FiresInTextInput</c>), not this method's.
     /// </summary>
-    private void OnWindowPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    private void OnGlobalInputAction(InputActionEventArgs e)
     {
-        const double SwipeThreshold = 1.5;
         if (DataContext is not MainViewModel viewModel)
         {
             return;
         }
 
-        if (e.Delta.X <= -SwipeThreshold && viewModel.CanNavigateBack)
+        switch (e.Action.Id)
         {
-            viewModel.NavigateBackCommand.Execute(null);
+            case InputActionIds.CloseCurrentView:
+                viewModel.EscapeCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            // The keyboard key always counts (it did before); a mouse thumb button or a swipe only when there is somewhere to go, so it never swallows an event for nothing.
+            case InputActionIds.NavigateBack when e.Device == InputDevice.Keyboard || viewModel.CanNavigateBack:
+                viewModel.NavigateBackCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            case InputActionIds.NavigateForward when e.Device == InputDevice.Keyboard || viewModel.CanNavigateForward:
+                viewModel.NavigateForwardCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            // Quick open (docs/superpowers/specs/2026-09-03-quick-open-command-palette-design.md) is inert inside the readers, which keep their own dense keymap.
+            case InputActionIds.OpenQuickOpen when viewModel.CurrentScreen is not ("reader" or "bookReader" or "pdfReader"):
+                viewModel.OpenQuickOpenCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            case InputActionIds.OpenSettings:
+                viewModel.GoPreferencesCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            case InputActionIds.CycleScreenForward:
+                viewModel.CycleScreenForwardCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            case InputActionIds.CycleScreenBackward:
+                viewModel.CycleScreenBackCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            // Metadata-edit Undo/Redo - added 2026-09-05 as this app's first keyboard access to it, replacing the rail's own Undo/Redo buttons.
+            case InputActionIds.Undo:
+                viewModel.UndoCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            case InputActionIds.Redo:
+                viewModel.RedoCommand.Execute(null);
+                e.Handled = true;
+                break;
+
+            // Close() already flows through OnWindowClosing's tray-aware logic, matching CE's own Exit semantics exactly.
+            case InputActionIds.Quit:
+                Close();
+                e.Handled = true;
+                break;
+
+            case InputActionIds.ToggleSidebar:
+                viewModel.ToggleNavRailPinCommand.Execute(null);
+                e.Handled = true;
+                break;
         }
-        else if (e.Delta.X >= SwipeThreshold && viewModel.CanNavigateForward)
-        {
-            viewModel.NavigateForwardCommand.Execute(null);
-        }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _globalInput?.Dispose();
+        _inputHost?.Dispose();
+        base.OnClosed(e);
     }
 
     private void OnWindowPropertyChanged(object? sender, Avalonia.AvaloniaPropertyChangedEventArgs e)

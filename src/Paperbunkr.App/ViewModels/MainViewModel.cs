@@ -248,8 +248,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             Avalonia.Threading.Dispatcher.UIThread.Post(Detail.ReloadCurrentSeries);
             return result;
         };
-        var keyBindingService = new KeyBindingService();
-        Reader = new ReaderScreenViewModel(NavigateBack, keyBindingService, ReadingEvents, TrackerAutoSync);
+        Reader = new ReaderScreenViewModel(NavigateBack, input: null, ReadingEvents, TrackerAutoSync);
         Reader.PageAdSeeder = new Services.AdDetection.AdHashSeeder();
         Reader.EnableNextIssueStaging();
         // "Ask me to rate a comic when I finish it" (docs/superpowers/specs/2026-09-04-behavior-
@@ -404,7 +403,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             new LibraryFolderScanner(),
             new FileAssociationService(),
             new BackupService(),
-            keyBindingService,
+            Services.Input.InputServiceLocator.Current,
             ShowToast,
             NeedsReview,
             Plugin,

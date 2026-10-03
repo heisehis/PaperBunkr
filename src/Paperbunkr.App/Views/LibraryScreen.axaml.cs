@@ -46,6 +46,7 @@ public partial class LibraryScreen : UserControl
         // Tunnel so Escape closes the Add-issue overlay even while a field inside it has focus
         // (the series-name SuggestBox otherwise swallows Escape to close its own dropdown).
         AddHandler(KeyDownEvent, OnLibraryScreenKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(PointerPressedEvent, OnScreenPointerPressedTunnel, RoutingStrategies.Tunnel);
         _libraryInput = new AttachedInputRegistration(this, InputScope.Library, OnLibraryInputAction, service: InputServiceLocator.Current, focusRoot: () => this);
         // Type-ahead (docs/superpowers/specs/2026-09-12-grid-typeahead-rangeselect-quit-design.md) -
         // Tunnel from the screen root rather than per-template, so it works regardless of which of
@@ -584,6 +585,32 @@ public partial class LibraryScreen : UserControl
 
         viewModel.ToggleIssueSelection(row, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Ctrl/Shift-click selection on the tiles. The tile handlers are declared on each <see cref="Button"/> card in XAML, but a Button marks a left press handled in its own class
+    /// handler before instance handlers run, so those never saw the click and Ctrl/Shift-click selected nothing. Tunnelling from the screen root runs first; the card's own handler
+    /// still does the work (focus, toggle) and, for a modified click, marks the press handled so the Button doesn't also "click".
+    /// </summary>
+    private void OnScreenPointerPressedTunnel(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed ||
+            e.Source is not Visual source ||
+            source.FindAncestorOfType<Button>(includeSelf: true) is not { } button ||
+            !button.Classes.Contains("card"))
+        {
+            return;
+        }
+
+        switch (button.DataContext)
+        {
+            case IssueListRow:
+                OnTilePointerPressed(button, e);
+                break;
+            case SeriesCardSample:
+                OnSeriesTilePointerPressed(button, e);
+                break;
+        }
     }
 
     /// <summary>

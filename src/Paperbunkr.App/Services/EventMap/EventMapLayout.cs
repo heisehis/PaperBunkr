@@ -549,6 +549,49 @@ public sealed class EventMapLayoutResult
         return best;
     }
 
+    /// <summary>
+    /// Left (<paramref name="direction"/> -1) and Right (+1): the nearest card in the same lane in that direction, so the key moves along the lane. A lane with nothing further that way falls back to the nearest
+    /// column beyond it (the closest lane within that column), so the key never just stops while the map goes on.
+    /// </summary>
+    public int? NearestAlongLane(int index, int direction)
+    {
+        var cell = Cells[index];
+        int sign = Math.Sign(direction);
+        int? best = null;
+        foreach (int candidate in _byTrack[cell.Track])
+        {
+            int distance = (Cells[candidate].Column - cell.Column) * sign;
+            if (distance > 0 && (best is null || distance < (Cells[best.Value].Column - cell.Column) * sign))
+            {
+                best = candidate;
+            }
+        }
+
+        if (best is not null)
+        {
+            return best;
+        }
+
+        for (int column = cell.Column + sign; column >= 0 && column < _byColumn.Length; column += sign)
+        {
+            int? closest = null;
+            foreach (int candidate in _byColumn[column])
+            {
+                if (closest is null || Math.Abs(Cells[candidate].Track - cell.Track) < Math.Abs(Cells[closest.Value].Track - cell.Track))
+                {
+                    closest = candidate;
+                }
+            }
+
+            if (closest is not null)
+            {
+                return closest;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>First unread (not fully read) trunk card in spine mode, or first unread card in relay mode; falls back to the first card.</summary>
     public int? FirstUnread()
     {

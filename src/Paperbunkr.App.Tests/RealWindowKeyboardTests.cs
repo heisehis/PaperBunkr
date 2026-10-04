@@ -359,4 +359,93 @@ public class RealWindowKeyboardTests : IDisposable
             window.Close();
         });
     }
+
+    [Trait("Speed", "Slow")]
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Library_Alphabetical_ArrowsLeaveTheToolbarForTheGrid_AndCrossTheLetterGroups(bool bySeries, bool alphabetical)
+    {
+        WithThemeAndTokens(() =>
+        {
+            using var styles = AppStyles();
+            using var tokens = AppResources();
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                for (int n = 0; n < 100; n++)
+                {
+                    char letter = (char)('A' + (n / 20));
+                    var entity = new Series { Name = $"{letter}series {n:000}" };
+                    context.Series.Add(entity);
+                    context.SaveChanges();
+                    context.Issues.Add(new Issue { SeriesId = entity.Id, Number = "1", FilePath = $"s{n}.cbz", PageCount = 20, AddedTime = DateTime.UtcNow });
+                }
+
+                context.SaveChanges();
+            }
+
+            var vm = new MainViewModel();
+            var window = new MainWindow { DataContext = vm, Width = 1400, Height = 900 };
+            window.Show();
+            vm.GoLibraryCommand.Execute(null);
+            vm.Library.IssueList.ConfigureSortGroup(Paperbunkr.Data.Entities.IssueListSortField.Series, Paperbunkr.Data.Entities.SortDirection.Ascending,
+                alphabetical ? Paperbunkr.Data.Entities.IssueListGroupField.Series : Paperbunkr.Data.Entities.IssueListGroupField.None);
+            if (bySeries)
+            {
+                vm.Library.SetGranularityCommand.Execute(Paperbunkr.Data.Entities.LibraryContentGranularity.Series);
+            }
+
+            vm.Library.LoadFromDatabase();
+            RunLayout(window);
+
+            var screen = window.GetVisualDescendants().OfType<LibraryScreen>().First();
+            bool IsCard(object? e) => e is Button b && b.Classes.Contains("card");
+
+            // From a toolbar button, a few Down presses must reach the grid.
+            var toolbarButton = screen.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Focusable && !b.Classes.Contains("card")
+                && b.TranslatePoint(default, window)!.Value.Y < 90 && b.TranslatePoint(default, window)!.Value.X > 300).OrderBy(b => b.TranslatePoint(default, window)!.Value.X).First();
+            toolbarButton.Focus(NavigationMethod.Directional);
+            RunLayout(window);
+            var toolbarTrail = new List<string>();
+            for (int i = 0; i < 6 && !IsCard(window.FocusManager!.GetFocusedElement()); i++)
+            {
+                Press(window, Key.Down);
+                toolbarTrail.Add(Describe(window.FocusManager!.GetFocusedElement()));
+            }
+
+            Assert.True(IsCard(window.FocusManager!.GetFocusedElement()), "Down from the toolbar reached the grid: " + string.Join(" -> ", toolbarTrail));
+
+            // And in the grid, Down has to carry on past the first group (20 series each).
+            static string? NameOf(object? element) => element is Control { DataContext: var data } ? (data is Paperbunkr.App.Models.IssueListRow row ? row.SeriesName : data is Paperbunkr.App.Models.SeriesCardSample card ? card.Name : null) : null;
+            var letters = new List<char>();
+            for (int i = 0; i < 80; i++)
+            {
+                if (NameOf(window.FocusManager!.GetFocusedElement()) is { Length: > 0 } name && (letters.Count == 0 || letters[^1] != name[0]))
+                {
+                    letters.Add(name[0]);
+                }
+
+                Press(window, Key.Down);
+                TestDispatcher.Drain();
+            }
+
+            Assert.True(letters.Count >= 2 || !alphabetical, "Down reached a second letter group: " + string.Join(",", letters) + " ... focus on " + Describe(window.FocusManager!.GetFocusedElement()));
+
+            // And back up through the groups to the first.
+            var up = new List<char>();
+            for (int i = 0; i < 120; i++)
+            {
+                Press(window, Key.Up);
+                TestDispatcher.Drain();
+                if (NameOf(window.FocusManager!.GetFocusedElement()) is { Length: > 0 } name && (up.Count == 0 || up[^1] != name[0]))
+                {
+                    up.Add(name[0]);
+                }
+            }
+
+            Assert.True(!alphabetical || up.Contains('A'), "Up climbed back to the first group: " + string.Join(",", up) + " ... focus on " + Describe(window.FocusManager!.GetFocusedElement()));
+            window.Close();
+        });
+    }
 }

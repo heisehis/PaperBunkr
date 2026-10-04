@@ -667,9 +667,10 @@ public sealed partial class EventMapViewModel : ViewModelBase
         return false;
     }
 
-    public bool MoveNext() => Move(Layout.Next);
+    // Left and Right run along the card's lane; reading order (Layout.Next/Prev) walks down a stacked column, which is why they used to move vertically.
+    public bool MoveNext() => Move(i => Layout.NearestAlongLane(i, +1));
 
-    public bool MovePrevious() => Move(Layout.Prev);
+    public bool MovePrevious() => Move(i => Layout.NearestAlongLane(i, -1));
 
     public bool MoveUp() => Move(i => Layout.NearestInLane(i, -1));
 

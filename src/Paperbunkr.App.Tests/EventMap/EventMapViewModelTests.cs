@@ -250,8 +250,8 @@ public class EventMapViewModelTests
     }
 
     [Theory]
-    [InlineData(Key.Right, 5)]
-    [InlineData(Key.Left, 3)]
+    [InlineData(Key.Right, 7)]      // along lane A (A #2 -> A #3), not down the next column in reading order
+    [InlineData(Key.Left, 2)]       // along lane A (A #2 -> A #1)
     [InlineData(Key.Up, 5)]         // lane A #2 (col 3) up → trunk: Crisis #1 (col 1) and Crisis #2 (col 4) → col 4 is closer
     [InlineData(Key.Down, 3)]       // A #2 (col 3) down → B #1 (col 2) vs B #2 (col 5) → col 2
     [InlineData(Key.Home, 0)]

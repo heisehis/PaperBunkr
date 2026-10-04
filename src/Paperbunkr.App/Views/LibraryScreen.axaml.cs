@@ -633,10 +633,36 @@ public partial class LibraryScreen : UserControl
     /// </summary>
     private void OnScreenCardKeyDownTunnel(object? sender, KeyEventArgs e)
     {
-        if (!e.Handled && e.KeyModifiers == KeyModifiers.None && e.Key is Key.Enter or Key.Space
-            && e.Source is Button { DataContext: IssueListRow or SeriesCardSample } button && button.Classes.Contains("card"))
+        if (e.Handled)
         {
-            OnCardKeyDown(button, e);
+            return;
+        }
+
+        bool arrow = e.Key is Key.Left or Key.Right or Key.Up or Key.Down;
+        if (e.Source is Button { DataContext: IssueListRow or SeriesCardSample } button && button.Classes.Contains("card"))
+        {
+            if (e.KeyModifiers == KeyModifiers.None && e.Key is Key.Enter or Key.Space)
+            {
+                OnCardKeyDown(button, e);
+            }
+            else if (arrow)
+            {
+                // The grid's own move first; when it has nowhere to go (the last row of a group, the first row on its way up to the toolbar) the screen's directional move takes over. Left to
+                // bubble, Avalonia's ItemsControl acts on the key on the way up and drops focus, so the key went nowhere (see Wanted).
+                OnCardKeyDown(button, e);
+                if (!e.Handled && e.KeyModifiers == KeyModifiers.None)
+                {
+                    e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
+                }
+            }
+
+            return;
+        }
+
+        // The toolbar, the chips and the sidebar: plain controls with no arrow handling of their own, so Down from the toolbar reaches the grid and Up comes back.
+        if (arrow && e.KeyModifiers == KeyModifiers.None)
+        {
+            e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
         }
     }
 

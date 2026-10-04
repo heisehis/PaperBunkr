@@ -630,3 +630,8 @@ tunnelled handler, not the Button).
 25. **Rings and hover.** Books (and the Book detail series strip) put the ring on a cover that was flush with its card and clipped, so neither hover nor focus showed: the cover now has the Library's gutter and drops
     its clip while the ring shows. An inset `BoxShadow` paints nothing on a control that has a border, so the Preferences sidebar's focus ring (the items carry the active-section bar as a border) never
     appeared; it is an inside adorner now. Left on the first Home tile or carousel panel goes to the nav rail instead of being swallowed or wrapping.
+26. **Event Map Left/Right run along the lane.** They used reading order, which walks down a stacked column, so the keys appeared to move vertically. `EventMapLayout.NearestAlongLane` takes the nearest card in the
+    same lane in that direction (and, when the lane has nothing further, the nearest column beyond it); Up and Down already stepped between lanes.
+27. **The Library had no directional fallback.** Down from the toolbar, the chips or the search box did nothing, and a grid key the grid declined (the last row of a group, the first row on the way up) reached Avalonia's
+    `ItemsControl` handling, which drops focus. `LibraryScreen.OnScreenCardKeyDownTunnel` now gives the grid its move first and `FocusReclaimer.TryMoveDirectionally` the rest, on the tunnel, and does the same for the toolbar.
+

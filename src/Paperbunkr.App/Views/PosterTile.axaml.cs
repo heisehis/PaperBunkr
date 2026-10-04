@@ -275,14 +275,16 @@ public partial class PosterTile : UserControl
             _ => row.Count - 1,
         };
 
-        // Always handled: an arrow must never scroll the shelf away from the focused tile.
+        // Handled even when there is nowhere to go: an arrow must never scroll the shelf away from the focused tile. The one exception is Left on the first tile of a shelf, which has the nav
+        // rail to its left, so it goes on to the screen and the shell.
         if (index >= 0 && target >= 0 && target < row.Count && target != index)
         {
             row[target].Root.Focus(NavigationMethod.Directional);
             FocusReclaimer.BringIntoViewWithRing(row[target]);
+            return true;
         }
 
-        return true;
+        return !(key == Key.Left && index == 0);
     }
 
     private static Rect? RectIn(Visual tile, Visual scope)

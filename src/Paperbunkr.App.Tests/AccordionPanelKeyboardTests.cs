@@ -45,8 +45,13 @@ public class AccordionPanelKeyboardTests
             Press(window, Key.Right);
             Assert.Same(buttons[0], Focused(window));
 
+            // Left on the first panel does not wrap round to the last: the nav rail is to its left, so the key goes on to the shell.
             Press(window, Key.Left);
-            Assert.Same(buttons[2], Focused(window));
+            Assert.Same(buttons[0], Focused(window));
+
+            Press(window, Key.Right);
+            Press(window, Key.Left);
+            Assert.Same(buttons[0], Focused(window));
 
             Assert.Contains("b", activated);
             Assert.Contains("c", activated);

@@ -644,36 +644,40 @@ public sealed partial class EventMapViewModel : ViewModelBase
 
     // ===================== Keyboard verbs (EventMapView.OnKeyDown) =====================
 
-    private void Move(Func<int, int?> step)
+    /// <summary>Moves the selection; false when there was nowhere to go (the edge of the map), so the key can go on to the shell instead.</summary>
+    private bool Move(Func<int, int?> step)
     {
         if (Layout.IsEmpty)
         {
-            return;
+            return false;
         }
 
         if (SelectedIndex is not int current)
         {
             Select(Layout.FirstUnread(), reveal: true);
-            return;
+            return true;
         }
 
-        if (step(current) is int target)
+        if (step(current) is int target && target != current)
         {
             Select(target, reveal: true);
+            return true;
         }
+
+        return false;
     }
 
-    public void MoveNext() => Move(Layout.Next);
+    public bool MoveNext() => Move(Layout.Next);
 
-    public void MovePrevious() => Move(Layout.Prev);
+    public bool MovePrevious() => Move(Layout.Prev);
 
-    public void MoveUp() => Move(i => Layout.NearestInLane(i, -1));
+    public bool MoveUp() => Move(i => Layout.NearestInLane(i, -1));
 
-    public void MoveDown() => Move(i => Layout.NearestInLane(i, +1));
+    public bool MoveDown() => Move(i => Layout.NearestInLane(i, +1));
 
-    public void MoveFirst() => Move(_ => Layout.First());
+    public bool MoveFirst() => Move(_ => Layout.First());
 
-    public void MoveLast() => Move(_ => Layout.Last());
+    public bool MoveLast() => Move(_ => Layout.Last());
 
     /// <summary>Esc: close the inspector first, then clear the selection. Returns false when there was nothing to do.</summary>
     public bool Escape()

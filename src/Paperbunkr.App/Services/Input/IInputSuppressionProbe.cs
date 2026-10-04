@@ -33,6 +33,12 @@ public sealed class AvaloniaInputSuppressionProbe : IInputSuppressionProbe
                 return suppressor.Suppression;
             }
 
+            // A text box reached with the arrow keys and not yet being edited takes no typing, so shortcuts keep working (see TextEntryMode).
+            if (visual is TextBox { } browsing && TextEntryMode.IsBrowsing(browsing))
+            {
+                return null;
+            }
+
             if (visual is TextBox or AutoCompleteBox or NumericUpDown)
             {
                 return InputSuppression.TextEntry;

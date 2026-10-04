@@ -34,12 +34,11 @@
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
-        <!-- Nav items fill the sidebar edge to edge, so an outside focus ring would be cut by the sidebar: draw it inside instead. -->
+        <!-- Nav items fill the sidebar edge to edge, so an outside focus ring would be cut by the sidebar: draw it inside instead. It is an adorner
+             rather than a BoxShadow on the button's presenter because Avalonia paints no inset shadow on a control that has a border, and these
+             items have their active-section bar as one (the ring never showed at all). -->
         <Style Selector="Button.prefNavItem">
-            <Setter Property="FocusAdorner" Value="{x:Null}" />
-        </Style>
-        <Style Selector="Button.prefNavItem:focus-visible /template/ ContentPresenter">
-            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRingInset}" />
+            <Setter Property="FocusAdorner" Value="{DynamicResource PbFocusAdornerInside}" />
         </Style>
         <Style Selector="Button.prefNavItem:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />

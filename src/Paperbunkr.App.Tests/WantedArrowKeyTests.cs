@@ -176,6 +176,54 @@ public class WantedArrowKeyTests : IDisposable
     [Theory]
     [InlineData("queue")]
     [InlineData("series")]
+    public void EveryDownPress_MovesFocusToANewRow_EvenWhileTheListScrolls(string tab)
+    {
+        WithThemeAndTokens(() =>
+        {
+            using var styles = AppStyles();
+            using var tokens = AppResources();
+            Seed(40);
+            var vm = CreateVm();
+            vm.Refresh();
+            if (tab == "series")
+            {
+                vm.GoSeriesCommand.Execute(null);
+            }
+
+            var screen = new WantedScreen { DataContext = vm };
+            var input = ReaderTestInput.Create();
+            screen.InputService = input;
+            var window = new Window { Content = screen, Width = 1200, Height = 700 };
+            InputHost.Attach(window, input);
+            window.Show();
+            RunLayout(window);
+
+            var first = screen.GetVisualDescendants().OfType<Button>()
+                .Where(b => b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Focusable && !b.Classes.Contains("tab") && !b.Classes.Contains("pbChip") && b.TranslatePoint(default, screen)?.Y > 120)
+                .OrderBy(b => b.TranslatePoint(default, screen)!.Value.Y).First();
+            first.Focus(NavigationMethod.Tab);
+            RunLayout(window);
+
+            var trail = new List<string>();
+            object? previous = window.FocusManager!.GetFocusedElement();
+            for (int i = 0; i < 25; i++)
+            {
+                window.KeyPress(Key.Down, RawInputModifiers.None, PhysicalKey.ArrowDown, null);
+                RunLayout(window);
+                TestDispatcher.Drain();
+                var now = window.FocusManager!.GetFocusedElement();
+                trail.Add(Describe(now));
+                Assert.False(ReferenceEquals(now, previous), $"Down press {i + 1} left focus where it was; trail: {string.Join(" -> ", trail)}");
+                previous = now;
+            }
+
+            window.Close();
+        });
+    }
+
+    [Theory]
+    [InlineData("queue")]
+    [InlineData("series")]
     public void FromTheTabHeader_DownEntersTheRows_AndUpComesBack(string tab)
     {
         WithThemeAndTokens(() =>

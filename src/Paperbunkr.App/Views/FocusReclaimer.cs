@@ -224,7 +224,7 @@ internal sealed class FocusReclaimer
     /// rows keep their buttons in different columns (a row with a button at the far right above a row with one at the far left) Up and Down found nothing and did nothing. This picks the
     /// nearest row in the direction, then the control in it closest to the current column.
     /// </summary>
-    private static Control? FindByRows(Control region, Visual from, NavigationDirection direction)
+    internal static Control? FindByRows(Control region, Visual from, NavigationDirection direction)
     {
         if (from is not Control source || source.TranslatePoint(default, region) is not { } origin)
         {

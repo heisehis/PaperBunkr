@@ -128,6 +128,8 @@ public partial class EventMapView : UserControl
     /// <summary>Keyboard moves and link clicks: scroll just enough to bring the card fully into view, then focus it.</summary>
     private void OnRevealRequested(int index)
     {
+        // Scrolling can recycle the card that has focus before the new one exists, so whether the map held focus is read now, not after the scroll.
+        bool hadFocus = IsKeyboardFocusWithin;
         Dispatcher.UIThread.Post(() =>
         {
             if (_vm is null || index >= _vm.Layout.Cells.Count)
@@ -149,7 +151,8 @@ public partial class EventMapView : UserControl
             // The card is realized on the layout pass that follows the scroll.
             Dispatcher.UIThread.Post(() =>
             {
-                if (IsKeyboardFocusWithin && _vm?.SelectedIndex == index)
+                bool focusLost = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is null;
+                if ((IsKeyboardFocusWithin || (hadFocus && focusLost)) && _vm?.SelectedIndex == index)
                 {
                     Surface.CardAt(index)?.Focus(NavigationMethod.Directional);
                 }
@@ -198,24 +201,19 @@ public partial class EventMapView : UserControl
     {
         switch (key)
         {
+            // A move that has nowhere to go is not used, so Left on the first card or Up on the top lane reaches the shell (the nav rail, the toolbar).
             case Key.Right:
-                vm.MoveNext();
-                return true;
+                return vm.MoveNext();
             case Key.Left:
-                vm.MovePrevious();
-                return true;
+                return vm.MovePrevious();
             case Key.Up:
-                vm.MoveUp();
-                return true;
+                return vm.MoveUp();
             case Key.Down:
-                vm.MoveDown();
-                return true;
+                return vm.MoveDown();
             case Key.Home:
-                vm.MoveFirst();
-                return true;
+                return vm.MoveFirst();
             case Key.End:
-                vm.MoveLast();
-                return true;
+                return vm.MoveLast();
             case Key.Enter when modifiers.HasFlag(KeyModifiers.Control):
                 vm.OpenReaderCommand.Execute(null);
                 return true;

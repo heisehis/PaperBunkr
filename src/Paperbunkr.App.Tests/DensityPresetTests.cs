@@ -7,6 +7,7 @@ namespace Paperbunkr.App.Tests;
 
 /// <summary>docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #17 - Compact / Comfortable / Spacious spacing presets.</summary>
 [Collection(nameof(AvaloniaTestCollection))]
+[Trait("Speed", "Slow")]
 public class DensityPresetTests : IDisposable
 {
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_density_test_{Guid.NewGuid():N}.db");

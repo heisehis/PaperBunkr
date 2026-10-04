@@ -31,17 +31,15 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="ClipToBounds" Value="True" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BoxShadowsTransition Property="BoxShadow" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                </Transitions>
-            </Setter>
+            <!-- A permanent gutter inside the card Button, as LibraryScreen's Border.posterCover has: the Button clips its content to its
+                 bounds, so a ring drawn outside the cover with no room to spread showed as nothing (the cover was flush with the card's edge).
+                 BoxShadow is never transitioned: animating it tears the ring mid-animation (see Primitives.axaml's posterCover note). -->
+            <Setter Property="Margin" Value="5,10,5,5" />
         </Style>
-        <Style Selector="Button.card:pointerover Border.bookCover">
+        <!-- The ring is a spread-only BoxShadow, which ClipToBounds clips away entirely, so clipping is dropped while it shows (same tradeoff as the Library). -->
+        <Style Selector="Button.card:pointerover Border.bookCover, Button.card:focus-visible Border.bookCover">
             <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
-        </Style>
-        <Style Selector="Button.card:focus-within Border.bookCover">
-            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
+            <Setter Property="ClipToBounds" Value="False" />
         </Style>
 
         <!-- Chrome pills / popups - own copy of the Library toolbar's classes (same per-UserControl
@@ -119,7 +117,7 @@
 
     <UserControl.Resources>
         <DataTemplate x:Key="BookCardTemplate" x:DataType="models:BookCardSample">
-            <Button Classes="card" Width="150" Margin="0,0,20,20"
+            <Button Classes="card" Width="160" Margin="0,0,15,15"
                     Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).CardClickCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown"
                     AutomationProperties.AutomationId="BookCard" AutomationProperties.Name="{Binding Title}">

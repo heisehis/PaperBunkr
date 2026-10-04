@@ -258,6 +258,11 @@
         <!-- Inside twin of PbGlowRing for controls their own container clips (a segmented control's pill). Overwritten at runtime by
              ThemeService.ApplyGlowRing / ApplyGlowTier. -->
         <BoxShadows x:Key="PbGlowRingInset">inset 0 0 0 2 #99E0995A</BoxShadows>
+        <!-- The focus ring drawn inside a control's own bounds, for one the layout clips (a sidebar item that fills its panel edge to edge) or one with a border (an inset BoxShadow paints nothing there).
+             Set it as the control's FocusAdorner. -->
+        <FocusAdornerTemplate x:Key="PbFocusAdornerInside">
+            <Border IsHitTestVisible="False" BoxShadow="{DynamicResource PbGlowRingInset}" />
+        </FocusAdornerTemplate>
     </Styles.Resources>
 
     <!-- PosterTile - see Views/PosterTile.axaml. Root there is a Border (not Button) specifically

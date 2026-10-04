@@ -36,9 +36,10 @@
                 <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
                 <Setter Property="BorderThickness" Value="2" />
             </Style>
-            <Style Selector="^:focus-visible /template/ Border#PART_Frame">
-                <Setter Property="BorderBrush" Value="{DynamicResource PbAccentTextBrush}" />
-                <Setter Property="BorderThickness" Value="2" />
+            <!-- Keyboard focus is the app-wide glow ring (the adorner). A selected card that also has focus drops its accent border back to the
+                 resting one, so the two never stack into a double ring; the card keeps the same 2px footprint so nothing shifts. -->
+            <Style Selector="^:selected:focus-visible /template/ Border#PART_Frame">
+                <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             </Style>
             <Style Selector="^:missing /template/ Panel#PART_Content">
                 <Setter Property="Opacity" Value="0.55" />

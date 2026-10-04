@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using Avalonia.VisualTree;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -20,6 +22,10 @@ public sealed class InputHost : IDisposable
     {
         _topLevel = topLevel;
         _service = service;
+        TextEntryMode.Install();
+        // The text-box handlers come first: a browsing box takes Enter and hands the arrows on before the service decides what the key means.
+        topLevel.AddHandler(InputElement.KeyDownEvent, OnTextKeyDown, RoutingStrategies.Tunnel);
+        topLevel.AddHandler(InputElement.PointerPressedEvent, OnTextPressed, RoutingStrategies.Tunnel);
         topLevel.AddHandler(InputElement.KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
         topLevel.AddHandler(InputElement.PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel);
         topLevel.AddHandler(InputElement.PointerPressedEvent, OnPressed, RoutingStrategies.Tunnel);
@@ -36,14 +42,33 @@ public sealed class InputHost : IDisposable
         }
 
         _disposed = true;
+        _topLevel.RemoveHandler(InputElement.KeyDownEvent, OnTextKeyDown);
+        _topLevel.RemoveHandler(InputElement.PointerPressedEvent, OnTextPressed);
         _topLevel.RemoveHandler(InputElement.KeyDownEvent, OnKeyDown);
         _topLevel.RemoveHandler(InputElement.PointerWheelChangedEvent, OnWheel);
         _topLevel.RemoveHandler(InputElement.PointerPressedEvent, OnPressed);
     }
 
+    private void OnTextKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!e.Handled && TextEntryMode.HandleKeyDown(_topLevel, e))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void OnTextPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.Handled && e.Source is Avalonia.Visual source && _topLevel.FocusManager?.GetFocusedElement() is Avalonia.Visual focused
+            && source.GetSelfAndVisualAncestors().Any(a => ReferenceEquals(a, focused)))
+        {
+            TextEntryMode.HandlePointerPressed(_topLevel);
+        }
+    }
+
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (!e.Handled)
+        if (!e.Handled && !TextEntryMode.IsRedirecting)
         {
             _service.ProcessKeyDown(e);
         }

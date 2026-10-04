@@ -18,6 +18,7 @@ namespace Paperbunkr.App.Tests;
 /// <see cref="AvaloniaTestCollection"/> since theme selection touches Application resources.
 /// </summary>
 [Collection(nameof(AvaloniaTestCollection))]
+[Trait("Speed", "Slow")]
 public class PreferencesScreenViewModelTests : IDisposable
 {
     private readonly string _originalInstalledDirectory;

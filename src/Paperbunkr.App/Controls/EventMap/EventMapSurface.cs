@@ -47,6 +47,8 @@ public sealed class EventMapSurface : Panel
 
     public EventMapSurface()
     {
+        Focusable = true;
+        FocusAdorner = null;
         Children.Add(_edges);
         EffectiveViewportChanged += OnEffectiveViewportChanged;
         AddHandler(PointerPressedEvent, OnPointerPressed, RoutingStrategies.Bubble, handledEventsToo: true);
@@ -199,6 +201,19 @@ public sealed class EventMapSurface : Panel
     {
         if (_realized.Remove(index, out var card))
         {
+            if (card.IsKeyboardFocusWithin)
+            {
+                // The card that had focus is scrolling out of range. Hiding it would leave nothing focused, and the next arrow press (which can arrive before the view re-focuses the selected card) would
+                // go nowhere; the surface holds focus in the meantime.
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    if (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is null)
+                    {
+                        Focus(NavigationMethod.Directional);
+                    }
+                }, Avalonia.Threading.DispatcherPriority.Send);
+            }
+
             card.DataContext = null;
             card.IsVisible = false;
             _pool.Push(card);

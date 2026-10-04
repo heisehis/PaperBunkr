@@ -184,6 +184,8 @@ Every enabled **Library** plugin command gets a shortcut that runs it on the sel
 
 Dropdown boxes open when you click them, or press `Enter`, `Space` or `Alt+↓` while they have focus; the arrow keys alone just move on to the next control.
 
+A text box you reach with the arrow keys (or a controller) is only highlighted, so the arrows keep moving you around: press `Enter` (or `F2`, or click it) to type, and `Esc` to step back out. Tabbing into a box, or `Ctrl+F` for search, lets you type straight away.
+
 ## Remapping
 
 1. **Preferences → Keyboard Shortcuts**. Every action is listed under its group, with one chip for

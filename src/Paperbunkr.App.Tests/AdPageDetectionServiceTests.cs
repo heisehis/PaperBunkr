@@ -14,6 +14,7 @@ namespace Paperbunkr.App.Tests;
 /// seeds are unrelated pages.
 /// </summary>
 [Collection(nameof(AvaloniaTestCollection))]
+[Trait("Speed", "Slow")]
 public class AdPageDetectionServiceTests : IDisposable
 {
     private const int AdSeed = 900;

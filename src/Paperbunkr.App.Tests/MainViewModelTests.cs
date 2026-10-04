@@ -15,6 +15,7 @@ namespace Paperbunkr.App.Tests;
 /// shared static other test classes also mutate.
 /// </summary>
 [Collection(nameof(AvaloniaTestCollection))]
+[Trait("Speed", "Slow")]
 public class MainViewModelTests : IDisposable
 {
     private readonly string? _originalDbPathOverride;

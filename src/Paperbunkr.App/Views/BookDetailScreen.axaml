@@ -53,15 +53,19 @@
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
         </Style>
         <Style Selector="Border.bookCover">
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="ClipToBounds" Value="True" />
+            <!-- Gutter for the ring, and no clipping while it shows: see BooksScreen.axaml's Border.bookCover. -->
+            <Setter Property="Margin" Value="5,10,5,5" />
         </Style>
-        <Style Selector="Button.card:pointerover Border.bookCover">
+        <Style Selector="Button.card:pointerover Border.bookCover, Button.card:focus-visible Border.bookCover">
             <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
+            <Setter Property="ClipToBounds" Value="False" />
         </Style>
     </UserControl.Styles>
 
@@ -202,7 +206,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:BookCardSample">
-                            <Button Classes="card" Width="150" Margin="0,0,20,20"
+                            <Button Classes="card" Width="160" Margin="0,0,15,15"
                                     Command="{Binding $parent[ItemsControl].((vm:BookDetailScreenViewModel)DataContext).OpenBookFromSeriesCommand}"
                                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
                                 <StackPanel Spacing="8">

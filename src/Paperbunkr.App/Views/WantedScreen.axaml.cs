@@ -38,6 +38,15 @@ public partial class WantedScreen : UserControl
         });
         _focus = new FocusReclaimer(this, () => DataContext is WantedScreenViewModel, FocusFallback);
         KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
+        // Avalonia's ItemsControl runs its own arrow-key navigation over the list's containers on the way up (after the focused row's own handlers, before this screen's), and with a virtualizing
+        // list that drops focus altogether, so Up and Down on a row went nowhere. These lists get the directional move first instead.
+        AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Source is Visual source && source.GetSelfAndVisualAncestors().OfType<ItemsControl>().Any(l => l.Classes.Contains("vlist")))
+            {
+                e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
+            }
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         DataContextChanged += OnDataContextChanged;
         AddHandler(GotFocusEvent, (_, _) =>
         {

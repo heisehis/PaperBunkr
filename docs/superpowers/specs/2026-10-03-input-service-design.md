@@ -613,3 +613,20 @@ tunnelled handler, not the Button).
 21. **Not keyboard, found in the same pass.** The Library empty state's button ran `ClearAllFilters`, which by design leaves the search text alone, so it did nothing when a search was the only cause;
     it now clears the filters and the search ("Clear search" when only a search is active). The Merge series dialog showed placeholder gradients instead of covers; its rows now carry the cover key
     of each series' cover issue and load the real cover.
+
+### 14.4 Gaps found by hand, third round (2026-10-04)
+
+22. **A text box must not trap the keyboard.** A box reached with the arrow keys or a controller used to take typing at once, and its caret kept Left and Right, so there was no arrow-key way off it.
+    `Services/Input/TextEntryMode` now treats a box focused by `NavigationMethod.Directional` as *browsing*: it is made read-only for the time (typing, paste and delete do nothing), the arrow keys
+    never reach it (the window's tunnel handler hands them to the box's parent as if from a control with no use for them, so a screen's directional move or the shell's rail fallback runs), and the
+    input service sees no text entry, so shortcuts still work. Enter or F2 (or a click, or a pad's A) starts editing, with the caret at the end; Esc goes back to browsing; losing focus resets it. Tab, Ctrl+F and a
+    click still land ready to type, so forms are unchanged. A box that is read-only by design (a strict dropdown's display) is never made editable, and its arrows go on unless its list is open.
+23. **Avalonia's own `ItemsControl` arrow handling drops focus.** On a virtualizing list of focusable rows (Wanted's Queue and Series) the key, after the focused row and before the screen's bubbling
+    handler, was acted on by the `ItemsControl` itself, which left nothing focused, so Up and Down did nothing. It only showed in the real window, never in a bare screen in a test window. These lists now get
+    the screen's directional move on the tunnel (`WantedScreen`). New rule: run keyboard tests in the real `MainWindow` (`RealWindowKeyboardTests`, `WantedInMainWindowTests`).
+24. **Event Map keys.** Scrolling recycled the focused card before the newly selected one existed, which left nothing focused and killed the next arrow press: the surface now holds focus in between and the
+    view re-focuses the selected card. A move with nowhere to go (Left on the first card, Up on the top lane) is no longer swallowed, so it reaches the shell. The selected card's accent border steps back to the resting
+    one while it has keyboard focus, so it shows the glow ring alone.
+25. **Rings and hover.** Books (and the Book detail series strip) put the ring on a cover that was flush with its card and clipped, so neither hover nor focus showed: the cover now has the Library's gutter and drops
+    its clip while the ring shows. An inset `BoxShadow` paints nothing on a control that has a border, so the Preferences sidebar's focus ring (the items carry the active-section bar as a border) never
+    appeared; it is an inside adorner now. Left on the first Home tile or carousel panel goes to the nav rail instead of being swallowed or wrapping.

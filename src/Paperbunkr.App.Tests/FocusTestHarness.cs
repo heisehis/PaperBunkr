@@ -141,6 +141,7 @@ internal static class FocusTestHarness
         foreach (var control in scope.GetVisualDescendants().OfType<Control>())
         {
             if (!control.Focusable || !control.IsEffectivelyVisible || !control.IsEffectivelyEnabled || control.FocusAdorner is null
+                || (control.TryFindResource("PbFocusAdornerInside", out var inside) && ReferenceEquals(control.FocusAdorner, inside))
                 || control.Bounds.Width <= 0 || control.Bounds.Height <= 0 || WindowRect(control, window) is not { } own)
             {
                 continue;

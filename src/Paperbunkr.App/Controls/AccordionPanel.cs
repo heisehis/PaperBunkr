@@ -256,6 +256,12 @@ public sealed class AccordionPanel : Panel
             from = OpenIndex;
         }
 
+        // Left on the first panel is not a wrap-around: the nav rail is to its left, so the key goes on to the screen and the shell.
+        if (e.Key == Key.Left && from == 0)
+        {
+            return;
+        }
+
         int step = e.Key == Key.Right ? 1 : -1;
         int to = ((from + step) % Children.Count + Children.Count) % Children.Count;
         // Focus alone opens it (OnChildGotFocus) - activating here too would hit the now-open child and open the reader. Inside an

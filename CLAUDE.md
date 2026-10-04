@@ -144,6 +144,11 @@ shortcuts for a *hotkey* on a screen.
   set its `FocusAdorner` to null and draw one inside its own bounds.
 - **A read-only `SuggestBox` must not open itself on keyboard focus or a bare Down** (arrowing through a form would pop every dropdown open): it opens on a click, Enter, Space or Alt+Down.
 - **Don't make a control inside a card focusable unless the keyboard needs it** (the tile-select checkboxes are mouse-only): the arrow keys' directional search treats a nested control as a neighbour.
+- **Avalonia's `ItemsControl` handles arrow keys itself, and on a virtualizing list of focusable rows that drops focus** (it runs after the focused row and before a screen's *bubbling* `KeyDown`).
+  A screen with such a list takes its directional move on the **tunnel** (see `WantedScreen`). This only reproduces in the real `MainWindow`: test keyboard behaviour there (`RealWindowKeyboardTests`).
+- **An inset `BoxShadow` draws nothing on a control that has a `BorderThickness`.** For an inside ring on such a control use an inside `FocusAdorner` (see `PreferencesScreen.axaml`'s `prefNavItem`).
+- **Text boxes reached with the arrow keys or a pad only browse** (`TextEntryMode`): Enter or F2 or a click edits, Esc goes back, Tab and Ctrl+F land ready to type. Don't focus a box with
+  `NavigationMethod.Directional` unless you want that; use `Tab`/`Unspecified` to put the user straight into typing.
 - **A Button also swallows Enter and Space** before a XAML `KeyDown=` handler on it runs. A card that opens with Enter must either keep a bound `Command` or have the key tunnelled from an
   ancestor (`LibraryScreen.OnScreenCardKeyDownTunnel`).
 - **A Button swallows a left press** (Avalonia 12): an instance `PointerPressed` handler declared in XAML on a `Button` never sees it. Tunnel from an ancestor instead (see
@@ -157,6 +162,19 @@ shortcuts for a *hotkey* on a screen.
   thing `MainWindow` does. The default `InputServiceLocator.Current` is the do-nothing service, so anything not given a real one ignores keys.
 - **Persistence:** user remaps are `keymap.json` next to the database (overrides only). The old `KeyBinding` table is read once by
   `LegacyKeyBindingImporter` and is left in place on purpose (worktrees share the dev DB) — don't write to it, don't drop it casually.
+
+## Running the App tests
+
+The full `Paperbunkr.App.Tests` suite (~5,300 tests) takes far too long to run after every change. Day to day run the fast set, and target the classes you touched:
+
+```bash
+dotnet test src/Paperbunkr.App.Tests --filter "Speed!=Slow"                      # everything except the slow classes
+dotnet test src/Paperbunkr.App.Tests --filter "FullyQualifiedName~WantedArrowKeyTests"   # one class
+dotnet test src/Paperbunkr.App.Tests --filter "Speed=Slow"                        # only the slow ones (run before a release)
+```
+
+A class or test that takes more than ~30 s is tagged `[Trait("Speed", "Slow")]` (`MainViewModelTests`, `AdPageDetectionServiceTests`, `DensityPresetTests`, `PreferencesScreenViewModelTests`, two sweeps in
+`RealWindowKeyboardTests`). Never start a second `dotnet test`/`dotnet build` on the project while one is running: they share the output folder and stall each other.
 
 ## Build gotcha: adding a new Avalonia View
 

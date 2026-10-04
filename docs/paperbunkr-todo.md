@@ -2714,6 +2714,10 @@ mouse buttons 4/5; Ctrl+F, F5, Shift+F6, Ctrl+wheel zoom, MouseButton4/5 = previ
 - **Later the same day (spec §14.2, §14.3):** Library Enter/Space on tiles, Esc/Backspace to leave detail pages, arrows in the editors and on the nav rail, Up/Down in the Detail grid and Wanted,
   Reading Lists gallery Up to Continue Reading, Books edge navigation, SuggestBox no longer opening itself on focus/arrow, Continuity sidebar Right/Enter, the focus-ring clipping side effect
   (`FocusRingAdorner`), doubled/hardcoded rings (Detail, carousel, Insights), the Library empty-state Clear button, and real covers in the Merge series dialog.
+- **Third round (spec §14.4, 2026-10-04):** text boxes only browse when reached by arrows/pad (`TextEntryMode`); Wanted Queue/Series Up/Down (Avalonia's `ItemsControl` dropped focus, found by walking the real
+  `MainWindow`); Event Map arrows (focus lost when a scroll recycled the focused card; edge moves reach the shell) and its doubled ring; hover and focus rings on Books cards; Preferences sidebar focus ring (an inset
+  shadow cannot draw on a bordered control); Left from the first Home tile or panel reaches the rail. Not reproduced: arrow navigation between groups in a grouped Library (walked Down, Up, Right in poster, list and
+  details modes, by issue and by series, small and large groups, all fine in the real window).
 - **Not verified on screen** (as above, plus): the controller driving non-reader screens with a real pad, capturing a pad button in the Preferences box, a real plugin's shortcut running, and how the
   focus ring now looks on every other page that uses the shared adorner (rendered headlessly only for Insights and the Home carousel).
 - **Limits / follow-ups:** the metadata-entity detail page has no code-behind to register a scope on; the PDF reader relies on its page canvas's Reader scope; only Library-hook plugin commands become

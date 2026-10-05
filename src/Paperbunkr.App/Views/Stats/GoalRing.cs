@@ -2,6 +2,7 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Views.Stats;
 
@@ -16,17 +17,24 @@ public sealed class GoalRing : Control
     public static readonly StyledProperty<double> PercentProperty =
         AvaloniaProperty.Register<GoalRing, double>(nameof(Percent));
 
-    public static readonly StyledProperty<bool> IsCompleteProperty =
-        AvaloniaProperty.Register<GoalRing, bool>(nameof(IsComplete));
+    /// <summary>Active (accent, or amber when <see cref="IsBehind"/>), Completed (success ring + check) or Missed (danger arc at the
+    /// reached percentage + cross) - docs/superpowers/specs/2026-10-04-insights-goal-outcomes-and-chart-colour-design.md.</summary>
+    public static readonly StyledProperty<GoalOutcome> OutcomeProperty =
+        AvaloniaProperty.Register<GoalRing, GoalOutcome>(nameof(Outcome));
+
+    public static readonly StyledProperty<bool> IsBehindProperty =
+        AvaloniaProperty.Register<GoalRing, bool>(nameof(IsBehind));
 
     static GoalRing()
     {
-        AffectsRender<GoalRing>(PercentProperty, IsCompleteProperty);
+        AffectsRender<GoalRing>(PercentProperty, OutcomeProperty, IsBehindProperty);
     }
 
     public double Percent { get => GetValue(PercentProperty); set => SetValue(PercentProperty, value); }
 
-    public bool IsComplete { get => GetValue(IsCompleteProperty); set => SetValue(IsCompleteProperty, value); }
+    public GoalOutcome Outcome { get => GetValue(OutcomeProperty); set => SetValue(OutcomeProperty, value); }
+
+    public bool IsBehind { get => GetValue(IsBehindProperty); set => SetValue(IsBehindProperty, value); }
 
     protected override Size MeasureOverride(Size availableSize) => new(40, 40);
 
@@ -44,11 +52,24 @@ public sealed class GoalRing : Control
         var trackBrush = ResolveBrush("PbBorderBrush", Color.FromArgb(0x40, 0xff, 0xff, 0xff));
         context.DrawEllipse(null, new Pen(trackBrush, strokeWidth), center, radius, radius);
 
-        if (IsComplete)
+        if (Outcome == GoalOutcome.Completed)
         {
             var successBrush = ResolveBrush("PbSuccessBrush", Color.FromRgb(0x4a, 0xde, 0x80));
             context.DrawEllipse(null, new Pen(successBrush, strokeWidth), center, radius, radius);
+            DrawMark(context, center, radius, successBrush, check: true);
             return;
+        }
+
+        bool missed = Outcome == GoalOutcome.Missed;
+        var arcBrush = missed
+            ? ResolveBrush("PbDangerBrush", Color.FromRgb(0xd9, 0x6c, 0x6c))
+            : IsBehind
+                ? ResolveBrush("PbBadgeBrush", Color.FromRgb(0xd7, 0xac, 0x4c))
+                : ResolveBrush("PbAccentBrush", Color.FromRgb(0x5b, 0x8d, 0xef));
+
+        if (missed)
+        {
+            DrawMark(context, center, radius, arcBrush, check: false);
         }
 
         double clamped = Math.Clamp(Percent, 0, 100);
@@ -76,8 +97,24 @@ public sealed class GoalRing : Control
             ctx.EndFigure(isClosed: false);
         }
 
-        var accentBrush = ResolveBrush("PbAccentBrush", Color.FromRgb(0x5b, 0x8d, 0xef));
-        context.DrawGeometry(null, new Pen(accentBrush, strokeWidth, lineCap: PenLineCap.Round), geometry);
+        context.DrawGeometry(null, new Pen(arcBrush, strokeWidth, lineCap: PenLineCap.Round), geometry);
+    }
+
+    /// <summary>A check (completed) or cross (missed) drawn inside the ring, so the outcome never depends on colour alone.</summary>
+    private static void DrawMark(DrawingContext context, Point center, double radius, IBrush brush, bool check)
+    {
+        var pen = new Pen(brush, 2.5, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
+        double r = radius * 0.42;
+        if (check)
+        {
+            context.DrawLine(pen, new Point(center.X - r, center.Y + (r * 0.05)), new Point(center.X - (r * 0.25), center.Y + (r * 0.7)));
+            context.DrawLine(pen, new Point(center.X - (r * 0.25), center.Y + (r * 0.7)), new Point(center.X + r, center.Y - (r * 0.6)));
+        }
+        else
+        {
+            context.DrawLine(pen, new Point(center.X - (r * 0.7), center.Y - (r * 0.7)), new Point(center.X + (r * 0.7), center.Y + (r * 0.7)));
+            context.DrawLine(pen, new Point(center.X + (r * 0.7), center.Y - (r * 0.7)), new Point(center.X - (r * 0.7), center.Y + (r * 0.7)));
+        }
     }
 
     private IBrush ResolveBrush(string key, Color fallback)

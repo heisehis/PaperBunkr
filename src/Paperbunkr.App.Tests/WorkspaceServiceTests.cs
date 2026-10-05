@@ -45,6 +45,31 @@ public class WorkspaceServiceTests : IDisposable
     }
 
     [Fact]
+    public void EnsureBuiltInsSeeded_RewritesAChangedLibraryStarter_AndLeavesUserWorkspacesAlone()
+    {
+        // What an install seeded before lenses existed: "Currently reading" as "unread only, by last opened".
+        string oldStarter = WorkspaceStateJson.Serialize(new LibraryWorkspaceState(
+            IssueListSortField: IssueListSortField.Opened, IssueListSortDirection: SortDirection.Descending, FilterUnreadOnly: true));
+        string userState = WorkspaceStateJson.Serialize(new LibraryWorkspaceState(FilterUnreadOnly: true));
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.Workspaces.Add(new Workspace { Screen = WorkspaceScreen.Library, Name = "Currently reading", IsBuiltIn = true, SortOrder = 1, StateJson = oldStarter });
+            context.Workspaces.Add(new Workspace { Screen = WorkspaceScreen.Library, Name = "Currently reading", IsBuiltIn = false, SortOrder = 0, StateJson = userState });
+            context.SaveChanges();
+        }
+
+        _service.EnsureBuiltInsSeeded();
+        _service.EnsureBuiltInsSeeded();
+
+        var rows = _service.List(WorkspaceScreen.Library).Where(w => w.Name == "Currently reading").ToList();
+        var starter = WorkspaceStateJson.DeserializeLibrary(rows.Single(w => w.IsBuiltIn).StateJson);
+        Assert.Equal(LibraryLens.Reading, starter.Lens);
+        Assert.False(starter.FilterUnreadOnly);
+        Assert.Equal(IssueListSortField.Opened, starter.IssueListSortField);
+        Assert.Equal(userState, rows.Single(w => !w.IsBuiltIn).StateJson);
+    }
+
+    [Fact]
     public void EnsureBuiltInsSeeded_CreatesTheStarters_ForEachScreen()
     {
         _service.EnsureBuiltInsSeeded();

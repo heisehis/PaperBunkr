@@ -25,10 +25,6 @@ using Paperbunkr.Plugins;
 
 namespace Paperbunkr.App.ViewModels;
 
-/// <summary>Which tab Library's "View &amp; Sort" popup shows (docs/superpowers/specs/2026-08-27-
-/// library-browsing-4b-toolbar-rework-design.md §4). Top-level so XAML <c>x:Static</c> can name it.</summary>
-public enum ViewSortTab { View, Sort, Group }
-
 /// <summary>
 /// Library grid + toolbar, ported from LibraryScreen.dc.html (Claude Design project 43c40b25),
 /// "pills" toolbar variant (the default selected in the parent "Paperbunkr App" wireframe).
@@ -204,7 +200,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         Action<int, bool>? enqueueMetadataWriteBack = null,
         IActivityService? activity = null,
         bool loadOnConstruction = true,
-        ITrackerAutoSyncService? trackerAutoSync = null)
+        ITrackerAutoSyncService? trackerAutoSync = null,
+        ListLayoutService? listLayoutService = null)
     {
         _trackerAutoSync = trackerAutoSync ?? NoOpTrackerAutoSyncService.Instance;
         _activity = activity ?? new ActivityService();
@@ -291,7 +288,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 // which sort/group via SeriesCardSample.RepresentativeRow through the same
                 // IssueListFieldCatalog) re-sorts too. Guarded against the constructor's own seed
                 // assignments in LoadLibrarySettings, before _allSeries is loaded.
-                if (_constructed)
+                // ...and against a list layout being applied, which sets all three and then saves and renders once.
+                if (_constructed && !_applyingListLayout)
                 {
                     SaveLibrarySettings();
                     RebuildView(ViewTrigger.SortGroup);
@@ -302,6 +300,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         LoadLibrarySettings();
         _suppressWorkspaceTracking = false;
         InitializeDetailsColumns();
+        InitializeListLayouts(listLayoutService);
 
         // Seeds history entry #1 with the just-loaded state, matching CE's own behavior of the
         // very first BookList assignment already counting as the first history entry - so
@@ -400,6 +399,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                     : new List<CollectionMember>();
             }
 
+            ApplyLayoutForSelection();
             SearchQuery = state.SearchQuery; // Goes through the normal setter - same reload/save path as any other search-query change.
             SaveLibrarySettings();
             RebuildView();
@@ -483,14 +483,12 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _searchQuery = settings.LibrarySearchQuery ?? string.Empty;
         _searchMode = settings.LibrarySearchMode;
         _filterUnreadOnly = settings.LibraryFilterUnreadOnly;
+        _activeLens = settings.LibraryLens;
         _filterMissingIssues = settings.LibraryFilterMissingIssues;
         _filterTrackedOnly = settings.LibraryFilterTrackedOnly;
         _detailsColumnsSetting = settings.LibraryDetailsColumns;
         _activeWorkspaceId = settings.LibraryActiveWorkspaceId;
-        _fadeInThumbnails = settings.FadeInThumbnails;
-        _smoothScrolling = settings.SmoothScrolling;
         _dogEarThumbnails = settings.DogEarThumbnails;
-        _showToolTips = settings.ShowToolTips;
         _numericRatingThumbnails = settings.NumericRatingThumbnails;
 #pragma warning restore MVVMTK0034
 
@@ -599,16 +597,14 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         settings.LibraryShowLanguageBadge = ShowLanguageBadge;
         settings.LibraryUseLanguageIcon = UseLanguageIcon;
         settings.LibraryShowContinueReadingButton = ShowContinueReadingButton;
-        settings.FadeInThumbnails = FadeInThumbnails;
-        settings.SmoothScrolling = SmoothScrolling;
         settings.DogEarThumbnails = DogEarThumbnails;
-        settings.ShowToolTips = ShowToolTips;
         settings.NumericRatingThumbnails = NumericRatingThumbnails;
         settings.LibrarySearchQuery = string.IsNullOrEmpty(SearchQuery) ? null : SearchQuery;
         settings.LibrarySearchMode = SearchMode;
         settings.LibraryActiveContentType = _activeContentType;
         settings.LibraryActiveCollectionId = _activeCollectionId;
         settings.LibraryFilterUnreadOnly = FilterUnreadOnly;
+        settings.LibraryLens = ActiveLens;
         settings.LibraryFilterMissingIssues = FilterMissingIssues;
         settings.LibraryFilterTrackedOnly = FilterTrackedOnly;
         // DetailsColumns is populated just after LoadLibrarySettings(); until then (the IssueList
@@ -629,6 +625,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         catch (DbUpdateException ex) when (PaperbunkrDbContext.IsTransientLockError(ex))
         {
         }
+
+        // The list on screen remembers its own layout (docs/superpowers/specs/2026-10-04-list-layouts-design.md);
+        // null only while the constructor is still seeding.
+        ListLayouts?.TrackChange();
     }
 
     /// <summary>Defensive: a corrupted/manually-edited settings row is treated as "no history yet",
@@ -707,7 +707,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             Field = field,
             DisplayName = descriptor.DisplayName,
             IsVisible = isVisible,
-            Width = WideDetailsColumns.Contains(field) ? 220 : 150,
+            Width = DetailsColumnWidthFor(field),
         };
         column.PropertyChanged += OnDetailsColumnChanged;
         DetailsColumns.Add(column);
@@ -715,7 +715,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     private void OnDetailsColumnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(DetailsColumn.IsVisible))
+        if (e.PropertyName == nameof(DetailsColumn.IsVisible) && !_applyingListLayout)
         {
             SaveLibrarySettings();
             DetailsColumnsChanged?.Invoke(this, EventArgs.Empty);
@@ -1232,6 +1232,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         OnPropertyChanged(nameof(IsAllSeriesActive));
+        OnPropertyChanged(nameof(HasContentTypeFilter));
+        OnPropertyChanged(nameof(ContentTypeChipLabel));
+        OnPropertyChanged(nameof(ShowClearChip));
+        OnPropertyChanged(nameof(ShowContinueStrip));
         OnPropertyChanged(nameof(HasCollections));
     }
 
@@ -1299,7 +1303,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             FilterUnreadOnly,
             FilterMissingIssues,
             IssueList.CaptureSortGroupSpec(),
-            SourceFilter);
+            SourceFilter,
+            ActiveLens,
+            PublisherFilter);
 
         return new ViewRequest(
             inputs,
@@ -1368,6 +1374,11 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         IssueList.ApplyPrecomputed(result.Rows, result.RowGroups, result.IsGrouped);
         ReResolvePreview();
+
+        _seriesLensCounts = result.SeriesLensCounts;
+        _issueLensCounts = result.IssueLensCounts;
+        RefreshContinueStrip();
+        RaiseLensBindings();
 
         OnPropertyChanged(nameof(ShowAlphabetIndex));
         OnPropertyChanged(nameof(AlphabetIndex));
@@ -1670,6 +1681,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _activeContentType = null;
         _activeCollectionId = null;
         _activeCollectionMembers = new List<CollectionMember>();
+        ApplyLayoutForSelection();
         SaveLibrarySettings();
         RebuildView();
         PushBrowseHistory();
@@ -1686,6 +1698,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _activeContentType = summary.ContentType;
         _activeCollectionId = null;
         _activeCollectionMembers = new List<CollectionMember>();
+        ApplyLayoutForSelection();
         SaveLibrarySettings();
         RebuildView();
         PushBrowseHistory();
@@ -1711,6 +1724,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             _activeCollectionMembers = new List<CollectionMember>(CollectionResolver.GetMembers(context, summary.Id));
         }
 
+        ApplyLayoutForSelection();
         SaveLibrarySettings();
         RebuildView();
         PushBrowseHistory();
@@ -1817,14 +1831,29 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
     }
 
+    /// <summary>Set by the shell: opens the goal editor with a Finish goal for a collection (docs/superpowers/specs/2026-10-04-insights-goal-scopes-design.md).</summary>
+    public Action<int>? CollectionGoalRequested { get; set; }
+
+    /// <summary>"Set a goal…" in a collection row's menu.</summary>
+    [RelayCommand]
+    private void SetCollectionGoal(CollectionSummary? summary)
+    {
+        if (summary is not null)
+        {
+            CollectionGoalRequested?.Invoke(summary.Id);
+        }
+    }
+
     private void DeleteCollection(int collectionId)
     {
         using var context = PaperbunkrDb.CreateContext();
         CollectionService.Delete(context, collectionId);
 
+        ListLayouts.ForgetList($"collection:{collectionId}");
         if (_activeCollectionId == collectionId)
         {
             _activeCollectionId = null;
+            ApplyLayoutForSelection();
             SaveLibrarySettings();
         }
 
@@ -2180,6 +2209,215 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         RebuildView(ViewTrigger.Filter);
     }
 
+    // --- Lens tabs (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 1) ---
+
+    /// <summary>The reading-state tab. Applies within the active granularity: per series for cards, per issue for rows.</summary>
+    [ObservableProperty]
+    private LibraryLens _activeLens;
+
+    partial void OnActiveLensChanged(LibraryLens value)
+    {
+        RaiseChipAndEmptyState();
+        SaveLibrarySettings();
+        RebuildView(ViewTrigger.Filter);
+    }
+
+    [RelayCommand]
+    private void SetLens(LibraryLens lens) => ActiveLens = lens;
+
+    // Tallied by the same pass that filters (LibraryViewPipeline), so they cost no extra walk and no query.
+    private LensCounts _seriesLensCounts;
+    private LensCounts _issueLensCounts;
+
+    private LensCounts ActiveLensCounts => IsSeriesGranularity ? _seriesLensCounts : _issueLensCounts;
+
+    public bool IsAllLens => ActiveLens == LibraryLens.All;
+    public bool IsReadingLens => ActiveLens == LibraryLens.Reading;
+    public bool IsUnreadLens => ActiveLens == LibraryLens.Unread;
+    public bool IsReadLens => ActiveLens == LibraryLens.Read;
+
+    public int LensAllCount => ActiveLensCounts.All;
+    public int LensReadingCount => ActiveLensCounts.Reading;
+    public int LensUnreadCount => ActiveLensCounts.Unread;
+    public int LensReadCount => ActiveLensCounts.Read;
+
+    /// <summary>A tab with nothing behind it stays in place, dimmed, so the strip never reshuffles under the pointer.</summary>
+    public bool IsLensAllEmpty => LensAllCount == 0;
+    public bool IsLensReadingEmpty => LensReadingCount == 0;
+    public bool IsLensUnreadEmpty => LensUnreadCount == 0;
+    public bool IsLensReadEmpty => LensReadCount == 0;
+
+    /// <summary>Right-hand end of the state row: how many items the current lens shows, in the active granularity's noun.</summary>
+    public string ResultSummary
+    {
+        get
+        {
+            int count = ActiveLensCounts.Of(ActiveLens);
+            string noun = IsSeriesGranularity ? "series" : count == 1 ? "issue" : "issues";
+            return $"{count:N0} {noun}";
+        }
+    }
+
+    private void RaiseLensBindings()
+    {
+        OnPropertyChanged(nameof(IsAllLens));
+        OnPropertyChanged(nameof(IsReadingLens));
+        OnPropertyChanged(nameof(IsUnreadLens));
+        OnPropertyChanged(nameof(IsReadLens));
+        OnPropertyChanged(nameof(LensAllCount));
+        OnPropertyChanged(nameof(LensReadingCount));
+        OnPropertyChanged(nameof(LensUnreadCount));
+        OnPropertyChanged(nameof(LensReadCount));
+        OnPropertyChanged(nameof(IsLensAllEmpty));
+        OnPropertyChanged(nameof(IsLensReadingEmpty));
+        OnPropertyChanged(nameof(IsLensUnreadEmpty));
+        OnPropertyChanged(nameof(IsLensReadEmpty));
+        OnPropertyChanged(nameof(ResultSummary));
+    }
+
+    // --- Continue reading strip (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 4) ---
+
+    /// <summary>How many series the strip shows at most; more than fit the window scroll sideways.</summary>
+    internal const int ContinueStripLimit = 6;
+
+    /// <summary>
+    /// Series with an issue in progress, most recently opened first - the rule Home's resume cards use
+    /// (<c>HomeFeedResolver.GetContinueReading</c>: mid-read issues only, never a series marked Dropped), read off the cached
+    /// cards so it costs no query. Comics only by construction: the Library's cards are comic series.
+    /// </summary>
+    public BulkObservableCollection<SeriesCardSample> ContinueStrip { get; } = new();
+
+    /// <summary>
+    /// The strip only heads the plain, whole-library view: the All lens with no search, no filter chip and no sidebar
+    /// selection. Anywhere narrower it would sit between the user and the results they just asked for.
+    /// </summary>
+    public bool ShowContinueStrip =>
+        ContinueStrip.Count > 0 && ActiveLens == LibraryLens.All && !HasActiveFilters && IsAllSeriesActive
+        && string.IsNullOrWhiteSpace(SearchQuery) && !IsCollectionView;
+
+    private void RefreshContinueStrip()
+    {
+        var cards = _projection is null
+            ? new List<SeriesCardSample>()
+            : _projection.Entries
+                .Select(e => e.Card)
+                .Where(c => c.ContinueReadingPage is not null && c.ReadingStatusLabel != nameof(ReadingStatus.Dropped))
+                .OrderByDescending(c => c.LastOpenedTime ?? DateTime.MinValue)
+                .Take(ContinueStripLimit)
+                .ToList();
+
+        if (!cards.SequenceEqual(ContinueStrip))
+        {
+            ContinueStrip.ReplaceAll(cards);
+        }
+
+        OnPropertyChanged(nameof(ShowContinueStrip));
+    }
+
+    /// <summary>A strip card took focus: the inspector follows it, exactly as it follows a focused grid tile.</summary>
+    public void PreviewContinueCard(SeriesCardSample card)
+    {
+        if (IsSeriesGranularity)
+        {
+            PreviewSeries = card;
+        }
+        else
+        {
+            PreviewIssue = PreviewSeriesRows(card.SeriesId).FirstOrDefault(r => r.Id == card.ContinueReadingIssueId) ?? PreviewIssue;
+        }
+    }
+
+    // --- Publisher chip. Session-only, like the source filter: it is not part of saved layouts or workspaces. ---
+
+    [ObservableProperty]
+    private string? _publisherFilter;
+
+    partial void OnPublisherFilterChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasPublisherFilter));
+        OnPropertyChanged(nameof(PublisherChipLabel));
+        RaiseChipAndEmptyState();
+        RebuildView(ViewTrigger.Filter);
+    }
+
+    public bool HasPublisherFilter => PublisherFilter is not null;
+
+    public string PublisherChipLabel => PublisherFilter ?? "Publisher";
+
+    /// <summary>The publishers the chip offers, read off the cached cards when its popup opens (the card's publisher is the aggregated one, not the stale <c>Series.Publisher</c>).</summary>
+    public IReadOnlyList<string> PublisherOptions { get; private set; } = Array.Empty<string>();
+
+    public bool IsPublisherChipOpen => ActiveDropdown == "publisherChip";
+
+    [RelayCommand]
+    private void TogglePublisherChip()
+    {
+        if (ActiveDropdown == "publisherChip")
+        {
+            ActiveDropdown = null;
+            return;
+        }
+
+        PublisherOptions = _projection is null
+            ? Array.Empty<string>()
+            : _projection.Entries
+                .Select(e => e.Card.Publisher)
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Select(p => p!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(p => p, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+        OnPropertyChanged(nameof(PublisherOptions));
+        ActiveDropdown = "publisherChip";
+    }
+
+    /// <summary>Picks a publisher from the chip's popup (null clears it). The popup closes a tick later: this runs from a button inside it.</summary>
+    [RelayCommand]
+    private void SetPublisherFilter(string? publisher)
+    {
+        PublisherFilter = string.IsNullOrWhiteSpace(publisher) ? null : publisher;
+        Dispatcher.UIThread.Post(() => ActiveDropdown = null);
+    }
+
+    [RelayCommand] private void ClearPublisherFilter() => PublisherFilter = null;
+
+    // --- Content type chip. Drives the same selection as the sidebar's Content type rows. ---
+
+    public bool HasContentTypeFilter => _activeContentType is not null;
+
+    public string ContentTypeChipLabel => _activeContentType?.ToString() ?? "Content type";
+
+    public bool IsContentTypeChipOpen => ActiveDropdown == "contentTypeChip";
+
+    [RelayCommand]
+    private void ToggleContentTypeChip() => ActiveDropdown = ActiveDropdown == "contentTypeChip" ? null : "contentTypeChip";
+
+    [RelayCommand]
+    private void SetContentTypeFilter(ContentTypeSummary? summary)
+    {
+        SelectContentType(summary);
+        Dispatcher.UIThread.Post(() => ActiveDropdown = null);
+    }
+
+    [RelayCommand]
+    private void ClearContentTypeFilter()
+    {
+        if (_activeContentType is not null)
+        {
+            SelectAllSeries();
+        }
+
+        Dispatcher.UIThread.Post(() => ActiveDropdown = null);
+    }
+
+    public bool IsSourceChipOpen => ActiveDropdown == "sourceChip";
+
+    [RelayCommand]
+    private void ToggleSourceChip() => ActiveDropdown = ActiveDropdown == "sourceChip" ? null : "sourceChip";
+
+    /// <summary>Whether the Clear chip has anything to clear: any filter chip, a narrowed search scope or a content type.</summary>
+    public bool ShowClearChip => HasActiveFilters || HasContentTypeFilter;
+
     /// <summary>A-Z indexer only means something against an alphabetically-ordered, ungrouped flat
     /// list (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase C) - now reads
     /// <see cref="IssueList"/>'s sort/group state directly since that's the only one left (see the
@@ -2217,14 +2455,15 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
     }
 
-    // --- Toolbar chrome (docs/superpowers/specs/2026-08-27-library-browsing-4b-toolbar-rework-
-    // design.md §2-§5) - one "View & Sort" tabbed popup replacing the old Filter/Sort/Group/Display
-    // pills, plus a chips row carrying the live filter/sort/group state. ---
+    // --- Toolbar chrome. One dropdown is open at a time. The old three-tab "View & Sort" popup (2026-08-27 4b design) was
+    // split on 2026-10-04: a Display popup on the row-1 button, and Sort and Group popups on their row-2 chips. ---
 
     [ObservableProperty]
     private string? _activeDropdown;
 
-    public bool IsViewSortOpen => ActiveDropdown == "viewSort";
+    public bool IsDisplayOpen => ActiveDropdown == "display";
+    public bool IsSortOpen => ActiveDropdown == "sort";
+    public bool IsGroupOpen => ActiveDropdown == "group";
     public bool IsSearchModeOpen => ActiveDropdown == "searchMode";
 
     /// <summary>The "+ Add filter" chip's small popup (the old Filter popup's checkbox content).</summary>
@@ -2236,38 +2475,31 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     partial void OnActiveDropdownChanged(string? value)
     {
-        OnPropertyChanged(nameof(IsViewSortOpen));
+        OnPropertyChanged(nameof(IsDisplayOpen));
+        OnPropertyChanged(nameof(IsSortOpen));
+        OnPropertyChanged(nameof(IsGroupOpen));
         OnPropertyChanged(nameof(IsSearchModeOpen));
         OnPropertyChanged(nameof(IsAddFilterOpen));
+        OnPropertyChanged(nameof(IsPublisherChipOpen));
+        OnPropertyChanged(nameof(IsContentTypeChipOpen));
+        OnPropertyChanged(nameof(IsSourceChipOpen));
         OnPropertyChanged(nameof(IsAddToListOpen));
         OnPropertyChanged(nameof(IsWorkspaceOpen));
     }
 
-    [ObservableProperty]
-    private ViewSortTab _viewSortActiveTab = ViewSortTab.View;
-
-    public bool IsViewTabActive => ViewSortActiveTab == ViewSortTab.View;
-    public bool IsSortTabActive => ViewSortActiveTab == ViewSortTab.Sort;
-    public bool IsGroupTabActive => ViewSortActiveTab == ViewSortTab.Group;
-
-    partial void OnViewSortActiveTabChanged(ViewSortTab value)
+    [RelayCommand]
+    private void ToggleDisplay()
     {
-        OnPropertyChanged(nameof(IsViewTabActive));
-        OnPropertyChanged(nameof(IsSortTabActive));
-        OnPropertyChanged(nameof(IsGroupTabActive));
+        // Preferences > Appearance owns the progress-bar setting too, so re-read it each time the popup opens.
+        OnPropertyChanged(nameof(ShowProgressBar));
+        ActiveDropdown = ActiveDropdown == "display" ? null : "display";
     }
 
     [RelayCommand]
-    private void ToggleViewSort() => ActiveDropdown = ActiveDropdown == "viewSort" ? null : "viewSort";
+    private void ToggleSort() => ActiveDropdown = ActiveDropdown == "sort" ? null : "sort";
 
-    /// <summary>Opens the View &amp; Sort popup on a specific tab - the chips row's
-    /// <c>Sorted:</c>/<c>Grouped:</c> chips use this to jump straight to the matching tab.</summary>
     [RelayCommand]
-    private void OpenViewSortTab(ViewSortTab tab)
-    {
-        ViewSortActiveTab = tab;
-        ActiveDropdown = "viewSort";
-    }
+    private void ToggleGroup() => ActiveDropdown = ActiveDropdown == "group" ? null : "group";
 
     [RelayCommand]
     private void ToggleSearchMode() => ActiveDropdown = ActiveDropdown == "searchMode" ? null : "searchMode";
@@ -2339,7 +2571,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             nameof(UseLanguageIcon), nameof(ShowContinueReadingButton),
             nameof(SearchQuery), nameof(SearchMode), nameof(SearchModeLabel),
             nameof(FilterUnreadOnly), nameof(FilterMissingIssues), nameof(FilterTrackedOnly),
-            nameof(IsAllSeriesActive),
+            nameof(ActiveLens),
+            nameof(IsAllSeriesActive), nameof(HasContentTypeFilter), nameof(ContentTypeChipLabel),
         })
         {
             OnPropertyChanged(name);
@@ -2358,7 +2591,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _activeContentType, _activeCollectionId,
         FilterUnreadOnly, FilterMissingIssues, FilterTrackedOnly,
         DetailsColumns.Count == 0 ? _detailsColumnsSetting : SerializeDetailsColumns(),
-        GridCoverFit);
+        GridCoverFit,
+        ActiveLens);
 
     [RelayCommand]
     private void ApplyWorkspace(int id)
@@ -2398,6 +2632,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             _filterUnreadOnly = s.FilterUnreadOnly;
             _filterMissingIssues = s.FilterMissingIssues;
             _filterTrackedOnly = s.FilterTrackedOnly;
+            _activeLens = s.Lens;
 #pragma warning restore MVVMTK0034
 
             // Sidebar selection - the exact stale-collection fallback LoadLibrarySettings uses.
@@ -2443,6 +2678,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             LoadFromDatabase();
 
             RaiseAllToolbarBindings();
+
+            // A workspace names both the list and its look, so that look becomes the list's own layout.
+            _appliedLayoutKey = LayoutSelectionKey;
+            ListLayouts.StoreCurrent();
         }
         finally
         {
@@ -2684,7 +2923,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     // --- Chips row + empty state ---
 
     public bool HasActiveFilters =>
-        FilterUnreadOnly || FilterMissingIssues || FilterTrackedOnly || SearchMode != SearchMode.All || SourceFilter is not null;
+        FilterUnreadOnly || FilterMissingIssues || FilterTrackedOnly || SearchMode != SearchMode.All || SourceFilter is not null || PublisherFilter is not null;
 
     // ---- Library source filter (remote-library-sharing design 8): every library / this computer / one remote library. ----
     // Session-only on purpose: it is not part of saved layouts or workspaces (a remote library may not exist next launch).
@@ -2709,7 +2948,16 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         RebuildView(ViewTrigger.Filter);
     }
 
-    [RelayCommand] private void SetSourceFilter(int? id) => SourceFilter = id;
+    /// <summary>Picks a library from the source chip's popup, which closes a tick later: this runs from a button inside it.</summary>
+    [RelayCommand]
+    private void SetSourceFilter(int? id)
+    {
+        SourceFilter = id;
+        if (ActiveDropdown == "sourceChip")
+        {
+            Dispatcher.UIThread.Post(() => ActiveDropdown = null);
+        }
+    }
     [RelayCommand] private void ClearSourceFilter() => SourceFilter = null;
 
     private void RefreshSourceOptions()
@@ -2738,7 +2986,6 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     public bool HasVisibleChips => HasActiveFilters || IsSortNonDefault || IsGroupNonDefault;
 
-    public bool ShowGroupChip => IsGroupNonDefault;
     public bool ShowSearchScopeChip => SearchMode != SearchMode.All;
     public string SearchScopeChipLabel => SearchModeLabel;
 
@@ -2750,7 +2997,6 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(IsSortNonDefault));
         OnPropertyChanged(nameof(IsGroupNonDefault));
         OnPropertyChanged(nameof(HasVisibleChips));
-        OnPropertyChanged(nameof(ShowGroupChip));
         OnPropertyChanged(nameof(ShowSearchScopeChip));
         OnPropertyChanged(nameof(SearchScopeChipLabel));
         OnPropertyChanged(nameof(ShowEmptyState));
@@ -2759,6 +3005,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(EmptyStateActionCommand));
         OnPropertyChanged(nameof(ShowNoResultsPreview));
         OnPropertyChanged(nameof(ShowIdlePreview));
+        OnPropertyChanged(nameof(ShowClearChip));
+        OnPropertyChanged(nameof(ShowContinueStrip));
+        RaiseLensBindings();
     }
 
     /// <summary>Clears the filter toggles and resets the search scope to All; leaves the sidebar
@@ -2770,7 +3019,19 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         FilterMissingIssues = false;
         FilterTrackedOnly = false;
         SourceFilter = null;
+        PublisherFilter = null;
         SearchMode = SearchMode.All;
+    }
+
+    /// <summary>The state row's Clear chip: every filter chip, plus the content type (which is a chip there too). The lens and the search text stay.</summary>
+    [RelayCommand]
+    private void ClearChips()
+    {
+        ClearAllFilters();
+        if (_activeContentType is not null)
+        {
+            SelectAllSeries();
+        }
     }
 
     [RelayCommand] private void ClearUnreadFilter() => FilterUnreadOnly = false;
@@ -2789,17 +3050,28 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 return $"No results for “{SearchQuery.Trim()}”.";
             }
 
-            return HasActiveFilters ? "No comics match this filter." : "This library is empty.";
+            if (HasActiveFilters)
+            {
+                return "No comics match this filter.";
+            }
+
+            return ActiveLens switch
+            {
+                LibraryLens.Reading => "Nothing in progress.",
+                LibraryLens.Unread => "Nothing unread.",
+                LibraryLens.Read => "Nothing read yet.",
+                _ => "This library is empty.",
+            };
         }
     }
 
-    private bool FiltersOrSearchActive => HasActiveFilters || !string.IsNullOrWhiteSpace(SearchQuery);
+    private bool FiltersOrSearchActive => HasActiveFilters || ActiveLens != LibraryLens.All || !string.IsNullOrWhiteSpace(SearchQuery);
 
     /// <summary>
     /// What the empty state offers. It has to undo whatever made the list empty: the filter toggles <em>and</em> the search text (<see cref="ClearAllFilters"/> alone leaves the search alone, by
     /// design, so a button that only ran it did nothing when a search was the only cause).
     /// </summary>
-    public string EmptyStateActionLabel => HasActiveFilters ? "Clear filters" : !string.IsNullOrWhiteSpace(SearchQuery) ? "Clear search" : "Scan folders";
+    public string EmptyStateActionLabel => HasActiveFilters ? "Clear filters" : !string.IsNullOrWhiteSpace(SearchQuery) ? "Clear search" : ActiveLens != LibraryLens.All ? "Show all" : "Scan folders";
 
     public IRelayCommand EmptyStateActionCommand =>
         FiltersOrSearchActive ? ClearFiltersAndSearchCommand : OpenLibraryFoldersCommand;
@@ -2810,6 +3082,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         ClearAllFilters();
         SearchQuery = string.Empty;
+        ActiveLens = LibraryLens.All;
     }
 
     /// <summary>Empty-state "Scan folders" action - hands off to Preferences → Libraries via the
@@ -3913,7 +4186,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// Poster/Panorama/Tiles modes merged into one <see cref="LibraryViewMode.PosterGrid"/> mode.</summary>
     public bool IsGridDogEarScope => IsCoverOverlayScope;
 
-    // View & Sort toggles are shown only in the view modes whose templates honour them, so none of them looks broken by doing nothing.
+    // Display popup toggles are shown only in the view modes whose templates honour them, so none of them looks broken by doing nothing.
 
     /// <summary>Dog-ear, numeric rating and hover tooltips live on the Poster/Panorama cover templates only.</summary>
     public bool IsCoverOverlayScope => IsPosterGrid || IsPanoramaGrid;
@@ -4200,9 +4473,23 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>The preview's series-state facts the view binds directly (kept here so they are unit-testable).</summary>
     public string PreviewSeriesReadLabel => PreviewSeries is { } s ? $"{s.IssueCount - s.UnreadCount} of {s.IssueCount} read" : string.Empty;
 
-    /// <summary>"Continue #N"-style primary label: Continue when reading has started, "Read from start" when nothing is read.</summary>
-    public string PreviewSeriesPrimaryLabel =>
-        PreviewSeries is { } s && s.HasContinueReading && s.UnreadCount < s.IssueCount ? "▶ Continue" : "▶ Read";
+    /// <summary>
+    /// Primary label: "Continue #N" once reading has started (with the page when that issue is mid-read), plain "Read" when
+    /// nothing is read yet or everything is.
+    /// </summary>
+    public string PreviewSeriesPrimaryLabel
+    {
+        get
+        {
+            if (PreviewSeries is not { } s || !s.HasContinueReading || (s.UnreadCount >= s.IssueCount && s.ContinueReadingPage is null))
+            {
+                return "▶ Read";
+            }
+
+            string label = s.ContinueReadingNumber is { } number ? $"▶ Continue #{number}" : "▶ Continue";
+            return s.ContinueReadingPage is int page ? $"{label} · p. {page}" : label;
+        }
+    }
 
     /// <summary>Series primary action: the continue-reading issue, else the first issue by number.</summary>
     [RelayCommand]
@@ -4325,6 +4612,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(PreviewSeriesPrimaryLabel));
 
         PreviewSeriesIssueRail.Clear();
+        RebuildPreviewIssueChips(value);
         if (value is not null)
         {
             // IssueList.Rows already carries every issue in the library (populated from
@@ -4351,6 +4639,73 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>Backs the series-preview state's issue rail (docs/superpowers/specs/2026-09-14-
     /// library-visual-redesign-design.md §4) - populated in <see cref="OnPreviewSeriesChanged"/>.</summary>
     public ObservableCollection<PosterRailItem> PreviewSeriesIssueRail { get; } = new();
+
+    /// <summary>A long series stops here: the strip is rebuilt on every focus change, and a few hundred buttons would make arrowing through the grid lag.</summary>
+    internal const int PreviewIssueChipLimit = 150;
+
+    /// <summary>
+    /// The inspector's issue strip (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 3): one number chip per
+    /// issue of the previewed series, in number order, built from the same in-memory rows as the rail.
+    /// </summary>
+    public BulkObservableCollection<PreviewIssueChip> PreviewSeriesIssueChips { get; } = new();
+
+    /// <summary>Right-hand caption of the strip's heading: missing files, or how many issues the strip left out. Empty when there is nothing to say.</summary>
+    public string PreviewIssueChipsCaption { get; private set; } = string.Empty;
+
+    public bool HasPreviewIssueChipsCaption => PreviewIssueChipsCaption.Length > 0;
+
+    private void RebuildPreviewIssueChips(SeriesCardSample? series)
+    {
+        var chips = new List<PreviewIssueChip>();
+        string caption = string.Empty;
+        if (series is not null)
+        {
+            var rows = PreviewSeriesRows(series.SeriesId).OrderBy(r => r.NumberSortKey ?? float.MaxValue).ToList();
+            int missing = 0;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var row = rows[i];
+                if (row.IsMissing)
+                {
+                    missing++;
+                }
+
+                if (i >= PreviewIssueChipLimit)
+                {
+                    continue;
+                }
+
+                string label = row.Number is { Length: > 0 } number ? number : (i + 1).ToString(System.Globalization.CultureInfo.CurrentCulture);
+                bool isNext = row.Id == series.ContinueReadingIssueId;
+                bool inProgress = !row.IsRead && row.ReadFraction > 0;
+                chips.Add(new PreviewIssueChip
+                {
+                    Row = row,
+                    Label = label,
+                    IsRead = row.IsRead,
+                    IsNext = isNext,
+                    IsMissing = row.IsMissing,
+                    Title = string.IsNullOrWhiteSpace(row.Title) || string.Equals(row.Title, row.SeriesName, StringComparison.OrdinalIgnoreCase)
+                        ? $"#{label}"
+                        : $"#{label} {row.Title}",
+                    StateLabel = row.IsMissing ? "File missing"
+                        : isNext ? (inProgress ? "Next to read, in progress" : "Next to read")
+                        : row.IsRead ? "Read"
+                        : inProgress ? "In progress"
+                        : "Unread",
+                });
+            }
+
+            caption = missing > 0 ? $"{missing} {(missing == 1 ? "file" : "files")} missing"
+                : rows.Count > PreviewIssueChipLimit ? $"first {PreviewIssueChipLimit} of {rows.Count}"
+                : string.Empty;
+        }
+
+        PreviewSeriesIssueChips.ReplaceAll(chips);
+        PreviewIssueChipsCaption = caption;
+        OnPropertyChanged(nameof(PreviewIssueChipsCaption));
+        OnPropertyChanged(nameof(HasPreviewIssueChipsCaption));
+    }
 
     /// <summary>Called from <see cref="Granularity"/>'s own changed-hook so the panel re-derives
     /// which of <see cref="PreviewIssue"/>/<see cref="PreviewSeries"/> applies without needing a
@@ -4403,7 +4758,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// the uncounted cover gutter below that made each card ~21 px shorter than its content: the star row squeezed the cover upward by
     /// ~10 px, pushing the hover/focus ring's top edge outside the card, where only a full-window redraw (the Matrix rain) painted it.
     /// </summary>
-    private const double PosterTitleRowHeight = 42;
+    private double PosterTitleRowHeight => 8 + (17 * Math.Max(1, CaptionLineCount));
 
     /// <summary>Height of the title StackPanel itself (bound by the templates); 8 px of <see cref="PosterTitleRowHeight"/> is its top margin.</summary>
     public double PosterTitleTextHeight => PosterTitleRowHeight - 8;
@@ -4455,7 +4810,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         SaveLibrarySettings();
     }
 
-    public bool EffectiveShowTileTitles => ShowTileTitles && PosterCardWidth >= PosterTitleHideThreshold;
+    public bool EffectiveShowTileTitles => ShowTileTitles && CaptionLineCount > 0 && PosterCardWidth >= PosterTitleHideThreshold;
 
     /// <summary>Panorama grid's fixed cover-box height - XAML binds here rather than a hardcoded literal, so this and <see cref="SeriesCardSample.PanoramaWidth"/>'s own math can't drift apart.</summary>
     public double PanoramaCardHeight => SeriesCardSample.PanoramaHeight;
@@ -4487,12 +4842,76 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [ObservableProperty]
     private bool _showLanguageBadge;
 
-    partial void OnShowLanguageBadgeChanged(bool value) => SaveLibrarySettings();
+    partial void OnShowLanguageBadgeChanged(bool value)
+    {
+        RaiseLanguageDisplayChanged();
+        SaveLibrarySettings();
+    }
 
     [ObservableProperty]
     private bool _useLanguageIcon;
 
-    partial void OnUseLanguageIconChanged(bool value) => SaveLibrarySettings();
+    partial void OnUseLanguageIconChanged(bool value)
+    {
+        RaiseLanguageDisplayChanged();
+        SaveLibrarySettings();
+    }
+
+    // The Display popup's one Language row (Off / Text / Flag) over the two stored settings above.
+    public bool IsLanguageOff => !ShowLanguageBadge;
+    public bool IsLanguageText => ShowLanguageBadge && !UseLanguageIcon;
+    public bool IsLanguageFlag => ShowLanguageBadge && UseLanguageIcon;
+
+    private void RaiseLanguageDisplayChanged()
+    {
+        OnPropertyChanged(nameof(IsLanguageOff));
+        OnPropertyChanged(nameof(IsLanguageText));
+        OnPropertyChanged(nameof(IsLanguageFlag));
+    }
+
+    /// <summary>"Off", "Text" or "Flag". Off keeps the text-or-flag choice, so switching back on restores it.</summary>
+    [RelayCommand]
+    private void SetLanguageDisplay(string? mode)
+    {
+        switch (mode)
+        {
+            case "Text":
+                UseLanguageIcon = false;
+                ShowLanguageBadge = true;
+                break;
+            case "Flag":
+                UseLanguageIcon = true;
+                ShowLanguageBadge = true;
+                break;
+            default:
+                ShowLanguageBadge = false;
+                break;
+        }
+    }
+
+    /// <summary>The read-progress bar on Poster and Panorama covers. The same app-wide setting as Preferences &gt; Appearance &gt;
+    /// "Read-progress bar" (<c>AppSettings.ProgressRing</c>), offered here because it is a cover mark like its neighbours. Not a
+    /// workspace field, so it writes its one column instead of going through <see cref="SaveLibrarySettings"/>.</summary>
+    public bool ShowProgressBar
+    {
+        get => CosmeticThumbnailSettings.ProgressRing;
+        set
+        {
+            if (CosmeticThumbnailSettings.ProgressRing == value)
+            {
+                return;
+            }
+
+            CosmeticThumbnailSettings.ProgressRing = value;
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                context.GetOrCreateAppSettings().ProgressRing = value;
+                context.SaveChanges();
+            }
+
+            OnPropertyChanged();
+        }
+    }
 
     /// <summary>Series-card-only overlay button: once <see cref="IsIssueGranularity"/>, clicking a
     /// tile itself IS "continue reading it" (<see cref="IssueListScreenViewModel.OpenIssueCommand"/>),
@@ -4503,29 +4922,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     partial void OnShowContinueReadingButtonChanged(bool value) => SaveLibrarySettings();
 
-    // Cosmetic Preferences micro-toggles (docs/superpowers/specs/2026-09-13-preferences-cosmetic-
-    // toggles-design.md) - same View & Sort popup "Overlay" group as the 4 badge toggles above.
-    // Each also pushes into CosmeticThumbnailSettings so AsyncCoverImage/the dog-ear peek/the hover
-    // tooltip (all static, no ViewModel reference) see the change immediately, not just on restart.
-
-    [ObservableProperty]
-    private bool _fadeInThumbnails = true;
-
-    partial void OnFadeInThumbnailsChanged(bool value)
-    {
-        CosmeticThumbnailSettings.FadeInThumbnails = value;
-        SaveLibrarySettings();
-    }
-
-    /// <summary>"Smooth scrolling" (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §6): eased mouse-wheel scrolling. Pushes into <see cref="SmoothScrollSettings"/> like the toggles above.</summary>
-    [ObservableProperty]
-    private bool _smoothScrolling = true;
-
-    partial void OnSmoothScrollingChanged(bool value)
-    {
-        SmoothScrollSettings.Enabled = value;
-        SaveLibrarySettings();
-    }
+    // Cosmetic micro-toggles (docs/superpowers/specs/2026-09-13-preferences-cosmetic-toggles-design.md) in the Display popup's
+    // "On the cover" group. Each also pushes into CosmeticThumbnailSettings so the dog-ear peek and the rating badge (static, no
+    // ViewModel reference) see the change at once. Fade in, Tooltips and Smooth scrolling moved to Preferences > Appearance on
+    // 2026-10-04 (PreferencesScreenViewModel); this view model no longer reads or writes them, so it cannot overwrite them.
 
     [ObservableProperty]
     private bool _dogEarThumbnails = true;
@@ -4533,15 +4933,6 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     partial void OnDogEarThumbnailsChanged(bool value)
     {
         CosmeticThumbnailSettings.DogEarThumbnails = value;
-        SaveLibrarySettings();
-    }
-
-    [ObservableProperty]
-    private bool _showToolTips;
-
-    partial void OnShowToolTipsChanged(bool value)
-    {
-        CosmeticThumbnailSettings.ShowToolTips = value;
         SaveLibrarySettings();
     }
 

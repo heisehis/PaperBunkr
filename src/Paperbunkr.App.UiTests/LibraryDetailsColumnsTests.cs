@@ -25,7 +25,7 @@ public class LibraryDetailsColumnsTests : IDisposable
 
         var window = _fixture.Window;
         LibraryToolbarDriver.GoToLibrary(window);
-        LibraryToolbarDriver.SelectViewMode(window, "LibraryViewModeOption_Details");
+        LibraryToolbarDriver.SelectViewMode(window, "LibraryViewSwitch_Details");
 
         // The default column set includes Year; its header cell is a real click-to-sort control.
         var yearHeader = LibraryToolbarDriver.Find(window, "LibraryDetailsHeader_Year");

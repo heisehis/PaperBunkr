@@ -146,6 +146,94 @@ public class LibraryScreenViewTests : IDisposable
         });
     }
 
+    /// <summary>
+    /// docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 2: a multi-issue series' cover is drawn as a stack, and the
+    /// stack lives in the cover's existing gutter - a stacked tile must measure exactly what a single-issue one does (a taller card
+    /// is how the cover once got pushed out of bounds).
+    /// </summary>
+    [Fact]
+    public void SeriesStack_IsDrawnOnlyForMultiIssueSeries_AndDoesNotChangeTheTileSize()
+    {
+        WithThemeAndTokens(() =>
+        {
+            CreateSeriesWithIssues("Incredible Hulk", 3);
+            CreateSeriesWithIssues("One Shot", 1);
+            var (vm, window) = Show();
+            vm.SetGranularityCommand.Execute(LibraryContentGranularity.Series);
+            RunLayout(window);
+
+            var cards = window.GetVisualDescendants().OfType<Button>()
+                .Where(b => b.Classes.Contains("card") && b.DataContext is Paperbunkr.App.Models.SeriesCardSample && b.IsEffectivelyVisible)
+                .ToList();
+            var stacked = cards.Single(c => ((Paperbunkr.App.Models.SeriesCardSample)c.DataContext!).Name == "Incredible Hulk");
+            var single = cards.Single(c => ((Paperbunkr.App.Models.SeriesCardSample)c.DataContext!).Name == "One Shot");
+
+            static int Peeks(Button card) => card.GetVisualDescendants().OfType<Border>().Count(b => b.Classes.Contains("stackPeek"));
+            Assert.Equal(2, Peeks(stacked));
+            Assert.Equal(0, Peeks(single));
+            Assert.Equal(single.Bounds.Size, stacked.Bounds.Size);
+
+            // The peeks stay inside the tile, above the cover.
+            var cover = stacked.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("posterCover"));
+            foreach (var peek in stacked.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("stackPeek")))
+            {
+                var top = peek.TranslatePoint(default, stacked)!.Value;
+                Assert.True(top.Y >= 0, $"peek starts at {top.Y}");
+                Assert.True(top.Y < cover.TranslatePoint(default, stacked)!.Value.Y);
+            }
+
+            window.Close();
+        });
+    }
+
+    /// <summary>
+    /// docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 2: in a grouped cover grid one floating header names the group
+    /// whose own header has scrolled off the top, and it is gone again at the top of the list and when the grid is ungrouped.
+    /// </summary>
+    [Fact]
+    public void PinnedGroupHeader_NamesTheGroupScrolledUnderTheTopEdge()
+    {
+        WithThemeAndTokens(() =>
+        {
+            foreach (string publisher in new[] { "Alpha", "Bravo", "Charlie" })
+            {
+                for (int n = 1; n <= 30; n++)
+                {
+                    CreateSeriesWithIssues($"{publisher} {n:00}", 1, publisher);
+                }
+            }
+
+            var (vm, window) = Show();
+            vm.SetGranularityCommand.Execute(LibraryContentGranularity.Series);
+            vm.IssueList.SetSortFieldCommand.Execute(IssueListSortField.Series);
+            vm.IssueList.SetGroupFieldCommand.Execute(IssueListGroupField.Publisher);
+            RunLayout(window);
+
+            var viewer = window.GetVisualDescendants().OfType<ScrollViewer>().Single(v => v.Name == "PosterGridScrollViewer");
+            var pinned = window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PinnedGroupHeader");
+            var text = pinned.GetVisualDescendants().OfType<TextBlock>().First();
+            Assert.False(pinned.IsVisible, "nothing is pinned at the top of the list");
+
+            viewer.Offset = new Vector(0, 200);
+            RunLayout(window);
+
+            Assert.True(pinned.IsVisible, "the first group's header has scrolled away, so it is pinned");
+            Assert.Equal(vm.Groups[0].Header, text.Text);
+
+            viewer.Offset = new Vector(0, 0);
+            RunLayout(window);
+            Assert.False(pinned.IsVisible);
+
+            viewer.Offset = new Vector(0, 200);
+            RunLayout(window);
+            vm.IssueList.SetGroupFieldCommand.Execute(IssueListGroupField.None);
+            RunLayout(window);
+            Assert.False(pinned.IsVisible, "an ungrouped grid pins nothing");
+
+            window.Close();
+        });
+    }
+
     [Fact]
     public void NoPriorClick_FocusLandsOnACard()
     {

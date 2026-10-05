@@ -3,6 +3,47 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.7-beta] - 2026-10-05
+
+### Added
+
+- **List layouts.** Every Library list (All Series, each content type, each collection) now remembers its own
+  layout, and a layout can be saved under a name and reused: Workspace menu → **List layouts**. **List
+  options** (Ctrl+L) picks the Details columns, their order and width, the lines under a poster cover and the
+  text on a tile; **Edit layouts** (Ctrl+Alt+L) renames, reorders, deletes, or sets one on every list. Five
+  starter layouts are included. Books gets the same menu for its sort and group.
+- **Resizable, movable Details columns.** Drag a column header to move it, or the grip after it to resize.
+- **One input layer for keyboard, mouse and controller.** Every shortcut is remappable in Preferences →
+  Keyboard Shortcuts, including mouse buttons, the wheel and a gamepad; the controller works on every screen,
+  and remaps are kept in a `keymap.json` you can export and import.
+- **Keyboard Shortcuts page redesign.** Search, a device filter and "Customised only" over a one-line-per-action
+  list, with an editor beside it for the selected shortcut.
+- **Library lenses.** All / Reading / Unread / Read tabs with counts, and a Continue strip above the covers.
+- **Reading goals.** Goals can target a reading list, collection, story event, continuity, creator or media
+  type, and a new Finish goal follows a list as it grows. Insights shows completed and missed goals, with
+  Renew.
+- **Your own publisher logos.** Drop PNG or JPG files into the publisher-icons folder and they are used ahead
+  of the built-in set. Library Health → **Publisher logos** lists publishers with no logo and issues with no
+  publisher, and can fill a missing publisher from the rest of the series.
+
+### Changed
+
+- **Library toolbar.** Two rows: search, Series | Issues and the view switch on top; lenses, filters, Sort and
+  Group below. "View & Sort" is now a smaller Display options popup; Fade in covers, Cover tooltips and Smooth
+  scrolling moved to Preferences → Appearance.
+- **Covers.** One badge per cover, a progress bar for anything in progress, and a stacked look for series with
+  several issues. The inspector's Continue button resumes the issue you were last reading.
+- **Insights charts** use one consistent set of colours, with legends that show counts and percentages.
+
+### Fixed
+
+- **Keyboard navigation across the app.** Enter and Space open Library tiles, Esc and Backspace leave detail
+  pages, arrow keys work in the Detail issue grid, Continuity, Wanted, Event Map, Preferences and the editors,
+  and Ctrl/Shift-click selects tiles again.
+- **Text boxes reached with the arrow keys only browse** until you press Enter or F2, so arrowing through a
+  form no longer types into it or opens every dropdown.
+- **Focus rings** are no longer clipped or doubled on buttons, tabs and dropdowns.
+
 ## [0.7.5-beta] - 2026-09-30
 
 ### Added

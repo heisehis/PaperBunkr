@@ -50,10 +50,12 @@ public class LibraryViewPipelineTests
         bool tracked = false,
         bool unread = false,
         bool missing = false,
-        IssueListGroupField group = IssueListGroupField.None)
+        IssueListGroupField group = IssueListGroupField.None,
+        LibraryLens lens = LibraryLens.All,
+        string? publisher = null)
     {
         var list = new IssueListScreenViewModel(_ => { }) { SortField = IssueListSortField.Series, SortDirection = SortDirection.Ascending, GroupField = group };
-        return new LibraryViewInputs(contentType, collection, query, mode, tracked, unread, missing, list.CaptureSortGroupSpec());
+        return new LibraryViewInputs(contentType, collection, query, mode, tracked, unread, missing, list.CaptureSortGroupSpec(), Lens: lens, PublisherFilter: publisher);
     }
 
     private static LibraryViewResult Run(List<Series> corpus, LibraryViewInputs inputs)
@@ -210,6 +212,104 @@ public class LibraryViewPipelineTests
         cts.Cancel();
 
         Assert.Throws<OperationCanceledException>(() => LibraryViewPipeline.Compute(Inputs(), projection, null, cts.Token));
+    }
+
+    /// <summary>"Fresh" (2 unopened), "Midway" (1 read, 1 half-read, 1 unopened), "Done" (1 read), "Shelf" (no issues at all).</summary>
+    private static List<Series> LensCorpus()
+    {
+        static Action<Issue> Pages(int? lastPageRead, string publisher) => i => { i.PageCount = 20; i.LastPageRead = lastPageRead; i.Publisher = publisher; };
+
+        var fresh = NewSeries(10, "Fresh", publisher: "DC");
+        fresh.Issues.Add(NewIssue(10, "1", Pages(null, "DC")));
+        fresh.Issues.Add(NewIssue(10, "2", Pages(null, "DC")));
+
+        var midway = NewSeries(11, "Midway", publisher: "Marvel");
+        midway.Issues.Add(NewIssue(11, "1", Pages(19, "Marvel")));
+        midway.Issues.Add(NewIssue(11, "2", Pages(8, "Marvel")));
+        midway.Issues.Add(NewIssue(11, "3", Pages(null, "Marvel")));
+
+        var done = NewSeries(12, "Done", publisher: "DC");
+        done.Issues.Add(NewIssue(12, "1", Pages(19, "DC")));
+
+        return new List<Series> { fresh, midway, done, NewSeries(13, "Shelf") };
+    }
+
+    [Fact]
+    public void LensOf_Series_IsUnreadUntilOpened_ReadOnlyWhenEveryIssueIs()
+    {
+        var corpus = LensCorpus();
+
+        Assert.Equal(LibraryLens.Unread, LibraryViewPipeline.LensOf(corpus[0]));
+        Assert.Equal(LibraryLens.Reading, LibraryViewPipeline.LensOf(corpus[1]));
+        Assert.Equal(LibraryLens.Read, LibraryViewPipeline.LensOf(corpus[2]));
+        Assert.Equal(LibraryLens.Unread, LibraryViewPipeline.LensOf(corpus[3]));
+    }
+
+    [Fact]
+    public void LensOf_Series_OpenedButUnfinishedEverywhere_IsReading_NotRead()
+    {
+        // The unread badge would call this series finished (nothing is unopened); the lens must not.
+        var series = NewSeries(20, "Half");
+        series.Issues.Add(NewIssue(20, "1", i => { i.PageCount = 20; i.LastPageRead = 5; }));
+        series.Issues.Add(NewIssue(20, "2", i => { i.PageCount = 20; i.LastPageRead = 19; }));
+
+        Assert.Equal(LibraryLens.Reading, LibraryViewPipeline.LensOf(series));
+    }
+
+    [Fact]
+    public void Card_AllReadBadge_MatchesTheReadLens_AndTheStackFlagFollowsTheIssueCount()
+    {
+        var projection = LibraryProjection.Build(LensCorpus(), Array.Empty<VirtualTagDefinition>(), dataVersion: 1);
+        var cards = projection.Entries.ToDictionary(e => e.Card.Name, e => e.Card);
+
+        Assert.False(cards["Fresh"].IsAllRead);
+        Assert.False(cards["Midway"].IsAllRead);
+        Assert.True(cards["Done"].IsAllRead);
+        Assert.False(cards["Shelf"].IsAllRead);
+
+        Assert.True(cards["Fresh"].HasMultipleIssues);
+        Assert.False(cards["Done"].HasMultipleIssues);
+        // The check and the unread count never show together.
+        Assert.All(cards.Values, c => Assert.False(c.IsAllRead && c.HasUnread));
+    }
+
+    [Fact]
+    public void LensCounts_AreTalliedForBothGranularities_AndDoNotDependOnTheSelectedLens()
+    {
+        var all = Run(LensCorpus(), Inputs());
+        var reading = Run(LensCorpus(), Inputs(lens: LibraryLens.Reading));
+
+        Assert.Equal(new LensCounts(Reading: 1, Unread: 2, Read: 1), all.SeriesLensCounts);
+        Assert.Equal(new LensCounts(Reading: 1, Unread: 3, Read: 2), all.IssueLensCounts);
+        Assert.Equal(4, all.SeriesLensCounts.All);
+        Assert.Equal(all.SeriesLensCounts, reading.SeriesLensCounts);
+        Assert.Equal(all.IssueLensCounts, reading.IssueLensCounts);
+    }
+
+    [Fact]
+    public void Lens_FiltersCardsPerSeries_AndRowsPerIssue()
+    {
+        var read = Run(LensCorpus(), Inputs(lens: LibraryLens.Read));
+
+        Assert.Equal("Done", Assert.Single(read.Cards).Name);
+        // Rows are per issue: Midway's finished issue is listed even though Midway itself is only "reading".
+        Assert.Equal(new[] { "Done", "Midway" }, read.Rows.Select(r => r.SeriesName).OrderBy(n => n));
+
+        var unread = Run(LensCorpus(), Inputs(lens: LibraryLens.Unread));
+        Assert.Equal(new[] { "Fresh", "Shelf" }, unread.Cards.Select(c => c.Name).OrderBy(n => n));
+        Assert.Equal(3, unread.Rows.Count);
+    }
+
+    [Fact]
+    public void LensCounts_FollowTheSearchAndThePublisherFilter()
+    {
+        var searched = Run(LensCorpus(), Inputs("midway"));
+        Assert.Equal(new LensCounts(Reading: 1, Unread: 0, Read: 0), searched.SeriesLensCounts);
+
+        var dc = Run(LensCorpus(), Inputs(publisher: "dc"));
+        Assert.Equal(new[] { "Done", "Fresh" }, dc.Cards.Select(c => c.Name).OrderBy(n => n));
+        Assert.Equal(new LensCounts(Reading: 0, Unread: 1, Read: 1), dc.SeriesLensCounts);
+        Assert.Equal(3, dc.IssueLensCounts.All);
     }
 
     [Fact]

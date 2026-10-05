@@ -6,6 +6,7 @@ using Avalonia.VisualTree;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
 using Paperbunkr.Data;
@@ -312,6 +313,54 @@ public class RealWindowKeyboardTests : IDisposable
 
             Assert.True(lowest <= 20, "Up climbed back to the top of the first group (lowest series reached " + lowest + "); trail: " + string.Join(",", upTrail.Take(80)) + "; focus now " + Describe(window.FocusManager!.GetFocusedElement()));
             window.Close();
+        });
+    }
+
+    [Fact]
+    public void KeyboardShortcuts_DownWalksTheList_RightEntersTheEditor_AndLeftComesBackToTheSameRow()
+    {
+        WithThemeAndTokens(() =>
+        {
+            using var styles = AppStyles();
+            using var tokens = AppResources();
+            // The shell takes its input service from the locator at construction, and the default is the do-nothing one with no actions to list.
+            var previousService = InputServiceLocator.Current;
+            InputServiceLocator.Current = new InputService(InputActionCatalog.CreateWithCoreActions(), new MemoryKeymapStore());
+            try
+            {
+            var vm = new MainViewModel();
+            var window = new MainWindow { DataContext = vm, Width = 1400, Height = 900 };
+            window.Show();
+            vm.GoPreferencesCommand.Execute(null);
+            vm.Preferences.ActiveSection = PreferencesSection.KeyboardShortcuts;
+            RunLayout(window);
+
+            var section = window.GetVisualDescendants().OfType<Paperbunkr.App.Views.Preferences.KeyboardShortcutsSection>().First();
+            var rows = section.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("ksRow") && b.IsEffectivelyVisible).ToList();
+            Assert.True(rows.Count >= 5, $"list rows: {rows.Count}");
+            rows[0].Focus(NavigationMethod.Directional);
+            RunLayout(window);
+
+            // Down walks the list a row at a time, and the editor follows the focused row.
+            for (int i = 1; i <= 3; i++)
+            {
+                Press(window, Key.Down);
+                Assert.True(ReferenceEquals(rows[i], window.FocusManager!.GetFocusedElement()), $"press {i}: focus is {Describe(window.FocusManager!.GetFocusedElement())}, expected {Describe(rows[i])}; row0 {Describe(rows[0])} y-positions {string.Join(",", rows.Take(5).Select(r => (int)r.TranslatePoint(default, window)!.Value.Y))}");
+                Assert.Same(rows[i].DataContext, vm.Preferences.Shortcuts.SelectedRow);
+            }
+
+            // Right goes into the editor pane, and Left comes back to the row that is selected.
+            Press(window, Key.Right);
+            var inPane = window.FocusManager!.GetFocusedElement();
+            Assert.True(inPane is Visual v && v.GetVisualAncestors().OfType<ScrollViewer>().Any(s => s.Name == "PaneScroll"), "Right entered the editor pane, focus is on " + Describe(inPane));
+            Press(window, Key.Left);
+            Assert.Same(rows[3], window.FocusManager!.GetFocusedElement());
+            window.Close();
+            }
+            finally
+            {
+                InputServiceLocator.Current = previousService;
+            }
         });
     }
 

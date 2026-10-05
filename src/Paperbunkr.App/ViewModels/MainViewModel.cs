@@ -95,6 +95,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // Seed the read-only starter workspaces before the two screen VMs first list them
         // (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md). Idempotent.
         new WorkspaceService().EnsureBuiltInsSeeded();
+        new ListLayoutService().EnsureTemplatesSeeded(WorkspaceScreen.Library,
+            ListLayoutTemplates.Library.Select(t => (t.Name, ListLayoutStateJson.Serialize(t.State))).ToList());
         WorkspaceName = new WorkspaceNameViewModel(CloseWorkspaceNameOverlay);
         QuickOpen = new QuickOpenViewModel(ActivateQuickOpenEntry, CloseQuickOpenOverlay);
 
@@ -217,6 +219,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // VM defaults to a synchronous scheduler so tests and the initial load behave exactly as before.
         Library.ViewScheduler = new Paperbunkr.App.Services.LibrarySearch.BackgroundLibraryViewScheduler();
         Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences, ShowToast, promptForName: PromptWorkspaceName);
+        WireListLayouts(Library.ListLayouts, Library.CreateListOptions);
+        WireListLayouts(Books.ListLayouts, Books.CreateListOptions);
         BookDetail = new BookDetailScreenViewModel(NavigateBack, GoBookReaderForBook, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries);
         BookProperties = new BookPropertiesScreenViewModel(CloseBookPropertiesOverlay, ShowToast);
         BulkBookProperties = new BulkBookPropertiesScreenViewModel(CloseBulkBookPropertiesOverlay, ShowToast);
@@ -308,6 +312,12 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         NewReadingList = new NewReadingListViewModel(new FilePickerService(), OnNewReadingListCreated, CloseNewReadingListDialog);
         NewEventOrContinuity = new NewEventOrContinuityViewModel(OnEventOrContinuityCreated, CloseNewEventDialog);
         GoalEditor = new GoalEditorViewModel(OnGoalCreated, CloseNewGoalDialog);
+        Insights.Goals.RenewRequested = OpenRenewGoalDialog;
+        // "Set a goal…" on a reading list / collection: the same overlay, as a Finish goal for that list or collection
+        // (docs/superpowers/specs/2026-10-04-insights-goal-scopes-design.md).
+        Reading.List.SetGoal = id => OpenFinishGoalDialog(GoalScopeKind.ReadingList, id);
+        Reading.List.OpenInsights = GoInsights;
+        Library.CollectionGoalRequested = id => OpenFinishGoalDialog(GoalScopeKind.Collection, id);
         QuickRate = new QuickRateScreenViewModel(CloseQuickRateOverlay, id => EnqueueMetadataWriteBack(id));
         WireLibraryBulkActions();
         DesignShowcase = new DesignShowcaseScreenViewModel();
@@ -789,6 +799,20 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     [ObservableProperty]
     private bool _isNewGoalDialogOpen;
+
+    /// <summary>List Options (docs/superpowers/specs/2026-10-04-list-layouts-design.md §8). <see cref="ListOptions"/> is a fresh draft per open.</summary>
+    [ObservableProperty]
+    private bool _isListOptionsOverlayOpen;
+
+    [ObservableProperty]
+    private ListOptionsViewModel? _listOptions;
+
+    /// <summary>Edit Layouts: bound straight to the opening screen's <see cref="ListLayoutsViewModel"/>.</summary>
+    [ObservableProperty]
+    private bool _isEditLayoutsOverlayOpen;
+
+    [ObservableProperty]
+    private ListLayoutsViewModel? _editLayouts;
 
     [ObservableProperty]
     private bool _isBookPropertiesOverlayOpen;
@@ -1414,6 +1438,17 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         IsWorkspaceNameOverlayOpen = true;
     }
 
+    /// <summary>The workspace name prompt, worded for a list layout.</summary>
+    private void PromptLayoutName(string? initial, Action<string> onName)
+    {
+        WorkspaceName.Begin(initial, name =>
+        {
+            onName(name);
+            IsWorkspaceNameOverlayOpen = false;
+        }, "NAME THIS LAYOUT", "Reusing an existing name overwrites that layout.");
+        IsWorkspaceNameOverlayOpen = true;
+    }
+
     [RelayCommand]
     private void CloseWorkspaceNameOverlay() => IsWorkspaceNameOverlayOpen = false;
 
@@ -1422,7 +1457,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         IsIssuePropertiesOverlayOpen || IsBulkIssuePropertiesOverlayOpen || IsBulkSeriesPropertiesOverlayOpen
         || IsBookPropertiesOverlayOpen || IsBulkBookPropertiesOverlayOpen || IsBookSeriesPropertiesOverlayOpen
         || IsReadingListPropertiesOverlayOpen || IsCollectionPropertiesOverlayOpen || IsWorkspaceNameOverlayOpen
-        || IsNewReadingListDialogOpen || IsNewEventDialogOpen || IsNewGoalDialogOpen || IsMigrationOverlayOpen || IsQuickRateOverlayOpen
+        || IsNewReadingListDialogOpen || IsNewEventDialogOpen || IsNewGoalDialogOpen || IsListOptionsOverlayOpen || IsEditLayoutsOverlayOpen || IsMigrationOverlayOpen || IsQuickRateOverlayOpen
         || IsPasteDataOverlayOpen || IsMergeSeriesOverlayOpen
         || IsWelcomeOverlayOpen || IsWelcomeTourOverlayOpen || IsWhatsNewOverlayOpen;
 
@@ -1614,8 +1649,44 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         IsNewGoalDialogOpen = true;
     }
 
+    /// <summary>"Renew" on a Completed/Missed goal: the same overlay, pre-filled from that goal.</summary>
+    private void OpenRenewGoalDialog(int goalId)
+    {
+        GoalEditor.LoadFrom(goalId);
+        IsNewGoalDialogOpen = true;
+    }
+
+    private void OpenFinishGoalDialog(GoalScopeKind kind, int id)
+    {
+        GoalEditor.StartFinishGoal(kind, id);
+        IsNewGoalDialogOpen = true;
+    }
+
     [RelayCommand]
     private void CloseNewGoalDialog() => IsNewGoalDialogOpen = false;
+
+    /// <summary>Gives a screen's list-layout menu its overlays and its "set on all lists" question.</summary>
+    private void WireListLayouts(ListLayoutsViewModel layouts, Func<Action, ListOptionsViewModel> createListOptions)
+    {
+        layouts.OpenListOptions = () =>
+        {
+            ListOptions = createListOptions(CloseListOptionsOverlay);
+            IsListOptionsOverlayOpen = true;
+        };
+        layouts.OpenEditLayouts = () =>
+        {
+            EditLayouts = layouts;
+            IsEditLayoutsOverlayOpen = true;
+        };
+        layouts.PromptForName = PromptLayoutName;
+        layouts.Confirm = (message, title, confirmLabel, destructive) => Dialogs.ConfirmAsync(message, title: title, confirmLabel: confirmLabel, isDestructive: destructive);
+    }
+
+    [RelayCommand]
+    private void CloseListOptionsOverlay() => IsListOptionsOverlayOpen = false;
+
+    [RelayCommand]
+    private void CloseEditLayoutsOverlay() => IsEditLayoutsOverlayOpen = false;
 
     private void OnGoalCreated()
     {
@@ -2967,6 +3038,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         else if (IsNewGoalDialogOpen)
         {
             CloseNewGoalDialog();
+        }
+        else if (IsListOptionsOverlayOpen)
+        {
+            CloseListOptionsOverlay();
+        }
+        else if (IsEditLayoutsOverlayOpen && !IsWorkspaceNameOverlayOpen)
+        {
+            CloseEditLayoutsOverlay();
         }
         else if (IsReadingListPropertiesOverlayOpen)
         {

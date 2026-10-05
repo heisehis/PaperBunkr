@@ -438,7 +438,7 @@ public class AppSettings
     public bool LibraryShowUnreadBadge { get; set; } = true;
 
     /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
-    public bool LibraryShowPublisherBadge { get; set; }
+    public bool LibraryShowPublisherBadge { get; set; } = true;
 
     /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public bool LibraryShowLanguageBadge { get; set; }
@@ -470,6 +470,9 @@ public class AppSettings
 
     /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public bool LibraryFilterUnreadOnly { get; set; }
+
+    /// <summary>The Library's active reading-state tab (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 1). <see cref="LibraryFilterUnreadOnly"/> stays as the separate "Has unread" chip.</summary>
+    public LibraryLens LibraryLens { get; set; } = LibraryLens.All;
 
     /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public bool LibraryFilterMissingIssues { get; set; }

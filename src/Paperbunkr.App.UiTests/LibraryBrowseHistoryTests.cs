@@ -38,6 +38,8 @@ public class LibraryBrowseHistoryTests : IDisposable
         Assert.False(backButton.IsEnabled);
         Assert.False(forwardButton.IsEnabled);
 
+        // Content type is a chip in the Library's state row since the 2026-10-04 redesign; its popup holds the options.
+        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryContentTypeChip"))!.AsButton().Invoke();
         window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryContentTypeOption_Manga"))!.AsButton().Invoke();
         Assert.True(backButton.IsEnabled);
 

@@ -247,11 +247,11 @@ public class PreferencesScreenViewModelTests : IDisposable
     {
         var sections = new LibraryHealthSections();
 
-        Assert.Equal(10, sections.All.Count);
-        Assert.Equal(10, sections.All.Select(s => s.Anchor).Distinct().Count());
-        Assert.Equal(10, sections.All.Select(s => s.Key).Distinct().Count());
+        Assert.Equal(11, sections.All.Count);
+        Assert.Equal(11, sections.All.Select(s => s.Anchor).Distinct().Count());
+        Assert.Equal(11, sections.All.Select(s => s.Key).Distinct().Count());
         Assert.All(new[] { sections.Missing, sections.EmptyRows, sections.RecentlyRemoved }, s => Assert.Equal(Paperbunkr.App.Models.LibraryHealthTab.Files, s.Tab));
-        Assert.Equal(7, sections.All.Count(s => s.Tab == Paperbunkr.App.Models.LibraryHealthTab.Review));
+        Assert.Equal(8, sections.All.Count(s => s.Tab == Paperbunkr.App.Models.LibraryHealthTab.Review));
         Assert.Same(sections.Duplicates, sections.Find("duplicates"));
         Assert.Same(sections.Duplicates, sections.Find("library.healthDuplicates"));
         Assert.Null(sections.Find("library.health"));
@@ -440,6 +440,18 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.RequestScrollToAnchor("library.comicFolders");
 
         Assert.Equal("library.comicFolders", anchor);
+    }
+
+    [Fact]
+    public void RequestScrollToAnchor_OnAShortcutGroup_SelectsItsFirstAction_AndClearsTheShortcutFilters()
+    {
+        var vm = CreateViewModel();
+        vm.Shortcuts.SearchText = "rotate";
+
+        vm.RequestScrollToAnchor("shortcuts.zoomFit");
+
+        Assert.Equal(string.Empty, vm.Shortcuts.SearchText);
+        Assert.Same(vm.Shortcuts.Groups.First(g => g.Tag == "shortcuts.zoomFit").Rows[0], vm.Shortcuts.SelectedRow);
     }
 
     // ===================== Connections list+dialog (docs/superpowers/specs/2026-09-06-connections-
@@ -1144,6 +1156,46 @@ public class PreferencesScreenViewModelTests : IDisposable
         {
             Paperbunkr.App.Services.CosmeticThumbnailSettings.BindingSpine = oldSpine;
             Paperbunkr.App.Services.CosmeticThumbnailSettings.ProgressRing = oldRing;
+        }
+    }
+
+    /// <summary>Fade in, Tooltips and Smooth scrolling moved here from the Library's popup (2026-10-04): they load from
+    /// AppSettings, persist, and push to the statics the Library reads.</summary>
+    [Fact]
+    public void FadeInTooltipsAndSmoothScrolling_Load_Persist_AndUpdateTheStaticCaches()
+    {
+        bool oldFade = Paperbunkr.App.Services.CosmeticThumbnailSettings.FadeInThumbnails;
+        bool oldTips = Paperbunkr.App.Services.CosmeticThumbnailSettings.ShowToolTips;
+        bool oldSmooth = Paperbunkr.App.Services.SmoothScrollSettings.Enabled;
+        try
+        {
+            var vm = CreateViewModel();
+            vm.EnsureLoaded();
+            Assert.True(vm.FadeInThumbnails);
+            Assert.False(vm.ShowToolTips);
+            Assert.True(vm.SmoothScrolling);
+
+            vm.FadeInThumbnails = false;
+            vm.ShowToolTips = true;
+            vm.SmoothScrolling = false;
+
+            using (var context = new PaperbunkrDbContext(_dbOptions))
+            {
+                var settings = context.GetOrCreateAppSettings();
+                Assert.False(settings.FadeInThumbnails);
+                Assert.True(settings.ShowToolTips);
+                Assert.False(settings.SmoothScrolling);
+            }
+
+            Assert.False(Paperbunkr.App.Services.CosmeticThumbnailSettings.FadeInThumbnails);
+            Assert.True(Paperbunkr.App.Services.CosmeticThumbnailSettings.ShowToolTips);
+            Assert.False(Paperbunkr.App.Services.SmoothScrollSettings.Enabled);
+        }
+        finally
+        {
+            Paperbunkr.App.Services.CosmeticThumbnailSettings.FadeInThumbnails = oldFade;
+            Paperbunkr.App.Services.CosmeticThumbnailSettings.ShowToolTips = oldTips;
+            Paperbunkr.App.Services.SmoothScrollSettings.Enabled = oldSmooth;
         }
     }
 

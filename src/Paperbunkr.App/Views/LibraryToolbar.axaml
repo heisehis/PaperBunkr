@@ -44,6 +44,13 @@
         <Style Selector="Button.browseBtn:disabled fi|SymbolIcon">
             <Setter Property="Opacity" Value="0.35" />
         </Style>
+        <Style Selector="Button.browseBtn.open">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        </Style>
+        <Style Selector="Button.browseBtn.open fi|SymbolIcon">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
 
         <Style Selector="Button.addBtn">
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
@@ -88,22 +95,6 @@
             <Setter Property="FontWeight" Value="Bold" />
         </Style>
 
-        <!-- Tab strip in the View & Sort popup -->
-        <Style Selector="Button.viewSortTab">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0,0,0,2" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="Padding" Value="10,6" />
-            <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.viewSortTab.active">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
-        </Style>
-
         <!-- Removable filter / read-only state chips - squircle (PbRadius), matching the
              toolbarPill buttons rather than the fully-round DetailPills primitive. -->
         <Style Selector="Border.chip">
@@ -123,6 +114,89 @@
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
+        <Style Selector="Button.chipBtn.open">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <!-- One labelled switch row in the Display popup. -->
+        <Style Selector="TextBlock.displayRow">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+        <!-- Row 1 quick switches: Series | Issues and Covers / List / Details. A plain "seg" class, not
+             "segToggle": TabStrip.Step treats segToggle as a tab strip, and only the lens tabs should answer the bumpers. -->
+        <Style Selector="Border.segGroup">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="Padding" Value="2" />
+        </Style>
+        <Style Selector="Button.seg">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Padding" Value="9,5" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.seg.on">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <Style Selector="Button.seg.on fi|SymbolIcon">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+
+        <!-- Lens tabs (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 1). They carry the app-wide
+             "tab" class so TabStrip.Step drives them from the bumpers and Ctrl+PageUp/PageDown; "lensTab" restyles them
+             as soft squircle tabs instead of DetailChrome's underlined ones. -->
+        <Style Selector="Button.tab.lensTab">
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="Padding" Value="11,5" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.tab.lensTab.active">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <Style Selector="Button.tab.lensTab.zero">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+        <Style Selector="Button.tab.lensTab TextBlock.lensCount">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.tab.lensTab.active TextBlock.lensCount">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+
+        <!-- Filter chips in the state row: a dropdown chip is a Button (class "on" while it filters), an on/off chip a ToggleButton. -->
+        <Style Selector="Button.filterChip, ToggleButton.filterChip">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.filterChip.on, ToggleButton.filterChip:checked">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+
         <Style Selector="Button.chipClose">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -136,7 +210,7 @@
         <!-- ============ Row 1: two-zone bar ============ -->
         <Border Padding="24,12" Background="{DynamicResource PbSurface1Brush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                     <Button Classes="browseBtn" Command="{Binding BrowsePreviousCommand}" IsEnabled="{Binding CanBrowsePrevious}"
                             ToolTip.Tip="Back" AutomationProperties.AutomationId="LibraryBrowsePreviousButton">
@@ -177,30 +251,55 @@
                     </DockPanel>
                 </Border>
 
-                <Button Grid.Column="3" x:Name="FilterButton" Classes="toolbarPill" Classes.open="{Binding IsAddFilterOpen}"
-                        Command="{Binding ToggleAddFilterCommand}" VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="LibraryFilterButton" AutomationProperties.Name="Filter">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <fi:SymbolIcon Symbol="Filter" />
-                        <TextBlock Text="Filter" />
+                <!-- Series | Issues: one card per series, or one tile per issue. The only place this is set. -->
+                <Border Grid.Column="3" Classes="segGroup" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                        <Button Classes="seg" Classes.on="{Binding IsSeriesGranularity}" Content="Series"
+                                Command="{Binding SetGranularityCommand}" CommandParameter="{x:Static entities:LibraryContentGranularity.Series}"
+                                AutomationProperties.AutomationId="LibraryGranularitySwitch_Series" AutomationProperties.Name="Show series" />
+                        <Button Classes="seg" Classes.on="{Binding IsIssueGranularity}" Content="Issues"
+                                Command="{Binding SetGranularityCommand}" CommandParameter="{x:Static entities:LibraryContentGranularity.Issue}"
+                                AutomationProperties.AutomationId="LibraryGranularitySwitch_Issue" AutomationProperties.Name="Show issues" />
                     </StackPanel>
-                </Button>
+                </Border>
 
-                <Button Grid.Column="4" x:Name="ViewSortButton" Classes="toolbarPill" Classes.open="{Binding IsViewSortOpen}"
-                        Command="{Binding ToggleViewSortCommand}" VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="LibraryViewSortButton"
-                        AutomationProperties.Name="{Binding DisplayModeLabel, StringFormat='View and Sort: {0}'}">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <fi:SymbolIcon Symbol="ArrowSort" />
-                        <TextBlock Text="View &amp; Sort" />
+                <!-- Covers / List / Details: the three view modes. The cover style (poster, panorama, tiles) is in the Display popup. -->
+                <Border Grid.Column="4" Classes="segGroup" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                        <Button Classes="seg" Classes.on="{Binding IsGridView}" ToolTip.Tip="Covers"
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.PosterGrid}"
+                                AutomationProperties.AutomationId="LibraryViewSwitch_Covers" AutomationProperties.Name="Covers view">
+                            <fi:SymbolIcon Symbol="Grid" />
+                        </Button>
+                        <Button Classes="seg" Classes.on="{Binding IsListView}" ToolTip.Tip="List"
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.List}"
+                                AutomationProperties.AutomationId="LibraryViewSwitch_List" AutomationProperties.Name="List view">
+                            <fi:SymbolIcon Symbol="TextBulletList" />
+                        </Button>
+                        <Button Classes="seg" Classes.on="{Binding IsDetailsTableView}" ToolTip.Tip="Details"
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.DetailsTable}"
+                                AutomationProperties.AutomationId="LibraryViewSwitch_Details" AutomationProperties.Name="Details view">
+                            <fi:SymbolIcon Symbol="Table" />
+                        </Button>
                     </StackPanel>
+                </Border>
+
+                <!-- Display options: how the covers or rows look. Sort and Group are the row-2 chips. The Details table has no
+                     display options of its own (its columns are set from its header), so the button is off there. -->
+                <Button Grid.Column="5" x:Name="DisplayButton" Classes="browseBtn" Classes.open="{Binding IsDisplayOpen}"
+                        Command="{Binding ToggleDisplayCommand}" VerticalAlignment="Center"
+                        IsEnabled="{Binding !IsDetailsTableView}"
+                        ToolTip.Tip="Display options"
+                        AutomationProperties.AutomationId="LibraryDisplayButton"
+                        AutomationProperties.Name="{Binding DisplayModeLabel, StringFormat='Display options: {0}'}">
+                    <fi:SymbolIcon Symbol="Options" />
                 </Button>
 
                 <!-- Live preview panel toggle (docs/superpowers/specs/2026-09-14-library-visual-
                      redesign-design.md §4) - Ctrl+B does the same thing (MainWindow.axaml.cs).
                      Hidden in DetailsTable mode: that mode already hides the panel unconditionally
                      (§2), so a toggle for it there would be misleading. -->
-                <Button Grid.Column="5" Classes="browseBtn"
+                <Button Grid.Column="6" Classes="browseBtn"
                         Command="{Binding ToggleLibraryPreviewPanelCommand}" VerticalAlignment="Center"
                         IsVisible="{Binding !IsDetailsTableView}"
                         ToolTip.Tip="Show or hide the preview panel (Ctrl+B)"
@@ -208,65 +307,123 @@
                     <fi:SymbolIcon Symbol="PanelRight" />
                 </Button>
 
-                <Button Grid.Column="6" Classes="browseBtn" Command="{Binding ResyncSeriesFromFileCommand}"
+                <Button Grid.Column="7" Classes="browseBtn" Command="{Binding ResyncSeriesFromFileCommand}"
                         IsEnabled="{Binding !IsResyncingSeries}" VerticalAlignment="Center"
                         ToolTip.Tip="Resync each issue's series from its file's embedded metadata"
                         AutomationProperties.AutomationId="LibraryResyncSeriesButton" AutomationProperties.Name="Resync series from file">
                     <fi:SymbolIcon Symbol="ArrowClockwise" />
                 </Button>
 
-                <Button Grid.Column="7" Classes="addBtn" Command="{Binding OpenAddIssueCommand}" VerticalAlignment="Center"
+                <Button Grid.Column="8" Classes="addBtn" Command="{Binding OpenAddIssueCommand}" VerticalAlignment="Center"
                         ToolTip.Tip="Add issue to library" AutomationProperties.AutomationId="LibraryAddIssueButton" AutomationProperties.Name="Add issue">
                     <fi:SymbolIcon Symbol="Add" />
                 </Button>
             </Grid>
         </Border>
 
-        <!-- ============ Row 2: chips ============ -->
-        <Border IsVisible="{Binding HasVisibleChips}" Padding="24,10,24,10"
-                Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
-            <WrapPanel Orientation="Horizontal" ItemWidth="NaN">
-                <Border Classes="chip" Margin="0,0,8,6" IsVisible="{Binding FilterUnreadOnly}">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <TextBlock Text="Unread only" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                        <Button Classes="chipClose" Content="✕" Command="{Binding ClearUnreadFilterCommand}" />
-                    </StackPanel>
-                </Border>
-                <Border Classes="chip" Margin="0,0,8,6" IsVisible="{Binding FilterMissingIssues}">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <TextBlock Text="Missing" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                        <Button Classes="chipClose" Content="✕" Command="{Binding ClearMissingFilterCommand}" />
-                    </StackPanel>
-                </Border>
-                <Border Classes="chip" Margin="0,0,8,6" IsVisible="{Binding FilterTrackedOnly}">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <TextBlock Text="Tracked" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                        <Button Classes="chipClose" Content="✕" Command="{Binding ClearTrackedFilterCommand}" />
-                    </StackPanel>
-                </Border>
-                <Border Classes="chip" Margin="0,0,8,6" IsVisible="{Binding SourceFilter, Converter={x:Static ObjectConverters.IsNotNull}}">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <TextBlock Text="{Binding SourceChipLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                        <Button Classes="chipClose" Content="✕" Command="{Binding ClearSourceFilterCommand}" AutomationProperties.Name="Clear library filter" />
-                    </StackPanel>
-                </Border>
-                <Border Classes="chip" Margin="0,0,8,6" IsVisible="{Binding ShowSearchScopeChip}">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <TextBlock Text="{Binding SearchScopeChipLabel, StringFormat='Search: {0}'}" FontSize="12"
-                                   Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                        <Button Classes="chipClose" Content="✕" Command="{Binding ClearSearchScopeCommand}" />
-                    </StackPanel>
-                </Border>
+        <!-- ============ Row 2: state - lens tabs, filter chips, result summary. Always visible. ============ -->
+        <Border Padding="24,8" Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="10">
+                <!-- The four buttons share this one parent on purpose: TabStrip.Step groups a strip by visual parent. -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <Button Classes="tab lensTab" Classes.active="{Binding IsAllLens}" Classes.zero="{Binding IsLensAllEmpty}"
+                            Command="{Binding SetLensCommand}" CommandParameter="{x:Static entities:LibraryLens.All}"
+                            AutomationProperties.AutomationId="LibraryLens_All" AutomationProperties.Name="{Binding LensAllCount, StringFormat='All, {0}'}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="All" />
+                            <TextBlock Classes="lensCount" Text="{Binding LensAllCount, StringFormat='{}{0:N0}'}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="tab lensTab" Classes.active="{Binding IsReadingLens}" Classes.zero="{Binding IsLensReadingEmpty}"
+                            Command="{Binding SetLensCommand}" CommandParameter="{x:Static entities:LibraryLens.Reading}"
+                            ToolTip.Tip="Started but not finished"
+                            AutomationProperties.AutomationId="LibraryLens_Reading" AutomationProperties.Name="{Binding LensReadingCount, StringFormat='Reading, {0}'}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Reading" />
+                            <TextBlock Classes="lensCount" Text="{Binding LensReadingCount, StringFormat='{}{0:N0}'}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="tab lensTab" Classes.active="{Binding IsUnreadLens}" Classes.zero="{Binding IsLensUnreadEmpty}"
+                            Command="{Binding SetLensCommand}" CommandParameter="{x:Static entities:LibraryLens.Unread}"
+                            ToolTip.Tip="Not started"
+                            AutomationProperties.AutomationId="LibraryLens_Unread" AutomationProperties.Name="{Binding LensUnreadCount, StringFormat='Unread, {0}'}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Unread" />
+                            <TextBlock Classes="lensCount" Text="{Binding LensUnreadCount, StringFormat='{}{0:N0}'}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="tab lensTab" Classes.active="{Binding IsReadLens}" Classes.zero="{Binding IsLensReadEmpty}"
+                            Command="{Binding SetLensCommand}" CommandParameter="{x:Static entities:LibraryLens.Read}"
+                            ToolTip.Tip="Finished"
+                            AutomationProperties.AutomationId="LibraryLens_Read" AutomationProperties.Name="{Binding LensReadCount, StringFormat='Read, {0}'}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Read" />
+                            <TextBlock Classes="lensCount" Text="{Binding LensReadCount, StringFormat='{}{0:N0}'}" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
 
-                <Button Classes="chipBtn" Margin="0,0,8,6" IsVisible="{Binding IsSortNonDefault}"
-                        Content="{Binding ActiveSortLabel, StringFormat='Sorted: {0}'}"
-                        Command="{Binding OpenViewSortTabCommand}" CommandParameter="{x:Static vm:ViewSortTab.Sort}"
-                        AutomationProperties.AutomationId="LibrarySortChip" />
-                <Button Classes="chipBtn" Margin="0,0,8,6" IsVisible="{Binding ShowGroupChip}"
-                        Content="{Binding ActiveGroupLabel, StringFormat='Grouped: {0}'}"
-                        Command="{Binding OpenViewSortTabCommand}" CommandParameter="{x:Static vm:ViewSortTab.Group}"
-                        AutomationProperties.AutomationId="LibraryGroupChip" />
-            </WrapPanel>
+                <Border Grid.Column="1" Width="1" Height="18" Background="{DynamicResource PbBorderBrush}" VerticalAlignment="Center" />
+
+                <!-- Chips never wrap: on a narrow window the row scrolls sideways instead of growing taller. The scroller's
+                     viewport clips a focus ring, so the chips sit 6px inside it (and the scroller reaches 6px out to keep them aligned). -->
+                <ScrollViewer Grid.Column="2" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" VerticalAlignment="Center" Margin="-6">
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="6">
+                        <Button x:Name="ContentTypeChip" Classes="filterChip" Classes.on="{Binding HasContentTypeFilter}"
+                                Command="{Binding ToggleContentTypeChipCommand}"
+                                AutomationProperties.AutomationId="LibraryContentTypeChip"
+                                AutomationProperties.Name="{Binding ContentTypeChipLabel, StringFormat='Content type filter: {0}'}">
+                            <TextBlock Text="{Binding ContentTypeChipLabel, StringFormat='{}{0} ▾'}" />
+                        </Button>
+                        <Button x:Name="PublisherChip" Classes="filterChip" Classes.on="{Binding HasPublisherFilter}"
+                                Command="{Binding TogglePublisherChipCommand}"
+                                AutomationProperties.AutomationId="LibraryPublisherChip"
+                                AutomationProperties.Name="{Binding PublisherChipLabel, StringFormat='Publisher filter: {0}'}">
+                            <TextBlock Text="{Binding PublisherChipLabel, StringFormat='{}{0} ▾'}" />
+                        </Button>
+                        <ToggleButton Classes="filterChip" IsChecked="{Binding FilterUnreadOnly}" Content="Has unread"
+                                      ToolTip.Tip="Anything with at least one unread issue"
+                                      AutomationProperties.AutomationId="LibraryFilterUnreadOnly" />
+                        <ToggleButton Classes="filterChip" IsChecked="{Binding FilterMissingIssues}" Content="Missing"
+                                      ToolTip.Tip="Files that can no longer be found"
+                                      AutomationProperties.AutomationId="LibraryFilterMissingIssues" />
+                        <ToggleButton Classes="filterChip" IsChecked="{Binding FilterTrackedOnly}" Content="Tracked"
+                                      ToolTip.Tip="Series linked to a tracker"
+                                      AutomationProperties.AutomationId="LibraryFilterTrackedOnly" />
+                        <!-- Only when at least one remote library is mirrored: which library's books to show. -->
+                        <Button x:Name="SourceChip" Classes="filterChip" IsVisible="{Binding HasRemoteSources}"
+                                Classes.on="{Binding SourceFilter, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                Command="{Binding ToggleSourceChipCommand}"
+                                AutomationProperties.AutomationId="LibrarySourceChip"
+                                AutomationProperties.Name="{Binding SourceChipLabel, StringFormat='Library filter: {0}'}">
+                            <TextBlock Text="{Binding SourceChipLabel, StringFormat='{}{0} ▾'}" />
+                        </Button>
+                        <Border Classes="chip" IsVisible="{Binding ShowSearchScopeChip}" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="{Binding SearchScopeChipLabel, StringFormat='Search: {0}'}" FontSize="12"
+                                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                <Button Classes="chipClose" Content="✕" Command="{Binding ClearSearchScopeCommand}" AutomationProperties.Name="Clear search scope" />
+                            </StackPanel>
+                        </Border>
+                        <Button Classes="chipBtn" Content="Clear" IsVisible="{Binding ShowClearChip}" VerticalAlignment="Center"
+                                Command="{Binding ClearChipsCommand}" AutomationProperties.AutomationId="LibraryClearChips" AutomationProperties.Name="Clear filters" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Result summary: count, then the sort and the grouping. Each is a button that opens its own list. -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ResultSummary}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center"
+                               AutomationProperties.AutomationId="LibraryResultSummary" />
+                    <Button x:Name="SortChip" Classes="chipBtn" Classes.open="{Binding IsSortOpen}"
+                            Content="{Binding ActiveSortLabel, StringFormat='Sort: {0}'}"
+                            Command="{Binding ToggleSortCommand}"
+                            AutomationProperties.AutomationId="LibrarySortChip" />
+                    <Button x:Name="GroupChip" Classes="chipBtn" Classes.open="{Binding IsGroupOpen}"
+                            Content="{Binding ActiveGroupLabel, StringFormat='Group: {0}'}"
+                            Command="{Binding ToggleGroupCommand}"
+                            AutomationProperties.AutomationId="LibraryGroupChip" />
+                </StackPanel>
+            </Grid>
         </Border>
 
         <!-- ============ Selection second row ============ -->
@@ -300,38 +457,68 @@
             </Border>
         </Popup>
 
-        <Popup PlacementTarget="{Binding #FilterButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
-               IsOpen="{Binding IsAddFilterOpen}" IsLightDismissEnabled="True">
-            <Border Classes="dropdown" Width="210">
-                <StackPanel Spacing="4">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Grid.Column="0" Text="Unread only" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding FilterUnreadOnly}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.AutomationId="LibraryFilterUnreadOnly" />
-                    </Grid>
-                    <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Grid.Column="0" Text="Missing issues" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding FilterMissingIssues}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.AutomationId="LibraryFilterMissingIssues" />
-                    </Grid>
-                    <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Grid.Column="0" Text="Tracked series" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding FilterTrackedOnly}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.AutomationId="LibraryFilterTrackedOnly" />
-                    </Grid>
-                    <!-- Only when at least one remote library is mirrored: which library's books to show. -->
-                    <StackPanel Spacing="2" Margin="0,6,0,0" IsVisible="{Binding HasRemoteSources}">
-                        <TextBlock Text="Library" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
-                        <ItemsControl ItemsSource="{Binding SourceOptions}">
+        <!-- Content type chip: the same selection as the sidebar's Content type rows. -->
+        <Popup PlacementTarget="{Binding #ContentTypeChip}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+               IsOpen="{Binding IsContentTypeChipOpen}" IsLightDismissEnabled="True">
+            <Border Classes="dropdown" Width="200">
+                <StackPanel Spacing="1">
+                    <Button Classes="modeOption" Classes.active="{Binding !HasContentTypeFilter}" Content="Any content type"
+                            Command="{Binding ClearContentTypeFilterCommand}" AutomationProperties.AutomationId="LibraryContentTypeOption_Any" />
+                    <ItemsControl ItemsSource="{Binding ContentTypes}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:ContentTypeSummary">
+                                <Button Classes="modeOption" Classes.active="{Binding IsActive}"
+                                        Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetContentTypeFilterCommand}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.AutomationId="{Binding Name, StringFormat='LibraryContentTypeOption_{0}'}">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Count}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- Publisher chip -->
+        <Popup PlacementTarget="{Binding #PublisherChip}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+               IsOpen="{Binding IsPublisherChipOpen}" IsLightDismissEnabled="True">
+            <Border Classes="dropdown" Width="240">
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Top" Classes="modeOption" Classes.active="{Binding !HasPublisherFilter}" Content="Any publisher"
+                            Command="{Binding SetPublisherFilterCommand}" CommandParameter="{x:Null}" AutomationProperties.AutomationId="LibraryPublisherOption_Any" />
+                    <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding PublisherOptions}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:LibraryScreenViewModel+SourceOption">
-                                    <Button Classes="chipBtn" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                            Content="{Binding Label}" Margin="0,0,0,2"
-                                            Command="{Binding $parent[ItemsControl].((vm:LibraryScreenViewModel)DataContext).SetSourceFilterCommand}"
-                                            CommandParameter="{Binding Id}"
-                                            AutomationProperties.Name="{Binding Label, StringFormat='Show {0}'}" />
+                                <DataTemplate x:DataType="x:String">
+                                    <Button Classes="modeOption" Content="{Binding}"
+                                            Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetPublisherFilterCommand}"
+                                            CommandParameter="{Binding}" />
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </StackPanel>
-                </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Popup>
+
+        <!-- Library source chip (remote-library sharing) -->
+        <Popup PlacementTarget="{Binding #SourceChip}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+               IsOpen="{Binding IsSourceChipOpen}" IsLightDismissEnabled="True">
+            <Border Classes="dropdown" Width="210">
+                <ItemsControl ItemsSource="{Binding SourceOptions}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LibraryScreenViewModel+SourceOption">
+                            <Button Classes="modeOption" Content="{Binding Label}"
+                                    Command="{Binding $parent[ItemsControl].((vm:LibraryScreenViewModel)DataContext).SetSourceFilterCommand}"
+                                    CommandParameter="{Binding Id}"
+                                    AutomationProperties.Name="{Binding Label, StringFormat='Show {0}'}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </Border>
         </Popup>
 
@@ -374,201 +561,202 @@
                             AutomationProperties.AutomationId="LibraryWorkspaceSaveAs" />
                     <Button Classes="modeOption" Content="Reset to default view" Command="{Binding ResetToDefaultViewCommand}"
                             AutomationProperties.AutomationId="LibraryWorkspaceReset" />
+                    <!-- List layouts (docs/superpowers/specs/2026-10-04-list-layouts-design.md): CE's Edit List Layout /
+                         Save List Layout / Edit Layouts / "Set 'X' Layout" items, nested here because this button is on
+                         both Library and Books. Applying one copies it onto the list now on screen. -->
+                    <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,6" />
+                    <TextBlock Classes="dropdownRow" Text="List layouts" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
+                    <ItemsControl ItemsSource="{Binding ListLayouts.Layouts}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ListLayoutRow">
+                                <Button Classes="modeOption" Content="{Binding Name}"
+                                        Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ListLayouts.ApplyLayoutCommand}"
+                                        CommandParameter="{Binding Id}"
+                                        ToolTip.Tip="Use this layout for the current list"
+                                        AutomationProperties.AutomationId="{Binding Name, StringFormat='LibraryListLayoutRow_{0}'}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Classes="modeOption" Content="List options…" Command="{Binding ListLayouts.ShowListOptionsCommand}"
+                            AutomationProperties.AutomationId="LibraryListOptions" />
+                    <Button Classes="modeOption" Content="Save list layout…" Command="{Binding ListLayouts.SaveLayoutAsCommand}"
+                            AutomationProperties.AutomationId="LibrarySaveListLayout" />
+                    <Button Classes="modeOption" Content="Edit layouts…" Command="{Binding ListLayouts.ShowEditLayoutsCommand}"
+                            AutomationProperties.AutomationId="LibraryEditLayouts" />
+                    <Button Classes="modeOption" Content="Default layout for this list" Command="{Binding ListLayouts.ResetToDefaultCommand}"
+                            ToolTip.Tip="Forget this list's own layout"
+                            AutomationProperties.AutomationId="LibraryDefaultListLayout" />
                 </StackPanel>
             </Border>
         </Popup>
 
-        <!-- View & Sort tabbed popup (design §4) -->
-        <Popup PlacementTarget="{Binding #ViewSortButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
-               IsOpen="{Binding IsViewSortOpen}" IsLightDismissEnabled="True">
-            <Border Classes="dropdown" Width="256">
-                <DockPanel LastChildFill="True">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="2" Margin="0,0,0,10">
-                        <Button Classes="viewSortTab" Classes.active="{Binding IsViewTabActive}" Content="View"
-                                Command="{Binding OpenViewSortTabCommand}" CommandParameter="{x:Static vm:ViewSortTab.View}"
-                                AutomationProperties.AutomationId="LibraryViewSortTab_View" />
-                        <Button Classes="viewSortTab" Classes.active="{Binding IsSortTabActive}" Content="Sort"
-                                Command="{Binding OpenViewSortTabCommand}" CommandParameter="{x:Static vm:ViewSortTab.Sort}"
-                                AutomationProperties.AutomationId="LibraryViewSortTab_Sort" />
-                        <Button Classes="viewSortTab" Classes.active="{Binding IsGroupTabActive}" Content="Group"
-                                Command="{Binding OpenViewSortTabCommand}" CommandParameter="{x:Static vm:ViewSortTab.Group}"
-                                AutomationProperties.AutomationId="LibraryViewSortTab_Group" />
+        <!-- Display popup: how the covers or rows look (2026-10-04 audit of the old three-tab "View & Sort" popup). Sort and
+             Group moved to their own popups on the row-2 chips; List / Details and Series | Issues are row-1 switches and are
+             not repeated here; Fade in, Tooltips and Smooth scrolling moved to Preferences > Appearance. Each row is visible
+             only in the view modes whose templates honour it (the Is*Scope properties on LibraryScreenViewModel): a toggle
+             that silently did nothing read as broken. -->
+        <Popup PlacementTarget="{Binding #DisplayButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+               IsOpen="{Binding IsDisplayOpen}" IsLightDismissEnabled="True">
+            <Border Classes="dropdown" Width="264">
+                <StackPanel Spacing="1">
+                    <StackPanel IsVisible="{Binding IsGridView}">
+                        <TextBlock Classes="dropdownRow" Text="Cover style" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,6" />
+                        <Border Classes="segGroup" HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <Button Classes="seg" Classes.on="{Binding IsPosterGrid}" Content="Poster" ToolTip.Tip="Cover-forward cards"
+                                        Command="{Binding SelectPosterGridCommand}" AutomationProperties.AutomationId="LibraryViewModeOption_PosterGrid" />
+                                <Button Classes="seg" Classes.on="{Binding IsPanoramaGrid}" Content="Panorama" ToolTip.Tip="Covers at their real width"
+                                        Command="{Binding SelectPanoramaGridCommand}" AutomationProperties.AutomationId="LibraryViewModeOption_PanoramaGrid" />
+                                <Button Classes="seg" Classes.on="{Binding IsTilesView}" Content="Tiles" ToolTip.Tip="A small cover beside its details"
+                                        Command="{Binding SelectTilesGridCommand}" AutomationProperties.AutomationId="LibraryViewModeOption_Tiles" />
+                            </StackPanel>
+                        </Border>
+                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,12,0,10" />
                     </StackPanel>
 
-                    <!-- No visible scroll bar (it took a column and ran alongside the checkboxes); the wheel and keyboard
-                         still scroll, and the bottom edge fades out while more settings sit below the fold
-                         (LibraryToolbar.axaml.cs OnViewSortScrollChanged) - 2026-09-26 library audit. -->
-                    <ScrollViewer x:Name="ViewSortScroll" MaxHeight="420" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Hidden"
-                                  ScrollChanged="OnViewSortScrollChanged">
-                      <Panel>
-                        <!-- View tab -->
-                        <StackPanel Spacing="1" IsVisible="{Binding IsViewTabActive}">
-                            <TextBlock Classes="dropdownRow" Text="Display mode" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
-                            <Button Classes="modeOption" Classes.active="{Binding IsPosterGrid}" Content="Poster grid"
-                                    Command="{Binding SelectPosterGridCommand}" AutomationProperties.AutomationId="LibraryViewModeOption_PosterGrid" />
-                            <Button Classes="modeOption" Classes.active="{Binding IsPanoramaGrid}" Content="Panorama grid"
-                                    Command="{Binding SelectPanoramaGridCommand}" AutomationProperties.AutomationId="LibraryViewModeOption_PanoramaGrid" />
-                            <Button Classes="modeOption" Classes.active="{Binding IsTilesView}" Content="Tiles"
-                                    Command="{Binding SelectTilesGridCommand}" AutomationProperties.AutomationId="LibraryViewModeOption_Tiles" />
-                            <Button Classes="modeOption" Classes.active="{Binding IsListView}" Content="List"
-                                    Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.List}" AutomationProperties.AutomationId="LibraryViewModeOption_List" />
-                            <Button Classes="modeOption" Classes.active="{Binding IsDetailsTableView}" Content="Details"
-                                    Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.DetailsTable}" AutomationProperties.AutomationId="LibraryViewModeOption_Details" />
-                            <!-- "Comic List" (LibraryViewMode.IssueList) fully removed 2026-09-03 - it
-                                 duplicated the Details view. The enum value, IssueListScreen and the
-                                 series-only LibrarySortField/GroupField columns are all gone; migrations
-                                 RemoveComicListViewMode / UnifyLibrarySortGroupFields remap any persisted
-                                 value to a survivor, and workspace JSON falls back to defaults. -->
+                    <StackPanel IsVisible="{Binding IsGridDensityScope}">
+                        <TextBlock Classes="dropdownRow" Text="Cover size" Foreground="{DynamicResource PbTextBrush}" Margin="0" />
+                        <Slider Minimum="0.6" Maximum="1.6" Value="{Binding GridDensity}" AutomationProperties.Name="Cover size" />
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsPosterGrid}">
+                            <TextBlock Grid.Column="0" Classes="displayRow" Text="Show titles" />
+                            <CheckBox Grid.Column="1" IsChecked="{Binding ShowTileTitles}" AutomationProperties.Name="Show titles"
+                                      AutomationProperties.AutomationId="LibraryShowTitlesToggle" />
+                        </Grid>
+                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
+                    </StackPanel>
 
-                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
+                    <StackPanel Spacing="1">
+                        <TextBlock Classes="dropdownRow" Text="On the cover" IsVisible="{Binding IsGridView}"
+                                   Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
+                        <TextBlock Classes="dropdownRow" Text="On each row" IsVisible="{Binding IsListView}"
+                                   Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsOverlayBadgeScope}">
+                            <TextBlock Grid.Column="0" Classes="displayRow" Text="Unread count" />
+                            <CheckBox Grid.Column="1" IsChecked="{Binding ShowUnreadBadge}" AutomationProperties.Name="Unread count" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsOverlayBadgeScope}">
+                            <TextBlock Grid.Column="0" Classes="displayRow" Text="Publisher logo" />
+                            <CheckBox Grid.Column="1" IsChecked="{Binding ShowPublisherBadge}" AutomationProperties.Name="Publisher logo" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsCoverOverlayScope}">
+                            <TextBlock Grid.Column="0" Classes="displayRow" Text="Progress bar" />
+                            <CheckBox Grid.Column="1" IsChecked="{Binding ShowProgressBar}" AutomationProperties.Name="Progress bar" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsCoverOverlayScope}">
+                            <TextBlock Grid.Column="0" Classes="displayRow" Text="Rating" />
+                            <CheckBox Grid.Column="1" IsChecked="{Binding NumericRatingThumbnails}" AutomationProperties.Name="Rating" />
+                        </Grid>
+                        <!-- Language is in the List and Tiles templates only (spec 2026-09-14 §5 took it off the grid covers).
+                             One row over the two stored settings: shown or not, and as text or a flag. -->
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsLanguageBadgeScope}" Margin="0,3">
+                            <TextBlock Grid.Column="0" Classes="displayRow" Text="Language" />
+                            <Border Grid.Column="1" Classes="segGroup">
+                                <StackPanel Orientation="Horizontal" Spacing="2">
+                                    <Button Classes="seg" Classes.on="{Binding IsLanguageOff}" Content="Off"
+                                            Command="{Binding SetLanguageDisplayCommand}" CommandParameter="Off" AutomationProperties.Name="Language: off" />
+                                    <Button Classes="seg" Classes.on="{Binding IsLanguageText}" Content="Text"
+                                            Command="{Binding SetLanguageDisplayCommand}" CommandParameter="Text" AutomationProperties.Name="Language: as text" />
+                                    <Button Classes="seg" Classes.on="{Binding IsLanguageFlag}" Content="Flag"
+                                            Command="{Binding SetLanguageDisplayCommand}" CommandParameter="Flag" AutomationProperties.Name="Language: as a flag" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsContinueReadingScope}">
+                            <TextBlock Grid.Column="0" Classes="displayRow" Text="Hover buttons (Read, More)" />
+                            <CheckBox Grid.Column="1" IsChecked="{Binding ShowContinueReadingButton}" AutomationProperties.Name="Hover buttons (Read, More)" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsGridDogEarScope}">
+                            <TextBlock Grid.Column="0" Classes="displayRow" Text="Dog-ear preview" />
+                            <CheckBox Grid.Column="1" IsChecked="{Binding DogEarThumbnails}" AutomationProperties.Name="Dog-ear preview" />
+                        </Grid>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Popup>
 
-                            <TextBlock Classes="dropdownRow" Text="Card content" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
-                            <Button Classes="modeOption" Classes.active="{Binding IsIssueGranularity}" Content="Per-issue tiles"
-                                    Command="{Binding SetGranularityCommand}" CommandParameter="{x:Static entities:LibraryContentGranularity.Issue}" AutomationProperties.AutomationId="LibraryGranularityOption_Issue" />
-                            <Button Classes="modeOption" Classes.active="{Binding IsSeriesGranularity}" Content="Series cards"
-                                    Command="{Binding SetGranularityCommand}" CommandParameter="{x:Static entities:LibraryContentGranularity.Series}" AutomationProperties.AutomationId="LibraryGranularityOption_Series" />
+        <!-- Sort popup, on the row-2 "Sort:" chip. One shared field pool for both granularities (2026-09-03); series cards sort
+             via SeriesCardSample.RepresentativeRow through the same IssueListFieldCatalog. No visible scroll bar: the wheel and
+             keyboard still scroll, and the bottom edge fades out while more sits below the fold (OnPopupScrollChanged). -->
+        <Popup PlacementTarget="{Binding #SortChip}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+               IsOpen="{Binding IsSortOpen}" IsLightDismissEnabled="True">
+            <Border Classes="dropdown" Width="240">
+                <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Hidden"
+                              ScrollChanged="OnPopupScrollChanged">
+                    <StackPanel Spacing="1">
+                        <ItemsControl ItemsSource="{Binding IssueList.SortFieldOptions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:IssueListSortFieldDescriptor">
+                                    <Button Classes="modeOption"
+                                            Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Field}}"
+                                            Content="{Binding DisplayName}"
+                                            Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetSortFieldCommand}"
+                                            CommandParameter="{Binding Field}"
+                                            AutomationProperties.AutomationId="{Binding Field, StringFormat='LibrarySortOption_{0}'}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <!-- Virtual Tags - dynamic, one entry per enabled VirtualTagDefinition
+                             (docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md
+                             §1), deliberately not in SortFieldOptions (no single fixed comparer
+                             exists for the whole family). Hidden entirely when none are enabled. -->
+                        <ItemsControl ItemsSource="{Binding IssueList.AvailableVirtualTags}" IsVisible="{Binding IssueList.HasVirtualTags}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:VirtualTagOption">
+                                    <Button Classes="modeOption"
+                                            Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.ActiveVirtualTagSortId, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Id}}"
+                                            Content="{Binding Name}"
+                                            Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetVirtualTagSortFieldCommand}"
+                                            CommandParameter="{Binding}"
+                                            AutomationProperties.AutomationId="{Binding Id, StringFormat='LibrarySortOption_VirtualTag_{0}'}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
+                        <Button Classes="modeOption" Classes.active="{Binding IssueList.SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Ascending}}"
+                                Content="↑ Ascending" Command="{Binding IssueList.ToggleSortDirectionCommand}" AutomationProperties.AutomationId="LibrarySortAscending" />
+                        <Button Classes="modeOption" Classes.active="{Binding IssueList.SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Descending}}"
+                                Content="↓ Descending" Command="{Binding IssueList.ToggleSortDirectionCommand}" AutomationProperties.AutomationId="LibrarySortDescending" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Popup>
 
-                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
-
-                            <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0" IsVisible="{Binding IsPosterGrid}">
-                                <TextBlock Grid.Column="0" Text="Show titles" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                                <CheckBox Grid.Column="1" IsChecked="{Binding ShowTileTitles}" AutomationProperties.AutomationId="LibraryShowTitlesToggle" />
-                            </Grid>
-                            <TextBlock Classes="dropdownRow" Text="Grid density" Foreground="{DynamicResource PbTextBrush}" Margin="0,6,0,0"
-                                       IsVisible="{Binding IsGridDensityScope}" />
-                            <Slider Minimum="0.6" Maximum="1.6" Value="{Binding GridDensity}" IsVisible="{Binding IsGridDensityScope}"
-                                    AutomationProperties.Name="Grid density" />
-
-                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
-
-                            <TextBlock Classes="dropdownRow" Text="Overlay" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
-                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsOverlayBadgeScope}">
-                                <TextBlock Grid.Column="0" Text="Unread badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                                <CheckBox Grid.Column="1" IsChecked="{Binding ShowUnreadBadge}" />
-                            </Grid>
-                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsOverlayBadgeScope}">
-                                <TextBlock Grid.Column="0" Text="Publisher badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                                <CheckBox Grid.Column="1" IsChecked="{Binding ShowPublisherBadge}" />
-                            </Grid>
-                            <!-- Each row below is visible only in the view modes whose templates honour it (the Is*Scope
-                                 properties on LibraryScreenViewModel) - a toggle that silently did nothing read as broken.
-                                 "Language badge" here now only controls List/Tiles' own inline
-                                 language icon (docs/superpowers/specs/2026-09-14-library-visual-
-                                 redesign-design.md §5 removed the CORNER version from Poster/Panorama
-                                 tiles specifically - List/Tiles' inline display next to the publisher
-                                 mark was never part of that corner-contention problem, so it's
-                                 untouched and this toggle still does real work for it). -->
-                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsLanguageBadgeScope}">
-                                <TextBlock Grid.Column="0" Text="Language badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                                <CheckBox Grid.Column="1" IsChecked="{Binding ShowLanguageBadge}" />
-                            </Grid>
-                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsLanguageBadgeScope}">
-                                <TextBlock Grid.Column="0" Text="Show language flag" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                                <CheckBox Grid.Column="1" IsChecked="{Binding UseLanguageIcon}" />
-                            </Grid>
-                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsContinueReadingScope}">
-                                <TextBlock Grid.Column="0" Text="Continue reading button" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                                <CheckBox Grid.Column="1" IsChecked="{Binding ShowContinueReadingButton}" />
-                            </Grid>
-
-                            <!-- Cosmetic Preferences micro-toggles (docs/superpowers/specs/2026-09-13-
-                                 preferences-cosmetic-toggles-design.md) - same Overlay group as the 4
-                                 badge toggles above. -->
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" Text="Fade in thumbnails" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                                <CheckBox Grid.Column="1" IsChecked="{Binding FadeInThumbnails}" />
-                            </Grid>
-                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsGridDogEarScope}">
-                                <TextBlock Grid.Column="0" Text="Dog-ear preview" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                                <CheckBox Grid.Column="1" IsChecked="{Binding DogEarThumbnails}" />
-                            </Grid>
-                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsCoverOverlayScope}">
-                                <TextBlock Grid.Column="0" Text="Tooltips" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                                <CheckBox Grid.Column="1" IsChecked="{Binding ShowToolTips}" />
-                            </Grid>
-                            <!-- Eased mouse-wheel scrolling (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §6). -->
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" Text="Smooth scrolling" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                                <CheckBox Grid.Column="1" IsChecked="{Binding SmoothScrolling}" />
-                            </Grid>
-                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsCoverOverlayScope}">
-                                <TextBlock Grid.Column="0" Text="Numeric rating badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                                <CheckBox Grid.Column="1" IsChecked="{Binding NumericRatingThumbnails}" />
-                            </Grid>
-                        </StackPanel>
-
-                        <!-- Sort tab - one shared field pool for both granularities (2026-09-03);
-                             series cards sort via SeriesCardSample.RepresentativeRow through the
-                             same IssueListFieldCatalog. -->
-                        <StackPanel Spacing="1" IsVisible="{Binding IsSortTabActive}">
-                            <ItemsControl ItemsSource="{Binding IssueList.SortFieldOptions}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="models:IssueListSortFieldDescriptor">
-                                        <Button Classes="modeOption"
-                                                Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Field}}"
-                                                Content="{Binding DisplayName}"
-                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetSortFieldCommand}"
-                                                CommandParameter="{Binding Field}"
-                                                AutomationProperties.AutomationId="{Binding Field, StringFormat='LibrarySortOption_{0}'}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <!-- Virtual Tags - dynamic, one entry per enabled VirtualTagDefinition
-                                 (docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md
-                                 §1), deliberately not in SortFieldOptions (no single fixed comparer
-                                 exists for the whole family). Hidden entirely when none are enabled. -->
-                            <ItemsControl ItemsSource="{Binding IssueList.AvailableVirtualTags}" IsVisible="{Binding IssueList.HasVirtualTags}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="models:VirtualTagOption">
-                                        <Button Classes="modeOption"
-                                                Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.ActiveVirtualTagSortId, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Id}}"
-                                                Content="{Binding Name}"
-                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetVirtualTagSortFieldCommand}"
-                                                CommandParameter="{Binding}"
-                                                AutomationProperties.AutomationId="{Binding Id, StringFormat='LibrarySortOption_VirtualTag_{0}'}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
-                            <Button Classes="modeOption" Classes.active="{Binding IssueList.SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Ascending}}"
-                                    Content="↑ Ascending" Command="{Binding IssueList.ToggleSortDirectionCommand}" AutomationProperties.AutomationId="LibrarySortAscending" />
-                            <Button Classes="modeOption" Classes.active="{Binding IssueList.SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Descending}}"
-                                    Content="↓ Descending" Command="{Binding IssueList.ToggleSortDirectionCommand}" AutomationProperties.AutomationId="LibrarySortDescending" />
-                        </StackPanel>
-
-                        <!-- Group tab - same shared pool. -->
-                        <StackPanel Spacing="1" IsVisible="{Binding IsGroupTabActive}">
-                            <Button Classes="modeOption" Classes.active="{Binding IssueList.GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueListGroupField.None}}"
-                                    Content="None" Command="{Binding IssueList.SetGroupFieldCommand}" CommandParameter="{x:Static entities:IssueListGroupField.None}" AutomationProperties.AutomationId="LibraryGroupOption_None" />
-                            <ItemsControl ItemsSource="{Binding IssueList.GroupFieldOptions}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="models:IssueListGroupFieldDescriptor">
-                                        <Button Classes="modeOption"
-                                                Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Field}}"
-                                                Content="{Binding DisplayName}"
-                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetGroupFieldCommand}"
-                                                CommandParameter="{Binding Field}"
-                                                AutomationProperties.AutomationId="{Binding Field, StringFormat='LibraryGroupOption_{0}'}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <!-- Virtual Tags - see the Sort tab's own section above for rationale. -->
-                            <ItemsControl ItemsSource="{Binding IssueList.AvailableVirtualTags}" IsVisible="{Binding IssueList.HasVirtualTags}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="models:VirtualTagOption">
-                                        <Button Classes="modeOption"
-                                                Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.ActiveVirtualTagGroupId, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Id}}"
-                                                Content="{Binding Name}"
-                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetVirtualTagGroupFieldCommand}"
-                                                CommandParameter="{Binding}"
-                                                AutomationProperties.AutomationId="{Binding Id, StringFormat='LibraryGroupOption_VirtualTag_{0}'}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                      </Panel>
-                    </ScrollViewer>
-                </DockPanel>
+        <!-- Group popup, on the row-2 "Group:" chip. Same shared pool. -->
+        <Popup PlacementTarget="{Binding #GroupChip}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+               IsOpen="{Binding IsGroupOpen}" IsLightDismissEnabled="True">
+            <Border Classes="dropdown" Width="240">
+                <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Hidden"
+                              ScrollChanged="OnPopupScrollChanged">
+                    <StackPanel Spacing="1">
+                        <Button Classes="modeOption" Classes.active="{Binding IssueList.GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueListGroupField.None}}"
+                                Content="None" Command="{Binding IssueList.SetGroupFieldCommand}" CommandParameter="{x:Static entities:IssueListGroupField.None}" AutomationProperties.AutomationId="LibraryGroupOption_None" />
+                        <ItemsControl ItemsSource="{Binding IssueList.GroupFieldOptions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:IssueListGroupFieldDescriptor">
+                                    <Button Classes="modeOption"
+                                            Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Field}}"
+                                            Content="{Binding DisplayName}"
+                                            Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetGroupFieldCommand}"
+                                            CommandParameter="{Binding Field}"
+                                            AutomationProperties.AutomationId="{Binding Field, StringFormat='LibraryGroupOption_{0}'}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <!-- Virtual Tags - see the Sort tab's own section above for rationale. -->
+                        <ItemsControl ItemsSource="{Binding IssueList.AvailableVirtualTags}" IsVisible="{Binding IssueList.HasVirtualTags}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:VirtualTagOption">
+                                    <Button Classes="modeOption"
+                                            Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.ActiveVirtualTagGroupId, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Id}}"
+                                            Content="{Binding Name}"
+                                            Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetVirtualTagGroupFieldCommand}"
+                                            CommandParameter="{Binding}"
+                                            AutomationProperties.AutomationId="{Binding Id, StringFormat='LibraryGroupOption_VirtualTag_{0}'}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
         </Popup>
 

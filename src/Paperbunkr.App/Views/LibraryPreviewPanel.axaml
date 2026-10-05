@@ -169,6 +169,39 @@
         <Style Selector="views|PosterRail ScrollViewer > StackPanel">
             <Setter Property="Margin" Value="0,0,0,12" />
         </Style>
+
+        <!-- Issue strip chips (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 3). Read is filled, the next
+             issue is outlined in the accent, and a missing file swaps the border for a dashed outline (drawn by the chip's
+             own Rectangle) - a shape change, so the state never rests on colour alone. -->
+        <Style Selector="Button.issueChip">
+            <Setter Property="MinWidth" Value="34" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,5,5" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.issueChip.read">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <Style Selector="Button.issueChip.next">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="Button.issueChip.missing">
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeBrush}" />
+        </Style>
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*" Background="{DynamicResource PbBgBrush}">
@@ -240,23 +273,63 @@
                             <TextBlock Text="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PreviewSeriesReadLabel}"
                                        Classes="previewMeta" FontSize="11" Margin="0,4,0,0" />
 
-                            <StackPanel IsVisible="{Binding RepresentativeRow.HasSummaryExcerpt}">
+                            <StackPanel IsVisible="{Binding HasSynopsis}">
                                 <Border Height="14" />
                                 <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,6">
                                     <TextBlock Text="ABOUT" Classes="sectionTitle" />
                                     <Border Grid.Column="1" Classes="sectionRule" />
                                 </Grid>
-                                <TextBlock Text="{Binding RepresentativeRow.SummaryExcerpt}" Classes="previewSynopsis" />
+                                <TextBlock Text="{Binding SynopsisExcerpt}" Classes="previewSynopsis" />
                             </StackPanel>
                         </StackPanel>
 
-                        <StackPanel Margin="16,0,16,16" IsVisible="{Binding !!PreviewSeriesIssueRail.Count}">
-                            <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,8">
+                        <!-- Issue strip: number chips that wrap (no sideways scrolling, however long the series). A click
+                             drills into the issue; hover or keyboard focus shows its cover and title in the one shared popup below. -->
+                        <StackPanel Margin="16,0,16,11" IsVisible="{Binding !!PreviewSeriesIssueChips.Count}">
+                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,8">
                                 <TextBlock Text="ISSUES" Classes="sectionTitle" />
                                 <Border Grid.Column="1" Classes="sectionRule" />
+                                <TextBlock Grid.Column="2" Text="{Binding PreviewIssueChipsCaption}" Classes="previewMeta" FontSize="11" Margin="8,0,0,0"
+                                           IsVisible="{Binding HasPreviewIssueChipsCaption}" VerticalAlignment="Center" />
                             </Grid>
-                            <views:PosterRail x:Name="IssueRail" ItemsSource="{Binding PreviewSeriesIssueRail}"
-                                              ClickCommand="{Binding DrillIntoIssueCommand}" />
+                            <ItemsControl x:Name="IssueChips" ItemsSource="{Binding PreviewSeriesIssueChips}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:PreviewIssueChip">
+                                        <Button Classes="issueChip" Classes.read="{Binding IsRead}" Classes.next="{Binding IsNext}" Classes.missing="{Binding IsMissing}"
+                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DrillIntoIssueCommand}"
+                                                CommandParameter="{Binding Row}"
+                                                PointerEntered="OnIssueChipPointerEntered" PointerExited="OnIssueChipPointerExited"
+                                                GotFocus="OnIssueChipGotFocus" LostFocus="OnIssueChipLostFocus"
+                                                AutomationProperties.Name="{Binding AccessibleName}">
+                                            <Panel>
+                                                <Rectangle IsVisible="{Binding IsMissing}" Stroke="{DynamicResource PbBadgeBrush}" StrokeThickness="1"
+                                                           StrokeDashArray="3,2" RadiusX="4" RadiusY="4" />
+                                                <TextBlock Text="{Binding Label}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="6,0" />
+                                            </Panel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <!-- One popup for the whole strip, moved from chip to chip by LibraryPreviewPanel.axaml.cs. Never hit-testable. -->
+                            <Popup x:Name="IssueChipPopup" Placement="Top" VerticalOffset="-6" IsLightDismissEnabled="False" IsHitTestVisible="False">
+                                <Border x:DataType="models:PreviewIssueChip" Width="230" Padding="8" IsHitTestVisible="False"
+                                        Background="{DynamicResource PbSurface3Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                        CornerRadius="{DynamicResource PbRadius}">
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                        <Border Width="40" Height="60" CornerRadius="3" ClipToBounds="True" Background="{Binding Row.CoverBrush}">
+                                            <Image views:AsyncCoverImage.SourceId="{Binding Row.CoverKey}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                                            <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
+                                                       TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding StateLabel}" Classes="previewMeta" FontSize="11" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </Popup>
                         </StackPanel>
 
                         <StackPanel Margin="16,0,16,20" DataContext="{Binding PreviewSeries}" x:DataType="models:SeriesCardSample" IsVisible="{Binding HasDetails}">

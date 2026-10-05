@@ -681,6 +681,13 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("Added");
 
+                    b.Property<string>("LibraryLens")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("All");
+
                     b.Property<string>("LibraryPreviewCollapsedSections")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2540,6 +2547,64 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("LibrarySnapshots");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ListLayout", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Screen")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("StateJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Screen", "Name")
+                        .IsUnique();
+
+                    b.ToTable("ListLayouts");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ListLayoutAssignment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Screen")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SelectionKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StateJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Screen", "SelectionKey")
+                        .IsUnique();
+
+                    b.ToTable("ListLayoutAssignments");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.Location", b =>
                 {
                     b.Property<int>("Id")
@@ -3051,6 +3116,12 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<DateTime>("CreatedUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("DistinctOnly")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Metric")
                         .HasColumnType("INTEGER");
 
@@ -3079,6 +3150,31 @@ namespace Paperbunkr.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ReadingGoals");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingGoalScope", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Label")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ReadingGoalId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Value")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReadingGoalId");
+
+                    b.ToTable("ReadingGoalScopes");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingList", b =>
@@ -5137,6 +5233,17 @@ namespace Paperbunkr.Data.Migrations
                     b.Navigation("Issue");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingGoalScope", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.ReadingGoal", "ReadingGoal")
+                        .WithMany("Scopes")
+                        .HasForeignKey("ReadingGoalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ReadingGoal");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingList", b =>
                 {
                     b.HasOne("Paperbunkr.Data.Entities.Continuity", "Continuity")
@@ -5516,6 +5623,11 @@ namespace Paperbunkr.Data.Migrations
             modelBuilder.Entity("Paperbunkr.Data.Entities.MediaRelation", b =>
                 {
                     b.Navigation("Evidence");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingGoal", b =>
+                {
+                    b.Navigation("Scopes");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingList", b =>

@@ -83,7 +83,7 @@ public partial class MainWindow : Window
         AddHandler(GotFocusEvent, OnAnyGotFocus);
         foreach (var name in new[]
                  {
-                     "LibraryCollections", "LibraryContentTypes", "BuiltInSmartLists", "CustomSmartLists", "MaintenanceSmartLists",
+                     "LibraryCollections", "BuiltInSmartLists", "CustomSmartLists", "MaintenanceSmartLists",
                      "SeriesSmartLists", "NovelSmartLists", "PluginSmartLists", "ContinuityList", "StoryEvents",
                  })
         {

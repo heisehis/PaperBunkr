@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:fi="using:FluentIcons.Avalonia.Fluent"
+             x:Class="Paperbunkr.App.Views.LibraryContinueStrip"
+             x:DataType="vm:LibraryScreenViewModel">
+    <!--
+        The Library's "Continue reading" strip (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 4): the series
+        with an issue in progress, most recently opened first. It sits at the top of each cover grid's scroller, so it scrolls
+        away with the grid, and LibraryScreen shows it only on the unfiltered All lens. Each card is an ordinary focusable
+        button: Enter or a click continues reading, Left/Right move along the strip, and the context-menu key opens the
+        series menu (the screen's ContextMenuHost reads the card's DataContext like any tile's).
+    -->
+    <UserControl.Styles>
+        <Style Selector="Button.continueCard">
+            <Setter Property="Width" Value="262" />
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusLg}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.continueCard:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+        <Style Selector="Border.continuePlay">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Margin="24,18,24,8" Spacing="10">
+        <DockPanel>
+            <TextBlock DockPanel.Dock="Left" Text="Continue reading" Classes="pbTextHeading" VerticalAlignment="Center" />
+            <TextBlock DockPanel.Dock="Left" Text="{Binding ContinueStrip.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
+            <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
+        </DockPanel>
+        <!-- The row never wraps; with more cards than fit it scrolls sideways. The scroller's viewport clips a focus ring,
+             so the cards sit 6px inside it (and it reaches 6px out to keep them aligned). -->
+        <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="-6">
+            <ItemsControl x:Name="Cards" ItemsSource="{Binding ContinueStrip}" Margin="6">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="12" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:SeriesCardSample">
+                        <Button Classes="continueCard"
+                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
+                                CommandParameter="{Binding}" GotFocus="OnCardGotFocus"
+                                AutomationProperties.Name="{Binding ContinueAccessibleName}">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <Border Grid.Column="0" Width="44" Height="66" CornerRadius="4" ClipToBounds="True" Background="{Binding CoverBrush}">
+                                    <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                                    <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding ContinueLabel}" Classes="pbTextCaption" TextTrimming="CharacterEllipsis" />
+                                    <ProgressBar Value="{Binding ReadFraction}" Minimum="0" Maximum="1" Height="4" MinHeight="4" MinWidth="0" Margin="0,4,0,0"
+                                                 Foreground="{DynamicResource PbAccentBrush}" Background="{DynamicResource PbBorderBrush}"
+                                                 AutomationProperties.Name="Series progress" />
+                                </StackPanel>
+                                <Border Grid.Column="2" Classes="continuePlay">
+                                    <fi:SymbolIcon Symbol="Play" FontSize="13" Foreground="{DynamicResource PbBadgeTextBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </Grid>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </StackPanel>
+</UserControl>

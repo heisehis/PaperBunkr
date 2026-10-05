@@ -35,7 +35,8 @@ public partial class PreferencesScreen : UserControl
         InitializeComponent();
         _screenInput = ScreenInput.Attach(this, InputScope.Preferences, new Dictionary<string, Func<bool>>
         {
-            [InputActionIds.FocusSearch] = () => ScreenInput.FocusTextBox(this, "PreferencesSearchBox"),
+            // On the Keyboard Shortcuts page Ctrl+F goes to that page's own action search, which is only effectively visible while the page is showing.
+            [InputActionIds.FocusSearch] = () => ScreenInput.FocusTextBox(this, "ShortcutSearchBox") || ScreenInput.FocusTextBox(this, "PreferencesSearchBox"),
 
             // The bumpers (and Ctrl+PageUp/PageDown) step through the sections in the list on the left.
             [InputActionIds.TabNext] = () => TabStrip.Step(this, 1),

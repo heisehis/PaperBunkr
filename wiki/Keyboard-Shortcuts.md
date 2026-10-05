@@ -188,19 +188,28 @@ A text box you reach with the arrow keys (or a controller) is only highlighted, 
 
 ## Remapping
 
-1. **Preferences → Keyboard Shortcuts**. Every action is listed under its group, with one chip for
-   each input bound to it.
+1. **Preferences → Keyboard Shortcuts**. Every action is listed on the left under its group, one line
+   each, with its first shortcut (and **+2** and so on when there are more). Pick one and its page opens
+   on the right, with every input bound to it as a chip. Type in the search box to find an action by
+   name or by key (`ctrl wheel`, `d-pad left`), use **All / Keyboard & mouse / Controller** to narrow the
+   list by device, and **Customised only** to see what you have changed (a dot marks those actions).
 2. Click **Add shortcut…**, then press the key (with `Ctrl`, `Shift` or `Alt` held for a combination),
    click the **middle** or a **side** mouse button, or turn the **wheel** (also with modifiers). `Esc`
    cancels. Left and right clicks are ignored — a click is how the box got focus.
-3. Click the **✕** on a chip to remove it, or **Reset** on a row to put that action back to its
-   defaults. An action with no chips is simply unbound.
-4. Conflicts are flagged inline — both rows turn red and a banner names the first pair. Two actions
-   conflict only when one input would reach both at once: a key may be page-turn, pan *and* scroll
-   (only one is ever active), but an always-available action shares nothing with them.
+3. Click the **✕** on a chip to remove it, or **Reset to default** to put that action back to its
+   defaults. An action with no chips is simply unbound. The controller's sticks and triggers are fixed
+   (a lock marks them) and have no ✕.
+4. Conflicts are marked quietly: a small warning icon on the action in the list and on the chip, and a
+   note on the action's page that names the other action, says whether it can take the press instead,
+   and has **Show that action** to jump to it. Two actions conflict only when one input would reach both
+   at once: a key may be page-turn, pan *and* scroll (only one is ever active), but an always-available
+   action shares nothing with them. Nothing is blocked.
 5. **Import Layout…** / **Export Layout…** save and load your whole layout as a file — handy for
    moving between machines or sharing. Layouts exported by earlier versions still import.
    **Reset to Defaults** reverts everything.
+
+With the keyboard or a controller: **Up** and **Down** move through the list, **Right** goes into the
+action's page and **Left** comes back to the same row.
 
 Your changes are stored in `keymap.json` next to the PaperBunkr database (only what you changed, so
 new defaults in later versions still reach you). Controller bindings can be viewed and removed in the

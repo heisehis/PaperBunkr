@@ -121,6 +121,16 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _fileAssociationService = fileAssociationService;
         _backupService = backupService;
         Shortcuts = new ShortcutsEditorViewModel(input, filePicker, showToast);
+
+        // A search hit or deep-link on a shortcut group selects that group's first action (and clears the page's filters) before the view scrolls to its header.
+        ScrollToAnchorRequested += anchor =>
+        {
+            if (anchor.StartsWith("shortcuts.", StringComparison.Ordinal))
+            {
+                Shortcuts.SelectGroupByTag(anchor);
+            }
+        };
+
         _input = input;
         _updateService = updateService;
         _showToast = showToast;
@@ -838,7 +848,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// </summary>
     public static readonly string[] BackgroundColorPresets = ["White", "WhiteSmoke", "Beige", "Wheat", "LightGray", "Gray", "DarkSlateGray", "Black"];
 
-    /// <summary>Preferences &gt; Keyboard Shortcuts: one row per input-service action, grouped, with capture, conflicts, reset and layout import/export.</summary>
+    /// <summary>Preferences &gt; Keyboard Shortcuts: a searchable, grouped list of input-service actions beside an editor for the selected one (capture, conflicts, reset), plus layout import/export.</summary>
     public ShortcutsEditorViewModel Shortcuts { get; }
 
     [ObservableProperty]
@@ -983,6 +993,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _suppressBehaviorApply = true;
         BindingSpine = settings.BindingSpine;
         ProgressRing = settings.ProgressRing;
+        FadeInThumbnails = settings.FadeInThumbnails;
+        ShowToolTips = settings.ShowToolTips;
+        SmoothScrolling = settings.SmoothScrolling;
         ReadingListMosaic = settings.ReadingListMosaic;
         SplashAmbientMotion = settings.SplashAmbientMotion;
         ShowSelectionCheckbox = settings.ShowSelectionCheckbox;
@@ -1140,6 +1153,39 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     {
         CosmeticThumbnailSettings.ProgressRing = value;
         PersistBehaviorSetting(s => s.ProgressRing = value);
+    }
+
+    // Fade in, Tooltips and Smooth scrolling were switches in the Library's View & Sort popup until 2026-10-04. They are set-once
+    // behaviour, not part of a view, so they live here now; the statics are what the Library reads.
+
+    /// <summary>Covers fade in the first time they appear (ComicRack CE's <c>FadeInThumbnails</c>).</summary>
+    [ObservableProperty]
+    private bool _fadeInThumbnails = true;
+
+    partial void OnFadeInThumbnailsChanged(bool value)
+    {
+        CosmeticThumbnailSettings.FadeInThumbnails = value;
+        PersistBehaviorSetting(s => s.FadeInThumbnails = value);
+    }
+
+    /// <summary>A details card after hovering a Poster or Panorama cover (ComicRack CE's <c>ShowToolTips</c>).</summary>
+    [ObservableProperty]
+    private bool _showToolTips;
+
+    partial void OnShowToolTipsChanged(bool value)
+    {
+        CosmeticThumbnailSettings.ShowToolTips = value;
+        PersistBehaviorSetting(s => s.ShowToolTips = value);
+    }
+
+    /// <summary>Eased mouse-wheel scrolling in the Library (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §6).</summary>
+    [ObservableProperty]
+    private bool _smoothScrolling = true;
+
+    partial void OnSmoothScrollingChanged(bool value)
+    {
+        SmoothScrollSettings.Enabled = value;
+        PersistBehaviorSetting(s => s.SmoothScrolling = value);
     }
 
     /// <summary>Preferences › Appearance › Home (docs/superpowers/specs/2026-09-28-home-improvements-design.md I1/I5) - kept in its own

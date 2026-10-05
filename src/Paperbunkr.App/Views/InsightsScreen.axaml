@@ -187,7 +187,8 @@
                         <Border Classes="heroTile attnCard" Cursor="Arrow" IsVisible="{Binding Goals.HasGoals}">
                             <StackPanel Spacing="6">
                                 <Grid ColumnDefinitions="Auto,*">
-                                    <stats:GoalRing Grid.Column="0" Percent="{Binding Goals.HeroGoal.Percent}" IsComplete="{Binding Goals.HeroGoal.IsComplete}" />
+                                    <stats:GoalRing Grid.Column="0" Percent="{Binding Goals.HeroGoal.Percent}"
+                                                    Outcome="{Binding Goals.HeroGoal.Outcome}" IsBehind="{Binding Goals.HeroGoal.IsBehind}" />
                                     <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center" Spacing="2">
                                         <TextBlock FontFamily="Consolas,monospace" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}">
                                             <TextBlock.Text>
@@ -246,7 +247,7 @@
                                 <Border Classes="card attnCard">
                                     <StackPanel Spacing="6" HorizontalAlignment="Center">
                                         <Grid ColumnDefinitions="Auto,*">
-                                            <stats:GoalRing Grid.Column="0" Percent="{Binding Percent}" IsComplete="{Binding IsComplete}" />
+                                            <stats:GoalRing Grid.Column="0" Percent="{Binding Percent}" Outcome="{Binding Outcome}" IsBehind="{Binding IsBehind}" />
                                             <Button Grid.Column="1" Classes="attnRow" HorizontalAlignment="Right" VerticalAlignment="Top"
                                                     Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Goals.DeleteGoalCommand}"
                                                     CommandParameter="{Binding}">
@@ -255,6 +256,53 @@
                                         </Grid>
                                         <TextBlock Classes="hlTitle" Text="{Binding Title}" TextAlignment="Center" />
                                         <TextBlock Classes="sub" Text="{Binding StatusText}" TextAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- Completed and Missed goals (docs/superpowers/specs/2026-10-04-insights-goal-outcomes-and-chart-colour-design.md):
+                     kept as history, collapsed behind a header unless there is nothing active to show instead. Renew
+                     opens the goal editor pre-filled; Delete is the same confirmed path as on an active card. -->
+                <StackPanel IsVisible="{Binding Goals.HasPastGoals}">
+                    <Button Classes="attnRow" Command="{Binding Goals.TogglePastGoalsCommand}" HorizontalAlignment="Left">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Classes="sectionLabel" Text="PAST GOALS" Margin="0" VerticalAlignment="Center" />
+                            <TextBlock Classes="sub" Text="{Binding Goals.PastCards.Count, StringFormat='({0})'}" VerticalAlignment="Center" />
+                            <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}"
+                                           IsVisible="{Binding !Goals.PastGoalsOpen}" />
+                            <fi:SymbolIcon Symbol="ChevronUp" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}"
+                                           IsVisible="{Binding Goals.PastGoalsOpen}" />
+                        </StackPanel>
+                    </Button>
+                    <ItemsControl ItemsSource="{Binding Goals.PastCards}" IsVisible="{Binding Goals.PastGoalsOpen}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:GoalCardViewModel">
+                                <Border Classes="card attnCard">
+                                    <StackPanel Spacing="6" HorizontalAlignment="Center">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <stats:GoalRing Grid.Column="0" Percent="{Binding Percent}" Outcome="{Binding Outcome}" IsBehind="{Binding IsBehind}" />
+                                            <Button Grid.Column="1" Classes="attnRow" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                    Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Goals.DeleteGoalCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            </Button>
+                                        </Grid>
+                                        <TextBlock Classes="hlTitle" Text="{Binding Title}" TextAlignment="Center" />
+                                        <TextBlock Classes="sub" Text="{Binding StatusText}" TextAlignment="Center" />
+                                        <Button Classes="attnRow" HorizontalAlignment="Center"
+                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Goals.RenewGoalCommand}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <fi:SymbolIcon Symbol="ArrowClockwise" FontSize="{StaticResource PbIconSizeXs}" />
+                                                <TextBlock Text="Renew" Classes="sub" />
+                                            </StackPanel>
+                                        </Button>
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>
@@ -563,14 +611,11 @@
                         <StackPanel Spacing="6">
                             <TextBlock Classes="panelTitle" Text="Reading state" />
                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
-                                <stats:CategoryDonut Grid.Column="0" Width="100" Height="100" Slices="{Binding Stats.Snapshot.Breakdown.ByReadingStatus}" />
-                                <ItemsControl Grid.Column="1" ItemsSource="{Binding Stats.Snapshot.Breakdown.ByReadingStatus}" VerticalAlignment="Center">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="meta:CompositionSlice">
-                                            <TextBlock Classes="sub" Text="{Binding Label}" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <stats:CategoryDonut x:Name="ReadingStateDonut" Grid.Column="0" Width="100" Height="100" Kind="ReadingState"
+                                                     Slices="{Binding Stats.Snapshot.Breakdown.ByReadingStatus}" />
+                                <stats:DonutLegend Grid.Column="1" VerticalAlignment="Center" Kind="ReadingState"
+                                                   Slices="{Binding Stats.Snapshot.Breakdown.ByReadingStatus}"
+                                                   HoveredIndex="{Binding #ReadingStateDonut.HoveredIndex, Mode=TwoWay}" />
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -578,14 +623,11 @@
                         <StackPanel Spacing="6">
                             <TextBlock Classes="panelTitle" Text="Media type" />
                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
-                                <stats:CategoryDonut Grid.Column="0" Width="100" Height="100" Slices="{Binding Stats.Snapshot.Breakdown.ByMediaType}" />
-                                <ItemsControl Grid.Column="1" ItemsSource="{Binding Stats.Snapshot.Breakdown.ByMediaType}" VerticalAlignment="Center">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="meta:CompositionSlice">
-                                            <TextBlock Classes="sub" Text="{Binding Label}" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <stats:CategoryDonut x:Name="MediaTypeDonut" Grid.Column="0" Width="100" Height="100"
+                                                     Slices="{Binding Stats.Snapshot.Breakdown.ByMediaType}" />
+                                <stats:DonutLegend Grid.Column="1" VerticalAlignment="Center"
+                                                   Slices="{Binding Stats.Snapshot.Breakdown.ByMediaType}"
+                                                   HoveredIndex="{Binding #MediaTypeDonut.HoveredIndex, Mode=TwoWay}" />
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -609,19 +651,14 @@
                                  treatment above - same Slices shape (IReadOnlyList&lt;CompositionSlice&gt;)
                                  already feeds the bar list below, no new binding path needed. -->
                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
-                                <stats:CategoryDonut Grid.Column="0" Width="100" Height="100" Slices="{Binding Stats.Snapshot.ContentRating}" />
-                                <ItemsControl Grid.Column="1" ItemsSource="{Binding Stats.Snapshot.ContentRating}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="meta:CompositionSlice">
-                                            <Grid ColumnDefinitions="80,*,Auto" Margin="0,2">
-                                                <TextBlock Grid.Column="0" Text="{Binding Label}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                <ProgressBar Grid.Column="1" Minimum="0" Maximum="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.CompositionMax}"
-                                                             Value="{Binding Count}" Height="8" Margin="6,0" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="2" Text="{Binding Count}" Classes="sub" VerticalAlignment="Center" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <!-- The bars are the legend: same palette layout as the donut, so each bar wears its slice's colour
+                                     (all-ages green -> teen blue -> mature amber -> adults red; Unknown neutral). 10 slices so every
+                                     rating stays its own row rather than folding into "Other". -->
+                                <stats:CategoryDonut x:Name="ContentRatingDonut" Grid.Column="0" Width="100" Height="100" Kind="ContentRating" MaxSlices="10"
+                                                     Slices="{Binding Stats.Snapshot.ContentRating}" />
+                                <stats:DonutLegend Grid.Column="1" VerticalAlignment="Center" Kind="ContentRating" MaxSlices="10" ShowBars="True"
+                                                   Slices="{Binding Stats.Snapshot.ContentRating}"
+                                                   HoveredIndex="{Binding #ContentRatingDonut.HoveredIndex, Mode=TwoWay}" />
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -693,9 +730,21 @@
                                         <Button Classes="filterRow"
                                                 Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.OpenLibraryFilterCommand}"
                                                 CommandParameter="{Binding Label}">
-                                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                                                <TextBlock Grid.Column="0" Text="{Binding Label}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{Binding Count}" Classes="sub" VerticalAlignment="Center" />
+                                            <!-- Publisher logo in a fixed-width slot so the names stay aligned whether or not a publisher has
+                                                 one. Only a real logo is shown: with none the mark would fall back to plain text, which just
+                                                 repeats the label beside it (same rule as the Continuity list). -->
+                                            <Grid ColumnDefinitions="40,*,Auto" Margin="0,2">
+                                                <controls:BrandMark Grid.Column="0" Family="Publisher" Value="{Binding Label}" MarkSize="16" MaxMarkWidth="34"
+                                                                    ShowText="False" EnsureContrast="True" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                    <controls:BrandMark.IsVisible>
+                                                        <MultiBinding Converter="{x:Static conv:BoolConverters.Or}">
+                                                            <Binding Path="IsImage" RelativeSource="{RelativeSource Self}" />
+                                                            <Binding Path="IsRaster" RelativeSource="{RelativeSource Self}" />
+                                                        </MultiBinding>
+                                                    </controls:BrandMark.IsVisible>
+                                                </controls:BrandMark>
+                                                <TextBlock Grid.Column="1" Text="{Binding Label}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Count}" Classes="sub" VerticalAlignment="Center" />
                                             </Grid>
                                         </Button>
                                     </DataTemplate>

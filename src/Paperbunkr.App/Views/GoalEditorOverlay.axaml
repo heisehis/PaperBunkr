@@ -2,9 +2,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="520"
+             mc:Ignorable="d" d:DesignWidth="460" d:DesignHeight="640"
              x:Class="Paperbunkr.App.Views.GoalEditorOverlay"
              x:DataType="vm:GoalEditorViewModel">
 
@@ -27,88 +28,128 @@
         </Style>
     </UserControl.Styles>
 
-    <Border Classes="floatingPanel" Width="420">
+    <Border Classes="floatingPanel" Width="460">
         <StackPanel>
             <Border Padding="18,15" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
                 <TextBlock Classes="pbTextHeading" Text="New reading goal" />
             </Border>
 
-            <StackPanel Margin="18,16" Spacing="14">
-                <StackPanel Spacing="6">
-                    <TextBlock Classes="fieldLabel" Text="TRACK" />
-                    <ItemsControl ItemsSource="{Binding MetricOptions}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:GoalMetricOption">
-                                <Button Classes="chip" Classes.active="{Binding IsActive}" Content="{Binding Label}"
-                                        Command="{Binding $parent[ItemsControl].((vm:GoalEditorViewModel)DataContext).SetMetricCommand}"
-                                        CommandParameter="{Binding Value}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
+            <!-- Scrolls rather than growing past the window: a goal can now carry several scope rows. -->
+            <ScrollViewer MaxHeight="560" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="18,16" Spacing="14">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="fieldLabel" Text="GOAL" />
+                        <ItemsControl ItemsSource="{Binding KindOptions}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:GoalKindOption">
+                                    <Button Classes="chip" Classes.active="{Binding IsActive}" Content="{Binding Label}"
+                                            ToolTip.Tip="{Binding Description}"
+                                            Command="{Binding $parent[ItemsControl].((vm:GoalEditorViewModel)DataContext).SetKindCommand}"
+                                            CommandParameter="{Binding Value}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Classes="fieldLabel" TextWrapping="Wrap" IsVisible="{Binding IsCountGoal}"
+                                   Text="Read a set number of issues or pages within a period." />
+                        <TextBlock Classes="fieldLabel" TextWrapping="Wrap" IsVisible="{Binding IsFinishGoal}"
+                                   Text="Finish everything in a reading list, collection, story event or continuity. The target follows the list as it grows." />
+                    </StackPanel>
 
-                <StackPanel Spacing="6">
-                    <TextBlock Classes="fieldLabel" Text="TARGET" />
-                    <TextBox Text="{Binding TargetText}" Watermark="e.g. 50" />
-                </StackPanel>
+                    <StackPanel Spacing="6" IsVisible="{Binding IsCountGoal}">
+                        <TextBlock Classes="fieldLabel" Text="TRACK" />
+                        <ItemsControl ItemsSource="{Binding MetricOptions}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:GoalMetricOption">
+                                    <Button Classes="chip" Classes.active="{Binding IsActive}" Content="{Binding Label}"
+                                            Command="{Binding $parent[ItemsControl].((vm:GoalEditorViewModel)DataContext).SetMetricCommand}"
+                                            CommandParameter="{Binding Value}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
 
-                <StackPanel Spacing="6">
-                    <TextBlock Classes="fieldLabel" Text="PERIOD" />
-                    <ItemsControl ItemsSource="{Binding PeriodOptions}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:GoalPeriodOption">
-                                <Button Classes="chip" Classes.active="{Binding IsActive}" Content="{Binding Label}"
-                                        Command="{Binding $parent[ItemsControl].((vm:GoalEditorViewModel)DataContext).SetPeriodCommand}"
-                                        CommandParameter="{Binding Value}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <Grid ColumnDefinitions="*,*" IsVisible="{Binding IsCustomPeriod}" Margin="0,4,0,0">
-                        <!-- CalendarDatePicker, not DatePicker: DatePicker renders three separate day/month/
-                             year spinner fields, which don't fit in a half-width column at this dialog's size
-                             (verified against the real Avalonia docs after seeing it collide/wrap on screen -
-                             not guessed). CalendarDatePicker is a single compact text field + dropdown
-                             calendar, same DateTimeOffset? SelectedDate binding, no ViewModel change needed. -->
-                        <CalendarDatePicker Grid.Column="0" SelectedDate="{Binding CustomStart}" Margin="0,0,4,0"
-                                            Watermark="Start date" HorizontalAlignment="Stretch" />
-                        <CalendarDatePicker Grid.Column="1" SelectedDate="{Binding CustomEnd}" Margin="4,0,0,0"
-                                            Watermark="End date" HorizontalAlignment="Stretch" />
-                    </Grid>
-                </StackPanel>
+                    <StackPanel Spacing="6" IsVisible="{Binding IsCountGoal}">
+                        <TextBlock Classes="fieldLabel" Text="TARGET" />
+                        <TextBox Text="{Binding TargetText}" Watermark="e.g. 50" />
+                    </StackPanel>
 
-                <StackPanel Spacing="6">
-                    <TextBlock Classes="fieldLabel" Text="SCOPE" />
-                    <ItemsControl ItemsSource="{Binding ScopeOptions}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:GoalScopeOption">
-                                <Button Classes="chip" Classes.active="{Binding IsActive}" Content="{Binding Label}" Margin="0,0,6,6"
-                                        Command="{Binding $parent[ItemsControl].((vm:GoalEditorViewModel)DataContext).SetScopeCommand}"
-                                        CommandParameter="{Binding Value}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <controls:SuggestBox IsVisible="{Binding IsSeriesScope}" Watermark="Series name"
-                                         Text="{Binding ScopeSeriesName}" Suggestions="{Binding AllSeriesNames}" />
-                    <controls:SuggestBox IsVisible="{Binding IsPublisherScope}" Watermark="Publisher"
-                                         Text="{Binding ScopePublisher}" Suggestions="{Binding AllPublishers}" />
-                    <controls:SuggestBox IsVisible="{Binding IsGenreScope}" Watermark="Genre"
-                                         Text="{Binding ScopeGenre}" Suggestions="{Binding AllGenres}" />
-                </StackPanel>
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="fieldLabel" Text="PERIOD" />
+                        <ItemsControl ItemsSource="{Binding PeriodOptions}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:GoalPeriodOption">
+                                    <Button Classes="chip" Classes.active="{Binding IsActive}" Content="{Binding Label}" Margin="0,0,6,6"
+                                            Command="{Binding $parent[ItemsControl].((vm:GoalEditorViewModel)DataContext).SetPeriodCommand}"
+                                            CommandParameter="{Binding Value}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Grid ColumnDefinitions="*,*" IsVisible="{Binding IsCustomPeriod}" Margin="0,4,0,0">
+                            <!-- CalendarDatePicker, not DatePicker: DatePicker renders three separate day/month/
+                                 year spinner fields, which don't fit in a half-width column at this dialog's size
+                                 (verified against the real Avalonia docs after seeing it collide/wrap on screen -
+                                 not guessed). CalendarDatePicker is a single compact text field + dropdown
+                                 calendar, same DateTimeOffset? SelectedDate binding, no ViewModel change needed. -->
+                            <CalendarDatePicker Grid.Column="0" SelectedDate="{Binding CustomStart}" Margin="0,0,4,0"
+                                                Watermark="Start date" HorizontalAlignment="Stretch" />
+                            <CalendarDatePicker Grid.Column="1" SelectedDate="{Binding CustomEnd}" Margin="4,0,0,0"
+                                                Watermark="End date" HorizontalAlignment="Stretch" />
+                        </Grid>
+                    </StackPanel>
 
-                <StackPanel Spacing="6">
-                    <TextBlock Classes="fieldLabel" Text="TITLE" />
-                    <TextBox Text="{Binding Title}" />
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="fieldLabel" Text="SCOPE" />
+                        <TextBlock Classes="fieldLabel" TextWrapping="Wrap" Text="{Binding ScopeSectionHint}" />
+
+                        <!-- Whole library is the absence of any row: say so, rather than showing an empty gap. -->
+                        <TextBlock Text="Whole library" Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12"
+                                   IsVisible="{Binding WholeLibrary}" />
+
+                        <ItemsControl ItemsSource="{Binding ScopeRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:GoalScopeRowViewModel">
+                                    <Grid ColumnDefinitions="128,*,Auto" ColumnSpacing="6" Margin="0,0,0,6">
+                                        <!-- Read-only dropdown (IsStrict): it opens on a click, Enter, Space or Alt+Down, never on a bare focus. -->
+                                        <controls:SuggestBox Grid.Column="0" IsStrict="True" Text="{Binding KindLabel}" Suggestions="{Binding KindLabels}" />
+                                        <controls:SuggestBox Grid.Column="1" Text="{Binding ValueText}" Suggestions="{Binding Suggestions}"
+                                                             Watermark="{Binding Watermark}" />
+                                        <Button Grid.Column="2" Classes="ghost" VerticalAlignment="Center" AutomationProperties.Name="Remove this scope"
+                                                ToolTip.Tip="Remove this scope"
+                                                Command="{Binding $parent[ItemsControl].((vm:GoalEditorViewModel)DataContext).RemoveScopeCommand}"
+                                                CommandParameter="{Binding}">
+                                            <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Button Classes="ghost" HorizontalAlignment="Left" Command="{Binding AddScopeCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
+                                <TextBlock Text="Add scope" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <CheckBox IsChecked="{Binding DistinctOnly}" IsVisible="{Binding IsCountGoal}"
+                              Content="Count each issue once (a re-read doesn't count again)" />
+
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="fieldLabel" Text="TITLE" />
+                        <TextBox Text="{Binding Title}" />
+                    </StackPanel>
                 </StackPanel>
-            </StackPanel>
+            </ScrollViewer>
 
             <Border Padding="18,13" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0">
                 <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">

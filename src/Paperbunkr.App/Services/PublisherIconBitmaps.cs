@@ -45,24 +45,37 @@ public static class PublisherIconBitmaps
     public static PublisherIconImage? Load(string avaresUri) =>
         string.IsNullOrWhiteSpace(avaresUri) ? null : Cache.GetOrAdd(avaresUri, LoadUncached);
 
+    /// <summary>Opens a bundled asset (<c>avares://</c>) or a user-supplied file (a rooted path - the user icon folder,
+    /// docs/superpowers/specs/2026-10-04-publisher-icons-user-folder-and-gaps-design.md). A path is read as-is, never through <see cref="Uri"/>:
+    /// a '#' in a CE-style alias filename would otherwise parse as a fragment.</summary>
+    private static Stream? Open(string location)
+    {
+        if (Path.IsPathRooted(location) && !location.StartsWith("avares:", StringComparison.OrdinalIgnoreCase))
+        {
+            return File.Exists(location) ? new FileStream(location, FileMode.Open, FileAccess.Read, FileShare.ReadWrite) : null;
+        }
+
+        var uri = new Uri(location);
+        return AssetLoader.Exists(uri) ? AssetLoader.Open(uri) : null;
+    }
+
     private static PublisherIconImage? LoadUncached(string avaresUri)
     {
         try
         {
-            var uri = new Uri(avaresUri);
-            if (!AssetLoader.Exists(uri))
-            {
-                return null;
-            }
-
             Bitmap bitmap;
-            using (Stream stream = AssetLoader.Open(uri))
+            using (Stream? stream = Open(avaresUri))
             {
+                if (stream is null)
+                {
+                    return null;
+                }
+
                 bitmap = new Bitmap(stream);
             }
 
             IconPlate plate;
-            using (Stream stream = AssetLoader.Open(uri))
+            using (Stream stream = Open(avaresUri)!)
             using (SKBitmap? sk = SKBitmap.Decode(stream))
             {
                 plate = sk is null ? IconPlate.Light : ClassifyPlate(sk.Pixels);

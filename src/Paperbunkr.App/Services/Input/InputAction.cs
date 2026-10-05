@@ -152,6 +152,11 @@ public static class InputActionIds
     public const string CycleScreenBackward = "App.CycleScreenBackward";
     public const string ToggleLibraryPreview = "App.ToggleLibraryPreview";
 
+    // --- List layouts (docs/superpowers/specs/2026-10-04-list-layouts-design.md): Library and Books both claim these. ---
+    public const string ListOptions = "App.ListOptions";
+    public const string SaveListLayout = "App.SaveListLayout";
+    public const string EditListLayouts = "App.EditListLayouts";
+
     // --- Every screen: moving around and acting on the focused item, by keyboard, mouse or controller. These forward the key the control already understands (docs/superpowers/specs/2026-10-03-input-service-design.md §14). ---
 
     /// <summary>Moves focus (or the caret-free arrow key a control uses) one step up; the controller's D-pad and left stick.</summary>

@@ -226,6 +226,31 @@
                                     AutomationProperties.AutomationId="BooksWorkspaceSaveAs" />
                             <Button Classes="modeOption" Content="Reset to default view" Command="{Binding ResetToDefaultViewCommand}"
                                     AutomationProperties.AutomationId="BooksWorkspaceReset" />
+                            <!-- List layouts (docs/superpowers/specs/2026-10-04-list-layouts-design.md): CE's Edit List Layout /
+                                 Save List Layout / Edit Layouts / "Set 'X' Layout" items, nested here because this button is on
+                                 both Library and Books. Applying one copies it onto the list now on screen. -->
+                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,6" />
+                            <TextBlock Classes="dropdownRow" Text="List layouts" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
+                            <ItemsControl ItemsSource="{Binding ListLayouts.Layouts}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ListLayoutRow">
+                                        <Button Classes="modeOption" Content="{Binding Name}"
+                                                Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).ListLayouts.ApplyLayoutCommand}"
+                                                CommandParameter="{Binding Id}"
+                                                ToolTip.Tip="Use this layout for the current list"
+                                                AutomationProperties.AutomationId="{Binding Name, StringFormat='BooksListLayoutRow_{0}'}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Classes="modeOption" Content="List options…" Command="{Binding ListLayouts.ShowListOptionsCommand}"
+                                    AutomationProperties.AutomationId="BooksListOptions" />
+                            <Button Classes="modeOption" Content="Save list layout…" Command="{Binding ListLayouts.SaveLayoutAsCommand}"
+                                    AutomationProperties.AutomationId="BooksSaveListLayout" />
+                            <Button Classes="modeOption" Content="Edit layouts…" Command="{Binding ListLayouts.ShowEditLayoutsCommand}"
+                                    AutomationProperties.AutomationId="BooksEditLayouts" />
+                            <Button Classes="modeOption" Content="Default layout for this list" Command="{Binding ListLayouts.ResetToDefaultCommand}"
+                                    ToolTip.Tip="Forget this list's own layout"
+                                    AutomationProperties.AutomationId="BooksDefaultListLayout" />
                         </StackPanel>
                     </Border>
                 </Popup>

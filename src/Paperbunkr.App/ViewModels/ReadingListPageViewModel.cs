@@ -405,8 +405,9 @@ public partial class ReadingListPageViewModel : ViewModelBase
         RefreshCanonicalAvailability();
 
         ShowTags(readingListId, list.Tags);
+        RefreshGoalChip(readingListId);
 
-        IsArcLinked = !string.IsNullOrEmpty(list.Source);
+        IsArcLinked =!string.IsNullOrEmpty(list.Source);
         _loadingFollowArc = true;
         FollowArc = IsArcLinked && list.FollowArc;
         _loadingFollowArc = false;

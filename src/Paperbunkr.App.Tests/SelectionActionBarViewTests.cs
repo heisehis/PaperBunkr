@@ -101,14 +101,17 @@ public class SelectionActionBarViewTests : IDisposable
         window.UpdateLayout();
     }
 
-    private static (LibraryScreenViewModel Vm, Window Window) ShowWithSelection()
+    private static (LibraryScreenViewModel Vm, Window Window) ShowWithSelection(Action<IReadOnlyList<int>>? goBulkIssueProperties = null)
     {
-        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { })
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { }, goBulkIssueProperties: goBulkIssueProperties)
         {
             History = new MetadataEditHistoryService(),
             MetadataClipboard = new MetadataClipboardService(),
         };
-        var window = new Window { Content = new LibraryScreen { DataContext = vm }, Width = 1400, Height = 900 };
+        // Keys reach the Library through the input service, so attach a real one the way MainWindow does.
+        var input = ReaderTestInput.Create();
+        var window = new Window { Content = new LibraryScreen { DataContext = vm, InputService = input }, Width = 1400, Height = 900 };
+        Services.Input.InputHost.Attach(window, input);
         window.Show();
         RunLayout(window);
         vm.SelectAllVisibleIssuesCommand.Execute(null);
@@ -154,6 +157,59 @@ public class SelectionActionBarViewTests : IDisposable
 
             using var context = PaperbunkrDb.CreateContext();
             Assert.All(context.Issues.ToList(), i => Assert.Equal(3f, i.Rating));
+            window.Close();
+        });
+    }
+
+    [Fact]
+    public void CtrlI_OnACard_OpensTheBulkEditorForTheSelection()
+    {
+        WithThemeAndTokens(() =>
+        {
+            IReadOnlyList<int>? opened = null;
+            var (vm, window) = ShowWithSelection(ids => opened = ids);
+            var card = window.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("card"));
+            card.Focus();
+
+            window.KeyPress(Key.I, RawInputModifiers.Control, PhysicalKey.I, "i");
+            RunLayout(window);
+
+            Assert.NotNull(opened);
+            Assert.NotEmpty(opened!);
+            window.Close();
+        });
+    }
+
+    [Fact]
+    public void CtrlClick_OnATile_TogglesItsSelection()
+    {
+        WithThemeAndTokens(() =>
+        {
+            var (vm, window) = ShowWithSelection();
+            vm.ClearSelectionCommand.Execute(null);
+            RunLayout(window);
+            Assert.Empty(vm.Selection.SelectedIds);
+
+            // A Button marks a left press handled before instance handlers run, so this only works because the screen tunnels the press first.
+            var cards = window.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("card") && b.IsVisible).Take(2).ToList();
+            foreach (var card in cards)
+            {
+                var centre = card.TranslatePoint(new Point(card.Bounds.Width / 2, card.Bounds.Height / 2), window)!.Value;
+                window.MouseMove(centre);
+                window.MouseDown(centre, MouseButton.Left, RawInputModifiers.Control);
+                window.MouseUp(centre, MouseButton.Left, RawInputModifiers.Control);
+                RunLayout(window);
+            }
+
+            Assert.Equal(cards.Count, vm.Selection.SelectedIds.Count);
+            Assert.True(cards.Count >= 2);
+
+            // Ctrl+click on a selected tile takes it out again.
+            var first = cards[0].TranslatePoint(new Point(cards[0].Bounds.Width / 2, cards[0].Bounds.Height / 2), window)!.Value;
+            window.MouseDown(first, MouseButton.Left, RawInputModifiers.Control);
+            window.MouseUp(first, MouseButton.Left, RawInputModifiers.Control);
+            RunLayout(window);
+            Assert.Equal(cards.Count - 1, vm.Selection.SelectedIds.Count);
             window.Close();
         });
     }

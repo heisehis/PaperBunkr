@@ -115,3 +115,6 @@ everywhere at once — don't fork.
 | Archive / archived state | `Archive` | |
 | Globe / language overlay | `Globe` | |
 | Settings (per-item, e.g. plugin command) | `Settings` | |
+| Preferences → Keyboard Shortcuts: controller binding chip | `Games` | |
+| Preferences → Keyboard Shortcuts: fixed (analogue axis) binding | `LockClosed` | |
+| Preferences → Keyboard Shortcuts: action shares a binding | `Warning` | quiet, neutral colour, never a red row |

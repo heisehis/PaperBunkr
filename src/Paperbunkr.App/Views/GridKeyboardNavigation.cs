@@ -140,7 +140,10 @@ public static class GridKeyboardNavigation
     /// </summary>
     public static bool TryHandleArrowKey(ItemsControl itemsControl, Control fromControl, Key key, Action<object>? onNavigated = null)
     {
-        if (itemsControl.ItemsPanelRoot is INavigableContainer navigable)
+        // Only a virtualizing panel takes this path: its unrealized items are not in the visual tree, so the spatial search below cannot see them. A plain WrapPanel also implements
+        // INavigableContainer, but its GetControl ignores Up and Down (a horizontal wrap only steps through the children one by one), which made up and down do nothing in a grid of
+        // ordinary tiles while still reporting the key as handled.
+        if (itemsControl.ItemsPanelRoot is VirtualizingPanel and INavigableContainer navigable)
         {
             // The panel looks the starting point up among its own children, so hand it the item container, not the control inside it
             // (a plain WrapPanel otherwise can't find it and jumps to its first child).
@@ -179,6 +182,12 @@ public static class GridKeyboardNavigation
         }
 
         object target = Navigate(items, currentItem, direction.Value);
+        if (ReferenceEquals(target, currentItem))
+        {
+            // At the edge of the grid: leave the key unhandled so it can carry on outward (to the screen's own directional move, or the nav rail) instead of being swallowed here.
+            return false;
+        }
+
         onNavigated?.Invoke(target);
         if (itemsControl.ContainerFromItem(target) is Control targetContainer)
         {
@@ -215,7 +224,7 @@ public static class GridKeyboardNavigation
         // .Focus() on it silently no-ops (confirmed: Control.IsFocused stayed false immediately
         // after calling it) - navigation always reported "handled" but visibly never moved focus at
         // all. Walk into the returned container to find the real focusable element instead.
-        if (navigable.GetControl(direction.Value, fromControl, wrap: false) is Control target)
+        if (navigable.GetControl(direction.Value, fromControl, wrap: false) is Control target && !ReferenceEquals(target, fromControl))
         {
             var focusable = FocusableIn(target);
             if (onNavigated is not null && (focusable?.DataContext ?? target.DataContext) is { } dataContext)
@@ -224,9 +233,11 @@ public static class GridKeyboardNavigation
             }
 
             FocusInside(target);
+            return true;
         }
 
-        return true;
+        // At the edge (or nothing there): unhandled, so the key can carry on outward.
+        return false;
     }
 
     private static Control? ContainerOf(Control control, Panel panel)

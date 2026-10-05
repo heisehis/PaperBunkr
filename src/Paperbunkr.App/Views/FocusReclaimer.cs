@@ -130,7 +130,7 @@ internal sealed class FocusReclaimer
             || e.Source is not Visual source
             || source.GetSelfAndVisualAncestors().TakeWhile(a => !ReferenceEquals(a, region))
                 .Any(a => a is TextBox box ? e.Key is Key.Left or Key.Right || box.AcceptsReturn
-                                           : a is Slider or ComboBox or ListBox or Avalonia.Controls.Primitives.ScrollBar or Controls.SuggestBox))
+                                           : a is Slider or ComboBox or ListBox or Avalonia.Controls.Primitives.ScrollBar or Controls.SuggestBox { IsDropDownOpen: true }))
         {
             return false;
         }
@@ -143,9 +143,34 @@ internal sealed class FocusReclaimer
             _ => NavigationDirection.Down,
         };
 
-        var found = TopLevel.GetTopLevel(region)?.FocusManager?.FindNextElement(direction, InRegion(region));
-        if (found is not Control next
-            || !next.GetSelfAndVisualAncestors().Any(a => ReferenceEquals(a, region)))
+        var manager = TopLevel.GetTopLevel(region)?.FocusManager;
+        bool vertical = direction is NavigationDirection.Up or NavigationDirection.Down;
+        Control? Find()
+        {
+            var spatial = manager?.FindNextElement(direction, InRegion(region)) is Control c && c.GetSelfAndVisualAncestors().Any(a => ReferenceEquals(a, region)) ? c : null;
+            if (!vertical)
+            {
+                return spatial;
+            }
+
+            // The spatial search only weighs controls that overlap the focused one horizontally, so it can step over a whole row whose buttons sit in other columns (or find nothing at all).
+            // Take the row-based answer when it is a nearer row.
+            var byRows = FindByRows(region, source, direction);
+            return spatial is null || (byRows is not null && RowGap(region, source, byRows, direction) < RowGap(region, source, spatial, direction) - 8) ? byRows ?? spatial : spatial;
+        }
+
+        var next = Find();
+        if (next is null && vertical && ScrollTowards(source, direction, region))
+        {
+            // A virtualizing list only has the rows near the viewport: scrolling realises the ones beyond it, so the search can be run again.
+            next = Find();
+            if (next is null)
+            {
+                return true;       // scrolled; nothing new to land on yet (the next press finds the rows that just appeared)
+            }
+        }
+
+        if (next is null)
         {
             return false;
         }
@@ -153,6 +178,92 @@ internal sealed class FocusReclaimer
         next.Focus(NavigationMethod.Directional);
         BringIntoViewWithRing(next);
         return true;
+    }
+
+    /// <summary>
+    /// Scrolls the nearest scroll viewer around <paramref name="from"/> half a viewport up or down, when it has room to go that way, and runs a layout pass so a virtualizing panel realises the rows
+    /// that came into range. False when there is nothing to scroll.
+    /// </summary>
+    private static bool ScrollTowards(Visual from, NavigationDirection direction, Control region)
+    {
+        bool down = direction == NavigationDirection.Down;
+        var viewer = from.GetSelfAndVisualAncestors().TakeWhile(a => !ReferenceEquals(a, region)).OfType<ScrollViewer>()
+            .FirstOrDefault(v => down ? v.Offset.Y < v.Extent.Height - v.Viewport.Height - 0.5 : v.Offset.Y > 0.5);
+        if (viewer is null)
+        {
+            return false;
+        }
+
+        double step = Math.Max(48, viewer.Viewport.Height * 0.5) * (down ? 1 : -1);
+        var before = viewer.Offset;
+        viewer.Offset = new Vector(before.X, Math.Clamp(before.Y + step, 0, Math.Max(0, viewer.Extent.Height - viewer.Viewport.Height)));
+        if (viewer.Offset == before)
+        {
+            return false;
+        }
+
+        region.UpdateLayout();
+        return true;
+    }
+
+    /// <summary>How far, vertically between centres, <paramref name="target"/> is from <paramref name="from"/> in <paramref name="direction"/>; large when it cannot be worked out.</summary>
+    private static double RowGap(Control region, Visual from, Control target, NavigationDirection direction)
+    {
+        if (from is not Control source || source.TranslatePoint(default, region) is not { } a || target.TranslatePoint(default, region) is not { } b)
+        {
+            return double.MaxValue;
+        }
+
+        double sourceY = a.Y + (source.Bounds.Height / 2);
+        double targetY = b.Y + (target.Bounds.Height / 2);
+        return direction == NavigationDirection.Down ? targetY - sourceY : sourceY - targetY;
+    }
+
+    /// <summary>
+    /// The control on the next row up or down, whichever column it is in. Avalonia's directional search only considers controls that overlap the focused one horizontally, so on a list whose
+    /// rows keep their buttons in different columns (a row with a button at the far right above a row with one at the far left) Up and Down found nothing and did nothing. This picks the
+    /// nearest row in the direction, then the control in it closest to the current column.
+    /// </summary>
+    internal static Control? FindByRows(Control region, Visual from, NavigationDirection direction)
+    {
+        if (from is not Control source || source.TranslatePoint(default, region) is not { } origin)
+        {
+            return null;
+        }
+
+        var sourceRect = new Rect(origin, source.Bounds.Size);
+        bool down = direction == NavigationDirection.Down;
+        Control? best = null;
+        double bestGap = double.MaxValue;
+        double bestDx = double.MaxValue;
+        foreach (var candidate in region.GetVisualDescendants().OfType<Control>())
+        {
+            if (!candidate.Focusable || !candidate.IsTabStop || !candidate.IsEffectivelyEnabled || !candidate.IsEffectivelyVisible || candidate.Bounds.Width <= 0
+                || ReferenceEquals(candidate, source) || source.IsVisualAncestorOf(candidate) || candidate.IsVisualAncestorOf(source)
+                || candidate.TranslatePoint(default, region) is not { } position)
+            {
+                continue;
+            }
+
+            var rect = new Rect(position, candidate.Bounds.Size);
+            double gap = down ? rect.Center.Y - sourceRect.Center.Y : sourceRect.Center.Y - rect.Center.Y;
+            if (gap <= 4)
+            {
+                continue;
+            }
+
+            double dx = Math.Abs(rect.Center.X - sourceRect.Center.X);
+            bool nearerRow = gap < bestGap - 8;
+            bool sameRowCloserColumn = Math.Abs(gap - bestGap) <= 8 && dx < bestDx;
+            if (best is null || nearerRow || sameRowCloserColumn)
+            {
+                best = candidate;
+                bestGap = Math.Min(gap, bestGap);
+                bestDx = dx;
+            }
+        }
+
+        return best;
     }
 
     /// <summary>Search options for a directional move made inside <paramref name="region"/>: only the region's own controls are candidates

@@ -6,6 +6,7 @@ using Avalonia.Input;
 using FluentIcons.Common;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels.LibraryActions;
@@ -112,32 +113,64 @@ public sealed class LibraryActionCatalog
         Trail, "delete", "clear-selection",
     };
 
-    /// <summary>Keyboard shortcuts: gesture → action id, plus which child to run for a submenu action (the rating's star count).</summary>
-    public static readonly IReadOnlyList<(string Gesture, string ActionId, string? Child)> KeyMap = new (string, string, string?)[]
+    /// <summary>
+    /// Which catalog action each Library input-service action runs on the current selection, plus which child to run for a submenu action (the rating's star count). The
+    /// bindings themselves live in the input service (<see cref="InputActions"/>) and are remappable; this only says what an action means for the selection at hand.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, (string ActionId, string? Child)> KeyActions = new Dictionary<string, (string, string?)>
     {
-        ("Ctrl+I", "edit", null),
-        ("Alt+Shift+0", "rating", "None"),
-        ("Alt+Shift+1", "rating", "1 Star"),
-        ("Alt+Shift+2", "rating", "2 Stars"),
-        ("Alt+Shift+3", "rating", "3 Stars"),
-        ("Alt+Shift+4", "rating", "4 Stars"),
-        ("Alt+Shift+5", "rating", "5 Stars"),
-        ("Alt+Shift+R", "bar-mark-read", null),
-        ("Alt+Shift+U", "bar-mark-unread", null),
-        ("Ctrl+G", "reveal", null),
-        ("Ctrl+C", "copy-data", null),
-        ("Ctrl+V", "paste-data", null),
-        ("Ctrl+Shift+C", "copy-paths", null),
+        [InputActionIds.LibraryEdit] = ("edit", null),
+        [InputActionIds.LibraryRate0] = ("rating", "None"),
+        [InputActionIds.LibraryRate1] = ("rating", "1 Star"),
+        [InputActionIds.LibraryRate2] = ("rating", "2 Stars"),
+        [InputActionIds.LibraryRate3] = ("rating", "3 Stars"),
+        [InputActionIds.LibraryRate4] = ("rating", "4 Stars"),
+        [InputActionIds.LibraryRate5] = ("rating", "5 Stars"),
+        [InputActionIds.LibraryMarkRead] = ("bar-mark-read", null),
+        [InputActionIds.LibraryMarkUnread] = ("bar-mark-unread", null),
+        [InputActionIds.LibraryReveal] = ("reveal", null),
+        [InputActionIds.LibraryCopyData] = ("copy-data", null),
+        [InputActionIds.LibraryPasteData] = ("paste-data", null),
+        [InputActionIds.LibraryCopyPaths] = ("copy-paths", null),
     };
 
     private readonly LibraryScreenViewModel _vm;
     private readonly Dictionary<string, LibraryAction> _actions;
 
-    public LibraryActionCatalog(LibraryScreenViewModel vm)
+    private readonly IInputService _input;
+
+    /// <param name="input">Supplies the shortcut each entry shows; null means the application's input service.</param>
+    public LibraryActionCatalog(LibraryScreenViewModel vm, IInputService? input = null)
     {
         _vm = vm;
+        _input = input ?? InputServiceLocator.Current;
         _actions = CreateActions().ToDictionary(a => a.Id);
     }
+
+    /// <summary>
+    /// The shortcut text for an entry: the first keyboard binding of <paramref name="inputActionId"/> as it is bound <em>now</em>, so a remap in Preferences shows in the menu and the bar.
+    /// An input service that does not know the action at all (the do-nothing one a test or design-time host has) falls back to the action's shipped default, so a menu built without
+    /// a live service still reads as it always did; an action the user has deliberately unbound shows no shortcut.
+    /// </summary>
+    private string? Hint(string inputActionId) => _input.ShortcutText(inputActionId);
+
+    /// <summary>"Alt+Shift+0…5" for the rating submenu when the star shortcuts still share a prefix, otherwise just the first one.</summary>
+    private string? RatingRangeHint()
+    {
+        string? first = Hint(InputActionIds.LibraryRate0);
+        string? last = Hint(InputActionIds.LibraryRate5);
+        return first is not null && last is not null && first.Length > 1 && last.Length == first.Length && first[..^1] == last[..^1] ? $"{first}…{last[^1]}" : first;
+    }
+
+    private static string RateAction(int stars) => stars switch
+    {
+        0 => InputActionIds.LibraryRate0,
+        1 => InputActionIds.LibraryRate1,
+        2 => InputActionIds.LibraryRate2,
+        3 => InputActionIds.LibraryRate3,
+        4 => InputActionIds.LibraryRate4,
+        _ => InputActionIds.LibraryRate5,
+    };
 
     public IReadOnlyCollection<LibraryAction> All => _actions.Values;
 
@@ -277,14 +310,13 @@ public sealed class LibraryActionCatalog
         return items;
     }
 
-    /// <summary>The command (and parameter) the keyboard shortcut <paramref name="key"/>+<paramref name="modifiers"/> runs on the current
-    /// selection, or false when the gesture isn't a Library action or doesn't apply right now.</summary>
-    public bool TryGetKeyCommand(Key key, KeyModifiers modifiers, out ICommand? command, out object? parameter)
+    /// <summary>The command (and parameter) the input-service action <paramref name="inputActionId"/> runs on the current selection, or false when it isn't a Library selection
+    /// action or doesn't apply right now (nothing selected, the entry is disabled, the command can't run).</summary>
+    public bool TryGetKeyCommand(string inputActionId, out ICommand? command, out object? parameter)
     {
         command = null;
         parameter = null;
-        var match = KeyMap.FirstOrDefault(k => ParseGesture(k.Gesture) is var g && g.Key == key && g.KeyModifiers == modifiers);
-        if (match.ActionId is null || ForSelection() is not { } context || BuildAction(match.ActionId, context) is not { } entry)
+        if (!KeyActions.TryGetValue(inputActionId, out var match) || ForSelection() is not { } context || BuildAction(match.ActionId, context) is not { } entry)
         {
             return false;
         }
@@ -306,22 +338,6 @@ public sealed class LibraryActionCatalog
         command = entry.Command;
         parameter = entry.CommandParameter;
         return true;
-    }
-
-    /// <summary>
-    /// <see cref="KeyGesture.Parse"/> with digit keys fixed: Avalonia reads a bare "3" as the numeric enum value 3, which is
-    /// <see cref="Key.Tab"/>, not <see cref="Key.D3"/> - so "Alt+Shift+3" would silently bind Alt+Shift+Tab.
-    /// </summary>
-    public static KeyGesture ParseGesture(string gesture)
-    {
-        int plus = gesture.LastIndexOf('+');
-        string last = plus < 0 ? gesture : gesture[(plus + 1)..];
-        if (last.Length == 1 && char.IsDigit(last[0]))
-        {
-            gesture = (plus < 0 ? string.Empty : gesture[..(plus + 1)]) + "D" + last;
-        }
-
-        return KeyGesture.Parse(gesture);
     }
 
     private ContextMenuEntry? BuildAction(string id, LibraryActionContext context)
@@ -360,9 +376,9 @@ public sealed class LibraryActionCatalog
 
         yield return new("edit", local, c => c.IsMenu
             ? c.IsSeries
-                ? ContextMenuEntry.Item(c.IsMulti ? $"Bulk Edit {c.Count} Series…" : "Bulk Edit…", _vm.BulkEditTargetCommand, c.Target, Symbol.Edit, inputGesture: "Ctrl+I")
-                : ContextMenuEntry.Item("Edit Properties…", _vm.EditIssuePropertiesCommand, c.AnchorId, Symbol.Info, inputGesture: "Ctrl+I")
-            : ContextMenuEntry.Item("Bulk Edit", _vm.BulkEditTargetCommand, c.Target, Symbol.Edit, inputGesture: "Ctrl+I"));
+                ? ContextMenuEntry.Item(c.IsMulti ? $"Bulk Edit {c.Count} Series…" : "Bulk Edit…", _vm.BulkEditTargetCommand, c.Target, Symbol.Edit, inputGesture: Hint(InputActionIds.LibraryEdit))
+                : ContextMenuEntry.Item("Edit Properties…", _vm.EditIssuePropertiesCommand, c.AnchorId, Symbol.Info, inputGesture: Hint(InputActionIds.LibraryEdit))
+            : ContextMenuEntry.Item("Bulk Edit", _vm.BulkEditTargetCommand, c.Target, Symbol.Edit, inputGesture: Hint(InputActionIds.LibraryEdit)));
 
         yield return new("rating", issue, BuildRating);
 
@@ -370,8 +386,8 @@ public sealed class LibraryActionCatalog
         {
             var children = new List<ContextMenuEntry?>
             {
-                ContextMenuEntry.Item("Read", _vm.MarkTargetReadCommand, c.Target, Symbol.CheckmarkCircle, inputGesture: "Alt+Shift+R"),
-                ContextMenuEntry.Item("Unread", _vm.MarkTargetUnreadCommand, c.Target, Symbol.Circle, inputGesture: "Alt+Shift+U"),
+                ContextMenuEntry.Item("Read", _vm.MarkTargetReadCommand, c.Target, Symbol.CheckmarkCircle, inputGesture: Hint(InputActionIds.LibraryMarkRead)),
+                ContextMenuEntry.Item("Unread", _vm.MarkTargetUnreadCommand, c.Target, Symbol.Circle, inputGesture: Hint(InputActionIds.LibraryMarkUnread)),
             };
             if (c is { Row: { } row, Count: 1 })
             {
@@ -383,10 +399,10 @@ public sealed class LibraryActionCatalog
         });
 
         yield return new("bar-mark-read", local, c =>
-            ContextMenuEntry.Item(c.IsMulti ? $"Mark {c.Count} as read" : "Mark as read", _vm.MarkTargetReadCommand, c.Target, Symbol.CheckmarkCircle, inputGesture: "Alt+Shift+R"));
+            ContextMenuEntry.Item(c.IsMulti ? $"Mark {c.Count} as read" : "Mark as read", _vm.MarkTargetReadCommand, c.Target, Symbol.CheckmarkCircle, inputGesture: Hint(InputActionIds.LibraryMarkRead)));
 
         yield return new("bar-mark-unread", local, c =>
-            ContextMenuEntry.Item(c.IsMulti ? $"Mark {c.Count} as unread" : "Mark as unread", _vm.MarkTargetUnreadCommand, c.Target, Symbol.Circle, inputGesture: "Alt+Shift+U"));
+            ContextMenuEntry.Item(c.IsMulti ? $"Mark {c.Count} as unread" : "Mark as unread", _vm.MarkTargetUnreadCommand, c.Target, Symbol.Circle, inputGesture: Hint(InputActionIds.LibraryMarkUnread)));
 
         yield return new("add-list", local, c =>
             ContextMenuEntry.SubMenu(c.IsMulti ? $"Add {c.Count} to Reading List" : "Add to Reading List", ReadingListChildren(c), Symbol.TextBulletListAdd));
@@ -436,11 +452,11 @@ public sealed class LibraryActionCatalog
             : ContextMenuEntry.Item(c.IsMulti ? $"Organize {c.Count}…" : "Organize…", _vm.OrganizeWithProfileCommand, c.AnchorId, Symbol.FolderArrowRight));
 
         yield return new("copy-data", issue | LibraryActionTargets.RemoteIssue, c =>
-            ContextMenuEntry.Item("Copy Data", _vm.CopyDataCommand, c.Target, Symbol.Copy, inputGesture: "Ctrl+C"));
+            ContextMenuEntry.Item("Copy Data", _vm.CopyDataCommand, c.Target, Symbol.Copy, inputGesture: Hint(InputActionIds.LibraryCopyData)));
 
         yield return new("paste-data", issue, c =>
             ContextMenuEntry.Item(c.IsMulti ? $"Paste Data onto {c.Count}…" : "Paste Data…", _vm.PasteDataCommand, c.Target, Symbol.ClipboardPaste,
-                isEnabled: _vm.HasMetadataClipboard, inputGesture: "Ctrl+V"));
+                isEnabled: _vm.HasMetadataClipboard, inputGesture: Hint(InputActionIds.LibraryPasteData)));
 
         yield return new("clear-data", issue, c =>
             ContextMenuEntry.Item(c.IsMulti ? $"Clear Data of {c.Count}…" : "Clear Data…", _vm.ClearDataCommand, c.Target, Symbol.Eraser));
@@ -471,11 +487,11 @@ public sealed class LibraryActionCatalog
             : null);
 
         yield return new("reveal", local, c =>
-            ContextMenuEntry.Item("Show in Explorer", _vm.RevealTargetCommand, c.Target, Symbol.FolderOpen, isEnabled: c.HasFile, inputGesture: "Ctrl+G"));
+            ContextMenuEntry.Item("Show in Explorer", _vm.RevealTargetCommand, c.Target, Symbol.FolderOpen, isEnabled: c.HasFile, inputGesture: Hint(InputActionIds.LibraryReveal)));
 
         yield return new("copy-paths", local, c =>
             ContextMenuEntry.Item(!c.IsSeries && c.Count == 1 ? "Copy file path" : "Copy file paths", _vm.CopyFilePathsCommand, c.Target, Symbol.DocumentCopy,
-                isEnabled: c.HasFile, inputGesture: "Ctrl+Shift+C"));
+                isEnabled: c.HasFile, inputGesture: Hint(InputActionIds.LibraryCopyPaths)));
 
         // Exactly two selected: put the two files side by side (docs/superpowers/specs/2026-09-26-comic-reader-compare-design.md #11).
         yield return new("compare", issue, c => c is { IsMenu: true, Count: 2 }
@@ -484,12 +500,12 @@ public sealed class LibraryActionCatalog
 
         yield return new("plugins", local, c => ContextMenuEntry.SubMenu(
             "Plugins",
-            _vm.LibraryPluginCommands.Select(p => ContextMenuEntry.Item(p.Name, _vm.RunLibraryPluginOnTargetCommand, (c.Target, p))),
+            _vm.LibraryPluginCommands.Select(p => ContextMenuEntry.Item(p.Name, _vm.RunLibraryPluginOnTargetCommand, (c.Target, p), inputGesture: Hint(Paperbunkr.App.Services.Input.PluginInputActions.IdFor(p)))),
             Symbol.PuzzlePiece,
             isVisible: _vm.HasLibraryPluginCommands));
 
         yield return new("select-all", local | LibraryActionTargets.RemoteIssue | LibraryActionTargets.RemoteSeries, c => c.IsMenu
-            ? ContextMenuEntry.Item("Select All", c.IsSeries ? _vm.SelectAllVisibleSeriesCommand : _vm.SelectAllVisibleIssuesCommand, icon: Symbol.SelectAllOn, inputGesture: "Ctrl+A")
+            ? ContextMenuEntry.Item("Select All", c.IsSeries ? _vm.SelectAllVisibleSeriesCommand : _vm.SelectAllVisibleIssuesCommand, icon: Symbol.SelectAllOn, inputGesture: Hint(InputActionIds.LibrarySelectAll))
             : null);
 
         yield return new("invert", local | LibraryActionTargets.RemoteIssue | LibraryActionTargets.RemoteSeries, c => c.IsMenu
@@ -532,12 +548,12 @@ public sealed class LibraryActionCatalog
         int? common = _vm.CommonRating(c.Target.Ids);
         var children = new List<ContextMenuEntry?>
         {
-            ContextMenuEntry.Item("None", _vm.SetRatingCommand, (c.Target, (int?)null), isChecked: common == 0, inputGesture: "Alt+Shift+0"),
+            ContextMenuEntry.Item("None", _vm.SetRatingCommand, (c.Target, (int?)null), isChecked: common == 0, inputGesture: Hint(InputActionIds.LibraryRate0)),
         };
         for (int stars = 1; stars <= 5; stars++)
         {
             children.Add(ContextMenuEntry.Item(stars == 1 ? "1 Star" : $"{stars} Stars", _vm.SetRatingCommand, (c.Target, (int?)stars),
-                Symbol.Star, isChecked: common == stars, inputGesture: $"Alt+Shift+{stars}"));
+                Symbol.Star, isChecked: common == stars, inputGesture: Hint(RateAction(stars))));
         }
 
         if (c.Count == 1)
@@ -547,7 +563,7 @@ public sealed class LibraryActionCatalog
         }
 
         var menu = ContextMenuEntry.SubMenu(c.IsMulti ? $"Rate {c.Count}" : "My Rating", children, Symbol.Star);
-        return menu is null ? null : menu with { InputGesture = "Alt+Shift+0…5" };
+        return menu is null ? null : menu with { InputGesture = RatingRangeHint() };
     }
 
     /// <summary>Content Type / Reading Direction / Publication Status / Reading Status over every series of the target - folded under

@@ -1692,9 +1692,8 @@ public class LibraryScreenViewModelTests : IDisposable
 
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
 
-        Assert.False(vm.FadeInThumbnails);
+        // Fade in and Tooltips are Preferences settings since 2026-10-04; the Library still seeds their static cache on load.
         Assert.False(vm.DogEarThumbnails);
-        Assert.True(vm.ShowToolTips);
         Assert.False(vm.NumericRatingThumbnails);
         Assert.False(CosmeticThumbnailSettings.FadeInThumbnails);
         Assert.False(CosmeticThumbnailSettings.DogEarThumbnails);
@@ -1707,19 +1706,13 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
 
-        vm.FadeInThumbnails = false;
         vm.DogEarThumbnails = false;
-        vm.ShowToolTips = true;
         vm.NumericRatingThumbnails = false;
 
         var settings = ReadAppSettings();
-        Assert.False(settings.FadeInThumbnails);
         Assert.False(settings.DogEarThumbnails);
-        Assert.True(settings.ShowToolTips);
         Assert.False(settings.NumericRatingThumbnails);
-        Assert.False(CosmeticThumbnailSettings.FadeInThumbnails);
         Assert.False(CosmeticThumbnailSettings.DogEarThumbnails);
-        Assert.True(CosmeticThumbnailSettings.ShowToolTips);
         Assert.False(CosmeticThumbnailSettings.NumericRatingThumbnails);
     }
 

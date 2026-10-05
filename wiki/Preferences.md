@@ -101,7 +101,7 @@ Seven tabs.
   for paged and continuous reading (*Default* keeps the classic behaviour; *L-shaped*, *Kindle-like*,
   *Edge*, *Right and left* and *Disabled* follow Mihon's layouts), an **invert** option for
   left-handed use, whether the **mouse** uses the zones, whether the **mouse side buttons** turn
-  pages, and whether a **game controller** drives the reader. Live previews show each layout.
+  pages, and whether a **game controller** drives the app. Live previews show each layout.
 - **Comfort** — the **reading stats chip** default, **eye-rest reminders** (interval 10-60
   minutes) and the **warm tint** (start and end time, strength).
 - **Profiles** — the **default profile** and the list of reader profiles (rename, delete,
@@ -113,7 +113,7 @@ Seven tabs.
 - **Auto-crop** — trim plain white or black scan borders from comic pages (off by default).
 - **Background & Margin** — canvas background (*Auto* app background, a fixed **color**, or a
   **Background texture**, including ComicRack CE's textures), optional **margin around the page**.
-- **Keyboard Shortcuts** — remap every reader command; **Import Layout… / Export
+- **Keyboard Shortcuts** — remap every key, mouse button, wheel direction and controller button; **Import Layout… / Export
   Layout…**. See [Keyboard Shortcuts](Keyboard-Shortcuts).
 
 ## Advanced

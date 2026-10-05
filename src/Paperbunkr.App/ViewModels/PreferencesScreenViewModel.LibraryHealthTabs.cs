@@ -18,8 +18,13 @@ public partial class PreferencesScreenViewModel
     /// </summary>
     private bool _libraryHealthTabChosen;
 
-    /// <summary>The ten collapsible sections' open state, sub-tab and anchor.</summary>
+    /// <summary>The eleven collapsible sections' open state, sub-tab and anchor.</summary>
     public LibraryHealthSections LibraryHealthSections { get; } = new();
+
+    private PublisherGapsViewModel? _publisherGaps;
+
+    /// <summary>The "Publisher logos" section's own view model (publishers with no logo, issues with no publisher, the user icon folder).</summary>
+    public PublisherGapsViewModel PublisherGaps => _publisherGaps ??= new PublisherGapsViewModel(dialogs: _dialogService);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsLibraryHealthOverviewTab), nameof(IsLibraryHealthReviewTab), nameof(IsLibraryHealthFilesTab))]

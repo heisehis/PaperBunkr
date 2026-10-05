@@ -7,6 +7,7 @@
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
              xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:svc="using:Paperbunkr.App.Services"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
@@ -882,6 +883,104 @@
                                 <StackPanel Spacing="8" IsVisible="{Binding LibraryHealthSections.SimilarSeries.IsOpen}">
                                     <TextBlock Text="Checks for series that only differ by punctuation (e.g. &quot;X: Y&quot; vs &quot;X - Y&quot;) - review and merge only the ones that are genuinely the same series." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
                                     <controls:VirtualList ItemsSource="{Binding SimilarSeriesCandidates}" ItemTemplate="{StaticResource SimilarSeriesRowTemplate}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Publisher logos (docs/superpowers/specs/2026-10-04-publisher-icons-user-folder-and-gaps-design.md): which publishers have no logo, which issues
+                             have no publisher, a fill from the rest of the series, and the folder your own logos go in. On demand, like Find Similar Series. -->
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,4" Tag="library.healthPublishers">
+                            <StackPanel Spacing="8" DataContext="{Binding PublisherGaps}" x:DataType="vm:PublisherGapsViewModel">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Button Grid.Column="0" Classes="sideItemButton" HorizontalContentAlignment="Stretch" Padding="0"
+                                            Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.Publishers.ToggleCommand}"
+                                            AutomationProperties.AutomationId="LibraryHealthTogglePublishers">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <fi:SymbolIcon Symbol="Image" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                            <TextBlock Text="Publisher logos" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding HeaderDetail}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="1" Classes="headerAction ghost" Command="{Binding ScanCommand}" AutomationProperties.AutomationId="ScanPublisherLogosButton">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" />
+                                            <TextBlock Text="Scan" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+
+                                <StackPanel Spacing="10" IsVisible="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.Publishers.IsOpen}">
+                                    <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                               FontSize="11.5" Foreground="{DynamicResource PbSuccessBrush}" TextWrapping="Wrap" />
+
+                                    <StackPanel Spacing="4" IsVisible="{Binding HasWithoutLogo}">
+                                        <TextBlock Text="Publishers with no logo" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                                        <TextBlock Text="These show a letter chip or plain text. Add a PNG or JPG named after the publisher to your icon folder below."
+                                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                        <ScrollViewer MaxHeight="180">
+                                            <ItemsControl ItemsSource="{Binding WithoutLogo}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="svc:PublisherWithoutLogo">
+                                                        <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding Issues, StringFormat='{}{0:N0} issues'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="4" IsVisible="{Binding HasNoPublisher}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Text="{Binding IssuesWithoutPublisher, StringFormat='{}{0:N0} issues have no publisher'}" FontWeight="SemiBold" FontSize="12"
+                                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <Button Grid.Column="1" Classes="headerAction secondary" Command="{Binding FillFromSiblingsCommand}" IsVisible="{Binding HasFillable}"
+                                                    AutomationProperties.AutomationId="FillMissingPublishersButton">
+                                                <TextBlock Text="{Binding FillLabel}" />
+                                            </Button>
+                                        </Grid>
+                                        <TextBlock Text="Where the rest of a series names a publisher, the blanks can take it. Series with no publisher anywhere (most web-comic and manhwa scans carry none in their files) are listed so you can set one in the bulk editor."
+                                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                        <ScrollViewer MaxHeight="180">
+                                            <ItemsControl ItemsSource="{Binding SeriesMissing}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="svc:SeriesMissingPublisher">
+                                                        <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                                            <TextBlock Grid.Column="0" Text="{Binding SeriesName}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Text="{Binding Suggested, StringFormat='→ {0}'}" FontSize="11.5" Foreground="{DynamicResource PbSuccessBrush}"
+                                                                           IsVisible="{Binding Suggested, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                                                <TextBlock Text="{Binding IssuesMissing, StringFormat='{}{0:N0} issues'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Your own logos" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                                        <TextBlock Text="Drop PNG or JPG files here, named after the publisher (Penguin Group.png). Yours are used before the built-in ones. Years work as in the built-in pack: Marvel(1990-2004).png."
+                                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding UserIconsFolder}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Button Classes="headerAction ghost" Command="{Binding OpenIconsFolderCommand}" AutomationProperties.AutomationId="OpenPublisherIconsFolderButton">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeXs}" />
+                                                    <TextBlock Text="Open folder" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Classes="headerAction ghost" Command="{Binding ReloadIconsCommand}" AutomationProperties.AutomationId="ReloadPublisherIconsButton">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" />
+                                                    <TextBlock Text="Reload icons" />
+                                                </StackPanel>
+                                            </Button>
+                                            <TextBlock Text="{Binding UserIconsSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </StackPanel>
                                 </StackPanel>
                             </StackPanel>
                         </Border>

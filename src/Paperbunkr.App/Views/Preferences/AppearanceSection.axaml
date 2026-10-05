@@ -176,10 +176,22 @@
                     <ToggleSwitch IsChecked="{Binding BindingSpine}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
-            <pref:SettingsRow Icon="Clock" Title="Read-progress ring"
-                               Description="Shows how far through a series or issue you are when you hover a cover, and always once it's finished.">
+            <pref:SettingsRow Icon="Clock" Title="Read-progress bar"
+                               Description="A thin bar along the bottom of a cover showing how far through a series or issue you are while it's in progress.">
                 <pref:SettingsRow.SettingsContent>
                     <ToggleSwitch IsChecked="{Binding ProgressRing}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Image" Title="Fade in covers"
+                               Description="Covers fade in the first time they appear instead of popping in.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding FadeInThumbnails}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="CursorHover" Title="Cover tooltips"
+                               Description="A details card after resting the pointer on a cover in the Poster and Panorama grids.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding ShowToolTips}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="Checkmark" Title="Selection checkbox on tiles"
@@ -308,6 +320,12 @@
                                Description="Shortens UI transitions to effectively instant.">
                 <pref:SettingsRow.SettingsContent>
                     <ToggleSwitch IsChecked="{Binding ReducedMotion}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="ArrowSort" Title="Smooth scrolling"
+                               Description="Each mouse-wheel notch glides to its place in the Library instead of jumping. Mouse wheel only.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding SmoothScrolling}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="Navigation" Title="Expand nav rail on hover"

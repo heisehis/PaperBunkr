@@ -197,6 +197,35 @@ public class ReadingListsScreenViewTests : IDisposable
         });
     }
 
+    [Fact]
+    public void Gallery_UpFromTheFirstRow_ReachesTheContinueReadingCard_AndDownComesBack()
+    {
+        WithThemeAndTokens(() =>
+        {
+            SeedList("Saga", 4, 1);              // in progress, so the Continue Reading card shows
+            SeedList("Annihilation", 6, 0);
+            var (vm, window) = Show();
+            vm.Gallery.Refresh();
+            VisibleTexts(window);
+
+            var tiles = window.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("rlTile")).ToList();
+            var first = tiles.OrderBy(t => t.TranslatePoint(default, window)!.Value.Y).ThenBy(t => t.TranslatePoint(default, window)!.Value.X).First();
+            first.Focus(NavigationMethod.Tab);
+            VisibleTexts(window);
+            Assert.Same(first, Focused(window));
+
+            Press(window, Key.Up);
+            var above = Focused(window);
+            Assert.NotNull(above);
+            Assert.False(tiles.Contains(above as Button), $"Up left the tile grid; focus is on {above?.GetType().Name}");
+            Assert.True(((Visual)above!).TranslatePoint(default, window)!.Value.Y < first.TranslatePoint(default, window)!.Value.Y, "focus moved up the screen");
+
+            Press(window, Key.Down);
+            Assert.Contains(tiles, t => ReferenceEquals(t, Focused(window)));
+            window.Close();
+        });
+    }
+
     /// <summary>The reported gap: opening a folder resets Tiles in place while the gallery stays visible the whole time, so the folder tile
     /// that had focus is detached along with the old content - and without <c>OnTilesChanged</c> wiring it into <see cref="FocusReclaimer"/>,
     /// nothing takes its place (focus fell back to whatever the window considers next, observed as the app's nav rail).</summary>

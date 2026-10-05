@@ -176,6 +176,8 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<KeyBinding> KeyBindings => Set<KeyBinding>();
 
     public DbSet<Workspace> Workspaces => Set<Workspace>();
+    public DbSet<ListLayout> ListLayouts => Set<ListLayout>();
+    public DbSet<ListLayoutAssignment> ListLayoutAssignments => Set<ListLayoutAssignment>();
 
     public DbSet<BookSeries> BookSeries => Set<BookSeries>();
 
@@ -200,6 +202,8 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<LibrarySnapshot> LibrarySnapshots => Set<LibrarySnapshot>();
 
     public DbSet<ReadingGoal> ReadingGoals => Set<ReadingGoal>();
+
+    public DbSet<ReadingGoalScope> ReadingGoalScopes => Set<ReadingGoalScope>();
 
     public DbSet<SeriesActivityEvent> SeriesActivityEvents => Set<SeriesActivityEvent>();
 
@@ -1727,6 +1731,10 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.LibraryGridCoverFit).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(LibraryGridCoverFit.Poster)
                 .HasSentinel(LibraryGridCoverFit.Poster);
+            // All (0) is both the CLR default and the desired default - same case as LibraryGridCoverFit above.
+            builder.Property(a => a.LibraryLens).HasConversion<string>().HasMaxLength(16)
+                .HasDefaultValue(LibraryLens.All)
+                .HasSentinel(LibraryLens.All);
             // Desired default (true) diverges from the CLR/SQLite implicit zero-value (false) - same
             // explicit-DB-default requirement as CheckForUpdatesOnStartup above, or an existing
             // singleton row's backfill on this ALTER TABLE lands on false instead of true.
@@ -1908,6 +1916,26 @@ public class PaperbunkrDbContext : DbContext
             builder.HasIndex(w => new { w.Screen, w.SortOrder });
         });
 
+        // List layouts (docs/superpowers/specs/2026-10-04-list-layouts-design.md): named layouts per screen, and the
+        // layout each list remembers. Same enum-as-string Screen as Workspace.
+        modelBuilder.Entity<ListLayout>(builder =>
+        {
+            builder.HasKey(l => l.Id);
+            builder.Property(l => l.Screen).HasConversion<string>().HasMaxLength(16);
+            builder.Property(l => l.Name).IsRequired();
+            builder.Property(l => l.StateJson).IsRequired();
+            builder.HasIndex(l => new { l.Screen, l.Name }).IsUnique();
+        });
+
+        modelBuilder.Entity<ListLayoutAssignment>(builder =>
+        {
+            builder.HasKey(a => a.Id);
+            builder.Property(a => a.Screen).HasConversion<string>().HasMaxLength(16);
+            builder.Property(a => a.SelectionKey).IsRequired().HasMaxLength(64);
+            builder.Property(a => a.StateJson).IsRequired();
+            builder.HasIndex(a => new { a.Screen, a.SelectionKey }).IsUnique();
+        });
+
         // Novels (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md §2) -
         // independent of the comic Series/Issue tables above, no FK crossing between the two.
         modelBuilder.Entity<BookSeries>(builder =>
@@ -2044,6 +2072,15 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(s => s.Id);
             builder.HasIndex(s => s.SnapshotDate).IsUnique();
+        });
+
+        // Goal filters (docs/superpowers/specs/2026-10-04-insights-goal-scopes-design.md): a goal owns any number of
+        // scope rows, deleted with it.
+        modelBuilder.Entity<ReadingGoalScope>(builder =>
+        {
+            builder.HasKey(s => s.Id);
+            builder.HasOne(s => s.ReadingGoal).WithMany(g => g.Scopes).HasForeignKey(s => s.ReadingGoalId).OnDelete(DeleteBehavior.Cascade);
+            builder.HasIndex(s => s.ReadingGoalId);
         });
 
         modelBuilder.Entity<SeriesActivityEvent>(builder =>

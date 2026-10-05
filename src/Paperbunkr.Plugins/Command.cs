@@ -22,6 +22,9 @@ public abstract class Command
 
     public string? Description { get; init; }
 
+    /// <summary>The manifest's <c>shortcut</c> attribute (Plugin API 4.3): the command's preferred default keyboard shortcut, as text. The host decides whether it can honour it.</summary>
+    public string? Shortcut { get; init; }
+
     /// <summary>Relative path (from the plugin's folder) to an icon image, or null.</summary>
     public string? Image { get; init; }
 

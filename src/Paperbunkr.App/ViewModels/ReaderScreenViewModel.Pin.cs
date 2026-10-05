@@ -45,10 +45,6 @@ public partial class ReaderScreenViewModel
 
     public Thickness PinMargin => ReaderPinMath.MarginFor(PinCorner);
 
-    /// <summary>The pin's own gesture, for tooltips.</summary>
-    [ObservableProperty]
-    private System.Collections.Generic.IReadOnlyList<Avalonia.Input.KeyGesture> _pinPageKey = [new(Avalonia.Input.Key.P, Avalonia.Input.KeyModifiers.Shift)];
-
     private void HookPinToInfoPanel() => Info.PropertyChanged += (_, e) =>
     {
         if (e.PropertyName == nameof(ReaderInfoPanelViewModel.IsOpen))

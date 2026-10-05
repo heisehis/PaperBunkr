@@ -31,17 +31,15 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="ClipToBounds" Value="True" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BoxShadowsTransition Property="BoxShadow" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                </Transitions>
-            </Setter>
+            <!-- A permanent gutter inside the card Button, as LibraryScreen's Border.posterCover has: the Button clips its content to its
+                 bounds, so a ring drawn outside the cover with no room to spread showed as nothing (the cover was flush with the card's edge).
+                 BoxShadow is never transitioned: animating it tears the ring mid-animation (see Primitives.axaml's posterCover note). -->
+            <Setter Property="Margin" Value="5,10,5,5" />
         </Style>
-        <Style Selector="Button.card:pointerover Border.bookCover">
+        <!-- The ring is a spread-only BoxShadow, which ClipToBounds clips away entirely, so clipping is dropped while it shows (same tradeoff as the Library). -->
+        <Style Selector="Button.card:pointerover Border.bookCover, Button.card:focus-visible Border.bookCover">
             <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
-        </Style>
-        <Style Selector="Button.card:focus-within Border.bookCover">
-            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
+            <Setter Property="ClipToBounds" Value="False" />
         </Style>
 
         <!-- Chrome pills / popups - own copy of the Library toolbar's classes (same per-UserControl
@@ -90,6 +88,8 @@
         <!-- Selection checkbox - hidden until hover, forced visible once anything's selected
              (own copy of LibraryScreen's tileSelect, same per-UserControl precedent). -->
         <Style Selector="CheckBox.tileSelect">
+            <!-- A mouse affordance: the keyboard selects with Shift+arrows. As a tab stop it also sat "above" the neighbouring card for the arrow keys, so Up from a card landed on the next card's checkbox. -->
+            <Setter Property="Focusable" Value="False" />
             <Setter Property="Opacity" Value="0" />
             <Setter Property="Transitions">
                 <Transitions><DoubleTransition Property="Opacity" Duration="0:0:0.12" /></Transitions>
@@ -117,7 +117,7 @@
 
     <UserControl.Resources>
         <DataTemplate x:Key="BookCardTemplate" x:DataType="models:BookCardSample">
-            <Button Classes="card" Width="150" Margin="0,0,20,20"
+            <Button Classes="card" Width="160" Margin="0,0,15,15"
                     Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).CardClickCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown"
                     AutomationProperties.AutomationId="BookCard" AutomationProperties.Name="{Binding Title}">
@@ -226,6 +226,31 @@
                                     AutomationProperties.AutomationId="BooksWorkspaceSaveAs" />
                             <Button Classes="modeOption" Content="Reset to default view" Command="{Binding ResetToDefaultViewCommand}"
                                     AutomationProperties.AutomationId="BooksWorkspaceReset" />
+                            <!-- List layouts (docs/superpowers/specs/2026-10-04-list-layouts-design.md): CE's Edit List Layout /
+                                 Save List Layout / Edit Layouts / "Set 'X' Layout" items, nested here because this button is on
+                                 both Library and Books. Applying one copies it onto the list now on screen. -->
+                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,6" />
+                            <TextBlock Classes="dropdownRow" Text="List layouts" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
+                            <ItemsControl ItemsSource="{Binding ListLayouts.Layouts}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ListLayoutRow">
+                                        <Button Classes="modeOption" Content="{Binding Name}"
+                                                Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).ListLayouts.ApplyLayoutCommand}"
+                                                CommandParameter="{Binding Id}"
+                                                ToolTip.Tip="Use this layout for the current list"
+                                                AutomationProperties.AutomationId="{Binding Name, StringFormat='BooksListLayoutRow_{0}'}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Classes="modeOption" Content="List options…" Command="{Binding ListLayouts.ShowListOptionsCommand}"
+                                    AutomationProperties.AutomationId="BooksListOptions" />
+                            <Button Classes="modeOption" Content="Save list layout…" Command="{Binding ListLayouts.SaveLayoutAsCommand}"
+                                    AutomationProperties.AutomationId="BooksSaveListLayout" />
+                            <Button Classes="modeOption" Content="Edit layouts…" Command="{Binding ListLayouts.ShowEditLayoutsCommand}"
+                                    AutomationProperties.AutomationId="BooksEditLayouts" />
+                            <Button Classes="modeOption" Content="Default layout for this list" Command="{Binding ListLayouts.ResetToDefaultCommand}"
+                                    ToolTip.Tip="Forget this list's own layout"
+                                    AutomationProperties.AutomationId="BooksDefaultListLayout" />
                         </StackPanel>
                     </Border>
                 </Popup>

@@ -165,6 +165,35 @@ public partial class App : Application
         // design.md) - same fire-and-forget, self-swallowing shape as the two triggers above.
         System.Threading.Tasks.Task.Run(ActivityHistoryStore.PruneOnStartup);
 
+        // The application-wide input service (docs/superpowers/specs/2026-10-03-input-service-design.md): every key, mouse-button, wheel and gamepad input resolves to an action
+        // through it. keymap.json holds the user's remaps; the first launch after the upgrade carries over the old KeyBinding table's remaps (read-only - the table stays, since
+        // other checkouts share the database). Published before any view or view model is built, so they pick it up.
+        try
+        {
+            var inputService = new Services.Input.InputService(
+                Services.Input.InputActionCatalog.CreateWithCoreActions(),
+                new Services.Input.JsonKeymapStore(Services.Input.JsonKeymapStore.DefaultPath(), log: DiagnosticsService.LogMilestone),
+                new Services.Input.AvaloniaInputSuppressionProbe(),
+                DiagnosticsService.LogMilestone);
+            int imported = Services.Input.LegacyKeyBindingImporter.ImportOnce(inputService, PaperbunkrDb.CreateContext);
+            if (imported > 0)
+            {
+                DiagnosticsService.LogMilestone($"Imported {imported} keyboard shortcut(s) from the previous settings.");
+            }
+
+            using (var settingsContext = PaperbunkrDb.CreateContext())
+            {
+                inputService.GamepadEnabled = settingsContext.GetOrCreateAppSettings().GamepadEnabled;
+            }
+
+            Services.Input.InputServiceLocator.Current = inputService;
+        }
+        catch (Exception ex)
+        {
+            // Input falls back to the do-nothing service rather than blocking startup; the app is then mouse-only until the next launch.
+            DiagnosticsService.LogMilestone($"Input service unavailable: {ex.GetType().Name} {ex.Message}");
+        }
+
         DiagnosticsService.LogMilestone("Database ready. Applying theme...");
         splashViewModel.ReportPhase(2, TotalPhases, "Loading appearance…");
         var themeService = new ThemeService();
@@ -334,6 +363,10 @@ public partial class App : Application
         // shown, so plugin precompile janks a visible window rather than delaying its appearance.
         var pluginHost = new PluginHostService();
         pluginHost.Initialize(mainViewModel, mainWindow);
+        // Plugin commands are keyboard actions too (Plugin API 4.3): the Library-hook ones are listed in Preferences > Keyboard Shortcuts and follow the plugin list as commands are switched on and off.
+        void SyncPluginShortcuts() => Services.Input.PluginInputActions.Sync(Services.Input.InputServiceLocator.Current.Actions, System.Linq.Enumerable.ToList(pluginHost.GetLibraryCommands()));
+        pluginHost.CommandsChanged += SyncPluginShortcuts;
+        SyncPluginShortcuts();
         mainViewModel.Plugin.AttachHost(pluginHost);
         mainViewModel.Library.AttachHost(pluginHost);
         mainViewModel.Books.AttachHost(pluginHost);

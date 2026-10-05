@@ -6,6 +6,7 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
 
@@ -81,8 +82,9 @@ public class ReaderScreenKeyTests : IDisposable
 
     private static (Window Window, ReaderScreenViewModel Vm) Show()
     {
-        var vm = new ReaderScreenViewModel(goBack: () => { });
+        var vm = new ReaderScreenViewModel(goBack: () => { }, ReaderTestInput.Create());
         var window = new Window { Width = 900, Height = 700, Content = CreateScreen(vm) };
+        InputHost.Attach(window, vm.Input);   // what MainWindow does for the app
         window.Show();
         // The reader keeps focus on its page canvas while reading; key presses are routed to the focused element.
         ((ReaderScreen)window.Content!).PageCanvasControl.Focus();

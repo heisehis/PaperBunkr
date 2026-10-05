@@ -7,6 +7,7 @@ using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Tests;
 
@@ -548,7 +549,10 @@ public class CompareTests : IDisposable
         vm.Open(_a, [_b]);
         Settle(vm);
         var screen = ReaderScreenTestHost_CreateCompare(vm);
+        var input = ReaderTestInput.Create();
+        screen.InputService = input;
         var window = new Avalonia.Controls.Window { Width = 1200, Height = 800, Content = screen };
+        InputHost.Attach(window, input);   // what MainWindow does for the app
         window.Show();
         try
         {

@@ -262,7 +262,7 @@ public sealed class PluginSettingsLockResetTransferTests : IDisposable
         Assert.Equal(1, root.GetProperty("version").GetInt32());
         Assert.Equal(Key, root.GetProperty("plugin").GetString());
         Assert.Equal("Sync Plugin", root.GetProperty("pluginName").GetString());
-        Assert.Equal("4.2", root.GetProperty("apiVersion").GetString());
+        Assert.Equal(PluginApi.Current.ToString(2), root.GetProperty("apiVersion").GetString());
         Assert.Equal("2026-09-20T13:45:01Z", root.GetProperty("exportedUtc").GetString());
         Assert.Equal(new[] { "token" }, root.GetProperty("secretsExcluded").EnumerateArray().Select(e => e.GetString()));
         var settings = root.GetProperty("settings");

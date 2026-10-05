@@ -13,7 +13,7 @@ namespace Paperbunkr.App.Tests;
 /// <summary>
 /// docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #1/#2 - the progress math on the two
 /// Library row models, and ground-truth rendering of <see cref="TileCosmeticsOverlay"/> (spine edge,
-/// ring visibility rules) via a real Skia-backed headless frame, the same approach
+/// progress bar rules) via a real Skia-backed headless frame, the same approach
 /// <see cref="MatrixRainOverlayRenderTests"/> uses because a control that draws nothing passes every
 /// non-rendering unit test.
 /// </summary>
@@ -77,11 +77,11 @@ public class TileCosmeticsOverlayTests
     {
         WithSettings(spine: true, ring: true, () =>
         {
-            var ltr = Render(new FakeSource { ReadFraction = 0.3 }, hover: false);
+            var ltr = Render(new FakeSource { ReadFraction = 0.3 });
             Assert.True(Brightness(ltr, 1, 40) < Brightness(ltr, W - 2, 40), "LTR spine should darken the left edge only");
             Assert.True(Brightness(ltr, 1, 40) < Brightness(ltr, W / 2, 40));
 
-            var rtl = Render(new FakeSource { ReadFraction = 0.3, IsRightToLeft = true }, hover: false);
+            var rtl = Render(new FakeSource { ReadFraction = 0.3, IsRightToLeft = true });
             Assert.True(Brightness(rtl, W - 2, 40) < Brightness(rtl, 1, 40), "RTL spine should darken the right edge only");
         });
     }
@@ -91,107 +91,64 @@ public class TileCosmeticsOverlayTests
     {
         WithSettings(spine: false, ring: false, () =>
         {
-            var frame = Render(new FakeSource { ReadFraction = 0.3 }, hover: false);
+            var frame = Render(new FakeSource { ReadFraction = 0.3 });
             Assert.Equal(255, Brightness(frame, 1, 40));
         });
     }
 
-    [Fact]
-    public void Ring_HiddenAtRest_ShownOnHover_AndShownAtRestWhenFinished()
+    [Theory]
+    [InlineData(0.0, false, false)]   // nothing read: no bar
+    [InlineData(0.4, false, true)]    // in progress: bar
+    [InlineData(1.0, false, false)]   // everything opened: no bar either, the badge speaks
+    [InlineData(1.0, true, false)]    // finished
+    [InlineData(0.4, true, false)]
+    public void ProgressBar_ShowsOnlyWhileInProgress(double fraction, bool finished, bool expected)
     {
-        WithSettings(spine: false, ring: true, checkbox: false, () =>
+        Assert.Equal(expected, TileCosmeticsOverlay.ShowsProgressBar(fraction, finished));
+    }
+
+    [Fact]
+    public void ProgressBar_RunsAlongTheBottomEdge_FilledFromTheLeft_AtRest()
+    {
+        WithSettings(spine: false, ring: true, () =>
         {
-            // With the selection checkbox off the ring sits bottom-RIGHT; sample its backdrop (a dark disc over the white cover).
-            int ringY = H - 7 - 17;
-            int ringX = (int)TileCosmeticsOverlay.RingCenterX(W, checkboxOwnsBottomRight: false);
+            int barY = H - 2;
+            var frame = Render(new FakeSource { ReadFraction = 0.4 });
 
-            var rest = Render(new FakeSource { ReadFraction = 0.4 }, hover: false);
-            Assert.Equal(255, Brightness(rest, ringX, ringY));
-
-            var hovered = Render(new FakeSource { ReadFraction = 0.4 }, hover: true);
-            Assert.True(Brightness(hovered, ringX - 12, ringY) < 200, "hover should draw the ring backdrop");
-
-            var finished = Render(new FakeSource { ReadFraction = 1.0, IsFinished = true }, hover: false);
-            Assert.True(Brightness(finished, ringX - 12, ringY) < 200, "a finished tile shows its ring at rest");
+            Assert.True(Brightness(frame, 10, barY) < 250, "the read part of the bar is drawn");
+            Assert.True(Brightness(frame, W - 10, barY) < 200, "the unread part shows the dark track");
+            Assert.NotEqual(Brightness(frame, 10, barY), Brightness(frame, W - 10, barY));
+            Assert.Equal(255, Brightness(frame, W / 2, H - 20));
         });
     }
 
     [Fact]
-    public void Ring_IsBottomRight_WhenNoCheckbox_AndBottomCentre_WhenTheCheckboxOwnsTheCorner()
+    public void ProgressBar_FillsFromTheRight_ForARightToLeftBook()
     {
-        int ringY = H - 7 - 17;
-        int rightX = (int)TileCosmeticsOverlay.RingCenterX(W, checkboxOwnsBottomRight: false);
-        int centreX = (int)TileCosmeticsOverlay.RingCenterX(W, checkboxOwnsBottomRight: true);
-        Assert.True(rightX > centreX + 15, "the two positions must actually differ");
-
-        WithSettings(spine: false, ring: true, checkbox: false, () =>
+        WithSettings(spine: false, ring: true, () =>
         {
-            var frame = Render(new FakeSource { ReadFraction = 0.4 }, hover: true);
-            Assert.True(Brightness(frame, rightX + 10, ringY) < 200, "checkbox off: ring in the bottom-right");
-            Assert.Equal(255, Brightness(frame, centreX - 10, ringY));
-        });
+            int barY = H - 2;
+            var ltr = Render(new FakeSource { ReadFraction = 0.4 });
+            var rtl = Render(new FakeSource { ReadFraction = 0.4, IsRightToLeft = true });
 
-        // Setting on: the hover checkbox lives bottom-right, so the ring steps aside to the centre.
-        WithSettings(spine: false, ring: true, checkbox: true, () =>
-        {
-            var frame = Render(new FakeSource { ReadFraction = 0.4 }, hover: true);
-            Assert.True(Brightness(frame, centreX - 10, ringY) < 200, "checkbox on: ring in the bottom-centre");
-            Assert.Equal(255, Brightness(frame, rightX + 10, ringY));
-        });
-
-        // A selected tile always shows its checked box, even with the setting off - so its ring also steps aside.
-        WithSettings(spine: false, ring: true, checkbox: false, () =>
-        {
-            var frame = Render(new SelectedSource { ReadFraction = 0.4, IsSelected = true }, hover: true);
-            Assert.True(Brightness(frame, centreX - 10, ringY) < 200, "selected tile: ring in the bottom-centre");
-            Assert.Equal(255, Brightness(frame, rightX + 10, ringY));
+            Assert.Equal(Brightness(ltr, 10, barY), Brightness(rtl, W - 10, barY));
+            Assert.Equal(Brightness(ltr, W - 10, barY), Brightness(rtl, 10, barY));
         });
     }
 
     [Fact]
-    public void Ring_MovesWhenTheTileIsSelectedWhileItsRingShows()
+    public void ProgressBar_NotDrawn_WhenUnread_Finished_OrSwitchedOff()
     {
-        // The row raises IsSelected while the pointer is over it; the overlay must repaint, not wait for the next hover change.
-        WithSettings(spine: false, ring: true, checkbox: false, () =>
+        int barY = H - 2;
+        WithSettings(spine: false, ring: true, () =>
         {
-            var source = new SelectedSource { ReadFraction = 0.4 };
-            var overlay = new TileCosmeticsOverlay { DataContext = source, HoverRing = true };
-            var window = new Window
-            {
-                Width = W, Height = H, SizeToContent = SizeToContent.Manual,
-                Content = new Grid { Background = Brushes.White, Children = { overlay } },
-            };
-            window.Show();
-            try
-            {
-                Pump(window);
-                int ringY = H - 7 - 17;
-                int rightX = (int)TileCosmeticsOverlay.RingCenterX(W, false);
-                int centreX = (int)TileCosmeticsOverlay.RingCenterX(W, true);
-                Assert.True(Brightness((WriteableBitmap)window.GetLastRenderedFrame()!, rightX + 10, ringY) < 200);
-
-                source.IsSelected = true;
-                Pump(window);
-
-                var after = (WriteableBitmap)window.GetLastRenderedFrame()!;
-                Assert.True(Brightness(after, centreX - 10, ringY) < 200, "ring moved to the centre once selected");
-                Assert.Equal(255, Brightness(after, rightX + 10, ringY));
-            }
-            finally
-            {
-                window.Close();
-            }
+            Assert.Equal(255, Brightness(Render(new FakeSource { ReadFraction = 0.0 }), 10, barY));
+            Assert.Equal(255, Brightness(Render(new FakeSource { ReadFraction = 1.0, IsFinished = true }), 10, barY));
         });
-    }
 
-    [Fact]
-    public void Ring_Off_NeverDraws_EvenWhenFinishedOrHovered()
-    {
-        WithSettings(spine: false, ring: false, checkbox: false, () =>
+        WithSettings(spine: false, ring: false, () =>
         {
-            var frame = Render(new FakeSource { ReadFraction = 1.0, IsFinished = true }, hover: true);
-            int x = (int)TileCosmeticsOverlay.RingCenterX(W, false) - 12;
-            Assert.Equal(255, Brightness(frame, x, H - 7 - 17));
+            Assert.Equal(255, Brightness(Render(new FakeSource { ReadFraction = 0.4 }), 10, barY));
         });
     }
 
@@ -201,29 +158,6 @@ public class TileCosmeticsOverlayTests
         {
             Dispatcher.UIThread.RunJobs();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick(2);
-        }
-    }
-
-    /// <summary>A tile source that also reports selection (and raises IsSelected), like the real row models.</summary>
-    private sealed class SelectedSource : ITileProgressSource, ISelectableCard, System.ComponentModel.INotifyPropertyChanged
-    {
-        private bool _isSelected;
-
-        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
-
-        public double ReadFraction { get; init; }
-        public bool IsFinished { get; init; }
-        public bool IsRightToLeft { get; init; }
-        public int Id => 1;
-
-        public bool IsSelected
-        {
-            get => _isSelected;
-            set
-            {
-                _isSelected = value;
-                PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsSelected)));
-            }
         }
     }
 
@@ -249,9 +183,9 @@ public class TileCosmeticsOverlayTests
         }
     }
 
-    private static WriteableBitmap Render(ITileProgressSource source, bool hover)
+    private static WriteableBitmap Render(ITileProgressSource source)
     {
-        var overlay = new TileCosmeticsOverlay { DataContext = source, HoverRing = hover };
+        var overlay = new TileCosmeticsOverlay { DataContext = source };
         var window = new Window
         {
             Width = W, Height = H, SizeToContent = SizeToContent.Manual,

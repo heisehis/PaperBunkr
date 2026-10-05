@@ -206,9 +206,10 @@ public class SuggestBox : TemplatedControl
 
     private void OnTextBoxGotFocus(object? sender, FocusChangedEventArgs e)
     {
-        if (IsStrict)
+        // Read-only field: clicking into it is a request to pick from the list. Keyboard focus is not: arrowing or tabbing through a form must not pop each dropdown open as it passes (the
+        // keyboard opens it with Enter, Space or Alt+Down below).
+        if (IsStrict && e.NavigationMethod == NavigationMethod.Pointer)
         {
-            // Read-only field: focusing it is a request to pick from the list.
             SetCurrentValue(IsDropDownOpenProperty, true);
             Repopulate();
         }
@@ -219,8 +220,14 @@ public class SuggestBox : TemplatedControl
         switch (e.Key)
         {
             case Key.Down:
+                // A closed box leaves Down alone, so the arrow keys keep moving through the screen; Alt+Down opens it (the usual dropdown shortcut). Once open, Down goes into the list.
                 if (!IsDropDownOpen)
                 {
+                    if (!e.KeyModifiers.HasFlag(KeyModifiers.Alt))
+                    {
+                        break;
+                    }
+
                     SetCurrentValue(IsDropDownOpenProperty, true);
                     Repopulate();
                 }
@@ -244,9 +251,20 @@ public class SuggestBox : TemplatedControl
                 break;
 
             case Key.Enter:
+            case Key.Space when IsStrict:
                 if (IsDropDownOpen)
                 {
-                    SetCurrentValue(IsDropDownOpenProperty, false);
+                    if (e.Key == Key.Enter)
+                    {
+                        SetCurrentValue(IsDropDownOpenProperty, false);
+                        e.Handled = true;
+                    }
+                }
+                else if (IsStrict)
+                {
+                    // A read-only field has no text to type into, so Enter and Space are how the keyboard asks for its list.
+                    SetCurrentValue(IsDropDownOpenProperty, true);
+                    Repopulate();
                     e.Handled = true;
                 }
 

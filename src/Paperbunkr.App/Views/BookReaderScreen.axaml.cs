@@ -11,6 +11,7 @@ using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data.Entities;
 
@@ -20,10 +21,15 @@ public partial class BookReaderScreen : UserControl
 {
     private BookReaderScreenViewModel? _viewModel;
 
+    private readonly IInputService _input = InputServiceLocator.Current;
+    private readonly AttachedInputRegistration _bookInput;
+
     public BookReaderScreen()
     {
         InitializeComponent();
         SizeChanged += OnSizeChanged;
+        _bookInput = new AttachedInputRegistration(this, InputScope.BookReader, OnBookInputAction, service: _input, focusRoot: () => this);
+        _input.BindingsChanged += (_, _) => PushBoundKeys();
 
         // Default WebView2 UserDataFolder is next to the EXE. A per-machine install (installer/
         // Installer.iss DefaultDirName={autopf} → Program Files) is not writable by a standard,
@@ -113,25 +119,14 @@ public partial class BookReaderScreen : UserControl
             return;
         }
 
-        if (type == "announcePosition")
+        if (type == "key")
         {
-            _viewModel.AnnounceReadingPositionCommand.Execute(null);
-            return;
-        }
-
-        if (type == "pageTurn")
-        {
-            // Keyboard page-turn while focus is inside the WebView - see HighlightScript's own
-            // keydown listener doc comment for why this needs a JS-forwarded message the same way
-            // contentTap/announcePosition already do.
-            string? direction = root.TryGetProperty("direction", out var directionProp) ? directionProp.GetString() : null;
-            if (direction == "next")
+            // A key the page swallowed because the input service has it bound in the book reader (see HighlightScript's keydown listener): resolve it like any other key.
+            string jsKey = root.TryGetProperty("key", out var keyProp) ? keyProp.GetString() ?? string.Empty : string.Empty;
+            if (WebKeyMap.TryFromJsKey(jsKey, out var key))
             {
-                await NextPageAsync();
-            }
-            else if (direction == "previous")
-            {
-                await PreviousPageAsync();
+                bool Held(string name) => root.TryGetProperty(name, out var flag) && flag.ValueKind == JsonValueKind.True;
+                _input.ProcessKey(key, WebKeyMap.ModifiersFor(Held("ctrl"), Held("alt"), Held("shift"), Held("meta")));
             }
 
             return;
@@ -256,6 +251,7 @@ public partial class BookReaderScreen : UserControl
             </head>
             <body><div id="pb-viewport"><div id="pb-content">{{chapterHtml}}</div></div></body>
             <script>window.pbPageMode = {{(UseColumnPaging ? "true" : "false")}};</script>
+            <script>window.pbBoundKeys = {{BoundKeysJson()}};</script>
             <script>{{HighlightScript}}</script>
             </html>
             """;
@@ -359,29 +355,17 @@ public partial class BookReaderScreen : UserControl
                 rectX: rect.left, rectY: rect.top, rectWidth: rect.width, rectHeight: rect.height
             }));
         });
-        // Ctrl+Shift+W (docs/superpowers/specs/2026-09-01-books-reader-screen-reader-accessibility-
-        // design.md) relies on Avalonia's UserControl.KeyBindings, which - same underlying reason as
-        // the tap-to-toggle-chrome fix above - doesn't reliably see key events while the native
-        // WebView has keyboard focus. Captured here and forwarded instead, so the shortcut keeps
-        // working once the user has clicked into the reading pane (which is most of the time).
-        // Right/PageDown/Space and Left/PageUp page-turning (real gap found via manual testing
-        // 2026-09-02 - the reader had no keyboard page-turning at all) needs the identical split:
-        // BookReaderScreen.axaml.cs's OnRootKeyDown covers focus-on-chrome, this covers focus-in-
-        // WebView (the common case once the user has clicked into the reading pane).
+        // Keyboard while the WebView has focus (docs/superpowers/specs/2026-10-03-input-service-design.md section 9). Avalonia never sees these keys - the same reason tap-to-toggle-chrome
+        // and the old Ctrl+Shift+W needed a JS bridge - so the page forwards them instead of deciding for itself which ones turn the page. window.pbBoundKeys is the set of keys
+        // the input service currently has bound in the book reader (pushed with each chapter and again whenever bindings change, see BoundKeysJson/PushBoundKeys): the page swallows
+        // exactly those and posts each one back for the service to resolve, so page turns and the "where am I?" announcement follow Preferences > Keyboard Shortcuts here too.
         document.addEventListener('keydown', function (e) {
-            if (e.ctrlKey && e.shiftKey && (e.key === 'W' || e.key === 'w')) {
-                e.preventDefault();
-                invokeCSharpAction(JSON.stringify({ type: 'announcePosition' }));
-                return;
-            }
-            if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
-            if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
-                e.preventDefault();
-                invokeCSharpAction(JSON.stringify({ type: 'pageTurn', direction: 'next' }));
-            } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-                e.preventDefault();
-                invokeCSharpAction(JSON.stringify({ type: 'pageTurn', direction: 'previous' }));
-            }
+            if (e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta') return;
+            var norm = (e.ctrlKey ? 'ctrl+' : '') + (e.altKey ? 'alt+' : '') + (e.shiftKey ? 'shift+' : '') + (e.metaKey ? 'meta+' : '')
+                + (e.key.length === 1 ? e.key.toLowerCase() : e.key);
+            if (!window.pbBoundKeys || window.pbBoundKeys.indexOf(norm) < 0) return;
+            e.preventDefault();
+            invokeCSharpAction(JSON.stringify({ type: 'key', key: e.key, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey }));
         });
         document.getElementById('pb-content').addEventListener('click', function (e) {
             var span = e.target.closest ? e.target.closest('.pb-highlight') : null;
@@ -780,30 +764,65 @@ public partial class BookReaderScreen : UserControl
     }
 
     /// <summary>
-    /// Real gap found via manual testing 2026-09-02: the reader had no keyboard page-turning at all
-    /// (unlike the comic reader's fully configurable Left/Right key bindings) - only Ctrl+Shift+W was
-    /// ever wired. Right/PageDown/Space advance, Left/PageUp go back, handled here only for when focus
-    /// is on chrome/RootGrid rather than inside the WebView - see <see cref="HighlightScript"/>'s own
-    /// <c>keydown</c> listener for the WebView-focused case (same split Ctrl+Shift+W already needed).
+    /// The book reader's shortcuts, as input-service actions in the BookReader scope (docs/superpowers/specs/2026-10-03-input-service-design.md section 9): Right/PageDown/Space and
+    /// Left/PageUp turn pages (a real gap found via manual testing 2026-09-02 - the reader had no keyboard page-turning at all), Ctrl+Shift+W announces the reading position. This
+    /// is the Avalonia side (focus on the chrome); keys typed while the WebView has focus arrive through the page's own forwarder as a "key" message and reach the same handler.
     /// </summary>
-    private async void OnRootKeyDown(object? sender, KeyEventArgs e)
+    private async void OnBookInputAction(InputActionEventArgs e)
     {
-        if (DataContext is not BookReaderScreenViewModel vm)
+        if (_viewModel is not { } vm)
         {
             return;
         }
 
-        vm.NotifyKeyActivity();
-
-        if (e.Key is Key.Right or Key.PageDown or Key.Space)
+        switch (e.Action.Id)
         {
-            e.Handled = true;
-            await NextPageAsync();
+            case InputActionIds.BookNextPage:
+                e.Handled = true;
+                vm.NotifyKeyActivity();
+                await NextPageAsync();
+                break;
+            case InputActionIds.BookPreviousPage:
+                e.Handled = true;
+                vm.NotifyKeyActivity();
+                await PreviousPageAsync();
+                break;
+            case InputActionIds.BookAnnouncePosition:
+                e.Handled = true;
+                vm.NotifyKeyActivity();
+                vm.AnnounceReadingPositionCommand.Execute(null);
+                break;
         }
-        else if (e.Key is Key.Left or Key.PageUp)
+    }
+
+    /// <summary>Any key counts as activity for the chrome's idle timer, whether or not it is a shortcut (the shortcuts note it themselves, since the service handles them before this runs).</summary>
+    private void OnRootKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is BookReaderScreenViewModel vm)
         {
-            e.Handled = true;
-            await PreviousPageAsync();
+            vm.NotifyKeyActivity();
+        }
+    }
+
+    /// <summary>The keys the web page must swallow and forward: every keyboard binding of the book reader's actions, in the page's own notation (<see cref="WebKeyMap"/>), as a JSON array.</summary>
+    private string BoundKeysJson()
+    {
+        var bindings = _input.Actions.All
+            .Where(info => info.Scope.Name == InputScope.BookReader.Name)
+            .SelectMany(info => _input.GetBindings(info.Action));
+        return JsonSerializer.Serialize(WebKeyMap.NormalizedKeysFor(bindings));
+    }
+
+    /// <summary>Tells the page which keys are bound now, after a remap in Preferences (a chapter already on screen would otherwise keep the old set until the next page load).</summary>
+    private async void PushBoundKeys()
+    {
+        try
+        {
+            await ReaderWebView.InvokeScript($"window.pbBoundKeys = {BoundKeysJson()};");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or NotSupportedException)
+        {
+            // No page is loaded yet; the next chapter's page carries the current set in its own markup.
         }
     }
 

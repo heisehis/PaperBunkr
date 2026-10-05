@@ -25,6 +25,9 @@ public sealed partial class MergeSeriesCandidate : ObservableObject
 
     public IBrush? CoverBrush { get; init; }
 
+    /// <summary>The cover cache key of the series' cover issue (the one its Library card shows), so the row can show the real cover; null when no issue has one.</summary>
+    public string? CoverKey { get; init; }
+
     [ObservableProperty]
     private bool _isTarget;
 }
@@ -86,6 +89,14 @@ public sealed partial class MergeSeriesScreenViewModel : ViewModelBase
         using var context = _contextFactory();
         var series = context.Series.Where(s => seriesIds.Contains(s.Id)).ToList();
         var issues = context.Issues.Where(i => seriesIds.Contains(i.SeriesId)).ToList();
+        string? CoverKeyOf(Paperbunkr.Data.Entities.Series s)
+        {
+            // The same rule the Library card uses: the chosen cover issue, else the first by number.
+            var cover = issues.FirstOrDefault(i => i.Id == s.CoverIssueId && i.SeriesId == s.Id)
+                ?? issues.Where(i => i.SeriesId == s.Id).OrderByNumber().FirstOrDefault();
+            return cover is null ? null : CoverFingerprint.Stem(cover.Id, cover.FilePath, cover.FileSize);
+        }
+
         _keysBySeries = issues.GroupBy(i => i.SeriesId)
             .ToDictionary(g => g.Key, g => g.Select(i => (i.EffectiveNumber(), i.EffectiveVolume())).ToHashSet());
 
@@ -99,6 +110,7 @@ public sealed partial class MergeSeriesScreenViewModel : ViewModelBase
                 Name = s.Name,
                 Detail = detail,
                 IssueCount = count,
+                CoverKey = CoverKeyOf(s),
                 CoverBrush = covers?.GetValueOrDefault(s.Id) ?? SeriesCardSample.CoverBrushFor(s.Name),
             };
             candidate.PropertyChanged += OnCandidateChanged;

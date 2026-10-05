@@ -7,6 +7,8 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
+using System.Collections.Generic;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Views;
 
@@ -22,10 +24,45 @@ public partial class BooksScreen : UserControl
     private ItemsControl? _lastCardList;
     private int _lastCardIndex;
 
+    private readonly AttachedInputRegistration _screenInput;
+
+    /// <summary>The input service this screen's actions arrive through: the application's, unless a test supplies its own.</summary>
+    public IInputService InputService
+    {
+        get => _screenInput.Service;
+        set => _screenInput.Service = value;
+    }
+
+    private bool RunListLayoutCommand(Func<BooksScreenViewModel, System.Windows.Input.ICommand> command)
+    {
+        if (DataContext is not BooksScreenViewModel vm)
+        {
+            return false;
+        }
+
+        command(vm).Execute(null);
+        return true;
+    }
+
     public BooksScreen()
     {
         InitializeComponent();
+        _screenInput = ScreenInput.Attach(this, InputScope.Books, new Dictionary<string, Func<bool>>
+        {
+            [InputActionIds.FocusSearch] = () => ScreenInput.FocusTextBox(this, "BooksSearchBox"),
+            [InputActionIds.ListOptions] = () => RunListLayoutCommand(vm => vm.ListLayouts.ShowListOptionsCommand),
+            [InputActionIds.SaveListLayout] = () => RunListLayoutCommand(vm => vm.ListLayouts.SaveLayoutAsCommand),
+            [InputActionIds.EditListLayouts] = () => RunListLayoutCommand(vm => vm.ListLayouts.ShowEditLayoutsCommand),
+
+            // Reloading rebuilds the collections the focused card lives in, so the shortcuts that change them run after the key press has finished routing.
+            [InputActionIds.Refresh] = () => DataContext is BooksScreenViewModel vm && ScreenInput.Deferred(vm.LoadFromDatabase),
+            [InputActionIds.BooksSelectAll] = () => DataContext is BooksScreenViewModel vm && ScreenInput.Deferred(() => vm.SelectAllVisibleCommand.Execute(null)),
+            [InputActionIds.BooksEditSelection] = () => DataContext is BooksScreenViewModel { HasSelection: true } vm && ScreenInput.Deferred(() => vm.EditSelectionCommand.Execute(null)),
+            [InputActionIds.BooksDeleteSelection] = () => DataContext is BooksScreenViewModel { HasSelection: true } vm && ScreenInput.Deferred(() => vm.DeleteSelectionCommand.Execute(null)),
+        });
         _focus = new FocusReclaimer(this, () => ActiveCardList() is not null, FocusFallback);
+        // Arrows a card did not use (at the edge of its grid, or from the toolbar) move on to the nearest control that way: across the series groups and between the toolbar and the grid.
+        KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
         DataContextChanged += OnDataContextChanged;
         AddHandler(GotFocusEvent, (_, _) =>
         {

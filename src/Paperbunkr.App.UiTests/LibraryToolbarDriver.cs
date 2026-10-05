@@ -4,10 +4,9 @@ using FlaUI.Core.Tools;
 namespace Paperbunkr.App.UiTests;
 
 /// <summary>
-/// Helpers for driving Library's Phase 4b toolbar (docs/superpowers/specs/2026-08-27-library-
-/// browsing-4b-toolbar-rework-design.md): the Filter/Sort/Group/Display pills collapsed into one
-/// "View &amp; Sort" tabbed popup, with live sort/group state surfaced as removable chips instead of
-/// on the buttons themselves.
+/// Helpers for driving the Library toolbar: the Covers / List / Details switch and the Display button in row 1, and the
+/// "Sort:" and "Group:" chips in row 2, each of which opens its own list (the three-tab "View &amp; Sort" popup was split up
+/// on 2026-10-04).
 /// </summary>
 internal static class LibraryToolbarDriver
 {
@@ -29,52 +28,35 @@ internal static class LibraryToolbarDriver
     {
         Invoke(window, "LibraryRailButton");
         // Wait for the toolbar to actually render before the caller starts poking it.
-        Find(window, "LibraryViewSortButton");
+        Find(window, "LibraryDisplayButton");
     }
 
-    /// <summary>Opens the View &amp; Sort popup (if closed) and switches it to the given tab.</summary>
-    private static void OpenViewSortTab(Window window, string tabId)
+    /// <summary>Clicks a row-1 view switch: <c>LibraryViewSwitch_Covers</c>, <c>_List</c> or <c>_Details</c>.</summary>
+    public static void SelectViewMode(Window window, string switchId) => Invoke(window, switchId);
+
+    /// <summary>Opens the popup behind <paramref name="chipId"/> unless the option is already on screen, then picks it.</summary>
+    private static void SelectFromChip(Window window, string chipId, string optionId)
     {
-        if (TryFind(window, tabId) is null)
+        if (TryFind(window, optionId) is null)
         {
-            Invoke(window, "LibraryViewSortButton");
+            Invoke(window, chipId);
         }
 
-        Invoke(window, tabId);
-    }
-
-    public static void OpenViewTab(Window window) => OpenViewSortTab(window, "LibraryViewSortTab_View");
-    public static void OpenSortTab(Window window) => OpenViewSortTab(window, "LibraryViewSortTab_Sort");
-    public static void OpenGroupTab(Window window) => OpenViewSortTab(window, "LibraryViewSortTab_Group");
-
-    public static void SelectViewMode(Window window, string optionId)
-    {
-        OpenViewTab(window);
         Invoke(window, optionId);
     }
 
-    public static void SelectSort(Window window, string optionId)
-    {
-        OpenSortTab(window);
-        Invoke(window, optionId);
-    }
+    public static void SelectSort(Window window, string optionId) => SelectFromChip(window, "LibrarySortChip", optionId);
 
-    public static void SelectGroup(Window window, string optionId)
-    {
-        OpenGroupTab(window);
-        Invoke(window, optionId);
-    }
+    public static void SelectGroup(Window window, string optionId) => SelectFromChip(window, "LibraryGroupChip", optionId);
 
-    /// <summary>The "Sorted: …" chip's accessible name, retrying until it appears (a non-default
-    /// sort makes it visible). Throws if it never shows.</summary>
+    /// <summary>The "Sort: …" chip's accessible name. The chip is always shown.</summary>
     public static string SortChipText(Window window) => Find(window, "LibrarySortChip").Name;
 
-    /// <summary>The "Grouped: …" chip's accessible name, retrying until it appears.</summary>
+    /// <summary>The "Group: …" chip's accessible name ("Group: None" when ungrouped).</summary>
     public static string GroupChipText(Window window) => Find(window, "LibraryGroupChip").Name;
 
-    /// <summary>The View &amp; Sort button's accessible name carries the active display mode (the
-    /// visible label stays "View &amp; Sort"; the chips carry sort/group state).</summary>
-    public static string ViewSortButtonName(Window window) => Find(window, "LibraryViewSortButton").Name;
+    /// <summary>The Display button's accessible name, which carries the active display mode ("Display options: List").</summary>
+    public static string DisplayButtonName(Window window) => Find(window, "LibraryDisplayButton").Name;
 
     // --- Saved Workspaces (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md) ---
 

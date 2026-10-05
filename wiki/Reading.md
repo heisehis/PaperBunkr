@@ -31,7 +31,8 @@ The reader is mostly full-bleed page. Move the mouse (or tap) to reveal the **ch
   key, and `PageUp` / `Shift+Space` / previous-track. A presentation clicker works with no setup.
 - **Mouse side buttons:** the back button goes to the previous page and the forward button to the
   next (in the continuous modes they scroll a screen). A right or middle click never turns the page.
-- **Game controller** (Xbox and other XInput pads, while the reader is open): **A** or the right
+- **Game controller** (Xbox and other XInput pads; the rest of the app can be driven by pad too, see
+  [Keyboard Shortcuts](Keyboard-Shortcuts)). In the reader: **A** or the right
   bumper = next page, **B** or the left bumper = previous, D-pad / left stick = arrows, right
   stick pans or scrolls, triggers zoom, **Y** toggles the toolbar, **X** fullscreen, **Start**
   opens the command palette, **Back** leaves the reader.

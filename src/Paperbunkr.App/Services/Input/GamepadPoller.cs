@@ -12,9 +12,10 @@ public interface IGamepadSource
 }
 
 /// <summary>
-/// Polls a controller about 60 times a second and hands each non-empty <see cref="GamepadFrame"/> to the reader (docs/superpowers/specs/2026-09-25-comic-reader-reach-design.md
-/// section 3). It only runs between <see cref="Start"/> and <see cref="Stop"/>, which the reader screen calls while it is visible and its window is active, and while no
-/// controller is connected it only probes the four slots every two seconds, so a machine without one pays almost nothing.
+/// Polls a controller about 60 times a second and hands every snapshot to the input service (docs/superpowers/specs/2026-10-03-input-service-design.md §5.5), which does the edge
+/// detection, key-repeat and binding lookup. Every poll is delivered while a controller is connected, not just the ones with something pressed: releasing a button has to reach
+/// the service for the next press to count as a new one. It only runs between <see cref="Start"/> and <see cref="Stop"/>, which the owning screen calls while it is visible and
+/// its window is active, and while no controller is connected it only probes the four slots every two seconds, so a machine without one pays almost nothing.
 /// </summary>
 public sealed class GamepadPoller
 {
@@ -24,17 +25,21 @@ public sealed class GamepadPoller
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(16);
 
     private readonly IGamepadSource _source;
-    private readonly Action<GamepadFrame, TimeSpan> _onFrame;
-    private readonly GamepadMapper _mapper = new();
+    private readonly Action<GamepadState, TimeSpan> _onState;
+    private readonly Action? _onReset;
     private DispatcherTimer? _timer;
     private long _lastTimestamp;
     private int _slot = -1;
     private TimeSpan _sinceProbe = ProbeInterval;
 
-    public GamepadPoller(IGamepadSource source, Action<GamepadFrame, TimeSpan> onFrame)
+    /// <param name="source">Where snapshots come from.</param>
+    /// <param name="onState">Receives each snapshot with the time since the previous one.</param>
+    /// <param name="onReset">Called when the controller disappears or the poller stops, so held buttons are forgotten.</param>
+    public GamepadPoller(IGamepadSource source, Action<GamepadState, TimeSpan> onState, Action? onReset = null)
     {
         _source = source;
-        _onFrame = onFrame;
+        _onState = onState;
+        _onReset = onReset;
     }
 
     public bool IsRunning { get; private set; }
@@ -65,7 +70,7 @@ public sealed class GamepadPoller
 
         IsRunning = false;
         _timer?.Stop();
-        _mapper.Reset();
+        _onReset?.Invoke();
         _slot = -1;
     }
 
@@ -99,7 +104,7 @@ public sealed class GamepadPoller
                 if (_source.TryGetState(slot, out _))
                 {
                     _slot = slot;
-                    _mapper.Reset();
+                    _onReset?.Invoke();
                     break;
                 }
             }
@@ -113,15 +118,11 @@ public sealed class GamepadPoller
         if (!_source.TryGetState(_slot, out var state))
         {
             _slot = -1;
-            _mapper.Reset();
+            _onReset?.Invoke();
             _sinceProbe = TimeSpan.Zero;
             return;
         }
 
-        var frame = _mapper.Update(state, elapsed);
-        if (frame.HasAny)
-        {
-            _onFrame(frame, elapsed);
-        }
+        _onState(state, elapsed);
     }
 }

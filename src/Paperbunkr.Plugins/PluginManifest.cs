@@ -121,6 +121,13 @@ public sealed class CommandManifestEntry
     public bool Enabled { get; set; } = true;
 
     /// <summary>
+    /// Optional default keyboard shortcut for a <c>Library</c>-hook command, e.g. <c>Ctrl+Alt+K</c> (Plugin API 4.3). Written as the app's shortcut text: modifiers <c>Ctrl</c>, <c>Alt</c>, <c>Shift</c> joined to a key
+    /// name with <c>+</c>. Absent or unparseable means the host's own default (CE gives the first twelve enabled commands Ctrl+Shift+F1 to F12). The user can always change it in Preferences &gt; Keyboard Shortcuts.
+    /// </summary>
+    [XmlAttribute("shortcut")]
+    public string? Shortcut { get; set; }
+
+    /// <summary>
     /// docs/superpowers/specs/2026-08-28-plugin-api-v3-data-manager-design.md §5 - when true, this
     /// command's <c>IMetadataWriter</c> calls are structurally required to obtain an affirmative
     /// <c>IApplication.AskQuestion</c> answer before any DB write. Default false.

@@ -67,6 +67,12 @@ public partial class SmartScreenViewModel : ViewModelBase
 
     private int? _activeSmartListId;
     private SmartList? _workingList;
+
+    /// <summary>A user list is open for editing (a system list is read-only), so Ctrl+S has something to save.</summary>
+    public bool CanSaveList => _workingList is not null && !IsReadOnly;
+
+    /// <summary>Any list is open, so Ctrl+D has something to duplicate.</summary>
+    public bool CanDuplicateList => _workingList is not null;
     private IReadOnlyList<VirtualTagOption> _virtualTagOptions = [];
 
     public ObservableCollection<SmartListSummary> BuiltInLists { get; }

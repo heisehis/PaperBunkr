@@ -139,11 +139,8 @@
     <Style Selector="Button.spotlightPanel:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
     </Style>
-    <Style Selector="Button.spotlightPanel:focus-visible">
-        <Setter Property="BorderThickness" Value="2" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-        <Setter Property="ClipToBounds" Value="False" />
-    </Style>
+    <!-- Keyboard focus: the app-wide glow ring (Primitives.axaml) draws around the panel. An inner border used to be added here as well, which inset the cover by its thickness and left a dark gap between the
+         two. The band clips at its own edge, and the panels sit inside it, so the ring has room. -->
 
     <!-- Slivers: darkened, full colour. The shade lifts on hover and is gone once the panel opens. -->
     <Style Selector="Border.sliverShade">

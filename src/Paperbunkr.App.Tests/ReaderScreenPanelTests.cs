@@ -11,6 +11,7 @@ using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Tests;
 
@@ -108,9 +109,10 @@ public class ReaderScreenPanelTests : IDisposable
 
     private (Window Window, ReaderScreenViewModel Vm, PageCanvas Canvas) Open(bool smartDoubleClick = true, bool bigPages = false)
     {
-        var vm = new ReaderScreenViewModel(goBack: () => { }) { PanelAnalyzer = (_, _) => Grid };
+        var vm = new ReaderScreenViewModel(goBack: () => { }, ReaderTestInput.Create()) { PanelAnalyzer = (_, _) => Grid };
         var screen = CreateScreen(vm);
         var window = new Window { Width = 900, Height = 700, Content = screen };
+        InputHost.Attach(window, vm.Input);   // what MainWindow does for the app
         window.Show();
         vm.LoadIssue(bigPages ? _bigIssueId : _issueId);
         vm.SmartDoubleClickZoom = smartDoubleClick;
@@ -844,9 +846,10 @@ public class ReaderScreenPanelTests : IDisposable
     public void TheBackButtonAppearsAndLeavesTheReader_WithOrWithoutGuidedView(bool guided)
     {
         int left = 0;
-        var vm = new ReaderScreenViewModel(goBack: () => left++) { PanelAnalyzer = (_, _) => Grid };
+        var vm = new ReaderScreenViewModel(goBack: () => left++, ReaderTestInput.Create()) { PanelAnalyzer = (_, _) => Grid };
         var screen = CreateScreen(vm);
         var window = new Window { Width = 900, Height = 700, Content = screen };
+        InputHost.Attach(window, vm.Input);   // what MainWindow does for the app
         window.Show();
         try
         {

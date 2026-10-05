@@ -18,6 +18,7 @@ namespace Paperbunkr.App.Tests;
 /// <see cref="AvaloniaTestCollection"/> since theme selection touches Application resources.
 /// </summary>
 [Collection(nameof(AvaloniaTestCollection))]
+[Trait("Speed", "Slow")]
 public class PreferencesScreenViewModelTests : IDisposable
 {
     private readonly string _originalInstalledDirectory;
@@ -246,11 +247,11 @@ public class PreferencesScreenViewModelTests : IDisposable
     {
         var sections = new LibraryHealthSections();
 
-        Assert.Equal(10, sections.All.Count);
-        Assert.Equal(10, sections.All.Select(s => s.Anchor).Distinct().Count());
-        Assert.Equal(10, sections.All.Select(s => s.Key).Distinct().Count());
+        Assert.Equal(11, sections.All.Count);
+        Assert.Equal(11, sections.All.Select(s => s.Anchor).Distinct().Count());
+        Assert.Equal(11, sections.All.Select(s => s.Key).Distinct().Count());
         Assert.All(new[] { sections.Missing, sections.EmptyRows, sections.RecentlyRemoved }, s => Assert.Equal(Paperbunkr.App.Models.LibraryHealthTab.Files, s.Tab));
-        Assert.Equal(7, sections.All.Count(s => s.Tab == Paperbunkr.App.Models.LibraryHealthTab.Review));
+        Assert.Equal(8, sections.All.Count(s => s.Tab == Paperbunkr.App.Models.LibraryHealthTab.Review));
         Assert.Same(sections.Duplicates, sections.Find("duplicates"));
         Assert.Same(sections.Duplicates, sections.Find("library.healthDuplicates"));
         Assert.Null(sections.Find("library.health"));
@@ -273,14 +274,15 @@ public class PreferencesScreenViewModelTests : IDisposable
         var scanner = new LibraryFolderScanner(() => new PaperbunkrDbContext(_dbOptions));
         var fileAssociationService = new FileAssociationService(shell ?? new FakeShellFileAssociation());
         var backupService = new BackupService(() => new PaperbunkrDbContext(_dbOptions));
-        var keyBindingService = new KeyBindingService(() => new PaperbunkrDbContext(_dbOptions));
+        var input = new Paperbunkr.App.Services.Input.InputService(
+            Paperbunkr.App.Services.Input.InputActionCatalog.CreateWithCoreActions(), new Paperbunkr.App.Services.Input.MemoryKeymapStore());
         return new PreferencesScreenViewModel(
             themeService,
             filePicker ?? new NoOpFilePicker(),
             scanner,
             fileAssociationService,
             backupService,
-            keyBindingService,
+            input,
             showToast ?? ((_, _) => { }),
             needsReview ?? new NeedsReviewViewModel(_ => { }),
             new PluginScreenViewModel(filePicker ?? new NoOpFilePicker(), new FakeDialogService()),
@@ -438,6 +440,18 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.RequestScrollToAnchor("library.comicFolders");
 
         Assert.Equal("library.comicFolders", anchor);
+    }
+
+    [Fact]
+    public void RequestScrollToAnchor_OnAShortcutGroup_SelectsItsFirstAction_AndClearsTheShortcutFilters()
+    {
+        var vm = CreateViewModel();
+        vm.Shortcuts.SearchText = "rotate";
+
+        vm.RequestScrollToAnchor("shortcuts.zoomFit");
+
+        Assert.Equal(string.Empty, vm.Shortcuts.SearchText);
+        Assert.Same(vm.Shortcuts.Groups.First(g => g.Tag == "shortcuts.zoomFit").Rows[0], vm.Shortcuts.SelectedRow);
     }
 
     // ===================== Connections list+dialog (docs/superpowers/specs/2026-09-06-connections-
@@ -1142,6 +1156,46 @@ public class PreferencesScreenViewModelTests : IDisposable
         {
             Paperbunkr.App.Services.CosmeticThumbnailSettings.BindingSpine = oldSpine;
             Paperbunkr.App.Services.CosmeticThumbnailSettings.ProgressRing = oldRing;
+        }
+    }
+
+    /// <summary>Fade in, Tooltips and Smooth scrolling moved here from the Library's popup (2026-10-04): they load from
+    /// AppSettings, persist, and push to the statics the Library reads.</summary>
+    [Fact]
+    public void FadeInTooltipsAndSmoothScrolling_Load_Persist_AndUpdateTheStaticCaches()
+    {
+        bool oldFade = Paperbunkr.App.Services.CosmeticThumbnailSettings.FadeInThumbnails;
+        bool oldTips = Paperbunkr.App.Services.CosmeticThumbnailSettings.ShowToolTips;
+        bool oldSmooth = Paperbunkr.App.Services.SmoothScrollSettings.Enabled;
+        try
+        {
+            var vm = CreateViewModel();
+            vm.EnsureLoaded();
+            Assert.True(vm.FadeInThumbnails);
+            Assert.False(vm.ShowToolTips);
+            Assert.True(vm.SmoothScrolling);
+
+            vm.FadeInThumbnails = false;
+            vm.ShowToolTips = true;
+            vm.SmoothScrolling = false;
+
+            using (var context = new PaperbunkrDbContext(_dbOptions))
+            {
+                var settings = context.GetOrCreateAppSettings();
+                Assert.False(settings.FadeInThumbnails);
+                Assert.True(settings.ShowToolTips);
+                Assert.False(settings.SmoothScrolling);
+            }
+
+            Assert.False(Paperbunkr.App.Services.CosmeticThumbnailSettings.FadeInThumbnails);
+            Assert.True(Paperbunkr.App.Services.CosmeticThumbnailSettings.ShowToolTips);
+            Assert.False(Paperbunkr.App.Services.SmoothScrollSettings.Enabled);
+        }
+        finally
+        {
+            Paperbunkr.App.Services.CosmeticThumbnailSettings.FadeInThumbnails = oldFade;
+            Paperbunkr.App.Services.CosmeticThumbnailSettings.ShowToolTips = oldTips;
+            Paperbunkr.App.Services.SmoothScrollSettings.Enabled = oldSmooth;
         }
     }
 
@@ -2313,282 +2367,6 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.True(context.GetOrCreateAppSettings().DefaultAutoRotate);
-    }
-
-    [Fact]
-    public void EnsureLoaded_PopulatesKeyBindings_OneRowPerRegisteredCommand()
-    {
-        var vm = CreateViewModel();
-
-        vm.EnsureLoaded();
-
-        int total = vm.NavigationKeyBindings.Count + vm.ZoomFitKeyBindings.Count + vm.DisplayKeyBindings.Count;
-        Assert.Equal(KeyboardCommandRegistry.Commands.Count, total);
-        Assert.Contains(vm.NavigationKeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft && r.BoundKeys.Single().Gesture == new KeyGesture(Key.Left));
-        Assert.Contains(vm.NavigationKeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight && r.BoundKeys.Single().Gesture == new KeyGesture(Key.Right));
-    }
-
-    /// <summary>Replaces a row's sole default binding with a new one via Add-then-Remove (docs/superpowers/specs/2026-09-07-keyboard-shortcuts-redesign-design.md - there's no single "replace" command since a row can hold more than one gesture).</summary>
-    private static void ReplaceBinding(KeyBindingRowViewModel row, KeyOption newOption)
-    {
-        var oldOption = row.BoundKeys.Single();
-        row.AddKeyCommand.Execute(newOption);
-        row.RemoveKeyCommand.Execute(oldOption);
-    }
-
-    /// <summary>docs/superpowers/specs/2026-08-25-reader-chrome-design.md - a genuine new gap closed, not a restyle: import/export never existed before this (confirmed via grep, zero hits anywhere in src/).</summary>
-    [Fact]
-    public async Task ExportThenImportKeyBindings_RoundTripsARemappedBinding()
-    {
-        string path = Path.Combine(Path.GetTempPath(), $"paperbunkr_keybindings_test_{Guid.NewGuid():N}.json");
-        try
-        {
-            var vm = CreateViewModel(new FileRoundTripPicker { SavePathToReturn = path, OpenPathToReturn = path });
-            vm.EnsureLoaded();
-            var row = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-            ReplaceBinding(row, row.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
-
-            await vm.ExportKeyBindingsCommand.ExecuteAsync(null);
-
-            // A second, independently-loaded VM (same underlying database) picks up the exported
-            // file and re-applies it - proves the file round-trips the real gesture, not just that
-            // the in-memory VM still remembers its own change.
-            using (var context = new PaperbunkrDbContext(_dbOptions))
-            {
-                context.KeyBindings.Single(k => k.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft).Key = "K";
-                context.SaveChanges();
-            }
-
-            await vm.ImportKeyBindingsCommand.ExecuteAsync(null);
-
-            var reloaded = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-            Assert.Equal(new KeyGesture(Key.J), reloaded.BoundKeys.Single().Gesture);
-        }
-        finally
-        {
-            if (File.Exists(path)) File.Delete(path);
-        }
-    }
-
-    /// <summary>Per-entry tolerance, not all-or-nothing (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - mirrors KeyBindingService.GetKeys's own catch (ArgumentException) fallback philosophy, applied at import time.</summary>
-    [Fact]
-    public async Task ImportKeyBindings_WithOneCorruptEntry_StillAppliesTheValidOnes()
-    {
-        string path = Path.Combine(Path.GetTempPath(), $"paperbunkr_keybindings_corrupt_test_{Guid.NewGuid():N}.json");
-        try
-        {
-            File.WriteAllText(path, $$"""
-                [
-                    {"CommandId": "{{KeyboardCommandRegistry.ReaderPageTurnLeft}}", "Gesture": "J"},
-                    {"CommandId": "{{KeyboardCommandRegistry.ReaderPageTurnRight}}", "Gesture": "not a real gesture"}
-                ]
-                """);
-            var vm = CreateViewModel(new FileRoundTripPicker { OpenPathToReturn = path });
-            vm.EnsureLoaded();
-
-            await vm.ImportKeyBindingsCommand.ExecuteAsync(null);
-
-            var left = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-            Assert.Equal(new KeyGesture(Key.J), left.BoundKeys.Single().Gesture);
-            // The corrupt entry didn't throw and didn't block the valid one - right still holds its default.
-            var right = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight);
-            Assert.Equal(new KeyGesture(Key.Right), right.BoundKeys.Single().Gesture);
-        }
-        finally
-        {
-            if (File.Exists(path)) File.Delete(path);
-        }
-    }
-
-    /// <summary>Genuine multi-binding, not a replace (docs/superpowers/specs/2026-09-07-keyboard-shortcuts-redesign-design.md) - adding a second gesture keeps the first, and both survive a reload.</summary>
-    [Fact]
-    public void AddKeyCommand_SecondGesture_BothPersistAndBothReturnedOnReload()
-    {
-        var vm = CreateViewModel();
-        vm.EnsureLoaded();
-        var row = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-
-        row.AddKeyCommand.Execute(row.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
-
-        Assert.Equal(2, row.BoundKeys.Count);
-        Assert.Contains(row.BoundKeys, k => k.Gesture == new KeyGesture(Key.Left));
-        Assert.Contains(row.BoundKeys, k => k.Gesture == new KeyGesture(Key.J));
-
-        var reloadedVm = CreateViewModel();
-        reloadedVm.EnsureLoaded();
-        var reloadedRow = reloadedVm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-        Assert.Equal(2, reloadedRow.BoundKeys.Count);
-        Assert.Contains(reloadedRow.BoundKeys, k => k.Gesture == new KeyGesture(Key.Left));
-        Assert.Contains(reloadedRow.BoundKeys, k => k.Gesture == new KeyGesture(Key.J));
-    }
-
-    [Fact]
-    public void RemoveKeyCommand_LastRemainingGesture_NoOps()
-    {
-        var vm = CreateViewModel();
-        vm.EnsureLoaded();
-        var row = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-        var onlyOption = row.BoundKeys.Single();
-
-        row.RemoveKeyCommand.Execute(onlyOption);
-
-        Assert.Single(row.BoundKeys);
-        Assert.Equal(onlyOption, row.BoundKeys.Single());
-    }
-
-    [Fact]
-    public void ChangingKeyBindingRow_PersistsThroughKeyBindingService()
-    {
-        var vm = CreateViewModel();
-        vm.EnsureLoaded();
-        var row = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-
-        ReplaceBinding(row, row.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
-
-        using var context = new PaperbunkrDbContext(_dbOptions);
-        Assert.Equal("J", context.KeyBindings.Single(k => k.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft).Key);
-    }
-
-    [Fact]
-    public void TwoRowsSharingAGesture_BothMarkedIsConflicted_AndClearingOneUnmarksBoth()
-    {
-        var vm = CreateViewModel();
-        vm.EnsureLoaded();
-        var left = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-        var right = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight);
-
-        ReplaceBinding(left, left.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
-        ReplaceBinding(right, right.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
-
-        // RemoveKeyCommand (inside ReplaceBinding) defers BoundKeys.Remove() via
-        // Dispatcher.UIThread.Post (see its own doc comment). This test chains a second
-        // ReplaceBinding onto `right` below, which needs right.BoundKeys back down to one entry
-        // first - pump the queue here rather than in the shared helper, since most other
-        // ReplaceBinding call sites don't chain and pumping there destabilized them (drains
-        // unrelated pending jobs too).
-        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-
-        Assert.True(vm.HasKeyBindingConflictError);
-        Assert.True(left.IsConflicted);
-        Assert.True(right.IsConflicted);
-
-        // Resolving it clears the error and both rows' flags again.
-        ReplaceBinding(right, right.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.K)));
-        TestDispatcher.Drain(); // ReplaceBinding's RemoveKey is deferred one tick, same as the pump above
-        Assert.False(vm.HasKeyBindingConflictError);
-        Assert.False(left.IsConflicted);
-        Assert.False(right.IsConflicted);
-    }
-
-    [Fact]
-    public void RowConflictingWithTwoOthers_AllThreeMarkedIsConflicted()
-    {
-        var vm = CreateViewModel();
-        vm.EnsureLoaded();
-        var pageTurnLeft = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-        var panLeft = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPanLeft);
-        var scrollLeft = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderScrollLeft);
-
-        // These three default to Left across three mutually-exclusive-at-runtime contexts, so they
-        // don't conflict with each other by default (see FreshLoad_NoConflictError... below). Adding
-        // an Always-context gesture (ZoomIn) to all three forces genuine cross-context conflicts:
-        // ZoomIn's Always context collides with each of the other three's own context individually.
-        var zoomIn = vm.ZoomFitKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderZoomIn);
-        ReplaceBinding(zoomIn, zoomIn.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.Left)));
-
-        Assert.True(vm.HasKeyBindingConflictError);
-        Assert.True(zoomIn.IsConflicted);
-        Assert.True(pageTurnLeft.IsConflicted);
-        Assert.True(panLeft.IsConflicted);
-        Assert.True(scrollLeft.IsConflicted);
-    }
-
-    [Fact]
-    public void FreshLoad_NoConflictError_DespitePagedUnzoomedPagedZoomedAndContinuousSharingDefaultLeft()
-    {
-        // PageTurnLeft/PanLeft/ScrollLeft all default to Left across three different, mutually
-        // exclusive-at-runtime contexts (PagedUnzoomed/PagedZoomed/Continuous) - must not flag.
-        var vm = CreateViewModel();
-
-        vm.EnsureLoaded();
-
-        Assert.False(vm.HasKeyBindingConflictError);
-    }
-
-    [Fact]
-    public void SameContextCollision_SetsConflictError()
-    {
-        var vm = CreateViewModel();
-        vm.EnsureLoaded();
-        var panRight = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPanRight);
-
-        // PanLeft (also PagedZoomed) still sits at its default Left.
-        ReplaceBinding(panRight, panRight.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.Left)));
-
-        Assert.True(vm.HasKeyBindingConflictError);
-    }
-
-    [Fact]
-    public void AlwaysContextCollidingWithModeSpecificCommand_SetsConflictError()
-    {
-        var vm = CreateViewModel();
-        vm.EnsureLoaded();
-        var zoomIn = vm.ZoomFitKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderZoomIn);
-
-        // ZoomIn is Always-context - colliding with PageTurnLeft/PanLeft/ScrollLeft (all still at
-        // their default Left) is a real conflict even though those three don't conflict with
-        // each other.
-        ReplaceBinding(zoomIn, zoomIn.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.Left)));
-
-        Assert.True(vm.HasKeyBindingConflictError);
-    }
-
-    [Fact]
-    public void ResetKeyBindingsCommand_RevertsEveryRowToDefault_AndClearsConflictError()
-    {
-        var vm = CreateViewModel();
-        vm.EnsureLoaded();
-        var pageTurnLeft = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-        var pageTurnRight = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight);
-        ReplaceBinding(pageTurnLeft, pageTurnLeft.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
-        ReplaceBinding(pageTurnRight, pageTurnRight.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
-        Assert.True(vm.HasKeyBindingConflictError);
-
-        vm.ResetKeyBindingsCommand.Execute(null);
-
-        Assert.False(vm.HasKeyBindingConflictError);
-        var reloadedLeft = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-        var reloadedRight = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight);
-        Assert.Equal(new KeyGesture(Key.Left), reloadedLeft.BoundKeys.Single().Gesture);
-        Assert.Equal(new KeyGesture(Key.Right), reloadedRight.BoundKeys.Single().Gesture);
-    }
-
-    [Fact]
-    public async Task ImportKeyBindings_MultipleEntriesForSameCommand_AppliesBothAsSeparateBindings()
-    {
-        string path = Path.Combine(Path.GetTempPath(), $"paperbunkr_keybindings_multi_test_{Guid.NewGuid():N}.json");
-        try
-        {
-            File.WriteAllText(path, $$"""
-                [
-                    {"CommandId": "{{KeyboardCommandRegistry.ReaderPageTurnLeft}}", "Gesture": "J"},
-                    {"CommandId": "{{KeyboardCommandRegistry.ReaderPageTurnLeft}}", "Gesture": "K"}
-                ]
-                """);
-            var vm = CreateViewModel(new FileRoundTripPicker { OpenPathToReturn = path });
-            vm.EnsureLoaded();
-
-            await vm.ImportKeyBindingsCommand.ExecuteAsync(null);
-
-            var row = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-            Assert.Equal(2, row.BoundKeys.Count);
-            Assert.Contains(row.BoundKeys, k => k.Gesture == new KeyGesture(Key.J));
-            Assert.Contains(row.BoundKeys, k => k.Gesture == new KeyGesture(Key.K));
-        }
-        finally
-        {
-            if (File.Exists(path)) File.Delete(path);
-        }
     }
 
     [Fact]

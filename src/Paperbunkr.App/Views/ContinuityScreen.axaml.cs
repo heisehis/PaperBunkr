@@ -2,6 +2,8 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Paperbunkr.App.ViewModels;
+using System.Collections.Generic;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Views;
 
@@ -13,11 +15,27 @@ public partial class ContinuityScreen : UserControl
     /// whatever held focus. Falls back to the active view-toggle chip (or the empty prompt's first button).</summary>
     private readonly FocusReclaimer _focus;
 
+    private readonly AttachedInputRegistration _screenInput;
+
+    /// <summary>The input service this screen's actions arrive through: the application's, unless a test supplies its own.</summary>
+    public IInputService InputService
+    {
+        get => _screenInput.Service;
+        set => _screenInput.Service = value;
+    }
+
     public ContinuityScreen()
     {
         InitializeComponent();
+        _screenInput = ScreenInput.Attach(this, InputScope.Continuity, new Dictionary<string, Func<bool>>
+        {
+            [InputActionIds.TabNext] = () => TabStrip.Step(this, 1),
+            [InputActionIds.TabPrevious] = () => TabStrip.Step(this, -1),
+            [InputActionIds.Refresh] = () => DataContext is ContinuityScreenViewModel vm && ScreenInput.Deferred(vm.RefreshSidebar),
+        });
         _focus = new FocusReclaimer(this, () => DataContext is ContinuityScreenViewModel,
             () => FocusReclaimer.FocusFirstButton(this, b => b.Classes.Contains("segToggle") && b.Classes.Contains("on")));
+        KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
         DataContextChanged += OnDataContextChanged;
         PropertyChanged += (_, e) =>
         {
@@ -27,6 +45,9 @@ public partial class ContinuityScreen : UserControl
             }
         };
     }
+
+    /// <summary>Puts keyboard focus inside the screen, on its usual landing (the active view-toggle chip, or the empty prompt's first button): where the sidebar sends focus after an event or continuity is opened from it.</summary>
+    public void FocusEntry() => _focus.Reclaim();
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {

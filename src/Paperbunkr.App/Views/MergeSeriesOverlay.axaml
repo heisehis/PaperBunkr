@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:views="using:Paperbunkr.App.Views"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="460" d:DesignHeight="420"
@@ -40,7 +41,9 @@
                                 <RadioButton GroupName="MergeTarget" IsChecked="{Binding IsTarget}" Padding="10,8"
                                              HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding Name}">
                                     <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <Border Width="28" Height="40" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True" />
+                                        <Border Width="28" Height="40" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True">
+                                            <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                                        </Border>
                                         <StackPanel VerticalAlignment="Center">
                                             <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
                                             <TextBlock Text="{Binding Detail}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />

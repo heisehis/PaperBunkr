@@ -19,8 +19,10 @@ public sealed partial class DetailsColumn : ObservableObject
 
     /// <summary>Fixed pixel width for this column's header cell and every data cell - a hidden
     /// column (<see cref="IsVisible"/> false) is dropped from the horizontal <c>StackPanel</c>
-    /// entirely, so widths only need to line up, not collapse.</summary>
-    public double Width { get; init; } = 150;
+    /// entirely, so widths only need to line up, not collapse. Live since the 2026-10-04 list layouts work: the
+    /// header's resize grip and List Options set it, and <see cref="LibraryScreenViewModel"/> stores it in the list's layout.</summary>
+    [ObservableProperty]
+    private double _width = 150;
 
     [ObservableProperty]
     private bool _isVisible;

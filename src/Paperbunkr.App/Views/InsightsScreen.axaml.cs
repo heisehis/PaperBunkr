@@ -10,6 +10,7 @@ using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data.Metadata;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Views;
 
@@ -31,13 +32,29 @@ public partial class InsightsScreen : UserControl
     // What each chart is currently showing, so a hover can be described (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #16).
     private IReadOnlyList<(string Label, int Value)> _paceBars = Array.Empty<(string, int)>();
     private IReadOnlyList<(string Label, int Value)> _yearBars = Array.Empty<(string, int)>();
+    private IReadOnlyList<(string Label, int Value)> _ratingBars = Array.Empty<(string, int)>();
     private IReadOnlyList<string> _growthMonths = Array.Empty<string>();
     private IReadOnlyList<(string Name, double[] Values)> _growthSeries = Array.Empty<(string, double[])>();
     private ScottPlot.Plottables.VerticalLine? _growthCursor;
 
+    private readonly AttachedInputRegistration _screenInput;
+
+    /// <summary>The input service this screen's actions arrive through: the application's, unless a test supplies its own.</summary>
+    public IInputService InputService
+    {
+        get => _screenInput.Service;
+        set => _screenInput.Service = value;
+    }
+
     public InsightsScreen()
     {
         InitializeComponent();
+        _screenInput = ScreenInput.Attach(this, InputScope.Insights, new Dictionary<string, Func<bool>>
+        {
+            [InputActionIds.TabNext] = () => TabStrip.Step(this, 1),
+            [InputActionIds.TabPrevious] = () => TabStrip.Step(this, -1),
+            [InputActionIds.Refresh] = () => DataContext is InsightsScreenViewModel vm && ScreenInput.Deferred(vm.Refresh),
+        });
         _focus = new FocusReclaimer(this, () => DataContext is InsightsScreenViewModel,
             () => FocusReclaimer.FocusFirstButton(this, b => b.Classes.Contains("tab") && b.Classes.Contains("active")));
         KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
@@ -53,6 +70,7 @@ public partial class InsightsScreen : UserControl
 
         AttachHover(PaceChart, (x, y) => InsightsChartHover.DescribeBar(x, y, _paceBars, "finished"));
         AttachHover(PublicationYearChart, (x, y) => InsightsChartHover.DescribeBar(x, y, _yearBars, "issues"));
+        AttachHover(RatingsChart, (x, y) => InsightsChartHover.DescribeBar(x, y, _ratingBars, "rated"));
         AttachHover(GrowthChart, (x, _) => InsightsChartHover.DescribeGrowth(x, _growthMonths, _growthSeries), moveCursor: true);
 
         // None of these charts have an interactive zoom feature this screen relies on - just hover
@@ -315,7 +333,7 @@ public partial class InsightsScreen : UserControl
     /// redesign's on-screen check: <see cref="RenderCharts"/> never called a rating-chart renderer, so
     /// <c>RatingsChart</c> sat on ScottPlot's default empty-axis range (-10 to 10) regardless of
     /// <see cref="StatsScreenViewModel.HasRatings"/> - a pre-existing bug, not something this redesign
-    /// introduced. No hover wiring, matching <see cref="RenderBurnDown"/>'s own no-hover precedent.</summary>
+    /// introduced. Bars run red to green by score, with hover (2026-10-04).</summary>
     private void RenderRatings(StatsSnapshot snapshot)
     {
         var plot = RatingsChart.Plot;
@@ -323,25 +341,34 @@ public partial class InsightsScreen : UserControl
         InsightsChartTheme.Apply(plot);
 
         var buckets = snapshot.Ratings;
+        _ratingBars = buckets.Select(b => ($"Score {b.Stars}", b.Count)).ToList();
         if (buckets.Count == 0 || buckets.All(b => b.Count == 0))
         {
             RatingsChart.Refresh();
             return;
         }
 
-        var accent = InsightsChartTheme.Accent;
+        // Low scores red -> high scores green (docs/superpowers/specs/2026-10-04-insights-goal-outcomes-and-chart-colour-design.md).
+        // An empty bucket is drawn as a faint stub, so it reads as "none" rather than as a missing bar; the count above a bar is its real value.
+        int peak = buckets.Max(b => b.Count);
         var bars = buckets.Select((b, i) => new ScottPlot.Bar
         {
             Position = i,
-            Value = b.Count,
-            FillColor = accent,
+            Value = b.Count > 0 ? b.Count : peak * 0.04,
+            FillColor = b.Count > 0
+                ? InsightsChartPalette.RampColor(i, buckets.Count)
+                : InsightsChartPalette.RampColor(i, buckets.Count).WithAlpha(0.25),
             LineWidth = 0,
+            ValueLabel = b.Count > 0 ? b.Count.ToString("N0") : string.Empty,
         }).ToList();
 
-        plot.Add.Bars(bars);
+        var barPlot = plot.Add.Bars(bars);
+        barPlot.ValueLabelStyle.ForeColor = InsightsChartTheme.Text;
+        barPlot.ValueLabelStyle.FontSize = 11;
+        // Digits, not "3★": ScottPlot's font has no star glyph, so the stars drew as tofu boxes.
         plot.Axes.Bottom.TickGenerator = new ScottPlot.TickGenerators.NumericManual(
             buckets.Select((_, i) => (double)i).ToArray(),
-            buckets.Select(b => $"{b.Stars}★").ToArray());
+            buckets.Select(b => b.Stars.ToString()).ToArray());
         plot.Axes.Bottom.MajorTickStyle.Length = 0;
         IntegerLeftTicks(plot, buckets.Max(b => b.Count));
         plot.Axes.Margins(bottom: 0, top: 0.15);

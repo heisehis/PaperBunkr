@@ -180,7 +180,7 @@
         <!-- ToolTip.ServiceEnabled (inherited attached property) set once here disables tooltips
              for every button inside while expanded - the label already showing the same text made
              the floating tooltip bubble redundant, found via direct user testing. -->
-        <Border Classes="navRail" Classes.expanded="{Binding IsNavRailExpanded}"
+        <Border x:Name="NavRail" Classes="navRail" Classes.expanded="{Binding IsNavRailExpanded}"
                 DockPanel.Dock="Left" Background="{DynamicResource PbChromeBrush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
                 IsVisible="{Binding !IsInReader}"
@@ -421,6 +421,9 @@
                                                                 <MenuItem Header="Edit…"
                                                                           Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.OpenCollectionPropertiesCommand}"
                                                                           CommandParameter="{Binding}" />
+                                                                <MenuItem Header="Set a goal…"
+                                                                          Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.SetCollectionGoalCommand}"
+                                                                          CommandParameter="{Binding}" />
                                                                 <MenuItem Header="Move up"
                                                                           Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.MoveCollectionUpCommand}"
                                                                           CommandParameter="{Binding}" />
@@ -446,26 +449,8 @@
                             </ItemsControl>
                         </StackPanel>
 
-                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,12" />
-
-                        <TextBlock Classes="sideHeading" Text="CONTENT TYPE" Margin="8,0,8,6" />
-
-                        <ItemsControl x:Name="LibraryContentTypes" ItemsSource="{Binding Library.ContentTypes}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:ContentTypeSummary">
-                                    <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
-                                            Command="{Binding #LibraryContentTypes.((vm:MainViewModel)DataContext).Library.SelectContentTypeCommand}"
-                                            CommandParameter="{Binding}"
-                                            AutomationProperties.AutomationId="{Binding ContentType, StringFormat='LibraryContentTypeOption_{0}'}"
-                                            AutomationProperties.HelpText="{Binding IsActive}">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1" Classes="count" Text="{Binding Count}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                        </Grid>
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <!-- Content type left this sidebar on 2026-10-04 (docs/superpowers/specs/2026-10-04-library-redesign-design.md,
+                             Slice 4): it is the "Content type" chip in the Library's state row now. -->
                     </StackPanel>
 
                     <!-- Smart Lists sidebar (docs/superpowers/specs/2026-08-29-smartlists-screen-
@@ -1063,6 +1048,26 @@
         <controls:OverlayShell.ContentTemplate>
             <DataTemplate x:DataType="vm:MainViewModel">
                 <views:NewReadingListOverlay DataContext="{Binding NewReadingList}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
+    </controls:OverlayShell>
+
+    <!-- ============ List layouts (docs/superpowers/specs/2026-10-04-list-layouts-design.md): List Options and Edit
+         Layouts, opened from the Workspace menu on Library and Books. Declared before the name prompt, which Edit
+         Layouts' Rename opens on top. ============ -->
+    <controls:OverlayShell IsOpen="{Binding IsListOptionsOverlayOpen}" CloseCommand="{Binding CloseListOptionsOverlayCommand}"
+                            CloseButtonAutomationId="ListOptionsOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:ListOptionsOverlay DataContext="{Binding ListOptions}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
+    </controls:OverlayShell>
+    <controls:OverlayShell IsOpen="{Binding IsEditLayoutsOverlayOpen}" CloseCommand="{Binding CloseEditLayoutsOverlayCommand}"
+                            CloseButtonAutomationId="EditLayoutsOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:EditLayoutsOverlay DataContext="{Binding EditLayouts}" />
             </DataTemplate>
         </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>

@@ -115,6 +115,67 @@ load or apply this skill's guidance here even though its name matches. If a futu
 considers adopting Zafiro for real, that's a brainstorming-level architecture decision, not
 something to slide in via skill auto-routing.
 
+## Input handling — one service, no per-screen key handlers
+
+All keyboard, mouse-button, wheel and gamepad input goes through `IInputService` (`src/Paperbunkr.App/Services/Input/`, design:
+[docs/superpowers/specs/2026-10-03-input-service-design.md](docs/superpowers/specs/2026-10-03-input-service-design.md)). `MainWindow` forwards
+its Tunnel events to it; the service resolves a physical input to a semantic `InputAction` through the keymap, and screens/controls
+**register a handler for the actions they own**. Do not add `KeyDown` handlers, `KeyBindings`, `KeyGesture`s or `PointerWheelChanged`
+shortcuts for a *hotkey* on a screen.
+
+- **Adding a shortcut:** add a `const` to `InputActionIds` and one `InputActionInfo` (scope, reader-state context, default bindings) to
+  `InputActions.Core`; handle it in the owning view with an `AttachedInputRegistration` (`focusRoot: () => this` keeps it quiet while a dialog
+  or popup has focus). Preferences > Keyboard Shortcuts, conflict detection, import/export and the user's `keymap.json` pick it up with no other
+  change. Reader-state variants are separate actions (`PageTurnRight` / `PanRight` / `ScrollRight`), selected by the scope's `InputContext`.
+- **A new screen gets shortcuts the same way every screen does** (design §14): in its constructor,
+  `ScreenInput.Attach(this, InputScope.X, new Dictionary<string, Func<bool>> { [InputActionIds.Refresh] = () => ... })`, plus an `InputService` property for tests. A handler
+  returns false to decline, so the shared actions (`Refresh` F5, `NewItem` Ctrl+N, `Save` Ctrl+S, `FocusSearch` Ctrl+F, `TabNext`/`TabPrevious`) are claimed only when the screen can do them
+  right now; anything it declines reaches the next screen or the shell. Run commands that rebuild the focused row's collections through `ScreenInput.Deferred`. A tab strip needs no code:
+  give its buttons the class `tab` (or `segToggle`/`ipTab`/`prefNavItem`) and `active`/`on`, and `TabStrip.Step` drives it from the bumpers and Ctrl+PageUp/PageDown.
+- **The controller is app-wide** (`AppGamepadHost`): its D-pad, A, Y and right stick are the `App.Focus*`/`Activate`/`ContextMenu`/`Scroll*` actions, which send the focused control the key
+  it already handles. So a new control needs no controller code; it only has to work from the keyboard.
+- **Item keys are remappable already.** Don't add a hardcoded Enter/Delete/F2/arrow check expecting it to be the only path: the user may have moved the action to another key, in which case the
+  service sends your control the *canonical* key (design §14, `InputActionInfo.CanonicalKey`). Keep handling the plain key and it works with any binding.
+- **Plugin commands are actions** (`PluginInputActions`, Plugin API 4.3): a Library-hook command shows up in Preferences > Keyboard Shortcuts without the plugin doing anything; its manifest
+  `shortcut` attribute only sets the default.
+- **The app-wide focus ring is an adorner, and Avalonia clips an adorner to its adorned control's clip.** Buttons clip to their bounds, which is why the ring template sets
+  `AdornerLayer.IsClipEnabled="False"`; `Controls/FocusRingAdorner` (the template root) puts back only the clip to the enclosing `ScrollViewer` viewports, so a half-scrolled control's ring does not draw over a
+  header. Don't add a second hand-rolled inner border on `:focus-visible` (it insets the content and doubles the ring); if a control needs a different ring,
+  set its `FocusAdorner` to null and draw one inside its own bounds.
+- **A read-only `SuggestBox` must not open itself on keyboard focus or a bare Down** (arrowing through a form would pop every dropdown open): it opens on a click, Enter, Space or Alt+Down.
+- **Don't make a control inside a card focusable unless the keyboard needs it** (the tile-select checkboxes are mouse-only): the arrow keys' directional search treats a nested control as a neighbour.
+- **Avalonia's `ItemsControl` handles arrow keys itself, and on a virtualizing list of focusable rows that drops focus** (it runs after the focused row and before a screen's *bubbling* `KeyDown`).
+  A screen with such a list takes its directional move on the **tunnel** (see `WantedScreen`). This only reproduces in the real `MainWindow`: test keyboard behaviour there (`RealWindowKeyboardTests`).
+- **An inset `BoxShadow` draws nothing on a control that has a `BorderThickness`.** For an inside ring on such a control use an inside `FocusAdorner` (see `PreferencesScreen.axaml`'s `prefNavItem`).
+- **Text boxes reached with the arrow keys or a pad only browse** (`TextEntryMode`): Enter or F2 or a click edits, Esc goes back, Tab and Ctrl+F land ready to type. Don't focus a box with
+  `NavigationMethod.Directional` unless you want that; use `Tab`/`Unspecified` to put the user straight into typing.
+- **A Button also swallows Enter and Space** before a XAML `KeyDown=` handler on it runs. A card that opens with Enter must either keep a bound `Command` or have the key tunnelled from an
+  ancestor (`LibraryScreen.OnScreenCardKeyDownTunnel`).
+- **A Button swallows a left press** (Avalonia 12): an instance `PointerPressed` handler declared in XAML on a `Button` never sees it. Tunnel from an ancestor instead (see
+  `LibraryScreen.OnScreenPointerPressedTunnel`).
+- **What stays a control's own key handler:** arrow navigation among a list's items, Enter/Space/Delete/F2 on the focused item, type-ahead,
+  Enter-to-commit/Esc-to-cancel in a text box, drag mechanics. If the behavior needs the *focused item*, it is the control's, not an action.
+- **Text boxes:** the service already ignores keyboard actions while a `TextBox` (or anything implementing `IInputSuppressor`) has focus, except
+  actions flagged `FiresInTextInput` (Escape, browser-back, quick open). A control that must see every key, mouse button and wheel turn
+  (a capture box) implements `IInputSuppressor` with `InputSuppression.All`.
+- **Headless tests that press keys** attach the window with `InputHost.Attach(window, service)` and pass the service to the view model — the same
+  thing `MainWindow` does. The default `InputServiceLocator.Current` is the do-nothing service, so anything not given a real one ignores keys.
+- **Persistence:** user remaps are `keymap.json` next to the database (overrides only). The old `KeyBinding` table is read once by
+  `LegacyKeyBindingImporter` and is left in place on purpose (worktrees share the dev DB) — don't write to it, don't drop it casually.
+
+## Running the App tests
+
+The full `Paperbunkr.App.Tests` suite (~5,300 tests) takes far too long to run after every change. Day to day run the fast set, and target the classes you touched:
+
+```bash
+dotnet test src/Paperbunkr.App.Tests --filter "Speed!=Slow"                      # everything except the slow classes
+dotnet test src/Paperbunkr.App.Tests --filter "FullyQualifiedName~WantedArrowKeyTests"   # one class
+dotnet test src/Paperbunkr.App.Tests --filter "Speed=Slow"                        # only the slow ones (run before a release)
+```
+
+A class or test that takes more than ~30 s is tagged `[Trait("Speed", "Slow")]` (`MainViewModelTests`, `AdPageDetectionServiceTests`, `DensityPresetTests`, `PreferencesScreenViewModelTests`, two sweeps in
+`RealWindowKeyboardTests`). Never start a second `dotnet test`/`dotnet build` on the project while one is running: they share the output folder and stall each other.
+
 ## Build gotcha: adding a new Avalonia View
 
 Adding a brand-new `.axaml` file with a fresh `x:Class` (a View not previously compiled in this

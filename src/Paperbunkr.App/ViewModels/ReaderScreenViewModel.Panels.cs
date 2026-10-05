@@ -41,9 +41,6 @@ public partial class ReaderScreenViewModel
     [ObservableProperty]
     private bool _smartDoubleClickZoom = true;
 
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _toggleGuidedViewKey = [new(Key.G)];
-
     /// <summary>Whether reading in reading order right-to-left, which decides the order of side-by-side panels.</summary>
     private bool PanelsRightToLeft => EffectiveReadingMode == ReadingMode.RightToLeft;
 

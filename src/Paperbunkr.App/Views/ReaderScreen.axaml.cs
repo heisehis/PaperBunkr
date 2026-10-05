@@ -20,12 +20,13 @@ namespace Paperbunkr.App.Views;
 public partial class ReaderScreen : UserControl
 {
     private ReaderScreenViewModel? _viewModel;
-    private GamepadPoller? _gamepad;
     private Window? _hostWindow;
+    private readonly AttachedInputRegistration _readerInput;
+    private readonly AttachedInputRegistration _overlayInput;
 
     /// <summary>
     /// The rail-nav switcher only toggles <c>IsVisible</c> on this screen's host and Avalonia 12 raises no public change notification for <c>IsEffectivelyVisible</c>, so a
-    /// half-second supervisor decides whether the 60 Hz poller should run (visible, window active, setting on). It costs one property read twice a second.
+    /// half-second supervisor decides whether the reader counts as being looked at (visible and the window active), for the reading-session clock.
     /// </summary>
     private DispatcherTimer? _gamepadSupervisor;
 
@@ -43,12 +44,14 @@ public partial class ReaderScreen : UserControl
         PageDotsItemsControl.AddHandler(PointerMovedEvent, OnPageDotsPointerMoved, RoutingStrategies.Bubble, handledEventsToo: true);
         PageDotsItemsControl.AddHandler(PointerExitedEvent, OnPageDotsPointerExited, RoutingStrategies.Bubble, handledEventsToo: true);
 
-        // Ctrl+Shift+P -> perf overlay (docs/superpowers/specs/2026-09-08-reader-decode-cache-
-        // prefetch-pipeline-design.md §10). Handled here rather than via UserControl.KeyBindings so
-        // it fires even though PageCanvas is the focused element - handledEventsToo covers the case
-        // where PageCanvas already marked an unrelated modifier chord handled.
-        // Tunnel only: with Tunnel | Bubble and handledEventsToo the handler ran twice per press (the tunnel pass handled it, the bubble pass ran again) and toggled the overlay back off.
-        AddHandler(KeyDownEvent, OnReaderKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
+        // Every reader shortcut (including Ctrl+Shift+P for the perf overlay, docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-pipeline-design.md §10) is an input-service
+        // action now: PageCanvas registers for the ones that act on view state, this screen for the rest (OnReaderInputAction), and the overlay driver below takes the controller
+        // over while the palette or the bad-page picker is open. Both screen-level registrations are dormant while the screen is hidden, and the first also while an overlay is open.
+        _readerInput = new AttachedInputRegistration(
+            this, InputScope.Reader, OnReaderInputAction, () => _viewModel?.IsKeyboardOverlayOpen == true ? InputContext.None : InputContext.Always, focusRoot: () => this);
+        _overlayInput = new AttachedInputRegistration(
+            this, InputScope.Reader, OnOverlayInputAction, () => _viewModel?.IsKeyboardOverlayOpen == true ? InputContext.Always : InputContext.None, focusRoot: () => this);
+        PageCanvasControl.IsInputSuspended = () => _viewModel?.IsKeyboardOverlayOpen == true;
 
         // "Auto in 5s - any key cancels" on the end-of-issue card. Tunnel only: the key press that opens the card
         // must not cancel the countdown the same press just started (a bubble handler would run after the command).
@@ -68,7 +71,7 @@ public partial class ReaderScreen : UserControl
         AddHandler(KeyDownEvent, OnPaletteKeyDown, RoutingStrategies.Tunnel);
     }
 
-    // ===================== Gamepad (reach design 3): polled only while this screen is visible and its window active =====================
+    // ===================== Presence: the reading-session clock only runs while this screen is visible and its window active =====================
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
@@ -79,7 +82,7 @@ public partial class ReaderScreen : UserControl
             _hostWindow.PropertyChanged += OnHostWindowPropertyChanged;
         }
 
-        UpdateGamepadRunning();
+        UpdatePresence();
         _gamepadSupervisor ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _gamepadSupervisor.Tick -= OnGamepadSupervisorTick;
         _gamepadSupervisor.Tick += OnGamepadSupervisorTick;
@@ -95,133 +98,144 @@ public partial class ReaderScreen : UserControl
             _hostWindow = null;
         }
 
-        _gamepad?.Stop();
         base.OnDetachedFromVisualTree(e);
     }
 
-    private void OnGamepadSupervisorTick(object? sender, EventArgs e) => UpdateGamepadRunning();
+    private void OnGamepadSupervisorTick(object? sender, EventArgs e) => UpdatePresence();
 
     private void OnHostWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
         if (e.Property == Window.IsActiveProperty)
         {
-            UpdateGamepadRunning();
+            UpdatePresence();
         }
     }
 
-    private void UpdateGamepadRunning()
+    private void UpdatePresence()
     {
         bool present = IsEffectivelyVisible && _hostWindow is { IsActive: true };
         _viewModel?.SetUserPresent(present);
-        bool run = _viewModel is { GamepadEnabled: true } && present;
-        if (run)
+    }
+
+    /// <summary>A controller button or stick was touched (the app-wide poller feeds the input service): counts as the reader being present, for the reading-session clock.</summary>
+    private void OnGamepadActivity(object? sender, EventArgs e)
+    {
+        if (IsEffectivelyVisible)
         {
-            _gamepad ??= new GamepadPoller(new XInputSource(), OnGamepadFrame);
-            _gamepad.Start();
-        }
-        else
-        {
-            _gamepad?.Stop();
+            _viewModel?.NoteReaderInput();
         }
     }
 
-    private void OnGamepadFrame(GamepadFrame frame, TimeSpan elapsed)
+    /// <summary>
+    /// The reader's actions that need no canvas state, only a view-model command (the info panel, pinning, clipping, the perf overlay, leaving the reader, the toolbar, reset zoom,
+    /// double-page and reading direction, first/last page). Replaces <c>UserControl.KeyBindings</c>-style per-command gestures and the controller's Back/Y handling.
+    /// </summary>
+    private void OnReaderInputAction(InputActionEventArgs e)
     {
         if (_viewModel is not { } vm)
         {
             return;
         }
 
-        vm.NoteReaderInput();
-        if (frame.HasAny && (frame.Next || frame.Previous || frame.Palette || frame.Leave || frame.ToggleChrome || frame.Fullscreen))
+        switch (e.Action.Id)
         {
-            Services.Reader.ReaderPerfStats.Current.RecordInput("gamepad button");
+            case InputActionIds.ToggleInfoPanel:
+                e.Handled = Run(vm.ToggleInfoPanelCommand);
+                break;
+            case InputActionIds.PinPage:
+                e.Handled = Run(vm.PinCurrentPageCommand);
+                break;
+            case InputActionIds.ClipRegion:
+                e.Handled = Run(vm.ToggleClipModeCommand);
+                break;
+            case InputActionIds.TogglePerfOverlay:
+                e.Handled = Run(vm.TogglePerfOverlayCommand);
+                break;
+            case InputActionIds.LeaveReader:
+                e.Handled = Run(vm.GoBackCommand);
+                break;
+            case InputActionIds.ToggleChrome:
+                e.Handled = Run(vm.ToggleChromeCommand);
+                break;
+            case InputActionIds.ResetZoom:
+                e.Handled = Run(vm.ResetZoomCommand);
+                break;
+            case InputActionIds.ToggleDoublePageMode:
+                e.Handled = Run(vm.ToggleDoublePageModeCommand);
+                break;
+            case InputActionIds.ToggleReadingDirection:
+                e.Handled = Run(vm.ToggleReadingModeCommand);
+                break;
+            case InputActionIds.FirstPage:
+                e.Handled = vm.GoToFirstPage();
+                break;
+            case InputActionIds.LastPage:
+                e.Handled = vm.GoToLastPage();
+                break;
+        }
+    }
+
+    private static bool Run(System.Windows.Input.ICommand? command)
+    {
+        if (command?.CanExecute(null) != true)
+        {
+            return false;
+        }
+
+        command.Execute(null);
+        return true;
+    }
+
+    /// <summary>
+    /// While the command palette or the bad-page reason picker is open the controller drives them, and nothing else of the reader's runs (reach design 3 and 5): D-pad or left stick
+    /// up and down move through the palette, A runs the selection, B closes, Start toggles the palette. Registered in the Reader scope but dormant unless an overlay is open, when the
+    /// canvas and <see cref="OnReaderInputAction"/> are the dormant ones. Keyboard input is not handled here: the palette's query box and the picker take it themselves.
+    /// </summary>
+    private void OnOverlayInputAction(InputActionEventArgs e)
+    {
+        if (e.Device != InputDevice.Gamepad || _viewModel is not { } vm)
+        {
+            return;
         }
 
         var palette = vm.Palette;
-        if (frame.Palette)
+        string id = e.Action.Id;
+        if (id == InputActionIds.CommandPalette)
         {
             palette.Toggle();
+            e.Handled = true;
             return;
         }
 
+        bool up = id is InputActionIds.PageTurnUp or InputActionIds.PanUp or InputActionIds.ScrollUp;
+        bool down = id is InputActionIds.PageTurnDown or InputActionIds.PanDown or InputActionIds.ScrollDown;
+        bool accept = id is InputActionIds.NextPage or InputActionIds.ScrollPageDown;
+        bool cancel = id is InputActionIds.PreviousPage or InputActionIds.ScrollPageUp;
         if (palette.IsOpen)
         {
-            // While the palette is open the pad drives it: D-pad/left stick up and down move, A runs, B closes.
-            if (frame.Up)
+            if (up)
             {
                 palette.MoveSelection(-1);
             }
-
-            if (frame.Down)
+            else if (down)
             {
                 palette.MoveSelection(1);
             }
-
-            if (frame.Next)
+            else if (accept)
             {
                 palette.ExecuteSelectedCommand.Execute(null);
             }
-            else if (frame.Previous)
+            else if (cancel)
             {
                 palette.Close();
             }
-
-            return;
         }
-
-        if (vm.IsReportPickerOpen)
+        else if (vm.IsReportPickerOpen && cancel)
         {
-            if (frame.Previous)
-            {
-                vm.CancelReportPickerCommand.Execute(null);
-            }
-
-            return;
+            vm.CancelReportPickerCommand.Execute(null);
         }
 
-        if (frame.Leave)
-        {
-            vm.GoBackCommand.Execute(null);
-            return;
-        }
-
-        if (frame.ToggleChrome)
-        {
-            vm.ToggleChromeCommand.Execute(null);
-        }
-
-        if (frame.Fullscreen)
-        {
-            vm.ToggleFullscreenCommand.Execute(null);
-        }
-
-        if (frame.Next)
-        {
-            PageCanvasControl.GamepadTurn(forward: true);
-        }
-
-        if (frame.Previous)
-        {
-            PageCanvasControl.GamepadTurn(forward: false);
-        }
-
-        int dx = (frame.Right ? 1 : 0) - (frame.Left ? 1 : 0);
-        int dy = (frame.Down ? 1 : 0) - (frame.Up ? 1 : 0);
-        if (dx != 0 || dy != 0)
-        {
-            PageCanvasControl.GamepadDirection(dx, dy);
-        }
-
-        if (frame.PanX != 0 || frame.PanY != 0)
-        {
-            PageCanvasControl.GamepadAnalog(frame.PanX, frame.PanY, elapsed);
-        }
-
-        if (frame.Zoom != 0)
-        {
-            PageCanvasControl.GamepadZoom(frame.Zoom, elapsed);
-        }
+        e.Handled = true;
     }
 
     private void OnPaletteKeyDown(object? sender, KeyEventArgs e)
@@ -231,7 +245,9 @@ public partial class ReaderScreen : UserControl
             return;
         }
 
-        if (vm.CommandPaletteKey.Any(g => g.Matches(e)) || vm.GoToPageKey.Any(g => g.Matches(e)))
+        // The keys that open the palette (and the go-to-page prompt, which shares it) also close it, whatever the user has remapped them to.
+        var pressed = InputBinding.ForKey(e.Key, e.KeyModifiers);
+        if (vm.Input.GetBindings(InputActionIds.CommandPalette).Contains(pressed) || vm.Input.GetBindings(InputActionIds.GoToPage).Contains(pressed))
         {
             palette.Close();
             e.Handled = true;
@@ -311,15 +327,6 @@ public partial class ReaderScreen : UserControl
 
     private void OnEndCardKeyDown(object? sender, KeyEventArgs e) => _viewModel?.CancelEndCardCountdown();
 
-    private void OnReaderKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.P && e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift))
-        {
-            _viewModel?.TogglePerfOverlayCommand.Execute(null);
-            e.Handled = true;
-        }
-    }
-
     /// <summary>
     /// Known-gap fix (docs/Paperbunkr-Roadmap.md P1): <see cref="PageCanvas"/> previously needed a
     /// manual click before arrow keys registered, because the rail-nav screen switcher never
@@ -342,9 +349,15 @@ public partial class ReaderScreen : UserControl
             _viewModel.CurrentPageIndexChanged -= OnCurrentPageIndexChanged;
             _viewModel.ReflowTransitionRequested -= OnReflowTransitionRequested;
             _viewModel.Palette.PropertyChanged -= OnPalettePropertyChanged;
+            _viewModel.Input.GamepadActivity -= OnGamepadActivity;
         }
 
         _viewModel = DataContext as ReaderScreenViewModel;
+
+        // The screen-level registrations follow the view model's service (a test passes its own; the app uses the shared one).
+        var input = _viewModel?.Input ?? NullInputService.Instance;
+        _readerInput.Service = input;
+        _overlayInput.Service = input;
         if (_viewModel is not null)
         {
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -354,10 +367,11 @@ public partial class ReaderScreen : UserControl
             _viewModel.ZoomResetRequested += OnZoomResetRequested;
             _viewModel.CurrentPageIndexChanged += OnCurrentPageIndexChanged;
             _viewModel.ReflowTransitionRequested += OnReflowTransitionRequested;
+            _viewModel.Input.GamepadActivity += OnGamepadActivity;
             _viewModel.Palette.PropertyChanged += OnPalettePropertyChanged;
         }
 
-        UpdateGamepadRunning();
+        UpdatePresence();
     }
 
     /// <summary>
@@ -523,12 +537,6 @@ public partial class ReaderScreen : UserControl
             PanelFlashOverlay.PageRect = PageCanvasControl.GetPageScreenRect();
             PanelFlashOverlay.Panels = PageCanvasControl.GetShownPanels();
             PanelFlashOverlay.Confident = flashVm.CurrentPagePanels?.Confident ?? false;
-            return;
-        }
-
-        if (e.PropertyName == nameof(ReaderScreenViewModel.GamepadEnabled))
-        {
-            UpdateGamepadRunning();
             return;
         }
 

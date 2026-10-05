@@ -48,10 +48,6 @@ public partial class ReaderScreenViewModel
 {
     private readonly WorkspaceService _profileService = new();
 
-    /// <summary>Cycles Standard, then each profile (default P).</summary>
-    [ObservableProperty]
-    private IReadOnlyList<Avalonia.Input.KeyGesture> _nextProfileKey = [new(Avalonia.Input.Key.P)];
-
     /// <summary>Raised for a short, low-stakes message ("Profile: Manga night"); <see cref="MainViewModel"/> wires it to the shared toast host.</summary>
     public event Action<ToastRequest>? ToastRequested;
 

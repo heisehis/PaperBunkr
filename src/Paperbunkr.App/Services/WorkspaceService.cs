@@ -10,7 +10,7 @@ namespace Paperbunkr.App.Services;
 /// <summary>
 /// CRUD for saved <see cref="Workspace"/> rows (docs/superpowers/specs/2026-09-03-library-saved-
 /// workspaces-design.md). Same no-DI, own-context-per-call, <see cref="Func{PaperbunkrDbContext}"/>
-/// test-seam shape as <see cref="KeyBindingService"/>.
+/// test-seam shape as the former KeyBindingService.
 ///
 /// <see cref="Workspace.IsBuiltIn"/> is enforced here, not just in the UI - a stale command or a
 /// test can't rename / re-point / delete a seeded starter.
@@ -134,7 +134,10 @@ public class WorkspaceService
     /// <summary>
     /// Idempotently inserts the read-only starter workspaces (design's tables). Keyed on
     /// <c>(Screen, Name, IsBuiltIn)</c> - re-running touches nothing, and a user's own
-    /// identically-named workspace neither blocks a starter nor is disturbed by one.
+    /// identically-named workspace neither blocks a starter nor is disturbed by one. A Library
+    /// starter whose definition changed since it was seeded is rewritten in place (starters are
+    /// read-only, so there is no user edit to lose): "Currently reading" became the Reading lens
+    /// (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 1).
     /// </summary>
     public void EnsureBuiltInsSeeded()
     {
@@ -158,7 +161,7 @@ public class WorkspaceService
             ("Currently reading", new LibraryWorkspaceState(
                 IssueListSortField: IssueListSortField.Opened,
                 IssueListSortDirection: SortDirection.Descending,
-                FilterUnreadOnly: true)),
+                Lens: LibraryLens.Reading)),
             ("Manga", new LibraryWorkspaceState(
                 Granularity: LibraryContentGranularity.Series,
                 IssueListSortField: IssueListSortField.Series,
@@ -169,6 +172,7 @@ public class WorkspaceService
         order = 0;
         foreach (var (name, state) in library)
         {
+            string json = WorkspaceStateJson.Serialize(state);
             if (Missing(WorkspaceScreen.Library, name))
             {
                 context.Workspaces.Add(new Workspace
@@ -177,8 +181,16 @@ public class WorkspaceService
                     Name = name,
                     SortOrder = order,
                     IsBuiltIn = true,
-                    StateJson = WorkspaceStateJson.Serialize(state),
+                    StateJson = json,
                 });
+            }
+            else
+            {
+                var seeded = context.Workspaces.First(w => w.IsBuiltIn && w.Screen == WorkspaceScreen.Library && w.Name == name);
+                if (WorkspaceStateJson.DeserializeLibrary(seeded.StateJson) != state)
+                {
+                    seeded.StateJson = json;
+                }
             }
 
             order++;

@@ -8,6 +8,7 @@ using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Tests;
 
@@ -179,11 +180,11 @@ public class ReaderPinTests : IDisposable
     [Fact]
     public void ThePalette_ThePageMenuAndTheKey_OfferThePin()
     {
-        var vm = new ReaderScreenViewModel(goBack: () => { });
+        var vm = new ReaderScreenViewModel(goBack: () => { }, new InputService(InputActionCatalog.CreateWithCoreActions(), new MemoryKeymapStore()));
         vm.LoadIssue(_issueA);
 
         Assert.Contains(vm.BuildPaletteEntries(), e => e.Title == "Pin this page as a reference");
-        Assert.Contains(vm.ExtraKeyBindings, b => b.Gestures.Any(g => g.Key == Key.P && g.KeyModifiers == KeyModifiers.Shift));
+        Assert.Equal([InputBinding.ForKey(Key.P, KeyModifiers.Shift)], vm.Input.GetBindings(InputActionIds.PinPage).Take(1));
         Assert.Contains(new ReaderPageContextMenuBuilder(vm).Build(null)!, e => e.Header == "Pin this page as a reference");
 
         vm.PinCurrentPageCommand.Execute(null);
@@ -195,7 +196,7 @@ public class ReaderPinTests : IDisposable
     [Fact]
     public void ShiftP_PinsThePage_AndDraggingItSnapsToTheNearestCorner()
     {
-        var vm = new ReaderScreenViewModel(goBack: () => { });
+        var vm = new ReaderScreenViewModel(goBack: () => { }, ReaderTestInput.Create());
         var (window, screen, canvas) = ReaderScreenTestHost.Open(vm, _issueA);
         try
         {
@@ -226,7 +227,7 @@ public class ReaderPinTests : IDisposable
     [Fact]
     public void ThePinDoesNotTakeClicksMeantForThePage()
     {
-        var vm = new ReaderScreenViewModel(goBack: () => { });
+        var vm = new ReaderScreenViewModel(goBack: () => { }, ReaderTestInput.Create());
         var (window, screen, canvas) = ReaderScreenTestHost.Open(vm, _issueA);
         try
         {

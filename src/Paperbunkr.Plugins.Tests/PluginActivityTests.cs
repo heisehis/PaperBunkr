@@ -46,9 +46,9 @@ public sealed class PluginActivityTests : IDisposable
     }
 
     [Fact]
-    public void The_api_version_is_4_2_now_that_the_logger_exists()
+    public void The_api_version_is_4_3_now_that_commands_can_declare_a_shortcut()
     {
-        Assert.Equal(new Version(4, 2), PluginApi.Current);
+        Assert.Equal(new Version(4, 3), PluginApi.Current);
     }
 
     [Fact]

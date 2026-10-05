@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.Services.Reader;
 using Paperbunkr.App.Views;
 using Paperbunkr.Data;
@@ -44,11 +45,6 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     // is specifically about not decoding pages that aren't needed) - still lightweight color-swatch
     // placeholders, just with correct count/selection tracking the real current page now.
     private const int MaxThumbnails = 200;
-
-    // No injected context-factory seam needed here (unlike ThemeService/CoverThumbnailService) -
-    // KeyBindingService's own default ctor already goes through PaperbunkrDb.CreateContext(),
-    // which PaperbunkrDbContext.DatabasePathOverride already redirects in tests.
-    private readonly KeyBindingService _keyBindings = new();
 
     private readonly Action _goBack;
     private int? _loadedIssueId;
@@ -139,29 +135,27 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// </summary>
     private bool _settingScrollOffsetFromAutoScroll;
 
-    /// <summary>Convenience overload for the ~130 existing call sites (this class predates
-    /// <see cref="KeyBindingService"/> being injected here) that don't care about shortcut hints -
-    /// constructs a real service against whatever database is currently active, same as every other
-    /// screen's own direct-instantiation precedent elsewhere in this codebase.</summary>
     private readonly ITrackerAutoSyncService _trackerAutoSync;
 
-    public ReaderScreenViewModel(Action goBack) : this(goBack, new KeyBindingService())
+    /// <summary>Convenience overload for the ~130 existing call sites that don't care about shortcuts: uses the application's input service (the do-nothing one before startup sets it, which is also what tests see).</summary>
+    public ReaderScreenViewModel(Action goBack) : this(goBack, (IInputService?)null)
     {
     }
 
-    public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService, IReadingEventRecorder? readingEventRecorder = null, ITrackerAutoSyncService? trackerAutoSync = null)
-        : this(goBack, keyBindingService, new BatteryStatusService(), readingEventRecorder, trackerAutoSync)
+    /// <param name="input">The application-wide input service (docs/superpowers/specs/2026-10-03-input-service-design.md); null means <see cref="InputServiceLocator.Current"/>.</param>
+    public ReaderScreenViewModel(Action goBack, IInputService? input, IReadingEventRecorder? readingEventRecorder = null, ITrackerAutoSyncService? trackerAutoSync = null)
+        : this(goBack, input, new BatteryStatusService(), readingEventRecorder, trackerAutoSync)
     {
     }
 
-    /// <summary>Test seam for <see cref="IBatteryStatusService"/> (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §2), same rationale as the <see cref="KeyBindingService"/> overload above - lets a test substitute a fake reading without touching the real Win32 API.</summary>
-    public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService, IBatteryStatusService batteryStatusService, IReadingEventRecorder? readingEventRecorder = null, ITrackerAutoSyncService? trackerAutoSync = null)
+    /// <summary>Test seam for <see cref="IBatteryStatusService"/> (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §2) - lets a test substitute a fake reading without touching the real Win32 API.</summary>
+    public ReaderScreenViewModel(Action goBack, IInputService? input, IBatteryStatusService batteryStatusService, IReadingEventRecorder? readingEventRecorder = null, ITrackerAutoSyncService? trackerAutoSync = null)
     {
         _trackerAutoSync = trackerAutoSync ?? NoOpTrackerAutoSyncService.Instance;
         _goBack = goBack;
+        Input = input ?? InputServiceLocator.Current;
         HookPinToInfoPanel();
         HookNotes();
-        _keyBindingService = keyBindingService;
         _batteryStatusService = batteryStatusService;
         _readingEventRecorder = readingEventRecorder;
         CoverBrush = SeriesCardSample.Gradient("#442a1c", "#c9803f");
@@ -169,7 +163,12 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         Bookmarks = new ObservableCollection<IssueBookmarkSummary>();
     }
 
-    private readonly KeyBindingService _keyBindingService;
+    /// <summary>
+    /// The application's input service. The view hands it to the canvas, which registers for the view-state actions (zoom, pan, scroll, page turns), and registers the rest of the reader's
+    /// actions itself; the view model only reads bindings from it, for the shortcut hints.
+    /// </summary>
+    public IInputService Input { get; }
+
     private readonly IBatteryStatusService _batteryStatusService;
 
     /// <summary>The reader profile in effect for the loaded issue (a series or default pointer, or one chosen this visit); null before the first load (design 2026-09-25 F2).</summary>
@@ -179,13 +178,14 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     private int? _sessionProfileId;
 
     /// <summary>Live shortcut-hint text for a toolbar/cluster control (docs/superpowers/specs/
-    /// 2026-08-25-reader-chrome-design.md) - reads <see cref="KeyBindingService"/> fresh on every
-    /// call rather than caching, so a hint reflects a remap made in Preferences without this
-    /// ViewModel needing to listen for change notifications from a service it doesn't own.
-    /// <paramref name="commandId"/> is one of <see cref="KeyboardCommandRegistry"/>'s ids. Avalonia's
-    /// {Binding} markup has no parameterized-method-call syntax, so XAML can't call this directly -
-    /// the named Xxx*Hint properties below are the actual binding targets, each a thin wrapper.</summary>
-    public string GetShortcutHint(string commandId) => $"({_keyBindingService.GetKeys(commandId)[0]})";
+    /// 2026-08-25-reader-chrome-design.md) - reads the input service fresh on every call rather than
+    /// caching, so a hint reflects a remap made in Preferences without this ViewModel needing to
+    /// listen for change notifications. <paramref name="actionId"/> is one of <see cref="InputActionIds"/>.
+    /// The hint shows the first keyboard binding (a toolbar button's tooltip reads best as a key), falling back to the
+    /// first binding of any kind, and is empty when the action is unbound. Avalonia's {Binding} markup has no
+    /// parameterized-method-call syntax, so XAML can't call this directly - the named Xxx*Hint properties below
+    /// are the actual binding targets, each a thin wrapper.</summary>
+    public string GetShortcutHint(string actionId) => Input.ShortcutText(actionId) is { } text ? $"({text})" : string.Empty;
 
     // Named hint properties - one per cluster/drawer control that has a real remappable shortcut.
     // Plain get-only properties (not [ObservableProperty]) since the value only ever needs to be
@@ -195,17 +195,17 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     // returning to this already-open Reader screen (which persists across navigation, per this
     // codebase's rail-nav "toggle IsVisible, never destroy" pattern) is reflected well before the
     // user could actually hover to see a tooltip.
-    public string RotateClockwiseHint => GetShortcutHint(KeyboardCommandRegistry.ReaderRotateClockwise);
-    public string RotateCounterClockwiseHint => GetShortcutHint(KeyboardCommandRegistry.ReaderRotateCounterClockwise);
-    public string AutoScrollHint => GetShortcutHint(KeyboardCommandRegistry.ReaderToggleAutoScroll);
-    public string ZoomInHint => GetShortcutHint(KeyboardCommandRegistry.ReaderZoomIn);
-    public string ZoomOutHint => GetShortcutHint(KeyboardCommandRegistry.ReaderZoomOut);
-    public string PageTurnLeftHint => GetShortcutHint(KeyboardCommandRegistry.ReaderPageTurnLeft);
-    public string PageTurnRightHint => GetShortcutHint(KeyboardCommandRegistry.ReaderPageTurnRight);
-    public string PreviousBookmarkHint => GetShortcutHint(KeyboardCommandRegistry.ReaderPreviousBookmark);
-    public string NextBookmarkHint => GetShortcutHint(KeyboardCommandRegistry.ReaderNextBookmark);
-    public string JumpBackHint => GetShortcutHint(KeyboardCommandRegistry.ReaderJumpBack);
-    public string ReportBadPageHint => GetShortcutHint(KeyboardCommandRegistry.ReaderReportBadPage);
+    public string RotateClockwiseHint => GetShortcutHint(InputActionIds.RotateClockwise);
+    public string RotateCounterClockwiseHint => GetShortcutHint(InputActionIds.RotateCounterClockwise);
+    public string AutoScrollHint => GetShortcutHint(InputActionIds.ToggleAutoScroll);
+    public string ZoomInHint => GetShortcutHint(InputActionIds.ZoomIn);
+    public string ZoomOutHint => GetShortcutHint(InputActionIds.ZoomOut);
+    public string PageTurnLeftHint => GetShortcutHint(InputActionIds.PageTurnLeft);
+    public string PageTurnRightHint => GetShortcutHint(InputActionIds.PageTurnRight);
+    public string PreviousBookmarkHint => GetShortcutHint(InputActionIds.PreviousBookmark);
+    public string NextBookmarkHint => GetShortcutHint(InputActionIds.NextBookmark);
+    public string JumpBackHint => GetShortcutHint(InputActionIds.JumpBack);
+    public string ReportBadPageHint => GetShortcutHint(InputActionIds.ReportBadPage);
 
     /// <summary>Public since 2026-09-16: <c>ReaderScreen.axaml.cs</c>'s root-canvas PointerMoved now
     /// calls this directly (instead of the wider <see cref="NotifyCursorActivity"/>, which also
@@ -282,80 +282,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private bool _highQualityPageDisplay = true;
 
-    // Remappable reader shortcuts (docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-
-    // design.md) - defaults here mirror KeyboardCommandRegistry's own defaults exactly; Load()
-    // overwrites each with the actual (default-or-remapped) gesture from KeyBindingService.
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _pageTurnLeftKey = [new(Key.Left)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _pageTurnRightKey = [new(Key.Right)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _panLeftKey = [new(Key.Left)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _panRightKey = [new(Key.Right)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _panUpKey = [new(Key.Up)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _panDownKey = [new(Key.Down)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _scrollLeftKey = [new(Key.Left)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _scrollRightKey = [new(Key.Right)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _scrollUpKey = [new(Key.Up)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _scrollDownKey = [new(Key.Down)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _scrollPageUpKey = [new(Key.PageUp)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _scrollPageDownKey = [new(Key.PageDown)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _scrollToStartKey = [new(Key.Home)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _scrollToEndKey = [new(Key.End)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _toggleAutoScrollKey = [new(Key.S)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _previousBookmarkKey = [new(Key.PageUp, KeyModifiers.Control)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _nextBookmarkKey = [new(Key.PageDown, KeyModifiers.Control)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _jumpBackKey = [new(Key.Left, KeyModifiers.Alt)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _reportBadPageKey = [new(Key.X)];
-
-    /// <summary>Reading-order page turns (design 2026-09-25 F1 section 2): PageDown/Space/media-next by default.</summary>
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _nextPageKey = [new(Key.PageDown), new(Key.Space), new(Key.MediaNextTrack)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _previousPageKey = [new(Key.PageUp), new(Key.Space, KeyModifiers.Shift), new(Key.MediaPreviousTrack)];
-
     /// <summary>Mouse side buttons turn pages (<see cref="AppSettings.ExtraMouseButtonsTurnPages"/>).</summary>
     [ObservableProperty]
     private bool _extraMouseButtonsTurnPages = true;
-
-    /// <summary>An XInput controller drives the reader while it is showing (<see cref="AppSettings.GamepadEnabled"/>); the screen's poller starts and stops on it.</summary>
-    [ObservableProperty]
-    private bool _gamepadEnabled = true;
 
     /// <summary>Tap/click zone layouts and inversion for paged and continuous modes (design 2026-09-25 F1 section 4), refreshed live by <see cref="RefreshDisplaySettings"/>.</summary>
     [ObservableProperty]
@@ -376,36 +305,6 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>The spatial Left/Right commands are swapped (right-to-left reading with the reversal setting on); the canvas uses it to express reading-order turns spatially.</summary>
     public bool IsSpatialFlipped => _isRightToLeft;
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _toggleFullscreenKey = [new(Key.F)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _rotateClockwiseKey = [new(Key.R)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _rotateCounterClockwiseKey = [new(Key.R, KeyModifiers.Shift)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _zoomInKey = [new(Key.Z)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _zoomOutKey = [new(Key.Z, KeyModifiers.Shift)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _fitOriginalKey = [new(Key.D1)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _fitAllKey = [new(Key.D2)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _fitWidthKey = [new(Key.D3)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _fitHeightKey = [new(Key.D4)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _fitBestKey = [new(Key.D5)];
 
     [ObservableProperty]
     private string? _errorMessage;
@@ -878,7 +777,6 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         ContinuousTapZoneInvert = effective.ContinuousTapZoneInvert;
         TapZonesForMouse = appSettings.TapZonesForMouse;
         ExtraMouseButtonsTurnPages = appSettings.ExtraMouseButtonsTurnPages;
-        GamepadEnabled = appSettings.GamepadEnabled;
         ApplyComfortSettings(appSettings, effective);
         if (!_preOpenNextIssue)
         {
@@ -1174,44 +1072,6 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         // Matches BookReaderScreenViewModel.LoadBook's own explicit "IsChromeVisible = false" reset
         // for the same reason - a fresh reading session should start with chrome hidden by default.
         ShowChrome = false;
-        PageTurnLeftKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPageTurnLeft);
-        PageTurnRightKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPageTurnRight);
-        PanLeftKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPanLeft);
-        PanRightKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPanRight);
-        PanUpKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPanUp);
-        PanDownKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPanDown);
-        ScrollLeftKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollLeft);
-        ScrollRightKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollRight);
-        ScrollUpKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollUp);
-        ScrollDownKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollDown);
-        ScrollPageUpKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollPageUp);
-        ScrollPageDownKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollPageDown);
-        ScrollToStartKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollToStart);
-        ScrollToEndKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollToEnd);
-        ToggleAutoScrollKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleAutoScroll);
-        PreviousBookmarkKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPreviousBookmark);
-        NextBookmarkKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderNextBookmark);
-        JumpBackKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderJumpBack);
-        ReportBadPageKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderReportBadPage);
-        NextPageKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderNextPage);
-        LoadPaletteKeys(context);
-        ToggleGuidedViewKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleGuidedView);
-        RefreshExtraKeyBindings(context);
-        ToggleSessionHudKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleSessionHud);
-        ToggleWarmShiftKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleWarmShift);
-        CopyPageKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderCopyPage);
-        NextProfileKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderNextProfile);
-        PreviousPageKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPreviousPage);
-        ToggleFullscreenKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleFullscreen);
-        RotateClockwiseKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderRotateClockwise);
-        RotateCounterClockwiseKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderRotateCounterClockwise);
-        ZoomInKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderZoomIn);
-        ZoomOutKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderZoomOut);
-        FitOriginalKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderFitOriginal);
-        FitAllKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderFitAll);
-        FitWidthKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderFitWidth);
-        FitHeightKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderFitHeight);
-        FitBestKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderFitBest);
         UpdateReadingModeState(issue.ReadingModeOverride ?? series.ReadingMode, appSettings.ReverseRtlNavigation);
 
         ErrorMessage = null;

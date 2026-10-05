@@ -2680,6 +2680,153 @@ it. Not committed. Not a CE feature (CE has no thumbnail handler) - modelled on 
 - **Not verified:** the Preferences toggle in the running app (tested through the CLI + service), .cb7/.cbt/.mobi/.azw3 through the
   shell (unit-tested only), DjVu (no ddjvu.exe shipped), a full installer build/uninstall.
 
+## 2026-10-03 - Input service (one app-wide keyboard / mouse / gamepad layer)
+
+Design [2026-10-03-input-service-design.md](superpowers/specs/2026-10-03-input-service-design.md) (§13 lists where the build differs
+from the plan). Not committed. CE precedent checked in `_reference/ComicRackCE` (`CommandKey` is one gesture space for keys, wheel and
+mouse buttons 4/5; Ctrl+F, F5, Shift+F6, Ctrl+wheel zoom, MouseButton4/5 = previous/next list).
+- **Service:** `Services/Input/` - `IInputService` takes keys, wheel, pointer buttons and gamepad state, resolves them against a keymap
+  to string-id `InputAction`s, and delivers them to handlers by scope (Global / screens / modal Overlay) and context (paged,
+  zoomed, continuous). One root Tunnel hook in `MainWindow` (`InputHost.Attach`); no per-page `KeyBindings` left in XAML. Text boxes
+  swallow actions unless the action says `FiresInTextInput`.
+- **Replaced** (deleted): `KeyboardCommandRegistry`, `KeyBindingService`, `KeyBindingIO`, `KeyOption`, `KeyCommandBinding`,
+  `KeyBindingRowViewModel`, `GamepadMapper`, `PageCanvas.KeyBindings`. The DB `KeyBinding` table is read once by
+  `LegacyKeyBindingImporter` and deliberately kept (worktrees share the dev DB).
+- **Config:** overrides-only `keymap.json` next to the DB (temp+replace writes, bad file kept as `.bad`, schema migration chain).
+  Preferences › Keyboard Shortcuts is rebuilt data-driven (chips, capture box for keys / middle + side buttons / wheel, per-row reset,
+  conflict banner, layout import/export - old exports still import).
+- **Migrated:** MainWindow shell shortcuts, reader (`PageCanvas`, `ReaderScreen`: keys, Ctrl+wheel zoom at cursor, thumb buttons, pad),
+  Library actions, Book reader (incl. JS key forwarding via `WebKeyMap`), Compare. Focused-item widget keys (arrow nav among tiles,
+  Enter/Delete/F2 on a row, type-ahead, EventMap) deliberately stay with their controls - spec §9.
+- **Verified:** new/rewritten tests for the model, binding parser, keymap, service routing/scopes/suppression, gamepad processor, legacy
+  import, editor view model, host wiring and capture box; whole solution builds with 0 errors; full App suite 5,193/5,194 - the one
+  failure (`SelectionActionBarViewTests.AltShift3_OnACard_RatesTheSelection`, its window had no `InputHost`/real service) was fixed and
+  re-run green together with `LibraryBulkActionsTests` (29/29). Other test projects were not re-run (Data only got a doc-comment edit).
+- **Not verified:** nothing seen or driven in the running app - real keyboard / thumb buttons / wheel-zoom anchor in the reader, the
+  Book reader's key forwarding in a real WebView, a real XInput controller, the Preferences editor look, remap persisting across a
+  restart, FlaUI `KeyboardShortcutDiagnosticTests` (compile-only).
+- **Follow-up, same day ("all screens", spec §14):** every screen now registers a scope (Home, Books, Reading Lists, Smart Lists, the detail screens, Continuity, Insights, Wanted, Preferences,
+  the editors); the controller is app-wide (`AppGamepadHost`: D-pad/A/B/Y/bumpers/right stick work everywhere, reader keeps its own); shared actions `Refresh` F5, `NewItem` Ctrl+N, `Save` Ctrl+S,
+  tabs on Ctrl+PageUp/PageDown and the bumpers (`TabStrip.Step`). Item keys (arrows, Enter, Space, F2, Delete, Home/End/Page) are remappable through canonical-key pass-through / forward / swallow
+  rules with no per-control edits. Controller buttons can be captured in Preferences. Plugin commands are actions (Plugin API 4.3, manifest `shortcut`, CE's Ctrl+Shift+F1-F12 defaults).
+  Fixed on the way: Library Ctrl/Shift-click selection (a Button handles the press first) and the shared focus ring being clipped to a speck on plain Buttons (Insights tabs, Home carousel; plus a
+  double ring/gap on the carousel). Tests: `UiNavigationTests`, `ScreenInputTests`, `InputFollowUpTests`, `FocusRingPaintTests` (pixels).
+- **Later the same day (spec §14.2, §14.3):** Library Enter/Space on tiles, Esc/Backspace to leave detail pages, arrows in the editors and on the nav rail, Up/Down in the Detail grid and Wanted,
+  Reading Lists gallery Up to Continue Reading, Books edge navigation, SuggestBox no longer opening itself on focus/arrow, Continuity sidebar Right/Enter, the focus-ring clipping side effect
+  (`FocusRingAdorner`), doubled/hardcoded rings (Detail, carousel, Insights), the Library empty-state Clear button, and real covers in the Merge series dialog.
+- **Third round (spec §14.4, 2026-10-04):** text boxes only browse when reached by arrows/pad (`TextEntryMode`); Wanted Queue/Series Up/Down (Avalonia's `ItemsControl` dropped focus, found by walking the real
+  `MainWindow`); Event Map arrows (focus lost when a scroll recycled the focused card; edge moves reach the shell) and its doubled ring; hover and focus rings on Books cards; Preferences sidebar focus ring (an inset
+  shadow cannot draw on a bordered control); Left from the first Home tile or panel reaches the rail. Not reproduced: arrow navigation between groups in a grouped Library (walked Down, Up, Right in poster, list and
+  details modes, by issue and by series, small and large groups, all fine in the real window).
+- **Not verified on screen** (as above, plus): the controller driving non-reader screens with a real pad, capturing a pad button in the Preferences box, a real plugin's shortcut running, and how the
+  focus ring now looks on every other page that uses the shared adorner (rendered headlessly only for Insights and the Home carousel).
+- **Limits / follow-ups:** the metadata-entity detail page has no code-behind to register a scope on; the PDF reader relies on its page canvas's Reader scope; only Library-hook plugin commands become
+  actions (the other hooks do not operate on a selection); Wanted, Continuity, Manga/Book detail and the editors are smoke-tested (register, decline when empty), not driven with real data.
+
+## 2026-10-04 - Preferences > Keyboard Shortcuts: master-detail redesign
+
+Design [2026-10-04-keyboard-shortcuts-master-detail-design.md](superpowers/specs/2026-10-04-keyboard-shortcuts-master-detail-design.md), plan
+[2026-10-04-keyboard-shortcuts-master-detail-plan.md](superpowers/specs/2026-10-04-keyboard-shortcuts-master-detail-plan.md). Not committed. Presentation only: the bindings model,
+`keymap.json`, capture box and conflict detection are unchanged. CE (`KeyboardShortcutEditor`) is a grouped list with an editor panel but has no search, filters or conflict detection; those are deliberate additions.
+- **Page:** search + device filter (All / Keyboard & mouse / Controller) + Customised only over a grouped one-line-per-action list, beside an editor for the selected action (chips, capture, reset, defaults, "where it works").
+  The red row glow and red banner are gone: a conflict is a quiet warning icon on the row and chip plus a note in the editor naming the other action, whether it can shadow this one, and a jump link.
+- **Code:** `ShortcutsEditorViewModel` (filters, `FilteredGroups`, selection, `SelectGroupByTag`), `ShortcutChip` is now an observable class, `InputScopeDisplay`, `KeyboardShortcutsSection` rewritten. Preferences search hits on a
+  `shortcuts.<group>` anchor select that group's first action and clear the filters; Ctrl+F on the page goes to its own search box.
+- **Behaviour change to know about:** the controller's analogue axes (sticks, triggers) now show a lock and no remove button. They could be removed before but never re-added (no capture for axes), so this stops an unrecoverable unbind.
+- **Verified:** 16 new view-model tests + 1 Preferences anchor test; a real-`MainWindow` test (Down walks the list and the editor follows, Right enters the editor, Left returns to the same row); headless renders of the dark skin at 1400 and 900 wide.
+  Found by that test: the screen-wide `TryMoveDirectionally` hops to the Preferences sidebar from this list, so the list steps through its own rows.
+- **User-seen:** on screen in the dark skin on 2026-10-04 ("way better"). **Not verified:** light and other skins, a controller driving the page with a real pad, Narrator, and capturing a pad button into the new editor pane.
+- **Test note:** the full fast set (Debug) had 6 failures outside this work (4 `PdfBookSourceTests` "resolver is already set", `BookFolderScanServiceTests` PDF import, `ReaderImagePipelineTests` detail-page budget); all 41 tests in those classes pass when run alone, so it looks like test ordering, not checked against a clean tree.
+
+## 2026-10-04 - Library redesign (lenses, two-row command bar, one-badge covers, inspector, continue strip)
+
+Design [2026-10-04-library-redesign-design.md](superpowers/specs/2026-10-04-library-redesign-design.md) (23 grilled decisions; mockup https://claude.ai/artifact/JmsuQFjQYsZqq5HeMZ24Fp),
+slice 1 plan [2026-10-04-library-redesign-slice1-plan.md](superpowers/specs/2026-10-04-library-redesign-slice1-plan.md). All four slices built in one session. Not committed. **Not seen on screen by anyone yet.**
+- **Slice 1, command bar and lenses:** `LibraryLens` (All / Reading / Unread / Read) + `AppSettings.LibraryLens` (migration `AddLibraryLens`, no-op `Down`). `LibraryViewPipeline` classifies and tallies both granularities
+  in its one pass (`LensCounts`), then applies the lens; counts follow scope, chips and search. The toolbar is two rows: row 1 gains Series | Issues and Covers / List / Details switches, row 2 is lens tabs, filter chips
+  (Content type, Publisher, Has unread, Missing, Tracked, Library source, Clear) and a result summary. The Filter dropdown is gone. Lens tabs carry the `tab` class, so `TabStrip.Step` drives them (Library now claims `TabNext`/`TabPrevious`).
+  `FilterUnreadOnly` is kept as the **Has unread** chip, so nothing saved changes meaning. Workspaces save the lens; built-in "Currently reading" is now the Reading lens and `EnsureBuiltInsSeeded` rewrites a changed Library starter.
+- **Slice 2, covers:** `TileCosmeticsOverlay` draws a bottom progress bar for in-progress items instead of the hover ring (the `ProgressRing` setting now switches the bar; Preferences label updated). Series covers: stack peek
+  (sibling Borders in the existing gutter, tile size unchanged, tested), all-read check in the unread badge's corner (`SeriesCardSample.IsAllRead`), hover Read + More buttons (not focusable; More opens the tile's context menu),
+  the last hardcoded `#B814161B` replaced. `PinnedGroupHeader` floats the current group's heading in grouped cover grids (no push-off). New installs default the publisher badge on (CLR initializer only, no model change).
+- **Slice 3, inspector:** Continue resumes the most recently opened in-progress issue, else the first unread (`ContinueReadingNumber`/`Page`, label "Continue #N · p. P"). Synopsis prefers `Series.Summary`. The cover rail in the
+  panel is replaced by number chips (`PreviewIssueChip`, capped at 150) with one shared cover popup on hover or focus; a missing file is a dashed chip. Esc in the panel returns focus to the grid.
+- **Slice 4, continue strip and sidebar:** `LibraryContinueStrip` heads each cover grid's scroller (up to 6 series with a mid-read issue, Home's rule, read off the cached cards; hidden unless All lens + no search + no chips + All Series).
+  The sidebar's Content type group is removed in favour of the chip.
+- **Deviations from the spec, on purpose:** (1) ~~the row-1 button is still "View & Sort"~~ resolved the same day, see the follow-up below. (2) The Content type chip drives the same
+  selection the sidebar rows did, so picking a type still leaves a collection; combining the two is not done. (3) The Publisher chip is session-only. (4) The strip is in the cover grids only, not List or Details.
+  (5) Hover buttons stay behind the existing toggle, off by default.
+- **Not done:** the spec's responsive rules (inspector overlay below ~1100px, row-1 compaction below ~900px); the stack and hover buttons on the Tiles cover style; the all-read check on per-issue tiles; a Publisher/lens entry in browse history.
+- **Verified:** new `LibraryLensTests`, `LibraryInspectorTests`, `LibraryContinueStripTests`, pipeline/workspace/overlay/view/keyboard tests (lens stepping with Ctrl+PageDown through the input service, Up/Down between strip and grid,
+  Esc from the inspector, focus rings not clipped on the chips and strip cards, stack does not change tile size, pinned header). Data migration tests pass. UI-automation tests were edited for the removed Filter button and sidebar group but **not run**.
+
+### 2026-10-04 follow-up - "View & Sort" split up after the user saw the build
+
+The user ran the build and found the popup redundant against the new row-1 switches; audit and three decisions agreed in chat (all recommended). Not committed.
+- **Gone from the popup:** the List and Details rows (row-1 switch) and the whole Card content group (Series | Issues switch).
+- **Row-1 button:** icon-only **Display options** (`LibraryDisplayButton`), no tabs: Cover style (Poster / Panorama / Tiles), Cover size (was "Grid density"), Show titles, then "On the cover":
+  Unread count, Publisher logo, Progress bar (new here; the same `AppSettings.ProgressRing` as Preferences), Rating, Language (Off / Text / Flag over the two stored settings), Hover buttons, Dog-ear preview.
+  Disabled in the Details table, where nothing in it applies.
+- **Sort and Group:** each its own popup on its row-2 chip ("Sort: …", "Group: …"). The group chip is always shown ("Group: None"). `ViewSortTab` and the tab state are deleted.
+- **Moved to Preferences > Appearance:** Fade in covers and Cover tooltips (Cover cosmetics), Smooth scrolling (Interface). `LibraryScreenViewModel` no longer reads or writes these three, so a Library settings save
+  cannot overwrite what Preferences wrote (tested). No schema change.
+- **Hover "More" button fix (user report: "glitched out"):** its menu was anchored to the button, which exists only while the cover is hovered, so the menu was torn down when the pointer moved onto it.
+  It now opens at the pointer, owned by the screen (`ContextMenuHost.ShowMenuAtPointer`), a tick after the click. Diagnosed from the code, not reproduced; no test clicks the button with a real pointer.
+- **Known unrelated failure:** `PreferencesScreenViewModelTests.Screen_FocusRings_AreNotClipped` throws `Static resource 'PbRadius' not found` at `KeyboardShortcutsSection.axaml:48` (the concurrent Keyboard Shortcuts work), so the
+  three new Appearance rows have not had their focus rings checked.
+- **Verified:** new `LibraryDisplayPopupTests`, a Preferences view-model test for the three moved switches, the existing Library suites. UI-automation driver and two tests repointed (`LibraryViewSwitch_*`, the chips) but **not run**.
+  Not seen on screen yet.
+
+## 2026-10-04 - Insights gaps: goal outcomes, chart colour, publisher logos, goal scopes
+
+Two design + plan pairs: `docs/superpowers/specs/2026-10-04-insights-goal-outcomes-and-chart-colour-{design,plan}.md` and
+`2026-10-04-insights-goal-scopes-design.md`. All of it **built, uncommitted, not yet seen in the real app** (the user's running Paperbunkr locks `bin/Debug`, so tests ran with `-c Release`).
+
+- **Goal outcomes.** `GoalOutcome` Active / Completed / Missed, derived in `GoalResolver` (no migration) - Missed for every period kind, not only Custom. Completed goals name the day they were
+  completed. `GoalRing` draws a check / cross / amber-behind. Today hero prefers active goals; ended ones sit in a collapsed "Past goals" group with Renew + Delete; a Missed goal raises one
+  `goal-missed:{id}` Activity Center alert.
+- **Chart colour.** `InsightsChartPalette` (meaning colours for reading state and content rating, neutral grey for Unknown/Other, positional fallback), `DonutLegend` (swatch + count + %), hover on donut and legend
+  (linked), score distribution on a red-to-green ramp with value labels and digit ticks (the `★` tofu was ScottPlot's font lacking the glyph), Top publishers rows show the publisher logo.
+  Found on the way: the original donut sweep arithmetic subtracted the padding from the largest slice twice, so the ring never closed (round caps hid it) - fixed in `DonutMath`, flat caps with a hairline gap now.
+- **Goal scopes.** Count goals and **Finish** goals; scopes: reading list, collection, story event, continuity, creator, media type (plus series/publisher/genre); several scopes per goal (AND); "count each once";
+  no-deadline finish goals; a goal whose list was deleted reads "<name> was deleted" and never "Completed". New table `ReadingGoalScopes` + two columns (migration `AddGoalScopes`, legacy single scope backfilled into a row, `Down` drops the table only).
+  Editor rebuilt (goal type, scope rows, SuggestBox pickers); "Set a goal…" on a reading list's Manage menu and on a collection's menu; a "Goal: 12 of 30" chip on the list page. **Reading status** was dropped as a scope
+  (a finish goal over "Planned" items shrinks as you read them); smart lists are out of scope.
+- **Verified:** Data.Tests `GoalResolverTests` + `GoalScopeResolverTests` + the two goal migration tests (37/37); App.Tests scoped filter `Goal|InsightsChart|DonutMath|InsightsScreen|ReadingList|Collection|Wanted|ScheduledTask`
+  (393/393, Release); controls and the editor rendered headlessly to PNG (the editor's `SuggestBox` pickers do not paint in that harness, so they are the unseen part). The full fast suite did **not** complete
+  in this session; four failures seen in its partial log were in reader / remote-reading tests (`ReaderScreenPanelTests`, `ReaderScreenViewModelTests`, `RemoteReadingTests`) and are not from this work.
+- **Not verified:** the real Insights screen (Past goals, Renew, hover tooltips), the goal editor with its pickers, the reading-list chip and both "Set a goal…" menu items.
+
+## 2026-10-04 - Publisher logos: user icon folder, publisher gaps, fill from siblings
+
+Design: `docs/superpowers/specs/2026-10-04-publisher-icons-user-folder-and-gaps-design.md`. **Built, uncommitted, not seen in the real app.**
+Diagnosis first: the bundled pack (751 files, identical to CE bar one rename) is fine - all 807 name keys resolve to an image - and the real library only has 16 distinct publishers, 12 of which already had a logo.
+The real gaps were 441 issues with no publisher (mostly manhwa/manga scans) and no runtime place to add icons.
+- `%APPDATA%\Paperbunkr\publisher-icons` (`PublisherIconFolder`): PNG/JPG, recursive, CE filename rules + `map.ini`, **consulted before every bundled mark**; loaded at startup and on *Reload icons*.
+- Library Health > Review > **Publisher logos** (`PublisherGapsViewModel`, `PublisherCoverage`): publishers with no logo, issues with no publisher, *Fill N from the rest of the series* (confirmed, DB only, ties skipped, never overwrites), Open folder / Reload icons.
+- Letter chips (not logos) for Penguin Random House, Abrams, Games Workshop via `publisher-aliases.tsv`.
+- **Verified:** `PublisherCoverageTests` + `MarkResolverUserIconTests` + resolver/BrandMark filter (137/137, Release); Preferences + Library Health filter incl. the updated section counts (296/296). A read-only dry run on the real library:
+  75 issues fillable (Green Arrow, Titans, The Flash, Gokurakugai -> Viz Media, Reality Quest -> Webtoon, ...); 366 issues in 17 series (the manhwa scans) have nothing local to infer from. **Not verified on screen.**
+
+## 2026-10-04 - List layouts (CE list layouts: column editor, named layouts, per-list layouts)
+
+Design: `docs/superpowers/specs/2026-10-04-list-layouts-design.md` (section 14 = as built); plan: `2026-10-04-list-layouts-plan.md`. **Built, uncommitted. The user confirmed the feature works in the Debug build on 2026-10-05; the itemised on-screen checks below were not each reported on.**
+CE facts were looked up in `_reference/ComicRackCE` first: the saved object is `ListConfiguration` (`Name` + `DisplayListConfig`), CE ships no preset layouts, a layout holds no fonts or colours, and each list keeps its own auto-saved copy.
+- **Data:** migration `AddListLayouts` (two new tables, nothing else): `ListLayouts` (named, per screen) and `ListLayoutAssignments` (one row per screen + list; key `*` is the screen default). `ListLayoutService` stores JSON only.
+- **Per-list memory:** `ListLayoutsViewModel` (one per screen) compares the captured layout with the last one applied and writes the list's row only when it differs, from the existing settings-save hook. Library keys: `all`, `content:<type>`, `collection:<id>`; Books: `all`.
+- **Library layout (`ListLayoutState`):** Details columns (order, visibility, **width**), view mode, cover style, up to three thumbnail caption lines, tile text elements, sort and group.
+- **Details header:** drag a header to move the column, the grip after it to resize (`LibraryScreen.DetailsHeader.cs`); the right-click column picker still works.
+- **Workspace menu** (Library and Books) gains *List layouts*: one row per saved layout, List options, Save list layout, Edit layouts, Default layout for this list.
+- **Overlays:** List Options (Details / Thumbnails / Tiles; Books: sort and group) and Edit Layouts (use here, all lists, up, down, rename, delete).
+- **Shortcuts** (input service): List options Ctrl+L, Edit layouts Ctrl+Alt+L (CE's keys), Save list layout unbound.
+- **Starter layouts (2026-10-05, user request; CE ships none):** Cover wall, Compact tiles, ComicRack classic, Reading progress, File details - seeded once at startup, ordinary layouts, a deleted one never returns (design section 15).
+- **Left out on purpose:** CE's series-statistics columns and the columns Paperbunkr has no data for, per-column date format, Ctrl+Shift+F6-F11, a Details table on Books, caption lines on Panorama cards.
+- **Verified:** `ListLayoutServiceTests`, `LibraryListLayoutTests`, `ListLayoutViewTests` (43/43, Release, including the starter layouts). The fast set (`Speed!=Slow`) ran 5,130 tests with 6 failures, none in this area:
+  four `PdfBookSourceTests` and one `BookFolderScanServiceTests` PDF test (all pass when run on their own) and one `LiveFolderWatchServiceTests` file-lock failure (that class fails a different test on each run).
+  Those six were not investigated further.
+- **Not verified:** anything on the real screen - the two header drags, both overlays in either skin, the menu section inside the Workspace popup, Ctrl+L / Ctrl+Alt+L in the running app, and a restart keeping a per-list layout.
+  The migration has only run through `EnsureCreated` in tests, not against the real database.
+
 ## Explicitly not in scope here
 
 - **Content-type classification manual dropdown** — flagged as a known gap, but the real

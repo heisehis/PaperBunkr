@@ -4,6 +4,7 @@ using Avalonia.Media.Immutable;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.Services.Reader;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
@@ -240,9 +241,6 @@ public class ReaderScreenViewModelTests : IDisposable
         context.SaveChanges();
     }
 
-    private static void SetKeyBinding(string commandId, KeyGesture gesture) =>
-        new KeyBindingService().AddKey(commandId, gesture);
-
     private void SetSeriesReadingMode(ReadingMode mode)
     {
         using var context = PaperbunkrDb.CreateContext();
@@ -368,7 +366,7 @@ public class ReaderScreenViewModelTests : IDisposable
     [Fact]
     public void JumpBack_IsARegisteredRemappableCommand()
     {
-        Assert.Contains(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderJumpBack);
+        Assert.Contains(InputActions.Core, i => i.Id == InputActionIds.JumpBack);
     }
 
     // ===== Panels & zoom (docs/superpowers/specs/2026-09-25-comic-reader-panels-and-zoom-design.md) =====
@@ -633,9 +631,9 @@ public class ReaderScreenViewModelTests : IDisposable
     [Fact]
     public void GuidedView_IsARegisteredRemappableCommand_PagedOnly()
     {
-        var command = Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderToggleGuidedView);
-        Assert.Equal(new KeyGesture(Key.G), command.DefaultGesture);
-        Assert.Equal(ConflictContext.Paged, command.Context);
+        var command = Assert.Single(InputActions.Core, i => i.Id == InputActionIds.ToggleGuidedView);
+        Assert.Equal([InputBinding.ForKey(Key.G)], command.Defaults);
+        Assert.Equal(InputContext.Paged, command.Context);
     }
 
     [Fact]
@@ -725,9 +723,9 @@ public class ReaderScreenViewModelTests : IDisposable
     [Fact]
     public void Hud_IsRegisteredAsARemappableCommand_WithTheDefaultKeys()
     {
-        Assert.Equal(new KeyGesture(Key.H), Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderToggleSessionHud).DefaultGesture);
-        Assert.Equal(new KeyGesture(Key.W), Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderToggleWarmShift).DefaultGesture);
-        Assert.Equal(new KeyGesture(Key.C, KeyModifiers.Control), Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderCopyPage).DefaultGesture);
+        Assert.Equal([InputBinding.ForKey(Key.H)], Assert.Single(InputActions.Core, i => i.Id == InputActionIds.ToggleSessionHud).Defaults);
+        Assert.Equal([InputBinding.ForKey(Key.W)], Assert.Single(InputActions.Core, i => i.Id == InputActionIds.ToggleWarmShift).Defaults);
+        Assert.Equal([InputBinding.ForKey(Key.C, KeyModifiers.Control)], Assert.Single(InputActions.Core, i => i.Id == InputActionIds.CopyPage).Defaults);
     }
 
     [Fact]
@@ -1383,8 +1381,8 @@ public class ReaderScreenViewModelTests : IDisposable
     [Fact]
     public void NextProfile_IsARegisteredRemappableCommand()
     {
-        var command = Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderNextProfile);
-        Assert.Equal(new KeyGesture(Key.P), command.DefaultGesture);
+        var command = Assert.Single(InputActions.Core, i => i.Id == InputActionIds.NextProfile);
+        Assert.Equal([InputBinding.ForKey(Key.P)], command.Defaults);
     }
 
     // ===== Reach (docs/superpowers/specs/2026-09-25-comic-reader-reach-design.md) =====
@@ -1463,22 +1461,20 @@ public class ReaderScreenViewModelTests : IDisposable
     [Fact]
     public void PaletteAndGoToPage_AreRegisteredRemappableCommands()
     {
-        var palette = Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderCommandPalette);
-        Assert.Equal(new KeyGesture(Key.K, KeyModifiers.Control), palette.DefaultGesture);
-        var goTo = Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderGoToPage);
-        Assert.Equal(new KeyGesture(Key.G, KeyModifiers.Control), goTo.DefaultGesture);
+        var palette = Assert.Single(InputActions.Core, i => i.Id == InputActionIds.CommandPalette);
+        Assert.Contains(InputBinding.ForKey(Key.K, KeyModifiers.Control), palette.Defaults);
+        var goTo = Assert.Single(InputActions.Core, i => i.Id == InputActionIds.GoToPage);
+        Assert.Equal([InputBinding.ForKey(Key.G, KeyModifiers.Control)], goTo.Defaults);
     }
 
     [Fact]
-    public void Load_ReadsTheReadingOrderKeys_AndTheDefaultInputSettings()
+    public void Load_ReadsTheDefaultInputSettings()
     {
         try
         {
             var vm = new ReaderScreenViewModel(goBack: () => { });
             vm.LoadIssue(CreateLongIssue());
 
-            Assert.Equal([new KeyGesture(Key.PageDown), new KeyGesture(Key.Space), new KeyGesture(Key.MediaNextTrack)], vm.NextPageKey);
-            Assert.Equal([new KeyGesture(Key.PageUp), new KeyGesture(Key.Space, KeyModifiers.Shift), new KeyGesture(Key.MediaPreviousTrack)], vm.PreviousPageKey);
             Assert.True(vm.ExtraMouseButtonsTurnPages);
             Assert.True(vm.TapZonesForMouse);
             Assert.Equal(TapZoneLayout.Default, vm.PagedTapZoneLayout);
@@ -2316,9 +2312,8 @@ public class ReaderScreenViewModelTests : IDisposable
     [Fact]
     public void ReportBadPage_IsARegisteredRemappableCommand_BoundToX()
     {
-        var command = Assert.Single(KeyboardCommandRegistry.Commands, c => c.Id == KeyboardCommandRegistry.ReaderReportBadPage);
-        Assert.Equal(Key.X, command.DefaultGesture.Key);
-        Assert.Equal(KeyModifiers.None, command.DefaultGesture.KeyModifiers);
+        var command = Assert.Single(InputActions.Core, i => i.Id == InputActionIds.ReportBadPage);
+        Assert.Equal([InputBinding.ForKey(Key.X)], command.Defaults);
     }
 
     // ===== Story-end finish (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md 3) =====
@@ -2333,7 +2328,7 @@ public class ReaderScreenViewModelTests : IDisposable
     {
         issueId = CreateLongIssue();
         TagPages(issueId, type, taggedPages);
-        var vm = new ReaderScreenViewModel(() => { }, new KeyBindingService(), recorder);
+        var vm = new ReaderScreenViewModel(() => { }, (IInputService?)null, recorder);
         vm.LoadIssue(issueId);
         return vm;
     }
@@ -2439,7 +2434,7 @@ public class ReaderScreenViewModelTests : IDisposable
     public void Finished_IsRecordedAtTheLastPageOfAShortIssue_UsingTheCeFormula()
     {
         var recorder = new RecordingReadingEventRecorder();
-        var vm = new ReaderScreenViewModel(() => { }, new KeyBindingService(), recorder);
+        var vm = new ReaderScreenViewModel(() => { }, (IInputService?)null, recorder);
         vm.LoadIssue(_issue1Id); // 3 pages: 2/3 = 66% under the old 0-based formula, 100% under CE's
 
         vm.NextPageCommand.Execute(null);
@@ -2616,7 +2611,7 @@ public class ReaderScreenViewModelTests : IDisposable
     public void LoadIssue_RecordsAnOpenedReadingEvent_ThenReachingTheEndRecordsFinished()
     {
         var recorder = new RecordingReadingEventRecorder();
-        var vm = new ReaderScreenViewModel(() => { }, new KeyBindingService(), recorder);
+        var vm = new ReaderScreenViewModel(() => { }, (IInputService?)null, recorder);
 
         vm.LoadIssue(_issue4Id); // 1-page issue, last in its own series
         Assert.Contains(recorder.Calls, c => c.Kind == "Opened" && c.ItemId == _issue4Id);
@@ -2630,7 +2625,7 @@ public class ReaderScreenViewModelTests : IDisposable
     public void ReachingTheEnd_AsksTheTrackerAutoSyncService_OncePerSession_ForThatSeries()
     {
         var sync = new RecordingTrackerSync();
-        var vm = new ReaderScreenViewModel(() => { }, new KeyBindingService(), new RecordingReadingEventRecorder(), sync);
+        var vm = new ReaderScreenViewModel(() => { }, (IInputService?)null, new RecordingReadingEventRecorder(), sync);
 
         vm.LoadIssue(_issue4Id);
         Assert.Empty(sync.Finished);
@@ -3169,40 +3164,64 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.False(vm.HighQualityPageDisplay);
     }
 
+    private static InputService NewInput() => new(InputActionCatalog.CreateWithCoreActions(), new MemoryKeymapStore());
+
+    /// <summary>The toolbar tooltips ("(Z)") are read fresh from the input service, so a remap in Preferences shows without reopening the reader.</summary>
     [Fact]
-    public void PageTurnKeys_DefaultToArrowKeys_AndReflectRemappingOnLoad()
+    public void ShortcutHints_DefaultToTheShippedKeys_AndFollowRemapping()
     {
-        var vm = new ReaderScreenViewModel(goBack: () => { });
-        vm.LoadIssue(_issue1Id);
-        Assert.Equal([new KeyGesture(Key.Left)], vm.PageTurnLeftKey);
-        Assert.Equal([new KeyGesture(Key.Right)], vm.PageTurnRightKey);
+        var input = NewInput();
+        var vm = new ReaderScreenViewModel(goBack: () => { }, input);
+        Assert.Equal("(Left)", vm.PageTurnLeftHint);
+        Assert.Equal("(Right)", vm.PageTurnRightHint);
+        Assert.Equal("(Z)", vm.ZoomInHint);
+        Assert.Equal("(R)", vm.RotateClockwiseHint);
 
-        SetKeyBinding(KeyboardCommandRegistry.ReaderPageTurnLeft, new KeyGesture(Key.J));
-        vm.LoadIssue(_issue1Id);
+        input.SetBindings(InputActionIds.PageTurnLeft, [InputBinding.ForKey(Key.J)]);
+        input.SetBindings(InputActionIds.ZoomIn, [InputBinding.ForKey(Key.OemComma)]);
 
-        Assert.Equal([new KeyGesture(Key.J)], vm.PageTurnLeftKey);
-        Assert.Equal([new KeyGesture(Key.Right)], vm.PageTurnRightKey); // untouched
+        Assert.Equal("(J)", vm.PageTurnLeftHint);
+        Assert.Equal("(Right)", vm.PageTurnRightHint);   // untouched
+        Assert.Equal("(,)", vm.ZoomInHint);
     }
 
     [Fact]
-    public void NewReaderShortcutKeys_DefaultCorrectly_AndReflectRemappingOnLoad()
+    public void ShortcutHint_PrefersAKeyboardBinding_AndIsEmptyWhenUnbound()
     {
-        // Representative sample across all three UI groups (Navigation/Zoom & Fit/Display) -
-        // docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-design.md.
+        var input = NewInput();
+        var vm = new ReaderScreenViewModel(goBack: () => { }, input);
+
+        // Zoom in ships with Z and Ctrl+Wheel Up: the tooltip shows the key, not the wheel.
+        Assert.Equal("(Z)", vm.ZoomInHint);
+        input.SetBindings(InputActionIds.ZoomIn, [InputBinding.ForWheel(WheelDirection.Up, KeyModifiers.Control), InputBinding.ForKey(Key.K)]);
+        Assert.Equal("(K)", vm.ZoomInHint);
+
+        input.SetBindings(InputActionIds.ZoomIn, [InputBinding.ForWheel(WheelDirection.Up, KeyModifiers.Control)]);
+        Assert.Equal("(Ctrl+Wheel up)", vm.ZoomInHint);
+
+        input.SetBindings(InputActionIds.ZoomIn, []);
+        Assert.Equal(string.Empty, vm.ZoomInHint);
+    }
+
+    [Fact]
+    public void KeyboardOverlay_IsOpenWhileThePaletteOrTheReportPickerIs()
+    {
         var vm = new ReaderScreenViewModel(goBack: () => { });
-        vm.LoadIssue(_issue1Id);
-        Assert.Equal([new KeyGesture(Key.Left)], vm.PanLeftKey);
-        Assert.Equal([new KeyGesture(Key.Z)], vm.ZoomInKey);
-        Assert.Equal([new KeyGesture(Key.F)], vm.ToggleFullscreenKey);
+        Assert.False(vm.IsKeyboardOverlayOpen);
 
-        SetKeyBinding(KeyboardCommandRegistry.ReaderPanLeft, new KeyGesture(Key.A));
-        SetKeyBinding(KeyboardCommandRegistry.ReaderZoomIn, new KeyGesture(Key.OemComma));
-        SetKeyBinding(KeyboardCommandRegistry.ReaderToggleFullscreen, new KeyGesture(Key.OemPeriod));
-        vm.LoadIssue(_issue1Id);
+        vm.Palette.Toggle();
+        Assert.True(vm.IsKeyboardOverlayOpen);
+        vm.Palette.Close();
+        Assert.False(vm.IsKeyboardOverlayOpen);
+    }
 
-        Assert.Equal([new KeyGesture(Key.A)], vm.PanLeftKey);
-        Assert.Equal([new KeyGesture(Key.OemComma)], vm.ZoomInKey);
-        Assert.Equal([new KeyGesture(Key.OemPeriod)], vm.ToggleFullscreenKey);
+    [Fact]
+    public void GoToFirstAndLastPage_AreFalseWithNothingLoaded()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        Assert.False(vm.GoToFirstPage());
+        Assert.False(vm.GoToLastPage());
     }
 
     [Fact]
@@ -3880,16 +3899,16 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.False(vm.IsDrawerOpen);
     }
 
-    /// <summary>docs/superpowers/specs/2026-08-25-reader-chrome-design.md - the real bug this phase fixes: a hint bound at construction time would go stale after a remap. GetShortcutHint reads KeyBindingService fresh on every call instead.</summary>
+    /// <summary>docs/superpowers/specs/2026-08-25-reader-chrome-design.md - the real bug this phase fixes: a hint bound at construction time would go stale after a remap. GetShortcutHint reads the input service fresh on every call instead.</summary>
     [Fact]
     public void GetShortcutHint_ReflectsARemapMadeAfterConstruction()
     {
-        var keyBindingService = new KeyBindingService(() => PaperbunkrDb.CreateContext());
-        var vm = new ReaderScreenViewModel(goBack: () => { }, keyBindingService);
-        string before = vm.GetShortcutHint(KeyboardCommandRegistry.ReaderRotateClockwise);
+        var input = new InputService(InputActionCatalog.CreateWithCoreActions(), new MemoryKeymapStore());
+        var vm = new ReaderScreenViewModel(goBack: () => { }, input);
+        string before = vm.GetShortcutHint(InputActionIds.RotateClockwise);
 
-        keyBindingService.AddKey(KeyboardCommandRegistry.ReaderRotateClockwise, new KeyGesture(Key.J));
-        string after = vm.GetShortcutHint(KeyboardCommandRegistry.ReaderRotateClockwise);
+        input.SetBindings(InputActionIds.RotateClockwise, [InputBinding.ForKey(Key.J)]);
+        string after = vm.GetShortcutHint(InputActionIds.RotateClockwise);
 
         Assert.NotEqual(before, after);
         Assert.Contains("J", after);
@@ -5048,7 +5067,7 @@ public class ReaderScreenViewModelTests : IDisposable
     [Fact]
     public void LoadIssue_WithBatteryPresent_FormatsPercentageLabel()
     {
-        var vm = new ReaderScreenViewModel(() => { }, new KeyBindingService(), new FakeBatteryStatusService(new BatteryStatusSample(72, IsCharging: false)));
+        var vm = new ReaderScreenViewModel(() => { }, (IInputService?)null, new FakeBatteryStatusService(new BatteryStatusSample(72, IsCharging: false)));
 
         vm.LoadIssue(_issue1Id);
 
@@ -5058,7 +5077,7 @@ public class ReaderScreenViewModelTests : IDisposable
     [Fact]
     public void LoadIssue_WithNoBatteryPresent_LeavesLabelNull()
     {
-        var vm = new ReaderScreenViewModel(() => { }, new KeyBindingService(), new FakeBatteryStatusService(null));
+        var vm = new ReaderScreenViewModel(() => { }, (IInputService?)null, new FakeBatteryStatusService(null));
 
         vm.LoadIssue(_issue1Id);
 

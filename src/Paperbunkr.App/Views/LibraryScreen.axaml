@@ -190,19 +190,50 @@
             <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
+        <!-- The resize grip in the gap after a Details header cell: a hairline, with the whole 10 px as its hit area.
+             Mouse-only by design (not focusable); the keyboard path is the width field in List Options. -->
+        <Style Selector="Thumb.columnGrip">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Cursor" Value="SizeWestEast" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="Transparent">
+                        <Border Width="1" HorizontalAlignment="Center" Margin="0,3" Background="{DynamicResource PbBorderBrush}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
         <Style Selector="Button.detailsHeader:pointerover">
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
 
 
-        <!-- Continue Reading overlay button (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase D) -->
+        <!-- Stacked series cover (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 2): two cards peeking
+             out above a multi-issue series' cover. They are siblings drawn BEFORE the cover, never children of it (its clip
+             would cut them, and its glow ring would fight them), and they live entirely inside the cover's existing top
+             gutter, so the tile measures exactly what it did. -->
+        <Style Selector="Border.stackPeek">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+        <!-- "All read" check: the same pill as the unread count, in the same corner; only one of the two ever shows. -->
+        <Style Selector="Border.countPill.done fi|SymbolIcon">
+            <Setter Property="Foreground" Value="{DynamicResource PbSuccessBrush}" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <!-- Hover action buttons on a cover (Read, More). Began as the Continue Reading overlay button
+             (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase D). -->
         <Style Selector="Button.continueReading">
             <Setter Property="Width" Value="32" />
             <Setter Property="Height" Value="32" />
             <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
-            <Setter Property="Background" Value="#B814161B" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface0Brush}" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -212,7 +243,7 @@
         <Style Selector="Button.continueReading Border.icon">
             <Setter Property="Width" Value="12" />
             <Setter Property="Height" Value="12" />
-            <Setter Property="Background" Value="White" />
+            <Setter Property="Background" Value="{DynamicResource PbTextBrush}" />
         </Style>
 
         <!-- Multi-selection checkbox (docs/superpowers/specs/2026-08-24-library-multiselect-slice1-
@@ -221,6 +252,8 @@
              toggled from LibraryScreenViewModel.HasSelection) so the whole active selection stays
              visible/adjustable without hunting for hover targets. -->
         <Style Selector="CheckBox.tileSelect">
+            <!-- A mouse affordance: the keyboard selects with Shift+arrows. As a tab stop it also sat "above" the neighbouring card for the arrow keys, so Up from a card landed on the next card's checkbox. -->
+            <Setter Property="Focusable" Value="False" />
             <Setter Property="Opacity" Value="0" />
             <Setter Property="Transitions">
                 <Transitions>
@@ -573,10 +606,20 @@
                                       CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-4,-4" />
                         </Panel>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                            <!-- Tile text elements (docs/superpowers/specs/2026-10-04-list-layouts-design.md §7): Title is
+                                 this line; the other checked elements share the second. -->
                             <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold"
+                                       IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TileShowsTitle}"
                                        Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Text="{Binding SeriesName}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
-                                       Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SeriesName}" />
+                            <TextBlock FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                       Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SeriesName}">
+                                <TextBlock.Text>
+                                    <MultiBinding Converter="{x:Static views:TileSecondLineConverter.Instance}">
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TileElements" />
+                                        <Binding Path="." />
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0,0,0">
                             <controls:LazyPart>
@@ -644,8 +687,10 @@
                 <StackPanel>
                     <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
                          transition-system-design.md) - "series-cover:{SeriesId}", same scheme as the
-                         Poster grid series template. -->
-                    <Border Classes="cover panoramaCover" Margin="5" Background="{Binding CoverBrush}"
+                         Poster grid series template. The Panel only exists so the stack peek can sit behind the cover. -->
+                    <Panel>
+                    <Border Classes="stackPeek" Margin="9,1,9,5" IsVisible="{Binding HasMultipleIssues}" />
+                    <Border x:Name="SeriesPanoramaCoverBorder" Classes="cover panoramaCover" Margin="5" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}"
                             controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
                             controls:SharedElement.ImageSource="{Binding #SeriesPanoramaCoverImage.Source}"
@@ -670,10 +715,17 @@
                             <Border Classes="libScrim" />
                             <views:TileCosmeticsOverlay />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                                <Border Classes="countPill" IsVisible="{Binding HasUnread}"
-                                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
-                                    <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" />
-                                </Border>
+                                <Panel>
+                                    <Border Classes="countPill" IsVisible="{Binding HasUnread}"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
+                                        <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" />
+                                    </Border>
+                                    <Border Classes="countPill done" IsVisible="{Binding IsAllRead}"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7"
+                                            ToolTip.Tip="All read" AutomationProperties.Name="All read">
+                                        <fi:SymbolIcon Symbol="Checkmark" />
+                                    </Border>
+                                </Panel>
                             </Border>
                             <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
                             <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="6,2"
@@ -688,14 +740,24 @@
                                 <controls:BrandMark Classes="coverLogo" IsVisible="{Binding HasPublisher}"
                                                     Family="Publisher" Value="{Binding Publisher}" Year="{Binding PublisherYear}" ShowText="False" />
                             </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
-                                <Button Classes="continueReading" IsVisible="{Binding HasContinueReading}"
+                            <!-- Hover actions: Read and More (mouse shortcuts, not focusable - see the Poster template). -->
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <StackPanel.IsVisible>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="#SeriesPanoramaCoverBorder.IsPointerOver" />
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton" />
+                                    </MultiBinding>
+                                </StackPanel.IsVisible>
+                                <Button Classes="continueReading" Focusable="False" IsVisible="{Binding HasContinueReading}"
                                         Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
-                                        CommandParameter="{Binding}"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        CommandParameter="{Binding}" ToolTip.Tip="Read" AutomationProperties.Name="Read">
                                     <fi:SymbolIcon Symbol="Play" />
                                 </Button>
-                            </Border>
+                                <Button Classes="continueReading" Focusable="False" Padding="0" Click="OnTileMoreClick"
+                                        ToolTip.Tip="More" AutomationProperties.Name="More actions">
+                                    <fi:SymbolIcon Symbol="MoreHorizontal" />
+                                </Button>
+                            </StackPanel>
                             <!-- Rating moved bottom-left (was language - now shown in the preview
                                  panel + hover tooltip instead, docs/superpowers/specs/2026-09-14-
                                  library-visual-redesign-design.md §3/§5); no selection-exclusion
@@ -718,6 +780,7 @@
                                       CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="5" />
                         </Grid>
                     </Border>
+                    </Panel>
                     <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
                                Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
                                Margin="5,3,5,0" />
@@ -849,9 +912,17 @@
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
                             <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                                       IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TileShowsTitle}"
                                        Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Text="{Binding Sub}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
-                                       Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                            <TextBlock FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                       Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
+                                <TextBlock.Text>
+                                    <MultiBinding Converter="{x:Static views:TileSecondLineConverter.Instance}">
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TileElements" />
+                                        <Binding Path="." />
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0,0,0">
                             <controls:LazyPart>
@@ -1067,9 +1138,47 @@
                                 Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterTitleTextHeight}"
                                 IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EffectiveShowTileTitles}">
                         <TextBlock Text="{Binding SeriesName}" FontSize="12" FontWeight="SemiBold"
+                                   IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasBuiltInCaptions}"
                                    Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
                                    ToolTip.Tip="{Binding SeriesName}" />
-                        <TextBlock Text="{Binding Number, StringFormat='#{0}'}" Classes="pbTextCaption" />
+                        <TextBlock Text="{Binding Number, StringFormat='#{0}'}" Classes="pbTextCaption"
+                                   IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasBuiltInCaptions}" />
+                        <!-- Custom caption lines (CE's First/Second/Third Line), built only for a list that has them. -->
+                        <controls:LazyPart IsActive="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasCustomCaptions}">
+                            <controls:LazyPart.ContentTemplate>
+                                <DataTemplate x:DataType="models:IssueListRow">
+                                  <StackPanel Spacing="1">
+                                    <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CaptionField1, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                                        <TextBlock.Text>
+                                            <MultiBinding Converter="{x:Static views:CaptionLineConverter.Instance}">
+                                                <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CaptionField1" />
+                                                <Binding Path="." />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                    <TextBlock Classes="pbTextCaption" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CaptionField2, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                                        <TextBlock.Text>
+                                            <MultiBinding Converter="{x:Static views:CaptionLineConverter.Instance}">
+                                                <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CaptionField2" />
+                                                <Binding Path="." />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                    <TextBlock Classes="pbTextCaption" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CaptionField3, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                                        <TextBlock.Text>
+                                            <MultiBinding Converter="{x:Static views:CaptionLineConverter.Instance}">
+                                                <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CaptionField3" />
+                                                <Binding Path="." />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                  </StackPanel>
+                                </DataTemplate>
+                            </controls:LazyPart.ContentTemplate>
+                        </controls:LazyPart>
                     </StackPanel>
                 </Grid>
             </Button>
@@ -1087,6 +1196,16 @@
                          (keyed on the SERIES id, not CoverIssueId - sidesteps ever needing to agree
                          on which issue is "the cover" across screens; both ends resolve their own
                          cover art independently for the same series id). -->
+                    <controls:LazyPart Grid.Row="0" IsActive="{Binding HasMultipleIssues}">
+                        <controls:LazyPart.ContentTemplate>
+                            <DataTemplate x:DataType="models:SeriesCardSample">
+                                <Panel IsHitTestVisible="False">
+                                    <Border Classes="stackPeek" Margin="13,2,13,5" Opacity="0.55" />
+                                    <Border Classes="stackPeek" Margin="9,6,9,5" />
+                                </Panel>
+                            </DataTemplate>
+                        </controls:LazyPart.ContentTemplate>
+                    </controls:LazyPart>
                     <Border x:Name="PosterSeriesCoverBorder" Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}"
                             controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
@@ -1151,20 +1270,45 @@
                                     </DataTemplate>
                                 </controls:LazyPart.ContentTemplate>
                             </controls:LazyPart>
+                            <!-- Top-right is the unread count OR this check, never both (HasUnread and IsAllRead exclude each other). -->
                             <controls:LazyPart>
                                 <controls:LazyPart.IsActive>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
-                                        <Binding Path="HasContinueReading" />
+                                        <Binding Path="IsAllRead" />
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge" />
+                                    </MultiBinding>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:SeriesCardSample">
+                                        <Border Classes="countPill done" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
+                                                ToolTip.Tip="All read" AutomationProperties.Name="All read">
+                                            <fi:SymbolIcon Symbol="Checkmark" />
+                                        </Border>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <!-- Hover actions: Read and More. Built only while the pointer is over the cover, and not focusable:
+                                 they are mouse shortcuts for what Enter and the context-menu key already do. -->
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="#PosterSeriesCoverBorder.IsPointerOver" />
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton" />
                                     </MultiBinding>
                                 </controls:LazyPart.IsActive>
                                 <controls:LazyPart.ContentTemplate>
                                     <DataTemplate x:DataType="models:SeriesCardSample">
-                                        <Button Classes="continueReading" Width="26" Height="26"
-                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
-                                                CommandParameter="{Binding}" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <fi:SymbolIcon Symbol="Play" />
-                                        </Button>
+                                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Button Classes="continueReading" Focusable="False" IsVisible="{Binding HasContinueReading}"
+                                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
+                                                    CommandParameter="{Binding}" ToolTip.Tip="Read" AutomationProperties.Name="Read">
+                                                <fi:SymbolIcon Symbol="Play" />
+                                            </Button>
+                                            <Button Classes="continueReading" Focusable="False" Padding="0" Click="OnTileMoreClick"
+                                                    ToolTip.Tip="More" AutomationProperties.Name="More actions">
+                                                <fi:SymbolIcon Symbol="MoreHorizontal" />
+                                            </Button>
+                                        </StackPanel>
                                     </DataTemplate>
                                 </controls:LazyPart.ContentTemplate>
                             </controls:LazyPart>
@@ -1213,9 +1357,47 @@
                                 Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterTitleTextHeight}"
                                 IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EffectiveShowTileTitles}">
                         <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
+                                   IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasBuiltInCaptions}"
                                    Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
                                    ToolTip.Tip="{Binding Name}" />
-                        <TextBlock Text="{Binding Sub}" Classes="pbTextCaption" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Sub}" Classes="pbTextCaption" TextTrimming="CharacterEllipsis"
+                                   IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasBuiltInCaptions}" />
+                        <!-- Custom caption lines (CE's First/Second/Third Line), built only for a list that has them. -->
+                        <controls:LazyPart IsActive="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasCustomCaptions}">
+                            <controls:LazyPart.ContentTemplate>
+                                <DataTemplate x:DataType="models:SeriesCardSample">
+                                  <StackPanel Spacing="1">
+                                    <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CaptionField1, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                                        <TextBlock.Text>
+                                            <MultiBinding Converter="{x:Static views:CaptionLineConverter.Instance}">
+                                                <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CaptionField1" />
+                                                <Binding Path="." />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                    <TextBlock Classes="pbTextCaption" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CaptionField2, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                                        <TextBlock.Text>
+                                            <MultiBinding Converter="{x:Static views:CaptionLineConverter.Instance}">
+                                                <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CaptionField2" />
+                                                <Binding Path="." />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                    <TextBlock Classes="pbTextCaption" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CaptionField3, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                                        <TextBlock.Text>
+                                            <MultiBinding Converter="{x:Static views:CaptionLineConverter.Instance}">
+                                                <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CaptionField3" />
+                                                <Binding Path="." />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                  </StackPanel>
+                                </DataTemplate>
+                            </controls:LazyPart.ContentTemplate>
+                        </controls:LazyPart>
                     </StackPanel>
                 </Grid>
             </Button>
@@ -1291,8 +1473,11 @@
              PosterCardWidth/Height (density slider) size the wrap panel, EffectiveShowTileTitles
              gates each tile's own text row. ============ -->
         <controls:SmoothScrollViewer x:Name="PosterGridScrollViewer" Grid.Row="1" IsVisible="{Binding IsPosterGrid}">
-            <Grid>
-                <Panel IsVisible="{Binding IsIssueGranularity}">
+            <Grid RowDefinitions="Auto,*">
+                <!-- Continue reading strip: first thing in the scroller, so it scrolls away with the grid. Not a Panel on
+                     purpose: the pinned-header lookup walks this Grid's Panel children to find the grids. -->
+                <views:LibraryContinueStrip Grid.Row="0" IsVisible="{Binding ShowContinueStrip}" />
+                <Panel Grid.Row="1" IsVisible="{Binding IsIssueGranularity}">
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource PosterGridIssueTemplate}" Margin="24,22,24,40">
@@ -1323,7 +1508,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </Panel>
-                <Panel IsVisible="{Binding IsSeriesGranularity}">
+                <Panel Grid.Row="1" IsVisible="{Binding IsSeriesGranularity}">
                     <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource PosterGridSeriesTemplate}" Margin="24,22,24,40">
@@ -1364,8 +1549,11 @@
              not the uniform-cell VirtualizingWrapPanel the other grids ride. Landscape covers wide,
              portrait covers narrow, side by side - the reason Panorama exists. -->
         <controls:SmoothScrollViewer x:Name="PanoramaScrollViewer" Grid.Row="1" IsVisible="{Binding IsPanoramaGrid}">
-            <Grid>
-                <Panel IsVisible="{Binding IsIssueGranularity}">
+            <Grid RowDefinitions="Auto,*">
+                <!-- Continue reading strip: first thing in the scroller, so it scrolls away with the grid. Not a Panel on
+                     purpose: the pinned-header lookup walks this Grid's Panel children to find the grids. -->
+                <views:LibraryContinueStrip Grid.Row="0" IsVisible="{Binding ShowContinueStrip}" />
+                <Panel Grid.Row="1" IsVisible="{Binding IsIssueGranularity}">
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource PanoramaGridItemTemplate}" Margin="24,22,24,40">
@@ -1392,7 +1580,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </Panel>
-                <Panel IsVisible="{Binding IsSeriesGranularity}">
+                <Panel Grid.Row="1" IsVisible="{Binding IsSeriesGranularity}">
                     <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource SeriesPanoramaGridItemTemplate}" Margin="24,22,24,40">
@@ -1459,13 +1647,16 @@
                  stay aligned with the row cells (rows are wrapped in Border.libRow for the focus ring). -->
             <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*" Margin="5,0,16,8" IsVisible="{Binding IsIssueGranularity}"
                   controls:ContextMenuHost.Provider="{Binding DetailsColumnsMenuProvider}">
-                <ItemsControl Grid.Column="1" ItemsSource="{Binding DetailsColumns}">
+                <!-- Drag a header to move its column, the grip after it to resize (LibraryScreen.DetailsHeader.cs,
+                     docs/superpowers/specs/2026-10-04-list-layouts-design.md §8). -->
+                <ItemsControl x:Name="DetailsHeaderItems" Grid.Column="1" ItemsSource="{Binding DetailsColumns}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:DetailsColumn">
-                            <Button Classes="detailsHeader" IsVisible="{Binding IsVisible}" Width="{Binding Width}"
+                          <Panel IsVisible="{Binding IsVisible}">
+                            <Button Classes="detailsHeader" Width="{Binding Width}"
                                     Command="{Binding $parent[ItemsControl].((vm:LibraryScreenViewModel)DataContext).SetDetailsSortCommand}"
                                     CommandParameter="{Binding Field}"
                                     AutomationProperties.AutomationId="{Binding Field, StringFormat='LibraryDetailsHeader_{0}'}">
@@ -1482,6 +1673,10 @@
                                     </Run>
                                 </TextBlock>
                             </Button>
+                            <Thumb Classes="columnGrip" Width="10" HorizontalAlignment="Right"
+                                   DragDelta="OnColumnGripDragDelta" DragCompleted="OnColumnGripDragCompleted"
+                                   ToolTip.Tip="Drag to resize" />
+                          </Panel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -1521,8 +1716,11 @@
 
         <!-- ============ Tiles ============ -->
         <controls:SmoothScrollViewer x:Name="TilesScrollViewer" Grid.Row="1" IsVisible="{Binding IsTilesView}">
-            <Grid>
-                <Panel IsVisible="{Binding IsIssueGranularity}">
+            <Grid RowDefinitions="Auto,*">
+                <!-- Continue reading strip: first thing in the scroller, so it scrolls away with the grid. Not a Panel on
+                     purpose: the pinned-header lookup walks this Grid's Panel children to find the grids. -->
+                <views:LibraryContinueStrip Grid.Row="0" IsVisible="{Binding ShowContinueStrip}" />
+                <Panel Grid.Row="1" IsVisible="{Binding IsIssueGranularity}">
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource TilesItemTemplate}" Margin="24,18,24,40">
@@ -1549,7 +1747,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </Panel>
-                <Panel IsVisible="{Binding IsSeriesGranularity}">
+                <Panel Grid.Row="1" IsVisible="{Binding IsSeriesGranularity}">
                     <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource SeriesTilesItemTemplate}" Margin="24,18,24,40">
@@ -1590,6 +1788,20 @@
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
         </controls:SmoothScrollViewer>
+
+        <!-- ============ Pinned group header ============ -->
+        <!-- One floating copy of the current group's header for the grouped cover grids (docs/superpowers/specs/2026-10-04-
+             library-redesign-design.md, Slice 2). The grouped grids are nested ItemsControls, not a flat list, so a header
+             cannot stick natively; LibraryScreen.axaml.cs shows this once a group's own header has scrolled under the top
+             edge and hides it as the next group's header arrives. No push-off animation. Opaque, so it covers the real
+             header while that one is still half in view. -->
+        <Border x:Name="PinnedGroupHeader" Grid.Row="1" IsVisible="False" IsHitTestVisible="False" VerticalAlignment="Top"
+                Background="{DynamicResource PbSurface1Brush}" Padding="24,10,24,8" Margin="0,0,18,0">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="PinnedGroupHeaderText" Classes="pbTextHeading" VerticalAlignment="Center" />
+                <TextBlock x:Name="PinnedGroupHeaderCount" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
 
         <!-- ============ A-Z jump indexer ============ -->
         <!-- Approximate scroll-to-letter (docs/superpowers/specs/2026-08-09-library-toolbar-design.md
@@ -1637,7 +1849,7 @@
                       IsVisible="{Binding ShowPreviewPanelColumn}" />
         <Border Grid.Row="1" Grid.Column="2" IsVisible="{Binding ShowPreviewPanelColumn}"
                 BorderThickness="1,0,0,0" BorderBrush="{DynamicResource PbBorderBrush}">
-            <views:LibraryPreviewPanel />
+            <views:LibraryPreviewPanel x:Name="PreviewPanel" />
         </Border>
 
         <!-- ============ Add-issue overlay (4b §6) - centered FloatingPanel over the grid, state on

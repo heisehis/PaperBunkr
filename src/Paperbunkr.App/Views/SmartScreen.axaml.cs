@@ -7,6 +7,9 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
+using System;
+using System.Collections.Generic;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Views;
 
@@ -17,9 +20,26 @@ public partial class SmartScreen : UserControl
     private SmartScreenViewModel? _viewModel;
     private object? _focusBeforeGroupedReview;
 
+    private readonly AttachedInputRegistration _screenInput;
+
+    /// <summary>The input service this screen's actions arrive through: the application's, unless a test supplies its own.</summary>
+    public IInputService InputService
+    {
+        get => _screenInput.Service;
+        set => _screenInput.Service = value;
+    }
+
     public SmartScreen()
     {
         InitializeComponent();
+        _screenInput = ScreenInput.Attach(this, InputScope.SmartLists, new Dictionary<string, Func<bool>>
+        {
+            // Each of these rewrites the lists the sidebar and the result grids are bound to, so they run once the key press has finished routing.
+            [InputActionIds.NewItem] = () => _viewModel is { } vm && ScreenInput.Deferred(() => vm.CreateNewCommand.Execute(null)),
+            [InputActionIds.Save] = () => _viewModel is { CanSaveList: true } vm && ScreenInput.Deferred(() => vm.SaveCommand.Execute(null)),
+            [InputActionIds.SmartDuplicate] = () => _viewModel is { CanDuplicateList: true } vm && ScreenInput.Deferred(() => vm.DuplicateCommand.Execute(null)),
+            [InputActionIds.Refresh] = () => _viewModel is { } vm && ScreenInput.Deferred(vm.RefreshSidebar),
+        });
         // Type-ahead (docs/superpowers/specs/2026-09-12-grid-typeahead-rangeselect-quit-design.md) -
         // no multi-select here to clear (this screen is read-only browse, unlike Library/Books), so
         // the clear-selection callback is a no-op.

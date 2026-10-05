@@ -70,15 +70,6 @@ public partial class ReaderScreenViewModel
 
     private bool? _configuredSessionHud;
 
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _toggleSessionHudKey = [new(Key.H)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _toggleWarmShiftKey = [new(Key.W)];
-
-    [ObservableProperty]
-    private IReadOnlyList<KeyGesture> _copyPageKey = [new(Key.C, KeyModifiers.Control)];
-
     [RelayCommand]
     private void ToggleSessionHud()
     {

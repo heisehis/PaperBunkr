@@ -8,6 +8,8 @@ using Avalonia.Controls.Templates;
 using Avalonia.VisualTree;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views.Home;
+using System.Collections.Generic;
+using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Views;
 
@@ -23,6 +25,14 @@ public partial class HomeScreen : UserControl
     private bool _firstReadyEffectsStarted;
     private readonly FocusReclaimer _focus;
     private bool _pausedByFocus;
+    private readonly AttachedInputRegistration _screenInput;
+
+    /// <summary>The input service this screen's actions arrive through: the application's, unless a test supplies its own.</summary>
+    public IInputService InputService
+    {
+        get => _screenInput.Service;
+        set => _screenInput.Service = value;
+    }
 
     public HomeScreen()
     {
@@ -32,6 +42,15 @@ public partial class HomeScreen : UserControl
 
         _focus = new FocusReclaimer(this, () => _viewModel is { Sections.Count: > 0 }, FocusDefault);
         KeyDown += OnHomeKeyDown;
+        _screenInput = ScreenInput.Attach(this, InputScope.Home, new Dictionary<string, Func<bool>>
+        {
+            [InputActionIds.FocusSearch] = () => ScreenInput.FocusTextBox(this, "HomeSearchBox"),
+            [InputActionIds.Refresh] = () => _viewModel is { } vm && vm.RefreshCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.RefreshCommand.Execute(null)),
+
+            // The bumpers (and Ctrl+PageUp/PageDown) step the spotlight carousel, which is Home's only set of tabs.
+            [InputActionIds.TabNext] = () => _viewModel is { } vm && ScreenInput.Deferred(() => vm.NextSpotlightCommand.Execute(null)),
+            [InputActionIds.TabPrevious] = () => _viewModel is { } vm && ScreenInput.Deferred(() => vm.PreviousSpotlightCommand.Execute(null)),
+        });
         AddHandler(GotFocusEvent, OnHomeGotFocus, Avalonia.Interactivity.RoutingStrategies.Bubble);
 
         DataContextChanged += (_, _) =>

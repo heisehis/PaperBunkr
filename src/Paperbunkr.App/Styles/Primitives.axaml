@@ -1,5 +1,6 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Paperbunkr.App.Controls">
     <!--
         Component primitives (docs/superpowers/specs/2026-08-24-design-language-foundation-design.md
         Component Primitives section). Implemented as style classes rather than literal Avalonia
@@ -23,9 +24,9 @@
     <Style Selector=":is(Control)">
         <Setter Property="FocusAdorner">
             <FocusAdornerTemplate>
-                <Border Margin="-16" IsHitTestVisible="False">
+                <controls:FocusRingAdorner Margin="-16" IsHitTestVisible="False" AdornerLayer.IsClipEnabled="False">
                     <Border Margin="16" CornerRadius="{DynamicResource PbRadiusSm}" BoxShadow="{DynamicResource PbGlowRing}" />
-                </Border>
+                </controls:FocusRingAdorner>
             </FocusAdornerTemplate>
         </Setter>
     </Style>
@@ -257,6 +258,11 @@
         <!-- Inside twin of PbGlowRing for controls their own container clips (a segmented control's pill). Overwritten at runtime by
              ThemeService.ApplyGlowRing / ApplyGlowTier. -->
         <BoxShadows x:Key="PbGlowRingInset">inset 0 0 0 2 #99E0995A</BoxShadows>
+        <!-- The focus ring drawn inside a control's own bounds, for one the layout clips (a sidebar item that fills its panel edge to edge) or one with a border (an inset BoxShadow paints nothing there).
+             Set it as the control's FocusAdorner. -->
+        <FocusAdornerTemplate x:Key="PbFocusAdornerInside">
+            <Border IsHitTestVisible="False" BoxShadow="{DynamicResource PbGlowRingInset}" />
+        </FocusAdornerTemplate>
     </Styles.Resources>
 
     <!-- PosterTile - see Views/PosterTile.axaml. Root there is a Border (not Button) specifically
@@ -377,11 +383,12 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000" />
     </Style>
+    <!-- Hover and focus use the shared ring token (PbGlowRing), which follows the skin's accent and the glow-tier setting; a literal colour here stayed orange on every other accent. -->
     <Style Selector="Border.heroTile:pointerover">
-        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 2 #66E0995A" />
+        <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
     </Style>
     <Style Selector="Border.heroTile:focus-visible">
-        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 2 #66E0995A" />
+        <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
     </Style>
 
     <!-- Poster cover scrim (docs/superpowers/specs/2026-08-27-library-browsing-4a-poster-grid-

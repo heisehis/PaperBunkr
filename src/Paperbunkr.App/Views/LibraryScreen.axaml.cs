@@ -9,9 +9,13 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Paperbunkr.App.ContextMenus;
+using Paperbunkr.App.Controls;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.ViewModels;
+using Paperbunkr.App.ViewModels.LibraryActions;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Views;
@@ -27,6 +31,15 @@ public partial class LibraryScreen : UserControl
 
     private int? _lastGridIndex;
 
+    private readonly AttachedInputRegistration _libraryInput;
+
+    /// <summary>The input service this screen's actions arrive through: the application's, unless a test supplies its own.</summary>
+    public IInputService InputService
+    {
+        get => _libraryInput.Service;
+        set => _libraryInput.Service = value;
+    }
+
     public LibraryScreen()
     {
         InitializeComponent();
@@ -35,6 +48,10 @@ public partial class LibraryScreen : UserControl
         // Tunnel so Escape closes the Add-issue overlay even while a field inside it has focus
         // (the series-name SuggestBox otherwise swallows Escape to close its own dropdown).
         AddHandler(KeyDownEvent, OnLibraryScreenKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(PointerPressedEvent, OnScreenPointerPressedTunnel, RoutingStrategies.Tunnel);
+        AddHandler(KeyDownEvent, OnScreenCardKeyDownTunnel, RoutingStrategies.Tunnel);
+        AttachDetailsHeaderDrag();
+        _libraryInput = new AttachedInputRegistration(this, InputScope.Library, OnLibraryInputAction, service: InputServiceLocator.Current, focusRoot: () => this);
         // Type-ahead (docs/superpowers/specs/2026-09-12-grid-typeahead-rangeselect-quit-design.md) -
         // Tunnel from the screen root rather than per-template, so it works regardless of which of
         // the 5 view modes is currently active, same "resolve the real ItemsControl from e.Source"
@@ -63,8 +80,101 @@ public partial class LibraryScreen : UserControl
 
     private string? _railCurrentLetter;
 
+    /// <summary>
+    /// Shows <c>PinnedGroupHeader</c> for the group whose own header has scrolled under the top edge of a grouped cover grid
+    /// (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 2), and hides it otherwise: ungrouped, a view mode
+    /// with no cover grid, at the very top, or in the stretch where the next group's header is about to take over. Cheap on
+    /// purpose, since it runs on every scroll change: it only looks at the realized group containers (a handful), never at tiles.
+    /// </summary>
+    private void UpdatePinnedGroupHeader()
+    {
+        var pinned = FindPinnedGroup();
+        if (pinned is null)
+        {
+            if (PinnedGroupHeader.IsVisible)
+            {
+                PinnedGroupHeader.IsVisible = false;
+            }
+
+            return;
+        }
+
+        var (header, count) = pinned.Value;
+        if (PinnedGroupHeaderText.Text != header)
+        {
+            PinnedGroupHeaderText.Text = header;
+        }
+
+        string countText = count.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        if (PinnedGroupHeaderCount.Text != countText)
+        {
+            PinnedGroupHeaderCount.Text = countText;
+        }
+
+        PinnedGroupHeader.IsVisible = true;
+    }
+
+    /// <summary>Room the pinned header needs; once less than this of a group is left on screen, the next group's real header takes over.</summary>
+    private const double PinnedGroupHeaderHandOff = 44;
+
+    private (string Header, int Count)? FindPinnedGroup()
+    {
+        ScrollViewer? viewer = PosterGridScrollViewer.IsEffectivelyVisible ? PosterGridScrollViewer
+            : PanoramaScrollViewer.IsEffectivelyVisible ? PanoramaScrollViewer
+            : null;
+        if (viewer is null || viewer.Offset.Y <= 0 || viewer.Content is not Panel host)
+        {
+            return null;
+        }
+
+        // The viewer's content is a Grid of two Panels (issue / series granularity), each holding the ungrouped and the grouped ItemsControl.
+        foreach (var granularity in host.Children.OfType<Panel>())
+        {
+            if (!granularity.IsVisible)
+            {
+                continue;
+            }
+
+            foreach (var groups in granularity.Children.OfType<ItemsControl>())
+            {
+                if (!groups.IsVisible)
+                {
+                    continue;
+                }
+
+                foreach (var container in groups.GetRealizedContainers())
+                {
+                    (string Header, int Count)? group = container.DataContext switch
+                    {
+                        SeriesCardGroup s => (s.Header, s.Items.Count),
+                        IssueListRowGroup r => (r.Header, r.Items.Count),
+                        _ => null,
+                    };
+                    if (group is null)
+                    {
+                        return null; // the ungrouped grid: its containers are tiles
+                    }
+
+                    if (container.TranslatePoint(default, viewer) is not { } top)
+                    {
+                        continue;
+                    }
+
+                    if (top.Y < 0 && top.Y + container.Bounds.Height > PinnedGroupHeaderHandOff)
+                    {
+                        return group;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
     private void OnAnyScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
+        UpdatePinnedGroupHeader();
+
         if (DataContext is not LibraryScreenViewModel vm || !vm.ShowAlphabetIndex || e.Source is not ScrollViewer scrollViewer)
         {
             return;
@@ -143,7 +253,7 @@ public partial class LibraryScreen : UserControl
         }
 
         int itemsPerRow = Math.Max(1, (int)(scrollViewer.Bounds.Width / (geometry.CardWidth + geometry.Margin)));
-        int firstRow = (int)Math.Max(0, scrollViewer.Offset.Y / (geometry.CardHeight + geometry.Margin));
+        int firstRow = (int)Math.Max(0, (scrollViewer.Offset.Y - ContinueStripHeight(scrollViewer)) / (geometry.CardHeight + geometry.Margin));
         int index = Math.Clamp(firstRow * itemsPerRow, 0, flat.Count - 1);
         return AlphabetIndexEntry.LetterForItem(flat[index]);
     }
@@ -261,82 +371,130 @@ public partial class LibraryScreen : UserControl
             // no unsubscribe needed, matching every other subscription in this block.
             vm.Covers.CollectionChanged += (_, _) => _focus.Reclaim();
             vm.Groups.CollectionChanged += (_, _) => _focus.Reclaim();
+            // A swap can leave the pinned header naming a group that is gone; re-evaluate once the new content has laid out.
+            vm.Groups.CollectionChanged += (_, _) => Dispatcher.UIThread.Post(UpdatePinnedGroupHeader, DispatcherPriority.Background);
+            vm.IssueList.Groups.CollectionChanged += (_, _) => Dispatcher.UIThread.Post(UpdatePinnedGroupHeader, DispatcherPriority.Background);
             vm.FlatCovers.CollectionChanged += (_, _) => _focus.Reclaim();
             vm.IssueList.Rows.CollectionChanged += (_, _) => _focus.Reclaim();
             vm.IssueList.FlatRows.CollectionChanged += (_, _) => _focus.Reclaim();
         }
     }
 
-    private void OnLibraryScreenKeyDown(object? sender, KeyEventArgs e)
+    /// <summary>
+    /// The Library's shortcuts, as input-service actions in the Library scope (docs/superpowers/specs/2026-10-03-input-service-design.md §9): focus the search box (CE's quick search, plus
+    /// the long-standing "/"), refresh, toggle the preview panel, select all, delete, and the selection actions that <see cref="LibraryActionCatalog"/> also puts on the right-click menu and
+    /// the bar, so the three can't drift apart. Escape never reaches here: it is the global CloseCurrentView action and <c>MainViewModel.Escape()</c> clears the selection last. Typing
+    /// in a text box never steals these (the service ignores keyboard actions under a text field), and neither does a dialog or popup that has focus (this registration is dormant then).
+    /// </summary>
+    private void OnLibraryInputAction(InputActionEventArgs e)
     {
         if (DataContext is not LibraryScreenViewModel vm)
         {
             return;
         }
 
-        // Escape for the Add-issue overlay is now handled centrally in MainViewModel.Escape()
-        // (docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md's own
-        // investigation) - MainWindow's Tunnel KeyDown handler runs before this one and always
-        // consumes Escape, so a duplicate check here would never actually be reached.
-
-        // docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md - "/"
-        // focuses the search box from anywhere in the grid. e.Source (not sender - this fires on the
-        // Tunnel pass, before the target's own handlers) is checked so typing "/" inside some other
-        // TextBox still types a literal "/" instead of stealing focus.
-        if (e.Key == Key.OemQuestion && e.KeyModifiers == KeyModifiers.None && e.Source is not TextBox)
+        switch (e.Action.Id)
         {
-            Toolbar.FocusSearchBox();
-            e.Handled = true;
+            case InputActionIds.FocusSearch:
+                Toolbar.FocusSearchBox();
+                e.Handled = true;
+                return;
+            case InputActionIds.ToggleLibraryPreview:
+                vm.ToggleLibraryPreviewPanelCommand.Execute(null);
+                e.Handled = true;
+                return;
+            case InputActionIds.ListOptions:
+                vm.ListLayouts.ShowListOptionsCommand.Execute(null);
+                e.Handled = true;
+                return;
+            case InputActionIds.SaveListLayout:
+                vm.ListLayouts.SaveLayoutAsCommand.Execute(null);
+                e.Handled = true;
+                return;
+            case InputActionIds.EditListLayouts:
+                vm.ListLayouts.ShowEditLayoutsCommand.Execute(null);
+                e.Handled = true;
+                return;
+            case InputActionIds.Refresh:
+                // Reloading clears and repopulates the very collections the focused tile lives in, so it runs after the key press has finished routing.
+                Dispatcher.UIThread.Post(vm.LoadFromDatabase);
+                e.Handled = true;
+                return;
+            case InputActionIds.CloseCurrentView:
+                // Esc inside the inspector hands focus back to the grid card it came from (docs/superpowers/specs/2026-10-04-library-redesign-
+                // design.md, Keyboard). Anywhere else it is declined, so the shell's own Escape handling runs as before.
+                if (ActiveGridItemsControl() is { } grid && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is Visual focused
+                    && PreviewPanel.IsVisualAncestorOf(focused))
+                {
+                    VirtualizedFocus.FocusIndex(grid, _lastGridIndex ?? 0, 1);
+                    e.Handled = true;
+                }
+
+                return;
+            case InputActionIds.TabNext:
+            case InputActionIds.TabPrevious:
+                // The lens tabs (All / Reading / Unread / Read) are the Library's tab strip. Deferred like Refresh: changing the lens swaps the collections the focused tile lives in.
+                int lensStep = e.Action.Id == InputActionIds.TabNext ? 1 : -1;
+                Dispatcher.UIThread.Post(() => TabStrip.Step(Toolbar, lensStep));
+                e.Handled = true;
+                return;
+            case InputActionIds.LibrarySelectAll:
+                vm.SelectAllVisibleCommand.Execute(null);
+                e.Handled = true;
+                return;
+            case InputActionIds.LibraryDeleteSelection:
+                vm.DeleteCurrentSelectionCommand.Execute(null);
+                e.Handled = true;
+                return;
+        }
+
+        if (PluginInputActions.IsPluginAction(e.Action.Id))
+        {
+            // Deferred like the other selection actions: a plugin may rewrite the library under the focused tile.
+            if (vm.LibraryPluginCommands.Any(c => PluginInputActions.IdFor(c) == e.Action.Id) && vm.SelectionBarIssueIds().Count > 0)
+            {
+                string pluginActionId = e.Action.Id;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => vm.RunPluginAction(pluginActionId));
+                e.Handled = true;
+            }
+
             return;
         }
 
-        // Real accelerator for the context menu's "Edit Properties… (Ctrl+I)" hint (CE parity -
-        // miProperties.ShortcutKeys), plus Select All / Delete (docs/superpowers/specs/2026-08-31-
-        // app-wide-and-library-keyboard-shortcuts-design.md). Wired here as a plain KeyDown handler,
-        // not <UserControl.KeyBindings>, matching PageCanvas's/this file's own already-proven Escape/
-        // "/" pattern above. Ctrl+I dispatches through BulkEditCurrentSelectionCommand, not
-        // BulkEditSelectionCommand directly - the latter only ever reads issue-granularity
-        // Selection.SelectedIds, so pressing Ctrl+I with a real series selected (SeriesSelection)
-        // silently no-opped, a genuine pre-existing bug found via live diagnostic logging this
-        // session, unrelated to key routing itself. e.Source, not sender, so typing into a TextBox
-        // (e.g. the search box) never steals these.
-        if (e.Source is TextBox)
+        if (!LibraryActionCatalog.KeyActions.ContainsKey(e.Action.Id))
         {
             return;
         }
 
-        // The bulk-action shortcuts (Ctrl+I, Alt+Shift+0-5/R/U, Ctrl+G, Ctrl+C/V, Ctrl+Shift+C) come from LibraryActionCatalog.KeyMap -
-        // the same definitions the menu hints and bar tooltips show (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §1).
-        // Deferred like the bar's buttons: several of them rebuild the grid the focused tile lives in.
-        if (new ViewModels.LibraryActions.LibraryActionCatalog(vm).TryGetKeyCommand(e.Key, e.KeyModifiers, out var command, out var parameter))
+        // Deferred like the bar's buttons: several of these rebuild the grid the focused tile lives in.
+        if (new LibraryActionCatalog(vm, _libraryInput.Service).TryGetKeyCommand(e.Action.Id, out var command, out var parameter))
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() => command!.Execute(parameter));
             e.Handled = true;
         }
-        else if (e.Key == Key.I && e.KeyModifiers == KeyModifiers.Control)
+        else if (e.Action.Id == InputActionIds.LibraryEdit)
         {
+            // Ctrl+I dispatches through BulkEditCurrentSelectionCommand when the catalog has nothing to run: BulkEditSelectionCommand only reads issue-granularity selection, so a real series
+            // selection silently no-opped (a pre-existing bug found via live diagnostic logging, docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md).
             vm.BulkEditCurrentSelectionCommand.Execute(null);
             e.Handled = true;
         }
-        else if (e.Key == Key.A && e.KeyModifiers == KeyModifiers.Control)
+    }
+
+    /// <summary>
+    /// Type-ahead backspace - Avalonia's TextInput event doesn't fire for Backspace (unlike WinForms KeyPress, which is why CE's own KeySearch could treat it as just another character); handled
+    /// here instead, sharing the same Buffer/matching logic. This is control behavior, not a shortcut, so it stays a key handler rather than an input-service action.
+    /// </summary>
+    private void OnLibraryScreenKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Source is TextBox || e.Key != Key.Back || e.KeyModifiers != KeyModifiers.None)
         {
-            vm.SelectAllVisibleCommand.Execute(null);
-            e.Handled = true;
+            return;
         }
-        else if (e.Key == Key.Delete && e.KeyModifiers == KeyModifiers.None)
+
+        if (HandleTypeAhead('', e.Source))
         {
-            vm.DeleteCurrentSelectionCommand.Execute(null);
             e.Handled = true;
-        }
-        // Type-ahead backspace - Avalonia's TextInput event doesn't fire for Backspace (unlike
-        // WinForms KeyPress, which is why CE's own KeySearch could treat it as just another
-        // character); handled here instead, sharing the same Buffer/matching logic.
-        else if (e.Key == Key.Back && e.KeyModifiers == KeyModifiers.None)
-        {
-            if (HandleTypeAhead('\b', e.Source))
-            {
-                e.Handled = true;
-            }
         }
     }
 
@@ -573,6 +731,71 @@ public partial class LibraryScreen : UserControl
     }
 
     /// <summary>
+    /// Ctrl/Shift-click selection on the tiles. The tile handlers are declared on each <see cref="Button"/> card in XAML, but a Button marks a left press handled in its own class
+    /// handler before instance handlers run, so those never saw the click and Ctrl/Shift-click selected nothing. Tunnelling from the screen root runs first; the card's own handler
+    /// still does the work (focus, toggle) and, for a modified click, marks the press handled so the Button doesn't also "click".
+    /// </summary>
+    private void OnScreenPointerPressedTunnel(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed ||
+            e.Source is not Visual source ||
+            source.FindAncestorOfType<Button>(includeSelf: true) is not { } button ||
+            !button.Classes.Contains("card"))
+        {
+            return;
+        }
+
+        switch (button.DataContext)
+        {
+            case IssueListRow:
+                OnTilePointerPressed(button, e);
+                break;
+            case SeriesCardSample:
+                OnSeriesTilePointerPressed(button, e);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Enter and Space open the focused tile. A Button handles both keys itself before a handler declared in XAML on it runs, and these tiles have no bound Command (a click used to navigate, which
+    /// made keyboard grid navigation unusable), so <see cref="OnCardKeyDown"/> never saw them and the keys did nothing. Tunnelling from the screen root runs first and hands them to it.
+    /// </summary>
+    private void OnScreenCardKeyDownTunnel(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled)
+        {
+            return;
+        }
+
+        bool arrow = e.Key is Key.Left or Key.Right or Key.Up or Key.Down;
+        if (e.Source is Button { DataContext: IssueListRow or SeriesCardSample } button && button.Classes.Contains("card"))
+        {
+            if (e.KeyModifiers == KeyModifiers.None && e.Key is Key.Enter or Key.Space)
+            {
+                OnCardKeyDown(button, e);
+            }
+            else if (arrow)
+            {
+                // The grid's own move first; when it has nowhere to go (the last row of a group, the first row on its way up to the toolbar) the screen's directional move takes over. Left to
+                // bubble, Avalonia's ItemsControl acts on the key on the way up and drops focus, so the key went nowhere (see Wanted).
+                OnCardKeyDown(button, e);
+                if (!e.Handled && e.KeyModifiers == KeyModifiers.None)
+                {
+                    e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
+                }
+            }
+
+            return;
+        }
+
+        // The toolbar, the chips and the sidebar: plain controls with no arrow handling of their own, so Down from the toolbar reaches the grid and Up comes back.
+        if (arrow && e.KeyModifiers == KeyModifiers.None)
+        {
+            e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
+        }
+    }
+
+    /// <summary>
     /// <c>DogEarThumbnails</c> hover peek (docs/superpowers/specs/2026-09-13-preferences-cosmetic-
     /// toggles-design.md) - mirrors CE's own hover-only real-page-2 fetch. Not a binding: the decode
     /// is lazy (only when actually hovered) and needs a staleness guard against container recycling
@@ -588,11 +811,6 @@ public partial class LibraryScreen : UserControl
 
     private void OnCoverPointerEntered(object? sender, PointerEventArgs e)
     {
-        if (sender is Border { Child: Grid overlayHost })
-        {
-            SetTileRingHover(overlayHost, true);
-        }
-
         if (sender is not Border coverBorder || ResolvePeekRow(coverBorder.DataContext) is not { } row)
         {
             return;
@@ -732,11 +950,6 @@ public partial class LibraryScreen : UserControl
             return;
         }
 
-        if (coverBorder.Child is Grid overlayHost)
-        {
-            SetTileRingHover(overlayHost, false);
-        }
-
         var peekImage = FindDogEarPeekImage(coverBorder);
         if (peekImage is not null)
         {
@@ -744,19 +957,29 @@ public partial class LibraryScreen : UserControl
         }
     }
 
-    /// <summary>Pushes the pointer-over state into the cover's <see cref="Views.TileCosmeticsOverlay"/>
-    /// (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #2) - a direct child of the cover Grid,
-    /// so a plain <c>Children</c> scan; no per-tile binding or subscription needed.</summary>
-    private static void SetTileRingHover(Grid coverGrid, bool hovering)
+    /// <summary>
+    /// A cover's hover "More" button (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 2): the tile's own
+    /// right-click menu, at the pointer. A mouse-only shortcut - the keyboard and the controller reach the same menu
+    /// with the context-menu key, which is why the button is not focusable.
+    /// The menu is owned by the screen, not the button: the button exists only while the cover is hovered, so it is removed the
+    /// moment the pointer moves onto the menu, and a flyout anchored to it was torn down with it. It also opens a tick later,
+    /// after this click has finished routing through a control that is about to be detached.
+    /// </summary>
+    private void OnTileMoreClick(object? sender, RoutedEventArgs e)
     {
-        foreach (var child in coverGrid.Children)
+        e.Handled = true;
+        if (sender is not Control { DataContext: { } target } || DataContext is not IContextMenuProvider provider)
         {
-            if (child is TileCosmeticsOverlay overlay)
-            {
-                overlay.HoverRing = hovering;
-                return;
-            }
+            return;
         }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (provider.BuildContextMenu(target) is { Count: > 0 } entries)
+            {
+                ContextMenuHost.ShowMenuAtPointer(this, entries);
+            }
+        });
     }
 
     /// <summary>The peek Image is a direct child of the cover Grid in the Panorama templates, but inside a
@@ -921,10 +1144,16 @@ public partial class LibraryScreen : UserControl
         var (scrollViewer, cardWidth, cardHeight, margin) = GetGridScrollGeometry(coverFit, vm);
         int itemsPerRow = Math.Max(1, (int)(scrollViewer.Bounds.Width / (cardWidth + margin)));
         int targetRow = index / itemsPerRow;
-        double offsetY = targetRow * (cardHeight + margin);
+        double offsetY = ContinueStripHeight(scrollViewer) + (targetRow * (cardHeight + margin));
 
         scrollViewer.Offset = new Vector(scrollViewer.Offset.X, offsetY);
     }
+
+    /// <summary>Height the "Continue reading" strip takes at the top of a cover grid's scroller (0 while hidden), so the row-based scroll estimates above and below stay aligned with the grid.</summary>
+    private static double ContinueStripHeight(ScrollViewer scrollViewer) =>
+        scrollViewer.Content is Panel host && host.Children.OfType<LibraryContinueStrip>().FirstOrDefault() is { IsVisible: true } strip
+            ? strip.Bounds.Height
+            : 0;
 
     /// <summary>Holds the approximate item index scrolled-to just before a
     /// <see cref="LibraryGridCoverFit"/> flip rebuilds the grid with different tile dimensions
@@ -945,7 +1174,7 @@ public partial class LibraryScreen : UserControl
 
         var (scrollViewer, cardWidth, cardHeight, margin) = GetGridScrollGeometry(oldCoverFit, vm);
         int itemsPerRow = Math.Max(1, (int)(scrollViewer.Bounds.Width / (cardWidth + margin)));
-        int topRow = (int)(scrollViewer.Offset.Y / (cardHeight + margin));
+        int topRow = (int)Math.Max(0, (scrollViewer.Offset.Y - ContinueStripHeight(scrollViewer)) / (cardHeight + margin));
         _pendingGridScrollIndex = topRow * itemsPerRow;
     }
 

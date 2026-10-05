@@ -99,6 +99,12 @@
                                        ToolTip.Tip="{Binding ListName}" />
                             <WrapPanel Orientation="Horizontal">
                                 <TextBlock Text="{Binding MetaLine}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                <!-- A Finish goal in progress for this list (docs/superpowers/specs/2026-10-04-insights-goal-scopes-design.md); opens Insights. -->
+                                <Button Classes="headerAction ghost" Padding="6,0,0,0" FontSize="12" IsVisible="{Binding HasGoalChip}"
+                                        Command="{Binding OpenGoalInsightsCommand}" ToolTip.Tip="See this goal in Insights"
+                                        AutomationProperties.Name="Reading goal progress for this list">
+                                    <TextBlock Text="{Binding GoalChipText, StringFormat='· {0}'}" />
+                                </Button>
                                 <Button Classes="headerAction ghost" Padding="6,0,0,0" FontSize="12" Content="{Binding ContinuityLinkLabel}"
                                         Command="{Binding OpenLinkedContinuityCommand}" IsVisible="{Binding IsContinuityLinked}" ToolTip.Tip="Open this continuity" />
                                 <Button Classes="headerAction ghost" Padding="6,0,0,0" FontSize="12" IsVisible="{Binding HasLinkedStoryEvent}"
@@ -186,6 +192,7 @@
                                                 </MenuItem>
                                                 <Separator />
                                                 <MenuItem Header="Edit details…" Command="{Binding OpenPropertiesCommand}" />
+                                                <MenuItem Header="Set a goal…" Command="{Binding SetGoalForListCommand}" />
                                             </MenuFlyout>
                                         </Button.Flyout>
                                     </Button>

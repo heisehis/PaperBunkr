@@ -57,13 +57,12 @@ Checked each against `docs/paperbunkr-todo.md`, the doc a human actually maintai
   **fixed**, wired into both (`paperbunkr-todo.md` lines 477-478).
 - ~~Series.Genre vs Issue.Genre display inconsistency~~ — **fixed**, full audit done
   (`paperbunkr-todo.md` line 486).
-- **Content-type classification is a manual dropdown on Detail — no real §7/§9 auto-classify
-  pipeline.** Still genuinely open, and it's not a small fix — see "Content-type classification &
-  manga metadata scraping" below, which is the real tracking entry for this. Partially built
-  already (publisher-based heuristic classifier, tracker sync stages 1-4, manga detail screen,
+- ~~**Content-type classification is a manual dropdown on Detail — no real §7/§9 auto-classify
+  pipeline.**~~ **Built 2026-10-06** (uncommitted, not yet seen on screen) - see "Content-type
+  classification & manga metadata scraping" below for what it does and what it deliberately leaves out.
+  Before it: publisher-based heuristic classifier, tracker sync stages 1-4, manga detail screen,
   MangaBaka + MangaUpdates + Kitsu adapters, Apply-from-Provider, MangaDex metadata scraping,
-  two-way tracker sync, and the Stage 5 stats dashboard as Stats v2 on 2026-09-08 all shipped);
-  the auto-classify pipeline itself is what remains open.
+  two-way tracker sync, and the Stage 5 stats dashboard as Stats v2 on 2026-09-08.
 
 ## Before tagging a release
 
@@ -856,7 +855,13 @@ VIZ Media → Manga/RightToLeft) via `PublisherContentTypeClassifier`. Publisher
 categories (Dark Horse, Tapas) are deliberately excluded rather than guessed. A periodic re-sweep is
 wired fire-and-forget off a new `AppSettings.LastContentTypeSweepUtc`, same shape as the auto-backup
 trigger. One migration (`20260902142325_AddLastContentTypeSweepUtc`). This is a heuristic pre-filter,
-not the tracker-driven pipeline below — that remains unbuilt.
+not the tracker-driven pipeline below.
+
+**Tracker-driven auto-classify pipeline built 2026-10-06** (uncommitted, not yet seen on screen): MangaBaka, then AniList (`countryOfOrigin`), then MangaDex
+(`originalLanguage`) tell manga, manhwa and manhua apart; every `Series` now records where its type came from and whether a person locked it, so the old sweep can
+no longer overwrite a deliberate "Unknown". Confident matches (near-exact title, sources agree) are applied with an Undo; the rest wait in Library Health >
+Review > Content type. Design `docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md`; status and what was verified in `paperbunkr-todo.md`
+(2026-10-06). The MangaUpdates / Kitsu / MAL / Shikimori adapters were deliberately not extended (they would only repeat what these three already say).
 
 **Expanded scope, per user-supplied research (2026-08-12):** full tracker-service *sync*
 integration (not just classification-time metadata lookup) — one `Track` row per series-per-
@@ -1934,8 +1939,9 @@ as of 2026-09-13/14 (`CosmeticThumbnailSettings`, `DogEarEligibility`, `DogEarTh
 uncommitted), see the Library browsing extras batch above.*
 
 ### Smart features pitch (unscoped, pitched 2026-09-14)
-Not started — needs its own brainstorm → design spec before implementation. Captured here so the
-ideas aren't lost, not because scope/approach is settled.
+**Designed and built 2026-10-06 (uncommitted, not seen in the running app)** — `docs/superpowers/specs/2026-10-06-smart-features-design.md`
+(five slices S1–S5, all built; dropped: #9, #12; out of scope: #14, #15). The per-item text below is the original pitch; the spec, and
+its "Implementation notes" for where the build differs, supersede it.
 
 1. **Smart Lists v2 template gallery** — the SmartList Engine v2 (nested AND/OR + regex, shipped
    2026-08-29) already supports this; expose a curated preset picker (Unread manga, Recently added
@@ -1963,7 +1969,7 @@ ideas aren't lost, not because scope/approach is settled.
 8. **Library gap detection** — per-series issue-number analysis: "you have #1-3, 5, 7; missing #4,
    #6." Surface per-series and as a global "holes in your collection" view. Pure query over `Issue`/
    `Series`, no new infra.
-9. **Reading-integrity health scan** — flag low-res pages, inconsistent page dimensions mid-issue,
+9. ~~**Reading-integrity health scan**~~ **Dropped 2026-10-06** (number kept so cross-references stay valid) — flag low-res pages, inconsistent page dimensions mid-issue,
    duplicate/blank pages, page-count-vs-metadata mismatch, unreadable archives. Natural extension of
    the existing `LibraryHealthService` (already probes `PageDecodeCore.TryOpenProvider` for
    content-empty detection, shipped 2026-09-17) — run as an Activity Center job like Scheduled
@@ -1975,7 +1981,8 @@ ideas aren't lost, not because scope/approach is settled.
     almost-finished series into one ranked rail, replacing Home's current separate Continue-Reading/
     Almost-Done/Dive-In modules with one blended one (or sitting alongside them — a real design
     question for the brainstorm, not decided here).
-12. **Reading-stats dashboard refinements** — pace, streaks, time-of-day heatmap, genre/publisher
+12. ~~**Reading-stats dashboard refinements**~~ **Dropped 2026-10-06** — streaks, pace, heatmap and burn-down
+    already ship in Insights → Trends; only a completion-rate chart is missing. Original text: pace, streaks, time-of-day heatmap, genre/publisher
     mix over time, completion rate. Overlaps significantly with the already-shipped Insights/Stats v2
     tab (`ReadingEvent` log + ScottPlot charts, 2026-09-06/09-08) — check what's already covered
     there before scoping this as new work; likely an extend, not a build.
@@ -1997,7 +2004,24 @@ ideas aren't lost, not because scope/approach is settled.
     review-queue pattern (`MetadataProposal`) already used for other proposed-metadata flows — no new
     review UI needed, just a new proposal source.
 
-*None of items 8-16 are scoped or brainstormed yet — same caveat as items 1-7 above: needs its own
+**Built on data already on hand — pitched 2026-10-06:**
+
+17. **Metadata consistency scan** — flag outliers within a series: an issue year outside the run's span,
+    a publisher or age rating that differs from its siblings, duplicate issue numbers, a volume that
+    contradicts its neighbours. A new check family in `LibraryHealthService`, with fixes offered as
+    `MetadataProposal`s rather than silent edits.
+18. **Affinity-ranked Wanted** — order the Wanted screen by how likely you are to read each item:
+    creators and series you finish, series you are mid-run on, and publishers you keep returning to,
+    scored from the `ReadingEvent` log. Wanted already holds the items; this is a ranking function
+    plus a "why this is up here" line.
+19. **Time-left estimates** — "~25 min left in this issue / ~3 h to finish the series", from your own
+    median pace per page (`ReadingEvent` durations) times unread pages. Shown on Home's Up Next
+    modules and the Detail screen; falls back to a format-wide median when a series has no history.
+20. **Confidence-gated auto-accept for proposals** — a threshold setting (default off) that lets
+    high-confidence `MetadataProposal`s apply themselves and lands the rest in the Activity Center
+    review queue, with an undo window. Pairs with #16 and the content-type auto-classify pipeline.
+
+*None of items 8-20 are scoped or brainstormed yet — same caveat as items 1-7 above: needs its own
 brainstorm → design spec per this project's `CLAUDE.md` workflow before implementation starts.*
 
 ### Plugin API 4.1 — all four slices implemented 2026-09-20 (on-screen verification pending)

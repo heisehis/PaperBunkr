@@ -123,6 +123,84 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Metron account sync (docs/superpowers/specs/2026-10-05-metron-account-sync-design.md): the only place the app sends
+                     reading data anywhere, so everything is off until the master switch is on and each row says what it sends. -->
+                <Border Classes="groupBox" Tag="connections.metronSync">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Metron account" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="6" DataContext="{Binding MetronSync}" x:DataType="vm:MetronSyncSettingsViewModel">
+                            <pref:SettingsRow Icon="ArrowSync" Title="Sync with my Metron account"
+                                              Description="Sends the things switched on below to your account on metron.cloud, about once an hour, using the Metron login saved above. Nothing is sent while this is off.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <ToggleSwitch IsChecked="{Binding IsEnabled}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                  AutomationProperties.AutomationId="MetronSyncEnabled" AutomationProperties.Name="Sync with my Metron account" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="Calendar" Title="Pull list"
+                                              Description="Series you follow from Metron are added to your pull list, and series on your pull list are followed here. Unfollowing here removes it there; removing it on Metron leaves your follow here alone."
+                                              IsEnabled="{Binding IsEnabled}">
+                                <pref:SettingsRow.SettingsContent>
+                                    <ToggleSwitch IsChecked="{Binding SyncPullList}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                  AutomationProperties.AutomationId="MetronSyncPullList" AutomationProperties.Name="Sync the pull list" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="Book" Title="Reading"
+                                              Description="Each issue you finish in the reader is sent as a read date, with your rating if it has one. Starts from now: earlier reads are sent only if you choose Send my reading history."
+                                              IsEnabled="{Binding IsEnabled}">
+                                <pref:SettingsRow.SettingsContent>
+                                    <ToggleSwitch IsChecked="{Binding SyncReading}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                  AutomationProperties.AutomationId="MetronSyncReading" AutomationProperties.Name="Sync reading" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="Library" Title="Collection"
+                                              Description="Every issue in your library that Metron knows is added to your collection as a digital copy, and rating changes are sent. A large library is uploaded a little each hour. Nothing is ever deleted from your Metron collection."
+                                              IsEnabled="{Binding IsEnabled}">
+                                <pref:SettingsRow.SettingsContent>
+                                    <ToggleSwitch IsChecked="{Binding SyncCollection}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                  AutomationProperties.AutomationId="MetronSyncCollection" AutomationProperties.Name="Sync the collection" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="Star" Title="Wish list"
+                                              Description="Issues you want (from Metron series) are added to your wish list, removed when you drop them, and marked acquired when they arrive."
+                                              IsEnabled="{Binding IsEnabled}">
+                                <pref:SettingsRow.SettingsContent>
+                                    <ToggleSwitch IsChecked="{Binding SyncWishList}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                  AutomationProperties.AutomationId="MetronSyncWishList" AutomationProperties.Name="Sync the wish list" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="ArrowUpload" Title="Run by hand"
+                                              Description="Sync now sends whatever is waiting. Send my reading history queues every issue you have finished, not just new ones. Import from Metron fills in ratings and read issues you have on Metron but not here, and never overwrites.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button Classes="headerAction primary" Command="{Binding SyncNowCommand}" IsEnabled="{Binding CanRun}"
+                                                AutomationProperties.AutomationId="MetronSyncNow">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" />
+                                                <TextBlock Text="Sync now" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Classes="headerAction ghost" Command="{Binding SendReadingHistoryCommand}" IsEnabled="{Binding CanRun}"
+                                                AutomationProperties.AutomationId="MetronSendReadingHistory">
+                                            <TextBlock Text="Send my reading history" />
+                                        </Button>
+                                        <Button Classes="headerAction ghost" Command="{Binding ImportFromMetronCommand}" IsEnabled="{Binding CanRun}"
+                                                AutomationProperties.AutomationId="MetronImport">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <fi:SymbolIcon Symbol="ArrowDownload" FontSize="{StaticResource PbIconSizeXs}" />
+                                                <TextBlock Text="Import from Metron" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasStatus}" FontSize="12" Margin="10,4,10,4" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource PbTextBrush}" AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- Download automation (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 7) -->
                 <Border Classes="groupBox" Tag="connections.downloadAutomation">
                     <StackPanel>
@@ -157,6 +235,21 @@
                                 <pref:SettingsRow.SettingsContent>
                                     <ToggleSwitch IsChecked="{Binding TrackerAutoOpenLinkPanel}" OnContent="{x:Null}" OffContent="{x:Null}"
                                                   AutomationProperties.AutomationId="TrackerAutoOpenLinkPanel" AutomationProperties.Name="Open the tracker link panel automatically" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <pref:SettingsRow Icon="Tag" Title="Ask before changing a content type"
+                                               Description="When classifying series from MangaBaka, AniList and MangaDex, never apply a type on your own: every match waits in Library Health &gt; Review &gt; Content type. Off: a near-exact match that two sources agree on is applied, with an Undo.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <ToggleSwitch IsChecked="{Binding AskBeforeClassifying}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                  AutomationProperties.AutomationId="AskBeforeClassifying" AutomationProperties.Name="Ask before changing a content type" />
+                                </pref:SettingsRow.SettingsContent>
+                            </pref:SettingsRow>
+                            <!-- docs/superpowers/specs/2026-10-06-smart-features-design.md §7.3 -->
+                            <pref:SettingsRow Icon="ArrowSync" Title="Refresh provider data when a series is marked completed"
+                                               Description="When a series linked to a metadata source becomes Completed, fetch its data from that source once more. Series with no link are never looked up. Shows as a job in the Activity Center.">
+                                <pref:SettingsRow.SettingsContent>
+                                    <ToggleSwitch IsChecked="{Binding RefreshProviderDataOnComplete}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                                  AutomationProperties.AutomationId="RefreshProviderDataOnComplete" AutomationProperties.Name="Refresh provider data when a series is marked completed" />
                                 </pref:SettingsRow.SettingsContent>
                             </pref:SettingsRow>
                             <pref:SettingsRow Icon="Book" Title="Update progress after reading"

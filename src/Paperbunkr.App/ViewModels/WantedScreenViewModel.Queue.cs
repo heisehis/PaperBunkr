@@ -21,7 +21,10 @@ public sealed partial class WantedScreenViewModel
     /// <summary>How many active downloads the strip lists before it says "and n more".</summary>
     private const int DownloadStripSize = 4;
 
-    public static IReadOnlyList<string> QueueSortNames { get; } = new[] { "Attention", "A–Z", "Recently added" };
+    /// <summary>The sort that ranks series by how likely you are to read more of them (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.5). Never the default.</summary>
+    public const string AffinitySortName = "Most likely to read";
+
+    public static IReadOnlyList<string> QueueSortNames { get; } = new[] { "Attention", "A–Z", "Recently added", AffinitySortName };
 
     private readonly Dictionary<int, QueueIssueViewModel> _issueById = new();
     private readonly Dictionary<int, QueueGroupViewModel> _groupById = new();
@@ -91,6 +94,7 @@ public sealed partial class WantedScreenViewModel
     {
         "A–Z" => QueueSort.Alphabetical,
         "Recently added" => QueueSort.RecentlyAdded,
+        AffinitySortName => QueueSort.Affinity,
         _ => QueueSort.Attention,
     };
 
@@ -179,6 +183,9 @@ public sealed partial class WantedScreenViewModel
         }
 
         // A Metron series has no cover of its own; the weekly list's cache may have one.
+        // How likely you are to read more of each series, for the "Most likely to read" sort and its tooltip (smart features §4.5).
+        var affinities = WantedAffinityScorer.Score(context, series.Values, DateTime.UtcNow);
+
         var cachedCovers = PullListService.CachedCovers(context, series.Values.Where(w => w.Provider == ComicProvider.Metron).Select(w => w.ExternalVolumeId));
 
         foreach (var (seriesId, issues) in byGroup)
@@ -198,6 +205,12 @@ public sealed partial class WantedScreenViewModel
                     ?? (cachedCovers.TryGetValue(watched.ExternalVolumeId, out var cached) ? cached : null),
                 watched.Provider == ComicProvider.Metron);
             group.Issues = issues;
+            if (affinities.TryGetValue(seriesId, out var affinity))
+            {
+                group.Affinity = affinity.Score;
+                group.AffinityWhy = affinity.Why;
+            }
+
             group.Summary = SummaryFor(issues);
             group.NeedsAttention = issues.Any(i => i.Stage is QueueStage.Failed or QueueStage.Downloading || i.HasCandidateChip);
         }
@@ -307,6 +320,7 @@ public sealed partial class WantedScreenViewModel
         {
             QueueSort.Alphabetical => groups.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase),
             QueueSort.RecentlyAdded => groups.OrderByDescending(g => g.NewestCreatedAt).ThenBy(g => g.Name, StringComparer.OrdinalIgnoreCase),
+            QueueSort.Affinity => groups.OrderByDescending(g => g.Affinity).ThenBy(g => g.Name, StringComparer.OrdinalIgnoreCase),
             _ => groups.OrderBy(AttentionRank).ThenBy(g => g.Name, StringComparer.OrdinalIgnoreCase),
         };
     }

@@ -7,7 +7,7 @@ public sealed record ComicVineVolumeSearchResult(int Id, string Name, string? St
 
 public sealed record ComicVineVolumeDetails(int Id, string Name, string? StartYear, string? Publisher, int? CountOfIssues, string? ImageUrl);
 
-public sealed record ComicVineIssueSummary(int Id, string? IssueNumber, string? Name, string? ImageUrl);
+public sealed record ComicVineIssueSummary(int Id, string? IssueNumber, string? Name, string? ImageUrl, string? CoverHash = null);
 
 /// <summary>How the issue-match dialog resolved: a plain "chosen issue or null" can't tell Skip (apply volume-level fields only) from Go Back (re-show the series dialog).</summary>
 public enum ComicVineIssueReviewOutcome
@@ -52,8 +52,19 @@ public interface IStoryArcSource
 /// had its own HTTP client and throttle). ComicVine returns a volume's issues in one paginated sweep, so <see cref="SearchIssuesAsync"/> returns them all for page 1
 /// and nothing after, which is what the orchestrator's paging loop expects.
 /// </summary>
-public sealed class ScrapeComicVineAdapter(IComicVineClient client, IComicVineIssueDetailsSource details) : IScrapeComicVine
+public sealed class ScrapeComicVineAdapter(IComicVineClient client, IComicVineIssueDetailsSource details) : IScrapeComicVine, IComicIssueLookup
 {
+    // Exact lookups exist on Metron only; any other source answers "nothing", which sends the scraper on to its name search.
+    public Task<IReadOnlyList<ComicIssueHit>> FindIssuesByComicVineIdAsync(int comicVineIssueId, CancellationToken cancellationToken) =>
+        client is IComicIssueLookup lookup
+            ? lookup.FindIssuesByComicVineIdAsync(comicVineIssueId, cancellationToken)
+            : Task.FromResult<IReadOnlyList<ComicIssueHit>>(Array.Empty<ComicIssueHit>());
+
+    public Task<IReadOnlyList<ComicIssueHit>> FindIssuesByUpcAsync(string upc, CancellationToken cancellationToken) =>
+        client is IComicIssueLookup lookup
+            ? lookup.FindIssuesByUpcAsync(upc, cancellationToken)
+            : Task.FromResult<IReadOnlyList<ComicIssueHit>>(Array.Empty<ComicIssueHit>());
+
     public async Task<IReadOnlyList<ComicVineVolumeSearchResult>> SearchVolumesAsync(string query, int page = 1, CancellationToken cancellationToken = default)
     {
         if (page > 1)
@@ -84,7 +95,7 @@ public sealed class ScrapeComicVineAdapter(IComicVineClient client, IComicVineIs
         }
 
         var issues = await client.GetVolumeIssuesAsync(volumeId, cancellationToken).ConfigureAwait(false);
-        return issues.Select(i => new ComicVineIssueSummary(i.Id, i.IssueNumber, i.Name, i.ImageUrl)).ToList();
+        return issues.Select(i => new ComicVineIssueSummary(i.Id, i.IssueNumber, i.Name, i.ImageUrl, i.CoverHash)).ToList();
     }
 
     public Task<ComicVineIssueDetails?> GetIssueDetailsAsync(int issueId, CancellationToken cancellationToken = default) =>

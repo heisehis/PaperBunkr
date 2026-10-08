@@ -93,8 +93,24 @@ public class GridCoverCacheTests
         Assert.Equal(1, cache.Count);
     }
 
+    // Leases (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md section 4.2). Touching a disposed bitmap throws
+    // ObjectDisposedException, which is how these tell a freed bitmap from a live one.
+
     [Fact]
-    public void Eviction_NeverDisposesTheBitmap_BecauseARealizedImageMayStillShowIt()
+    public void Eviction_NeverDisposesALeasedBitmap_BecauseARealizedImageIsShowingIt()
+    {
+        var cache = new GridCoverCache(100);
+        cache.Add("old", 96, Tiny(), 100);
+        Assert.True(cache.TryLease("old", 96, out var shown));
+
+        cache.Add("new", 96, Tiny(), 100);
+
+        Assert.False(cache.TryGet("old", 96, out _));
+        Assert.Equal(new PixelSize(1, 1), shown!.PixelSize);
+    }
+
+    [Fact]
+    public void Eviction_DisposesABitmapNobodyLeases_SoItsMemoryIsFreedAtOnce()
     {
         var cache = new GridCoverCache(100);
         var evicted = Tiny();
@@ -102,9 +118,81 @@ public class GridCoverCacheTests
 
         cache.Add("new", 96, Tiny(), 100);
 
-        Assert.False(cache.TryGet("old", 96, out _));
-        // Still fully usable: touching a disposed bitmap would throw ObjectDisposedException.
-        Assert.Equal(new PixelSize(1, 1), evicted.PixelSize);
+        Assert.Throws<ObjectDisposedException>(() => evicted.PixelSize);
+    }
+
+    [Fact]
+    public void ReleasingTheLastLease_OfAnEvictedBitmap_DisposesIt()
+    {
+        var cache = new GridCoverCache(100);
+        cache.Add("old", 96, Tiny(), 100);
+        Assert.True(cache.TryLease("old", 96, out var first));
+        Assert.True(cache.TryLease("old", 96, out var second));
+        Assert.Same(first, second);
+        cache.Add("new", 96, Tiny(), 100);
+
+        cache.Release(first!);
+        Assert.Equal(new PixelSize(1, 1), first!.PixelSize); // one image still shows it
+
+        cache.Release(first);
+        Assert.Throws<ObjectDisposedException>(() => first.PixelSize);
+        Assert.Equal(0, cache.LeaseCount(first));
+    }
+
+    [Fact]
+    public void ReleasingALease_OfABitmapStillCached_KeepsIt()
+    {
+        var cache = new GridCoverCache(1_000);
+        cache.Add("1", 96, Tiny(), 100);
+        Assert.True(cache.TryLease("1", 96, out var leased));
+
+        cache.Release(leased!);
+
+        Assert.True(cache.TryGet("1", 96, out var again));
+        Assert.Same(leased, again);
+        Assert.Equal(new PixelSize(1, 1), leased!.PixelSize);
+    }
+
+    [Fact]
+    public void TryLease_Misses_WhenTheEntryIsGone()
+    {
+        var cache = new GridCoverCache(1_000);
+
+        Assert.False(cache.TryLease("nope", 96, out var bitmap));
+        Assert.Null(bitmap);
+    }
+
+    [Fact]
+    public void Trim_DropsLeastRecentlyUsedDownToTheTarget_DisposingOnlyUnleasedOnes()
+    {
+        var cache = new GridCoverCache(1_000);
+        var oldest = Tiny();
+        cache.Add("a", 96, oldest, 100);
+        cache.Add("b", 96, Tiny(), 100);
+        cache.Add("c", 96, Tiny(), 100);
+        Assert.True(cache.TryLease("b", 96, out var shown));
+        Assert.True(cache.TryGet("c", 96, out _)); // order, most recent first: c, b, a
+
+        cache.Trim(100);
+
+        Assert.Equal(100, cache.Bytes);
+        Assert.True(cache.TryGet("c", 96, out _));
+        Assert.Throws<ObjectDisposedException>(() => oldest.PixelSize);
+        Assert.Equal(new PixelSize(1, 1), shown!.PixelSize);
+    }
+
+    [Fact]
+    public void Clear_LeavesALeasedBitmapAlive_UntilItIsReleased()
+    {
+        var cache = new GridCoverCache(1_000);
+        cache.Add("1", 96, Tiny(), 100);
+        Assert.True(cache.TryLease("1", 96, out var shown));
+
+        cache.Clear();
+        Assert.Equal(new PixelSize(1, 1), shown!.PixelSize);
+
+        cache.Release(shown);
+        Assert.Throws<ObjectDisposedException>(() => shown.PixelSize);
     }
 
     [Fact]
@@ -145,8 +233,9 @@ public class GridCoverCacheTests
     }
 
     [Fact]
-    public void TheSharedBudget_IsThreeHundredMegabytes()
+    public void TheSharedBudget_IsTheGridShareOfTheImageBudget()
     {
-        Assert.Equal(300L * 1024 * 1024, GridCoverCache.BudgetBytes);
+        Assert.Equal(Paperbunkr.App.Services.Performance.ImageMemoryBudget.GridBytes, GridCoverCache.BudgetBytes);
+        Assert.InRange(GridCoverCache.BudgetBytes, 90L * 1024 * 1024, 300L * 1024 * 1024);
     }
 }

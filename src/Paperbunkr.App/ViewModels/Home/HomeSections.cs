@@ -49,6 +49,13 @@ public sealed class ContinueReadingSectionViewModel : HomeSectionViewModel
         : base(home, HomeSectionKey.ContinueReading, Symbol.BookOpen, "HomeContinueReadingHeader") { }
 }
 
+/// <summary>The ranked "what to read next" list (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.4).</summary>
+public sealed class UpNextSectionViewModel : HomeSectionViewModel
+{
+    public UpNextSectionViewModel(HomeScreenViewModel home)
+        : base(home, HomeSectionKey.UpNext, Symbol.ArrowRight, "HomeUpNextHeader") { }
+}
+
 public sealed class RecentlyAddedSectionViewModel : HomeSectionViewModel
 {
     public RecentlyAddedSectionViewModel(HomeScreenViewModel home)

@@ -79,6 +79,37 @@ public class TextSpinnerTests
         Assert.Equal("2.MU", TextSpinner.Step("1.MU", 1.0m, 0, int.MaxValue));
     }
 
+    [Fact]
+    public void Nudge_DoesNotThrow_WhenABindingHandsTheTextBackAsNull()
+    {
+        // Crash report 2026-10-06: Nudge assigned box.Text and then read box.Text.Length, and a bound box whose source coerced the value back to
+        // null made that a NullReferenceException on the UI thread.
+        var box = new Avalonia.Controls.TextBox { Text = "5" };
+        box.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Avalonia.Controls.TextBox.TextProperty && e.NewValue is string)
+            {
+                box.Text = null;
+            }
+        };
+
+        TextSpinner.Nudge(box, 1m);
+
+        Assert.Null(box.Text);
+        Assert.Equal(0, box.CaretIndex);
+    }
+
+    [Fact]
+    public void Nudge_PutsTheCaretAtTheEndOfTheNewNumber()
+    {
+        var box = new Avalonia.Controls.TextBox { Text = "5" };
+
+        TextSpinner.Nudge(box, 1m);
+
+        Assert.Equal("6", box.Text);
+        Assert.Equal(1, box.CaretIndex);
+    }
+
     [Theory]
     [InlineData("500", "100", 0, 100)]      // above the range
     [InlineData("3", "15", 15, 1440)]       // below the range

@@ -39,4 +39,7 @@ public enum SeriesActivityEventKind
     TrackerUnlinked = 3,
     TrackerSynced = 4,
     RatingChanged = 5,
+
+    /// <summary>The series' publisher status changed (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.3). <see cref="SeriesActivityEvent.Detail"/> is the whole sentence.</summary>
+    StatusChanged = 6,
 }

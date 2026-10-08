@@ -240,6 +240,10 @@ internal sealed class MangaDexAttributesDto
     [JsonPropertyName("publicationDemographic")]
     public string? PublicationDemographic { get; set; }
 
+    /// <summary>ja / ko / zh / zh-hk / en ... - the signal that separates manhwa/manhua from manga (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md).</summary>
+    [JsonPropertyName("originalLanguage")]
+    public string? OriginalLanguage { get; set; }
+
     /// <summary>Cross-referenced external ids keyed by site code ("al"/"mal"/"mu"/"kt"/...) -
     /// only the four this codebase has an <see cref="ExternalMetadataProvider"/> value for are
     /// mapped; the rest (raw scanlator/publisher sites) are ignored.</summary>
@@ -285,7 +289,8 @@ internal static class MangaDexNormalizer
         Demographic: dto.Attributes?.PublicationDemographic,
         CrossReferences: ResolveCrossReferences(dto),
         GenreTags: ResolveGenreTags(dto),
-        OtherTags: ResolveOtherTags(dto));
+        OtherTags: ResolveOtherTags(dto),
+        OriginalLanguage: dto.Attributes?.OriginalLanguage);
 
     /// <summary>English beats the first alt-title in any language beats "Untitled" - never throws
     /// even when every title field is somehow empty.</summary>

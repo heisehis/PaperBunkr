@@ -36,8 +36,14 @@ public partial class DuplicateGroupRowViewModel : ViewModelBase
         _onResolveKeepFiles = onResolveKeepFiles;
 
         string groupKey = Guid.NewGuid().ToString();
+        // Which copy to keep is advice shown as a badge (smart features §5.2); the default selection below is unchanged.
+        var keeper = Paperbunkr.Data.Metadata.DuplicateKeeperRanker.Recommend(members);
         Candidates = new ObservableCollection<DuplicateCandidateViewModel>(
-            members.Select(i => new DuplicateCandidateViewModel(i, groupKey)));
+            members.Select(i => new DuplicateCandidateViewModel(i, groupKey)
+            {
+                IsRecommended = keeper?.IssueId == i.Id,
+                RecommendedReason = keeper?.IssueId == i.Id ? keeper.Reason : null,
+            }));
         Candidates[0].IsKeep = true;
 
         IssueIds = members.Select(i => i.Id).ToList();

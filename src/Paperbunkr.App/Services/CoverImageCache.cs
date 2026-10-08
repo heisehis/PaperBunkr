@@ -32,9 +32,9 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public static class CoverImageCache
 {
-    private const int MaxEntries = 5000;
-
-    private static readonly LruCache<string, Bitmap> _cache = new(MaxEntries);
+    // Bounded by bytes, not entries (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.2): the old 5,000-entry
+    // cap let every cover of a 5,000-comic library stay decoded at once.
+    private static readonly BitmapByteCache<string> _cache = new(Performance.ImageMemoryBudget.ComicBytes);
 
     /// <summary>A cache hit, or decode-then-store if a file exists (custom cover preferred). Any thread.</summary>
     public static Bitmap? Get(string idKey)
@@ -128,6 +128,7 @@ public static class CoverImageCache
         }
 
         _cache.Add(idKey, decoded);
+        Performance.MemoryPressureTrimmer.Shared.Check();
         return decoded;
     }
 
@@ -151,6 +152,12 @@ public static class CoverImageCache
 
     /// <summary>Number of decoded full-size bitmaps held (harness/tests).</summary>
     internal static int CachedCount => _cache.Count;
+
+    /// <summary>Pixel bytes of the decoded full-size bitmaps held.</summary>
+    internal static long CachedBytes => _cache.Bytes;
+
+    /// <summary>Drops least-recently-used entries down to <paramref name="fraction"/> of the budget (memory-pressure trim). Never disposes.</summary>
+    internal static void Trim(double fraction) => _cache.Trim((long)(Performance.ImageMemoryBudget.ComicBytes * fraction));
 
     /// <summary>Drops only the in-memory entry for one key, leaving the on-disk file alone - for a
     /// caller that just wrote fresh content to that path itself (custom covers).</summary>

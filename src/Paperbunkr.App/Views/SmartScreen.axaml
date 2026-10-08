@@ -437,5 +437,8 @@
                 </ScrollViewer>
             </DockPanel>
         </Border>
+
+        <!-- "New Smart List" gallery (docs/superpowers/specs/2026-10-06-smart-features-design.md §3.2) -->
+        <views:SmartTemplateGallery Grid.Row="0" Grid.RowSpan="3" DataContext="{Binding Gallery}" />
     </Grid>
 </UserControl>

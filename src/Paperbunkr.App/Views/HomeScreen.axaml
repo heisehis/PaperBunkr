@@ -30,6 +30,7 @@
                 <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/SpotlightSection.axaml" />
                 <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/NeedsAttentionSection.axaml" />
                 <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/ContinueReadingSection.axaml" />
+                <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/UpNextSection.axaml" />
                 <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/RecentlyAddedSection.axaml" />
                 <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/CollectionsSection.axaml" />
                 <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/BecauseYouReadSection.axaml" />

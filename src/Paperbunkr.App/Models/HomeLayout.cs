@@ -18,10 +18,13 @@ public static class HomeSectionKey
     public const string BecauseYouRead = "becauseYouRead";
     public const string ReadingList = "readingList";
 
-    /// <summary>Default order - today's Home layout with Needs Attention slotted in under the spotlight.</summary>
+    /// <summary>The ranked "what to read next" list (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.4).</summary>
+    public const string UpNext = "upNext";
+
+    /// <summary>Default order - Needs Attention under the spotlight, Up Next right after Continue Reading.</summary>
     public static IReadOnlyList<string> Default { get; } = new[]
     {
-        Spotlight, NeedsAttention, ContinueReading, RecentlyAdded, Collections, BecauseYouRead, ReadingList,
+        Spotlight, NeedsAttention, ContinueReading, UpNext, RecentlyAdded, Collections, BecauseYouRead, ReadingList,
     };
 
     public static string DisplayName(string key) => key switch
@@ -29,6 +32,7 @@ public static class HomeSectionKey
         Spotlight => "Spotlight",
         NeedsAttention => "Needs attention",
         ContinueReading => "Continue reading",
+        UpNext => "Up next",
         RecentlyAdded => "Recently added",
         Collections => "Collections",
         BecauseYouRead => "Because you read",

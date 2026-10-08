@@ -50,6 +50,11 @@ public class UpdateService
     {
         UIFactory = null,
         UserInteractionMode = UserInteractionMode.NotSilent,
+        // NetSparkle's default (true) asks the server for the destination file name. A GitHub release
+        // URL redirects to a signed blob URL whose name carries no extension, so the installer landed
+        // as an extensionless file and "Restart" opened the "Open with" dialog instead of running it.
+        // False takes the name from the enclosure URL (PaperbunkrSetup-x.y.z.exe).
+        CheckServerFileName = false,
         // Left unset, NetSparkle drops the downloaded installer straight in Path.GetTempPath() (its
         // own SparkleUpdater.cs default) - fine for the immediate-restart path, but "Later" from the
         // download-ready toast (MainViewModel.DownloadUpdateAsync) keeps a reference to that path for

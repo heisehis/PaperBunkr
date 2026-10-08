@@ -829,6 +829,42 @@ public partial class SmartScreenViewModel : ViewModelBase
         LoadSmartList(list.Id);
     }
 
+    // --- Template gallery (docs/superpowers/specs/2026-10-06-smart-features-design.md §3.2) ---
+
+    private SmartTemplateGalleryViewModel? _gallery;
+
+    /// <summary>The "New Smart List" gallery: the sidebar's three "+" buttons and Ctrl+N open it on their kind's tab.</summary>
+    public SmartTemplateGalleryViewModel Gallery => _gallery ??= new SmartTemplateGalleryViewModel(CreateFromGallery);
+
+    [RelayCommand]
+    private void OpenGallery() => Gallery.Open(SmartListTargetKind.Issue);
+
+    [RelayCommand]
+    private void OpenSeriesGallery() => Gallery.Open(SmartListTargetKind.Series);
+
+    [RelayCommand]
+    private void OpenNovelGallery() => Gallery.Open(SmartListTargetKind.Novel);
+
+    /// <summary>
+    /// Makes the list the gallery asked for: a blank one (<paramref name="template"/> null) or an ordinary editable copy of a
+    /// template's rules, with nothing linking it back to the template. Opens it in the editor either way.
+    /// </summary>
+    private void CreateFromGallery(SmartListTargetKind kind, SmartListTemplate? template)
+    {
+        if (template is null)
+        {
+            CreateNewList(kind);
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var list = SmartListTemplateCatalog.Instantiate(template);
+        list.SortOrder = context.SmartLists.Count();
+        context.SmartLists.Add(list);
+        context.SaveChanges();
+        LoadSmartList(list.Id);
+    }
+
     [RelayCommand]
     private async Task SelectList(SmartListSummary? summary)
     {

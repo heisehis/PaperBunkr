@@ -80,6 +80,93 @@ public class AsyncCoverImageTests : IDisposable
         Assert.Null(image.Source);
     }
 
+    // Grid pipeline leases (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md section 4.2): the Image holds a lease on
+    // the cache's bitmap for as long as it shows it, so the cache may dispose evicted bitmaps without ever disposing a displayed one.
+
+    private const double GridCardWidth = 150;
+
+    private static (Image Image, int Bucket) GridImage()
+    {
+        AsyncCoverImage.NoteRenderScaling(1.0);
+        var image = new Image();
+        AsyncCoverImage.SetGridMode(image, true);
+        AsyncCoverImage.SetDecodeWidth(image, GridCardWidth);
+        return (image, GridCoverCache.BucketFor(GridCardWidth, 1.0));
+    }
+
+    private static Avalonia.Media.Imaging.Bitmap TinyBitmap() =>
+        new Avalonia.Media.Imaging.WriteableBitmap(new Avalonia.PixelSize(1, 1), new Avalonia.Vector(96, 96));
+
+    [Fact]
+    public void GridImage_LeasesTheCoverItShows_AndGivesItBackWhenRePointed()
+    {
+        var (image, bucket) = GridImage();
+        string stem = $"lease-{Guid.NewGuid():N}";
+        var cover = GridCoverCache.Shared.Add(stem, bucket, TinyBitmap(), 100);
+
+        AsyncCoverImage.SetSourceId(image, stem);
+        Assert.Same(cover, image.Source);
+        Assert.Equal(1, GridCoverCache.Shared.LeaseCount(cover));
+
+        AsyncCoverImage.SetSourceId(image, null);
+        Assert.Null(image.Source);
+        Assert.Equal(0, GridCoverCache.Shared.LeaseCount(cover));
+        Assert.Equal(new Avalonia.PixelSize(1, 1), cover.PixelSize); // still cached, so still alive
+
+        GridCoverCache.Shared.Remove(stem);
+    }
+
+    [Fact]
+    public void GridImage_KeepsItsCoverAlive_WhenTheCacheEvictsIt_AndFreesItOnceRePointed()
+    {
+        var (image, bucket) = GridImage();
+        string stem = $"evicted-{Guid.NewGuid():N}";
+        var cover = GridCoverCache.Shared.Add(stem, bucket, TinyBitmap(), 100);
+        AsyncCoverImage.SetSourceId(image, stem);
+
+        GridCoverCache.Shared.Remove(stem); // thumbnail regenerated, or evicted under pressure
+
+        Assert.Same(cover, image.Source);
+        Assert.Equal(new Avalonia.PixelSize(1, 1), cover.PixelSize); // displayed, so not disposed
+
+        AsyncCoverImage.SetSourceId(image, null);
+        Assert.Null(image.Source);
+        Assert.Throws<ObjectDisposedException>(() => cover.PixelSize);
+    }
+
+    [Fact]
+    public void ApplyGrid_ShowsTheCachedBitmapOnALease()
+    {
+        var (image, bucket) = GridImage();
+        string stem = $"applied-{Guid.NewGuid():N}";
+        AsyncCoverImage.SetSourceId(image, stem); // generation -> 1, cache miss
+        var cover = GridCoverCache.Shared.Add(stem, bucket, TinyBitmap(), 100); // the worker stored its decode
+
+        AsyncCoverImage.ApplyGrid(image, stem, bucket, generation: 1, cover);
+
+        Assert.Same(cover, image.Source);
+        Assert.Equal(1, GridCoverCache.Shared.LeaseCount(cover));
+
+        AsyncCoverImage.SetSourceId(image, null);
+        GridCoverCache.Shared.Remove(stem);
+    }
+
+    [Fact]
+    public void ApplyGrid_NeverShowsADecodeTheCacheAlreadyEvictedAndDisposed()
+    {
+        var (image, bucket) = GridImage();
+        string stem = $"gone-{Guid.NewGuid():N}";
+        AsyncCoverImage.SetSourceId(image, stem); // generation -> 1, cache miss
+        var cover = GridCoverCache.Shared.Add(stem, bucket, TinyBitmap(), 100);
+        GridCoverCache.Shared.Remove(stem); // evicted between the worker storing it and the UI callback
+        Assert.Throws<ObjectDisposedException>(() => cover.PixelSize);
+
+        AsyncCoverImage.ApplyGrid(image, stem, bucket, generation: 1, cover);
+
+        Assert.Null(image.Source);
+        AsyncCoverImage.SetSourceId(image, null);
+    }
+
     [Fact]
     public void SettingSourceId_ToAnUnknownIssue_LeavesSourceNull()
     {

@@ -4011,7 +4011,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         var series = context.Series.Find(seriesId);
         if (series is not null)
         {
-            series.ContentType = type;
+            SeriesContentTypeEditor.SetManual(series, type);
             context.SaveChanges();
             LoadFromDatabase();
         }
@@ -4122,7 +4122,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         if (seriesIsNew)
         {
-            issue.Series.ContentType = NewIssueContentType;
+            SeriesContentTypeEditor.SetManual(issue.Series, NewIssueContentType);
             if (ShowAddReadingModePicker)
             {
                 issue.Series.ReadingMode = NewIssueReadingMode;
@@ -4383,6 +4383,42 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     public bool HasPreviewDrill => PreviewDrillIssue is not null;
 
+    // Time left in the previewed issue (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.2). The pace is read at most once a
+    // few minutes: the inspector re-evaluates this on every focus move.
+    private ReadingPace _previewPace = ReadingPace.Unknown;
+    private DateTime _previewPaceLoadedUtc = DateTime.MinValue;
+
+    /// <summary>"~25 min left" for the previewed issue, or null when it is read, has no page count, or there is no reading pace yet.</summary>
+    public string? PreviewTimeLeft
+    {
+        get
+        {
+            if (ActivePreviewIssue is not { IsRead: false, PageCount: int pages and > 0 } row)
+            {
+                return null;
+            }
+
+            if (DateTime.UtcNow - _previewPaceLoadedUtc > TimeSpan.FromMinutes(5))
+            {
+                _previewPaceLoadedUtc = DateTime.UtcNow;
+                try
+                {
+                    using var context = PaperbunkrDb.CreateContext();
+                    _previewPace = ReadingPaceResolver.Load(context);
+                }
+                catch (Exception)
+                {
+                    _previewPace = ReadingPace.Unknown;
+                }
+            }
+
+            int pagesLeft = (int)Math.Ceiling(pages * (1 - row.ReadFraction));
+            return TimeLeftFormatter.Left(_previewPace.TimeFor(ReadingItemType.Comic, pagesLeft));
+        }
+    }
+
+    public bool HasPreviewTimeLeft => PreviewTimeLeft is not null;
+
     /// <summary>Text of the issue state's back link, e.g. "← Silk".</summary>
     public string PreviewBackLabel => PreviewSeries is { } series ? $"← {series.Name}" : "← Back";
 
@@ -4408,6 +4444,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(ShowIssuePreview));
         OnPropertyChanged(nameof(ShowIdlePreview));
         OnPropertyChanged(nameof(ActivePreviewIssue));
+        OnPropertyChanged(nameof(PreviewTimeLeft));
+        OnPropertyChanged(nameof(HasPreviewTimeLeft));
         OnPropertyChanged(nameof(HasPreviewDrill));
         OnPropertyChanged(nameof(PreviewBackLabel));
     }

@@ -516,6 +516,22 @@ public class AppSettings
     public MetadataResolutionPolicy MetadataResolutionPolicy { get; set; } = MetadataResolutionPolicy.Automatic;
 
     /// <summary>
+    /// Under the <see cref="MetadataResolutionPolicy.Automatic"/> policy, the lowest <see cref="MetadataProposal.Confidence"/> (0-1) a
+    /// newly created proposal needs to apply itself; anything below waits in the review queue as Pending
+    /// (docs/superpowers/specs/2026-10-06-smart-features-design.md §6.1). Default 0 = every proposal applies, exactly as before this
+    /// existed. Filename-parser proposals have a fixed confidence of 0.6, so a value above that sends them all to review. Provider
+    /// proposals (confidence 1) always apply. Ignored under <see cref="MetadataResolutionPolicy.Prompt"/>, where nothing applies itself.
+    /// </summary>
+    public decimal AutoApplyMinConfidence { get; set; }
+
+    /// <summary>
+    /// When a series that is linked to a metadata provider becomes <see cref="SeriesStatus.Completed"/>, refresh its provider data
+    /// (relations and cover candidates) once (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.3). Default true. Unlinked
+    /// series never cause a network call either way.
+    /// </summary>
+    public bool RefreshProviderDataOnComplete { get; set; } = true;
+
+    /// <summary>
     /// Whether minimizing (and, deliberately diverging from CE - see docs/superpowers/specs/
     /// 2026-08-23-app-chrome-crash-reporter-and-tray-design.md §4) closing the main window hides it
     /// to a tray icon instead of exiting. CE default false (<c>Settings.MinimizeToTray</c>,
@@ -662,6 +678,13 @@ public class AppSettings
     /// </summary>
     public DateTime? LastContentTypeSweepUtc { get; set; }
 
+    /// <summary>
+    /// When true the tracker-driven content-type classifier never applies a type on its own - every match, however confident,
+    /// is queued in Library Health &gt; Review &gt; Content type for a person to accept (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md).
+    /// Default false: a near-exact title match that two sources agree on is applied, with an Undo.
+    /// </summary>
+    public bool AskBeforeClassifying { get; set; }
+
     // --- Books reader ergonomics global defaults (docs/superpowers/specs/2026-09-01-books-reader-
     // ergonomics-and-annotations-design.md) - falls back for any Book with no per-book override
     // column set (see Book.FontSizeOverride etc.). Defaults match BookReaderSettings' own pre-
@@ -718,6 +741,39 @@ public class AppSettings
     /// instead - see the design doc. Default false.
     /// </summary>
     public bool WriteNativeSidecar { get; set; }
+
+    /// <summary>
+    /// When <see cref="WriteMetadataToFiles"/> is on: whether a <c>MetronInfo.xml</c> is also written
+    /// next to <c>ComicInfo.xml</c> (docs/superpowers/specs/2026-10-05-metroninfo-write-back-design.md).
+    /// Deliberate Paperbunkr deviation - CE only reads that format, and removes the file on export.
+    /// Off leaves any <c>MetronInfo.xml</c> a file already has exactly as it is. Default false.
+    /// </summary>
+    public bool WriteMetronInfo { get; set; }
+
+    // --- Metron account sync (docs/superpowers/specs/2026-10-05-metron-account-sync-design.md). Everything here
+    // sends personal data to metron.cloud, so every switch defaults to off and the areas do nothing unless the
+    // master is on. ---
+
+    /// <summary>Master switch: nothing is sent to (or read from) the user's Metron account while this is off.</summary>
+    public bool MetronSyncEnabled { get; set; }
+
+    /// <summary>Followed Metron series and the account's pull list are kept in step (additions both ways).</summary>
+    public bool MetronSyncPullList { get; set; }
+
+    /// <summary>Each finished read is sent as a read date ("scrobbled"), with the issue's rating when it has one.</summary>
+    public bool MetronSyncReading { get; set; }
+
+    /// <summary>Library issues are added to the account's collection as digital copies, and rating changes are sent.</summary>
+    public bool MetronSyncCollection { get; set; }
+
+    /// <summary>Wanted issues are mirrored to the account's wish list.</summary>
+    public bool MetronSyncWishList { get; set; }
+
+    /// <summary>
+    /// The highest <see cref="ReadingEvent"/> id already handled by reading sync. Set to the newest event when the reading
+    /// switch is turned on, so old history isn't sent unasked; "Send my reading history" puts it back to 0.
+    /// </summary>
+    public int MetronSyncReadingEventId { get; set; }
 
     // --- Behavior settings, second batch (docs/superpowers/specs/2026-09-04-behavior-settings-
     // batch2-design.md). Follows the first batch (OpenLastPage/AutoNavigateComics above); each gates

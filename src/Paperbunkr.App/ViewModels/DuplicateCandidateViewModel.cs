@@ -36,6 +36,15 @@ public partial class DuplicateCandidateViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isKeep;
 
+    /// <summary>
+    /// The ranker's pick out of this group (docs/superpowers/specs/2026-10-06-smart-features-design.md §5.2). Advice only: it never
+    /// changes <see cref="IsKeep"/>, which stays the user's choice.
+    /// </summary>
+    public bool IsRecommended { get; init; }
+
+    /// <summary>Why this copy is the recommended one, e.g. "Most pages: 28 vs 24".</summary>
+    public string? RecommendedReason { get; init; }
+
     /// <summary>Human-readable byte size, same units/style as <c>IssueListFieldCatalog.FormatFileSize</c> (not shared - that method is private to an unrelated file).</summary>
     private static string FormatFileSize(long? bytes)
     {

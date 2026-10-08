@@ -464,6 +464,7 @@ public partial class ReadingListPageViewModel : ViewModelBase
         RebuildPath();
         RefreshRail(context);
         RefreshOverlaps(context);
+        RefreshChronology(context);
         LoadHeroBackdrop(list.Id, items);
 
         if (switched || triggerEntrance)

@@ -4,8 +4,11 @@ namespace Paperbunkr.App.Services.Reader;
 
 /// <summary>
 /// The one adaptive byte budget for a reading session (docs/superpowers/specs/2026-09-08-reader-
-/// decode-cache-prefetch-pipeline-design.md §5). Auto = <c>clamp(25% physical RAM, 128 MiB,
-/// 512 MiB)</c>; an explicit user limit (Preferences → Reader) overrides. One budget, shared -
+/// decode-cache-prefetch-pipeline-design.md §5). Auto = <c>clamp(physical RAM / 32, 128 MiB,
+/// 512 MiB)</c>; an explicit user limit (Preferences → Reader) overrides. It was 25% of RAM with the same
+/// clamp, which is the 512 MiB ceiling on anything with 2 GB or more: on a 7.8 GB machine the reader's
+/// pages alone were then a quarter of the app's measured 2.1 GB (2026-10-07). RAM / 32 is about 250 MiB
+/// there (ten ordinary 1988x3056 pages) and still the full 512 MiB from 16 GB up. One budget, shared -
 /// only one reader (comic / PDF / book) is open at a time - split three ways: decoded display
 /// bitmaps, the thumbnail rail, and the compressed-bytes tier.
 /// </summary>
@@ -40,9 +43,12 @@ public sealed class ReaderMemoryBudget
     {
         long bytes = userLimitMb is int mb && mb > 0
             ? mb * Mib
-            : Math.Clamp(PhysicalRamBytes() / 4, AutoFloor, AutoCeiling);
+            : AutoFor(PhysicalRamBytes());
         return new ReaderMemoryBudget(bytes);
     }
+
+    /// <summary>The Auto budget for a machine with <paramref name="physicalRamBytes"/> of RAM.</summary>
+    public static long AutoFor(long physicalRamBytes) => Math.Clamp(physicalRamBytes / 32, AutoFloor, AutoCeiling);
 
     private static long PhysicalRamBytes()
     {

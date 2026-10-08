@@ -58,111 +58,155 @@ public class LibraryHealthService
         return await Task.Run(() => Verify(progress, ct, issueIds), ct);
     }
 
+    /// <summary>Issues read, checked and saved per round trip. Internal so a test can force several pages with a handful of rows.</summary>
+    internal int PageSize { get; set; } = SweepPaging.DefaultPageSize;
+
+    private static IQueryable<Issue> Candidates(PaperbunkrDbContext context, IReadOnlyCollection<int>? issueIds)
+    {
+        var query = context.Issues.Where(i => !i.IsPlaceholder && i.FilePath != null);
+        return issueIds is null ? query : query.Where(i => issueIds.Contains(i.Id));
+    }
+
+    /// <summary>
+    /// Works through the library a page at a time (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.4): each
+    /// page is read by id cursor into its own context, checked, saved and let go, so the sweep never holds every issue of a
+    /// 5,000-comic library as a tracked entity at once. A pass that is cancelled keeps the pages it already saved; each issue's
+    /// own result is complete and correct either way.
+    /// </summary>
     private LibraryHealthVerifyResult Verify(IProgress<(int Done, int Total)> progress, CancellationToken ct, IReadOnlyCollection<int>? issueIds)
     {
-        using var context = _contextFactory();
-
-        var query = context.Issues.Where(i => !i.IsPlaceholder && i.FilePath != null);
-        if (issueIds is not null)
+        int total;
+        using (var counting = _contextFactory())
         {
-            query = query.Where(i => issueIds.Contains(i.Id));
+            total = Candidates(counting, issueIds).Count();
         }
 
-        var issues = query.ToList();
-        int total = issues.Count;
         int done = 0;
         progress.Report((0, total));
 
         int missingNow = 0;
         int confirmedMissing = 0;
         int contentEmptyNow = 0;
-        var newlyConfirmed = new List<MissingFileConfirmedEvent>();
+        int lastId = 0;
 
-        foreach (var issue in issues)
+        while (true)
         {
             ct.ThrowIfCancellationRequested();
 
-            int previousCount = issue.MissingVerificationCount;
-            bool exists = File.Exists(issue.FilePath);
-            issue.FileIsMissing = !exists;
-            issue.MissingVerificationCount = exists ? 0 : issue.MissingVerificationCount + 1;
-
-            // A dismissal covers one missing episode (docs/superpowers/specs/2026-09-28-library-health-
-            // dismissed-rows-design.md): once the file is back, forget it, so a later disappearance
-            // shows up in Missing Files again instead of staying silently hidden.
-            if (exists)
+            var newlyConfirmed = new List<MissingFileConfirmedEvent>();
+            int pageCount;
+            using (var context = _contextFactory())
             {
-                issue.MissingAcknowledged = false;
-            }
-
-            if (!exists)
-            {
-                missingNow++;
-                if (issue.MissingVerificationCount >= ConfirmedMissingThreshold && !issue.MissingAcknowledged)
+                int cursor = lastId;
+                var issues = Candidates(context, issueIds).Where(i => i.Id > cursor).OrderBy(i => i.Id).Take(PageSize).ToList();
+                pageCount = issues.Count;
+                if (pageCount == 0)
                 {
-                    confirmedMissing++;
-
-                    // MissingFileDetected plugin hook (docs/superpowers/specs/2026-09-20-plugin-api-4-1-
-                    // design.md §5.3): announced only on the pass where the count CROSSES the threshold,
-                    // not on every later pass while the file stays missing (confirmedMissing above counts
-                    // every eligible item each pass, which is right for the summary but would spam a
-                    // plugin). A single failed check never announces - a disconnected drive would be noisy.
-                    if (previousCount < ConfirmedMissingThreshold)
-                    {
-                        newlyConfirmed.Add(new MissingFileConfirmedEvent(
-                            ReadingItemType.Comic,
-                            issue.Id,
-                            issue.FilePath!,
-                            issue.Title ?? Path.GetFileNameWithoutExtension(issue.FilePath!)));
-                    }
+                    break;
                 }
 
-                // Empty Rows (docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-row-
-                // cleanup-design.md) is a distinct concept from "missing" - a missing file has
-                // nothing to probe, so IsContentEmpty stays false and the row surfaces in Missing
-                // Files, not Empty Rows.
-                issue.IsContentEmpty = false;
-            }
-            else
-            {
-                // Cheap probe: PageDecodeCore.TryOpenProvider already returns null for an unopenable
-                // file or one that opens with zero pages - a corrupt/empty archive. Only opens the
-                // archive header, doesn't decode any image bytes.
-                var provider = PageDecodeCore.TryOpenProvider(issue.FilePath!);
-                provider?.Dispose();
-                issue.IsContentEmpty = provider is null;
-                if (issue.IsContentEmpty)
+                foreach (var issue in issues)
                 {
-                    contentEmptyNow++;
+                    ct.ThrowIfCancellationRequested();
+                    VerifyOne(issue, newlyConfirmed, ref missingNow, ref confirmedMissing, ref contentEmptyNow);
+                    progress.Report((++done, total));
                 }
-                else
-                {
-                    issue.EmptyRowAcknowledged = false;
-                }
+
+                lastId = issues[^1].Id;
+                context.SaveChanges();
             }
 
-            progress.Report((++done, total));
+            // Only after the counts are durably saved - a failed save must not announce anything.
+            foreach (var confirmed in newlyConfirmed)
+            {
+                _events.Raise(confirmed);
+            }
+
+            if (pageCount < PageSize)
+            {
+                break;
+            }
+
+            SweepPaging.PauseBetweenPages(ct);
         }
 
         // Same one-episode rule for an empty series: once it has issues again, its dismissal no longer
         // applies. Full passes only - a scoped pass (one removed folder) isn't a statement about every series.
         if (issueIds is null)
         {
+            using var context = _contextFactory();
             foreach (var series in context.Series.Where(s => s.EmptyRowAcknowledged && s.Issues.Any()))
             {
                 series.EmptyRowAcknowledged = false;
             }
+
+            context.SaveChanges();
         }
 
-        context.SaveChanges();
+        return new LibraryHealthVerifyResult(done, missingNow, confirmedMissing, contentEmptyNow);
+    }
 
-        // Only after the counts are durably saved - a failed save must not announce anything.
-        foreach (var confirmed in newlyConfirmed)
+    private void VerifyOne(Issue issue, List<MissingFileConfirmedEvent> newlyConfirmed, ref int missingNow, ref int confirmedMissing, ref int contentEmptyNow)
+    {
+        int previousCount = issue.MissingVerificationCount;
+        bool exists = File.Exists(issue.FilePath);
+        issue.FileIsMissing = !exists;
+        issue.MissingVerificationCount = exists ? 0 : issue.MissingVerificationCount + 1;
+
+        // A dismissal covers one missing episode (docs/superpowers/specs/2026-09-28-library-health-
+        // dismissed-rows-design.md): once the file is back, forget it, so a later disappearance
+        // shows up in Missing Files again instead of staying silently hidden.
+        if (exists)
         {
-            _events.Raise(confirmed);
+            issue.MissingAcknowledged = false;
         }
 
-        return new LibraryHealthVerifyResult(total, missingNow, confirmedMissing, contentEmptyNow);
+        if (!exists)
+        {
+            missingNow++;
+            if (issue.MissingVerificationCount >= ConfirmedMissingThreshold && !issue.MissingAcknowledged)
+            {
+                confirmedMissing++;
+
+                // MissingFileDetected plugin hook (docs/superpowers/specs/2026-09-20-plugin-api-4-1-
+                // design.md §5.3): announced only on the pass where the count CROSSES the threshold,
+                // not on every later pass while the file stays missing (confirmedMissing above counts
+                // every eligible item each pass, which is right for the summary but would spam a
+                // plugin). A single failed check never announces - a disconnected drive would be noisy.
+                if (previousCount < ConfirmedMissingThreshold)
+                {
+                    newlyConfirmed.Add(new MissingFileConfirmedEvent(
+                        ReadingItemType.Comic,
+                        issue.Id,
+                        issue.FilePath!,
+                        issue.Title ?? Path.GetFileNameWithoutExtension(issue.FilePath!)));
+                }
+            }
+
+            // Empty Rows (docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-row-
+            // cleanup-design.md) is a distinct concept from "missing" - a missing file has
+            // nothing to probe, so IsContentEmpty stays false and the row surfaces in Missing
+            // Files, not Empty Rows.
+            issue.IsContentEmpty = false;
+        }
+        else
+        {
+            // Cheap probe: PageDecodeCore.TryOpenProvider already returns null for an unopenable
+            // file or one that opens with zero pages - a corrupt/empty archive. Only opens the
+            // archive header, doesn't decode any image bytes.
+            var provider = PageDecodeCore.TryOpenProvider(issue.FilePath!);
+            provider?.Dispose();
+            issue.IsContentEmpty = provider is null;
+            if (issue.IsContentEmpty)
+            {
+                contentEmptyNow++;
+            }
+            else
+            {
+                issue.EmptyRowAcknowledged = false;
+            }
+        }
+
     }
 
     /// <summary>

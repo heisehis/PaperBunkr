@@ -90,9 +90,9 @@ Environment.Activity.RaiseAlert(PluginAlertSeverity.Warning, "Sync is offline",
 
 Needs API `4.1` - declare `requiresApi="4.1"` if your plugin uses it.
 
-### Reacting to what happens in Paperbunkr (API 4.1)
+### Reacting to what happens in Paperbunkr (API 4.1, one hook from 4.4)
 
-Four hooks tell a plugin that something just happened. They are **notification-only** (what your
+Five hooks tell a plugin that something just happened. They are **notification-only** (what your
 script returns is ignored) and run in the background, so a slow plugin never holds up reading or
 scanning.
 
@@ -102,6 +102,14 @@ scanning.
 | `LibraryScanCompleted` | A full comic/manga folder scan finishes (Scan Now, the scheduled scan) - not a live-watch or drag import, and not a Books scan | `FolderPaths`, `AddedCount`, `SeriesTouched`, `Duration`, `AddedItemIds` |
 | `MissingFileDetected` | A file is **confirmed** missing (Library Health's threshold) - once when it crosses the threshold, not on every check | `ItemId`, `FilePath`, `Title` |
 | `ReadingListChanged` | A reading list's items or order change - one event per action, so importing 300 issues is one event | `ListId`, `ListName`, `Kind`, `AddedIssueIds`, `RemovedIssueIds` |
+| `ContinuityCompleted` (API 4.4) | You finish the last unread issue of a continuity or a story event - once per completion | `Kind`, `Id`, `Name`, `IssueCount`, `CompletedAtUtc` |
+
+`ContinuityCompleted.Kind` is `CompletedCollectionKind.Continuity` or `CompletedCollectionKind.StoryEvent`,
+and `Id` is that continuity's or story event's id. A continuity counts as complete when every issue of
+every series in it is read; a story event when every issue in it is read. If issues are added later and
+it is no longer complete, finishing those fires the hook again. Re-reading an issue of something already
+complete does not. This hook needs API `4.4` - declare `requiresApi="4.4"`; on an older Paperbunkr the
+command simply never fires.
 
 `ReadingListChanged.Kind` can combine values (a refresh may add, remove and reorder at once), so test
 it with `Kind.HasFlag(ReadingListChangeKind.Removed)`. Creating, renaming or deleting a whole list is not

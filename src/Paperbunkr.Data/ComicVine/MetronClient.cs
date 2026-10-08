@@ -14,6 +14,27 @@ public interface IComicProvider : IComicVineClient, IComicVineVolumeSearch, ICom
     ComicProvider Kind { get; }
 }
 
+/// <summary>One issue an exact-id lookup found: enough to fetch its details and its series.</summary>
+public sealed record ComicIssueHit(int IssueId, int SeriesId);
+
+/// <summary>
+/// A source that can find an issue by an id it didn't issue itself (docs/superpowers/specs/2026-10-05-metron-api-efficiency-and-matching-design.md section 2).
+/// Metron indexes every issue by its ComicVine id and its barcode, so a book that carries either needs no name search.
+/// </summary>
+public interface IComicIssueLookup
+{
+    Task<IReadOnlyList<ComicIssueHit>> FindIssuesByComicVineIdAsync(int comicVineIssueId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ComicIssueHit>> FindIssuesByUpcAsync(string upc, CancellationToken cancellationToken);
+}
+
+/// <summary>A source that can say, in one request, which of its series changed since a moment in time (same design, section 1).</summary>
+public interface ISeriesChangeSource
+{
+    /// <summary>Series id to when it last changed, for every series changed after <paramref name="sinceUtc"/>. Null when too much changed to list, which callers treat as "assume all of them".</summary>
+    Task<IReadOnlyDictionary<int, DateTime>?> GetSeriesModifiedSinceAsync(DateTime sinceUtc, CancellationToken cancellationToken);
+}
+
 /// <summary>HTTP plumbing for Metron: one shared, rate-limited client (docs/superpowers/specs/2026-09-20-metron-as-comicvine-alternative-design.md section 3).</summary>
 public static class MetronHttp
 {
@@ -21,7 +42,9 @@ public static class MetronHttp
     /// Metron's documented limits for a logged-in user are 20 requests a minute (burst) and 5,000 a day. The minute window is enforced here with headroom (18, of which
     /// background work may use 14, so interactive work always has room); a daily overrun surfaces as an HTTP 429, which pauses every caller with the handler's cool-offs.
     /// </summary>
-    public static ComicVineRateLimitHandler Handler { get; } = new(new HttpClientHandler(), new ComicVineRateLimitHandler.Options
+    // No automatic redirects: following one drops the Authorization header, so a mistyped path (a missing trailing slash) reaches Metron as a
+    // request with no login - a 401, and three of those in five minutes block the address for a day. A redirect is reported as what it is instead.
+    public static ComicVineRateLimitHandler Handler { get; } = new(new HttpClientHandler { AllowAutoRedirect = false }, new ComicVineRateLimitHandler.Options
     {
         MinSpacing = TimeSpan.FromMilliseconds(250),
         Window = TimeSpan.FromMinutes(1),
@@ -37,10 +60,13 @@ public static class MetronHttp
 /// <c>series/?name=</c> (paged, 100 per page), <c>series/{id}/</c>, <c>series/{id}/issue_list/</c>, <c>issue/{id}/</c>; HTTP Basic auth.
 /// A Metron series has no cover image; its issues do.
 /// </summary>
-public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.IStoryArcSource
+public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.IStoryArcSource, IComicIssueLookup, ISeriesChangeSource
 {
     private const string BaseUrl = "https://metron.cloud/api";
     private const int MaxPages = 30;
+
+    // 100 series a page: past 500 changed series the sweep costs more than it could save for any realistic follow list.
+    private const int MaxChangePages = 5;
 
     private static readonly IReadOnlyDictionary<string, string> RoleMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -70,7 +96,14 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
         _authorization = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
         _priority = priority;
         _http = http ?? MetronHttp.Client;
+        GuardLogin = http is null;
     }
+
+    /// <summary>
+    /// Whether <see cref="MetronLoginGuard"/> applies: yes for the real, shared client; no for a client a test hands in, so one test's
+    /// scripted 401 can't hold up the next. A test of the guard itself turns it on.
+    /// </summary>
+    internal bool GuardLogin { get; init; }
 
     public ComicProvider Kind => ComicProvider.Metron;
 
@@ -197,13 +230,63 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
                     StoreDate: ParseDate(o["store_date"]?.GetValue<string>()),
                     CoverDate: ParseDate(o["cover_date"]?.GetValue<string>()),
                     ImageUrl: o["image"]?.GetValue<string>(),
-                    VolumeId: volumeId));
+                    VolumeId: volumeId,
+                    CoverHash: o["cover_hash"]?.GetValue<string>()));
             }
 
             url = root["next"]?.GetValue<string?>();
         }
 
         return issues;
+    }
+
+    /// <summary>
+    /// Metron bumps a series' <c>modified</c> whenever one of its issues is added, edited or removed, so this one list stands in for re-reading every
+    /// followed series' issue list. A long gap can change more series than are worth paging through; past the cap the answer is "unknown" (null).
+    /// </summary>
+    public async Task<IReadOnlyDictionary<int, DateTime>?> GetSeriesModifiedSinceAsync(DateTime sinceUtc, CancellationToken cancellationToken)
+    {
+        var changed = new Dictionary<int, DateTime>();
+        string? url = $"{BaseUrl}/series/?modified_gt={Uri.EscapeDataString(sinceUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))}";
+
+        for (int page = 0; page < MaxChangePages && url is not null; page++)
+        {
+            var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+            foreach (var node in (root["results"] as JsonArray) ?? new JsonArray())
+            {
+                if (node is JsonObject o && PositiveInt(o["id"]) is int id)
+                {
+                    // A row with no readable timestamp still counts as changed: "now" is after any last refresh.
+                    changed[id] = ParseDate(o["modified"]?.GetValue<string>()) ?? DateTime.UtcNow;
+                }
+            }
+
+            url = root["next"]?.GetValue<string?>();
+        }
+
+        return url is null ? changed : null;
+    }
+
+    public Task<IReadOnlyList<ComicIssueHit>> FindIssuesByComicVineIdAsync(int comicVineIssueId, CancellationToken cancellationToken) =>
+        FindIssuesAsync($"cv_id={comicVineIssueId.ToString(CultureInfo.InvariantCulture)}", cancellationToken);
+
+    public Task<IReadOnlyList<ComicIssueHit>> FindIssuesByUpcAsync(string upc, CancellationToken cancellationToken) =>
+        FindIssuesAsync($"upc={Uri.EscapeDataString(upc.Trim())}", cancellationToken);
+
+    /// <summary>One page is all an exact filter can need: a caller only acts on exactly one hit, and anything more is "ambiguous" whatever the count.</summary>
+    private async Task<IReadOnlyList<ComicIssueHit>> FindIssuesAsync(string filter, CancellationToken cancellationToken)
+    {
+        var root = await GetAsync($"{BaseUrl}/issue/?{filter}", cancellationToken).ConfigureAwait(false);
+        var hits = new List<ComicIssueHit>();
+        foreach (var node in (root["results"] as JsonArray) ?? new JsonArray())
+        {
+            if (node is JsonObject o && PositiveInt(o["id"]) is int issueId && PositiveInt((o["series"] as JsonObject)?["id"]) is int seriesId)
+            {
+                hits.Add(new ComicIssueHit(issueId, seriesId));
+            }
+        }
+
+        return hits;
     }
 
     public async Task<IReadOnlyList<PullListEntry>> GetReleasesAsync(DateTime from, DateTime to, CancellationToken cancellationToken)
@@ -365,6 +448,20 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
             GcdId: PositiveInt(o["gcd_id"]));
     }
 
+    /// <summary>The <c>detail</c> text of a Metron error body, trimmed of its trailing full stop, or null when there is none.</summary>
+    private static string? Detail(string body)
+    {
+        try
+        {
+            string? detail = (JsonNode.Parse(body) as JsonObject)?["detail"]?.GetValue<string>()?.Trim().TrimEnd('.');
+            return string.IsNullOrWhiteSpace(detail) ? null : detail;
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
     private static int? PositiveInt(JsonNode? node) => node is not null && int.TryParse(node.ToString(), out int value) && value > 0 ? value : null;
 
     private static IReadOnlyList<ComicVineIdName> IdNames(JsonNode? array) =>
@@ -450,7 +547,15 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
     /// test would make the suite slow for no benefit, same test-seam shape as <see cref="MetronQuota.Clock"/>.</summary>
     internal static TimeSpan RetryDelay { get; set; } = TimeSpan.FromMilliseconds(2500);
 
-    private async Task<JsonNode> GetAsync(string url, CancellationToken cancellationToken)
+    private Task<JsonNode> GetAsync(string url, CancellationToken cancellationToken) =>
+        SendAsync(HttpMethod.Get, url, body: null, retryTransportFailure: true, cancellationToken);
+
+    /// <summary>
+    /// Every request to Metron, reads and (for <see cref="MetronAccountClient"/>) writes alike, so one place owns the login, the quota bookkeeping and the error mapping.
+    /// <paramref name="retryTransportFailure"/> is for calls that are safe to repeat: a write whose request may have reached Metron before the connection dropped
+    /// must not be sent twice unless doing so changes nothing. A reply with no body (a 204 from a delete) comes back as an empty object.
+    /// </summary>
+    internal async Task<JsonNode> SendAsync(HttpMethod method, string url, JsonNode? body, bool retryTransportFailure, CancellationToken cancellationToken)
     {
         // Background work leaves the last slice of the day's quota for interactive use; it waits for the reset instead.
         if (_priority == ComicVineRequestPriority.Low && MetronQuota.BackgroundShouldWait(out var untilReset))
@@ -458,27 +563,40 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
             throw new ComicVineException($"Metron's daily limit is nearly used up, so background updates resume in about {Math.Max(1, (int)Math.Ceiling(untilReset.TotalMinutes))} minutes.", 107);
         }
 
+        // A login Metron has just rejected is not sent again: three 401s in five minutes get the address blocked for a day.
+        if (GuardLogin && MetronLoginGuard.ShouldHold(_authorization, out var hold))
+        {
+            throw new ComicVineException(MetronLoginGuard.HoldMessage(hold), 100);
+        }
+
         JsonNode? root = null;
         ComicVineException? lastFailure = null;
 
-        for (int attempt = 0; attempt < 2 && root is null; attempt++)
+        int attempts = retryTransportFailure ? 2 : 1;
+        for (int attempt = 0; attempt < attempts && root is null; attempt++)
         {
             if (attempt > 0)
             {
                 await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
             }
 
-            string body;
+            string responseBody;
             HttpStatusCode status;
             try
             {
-                using var request = ComicVineHttp.Get(url, _priority);
+                using var request = new HttpRequestMessage(method, url);
+                request.Options.Set(ComicVineRateLimitHandler.PriorityKey, _priority);
+                if (body is not null)
+                {
+                    request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
+                }
+
                 request.Headers.Authorization = new AuthenticationHeaderValue("Basic", _authorization);
                 request.Headers.UserAgent.ParseAdd("Paperbunkr (comic library manager)");
                 using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
                 status = response.StatusCode;
                 MetronQuota.Observe(response.Headers);
-                body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (HttpRequestException ex)
             {
@@ -500,7 +618,20 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
             switch (status)
             {
                 case HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden:
-                    throw new ComicVineException("Metron rejected your login. Check it under Preferences → Connections.", 100);
+                    if (GuardLogin)
+                    {
+                        MetronLoginGuard.RecordRejected(_authorization);
+                    }
+
+                    // Metron says why in its own words ("Invalid username/password.", "You do not have permission..."); a 403 is not a wrong
+                    // password, and saying "rejected your login" for both sent people to retype a password that was fine.
+                    string? detail = Detail(responseBody);
+                    throw new ComicVineException(status == HttpStatusCode.Unauthorized
+                        ? $"Metron rejected your login{(detail is null ? "" : $" ({detail})")}. Check it under Preferences → Connections."
+                        : $"Metron refused this request{(detail is null ? "" : $" ({detail})")}. Your login was accepted, but it isn't allowed to do this.", 100)
+                    {
+                        HttpStatus = (int)status,
+                    };
                 case HttpStatusCode.NotFound:
                     throw new ComicVineException("Metron has no such record.", 101);
                 case HttpStatusCode.TooManyRequests:
@@ -513,14 +644,24 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
                 continue;
             }
 
+            if ((int)status is >= 300 and < 400)
+            {
+                throw new ComicVineException($"Metron answered with a redirect (HTTP {(int)status}) instead of data for {new Uri(url).AbsolutePath}. This is a fault in Paperbunkr, not in your login.") { HttpStatus = (int)status };
+            }
+
             if ((int)status >= 400)
             {
-                throw new ComicVineException($"Metron returned HTTP {(int)status}.");
+                throw new ComicVineException($"Metron returned HTTP {(int)status}.") { HttpStatus = (int)status };
+            }
+
+            if (method != HttpMethod.Get && string.IsNullOrWhiteSpace(responseBody))
+            {
+                return new JsonObject();
             }
 
             try
             {
-                root = JsonNode.Parse(body);
+                root = JsonNode.Parse(responseBody);
                 if (root is null)
                 {
                     lastFailure = new ComicVineException("Metron returned an empty response.");

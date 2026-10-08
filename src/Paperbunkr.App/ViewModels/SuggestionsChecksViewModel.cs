@@ -72,10 +72,18 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
 
     public bool HasNoNewContinuitySuggestions => NewContinuitySuggestions.Count == 0;
 
+    /// <summary>
+    /// Series that share three or more characters with a continuity's member series and are not in it (docs/superpowers/specs/
+    /// 2026-10-06-smart-features-design.md §7.1). Local only - computed from the characters the library already knows.
+    /// </summary>
+    public ObservableCollection<CharacterSuggestionRowViewModel> CharacterSuggestions { get; } = new();
+
+    public bool HasCharacterSuggestions => CharacterSuggestions.Count > 0;
+
     public string PossibleDuplicatesSummary => PossibleDuplicates.Count.ToString(System.Globalization.CultureInfo.CurrentCulture);
 
     /// <summary>Everything waiting here - the sidebar row's badge.</summary>
-    public int TotalCount => NewStoryEventCandidates.Count + PossibleDuplicates.Count + NewContinuitySuggestions.Count;
+    public int TotalCount => NewStoryEventCandidates.Count + PossibleDuplicates.Count + NewContinuitySuggestions.Count + CharacterSuggestions.Count;
 
     public bool IsEmpty => TotalCount == 0;
 
@@ -101,6 +109,7 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasNoNewStoryEventCandidates));
         OnPropertyChanged(nameof(HasPossibleDuplicates));
         OnPropertyChanged(nameof(HasNoNewContinuitySuggestions));
+        OnPropertyChanged(nameof(HasCharacterSuggestions));
         OnPropertyChanged(nameof(PossibleDuplicatesSummary));
         OnPropertyChanged(nameof(TotalCount));
         OnPropertyChanged(nameof(IsEmpty));
@@ -118,7 +127,57 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
             NewStoryEventCandidates.Add(new StoryEventCandidateRowViewModel(candidate, AcceptStoryEventCandidateAsync, DismissStoryEventCandidate));
         }
 
+        RefreshCharacterSuggestions(context);
         RaiseCounts();
+    }
+
+    // --- Shared-character suggestions: local-only, recomputed whenever the panel's local lists are (smart features §7.1). ---
+
+    private void RefreshCharacterSuggestions(Paperbunkr.Data.PaperbunkrDbContext context)
+    {
+        CharacterSuggestions.Clear();
+        try
+        {
+            foreach (var suggestion in ContinuityCharacterSuggestionResolver.GetSuggestions(context))
+            {
+                CharacterSuggestions.Add(new CharacterSuggestionRowViewModel(suggestion, AcceptCharacterSuggestion, DismissCharacterSuggestion));
+            }
+        }
+        catch (Exception ex)
+        {
+            // A suggestion list is never worth losing the rest of the panel over.
+            DiagnosticsService.LogMilestone($"Continuity: shared-character suggestions failed ({ex.GetType().Name}: {ex.Message}).");
+        }
+    }
+
+    private void AcceptCharacterSuggestion(CharacterSuggestionRowViewModel row)
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            ContinuityResolver.AddSeriesToContinuity(context, row.Suggestion.SeriesId, row.Suggestion.ContinuityId);
+        }
+
+        _notify("Series added to continuity", $"\"{row.Suggestion.SeriesName}\" added to \"{row.Suggestion.ContinuityName}\".");
+        Dispatcher.UIThread.Post(() =>
+        {
+            CharacterSuggestions.Remove(row);
+            RaiseCounts();
+        });
+    }
+
+    private void DismissCharacterSuggestion(CharacterSuggestionRowViewModel row)
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            HealthDismissals.Dismiss(
+                context, HealthDismissals.ContinuitySuggestion, row.Suggestion.DismissalKey, $"{row.Suggestion.SeriesName} → {row.Suggestion.ContinuityName}");
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            CharacterSuggestions.Remove(row);
+            RaiseCounts();
+        });
     }
 
     private async Task AcceptStoryEventCandidateAsync(StoryEventCandidateRowViewModel row)

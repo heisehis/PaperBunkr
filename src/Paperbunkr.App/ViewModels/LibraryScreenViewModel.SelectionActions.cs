@@ -134,9 +134,46 @@ public partial class LibraryScreenViewModel
     [RelayCommand]
     private void SetSeriesContentTypeFor((IReadOnlyList<int> SeriesIds, ContentType Value) args)
     {
-        if (UpdateSeries(args.SeriesIds, s => s.ContentType = args.Value))
+        if (UpdateSeries(args.SeriesIds, s => SeriesContentTypeEditor.SetManual(s, args.Value)))
         {
             LoadFromDatabase();
+        }
+    }
+
+    /// <summary>
+    /// "Classify from trackers" on the selected series (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md): looks each one up on MangaBaka, AniList and
+    /// MangaDex whatever the schedule says, and applies or queues the result. A series whose type you set yourself is left alone.
+    /// </summary>
+    [RelayCommand]
+    private async Task ClassifyTarget(LibraryTarget target)
+    {
+        var ids = target.Ids.ToList();
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        using var job = _activity.StartJob(ActivityJobKind.SyncMetadata, ids.Count == 1 ? "Classifying 1 series" : $"Classifying {ids.Count} series");
+        try
+        {
+            var result = await ContentTypeClassifierRunner.RunAsync(
+                ContentTypeClassifierRunner.ManualBudget,
+                (done, total) => job.Report(done, total, $"{done} / {total} series"),
+                job.CancellationToken,
+                ids);
+            job.Succeed(
+                ContentTypeClassifierRunner.Summarize(result),
+                result.Queued > 0 ? new Models.ActivityLink(ActivityLinkKind.Preferences, "LibraryHealth") : null,
+                itemsProcessed: result.Applied + result.Queued);
+            LoadFromDatabase();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            job.Fail("Classifying series failed", ex: ex);
         }
     }
 

@@ -19,6 +19,38 @@ public class Series
 
     public ReadingMode ReadingMode { get; set; } = ReadingMode.LeftToRight;
 
+    // --- Content-type provenance (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md). Written only through SeriesContentTypeEditor. ---
+
+    /// <summary>Where <see cref="ContentType"/> came from.</summary>
+    public ContentTypeSource ContentTypeSource { get; set; } = ContentTypeSource.Unset;
+
+    /// <summary>Title-match confidence (0-1) when <see cref="ContentTypeSource"/> is <see cref="Entities.ContentTypeSource.Provider"/>, or of a queued suggestion.</summary>
+    public double? ContentTypeConfidence { get; set; }
+
+    /// <summary>A person decided: no pipeline ever changes or re-asks. Set by every manual write and by the confirm queue's Accept/Change/Keep/Skip.</summary>
+    public bool ContentTypeLocked { get; set; }
+
+    /// <summary>The type before the last auto-classification, so Undo can restore it. Null when never auto-classified.</summary>
+    public ContentType? PreviousContentType { get; set; }
+
+    /// <summary>The reading mode before the last auto-classification (restored together with <see cref="PreviousContentType"/>).</summary>
+    public ReadingMode? PreviousReadingMode { get; set; }
+
+    /// <summary>When the last auto-classification applied a type, for the "Recently auto-classified" list (30 days).</summary>
+    public DateTime? ContentTypeAutoAppliedUtc { get; set; }
+
+    /// <summary>A queued candidate type awaiting a person (Accept / Change / Keep / Skip); null when nothing is queued.</summary>
+    public ContentType? ContentTypeSuggestion { get; set; }
+
+    /// <summary>JSON list of the per-source evidence behind <see cref="ContentTypeSuggestion"/> or the last auto-apply (see <c>ContentTypeEvidenceItem</c>).</summary>
+    public string? ContentTypeEvidence { get; set; }
+
+    /// <summary>What the last auto-classify pass concluded.</summary>
+    public ContentTypeCheck ContentTypeCheck { get; set; } = ContentTypeCheck.None;
+
+    /// <summary>When the auto-classify pass last looked at this series; drives the no-match retry and the budgeted sweep's oldest-first order.</summary>
+    public DateTime? ContentTypeCheckedUtc { get; set; }
+
     /// <summary>
     /// Series-level double-page spread default (docs/superpowers/specs/2026-08-15-reader-double-page-
     /// spread-design.md §2). Nullable, unlike <see cref="ReadingMode"/> above - <see langword="null"/>

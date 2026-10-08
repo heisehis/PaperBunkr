@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using cYo.Projects.ComicRack.Engine;
 using cYo.Projects.ComicRack.Engine.IO.Provider;
 using Microsoft.EntityFrameworkCore;
@@ -244,5 +245,111 @@ public class MetadataFileWriteBackServiceTests : IDisposable
 
         Assert.Contains(outcome.Result, new[] { MetadataWriteBackResult.Failed, MetadataWriteBackResult.Success });
         // The point is no throw - if 7-Zip repairs/rewrites it that's Success, if it rejects it that's Failed.
+    }
+
+    private const string ForeignMetronInfo = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <MetronInfo>
+            <IDS><ID source="MangaDex" primary="true">abc-123</ID></IDS>
+            <Series><Name>Kilo Station</Name></Series>
+            <Prices><Price country="US">3.99</Price></Prices>
+        </MetronInfo>
+        """;
+
+    private static void AddEntry(string cbz, string name, string content)
+    {
+        using var zip = ZipFile.Open(cbz, ZipArchiveMode.Update);
+        using var writer = new StreamWriter(zip.CreateEntry(name).Open());
+        writer.Write(content.Trim());
+    }
+
+    private static byte[]? ReadEntry(string cbz, string name)
+    {
+        using var zip = ZipFile.OpenRead(cbz);
+        var entry = zip.GetEntry(name);
+        if (entry is null)
+        {
+            return null;
+        }
+
+        using var stream = entry.Open();
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        return ms.ToArray();
+    }
+
+    // docs/superpowers/specs/2026-10-05-metroninfo-write-back-design.md
+    [Fact]
+    public async Task WriteAsync_MetronInfo_WrittenWithIdsAndCredits()
+    {
+        string cbz = Path.Combine(_dir, "metron.cbz");
+        CbzFixture.Create(cbz, pageCount: 1);
+        int id = SeedIssue(cbz, i =>
+        {
+            i.Writer = "Jane Writer";
+            i.MetadataSource = ComicProvider.Metron;
+            i.GcdIssueId = 543;
+        });
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.ComicMetadataExternalIds.Add(new ComicMetadataExternalId { EntityKind = ComicMetadataEntityKind.Issue, EntityId = id, Provider = ComicProvider.Metron, ExternalId = "290431" });
+            context.SaveChanges();
+        }
+
+        var outcome = await Service().WriteAsync(id, includeSidecar: false, includeMetronInfo: true);
+
+        Assert.Equal(MetadataWriteBackResult.Success, outcome.Result);
+        var document = MetronInfo.TryRead(new MemoryStream(ReadEntry(cbz, "MetronInfo.xml")!))!;
+        Assert.Equal("Kilo Station", document.Series.Name);
+        Assert.Equal("Jane Writer", document.Credits.Single().Creator.Value);
+        var primary = Assert.Single(document.Ids, i => i.PrimarySpecified && i.Primary);
+        Assert.Equal("290431", primary.Value);
+        Assert.Contains(document.Ids, i => i.Source == InformationSource.GrandComicsDatabase && i.Value == "543");
+        Assert.Equal("Jane Writer", ReadBack(cbz).Writer); // ComicInfo.xml is still written, and still what we read first
+    }
+
+    [Fact]
+    public async Task WriteAsync_MetronInfoOff_LeavesAnExistingOneByteForByte()
+    {
+        string cbz = Path.Combine(_dir, "metron-off.cbz");
+        CbzFixture.Create(cbz, pageCount: 1);
+        AddEntry(cbz, "MetronInfo.xml", ForeignMetronInfo);
+        byte[] before = ReadEntry(cbz, "MetronInfo.xml")!;
+        int id = SeedIssue(cbz, i => i.Summary = "Changed.");
+
+        await Service().WriteAsync(id, includeSidecar: false);
+
+        Assert.Equal(before, ReadEntry(cbz, "MetronInfo.xml"));
+    }
+
+    [Fact]
+    public async Task WriteAsync_MetronInfoOn_OverwritesAnExistingOne_KeepingWhatWeDoNotHold()
+    {
+        string cbz = Path.Combine(_dir, "metron-carry.cbz");
+        CbzFixture.Create(cbz, pageCount: 1);
+        AddEntry(cbz, "MetronInfo.xml", ForeignMetronInfo);
+        int id = SeedIssue(cbz, i => i.Summary = "Changed.");
+
+        await Service().WriteAsync(id, includeSidecar: false, includeMetronInfo: true);
+
+        var document = MetronInfo.TryRead(new MemoryStream(ReadEntry(cbz, "MetronInfo.xml")!))!;
+        Assert.Equal("Changed.", document.Summary);
+        Assert.Equal(3.99m, document.Prices.Single().Value);
+        Assert.Equal("abc-123", document.Ids.Single().Value);
+    }
+
+    [Fact]
+    public async Task WriteAsync_MetronInfo_FolderOfImages()
+    {
+        string folder = Path.Combine(_dir, "folder-metron");
+        Directory.CreateDirectory(folder);
+        File.WriteAllBytes(Path.Combine(folder, "001.jpg"), new byte[] { 1, 2, 3 });
+        int id = SeedIssue(folder, i => i.Summary = "Folder summary.");
+
+        var outcome = await Service().WriteAsync(id, includeSidecar: false, includeMetronInfo: true);
+
+        Assert.Equal(MetadataWriteBackResult.Success, outcome.Result);
+        using var file = File.OpenRead(Path.Combine(folder, "MetronInfo.xml"));
+        Assert.Equal("Folder summary.", MetronInfo.TryRead(file)!.Summary);
     }
 }

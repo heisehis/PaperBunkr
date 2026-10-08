@@ -107,4 +107,6 @@ public sealed record ExternalMediaMetadata(
     string? Demographic = null,
     IReadOnlyList<(ExternalMetadataProvider Provider, string ExternalId)>? CrossReferences = null,
     IReadOnlyList<string>? GenreTags = null,
-    IReadOnlyList<(string Value, string Category)>? OtherTags = null);
+    IReadOnlyList<(string Value, string Category)>? OtherTags = null,
+    string? CountryOfOrigin = null,
+    string? OriginalLanguage = null);

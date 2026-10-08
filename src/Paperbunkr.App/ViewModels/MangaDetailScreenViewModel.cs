@@ -196,7 +196,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
             return;
         }
 
-        series.ContentType = value;
+        SeriesContentTypeEditor.SetManual(series, value);
         context.SaveChanges();
 
         // Content type drives the ComicInfo <Manga> field for every issue in the series
@@ -210,6 +210,48 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         }
 
         _goDetailForSeries(seriesId);
+    }
+
+    /// <summary>
+    /// True while the series' type was applied on its own by the tracker classifier and nobody has confirmed, undone or changed it since
+    /// (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md). Shows the header's Undo; there is no time limit here, unlike the
+    /// queue's 30-day "Recently auto-classified" list, because the previous type is stored on the series row.
+    /// </summary>
+    [ObservableProperty]
+    private bool _canUndoContentType;
+
+    /// <summary>"Auto-classified from MangaBaka / AniList: was Unknown".</summary>
+    [ObservableProperty]
+    private string _undoContentTypeLabel = string.Empty;
+
+    private void RefreshContentTypeUndo(Series series)
+    {
+        CanUndoContentType = series.ContentTypeSource == ContentTypeSource.Provider && !series.ContentTypeLocked && series.PreviousContentType is not null;
+        UndoContentTypeLabel = CanUndoContentType ? $"Auto-classified: was {series.PreviousContentType}" : string.Empty;
+    }
+
+    /// <summary>Puts back the type and reading mode from before the automatic classification, locks the series, and reloads the screen.</summary>
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void UndoContentType()
+    {
+        if (_seriesId is not int seriesId)
+        {
+            return;
+        }
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var series = context.Series.Find(seriesId);
+            if (series is null || !SeriesContentTypeEditor.Undo(series))
+            {
+                return;
+            }
+
+            context.SaveChanges();
+        }
+
+        // Reload on the next dispatcher tick: this runs from the header's own Button, and the reload replaces the screen it sits on.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => _goDetailForSeries(seriesId));
     }
 
     [ObservableProperty]
@@ -329,6 +371,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
             .Select(t => t.Value)
             .FirstOrDefault(v => !string.Equals(v, series.Name, StringComparison.OrdinalIgnoreCase));
         SelectedContentType = series.ContentType;
+        RefreshContentTypeUndo(series);
         StatusLabel = series.Status switch
         {
             SeriesStatus.Ongoing => "Ongoing",

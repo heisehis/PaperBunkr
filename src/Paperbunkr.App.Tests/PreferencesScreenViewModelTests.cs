@@ -247,11 +247,11 @@ public class PreferencesScreenViewModelTests : IDisposable
     {
         var sections = new LibraryHealthSections();
 
-        Assert.Equal(11, sections.All.Count);
-        Assert.Equal(11, sections.All.Select(s => s.Anchor).Distinct().Count());
-        Assert.Equal(11, sections.All.Select(s => s.Key).Distinct().Count());
+        Assert.Equal(13, sections.All.Count);
+        Assert.Equal(13, sections.All.Select(s => s.Anchor).Distinct().Count());
+        Assert.Equal(13, sections.All.Select(s => s.Key).Distinct().Count());
         Assert.All(new[] { sections.Missing, sections.EmptyRows, sections.RecentlyRemoved }, s => Assert.Equal(Paperbunkr.App.Models.LibraryHealthTab.Files, s.Tab));
-        Assert.Equal(8, sections.All.Count(s => s.Tab == Paperbunkr.App.Models.LibraryHealthTab.Review));
+        Assert.Equal(10, sections.All.Count(s => s.Tab == Paperbunkr.App.Models.LibraryHealthTab.Review));
         Assert.Same(sections.Duplicates, sections.Find("duplicates"));
         Assert.Same(sections.Duplicates, sections.Find("library.healthDuplicates"));
         Assert.Null(sections.Find("library.health"));
@@ -3241,12 +3241,14 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.WriteMetadataToFiles = true;
         vm.WriteMetadataAutomatically = true;
         vm.WriteNativeSidecar = true;
+        vm.WriteMetronInfo = true;
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         var settings = context.GetOrCreateAppSettings();
         Assert.True(settings.WriteMetadataToFiles);
         Assert.True(settings.WriteMetadataAutomatically);
         Assert.True(settings.WriteNativeSidecar);
+        Assert.True(settings.WriteMetronInfo);
     }
 
     [Fact]

@@ -56,6 +56,28 @@ public partial class ReaderScreenViewModel
         }
     }
 
+    // ===================== Active time per issue (smart features §4.1) =====================
+
+    private TimeSpan _issueActiveBaseline;
+
+    /// <summary>The visit clock runs across issues; this marks where the issue just opened starts on it.</summary>
+    private void MarkIssueActiveTimeStart() => _issueActiveBaseline = SessionClock.ActiveTime;
+
+    /// <summary>
+    /// Whole seconds of active reading on the open issue, for its <c>ReadingEvent</c> row. Read when the issue's session ends, which is
+    /// always before <see cref="EndComfortVisit"/> resets the clock. The clock is first brought up to now, so the stretch since the last
+    /// 10-second tick counts. If the visit restarted while this issue was open (away for <see cref="ReadingSessionClock.NewVisitAfter"/>),
+    /// the clock is below the baseline and only the time since the restart is known.
+    /// </summary>
+    private int TakeIssueActiveSeconds()
+    {
+        SessionClock.Tick(NowProvider(), _userPresent);
+        var active = SessionClock.ActiveTime;
+        var forIssue = active >= _issueActiveBaseline ? active - _issueActiveBaseline : active;
+        _issueActiveBaseline = active;
+        return (int)Math.Floor(forIssue.TotalSeconds);
+    }
+
     /// <summary>Called by the screen for every key press, click and wheel turn over the reader (and by gamepad frames).</summary>
     public void NoteReaderInput() => SessionClock.NoteInput(NowProvider());
 

@@ -147,4 +147,19 @@ public enum SmartListField
     NovelAdded,
     NovelOpened,
     NovelPublished,
+
+    // Smart features S1 (docs/superpowers/specs/2026-10-06-smart-features-design.md §3.1). Stored by name (string
+    // conversion), so appending here needs no migration. Not in CE, which has only a series gap count.
+
+    /// <summary>Series-target only - issues not yet read (95% rule; in-progress counts as unread), placeholders excluded.</summary>
+    UnreadCount,
+
+    /// <summary>Series-target only - issues read (95% rule), placeholders excluded.</summary>
+    ReadCount,
+
+    /// <summary>Series-target only - whole days since the newest open/reading event across the series; a never-opened series has no value and never matches.</summary>
+    DaysSinceLastRead,
+
+    /// <summary>Issue-target only - the issue has at least one Pending <see cref="MetadataProposal"/>.</summary>
+    HasPendingProposal,
 }

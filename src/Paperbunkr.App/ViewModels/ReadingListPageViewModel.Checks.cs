@@ -80,9 +80,14 @@ public partial class ReadingListPageViewModel
     public bool HasOverlap => CurrentOverlap is not null && IsListOpen;
 
     /// <summary>The Checks strip shows when it has at least one line (K1).</summary>
-    public bool HasChecks => HasOverlap || HasCanonicalPanel || HasRebuildNote;
+    public bool HasChecks => HasOverlap || HasCanonicalPanel || HasRebuildNote || HasChronologyCheck;
 
-    private void RaiseChecks() => OnPropertyChanged(nameof(HasChecks));
+    private void RaiseChecks()
+    {
+        OnPropertyChanged(nameof(HasChecks));
+        OnPropertyChanged(nameof(HasChronologyCheck));
+        OnPropertyChanged(nameof(IsChronologyFirstCheck));
+    }
 
     public string OverlapText => CurrentOverlap is { } o ? $"Shares {o.Shared} of {o.OwnCount} issues with {o.Name}" : string.Empty;
 

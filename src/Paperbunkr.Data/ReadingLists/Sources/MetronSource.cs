@@ -23,6 +23,7 @@ public sealed class MetronSource : IReadingListSource
     private static readonly TimeSpan MinRequestInterval = TimeSpan.FromMilliseconds(500);
 
     private readonly HttpClient _http;
+    private readonly string _login = string.Empty;
     private readonly object _throttleLock = new();
     private DateTime _lastRequestUtc = DateTime.MinValue;
 
@@ -32,6 +33,7 @@ public sealed class MetronSource : IReadingListSource
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("Paperbunkr/0.1 (comic library manager)");
         string basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", basic);
+        _login = basic;
     }
 
     public string SourceKey => "Metron";
@@ -141,6 +143,12 @@ public sealed class MetronSource : IReadingListSource
 
     private async Task<JsonNode?> GetJsonAsync(string url, CancellationToken cancellationToken)
     {
+        // Shared with every other Metron request the app makes: a rejected login must not be sent a third time (see MetronLoginGuard).
+        if (ComicVine.MetronLoginGuard.ShouldHold(_login, out var hold))
+        {
+            throw new ReadingListSourceException(DisplayName, ComicVine.MetronLoginGuard.HoldMessage(hold));
+        }
+
         await ThrottleAsync(cancellationToken).ConfigureAwait(false);
 
         HttpResponseMessage response;
@@ -162,6 +170,7 @@ public sealed class MetronSource : IReadingListSource
 
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
+            ComicVine.MetronLoginGuard.RecordRejected(_login);
             throw new ReadingListSourceException(DisplayName, "Metron rejected the configured username/password (401 Unauthorized).");
         }
 

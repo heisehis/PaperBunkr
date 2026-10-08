@@ -1,0 +1,52 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:fi="using:FluentIcons.Avalonia"
+                    xmlns:vm="using:Paperbunkr.App.ViewModels"
+                    xmlns:home="using:Paperbunkr.App.ViewModels.Home"
+                    xmlns:models="using:Paperbunkr.App.Models"
+                    xmlns:controls="using:Paperbunkr.App.Controls">
+
+    <!--
+        Up Next (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.4): a short ranked list of the next unread issue of each
+        series you are part-way through. The order is the message, so each row shows its rank, one reason and the time-left estimate -
+        never the score behind the order. HomeScreenViewModel leaves this section out of the list entirely when there is nothing to show.
+        Each row is one Button, so Enter / Space / a pad's A open it and the arrow keys move between rows like any other Home control.
+    -->
+    <DataTemplate x:Key="HomeSection.upNext" DataType="home:UpNextSectionViewModel">
+        <StackPanel Spacing="10" controls:ScrollReveal.Enabled="True">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <fi:SymbolIcon Classes="sectionIcon" Symbol="{Binding Icon}" />
+                <controls:SplitText Classes="heading" Text="{Binding Title}" AutomationProperties.AutomationId="{Binding HeaderAutomationId}" />
+            </StackPanel>
+            <ItemsControl ItemsSource="{Binding Home.UpNext}" AutomationProperties.AutomationId="HomeUpNextList">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><StackPanel Spacing="6" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:HomeUpNextRow">
+                        <Button Classes="attentionBanner"
+                                Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenUpNextCommand}"
+                                CommandParameter="{Binding}" AutomationProperties.Name="{Binding AccessibleName}">
+                            <Grid ColumnDefinitions="22,Auto,*,Auto" ColumnSpacing="10">
+                                <TextBlock Grid.Column="0" Text="{Binding Rank}" FontSize="13" FontWeight="Bold" VerticalAlignment="Center"
+                                           HorizontalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <Border Grid.Column="1" Width="30" Height="44" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
+                                        Background="{Binding CoverBrush}">
+                                    <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                                    <TextBlock Text="{Binding Reason}" FontSize="11.5"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="3" Text="{Binding TimeLeft}" IsVisible="{Binding HasTimeLeft}" FontSize="12"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            </Grid>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </DataTemplate>
+</ResourceDictionary>

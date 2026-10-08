@@ -8,11 +8,23 @@
     <!-- Single source of truth for the release version (docs/superpowers/specs/
          2026-09-01-auto-update-and-changelog-design.md). CI derives the SemVer release tag/appcast
          version from this by dropping the trailing revision segment and appending "-beta". -->
-    <Version>0.7.7.0</Version>
+    <Version>0.7.8.0</Version>
     <!-- We stamp InformationalVersion ourselves in _PbStampBuildMetadata below; turn off the SDK's
          own SourceLink-driven "+<SourceRevisionId>" append so it can't double-stamp. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <!-- Garbage collector settings for a desktop app on a small machine (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md
+         §4.5). Workstation + concurrent are the defaults for this project type; stated so nobody has to wonder. -->
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ConserveMemory (scale 0-9) makes the collector compact a fragmented heap sooner, trading some collection time for a
+         smaller footprint. 5, raised from 1 on 2026-10-08: a dump with 1 still showed 150 MB of free space inside a 510 MB
+         managed heap (25% of gen 2, 39% of the large object heap). Not yet checked for longer pauses; lower it if the UI hitches.
+         Written into Paperbunkr.App.runtimeconfig.json; there is no MSBuild property for it. -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
 
   <!-- Build-metadata stamp (docs/superpowers/specs/2026-09-10-versioning-convention-design.md Q5):
        InformationalVersion becomes "<Version>+<short git hash>", or "<Version>+dev" off a non-git

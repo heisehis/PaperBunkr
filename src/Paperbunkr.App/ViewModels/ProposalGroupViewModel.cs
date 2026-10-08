@@ -61,8 +61,13 @@ public partial class ProposalGroupViewModel : ViewModelBase
     /// <summary>Which linked provider produced these, for <see cref="MetadataProposalSource.MetadataProvider"/> groups; null otherwise.</summary>
     public ExternalMetadataProvider? Provider { get; }
 
-    /// <summary>"Number · FilenameParser" / "Summary · MetadataProvider (MangaBaka)".</summary>
-    public string Title => Provider is { } provider ? $"{Field} · {Source} ({provider})" : $"{Field} · {Source}";
+    /// <summary>"Number · FilenameParser" / "Summary · MetadataProvider (MangaBaka)" / "Genre · Read from the synopsis".</summary>
+    public string Title => Provider is { } provider
+        ? $"{Field} · {Source} ({provider})"
+        // The only Genre proposals filed under Other are the synopsis keyword suggestions (smart features §6.2); "Other" says nothing.
+        : Field == MetadataProposalField.Genre && Source == Paperbunkr.Data.Metadata.SynopsisGenreInferrer.Source
+            ? $"{Field} · Read from the synopsis"
+            : $"{Field} · {Source}";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CountLabel), nameof(HiddenRowsLabel), nameof(HasHiddenRows))]

@@ -58,6 +58,7 @@ public sealed class AniListMetadataProvider : IMetadataProvider, ITrackerSearchP
             staff { edges { role node { name { full } } } }
             startDate { year }
             format
+            countryOfOrigin
             tags { name rank isMediaSpoiler }
             relations { edges { relationType node { id title { romaji english } siteUrl } } }
           }
@@ -322,6 +323,10 @@ internal sealed class AniListMediaDto
 
     [JsonPropertyName("format")]
     public string? Format { get; set; }
+
+    /// <summary>ISO 3166-1 alpha-2 (JP/KR/CN/TW) - the signal that separates manhwa/manhua from manga (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md). Get-by-id only.</summary>
+    [JsonPropertyName("countryOfOrigin")]
+    public string? CountryOfOrigin { get; set; }
 
     [JsonPropertyName("tags")]
     public List<AniListTagDto>? Tags { get; set; }

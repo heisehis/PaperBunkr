@@ -26,6 +26,37 @@ public partial class PreferencesScreenViewModel
     /// <summary>The "Publisher logos" section's own view model (publishers with no logo, issues with no publisher, the user icon folder).</summary>
     public PublisherGapsViewModel PublisherGaps => _publisherGaps ??= new PublisherGapsViewModel(dialogs: _dialogService);
 
+    // Smart features S1 (docs/superpowers/specs/2026-10-06-smart-features-design.md §3.3, §3.4). Both scan when their section is first
+    // opened (InitLibraryHealthTabs) and again on Rescan.
+    private CollectionGapsViewModel? _collectionGaps;
+    private MetadataConsistencyViewModel? _metadataConsistency;
+    private Action<int>? _openSeries;
+    private Action<int>? _openIssueEditor;
+
+    /// <summary>The "Collection gaps" section's own view model.</summary>
+    public CollectionGapsViewModel CollectionGaps => _collectionGaps ??= new CollectionGapsViewModel(_contextFactory) { OpenSeries = _openSeries };
+
+    /// <summary>The "Metadata consistency" section's own view model.</summary>
+    public MetadataConsistencyViewModel MetadataConsistency =>
+        _metadataConsistency ??= new MetadataConsistencyViewModel(_contextFactory) { OpenSeries = _openSeries, OpenIssueEditor = _openIssueEditor };
+
+    /// <summary>Gives Library Health's rows somewhere to go: a series' Detail page and the issue editor. Called once by the shell.</summary>
+    public void AttachNavigation(Action<int> openSeries, Action<int> openIssueEditor)
+    {
+        _openSeries = openSeries;
+        _openIssueEditor = openIssueEditor;
+        if (_collectionGaps is not null)
+        {
+            _collectionGaps.OpenSeries = openSeries;
+        }
+
+        if (_metadataConsistency is not null)
+        {
+            _metadataConsistency.OpenSeries = openSeries;
+            _metadataConsistency.OpenIssueEditor = openIssueEditor;
+        }
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsLibraryHealthOverviewTab), nameof(IsLibraryHealthReviewTab), nameof(IsLibraryHealthFilesTab))]
     private LibraryHealthTab _activeLibraryHealthTab = LibraryHealthTab.Overview;
@@ -39,6 +70,21 @@ public partial class PreferencesScreenViewModel
     /// <summary>Wired from the constructor: applies the first-open rule as soon as the first refresh shows something is pending.</summary>
     private void InitLibraryHealthTabs()
     {
+        LibraryHealthSections.CollectionGaps.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(LibraryHealthSectionState.IsOpen) && LibraryHealthSections.CollectionGaps.IsOpen)
+            {
+                CollectionGaps.EnsureScanned();
+            }
+        };
+        LibraryHealthSections.MetadataConsistency.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(LibraryHealthSectionState.IsOpen) && LibraryHealthSections.MetadataConsistency.IsOpen)
+            {
+                MetadataConsistency.EnsureScanned();
+            }
+        };
+
         NeedsReview.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(NeedsReviewViewModel.HasLoaded) && !_libraryHealthTabChosen && NeedsReview.HasPendingItems)

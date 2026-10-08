@@ -176,7 +176,9 @@ sealed class Program
             // 256-512MB desktop-default range. Confirmed the real type is `Avalonia.SkiaOptions`
             // (not `Avalonia.Skia.SkiaOptions`) via reflection against the built app's own
             // Avalonia.Skia.dll, not guessed.
-            .With(new SkiaOptions { MaxGpuResourceSizeBytes = 384L * 1024 * 1024 })
+            // Since 2026-10-07 the 384MB is the ceiling of a RAM-scaled limit (ImageMemoryBudget.GpuCacheFor), not a constant:
+            // on integrated graphics this cache is system memory.
+            .With(new SkiaOptions { MaxGpuResourceSizeBytes = Paperbunkr.App.Services.Performance.ImageMemoryBudget.GpuCacheBytes })
             // Make the GPU rendering fallback chain explicit rather than relying on Avalonia's
             // implicit Win32 default of [AngleEgl, Software] - Auto adds a native-GL rung before
             // the CPU rasterizer, and Software/Gpu are the escape hatch / no-fallback test mode

@@ -81,6 +81,26 @@ public sealed class AsyncCoverImage
     private static readonly AttachedProperty<CoverDecodeQueue.Ticket?> TicketProperty =
         AvaloniaProperty.RegisterAttached<AsyncCoverImage, Image, CoverDecodeQueue.Ticket?>("Ticket");
 
+    /// <summary>
+    /// The <see cref="GridCoverCache"/> bitmap this <see cref="Image"/> is showing, held on a lease so the cache cannot dispose it
+    /// while it is displayed (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.2). Released when the image is
+    /// re-pointed or leaves the visual tree.
+    /// </summary>
+    private static readonly AttachedProperty<Bitmap?> LeaseProperty =
+        AvaloniaProperty.RegisterAttached<AsyncCoverImage, Image, Bitmap?>("Lease");
+
+    /// <summary>Set once the attach/detach handlers below are on this <see cref="Image"/>.</summary>
+    private static readonly AttachedProperty<bool> LeaseHookedProperty =
+        AvaloniaProperty.RegisterAttached<AsyncCoverImage, Image, bool>("LeaseHooked");
+
+    /// <summary>The image gave its cover back when it left the visual tree and must resolve it again when it returns.</summary>
+    private static readonly AttachedProperty<bool> ReleasedOnDetachProperty =
+        AvaloniaProperty.RegisterAttached<AsyncCoverImage, Image, bool>("ReleasedOnDetach");
+
+    /// <summary>Generation of the one re-request made after a decode was evicted before it could be shown, so that cannot repeat forever.</summary>
+    private static readonly AttachedProperty<long> RetryGenerationProperty =
+        AvaloniaProperty.RegisterAttached<AsyncCoverImage, Image, long>("RetryGeneration");
+
     /// <summary>Last render scaling seen on an attached top level; used for images not attached yet when their cover is first bound.</summary>
     private static double s_lastRenderScaling = 1.0;
 
@@ -138,6 +158,58 @@ public sealed class AsyncCoverImage
     }
 
     private static void Refresh(Image image, string? newStem)
+    {
+        // The cover this image was showing stays leased until its new Source is in place (every path below sets one),
+        // so the image never holds a bitmap the cache has disposed.
+        var previousLease = image.GetValue(LeaseProperty);
+        image.SetValue(LeaseProperty, null);
+        image.SetValue(ReleasedOnDetachProperty, false);
+        try
+        {
+            RefreshCore(image, newStem);
+        }
+        finally
+        {
+            if (previousLease is not null)
+            {
+                GridCoverCache.Shared.Release(previousLease);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A grid image that leaves the visual tree (its screen closed, its container dropped) gives its cover back, so the cache can
+    /// free it; if the image comes back it resolves the cover again (a cache hit paints at once). Without this every screen change
+    /// would leave its visible covers leased until the collector noticed the dead images.
+    /// </summary>
+    private static void EnsureLeaseHooks(Image image)
+    {
+        if (image.GetValue(LeaseHookedProperty))
+        {
+            return;
+        }
+
+        image.SetValue(LeaseHookedProperty, true);
+        image.DetachedFromVisualTree += static (sender, _) =>
+        {
+            if (sender is Image detached && detached.GetValue(LeaseProperty) is { } lease)
+            {
+                detached.Source = null;
+                detached.SetValue(LeaseProperty, null);
+                detached.SetValue(ReleasedOnDetachProperty, true);
+                GridCoverCache.Shared.Release(lease);
+            }
+        };
+        image.AttachedToVisualTree += static (sender, _) =>
+        {
+            if (sender is Image attached && attached.GetValue(ReleasedOnDetachProperty) && GetSourceId(attached) is { } stem)
+            {
+                Refresh(attached, stem);
+            }
+        };
+    }
+
+    private static void RefreshCore(Image image, string? newStem)
     {
         long generation = image.GetValue(GenerationProperty) + 1;
         image.SetValue(GenerationProperty, generation);
@@ -210,9 +282,12 @@ public sealed class AsyncCoverImage
         double scaling = TopLevel.GetTopLevel(image)?.RenderScaling ?? s_lastRenderScaling;
         int bucket = GridCoverCache.BucketFor(decodeWidth, scaling);
 
-        if (GridCoverCache.Shared.TryGet(stem, bucket, out var cached))
+        EnsureLeaseHooks(image);
+
+        if (GridCoverCache.Shared.TryLease(stem, bucket, out var cached))
         {
             CoverPipelineStats.CacheHit();
+            image.SetValue(LeaseProperty, cached);
             Paint(image, stem, cached);
             if (cached is not null && CoverFingerprint.TryGetId(stem, out int cachedId))
             {
@@ -230,12 +305,16 @@ public sealed class AsyncCoverImage
             stem,
             bucket,
             CoverDecodeQueue.Priority.Visible,
-            decoded => Dispatcher.UIThread.Post(() => ApplyGrid(image, stem, generation, decoded)));
+            decoded => Dispatcher.UIThread.Post(() => ApplyGrid(image, stem, bucket, generation, decoded)));
         image.SetValue(TicketProperty, ticket);
     }
 
-    /// <summary>Paints a finished grid-pipeline decode (already stored in <see cref="GridCoverCache"/> by the worker), unless the container was recycled meanwhile.</summary>
-    internal static void ApplyGrid(Image image, string stem, long generation, Bitmap? decoded)
+    /// <summary>
+    /// Paints a finished grid-pipeline decode (already stored in <see cref="GridCoverCache"/> by the worker), unless the container was recycled meanwhile.
+    /// The bitmap shown is leased from the cache here, not taken from <paramref name="decoded"/>: between the worker storing it and this
+    /// callback running, the cache may have evicted and disposed it.
+    /// </summary>
+    internal static void ApplyGrid(Image image, string stem, int bucket, long generation, Bitmap? decoded)
     {
         if (image.GetValue(GenerationProperty) != generation)
         {
@@ -252,9 +331,23 @@ public sealed class AsyncCoverImage
             return;
         }
 
-        CoverPipelineStats.DecodeApplied();
         image.SetValue(TicketProperty, null);
-        PaintNewlyDecoded(image, stem, decoded);
+        if (!GridCoverCache.Shared.TryLease(stem, bucket, out var leased) || leased is null)
+        {
+            // Evicted before it could be shown (the cache is under pressure). Ask once more; a second loss leaves the placeholder.
+            CoverPipelineStats.DecodeWasted();
+            if (image.GetValue(RetryGenerationProperty) != generation)
+            {
+                image.SetValue(RetryGenerationProperty, generation + 1);
+                Refresh(image, stem);
+            }
+
+            return;
+        }
+
+        CoverPipelineStats.DecodeApplied();
+        image.SetValue(LeaseProperty, leased);
+        PaintNewlyDecoded(image, stem, leased);
     }
 
     /// <summary>One-shot 0→1 opacity fade (docs/superpowers/specs/2026-09-13-preferences-cosmetic-

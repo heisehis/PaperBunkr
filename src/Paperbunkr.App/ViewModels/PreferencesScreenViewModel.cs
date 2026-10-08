@@ -173,6 +173,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         // bodies are unchanged.
         Acquisition = new AcquisitionSettingsViewModel(_contextFactory, () => ActiveSection = PreferencesSection.Connections);
         GcdData = new GcdDataSettingsViewModel(_contextFactory, _activity);
+        MetronSync = new MetronSyncSettingsViewModel(_contextFactory, _activity);
         OrganizeScrape = new OrganizeScrapeSettingsViewModel(
             _contextFactory, () => ActiveSection = PreferencesSection.Connections,
             new Scraper.ProfileManagerViewModel(
@@ -432,6 +433,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     /// <summary>Connections → Grand Comics Database data (docs/superpowers/specs/2026-09-27-gcd-data-design.md §2).</summary>
     public GcdDataSettingsViewModel GcdData { get; }
+
+    /// <summary>Preferences → Connections → Metron account (docs/superpowers/specs/2026-10-05-metron-account-sync-design.md).</summary>
+    public MetronSyncSettingsViewModel MetronSync { get; }
     public bool IsPluginsSection => ActiveSection == PreferencesSection.Plugins;
     public bool IsAdvancedSection => ActiveSection == PreferencesSection.Advanced;
     public bool IsAboutSection => ActiveSection == PreferencesSection.About;
@@ -563,6 +567,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// <summary>Open the tracker link panel automatically (first time, source-linked manga only).</summary>
     [ObservableProperty]
     private bool _trackerAutoOpenLinkPanel = true;
+
+    /// <summary>Never apply a content type on its own: queue every tracker match in Library Health &gt; Review for a person to accept (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md).</summary>
+    [ObservableProperty]
+    private bool _askBeforeClassifying;
+
+    /// <summary>When a linked series becomes Completed, refresh its provider data once (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.3).</summary>
+    [ObservableProperty]
+    private bool _refreshProviderDataOnComplete = true;
 
     /// <summary>Push progress to linked trackers when the comic reader finishes an issue.</summary>
     [ObservableProperty]
@@ -870,6 +882,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         if (value == PreferencesSection.Connections)
         {
             GcdData?.Refresh();   // null only while the constructor is still running
+            MetronSync?.Refresh();
         }
 
         OnPropertyChanged(nameof(IsAcquisitionSection));
@@ -1008,6 +1021,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         RestoreSessionOnStartup = settings.RestoreSessionOnStartup;
         PromptReviewOnFinish = settings.PromptReviewOnFinish;
         TrackerAutoOpenLinkPanel = settings.TrackerAutoOpenLinkPanel;
+        AskBeforeClassifying = settings.AskBeforeClassifying;
+        RefreshProviderDataOnComplete = settings.RefreshProviderDataOnComplete;
         TrackerUpdateAfterReading = settings.TrackerUpdateAfterReading;
         TrackerUpdateOnMarkRead = settings.TrackerUpdateOnMarkRead;
         TrackerAutoSyncFromTrackers = settings.TrackerAutoSyncFromTrackers;
@@ -1051,6 +1066,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         WriteMetadataToFiles = settings.WriteMetadataToFiles;
         WriteMetadataAutomatically = settings.WriteMetadataAutomatically;
         WriteNativeSidecar = settings.WriteNativeSidecar;
+        WriteMetronInfo = settings.WriteMetronInfo;
         AutoRemoveMissingOnScan = settings.AutoRemoveMissingOnScan;
         DontReimportRemovedFiles = settings.DontReimportRemovedFiles;
         ExportedListsContainFilenames = settings.ExportedListsContainFilenames;
@@ -1404,6 +1420,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     partial void OnTrackerAutoOpenLinkPanelChanged(bool value) => PersistBehaviorSetting(s => s.TrackerAutoOpenLinkPanel = value);
 
+    partial void OnAskBeforeClassifyingChanged(bool value) => PersistBehaviorSetting(s => s.AskBeforeClassifying = value);
+
+    partial void OnRefreshProviderDataOnCompleteChanged(bool value) => PersistBehaviorSetting(s => s.RefreshProviderDataOnComplete = value);
+
     partial void OnTrackerUpdateAfterReadingChanged(bool value) => PersistBehaviorSetting(s => s.TrackerUpdateAfterReading = value);
 
     partial void OnTrackerUpdateOnMarkReadChanged(TrackerAutoUpdateMode value) => PersistBehaviorSetting(s => s.TrackerUpdateOnMarkRead = value);
@@ -1581,6 +1601,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private bool _writeNativeSidecar;
 
     [ObservableProperty]
+    private bool _writeMetronInfo;
+
+    [ObservableProperty]
     private string _writeAllMetadataStatus = string.Empty;
 
     partial void OnWriteMetadataToFilesChanged(bool value) => PersistBehaviorSetting(s => s.WriteMetadataToFiles = value);
@@ -1588,6 +1611,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnWriteMetadataAutomaticallyChanged(bool value) => PersistBehaviorSetting(s => s.WriteMetadataAutomatically = value);
 
     partial void OnWriteNativeSidecarChanged(bool value) => PersistBehaviorSetting(s => s.WriteNativeSidecar = value);
+
+    partial void OnWriteMetronInfoChanged(bool value) => PersistBehaviorSetting(s => s.WriteMetronInfo = value);
 
     /// <summary>docs/superpowers/specs/2026-09-13-preferences-cosmetic-toggles-design.md - CE:
     /// Settings.ExportedListsContainFilenames, default false, .cbl export only.</summary>
@@ -1820,7 +1845,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// (docs/superpowers/specs/2026-09-07-library-folder-management-redesign-design.md §2), since
     /// these 5 operations don't otherwise guard against each other.</summary>
     public bool IsAnyComicFolderOperationRunning =>
-        IsScanning || IsGeneratingCovers || IsSyncingMetadata || IsRepairingCovers || IsVerifyingCovers;
+        IsScanning || IsGeneratingCovers || IsSyncingMetadata || IsRepairingCovers || IsVerifyingCovers || IsClassifyingLibrary;
 
     /// <summary>Folder management redesign (docs/superpowers/specs/2026-09-07-library-folder-
     /// management-redesign-design.md) - the currently-running Comic Folders operation (Scan Now or
@@ -2091,10 +2116,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         IsScanningBooks = true;
-        using var job = _activity.StartJob(ActivityJobKind.BookScan, "Scanning book folders");
+        using var job = _activity.StartJob(ActivityJobKind.BookScan, "Scanning book folders", startQueued: Services.HeavyJobLane.Shared.WouldWait);
         CurrentBookFolderJob = job.Job;
         try
         {
+            using var laneSlot = Services.HeavyJobLane.Activate(await Services.HeavyJobLane.Shared.EnterAsync(userStarted: true, job.CancellationToken));
+            job.Begin();
             var scanProgress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} files"));
             var result = await new BookFolderScanService().ScanAllAsync(scanProgress, job.CancellationToken);
 
@@ -2112,7 +2139,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
         catch (OperationCanceledException)
         {
-            throw;
+            // Cancelled from the Activity Center: disposing the job records it as Cancelled. Rethrowing sent the exception
+            // out through the relay command to the UI thread's unhandled-exception handler, which showed a crash report.
         }
         catch (Exception ex)
         {
@@ -2136,10 +2164,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         IsScanning = true;
-        using var job = _activity.StartJob(ActivityJobKind.LibraryScan, "Scanning library folders");
+        using var job = _activity.StartJob(ActivityJobKind.LibraryScan, "Scanning library folders", startQueued: Services.HeavyJobLane.Shared.WouldWait);
         CurrentComicFolderJob = job.Job;
         try
         {
+            using var laneSlot = Services.HeavyJobLane.Activate(await Services.HeavyJobLane.Shared.EnterAsync(userStarted: true, job.CancellationToken));
+            job.Begin();
             var progress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} files"));
             var result = await _libraryScanner.ScanAllAsync(progress, job.CancellationToken);
             string summary = result.IssuesAdded == 0
@@ -2202,7 +2232,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
         catch (OperationCanceledException)
         {
-            throw;
+            // Cancelled from the Activity Center: disposing the job records it as Cancelled. Rethrowing sent the exception
+            // out through the relay command to the UI thread's unhandled-exception handler, which showed a crash report.
         }
         catch (Exception ex)
         {
@@ -2269,12 +2300,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         IsGeneratingCovers = true;
-        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Generating covers");
+        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Generating covers", startQueued: Services.HeavyJobLane.Shared.WouldWait);
         CurrentComicFolderJob = job.Job;
         int total = 0;
 
         try
         {
+            using var laneSlot = Services.HeavyJobLane.Activate(await Services.HeavyJobLane.Shared.EnterAsync(userStarted: true, job.CancellationToken));
+            job.Begin();
             var progress = new Progress<(int Done, int Total)>(p =>
             {
                 total = p.Total;
@@ -2286,7 +2319,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
         catch (OperationCanceledException)
         {
-            throw;
+            // Cancelled from the Activity Center: disposing the job records it as Cancelled. Rethrowing sent the exception
+            // out through the relay command to the UI thread's unhandled-exception handler, which showed a crash report.
         }
         catch (Exception ex)
         {
@@ -2323,7 +2357,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         IsVerifyingCovers = true;
-        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Verifying covers");
+        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Verifying covers", startQueued: Services.HeavyJobLane.Shared.WouldWait);
         CurrentComicFolderJob = job.Job;
 
         // Two sequential passes sharing one job - accumulate rather than assign directly, or the
@@ -2332,6 +2366,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         int bookTotal = 0;
         try
         {
+            using var laneSlot = Services.HeavyJobLane.Activate(await Services.HeavyJobLane.Shared.EnterAsync(userStarted: true, job.CancellationToken));
+            job.Begin();
             var comicProgress = new Progress<(int Done, int Total)>(p =>
             {
                 comicTotal = p.Total;
@@ -2352,7 +2388,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
         catch (OperationCanceledException)
         {
-            throw;
+            // Cancelled from the Activity Center: disposing the job records it as Cancelled. Rethrowing sent the exception
+            // out through the relay command to the UI thread's unhandled-exception handler, which showed a crash report.
         }
         catch (Exception ex)
         {
@@ -2387,13 +2424,15 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         IsRepairingCovers = true;
-        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Repairing missing covers");
+        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Repairing missing covers", startQueued: Services.HeavyJobLane.Shared.WouldWait);
         CurrentComicFolderJob = job.Job;
 
         int comicTotal = 0;
         int bookTotal = 0;
         try
         {
+            using var laneSlot = Services.HeavyJobLane.Activate(await Services.HeavyJobLane.Shared.EnterAsync(userStarted: true, job.CancellationToken));
+            job.Begin();
             var comicProgress = new Progress<(int Done, int Total)>(p =>
             {
                 comicTotal = p.Total;
@@ -2415,7 +2454,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
         catch (OperationCanceledException)
         {
-            throw;
+            // Cancelled from the Activity Center: disposing the job records it as Cancelled. Rethrowing sent the exception
+            // out through the relay command to the UI thread's unhandled-exception handler, which showed a crash report.
         }
         catch (Exception ex)
         {
@@ -2458,11 +2498,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         // Directory is now empty, so the cheap presence-based path regenerates everything - no
         // need for VerifyAllAsync/force here.
         IsGeneratingCovers = true;
-        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Rebuilding comic covers");
+        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Rebuilding comic covers", startQueued: Services.HeavyJobLane.Shared.WouldWait);
         CurrentComicFolderJob = job.Job;
         int total = 0;
         try
         {
+            using var laneSlot = Services.HeavyJobLane.Activate(await Services.HeavyJobLane.Shared.EnterAsync(userStarted: true, job.CancellationToken));
+            job.Begin();
             var progress = new Progress<(int Done, int Total)>(p =>
             {
                 total = p.Total;
@@ -2473,7 +2515,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
         catch (OperationCanceledException)
         {
-            throw;
+            // Cancelled from the Activity Center: disposing the job records it as Cancelled. Rethrowing sent the exception
+            // out through the relay command to the UI thread's unhandled-exception handler, which showed a crash report.
         }
         catch (Exception ex)
         {
@@ -2514,11 +2557,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         IsClearingBookCoverCache = true;
-        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Rebuilding book covers");
+        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Rebuilding book covers", startQueued: Services.HeavyJobLane.Shared.WouldWait);
         CurrentBookFolderJob = job.Job;
         int total = 0;
         try
         {
+            using var laneSlot = Services.HeavyJobLane.Activate(await Services.HeavyJobLane.Shared.EnterAsync(userStarted: true, job.CancellationToken));
+            job.Begin();
             var progress = new Progress<(int Done, int Total)>(p =>
             {
                 total = p.Total;
@@ -2529,7 +2574,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
         catch (OperationCanceledException)
         {
-            throw;
+            // Cancelled from the Activity Center: disposing the job records it as Cancelled. Rethrowing sent the exception
+            // out through the relay command to the UI thread's unhandled-exception handler, which showed a crash report.
         }
         catch (Exception ex)
         {
@@ -2559,11 +2605,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         IsSyncingMetadata = true;
-        using var job = _activity.StartJob(ActivityJobKind.SyncMetadata, "Syncing metadata");
+        using var job = _activity.StartJob(ActivityJobKind.SyncMetadata, "Syncing metadata", startQueued: Services.HeavyJobLane.Shared.WouldWait);
         CurrentComicFolderJob = job.Job;
 
         try
         {
+            using var laneSlot = Services.HeavyJobLane.Activate(await Services.HeavyJobLane.Shared.EnterAsync(userStarted: true, job.CancellationToken));
+            job.Begin();
             var progress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} issues"));
             var result = await _libraryScanner.SyncMetadataAsync(progress, job.CancellationToken);
             job.Succeed(
@@ -2575,7 +2623,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
         catch (OperationCanceledException)
         {
-            throw;
+            // Cancelled from the Activity Center: disposing the job records it as Cancelled. Rethrowing sent the exception
+            // out through the relay command to the UI thread's unhandled-exception handler, which showed a crash report.
         }
         catch (Exception ex)
         {
@@ -2587,6 +2636,79 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             IsSyncingMetadata = false;
             CurrentComicFolderJob = null;
         }
+    }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnyComicFolderOperationRunning))]
+    private bool _isClassifyingLibrary;
+
+    /// <summary>
+    /// "Classify Library" - looks unknown series up on MangaBaka, AniList and MangaDex now (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md): the same
+    /// pass the scheduled task runs, with a larger search budget. Confident matches are applied with an Undo; the rest wait in Library Health &gt; Review.
+    /// </summary>
+    [RelayCommand]
+    private async Task ClassifyLibrary()
+    {
+        if (IsClassifyingLibrary)
+        {
+            return;
+        }
+
+        IsClassifyingLibrary = true;
+        using var job = _activity.StartJob(ActivityJobKind.SyncMetadata, "Classifying series", startQueued: Services.HeavyJobLane.Shared.WouldWait);
+        CurrentComicFolderJob = job.Job;
+
+        try
+        {
+            using var laneSlot = Services.HeavyJobLane.Activate(await Services.HeavyJobLane.Shared.EnterAsync(userStarted: true, job.CancellationToken));
+            job.Begin();
+            var result = await Services.ContentTypeClassifierRunner.RunAsync(
+                Services.ContentTypeClassifierRunner.ManualBudget,
+                (done, total) => job.Report(done, total, $"{done} / {total} series"),
+                job.CancellationToken,
+                contextFactory: _contextFactory);
+            job.Succeed(
+                Services.ContentTypeClassifierRunner.Summarize(result),
+                result.Queued > 0 ? new Models.ActivityLink(ActivityLinkKind.Preferences, "LibraryHealth") : null,
+                itemsProcessed: result.Applied + result.Queued);
+            _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.ContentTypeTrackerClassify, ScheduledRunStatus.Succeeded);
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancelled from the Activity Center: disposing the job records it as Cancelled. Rethrowing sent the exception
+            // out through the relay command to the UI thread's unhandled-exception handler, which showed a crash report.
+        }
+        catch (Exception ex)
+        {
+            job.Fail("Classifying series failed", ex: ex);
+            _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.ContentTypeTrackerClassify, ScheduledRunStatus.Failed);
+        }
+        finally
+        {
+            IsClassifyingLibrary = false;
+            CurrentComicFolderJob = null;
+        }
+    }
+
+    /// <summary>
+    /// "Re-check publisher-classified series" - unlocks the series whose type could only have come from the publisher guess, so the next classify pass looks at them again.
+    /// A type you chose yourself is never unlocked.
+    /// </summary>
+    [RelayCommand]
+    private async Task RecheckPublisherClassified()
+    {
+        int changed = await Task.Run(() =>
+        {
+            using var context = _contextFactory();
+            return Paperbunkr.Data.Metadata.SeriesContentTypeEditor.RecheckPublisherClassified(context);
+        });
+        _activity.RaiseAlert(new ActivityAlert
+        {
+            Severity = ActivityAlertSeverity.Info,
+            Title = changed == 0 ? "No series to re-check" : $"{changed} series will be re-checked",
+            Detail = changed == 0 ? "None of the publisher-classified series needed another look." : "Run Classify Library (or wait for the next scheduled run) to look them up.",
+            DedupeKey = "content-type-recheck",
+        });
     }
 
     // ===================== File Association (docs/superpowers/specs/2026-08-07-preferences-advanced-tab-design.md §2) =====================
@@ -3257,6 +3379,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public void AttachScheduler(Services.Scheduling.ISchedulerService scheduler)
     {
         _scheduler = scheduler;
+        MetronSync.SetScheduledTaskEnabled = enabled => scheduler.SetEnabled(Services.Scheduling.ScheduledTaskCatalog.MetronSync, enabled);
         scheduler.Changed += (_, _) => RebuildScheduledTasks();
         using (var context = _contextFactory())
         {
@@ -3528,10 +3651,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             i.FileIsMissing && i.MissingVerificationCount >= _libraryHealth.ConfirmedMissingThreshold && !i.MissingAcknowledged);
 
         MissingFileItems.Clear();
-        foreach (var issue in trackedIssues.Where(i => i.FileIsMissing && !i.MissingAcknowledged).Include(i => i.Series).OrderBy(i => i.Series!.Name))
+        var missingIssues = trackedIssues.Where(i => i.FileIsMissing && !i.MissingAcknowledged).Include(i => i.Series).OrderBy(i => i.Series!.Name).ToList();
+        var matches = FindMissingFileMatches(context, missingIssues);
+        foreach (var issue in missingIssues)
         {
             int issueId = issue.Id;
             bool confirmedMissing = issue.MissingVerificationCount >= _libraryHealth.ConfirmedMissingThreshold;
+            matches.TryGetValue(issueId, out var match);
             MissingFileItems.Add(new MissingFileRowViewModel(
                 issueId,
                 $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}",
@@ -3539,8 +3665,16 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 onRemove: _ => RemoveMissingFile(issueId),
                 onDismiss: _ => DismissMissingFile(issueId),
                 severity: confirmedMissing ? HealthSeverity.Error : HealthSeverity.Warning,
-                severityLabel: confirmedMissing ? "Confirmed missing" : "Missing"));
+                severityLabel: confirmedMissing ? "Confirmed missing" : "Missing")
+            {
+                Match = match,
+                OnRelinkToMatch = match is null ? null : RelinkMissingFileToMatch,
+            });
         }
+
+        OnPropertyChanged(nameof(ExactMissingFileMatchCount));
+        OnPropertyChanged(nameof(HasExactMissingFileMatches));
+        OnPropertyChanged(nameof(RelinkExactMatchesLabel));
 
         DismissedMissingFileItems.Clear();
         foreach (var issue in trackedIssues.Where(i => i.FileIsMissing && i.MissingAcknowledged).Include(i => i.Series).OrderBy(i => i.Series!.Name))
@@ -3699,10 +3833,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         IsVerifyingLibraryHealth = true;
-        using var job = _activity.StartJob(ActivityJobKind.LibraryVerify, "Verifying library files");
+        using var job = _activity.StartJob(ActivityJobKind.LibraryVerify, "Verifying library files", startQueued: Services.HeavyJobLane.Shared.WouldWait);
         CurrentLibraryHealthJob = job.Job;
         try
         {
+            using var laneSlot = Services.HeavyJobLane.Activate(await Services.HeavyJobLane.Shared.EnterAsync(userStarted: true, job.CancellationToken));
+            job.Begin();
             var progress = new Progress<(int Done, int Total)>(p =>
             {
                 job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} files");
@@ -3722,7 +3858,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
         catch (OperationCanceledException)
         {
-            throw;
+            // Cancelled from the Activity Center: disposing the job records it as Cancelled. Rethrowing sent the exception
+            // out through the relay command to the UI thread's unhandled-exception handler, which showed a crash report.
         }
         catch (Exception ex)
         {
@@ -3735,6 +3872,102 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             using var context = _contextFactory();
             RefreshLibraryHealth(context);
         }
+    }
+
+    // --- Relink suggestions (docs/superpowers/specs/2026-10-06-smart-features-design.md §5.1) ---
+
+    /// <summary>
+    /// For each missing issue, another entry in the library that probably holds its file. A moved file is re-imported as a new entry at
+    /// its new path, so the match is usually already in the library. Skipped (no query at all) when nothing is missing; a failure here
+    /// only costs the suggestions, never the Library Health list.
+    /// </summary>
+    private static Dictionary<int, MissingFileMatch> FindMissingFileMatches(PaperbunkrDbContext context, IReadOnlyCollection<Issue> missingIssues)
+    {
+        if (missingIssues.Count == 0)
+        {
+            return new Dictionary<int, MissingFileMatch>();
+        }
+
+        try
+        {
+            var present = context.Issues.AsNoTracking()
+                .Where(i => !i.IsPlaceholder && !i.FileIsMissing && i.FilePath != null)
+                .Include(i => i.Series)
+                .ToList();
+            return MissingFileMatchResolver.Find(missingIssues, present);
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsService.LogMilestone($"Library Health: relink suggestions failed ({ex.GetType().Name}: {ex.Message}).");
+            return new Dictionary<int, MissingFileMatch>();
+        }
+    }
+
+    public int ExactMissingFileMatchCount => MissingFileItems.Count(r => r.HasMatch && r.IsExactMatch);
+
+    public bool HasExactMissingFileMatches => ExactMissingFileMatchCount > 0;
+
+    public string RelinkExactMatchesLabel => ExactMissingFileMatchCount == 1 ? "Relink 1 exact match" : $"Relink {ExactMissingFileMatchCount:N0} exact matches";
+
+    private TwoStepConfirm? _relinkExactMatchesConfirm;
+
+    /// <summary>"Relink all exact matches": two clicks, because it rewrites many entries at once. Probable matches are never bulk-relinked.</summary>
+    public TwoStepConfirm RelinkExactMatchesConfirm =>
+        _relinkExactMatchesConfirm ??= new TwoStepConfirm(RelinkAllExactMatches, "Relink all exact matches", "Confirm relink?");
+
+    /// <summary>"Relink to this" on one row. The old entry keeps its history and takes the match's file; the duplicate entry is removed.</summary>
+    private void RelinkMissingFileToMatch(MissingFileRowViewModel row)
+    {
+        if (row.Match is { } match)
+        {
+            RelinkToMatches(new[] { match });
+        }
+    }
+
+    private void RelinkAllExactMatches() =>
+        RelinkToMatches(MissingFileItems.Where(r => r.HasMatch && r.IsExactMatch).Select(r => r.Match!).ToList());
+
+    private void RelinkToMatches(IReadOnlyCollection<MissingFileMatch> matches)
+    {
+        int relinked = 0;
+        var relinkedIssues = new List<(int Id, string Path)>();
+        using (var context = _contextFactory())
+        {
+            foreach (var match in matches)
+            {
+                if (MissingFileRelinker.RelinkToCandidate(context, match.MissingIssueId, match.CandidateIssueId))
+                {
+                    relinked++;
+                    relinkedIssues.Add((match.MissingIssueId, match.CandidatePath));
+                }
+            }
+        }
+
+        // The kept entry's cached cover was made from the file it lost; make it again from the file it has now (best effort).
+        foreach (var (id, path) in relinkedIssues)
+        {
+            try
+            {
+                new CoverThumbnailService(_contextFactory).TryGenerateThumbnail(id, path, force: true);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        if (matches.Count > 1 || relinked == 0)
+        {
+            _showToast("Library Health", relinked == 0
+                ? "Nothing was relinked: the matching entries are no longer there."
+                : $"Relinked {relinked:N0} of {matches.Count:N0} missing issues.");
+        }
+
+        // Deferred: this runs from a button inside the row (or the section header) whose list the refresh rebuilds (CLAUDE.md).
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            using var refreshContext = _contextFactory();
+            RefreshLibraryHealth(refreshContext);
+        });
     }
 
     private async Task RelinkMissingFile(MissingFileRowViewModel row)

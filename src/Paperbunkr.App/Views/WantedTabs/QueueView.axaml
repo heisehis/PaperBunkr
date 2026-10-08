@@ -155,7 +155,8 @@
                                                     <TextBlock Text="Metron" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}" />
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="{Binding Summary}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            <!-- The tooltip says why the series ranks where it does under "Most likely to read" (smart features §4.5). -->
+                                            <TextBlock Text="{Binding Summary}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" ToolTip.Tip="{Binding AffinityWhy}" />
                                         </StackPanel>
                                     </Grid>
                                 </Button>

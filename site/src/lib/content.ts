@@ -9,6 +9,11 @@ import automationShot from '../assets/shots/automation.png';
 import detailShot from '../assets/shots/detail.png';
 import detailIssuesShot from '../assets/shots/detail-issues.png';
 import readingListsShot from '../assets/shots/reading-lists.png';
+import readerShot from '../assets/shots/reader-comic.png';
+import readingListsGalleryShot from '../assets/shots/reading-lists-gallery.png';
+import continuityMapShot from '../assets/shots/continuity-map.png';
+import wantedShot from '../assets/shots/wanted-releases.png';
+import insightsHistoryShot from '../assets/shots/insights-history.png';
 
 export const REPO_URL = 'https://github.com/heisehis/PaperBunkr';
 export const WIKI_URL = `${REPO_URL}/wiki`;
@@ -37,10 +42,11 @@ export const themes: Theme[] = [
       'Double-page spreads, continuous and webtoon scroll, right-to-left manga',
       'Reader profiles, a warm night tint, eye-rest reminders and Xbox controller support',
       'The next issue opens in the background, so moving on is instant',
+      'An Info panel with credits, your place in the reading list and Previous / Next',
       'Books: EPUB, PDF, FB2 and MOBI/AZW3 with highlights and notes',
     ],
-    image: booksShot,
-    alt: 'The Books section: a shelf of novel covers by Frank Herbert, Orson Scott Card and Ray Bradbury',
+    image: readerShot,
+    alt: 'The comic reader with the Info panel on the left and the Reader Tools drawer on the right',
   },
   {
     id: 'organise',
@@ -50,7 +56,8 @@ export const themes: Theme[] = [
     intro: 'Series are real records, not a text field, so everything built on them stays consistent.',
     points: [
       'Series and issue views, Collections and saved Workspaces',
-      'Smart Lists with nested AND/OR rules, and Reading Lists that import CBL and CSV',
+      'Smart Lists with nested AND/OR rules and a template gallery, and Reading Lists that import CBL and CSV',
+      'Every list remembers its own layout, and layouts can be saved by name',
       'Virtual Tags that apply themselves by rule',
       'Single and bulk metadata editors, with optional ComicInfo.xml write-back',
       'Library Organizer to rename and file comics by template',
@@ -66,12 +73,14 @@ export const themes: Theme[] = [
     title: 'Know what to read next',
     intro: 'Your reading history and a relationship-aware engine decide what comes up, not an ad feed.',
     points: [
-      'Home picks up where you left off and suggests "because you read…" series',
+      'Home picks up where you left off, shows what to read next and suggests "because you read…" series',
       'Insights: reading goals, trends against the last period, and a year-in-review recap',
       'Story Events and Continuities that tie issues together across series, suggested for you',
       'Metadata and covers from ComicVine and Metron, matched by cover before they are applied',
       'Manga tracking with AniList, MangaBaka, MangaUpdates, MangaDex and Kitsu',
       'A Wanted list and a weekly pull list of new releases for the series you follow',
+      'A Metron account sync keeps your pull list, collection and wish list in step with the library',
+      'Series types (manga, manhwa, comic) are suggested from your trackers, with review and Undo',
     ],
     image: insightsTodayShot,
     alt: 'Insights, Today tab: a reading goal, what to continue, a "because you finished" pick and unstarted runs',
@@ -136,13 +145,33 @@ export const gallery: GalleryShot[] = [
     caption: 'Every issue of a series at a glance',
   },
   {
+    image: readingListsGalleryShot,
+    alt: 'The Reading Lists gallery: a Continue Reading row and a grid of list and folder covers with progress bars',
+    caption: 'Reading Lists gallery, with folders and a Continue row',
+  },
+  {
     image: readingListsShot,
-    alt: 'A Reading List for World War Hulk imported from ComicVine, 38 issues in order',
-    caption: 'Reading Lists, imported from CBL files or story-arc lookups',
+    alt: 'A reading list for Avengers: Armageddon as a journey path with an Up next card',
+    caption: 'A reading list as a path, with your pace and an estimated finish',
+  },
+  {
+    image: continuityMapShot,
+    alt: 'A continuity map: each series a lane, every issue a card in publication order',
+    caption: 'Continuity map: every issue of every event in publication order',
+  },
+  {
+    image: wantedShot,
+    alt: 'Wanted, Releases tab: a week of new releases as covers with Request buttons',
+    caption: "Wanted: this week's new releases from Metron",
   },
   {
     image: insightsTrendsShot,
     alt: 'Insights, Trends tab: highlights, reading streaks, pace and an activity heatmap',
     caption: 'Insights trends: streaks, pace and an activity heatmap',
+  },
+  {
+    image: insightsHistoryShot,
+    alt: 'Insights, History tab: what you read, newest first, with resume buttons',
+    caption: 'History: what you read, newest first',
   },
 ];

@@ -6,6 +6,8 @@ Paperbunkr can fill in a comic's details from **ComicVine** and can move or copy
 
 Add your ComicVine API key, a Metron login, or both, under **Preferences → Connections**. Every key and password lives there. Scraping without one just tells you where to add it.
 
+![Preferences, Connections](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/preferences-connections.png)
+
 **Metron** is an alternative to ComicVine. Under **Preferences → Organize & Scrape → Source** choose which one a scrape starts on. The match dialog has a source box too, to switch a single run (its search and issue list follow it). A re-scrape starts on the source most of the chosen comics were scraped from before; scheduled scrapes use the one from Preferences.
 
 ## Scrape

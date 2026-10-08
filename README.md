@@ -39,9 +39,43 @@ in **beta**: expect rough edges, and keep backups of anything you point it at.
 
 ---
 
-## Recent Highlights (September 2026)
+## Recent Highlights
 
-The [`0.3.0-beta`](https://github.com/heisehis/PaperBunkr/releases/tag/v0.3.0-beta) release is
+### New in 0.7.8-beta (October 2026)
+
+* **Metron, fully used.** A scheduled sync keeps your Metron pull list, reading list, collection, wish
+  list and reading lists in step with the library. Scraping looks issues up by ComicVine id or UPC,
+  breaks ties by comparing cover hashes, and checks Metron's change feed so unchanged series are not
+  refetched.
+* **MetronInfo.xml write-back.** An opt-in setting writes MetronInfo v1.1 next to `ComicInfo.xml`, and
+  Metron ids already inside a file are linked on scan.
+* **Content-type classification.** MangaBaka, AniList and MangaDex can set a series' type (manga, manhwa,
+  comic and so on). Clear agreement is applied automatically, doubtful cases go to a review queue in
+  Library Health, and a manual choice locks the series.
+* **Smart features.** A smart-list template gallery, Collection gaps and Metadata consistency checks, reading
+  pace and a Home "Up next" row, relink suggestions for missing files, and a "Recommended" badge on the
+  best copy in a duplicate group.
+* **Lower memory use.** Covers and pages are released as they scroll away, memory is trimmed under
+  pressure, and heavy jobs take turns. This is not yet measured against 0.7.7.
+
+### Since 0.3.0-beta
+
+* **Continuity & Event Map.** A Continuities | Events screen with Overview, Map and Timeline views, an
+  issue-by-issue map in publication order, and sequel suggestions for story events.
+* **Reading Lists redesign.** A gallery home with a Continue row, and a list page that is a journey path or
+  a cover wall.
+* **A configurable Home.** Sections you can reorder or hide, a "because you read" row, and collections.
+* **Insights History.** What you read, newest first, with resume and read-next.
+* **List layouts.** Every Library list remembers its own columns, order and cover text, and layouts can be
+  saved by name.
+* **One input layer.** Every shortcut is remappable, including mouse buttons, the wheel and a gamepad.
+* **Grand Comics Database data.** An optional download that adds series continuity and on-sale dates.
+
+Full history is in [CHANGELOG.md](CHANGELOG.md).
+
+### 0.3.0-beta (September 2026)
+
+The [`0.3.0-beta`](https://github.com/heisehis/PaperBunkr/releases/tag/v0.3.0-beta) release was
 the largest since the alpha. The biggest things to be aware of:
 
 * **Insights & Stats.** A new "Insights" section in the nav rail with a reading-habit dashboard
@@ -77,19 +111,19 @@ the largest since the alpha. The biggest things to be aware of:
   per-format file-association checkboxes, a branded startup splash, a reworked Welcome screen,
   and a "What's New" panel on first launch of a new version.
 
-Full history is in [CHANGELOG.md](CHANGELOG.md).
-
 ---
 
 ## Table of Contents
 
-- [Recent Highlights](#recent-highlights-september-2026)
+- [Recent Highlights](#recent-highlights)
 - [Features](#features)
   - [Comic & Manga Reading](#comic--manga-reading)
   - [Books (EPUB, PDF, FB2, MOBI)](#books-epub-pdf-fb2-mobi)
   - [Library Management](#library-management)
+  - [Series & Issue Details](#series--issue-details)
   - [Home Dashboard & Recommendations](#home-dashboard--recommendations)
   - [Smart Lists & Reading Lists](#smart-lists--reading-lists)
+  - [Wanted & New Releases](#wanted--new-releases)
   - [Metadata & Editing](#metadata--editing)
   - [Story Events & Continuity](#story-events--continuity)
   - [Insights](#insights)
@@ -112,12 +146,9 @@ Full history is in [CHANGELOG.md](CHANGELOG.md).
 A custom reader canvas with real page decoding and rendering for `.cbz` / `.cbr` / `.pdf` — no
 webview anywhere.
 
-<!-- screenshot TODO: the comic reader on a real page with the reader chrome/overlay visible
-     (top bar + page controls). Double-page spread is a good choice. Save as docs/assets/reader-comic.png
-     then replace this comment with:
-<p align="center"><img src="docs/assets/reader-comic.png" alt="Comic reader" width="820" /></p>
--->
-
+<p align="center">
+  <img src="docs/assets/reader-comic.png" alt="The comic reader with the Info panel and Reader Tools open" width="820" />
+</p>
 
 * **Layouts & fit.** Single page, double-page spread, and continuous / webtoon scroll; fit-to-width,
   fit-to-height, fit-screen, and original-resolution modes; zoom presets and free zoom; page
@@ -128,6 +159,10 @@ webview anywhere.
   an on-screen clock and battery indicator, and tap-to-toggle chrome on touch.
 * **Live image adjustment.** Brightness, contrast, saturation, and gamma overlays independent of
   your display settings, plus background colour and margin customization.
+* **Reader Tools and Info.** A Reader Tools drawer with reading profiles, rotate and auto-rotate, guided
+  view, pinning a page, double-page mode and the image adjustments. An Info panel shows the issue's
+  credits and summary, your place in its reading list with Previous / Next, and buttons to open its details
+  or edit its properties.
 * **Navigation.** Split-page part-by-part navigation for oversized pages, named bookmarks,
   remappable keyboard shortcuts, and a rebuilt decode/cache/prefetch pipeline that keeps
   fast-flipping smooth and memory bounded (`Ctrl+Shift+P` shows a performance overlay).
@@ -164,23 +199,49 @@ A separate Books section for novels, sitting alongside the comic library.
   decoding every image up front.
 * **Collections.** Group series, issues, and books by hand, or with rule-based Smart Collections,
   browsable from the Library sidebar.
-* **Sort, group & filter.** A unified pool of sort and group keys, filter chips, and a View &
-  Sort panel; **Saved Workspaces** capture a whole configuration by name.
+* **Lenses.** All / Reading / Unread / Read tabs with counts, and a Continue strip above the covers.
+* **List layouts.** Every list (All Series, each content type, each collection) remembers its own
+  columns, their order and width, the lines under a cover and the text on a tile. A layout can be
+  saved under a name and reused.
+* **Sort, group & filter.** A unified pool of sort and group keys, filter chips, and a Display
+  options popup; **Saved Workspaces** capture a whole configuration by name.
 * **Virtual Tags.** Rule-based tags that apply themselves to matching issues.
 * **Navigation.** Full keyboard movement through every grid and sidebar, Back/Forward screen
   history, and **Quick Open** (`Ctrl+P`) to jump anywhere by typing.
 * **Import.** Folder scanning with trade-paperback folding and anthology auto-splitting, plus
   drag-and-drop of files, folders, and `.cbl` lists onto the Library.
 
+### Series & Issue Details
+
+<p align="center">
+  <img src="docs/assets/detail-series.png" alt="A series page with credits, teams, locations and characters" width="820" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/detail-issues.png" alt="A series' Issues tab in poster view" width="820" />
+</p>
+
+* **Series page.** A blurred cover masthead, status and publisher chips, a Continue button that resumes
+  the issue you were last reading, and credits, genres, teams, locations and characters as chips.
+* **Tabs.** Issues (poster, list or card), Related, Details and Activity.
+* **Per-series reading mode.** Left-to-right or right-to-left, remembered for the series.
+
 ### Home Dashboard & Recommendations
 
 A cover-forward dashboard driven by a relationship-aware recommendation engine.
 
+<p align="center">
+  <img src="docs/assets/home-recommendations.png" alt="Home: collections and Because you read rows" width="820" />
+</p>
+
 * **Continue Reading** for comics and books, tracking your exact page.
+* **Collections** as a row of cover collages.
 * **"Because you read…"** recommendations that follow series relations, shared creators,
   continuity, and story events.
+* **Up next.** A row of what to read next, based on your reading pace.
 * **Spotlight** modules with a blurred cover-wall masthead that picks up the featured book's
   colour and the active theme.
+* **Your layout.** Home is sections you can reorder or hide in Preferences → Appearance → Home.
 
 ### Smart Lists & Reading Lists
 
@@ -188,11 +249,40 @@ A cover-forward dashboard driven by a relationship-aware recommendation engine.
   <img src="docs/assets/smart-lists.png" alt="Smart Lists" width="820" />
 </p>
 
+<p align="center">
+  <img src="docs/assets/smart-list-templates.png" alt="The New Smart List template gallery" width="820" />
+</p>
+
 * **Smart Lists v2.** Saved rule-based views with nested AND/OR condition groups and text
   operators (list-contains, regex, case sensitivity) — a CE-parity rule engine.
+* **Template gallery.** Start a smart list from a ready-made template (such as *Unread manga* or
+  *Missing metadata*), or from a blank list.
 * **Reading Lists.** Hand-curated ordered lists, with drag-and-drop reordering and bulk actions.
+* **Gallery and list page.** A gallery home with a Continue row and lists grouped in folders. A list page
+  is a journey path with an "Up next" card, or a cover wall, and shows your pace and an estimated finish.
 * **Import / export.** ComicBookList (`.cbl`) and CSV, with story-arc lookup across multiple
   sources to auto-build an event's reading order from files you already own.
+
+<p align="center">
+  <img src="docs/assets/reading-lists-gallery.png" alt="The Reading Lists gallery" width="820" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/reading-list-path.png" alt="A reading list as a journey path" width="820" />
+</p>
+
+### Wanted & New Releases
+
+<p align="center">
+  <img src="docs/assets/wanted-releases.png" alt="Wanted → Releases, a week of new releases from Metron" width="820" />
+</p>
+
+* **Three tabs.** Queue, Series and Releases.
+* **Releases.** A cover shelf of each week's new releases from Metron, paged by week with a calendar, a
+  publisher filter and a "Followed only" switch. Releases on your wanted list carry a badge, and each has
+  a Request button.
+* **Metron sync.** Your Metron pull list, wish list and collection can be kept in step with the library
+  from a scheduled task.
 
 ### Metadata & Editing
 
@@ -210,15 +300,32 @@ A cover-forward dashboard driven by a relationship-aware recommendation engine.
   Kitsu, and more as per-field proposals you accept or reject, with optional two-way sync of
   progress and ratings. Bring your own [ComicVine](COMICVINE_NOTICE.md) API key for ComicVine
   lookups.
-* **Write-back.** Optionally embed your edits into the file as `ComicInfo.xml` and/or a
+* **Metron.** Scraping can look an issue up by ComicVine id or UPC, and compares cover hashes to break
+  ties between candidates.
+* **Content type.** MangaBaka, AniList and MangaDex can classify a series as manga, manhwa, comic and so
+  on. Clear agreement is applied (with Undo), doubtful cases wait in a Library Health review queue, and a
+  manual choice locks the series.
+* **Write-back.** Optionally embed your edits into the file as `ComicInfo.xml`, MetronInfo v1.1 and/or a
   `paperbunkr.json` sidecar (opt-in, `.cbz` only).
 
 ### Story Events & Continuity
 
+<p align="center">
+  <img src="docs/assets/continuity.png" alt="The Continuity screen, a continuity's overview" width="820" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/continuity-map.png" alt="A continuity's map, issue by issue in publication order" width="820" />
+</p>
+
+* **Continuities and Events.** A sidebar with publisher logos, and for each continuity an Overview (series
+  as runs, with gaps shown as "Not in your library"), a Map and a Timeline.
+* **Map.** Every issue of every event on one map in publication order, with a density control and an
+  "Hide optional" filter.
 * Bulk selection, continuity editing and merging, and cross-event relations.
-* Format-signal grouping suggestions.
+* Format-signal grouping suggestions, and sequel suggestions for story events.
 * An age / appearance timeline for tracking a character or continuity across events.
-* Event and continuity maps, with events ordered by a smart connector, and optional
+* Events ordered by a smart connector, and optional
   [Grand Comics Database data](https://github.com/heisehis/paperbunkr-gcd-data) for series continuity and on-sale dates.
 
 ### Insights
@@ -227,9 +334,22 @@ A cover-forward dashboard driven by a relationship-aware recommendation engine.
   <img src="docs/assets/insights.png" alt="The Insights → Stats view" width="820" />
 </p>
 
-* A **reading-habit dashboard** in the nav rail.
-* A **Stats** view with library and reading analytics (ScottPlot charts).
-* Both backed by an append-only `ReadingEvent` log; your existing progress is backfilled once on
+<p align="center">
+  <img src="docs/assets/insights-trends.png" alt="Insights → Trends, highlights and reading activity" width="820" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/insights-history.png" alt="Insights → History, what you read, newest first" width="820" />
+</p>
+
+* A **reading-habit dashboard** in the nav rail with **Today**, **Trends** and **History** tabs.
+* **Trends** shows highlights (highest rated, most reread, fastest completion), streaks, pace and an
+  activity heatmap over 30 days, 90 days, 12 months or all time.
+* **History** lists what you read, newest first, one row per series or book, with resume and read-next.
+  Removing rows only hides them; stats and goals do not change.
+* **Reading goals** can target a reading list, collection, story event, continuity, creator or media
+  type, and Insights shows completed and missed goals.
+* Everything is backed by an append-only `ReadingEvent` log; your existing progress is backfilled once on
   upgrade.
 
 ### Library Health & Automation
@@ -239,7 +359,11 @@ A cover-forward dashboard driven by a relationship-aware recommendation engine.
 </p>
 
 * **Library Health.** A Preferences dashboard that finds missing files, flags likely duplicates,
-  and collects everything needing attention into a single "Needs Review" list.
+  and collects everything needing attention into a single "Needs Review" list. It also reports
+  **Collection gaps**, **Metadata consistency**, publisher logos you are missing, and content-type
+  suggestions waiting for review; findings can be dismissed.
+* **Relink suggestions.** A missing file is matched to a likely replacement, and the best copy in a
+  duplicate group gets a "Recommended" badge.
 * **Automation.** Background maintenance tasks — library rescan, cover verification, database
   backups, and more — each on a schedule you control from Preferences → Automation, with an
   activity history.
@@ -373,7 +497,8 @@ Paperbunkr stands on a lot of prior work:
   and **[FluentIcons](https://github.com/davidxuang/FluentIcons)**.
 * **[AniList](https://anilist.co/)**, **[MangaBaka](https://mangabaka.dev/)**,
   **[MangaUpdates](https://www.mangaupdates.com/)**, **[MangaDex](https://mangadex.org/)**,
-  **[Kitsu](https://kitsu.io/)**, and **[ComicVine](https://comicvine.gamespot.com/)** — the
+  **[Kitsu](https://kitsu.io/)**, **[Metron](https://metron.cloud/)**, and
+  **[ComicVine](https://comicvine.gamespot.com/)** — the
   metadata sources behind online lookups and tracking.
 * The **[Grand Comics Database™](https://www.comics.org)**: series continuity and on-sale dates, as an optional
   CC BY-SA 4.0 download published at [paperbunkr-gcd-data](https://github.com/heisehis/paperbunkr-gcd-data).

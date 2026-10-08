@@ -9,6 +9,8 @@ Open **Reading Lists** from the navigation rail.
 
 The section opens on a gallery of your lists.
 
+![The Reading Lists gallery](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/reading-lists-gallery.png)
+
 - **Continue reading** at the top shows the lists you've started and can keep reading, most recent first. Click one to jump
   straight to where you are.
 - Below it, every **folder** and **list** is a tile: a list shows its cover (or a mosaic of its first covers) and how much you've
@@ -30,6 +32,8 @@ Opening a list shows:
 - the **path**: the issues in reading order along a line that fills in as you read. Sub-arcs are **chapters** (click a chapter to
   fold it away; chapters you've finished start folded). The next issue to read is expanded into an **Up next** card. The list opens
   scrolled to where you are.
+
+![A reading list as a journey path](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/reading-list-path.png)
 
 Click an issue to read it; the reader's previous/next follows the list's order. A **missing** issue offers **Find & link** (pick the
 real comic from your library) or **Request** it.

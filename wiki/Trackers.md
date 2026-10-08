@@ -124,6 +124,8 @@ never overwritten by an ordinary sync.
 **Preferences → Connections → Tracking behavior** controls what happens automatically. These are
 global settings.
 
+![Preferences, Connections, Tracking behavior](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/preferences-tracking-behavior.png)
+
 | Setting | Default | What it does |
 |---|---|---|
 | **Open the tracker link panel automatically** | On | The first time you open a manga that has an External Metadata link and a connected tracker account, jump to its tracker link panel. Once per series. |
@@ -131,6 +133,8 @@ global settings.
 | **Update progress when marked as read** | Always | When you mark issues read yourself: **Always** updates trackers, **Ask** shows a prompt first, **Never** leaves them alone. |
 | **Auto sync progress from trackers** | Off | When you open a linked series, pull any further-along progress from its trackers and mark those issues read. Off by default because it changes your local read state. |
 | **Select entries using source metadata** | On | Pins a series' linked metadata source first when linking a tracker. |
+| **Ask before changing a content type** | Off | When series are classified from MangaBaka, AniList and MangaDex, never apply a type on your own: every match waits in Library Health > Review > Content type. Off: a near-exact match that two sources agree on is applied, with an Undo. |
+| **Refresh provider data when a series is marked completed** | On | When a series linked to a metadata source becomes Completed, fetch its data from that source once more. Series with no link are never looked up. Shows as a job in the Activity Center. |
 
 Every automatic update shows in the **Activity Center** — a status-bar indicator while it runs, a toast
 when it finishes, and a persistent alert (linking to the series) if a tracker refuses. If a tracker

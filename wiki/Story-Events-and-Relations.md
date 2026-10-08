@@ -46,6 +46,8 @@ A log of recent changes and reading activity for the series.
 
 ### The Continuity screen
 
+![A continuity's overview](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/continuity.png)
+
 - **Sidebar.** A **Continuities | Events** switch at the top (it remembers the last one you used). Continuity rows show the
   publisher's logo and how many issues the continuity holds; event rows show the start year and issue count. **＋** makes a new
   continuity or event. Right-click a row to open, edit or delete it.
@@ -105,6 +107,8 @@ series, laid out in the event's reading order.
   reading.
 
 ### Continuity map
+
+![A continuity's map, issue by issue in publication order](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/continuity-map.png)
 
 A continuity has a map too (**Overview | Map | Timeline**). It shows every issue of every story event that includes one of the
 continuity's series on one swimlane, events in chronological order:

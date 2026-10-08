@@ -78,6 +78,10 @@ Seven tabs.
   - **Files** — **Missing Files** (relink, or remove confirmed-missing ones), **Empty Rows**, and
     **Recently Removed** (restore anything removed here within 30 days), plus how a scan treats
     missing and manually removed files.
+
+  The **Content Type** queue lists series whose type MangaBaka, AniList or MangaDex suggests. **Recently auto-classified** shows types applied on their own in the last 30 days, because the match was near-exact and the sources agreed; **Undo** puts the old type back.
+
+![Preferences, Library, Library Health with Recently auto-classified series](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/library-health-content-type.png)
   The Library navigation item shows a dot while something needs review.
 - **Virtual Tags** — define named computed tags for [Smart Lists](Smart-Lists).
 

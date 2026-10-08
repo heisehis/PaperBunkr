@@ -182,6 +182,10 @@ Your sort field, direction, grouping, display mode, and filters are **remembered
 view** and restored when you come back — including across app restarts. Different
 collections and Smart Lists keep their own layout.
 
+**List options** (**Ctrl+L**) sets what a list shows: the Details columns, the lines under each cover on the **Thumbnails** tab, and the text on a tile on the **Tiles** tab.
+
+![The List options dialog, Thumbnails tab](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/library-list-options.png)
+
 ## Opening things
 
 - **Double-click a cover** (or press **Enter**) — an issue opens in the **[reader](Reading)**; a
@@ -211,6 +215,10 @@ Opening a series shows its cover, metadata pills, summary, and an **issue list**
 tabs for related content — see [Story Events & Relations](Story-Events-and-Relations) and
 [Metadata & Editing](Metadata-and-Editing). For manga with an online match, a richer
 manga detail view is shown.
+
+![A series page with credits, teams, locations and characters](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/detail-series.png)
+
+![A series' Issues tab in poster view](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/detail-issues.png)
 
 ## Collections
 

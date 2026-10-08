@@ -38,6 +38,12 @@ public sealed class AcquisitionCycle(
     internal const int MaxCandidatesPerIssue = 10;
     internal static readonly TimeSpan CatalogRefreshAge = TimeSpan.FromHours(12);
 
+    /// <summary>However quiet a change sweep says a series is, its issue list is re-read at least this often.</summary>
+    internal static readonly TimeSpan FullCatalogFetchAge = TimeSpan.FromDays(7);
+
+    /// <summary>Slack for the two clocks (ours and the provider's) not agreeing to the second.</summary>
+    internal static readonly TimeSpan SweepMargin = TimeSpan.FromMinutes(5);
+
     private readonly Func<DateTime> _now = now ?? (() => DateTime.UtcNow);
 
     /// <summary>How many cycles in a row ended because an indexer was unreachable; the service backs off on this.</summary>
@@ -184,9 +190,26 @@ public sealed class AcquisitionCycle(
         var stopped = new HashSet<ComicProvider>();
         var touched = new HashSet<ComicProvider>();
 
+        var unchanged = await FindUnchangedAsync(context, stale, clients, cancellationToken).ConfigureAwait(false);
+        if (unchanged.Count > 0)
+        {
+            var now = _now();
+            foreach (var watched in stale.Where(w => unchanged.Contains(w.Id)))
+            {
+                watched.LastRefreshedAt = now;
+            }
+
+            context.SaveChanges();
+        }
+
         foreach (var watched in stale)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (unchanged.Contains(watched.Id))
+            {
+                continue;
+            }
+
             var provider = watched.Provider;
             if (stopped.Contains(provider))
             {
@@ -228,6 +251,63 @@ public sealed class AcquisitionCycle(
         {
             events.Publish(new DaemonAlertClearedEvent(provider == ComicProvider.Metron ? MetronAlert : ComicVineAlert));
         }
+    }
+
+    /// <summary>
+    /// The due series a provider can vouch for without their issue lists being re-read (docs/superpowers/specs/2026-10-05-metron-api-efficiency-and-matching-design.md
+    /// section 1): one "what changed since" request covers all of them. Only series fetched for real inside <see cref="FullCatalogFetchAge"/> qualify, so a missed change
+    /// can't outlive a week, and it takes two of them to be worth the request. Any failure just means nothing is vouched for and everything is fetched as before.
+    /// </summary>
+    private async Task<HashSet<int>> FindUnchangedAsync(PaperbunkrDbContext context, List<WatchedSeries> due, Dictionary<ComicProvider, IComicVineClient?> clients, CancellationToken cancellationToken)
+    {
+        var unchanged = new HashSet<int>();
+        var fetchedSince = _now() - FullCatalogFetchAge;
+
+        foreach (var group in due.GroupBy(w => w.Provider))
+        {
+            var candidates = group
+                .Where(w => w.LastRefreshedAt is not null && w.LastCatalogFetchAt is not null && w.LastCatalogFetchAt >= fetchedSince)
+                .ToList();
+            if (candidates.Count < 2)
+            {
+                continue;
+            }
+
+            if (!clients.TryGetValue(group.Key, out var client))
+            {
+                client = clients[group.Key] = ClientFor(context, group.Key);
+            }
+
+            if (client is not ISeriesChangeSource source)
+            {
+                continue;
+            }
+
+            IReadOnlyDictionary<int, DateTime>? changed;
+            try
+            {
+                changed = await source.GetSeriesModifiedSinceAsync(candidates.Min(w => w.LastRefreshedAt!.Value) - SweepMargin, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ComicVineException)
+            {
+                continue; // the per-series fetches that follow report whatever is wrong, with the alerts they already have
+            }
+
+            if (changed is null)
+            {
+                continue;
+            }
+
+            foreach (var watched in candidates)
+            {
+                if (!changed.TryGetValue(watched.ExternalVolumeId, out var modified) || modified <= watched.LastRefreshedAt!.Value - SweepMargin)
+                {
+                    unchanged.Add(watched.Id);
+                }
+            }
+        }
+
+        return unchanged;
     }
 
     /// <summary>

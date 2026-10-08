@@ -82,7 +82,7 @@ public sealed class LibraryActionCatalog
     private static readonly string[] SeriesMenuOrder =
     {
         "open", "edit", "mark", "add-list", "add-collection", Sep,
-        "content-type", "reading-direction", "publication-status", "reading-status", Sep,
+        "content-type", "reading-direction", "publication-status", "reading-status", "classify", Sep,
         "scrape", "organize", "write-files", "refresh", "merge", Sep,
         "reveal", "copy-paths", Sep,
         "plugins", Sep,
@@ -108,7 +108,7 @@ public sealed class LibraryActionCatalog
     {
         "edit", Sep,
         "bar-mark-read", "bar-mark-unread", "add-to", Sep,
-        "scrape", "organize", "write-files", "merge", "refresh", Sep,
+        "scrape", "organize", "write-files", "merge", "refresh", "classify", Sep,
         "reveal", "copy-paths", "plugins",
         Trail, "delete", "clear-selection",
     };
@@ -442,6 +442,9 @@ public sealed class LibraryActionCatalog
         yield return new("reading-direction", series, c => c.IsMenu ? SeriesSetters(c)[1] : null);
         yield return new("publication-status", series, c => c.IsMenu ? SeriesSetters(c)[2] : null);
         yield return new("reading-status", series, c => c.IsMenu ? SeriesSetters(c)[3] : null);
+
+        yield return new("classify", series, c => ContextMenuEntry.Item(
+            c.IsMulti ? $"Classify {c.Count} series from trackers" : "Classify from trackers", _vm.ClassifyTargetCommand, c.Target, Symbol.Tag));
 
         yield return new("scrape", local, c => c.IsSeries
             ? ContextMenuEntry.Item(c.IsMulti ? $"Scrape {c.Count} series…" : "Scrape…", _vm.ScrapeSeriesWithComicVineCommand, c.AnchorId, Symbol.ArrowDownload)

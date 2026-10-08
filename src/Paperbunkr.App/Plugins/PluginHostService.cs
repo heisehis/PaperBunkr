@@ -503,6 +503,7 @@ public sealed class PluginHostService
         events.LibraryScanCompleted += OnLibraryScanCompleted;
         events.MissingFileConfirmed += OnMissingFileConfirmed;
         events.ReadingListChanged += OnReadingListChanged;
+        events.CollectionCompleted += OnCollectionCompleted;
         events.ManagerBypassed += OnManagerBypassed;
     }
 
@@ -519,6 +520,7 @@ public sealed class PluginHostService
             _subscribedEvents.LibraryScanCompleted -= OnLibraryScanCompleted;
             _subscribedEvents.MissingFileConfirmed -= OnMissingFileConfirmed;
             _subscribedEvents.ReadingListChanged -= OnReadingListChanged;
+            _subscribedEvents.CollectionCompleted -= OnCollectionCompleted;
             _subscribedEvents.ManagerBypassed -= OnManagerBypassed;
             _subscribedEvents = null;
         }
@@ -606,6 +608,25 @@ public sealed class PluginHostService
             ItemId = missing.ItemId,
             FilePath = missing.FilePath,
             Title = missing.Title,
+        });
+    }
+
+    /// <summary>Plugin API 4.4 (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.4): a continuity or story event was read to the end.</summary>
+    private void OnCollectionCompleted(CollectionCompletedEvent completed)
+    {
+        if (!HasCommands(PluginHooks.ContinuityCompleted))
+        {
+            return;
+        }
+
+        DomainHooks.Dispatch(PluginHooks.ContinuityCompleted, env => new ContinuityCompletedHookGlobals
+        {
+            Environment = env,
+            Kind = completed.Kind,
+            Id = completed.Id,
+            Name = completed.Name,
+            IssueCount = completed.IssueCount,
+            CompletedAtUtc = completed.CompletedAtUtc,
         });
     }
 

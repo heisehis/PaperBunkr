@@ -334,6 +334,27 @@
                                     </Button>
                                 </Grid>
                             </Border>
+                            <!-- order vs story-event chronology (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.2); advisory -->
+                            <Border Classes="rlStripLine" Classes.first="{Binding IsChronologyFirstCheck}" IsVisible="{Binding HasChronologyCheck}"
+                                    AutomationProperties.AutomationId="ReadingListChronologyCheck">
+                                <StackPanel Spacing="6">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                        <fi:SymbolIcon Grid.Column="0" Symbol="ArrowSort" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding ChronologySummary}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                            <Button Classes="headerAction secondary" Padding="9,3" FontSize="11" Content="Reorder to story order" Command="{Binding ReorderToChronologyCommand}"
+                                                    IsVisible="{Binding CanReorderToChronology}" ToolTip.Tip="Moves only the entries that belong to linked story events; everything else stays where it is." />
+                                            <Button Classes="headerAction ghost" Padding="9,3" FontSize="11" Content="Order is intended" Command="{Binding DismissChronologyCommand}"
+                                                    ToolTip.Tip="Stop checking this list against story order" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <ItemsControl ItemsSource="{Binding ChronologyLines}" Margin="28,0,0,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String"><TextBlock Text="{Binding}" Classes="rlFaint" Margin="0,1" TextWrapping="Wrap" /></DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
 

@@ -426,6 +426,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             enqueueMetadataWriteBack: EnqueueMetadataWriteBack,
             openIssueAtPage: GoReaderForIssueAtPage);
         Preferences.AttachScheduler(Scheduler);
+        Preferences.AttachNavigation(GoDetailForSeries, GoIssuePropertiesForIssue);
 
         // Remote library sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md). Built here like the other
         // manually-composed services; App.axaml.cs starts serving (if the user turned it on) and syncs the saved remote libraries.
@@ -872,6 +873,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     partial void OnCurrentScreenChanging(string oldValue, string newValue)
     {
+        if (oldValue == "reader" && newValue != "reader")
+        {
+            // Guided view keeps a panel-detection model in native memory; free it once the Reader is left
+            // (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.5). Off the UI thread: it waits for a page still being analysed.
+            System.Threading.Tasks.Task.Run(Services.Reader.Panels.PanelDetectionService.Unload);
+        }
+
         if (RailOrder.TryGetValue(oldValue, out int oldIndex) && RailOrder.TryGetValue(newValue, out int newIndex))
         {
             IsTransitionReversed = newIndex < oldIndex;
@@ -3111,6 +3119,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         else if (IsCompare)
         {
             Compare.Close();
+        }
+        // The Smart screen's "New Smart List" gallery (docs/superpowers/specs/2026-10-06-smart-features-design.md §3.2).
+        else if (Smart.Gallery.IsOpen)
+        {
+            Smart.Gallery.CloseCommand.Execute(null);
         }
         else if (IsReader && Reader.IsClipMode)
         {

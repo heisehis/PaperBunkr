@@ -31,6 +31,9 @@ public enum QueueSort
     Attention,
     Alphabetical,
     RecentlyAdded,
+
+    /// <summary>Most likely to be read first (<c>WantedAffinityScorer</c>).</summary>
+    Affinity,
 }
 
 /// <summary>
@@ -91,6 +94,12 @@ public sealed partial class QueueGroupViewModel : QueueItemViewModel
 
     /// <summary>The issues the current filter lists under this header that a bulk action would touch (not downloading ones).</summary>
     [ObservableProperty] private bool _canBulk;
+
+    /// <summary>0-100: how likely the reader is to read more of this series; orders the "Most likely to read" sort.</summary>
+    internal double Affinity { get; set; }
+
+    /// <summary>Why the series ranks where it does, in words (the header tooltip).</summary>
+    [ObservableProperty] private string? _affinityWhy;
 
     private string? _coverUrl;
 

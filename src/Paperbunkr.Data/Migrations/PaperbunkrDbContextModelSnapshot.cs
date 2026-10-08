@@ -282,6 +282,14 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("default");
 
+                    b.Property<bool>("AskBeforeClassifying")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("AutoApplyMinConfidence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue(0m);
+
                     b.Property<bool>("AutoBackupEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -778,6 +786,24 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("Automatic");
 
+                    b.Property<bool>("MetronSyncCollection")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("MetronSyncEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("MetronSyncPullList")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("MetronSyncReading")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MetronSyncReadingEventId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("MetronSyncWishList")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("MinimizeToTray")
                         .HasColumnType("INTEGER");
 
@@ -885,6 +911,11 @@ namespace Paperbunkr.Data.Migrations
 
                     b.Property<bool>("ReducedMotion")
                         .HasColumnType("INTEGER");
+
+                    b.Property<bool>("RefreshProviderDataOnComplete")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("RenderingBackend")
                         .IsRequired()
@@ -1055,6 +1086,9 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("WriteMetadataToFiles")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("WriteMetronInfo")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("WriteNativeSidecar")
@@ -1570,6 +1604,9 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTime?>("CompletedNotifiedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -2063,6 +2100,36 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("SeriesId");
 
                     b.ToTable("ExternalRatings");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.HealthFindingDismissal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("DismissedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Label")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind", "Key")
+                        .IsUnique();
+
+                    b.ToTable("HealthFindingDismissals");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.Issue", b =>
@@ -2751,6 +2818,38 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("MetadataProposals");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.MetronSyncLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LocalId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("PushedRating")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RemoteId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("State")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("SyncedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind", "LocalId")
+                        .IsUnique();
+
+                    b.ToTable("MetronSyncLinks");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.PageClip", b =>
                 {
                     b.Property<int>("Id")
@@ -3053,6 +3152,9 @@ namespace Paperbunkr.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ActiveSeconds")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("HiddenFromHistory")
@@ -3699,6 +3801,39 @@ namespace Paperbunkr.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("ContentTypeAutoAppliedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentTypeCheck")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("None");
+
+                    b.Property<DateTime?>("ContentTypeCheckedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("ContentTypeConfidence")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("ContentTypeEvidence")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("ContentTypeLocked")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ContentTypeSource")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Unset");
+
+                    b.Property<string>("ContentTypeSuggestion")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("CoverIssueId")
                         .HasColumnType("INTEGER");
 
@@ -3727,6 +3862,14 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("PageLayoutMode")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PreviousContentType")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PreviousReadingMode")
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
@@ -4071,6 +4214,9 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ComicVineArcId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("CompletedNotifiedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
@@ -4463,6 +4609,9 @@ namespace Paperbunkr.Data.Migrations
 
                     b.Property<bool>("IsPaused")
                         .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("LastCatalogFetchAt")
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastRefreshedAt")
                         .HasColumnType("TEXT");

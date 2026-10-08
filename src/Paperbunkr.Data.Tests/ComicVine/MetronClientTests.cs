@@ -95,7 +95,7 @@ public class MetronClientTests
         var issues = await client.GetVolumeIssuesAsync(10, CancellationToken.None);
 
         Assert.Equal(2, issues.Count);
-        Assert.Equal(new ComicVineIssue(900, "1", null, new DateTime(2018, 5, 9), new DateTime(2018, 7, 1), "https://x/1.jpg", 10), issues[0]);
+        Assert.Equal(new ComicVineIssue(900, "1", null, new DateTime(2018, 5, 9), new DateTime(2018, 7, 1), "https://x/1.jpg", 10, "abc"), issues[0]);
         Assert.Null(issues[1].StoreDate);
         Assert.Contains("/series/10/issue_list/", handler.Requests[0].RequestUri!.OriginalString);
     }
@@ -289,6 +289,60 @@ public class MetronClientTests
 
         Assert.Single(handler.Requests);
     }
+
+    // docs/superpowers/specs/2026-10-05-metron-api-efficiency-and-matching-design.md
+
+    [Fact]
+    public async Task SeriesModifiedSince_SendsTheMoment_AndMapsEachChangedSeries()
+    {
+        var (client, handler) = Make(_ => (HttpStatusCode.OK, Page("[" + Series(10, "Captain America (2018)", 2018, 30) + "," + Series(11, "Spawn (1992)", 1992, 355) + "]")));
+
+        var changed = await client.GetSeriesModifiedSinceAsync(new DateTime(2026, 9, 19, 8, 30, 0, DateTimeKind.Utc), CancellationToken.None);
+
+        Assert.Equal(new[] { 10, 11 }, changed!.Keys.OrderBy(k => k));
+        Assert.Equal(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), changed[10]);
+        Assert.Contains("/series/?modified_gt=2026-09-19T08%3A30%3A00Z", handler.Requests[0].RequestUri!.OriginalString);
+    }
+
+    [Fact]
+    public async Task SeriesModifiedSince_PastThePageCap_SaysItCannotTell()
+    {
+        var (client, handler) = Make(_ => (HttpStatusCode.OK, Page("[" + Series(10, "Captain America (2018)", 2018, 30) + "]", next: "https://metron.cloud/api/series/?modified_gt=x&page=2")));
+
+        Assert.Null(await client.GetSeriesModifiedSinceAsync(DateTime.UtcNow.AddDays(-30), CancellationToken.None));
+        Assert.Equal(5, handler.Requests.Count);
+    }
+
+    private const string IssueRow = """
+        {"id":{0},"series":{"id":{1},"name":"Asgardians of the Galaxy","volume":1,"year_began":2018},"number":"1","issue":"Asgardians of the Galaxy (2018) #1","cover_date":"2018-11-01","store_date":"2018-09-05","image":"https://static.metron.cloud/media/issue/x.jpg","cover_hash":"c585eb18bf1e5423","modified":"2024-12-28T13:27:10.206628-05:00"}
+        """;
+
+    private static string Issue(int id, int seriesId) => IssueRow.Replace("{0}", id.ToString()).Replace("{1}", seriesId.ToString());
+
+    [Fact]
+    public async Task FindIssuesByComicVineId_AndByUpc_UseTheExactFilters()
+    {
+        var (client, handler) = Make(_ => (HttpStatusCode.OK, Page("[" + Issue(50, 15) + "]")));
+
+        var byId = await client.FindIssuesByComicVineIdAsync(686521, CancellationToken.None);
+        var byUpc = await client.FindIssuesByUpcAsync(" 75960609558200111 ", CancellationToken.None);
+
+        Assert.Equal(new ComicIssueHit(50, 15), Assert.Single(byId));
+        Assert.Equal(new ComicIssueHit(50, 15), Assert.Single(byUpc));
+        Assert.EndsWith("/issue/?cv_id=686521", handler.Requests[0].RequestUri!.OriginalString);
+        Assert.EndsWith("/issue/?upc=75960609558200111", handler.Requests[1].RequestUri!.OriginalString);
+    }
+
+    [Fact]
+    public async Task VolumeIssues_CarryMetronsCoverHash()
+    {
+        var (client, _) = Make(_ => (HttpStatusCode.OK, Page("[" + Issue(50, 15) + "]")));
+
+        var issue = Assert.Single(await client.GetVolumeIssuesAsync(15, CancellationToken.None));
+
+        Assert.Equal("c585eb18bf1e5423", issue.CoverHash);
+    }
+
 }
 
 public class ComicProviderFactoryTests : Acquisition.AcquisitionTestBase

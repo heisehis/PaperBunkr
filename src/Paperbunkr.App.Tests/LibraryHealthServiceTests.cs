@@ -68,6 +68,42 @@ public class LibraryHealthServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Verify_AcrossSeveralPages_ChecksEveryIssueOnce()
+    {
+        // Two per page over five issues (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md section 4.4): the id
+        // cursor must reach the last, partial page, and a missing file on a later page is counted exactly once.
+        var present = new[] { AddIssue("a.cbz"), AddIssue("b.cbz"), AddIssue("d.cbz") };
+        var missing = new[] { AddIssue("c-gone.cbz", createFile: false), AddIssue("e-gone.cbz", createFile: false) };
+
+        var service = CreateService();
+        service.PageSize = 2;
+        var result = await service.VerifyAsync(new Progress<(int, int)>());
+
+        Assert.Equal(5, result.Checked);
+        Assert.Equal(2, result.MissingNow);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.All(context.Issues.Where(i => missing.Contains(i.Id)).ToList(), issue =>
+        {
+            Assert.True(issue.FileIsMissing);
+            Assert.Equal(1, issue.MissingVerificationCount);
+        });
+        Assert.All(context.Issues.Where(i => present.Contains(i.Id)).ToList(), issue => Assert.False(issue.FileIsMissing));
+    }
+
+    [Fact]
+    public async Task Verify_Cancelled_ThrowsOperationCanceled_AndTheServiceStaysUsable()
+    {
+        AddIssue("a.cbz");
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => CreateService().VerifyAsync(new Progress<(int, int)>(), cts.Token));
+
+        var result = await CreateService().VerifyAsync(new Progress<(int, int)>());
+        Assert.Equal(1, result.Checked);
+    }
+
+    [Fact]
     public async Task Verify_FlagsMissingFile_IncrementsCount()
     {
         int issueId = AddIssue("gone.cbz", createFile: false);

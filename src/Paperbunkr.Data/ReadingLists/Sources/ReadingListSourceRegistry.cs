@@ -18,6 +18,7 @@ public static class ReadingListSourceRegistry
     {
         ("ComicVine", "ComicVine", true, false),
         ("Metron", "Metron", true, false),
+        ("MetronLists", "Metron reading lists", true, false),
         ("ComicBookReadingOrders", "Comic Book Reading Orders", false, true),
         ("ComicArc", "ComicArc", false, true),
         ("ReadingOrdersNet", "ReadingOrders.com", false, true),
@@ -43,6 +44,14 @@ public static class ReadingListSourceRegistry
                 return string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)
                     ? null
                     : new MetronSource(username, password);
+
+            // Curated reading lists (own and public), not arcs - docs/superpowers/specs/2026-10-05-metron-account-sync-design.md D6.
+            case "MetronLists":
+                string? listsUser = CredentialStore.Get(context, "Metron", CredentialKind.Username);
+                string? listsPassword = CredentialStore.Get(context, "Metron", CredentialKind.Password);
+                return string.IsNullOrEmpty(listsUser) || string.IsNullOrEmpty(listsPassword)
+                    ? null
+                    : new MetronReadingListSource(new ComicVine.MetronClient(listsUser, listsPassword));
 
             case "ComicBookReadingOrders":
                 return new ComicBookReadingOrdersSource();

@@ -34,6 +34,8 @@ public partial class NeedsReviewViewModel : ViewModelBase
     {
         _onOpenSeriesDetail = onOpenSeriesDetail;
         ContentTypeItems = new ObservableCollection<SeriesReviewItem>();
+        AutoClassifiedItems = new ObservableCollection<SeriesReviewItem>();
+        AcceptAllHighConfidenceConfirm = new TwoStepConfirm(AcceptAllHighConfidence, "Accept all high confidence", "Confirm accept all?");
         SeriesConflicts = new ObservableCollection<SeriesConflictRowViewModel>();
         PendingProposalGroups = new ObservableCollection<ProposalGroupViewModel>();
         AppliedProposalGroups = new ObservableCollection<ProposalGroupViewModel>();
@@ -115,6 +117,36 @@ public partial class NeedsReviewViewModel : ViewModelBase
 
     public ObservableCollection<SeriesReviewItem> ContentTypeItems { get; }
 
+    /// <summary>Series the tracker pipeline classified on its own in the last 30 days, each with an Undo (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md).</summary>
+    public ObservableCollection<SeriesReviewItem> AutoClassifiedItems { get; }
+
+    public bool HasAutoClassifiedItems => AutoClassifiedItems.Count > 0;
+
+    public string AutoClassifiedCountLabel => AutoClassifiedItems.Count == 1 ? "1 series" : $"{AutoClassifiedItems.Count:N0} series";
+
+    [ObservableProperty]
+    private bool _isAutoClassifiedOpen;
+
+    [RelayCommand]
+    private void ToggleAutoClassifiedOpen() => IsAutoClassifiedOpen = !IsAutoClassifiedOpen;
+
+    /// <summary>"38 not looked up (Western evidence) · 112 with no tracker match", or empty. Counts what the queue is not asking about so the list is not a silent subset.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasContentTypeSummary))]
+    private string _contentTypeSummary = string.Empty;
+
+    public bool HasContentTypeSummary => !string.IsNullOrEmpty(ContentTypeSummary);
+
+    /// <summary>How many rows "Accept all high confidence" would take.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasHighConfidenceItems))]
+    private int _highConfidenceCount;
+
+    public bool HasHighConfidenceItems => HighConfidenceCount > 0;
+
+    /// <summary>Accept every high-confidence suggestion at once (two-step: it changes many series). Conflicting and doubtful rows are left for a person.</summary>
+    public TwoStepConfirm AcceptAllHighConfidenceConfirm { get; }
+
     public ObservableCollection<SeriesConflictRowViewModel> SeriesConflicts { get; }
 
     /// <summary>
@@ -195,6 +227,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasContentTypeItems));
         OnPropertyChanged(nameof(HasSeriesConflictItems));
         OnPropertyChanged(nameof(HasPendingProposalItems));
+        OnPropertyChanged(nameof(HasThresholdAccept));
         OnPropertyChanged(nameof(PendingProposalCount));
         OnPropertyChanged(nameof(PendingProposalCountLabel));
         OnPropertyChanged(nameof(HasAppliedProposalItems));
@@ -208,6 +241,8 @@ public partial class NeedsReviewViewModel : ViewModelBase
         OnPropertyChanged(nameof(DuplicateCountLabel));
         OnPropertyChanged(nameof(ConflictCountLabel));
         OnPropertyChanged(nameof(ContentTypeCountLabel));
+        OnPropertyChanged(nameof(HasAutoClassifiedItems));
+        OnPropertyChanged(nameof(AutoClassifiedCountLabel));
         OnPropertyChanged(nameof(AdPageCountLabel));
         OnPropertyChanged(nameof(HasAnyProposalItems));
         OnPropertyChanged(nameof(ProposalSummaryLabel));
@@ -502,21 +537,280 @@ public partial class NeedsReviewViewModel : ViewModelBase
     {
         // The smart-list field this used to evaluate is just Series.ContentType (SmartListCatalog: i.Series?.ContentType), but
         // going through SmartListQueryBuilder.Build loaded every issue with Series, MetadataProposals and Tags first (430-1,060 ms
-        // on a 3,650-issue library). Same set, direct: series of unknown content type that have at least one issue.
-        var seriesNeedingReview = context.Series.AsNoTracking()
-            .Where(s => s.ContentType == ContentType.Unknown && s.Issues.Any())
-            .OrderBy(s => s.Name)
-            .Select(s => new SeriesReviewItem { SeriesId = s.Id, SeriesName = s.Name })
+        // on a 3,650-issue library). Same set, direct: series of unknown content type that have at least one issue - now minus the ones a
+        // person already decided (locked) or waved off (skipped), plus any series with a tracker-suggested type waiting to be confirmed.
+        var rows = context.Series.AsNoTracking()
+            .Where(s => !s.ContentTypeLocked && s.RemoteSourceId == null && s.ContentTypeCheck != ContentTypeCheck.Skipped && s.Issues.Any()
+                && (s.ContentType == ContentType.Unknown || s.ContentTypeSuggestion != null))
+            .Select(s => new
+            {
+                s.Id,
+                s.Name,
+                s.ContentType,
+                s.ContentTypeSource,
+                s.ContentTypeSuggestion,
+                s.ContentTypeConfidence,
+                s.ContentTypeEvidence,
+                s.ContentTypeCheck,
+                s.GcdSeriesId,
+                s.CoverIssueId,
+            })
             .ToList();
+
+        // The per-series issue facts come from three flat queries joined here: correlated subqueries (First/Distinct inside the projection) need the SQL APPLY
+        // operation, which SQLite does not support.
+        var rowIds = rows.Select(r => r.Id).ToList();
+        var firstIssueIds = context.Issues.AsNoTracking()
+            .Where(i => rowIds.Contains(i.SeriesId))
+            .GroupBy(i => i.SeriesId)
+            .Select(g => new { SeriesId = g.Key, First = g.Min(i => i.Id) })
+            .ToDictionary(x => x.SeriesId, x => x.First);
+        var publishersBySeries = context.Issues.AsNoTracking()
+            .Where(i => rowIds.Contains(i.SeriesId))
+            .Select(i => new { i.SeriesId, i.Publisher })
+            .Distinct()
+            .ToList()
+            .GroupBy(x => x.SeriesId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Publisher).ToList());
+        var scrapedSeries = context.Issues.AsNoTracking()
+            .Where(i => rowIds.Contains(i.SeriesId) && i.MetadataSource != null)
+            .Select(i => i.SeriesId)
+            .Distinct()
+            .ToHashSet();
+
+        int skipped = 0, noMatch = 0;
+        var items = new List<SeriesReviewItem>();
+        foreach (var row in rows)
+        {
+            var evidence = ContentTypeEvidence.Deserialize(row.ContentTypeEvidence);
+            string? skipReason = row.ContentTypeSuggestion is null
+                ? ContentTypeClassificationService.SkipReason(row.GcdSeriesId, row.ContentTypeSource, row.ContentType,
+                    publishersBySeries.GetValueOrDefault(row.Id) ?? new List<string?>(), scrapedSeries.Contains(row.Id))
+                : null;
+            if (skipReason is not null)
+            {
+                skipped++;
+            }
+
+            if (row.ContentTypeCheck == ContentTypeCheck.NoMatch && row.ContentTypeSuggestion is null)
+            {
+                noMatch++;
+            }
+
+            items.Add(BuildContentTypeItem(row.Id, row.Name, row.CoverIssueId ?? firstIssueIds.GetValueOrDefault(row.Id), row.ContentType, row.ContentTypeSuggestion,
+                row.ContentTypeConfidence, evidence, StatusFor(row.ContentTypeSuggestion, row.ContentTypeCheck, skipReason), autoClassified: false));
+        }
+
+        items = items
+            .OrderByDescending(i => i.HasSuggestion)
+            .ThenBy(i => i.IsConflict)
+            .ThenByDescending(i => i.Confidence ?? 0)
+            .ThenBy(i => i.SeriesName, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+        // Recently auto-classified: applied on its own in the last 30 days and not yet confirmed, undone or locked by a person.
+        var cutoff = DateTime.UtcNow.AddDays(-30);
+        var autoRows = context.Series.AsNoTracking()
+            .Where(s => s.ContentTypeSource == ContentTypeSource.Provider && !s.ContentTypeLocked && s.PreviousContentType != null
+                && s.ContentTypeAutoAppliedUtc != null && s.ContentTypeAutoAppliedUtc >= cutoff)
+            .OrderByDescending(s => s.ContentTypeAutoAppliedUtc)
+            .Select(s => new
+            {
+                s.Id,
+                s.Name,
+                s.ContentType,
+                s.PreviousContentType,
+                s.ContentTypeConfidence,
+                s.ContentTypeEvidence,
+                s.CoverIssueId,
+            })
+            .ToList();
+        var autoIds = autoRows.Select(r => r.Id).ToList();
+        var autoFirstIssueIds = context.Issues.AsNoTracking()
+            .Where(i => autoIds.Contains(i.SeriesId))
+            .GroupBy(i => i.SeriesId)
+            .Select(g => new { SeriesId = g.Key, First = g.Min(i => i.Id) })
+            .ToDictionary(x => x.SeriesId, x => x.First);
+        var autoItems = autoRows
+            .Select(r => BuildContentTypeItem(r.Id, r.Name, r.CoverIssueId ?? autoFirstIssueIds.GetValueOrDefault(r.Id), r.PreviousContentType ?? ContentType.Unknown, r.ContentType,
+                r.ContentTypeConfidence, ContentTypeEvidence.Deserialize(r.ContentTypeEvidence), string.Empty, autoClassified: true))
+            .ToList();
+
+        var summaryParts = new List<string>();
+        if (skipped > 0)
+        {
+            summaryParts.Add($"{skipped:N0} not looked up (Western evidence)");
+        }
+
+        if (noMatch > 0)
+        {
+            summaryParts.Add($"{noMatch:N0} with no tracker match");
+        }
+
+        string summary = string.Join(" · ", summaryParts);
+        int highConfidence = items.Count(i => i.IsHighConfidence);
 
         return () =>
         {
             ContentTypeItems.Clear();
-            foreach (var item in seriesNeedingReview)
+            foreach (var item in items)
             {
                 ContentTypeItems.Add(item);
             }
+
+            AutoClassifiedItems.Clear();
+            foreach (var item in autoItems)
+            {
+                AutoClassifiedItems.Add(item);
+            }
+
+            ContentTypeSummary = summary;
+            HighConfidenceCount = highConfidence;
         };
+    }
+
+    private static string StatusFor(ContentType? suggestion, ContentTypeCheck check, string? skipReason) =>
+        suggestion is not null ? string.Empty
+        : skipReason is not null ? $"Not looked up: {skipReason.ToLowerInvariant()}"
+        : check == ContentTypeCheck.NoMatch ? "No match on the tracker sites"
+        : "Not looked up yet";
+
+    /// <summary>
+    /// Turns a series row plus its stored evidence into a queue row. <paramref name="current"/> is the type shown in the "Now" column; for a
+    /// recently auto-classified row <paramref name="suggestion"/> is the type that was applied and <paramref name="current"/> is what Undo restores.
+    /// </summary>
+    private static SeriesReviewItem BuildContentTypeItem(int id, string name, int? coverIssueId, ContentType current, ContentType? suggestion,
+        double? confidence, IReadOnlyList<ContentTypeEvidenceItem> evidence, string status, bool autoClassified)
+    {
+        var typed = evidence.Where(e => e.Type is not null).ToList();
+        bool conflict = typed.Select(e => e.Type).Distinct().Count() > 1;
+        bool high = !autoClassified && suggestion is not null && !conflict
+            && typed.Any(e => e.Type == suggestion && !e.QueueOnly && e.Score >= TitleMatchScorer.AutoThreshold);
+
+        var chips = evidence.Select(e => new ContentTypeEvidenceChip(
+            $"{e.Provider}: {(string.IsNullOrWhiteSpace(e.Raw) ? e.Type?.ToString() ?? "no type" : e.Raw)}",
+            $"Matched \"{e.MatchedTitle}\" ({e.Score:P0}){(e.Type is null ? ", which says nothing about its type" : $" - reads as {e.Type}")}{(e.QueueOnly ? " (a weak signal, never applied on its own)" : string.Empty)}"))
+            .ToList();
+
+        return new SeriesReviewItem
+        {
+            SeriesId = id,
+            SeriesName = name,
+            CoverIssueId = coverIssueId,
+            CurrentLabel = current.ToString(),
+            Suggestion = suggestion,
+            Confidence = suggestion is null ? null : confidence,
+            IsConflict = conflict,
+            IsHighConfidence = high,
+            StatusLabel = status,
+            Chips = chips,
+            IsAutoClassified = autoClassified,
+        };
+    }
+
+    // ----- Content Type row actions (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md). Each runs from a Button inside a row of
+    // ContentTypeItems / AutoClassifiedItems, so the list refresh is deferred one dispatcher tick (CLAUDE.md "routed event" gotcha). -----
+
+    /// <summary>Writes one series' content-type change in a fresh context, then the caller refreshes the queue after the click has finished routing.</summary>
+    private static void EditContentType(int seriesId, Action<Series> edit)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var series = context.Series.Find(seriesId);
+        if (series is not null)
+        {
+            edit(series);
+            context.SaveChanges();
+        }
+    }
+
+    private void RefreshContentTypeSoon() => Avalonia.Threading.Dispatcher.UIThread.Post(() => Refresh(Queue.ContentType));
+
+    /// <summary>Accept: apply the suggested type and lock it.</summary>
+    [RelayCommand]
+    private void AcceptContentType(SeriesReviewItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        EditContentType(item.SeriesId, s => SeriesContentTypeEditor.AcceptSuggestion(s));
+        RefreshContentTypeSoon();
+    }
+
+    /// <summary>Keep: lock the type the series has now.</summary>
+    [RelayCommand]
+    private void KeepContentType(SeriesReviewItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        EditContentType(item.SeriesId, SeriesContentTypeEditor.Keep);
+        RefreshContentTypeSoon();
+    }
+
+    /// <summary>"Not a comic: skip": never looked up again.</summary>
+    [RelayCommand]
+    private void SkipContentType(SeriesReviewItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        EditContentType(item.SeriesId, s => SeriesContentTypeEditor.Skip(s, DateTime.UtcNow));
+        RefreshContentTypeSoon();
+    }
+
+    /// <summary>Change: set a type of the person's own choosing and lock it.</summary>
+    private void ChangeContentType(SeriesReviewItem? item, ContentType type)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        EditContentType(item.SeriesId, s => SeriesContentTypeEditor.SetManual(s, type));
+        RefreshContentTypeSoon();
+    }
+
+    [RelayCommand] private void ChangeContentTypeToComic(SeriesReviewItem? item) => ChangeContentType(item, ContentType.Comic);
+
+    [RelayCommand] private void ChangeContentTypeToManga(SeriesReviewItem? item) => ChangeContentType(item, ContentType.Manga);
+
+    [RelayCommand] private void ChangeContentTypeToManhwa(SeriesReviewItem? item) => ChangeContentType(item, ContentType.Manhwa);
+
+    [RelayCommand] private void ChangeContentTypeToManhua(SeriesReviewItem? item) => ChangeContentType(item, ContentType.Manhua);
+
+    /// <summary>Undo an automatic classification: the previous type and reading mode come back and the series is locked so the same guess is not re-applied.</summary>
+    [RelayCommand]
+    private void UndoAutoClassified(SeriesReviewItem? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        EditContentType(item.SeriesId, s => SeriesContentTypeEditor.Undo(s));
+        RefreshContentTypeSoon();
+    }
+
+    private void AcceptAllHighConfidence()
+    {
+        var ids = ContentTypeItems.Where(i => i.IsHighConfidence).Select(i => i.SeriesId).ToList();
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            foreach (var series in context.Series.Where(s => ids.Contains(s.Id)))
+            {
+                SeriesContentTypeEditor.AcceptSuggestion(series);
+            }
+
+            context.SaveChanges();
+        }
+
+        RefreshContentTypeSoon();
     }
 
     /// <summary>
@@ -687,9 +981,14 @@ public partial class NeedsReviewViewModel : ViewModelBase
     {
         var pending = LoadProposalGroups(context, MetadataProposalStatus.Pending);
         var applied = LoadProposalGroups(context, MetadataProposalStatus.Accepted);
+        var settings = context.GetOrCreateAppSettings();
+        var policy = settings.MetadataResolutionPolicy;
+        decimal minConfidence = settings.AutoApplyMinConfidence;
 
         return () =>
         {
+            ApplyAutoApplySettings(policy, minConfidence);
+
             PendingProposalGroups.Clear();
             foreach (var group in pending)
             {
@@ -791,6 +1090,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
     private void NotifyProposalCountsChanged()
     {
         OnPropertyChanged(nameof(HasPendingProposalItems));
+        OnPropertyChanged(nameof(HasThresholdAccept));
         OnPropertyChanged(nameof(PendingProposalCount));
         OnPropertyChanged(nameof(PendingProposalCountLabel));
         OnPropertyChanged(nameof(HasAppliedProposalItems));
@@ -821,9 +1121,10 @@ public partial class NeedsReviewViewModel : ViewModelBase
         {
             if (status == MetadataProposalStatus.Pending)
             {
-                writeTimeIds = ProposalsIn(context, status, group).Where(p => p.Field == MetadataProposalField.Series).Select(p => p.Id).ToList();
+                // Write-time proposals: a Series-field one moves the issue, and a series-scoped one writes its Series field.
+                writeTimeIds = ProposalsIn(context, status, group).Where(p => p.Field == MetadataProposalField.Series || p.SeriesId != null).Select(p => p.Id).ToList();
                 ProposalsIn(context, status, group)
-                    .Where(p => p.Field != MetadataProposalField.Series)
+                    .Where(p => p.Field != MetadataProposalField.Series && p.SeriesId == null)
                     .ExecuteUpdate(s => s
                         .SetProperty(p => p.Status, MetadataProposalStatus.Accepted)
                         .SetProperty(p => p.ResolvedAt, now)
@@ -910,6 +1211,10 @@ public partial class NeedsReviewViewModel : ViewModelBase
             return;
         }
 
+        // Whether the proposal's value is in the Series field right now: only one that was applied has anything to revert, and only
+        // one that was still waiting has anything left to apply (smart features §6.1, §6.2 - series proposals can now be Pending).
+        bool wasApplied = proposal.Status == MetadataProposalStatus.Accepted;
+
         proposal.Status = accept ? MetadataProposalStatus.Accepted : MetadataProposalStatus.Rejected;
         proposal.ResolvedAt = DateTime.UtcNow;
         if (accept)
@@ -932,10 +1237,49 @@ public partial class NeedsReviewViewModel : ViewModelBase
         // from-provider-design.md) arrive already Accepted and write straight to the Series field -
         // unlike Issue-scoped proposals (never written to the raw field, only surfaced through an
         // Effective* resolver), Reject here needs a real revert step, not just a status flip.
-        if (!accept && proposal.SeriesId is not null)
+        if (!accept && proposal.SeriesId is not null && wasApplied)
         {
             RevertSeriesField(context, proposal);
         }
+
+        // A series-scoped proposal that was waiting for review (a synopsis genre suggestion, say) is written to the Series field
+        // when it is accepted - the same write MetadataLinkResolver does up front for the ones that apply themselves.
+        if (accept && proposal.SeriesId is not null && !wasApplied && proposal.Field != MetadataProposalField.Series)
+        {
+            ApplySeriesField(context, proposal);
+        }
+    }
+
+    /// <summary>Writes <see cref="MetadataProposal.ProposedValue"/> into the Series field the proposal is about.</summary>
+    private static void ApplySeriesField(PaperbunkrDbContext context, MetadataProposal proposal)
+    {
+        var series = context.Series.Find(proposal.SeriesId);
+        if (series is null)
+        {
+            return;
+        }
+
+        switch (proposal.Field)
+        {
+            case MetadataProposalField.Summary:
+                series.Summary = proposal.ProposedValue;
+                break;
+            case MetadataProposalField.Genre:
+                series.Genre = proposal.ProposedValue;
+                break;
+            case MetadataProposalField.Creator:
+                series.Creator = proposal.ProposedValue;
+                break;
+            case MetadataProposalField.Status:
+                if (Enum.TryParse<SeriesStatus>(proposal.ProposedValue, out var status))
+                {
+                    series.Status = status;
+                }
+
+                break;
+        }
+
+        context.SaveChanges();
     }
 
     /// <summary>Writes <see cref="MetadataProposal.CurrentValue"/> (the pre-proposal snapshot) back into the Series field it came from, undoing <c>MetadataLinkResolver</c>'s auto-accept write.</summary>
@@ -954,6 +1298,10 @@ public partial class NeedsReviewViewModel : ViewModelBase
                 break;
             case MetadataProposalField.Genre:
                 series.Genre = proposal.CurrentValue;
+                break;
+            // Was missing: rejecting a Creator proposal left the provider's value in place (smart features §6.1).
+            case MetadataProposalField.Creator:
+                series.Creator = proposal.CurrentValue;
                 break;
             case MetadataProposalField.Status:
                 series.Status = string.IsNullOrEmpty(proposal.CurrentValue)

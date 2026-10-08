@@ -153,7 +153,15 @@ public class BookFolderScanService
 
         // Loaded once and updated in-memory as new series are created within this run, same
         // rationale as LibraryFolderScanner's seriesByName dictionary.
-        var seriesByName = context.BookSeries.ToList().ToDictionary(s => s.Name, s => s, StringComparer.OrdinalIgnoreCase);
+        // BookSeries.Name is not unique either (a series can be renamed to a name another one has), so a shared
+        // name resolves to the oldest row instead of throwing - see LibraryFolderScanner.ImportFiles.
+        var seriesByName = new Dictionary<string, BookSeries>(StringComparer.OrdinalIgnoreCase);
+        foreach (var existing in context.BookSeries.OrderBy(s => s.Id).ToList())
+        {
+            seriesByName.TryAdd(existing.Name, existing);
+        }
+
+
         var seriesTouched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var addedBooks = new List<Book>();
 

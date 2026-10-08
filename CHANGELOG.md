@@ -3,6 +3,40 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.8-beta] - 2026-10-08
+
+### Added
+
+- **Metron, fully used.** A scheduled **Metron sync** keeps your Metron pull list, reading list, collection,
+  wish list and reading lists in step with the library (Preferences → Connections). Scraping now looks issues
+  up by ComicVine id or UPC, breaks ties by comparing cover hashes, and checks Metron's change feed so
+  unchanged series aren't refetched.
+- **MetronInfo.xml write-back.** An opt-in setting writes MetronInfo v1.1 next to ComicInfo.xml when file
+  write-back is on, and Metron ids already inside a file are linked when it is scanned.
+- **Classify from trackers.** MangaBaka, AniList and MangaDex can set a series' content type (manga, manhwa,
+  comic, and so on). Clear agreement is applied automatically, doubtful cases go to a review queue in
+  Library Health, a manual choice locks the series, and Undo is in the Detail header. An optional task
+  re-checks publisher guesses, and **Ask before changing a content type** turns auto-apply off.
+- **Smart-list template gallery.** Start a smart list from a ready-made template.
+- **Library Health: Collection gaps and Metadata consistency.** Missing issues in a run and fields that
+  disagree across a series, each dismissible.
+- **Reading pace.** Time-left estimates for what you're reading, a Drop-off watch, and a Home **Up next** row.
+  Wanted can sort by how much you read a series.
+- **Relink suggestions** for missing files, and a **Recommended** badge on the best copy in a duplicate group.
+- **Suggestions from your data.** Genre suggestions from a synopsis, character suggestions for a continuity,
+  a chronology check on reading lists, and a completion event (with a plugin hook, Plugin API 4.4) when a
+  series is marked complete.
+
+### Changed
+
+- **Lower memory use.** Cover and page bitmaps are released as they scroll out of view, memory use is
+  watched and trimmed under pressure, heavy jobs take turns instead of running on top of each other, and
+  large library sweeps work in pages. Not yet measured against the earlier build.
+
+### Fixed
+
+- Cancelling a Preferences job (Verify, Sync metadata and similar) no longer shows a crash report.
+
 ## [0.7.7-beta] - 2026-10-05
 
 ### Added

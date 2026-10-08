@@ -46,9 +46,9 @@ public sealed class PluginActivityTests : IDisposable
     }
 
     [Fact]
-    public void The_api_version_is_4_3_now_that_commands_can_declare_a_shortcut()
+    public void The_api_version_is_4_4_now_that_there_is_a_ContinuityCompleted_hook()
     {
-        Assert.Equal(new Version(4, 3), PluginApi.Current);
+        Assert.Equal(new Version(4, 4), PluginApi.Current);
     }
 
     [Fact]

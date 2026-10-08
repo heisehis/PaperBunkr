@@ -15,9 +15,7 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public static class BookCoverImageCache
 {
-    private const int MaxEntries = 5000;
-
-    private static readonly LruCache<string, Bitmap> _cache = new(MaxEntries);
+    private static readonly BitmapByteCache<string> _cache = new(Performance.ImageMemoryBudget.BookBytes);
 
     /// <summary>Decoded cover for an id key, or null when no file exists (custom cover preferred).</summary>
     public static Bitmap? Get(string idKey)
@@ -75,6 +73,13 @@ public static class BookCoverImageCache
 
     /// <summary>Drops every in-memory entry - after a library-rebuild purge.</summary>
     public static void Clear() => _cache.Clear();
+
+    internal static int CachedCount => _cache.Count;
+
+    internal static long CachedBytes => _cache.Bytes;
+
+    /// <summary>Drops least-recently-used entries down to <paramref name="fraction"/> of the budget (memory-pressure trim). Never disposes.</summary>
+    internal static void Trim(double fraction) => _cache.Trim((long)(Performance.ImageMemoryBudget.BookBytes * fraction));
 
     /// <summary>Drops only the in-memory entry for one key, leaving the on-disk file.</summary>
     public static void InvalidateMemoryOnly(string idKey) => _cache.Remove(idKey);

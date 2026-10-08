@@ -35,7 +35,8 @@ public partial class SmartScreen : UserControl
         _screenInput = ScreenInput.Attach(this, InputScope.SmartLists, new Dictionary<string, Func<bool>>
         {
             // Each of these rewrites the lists the sidebar and the result grids are bound to, so they run once the key press has finished routing.
-            [InputActionIds.NewItem] = () => _viewModel is { } vm && ScreenInput.Deferred(() => vm.CreateNewCommand.Execute(null)),
+            // Ctrl+N opens the template gallery (smart features §3.2); "Blank list" is its first card.
+            [InputActionIds.NewItem] = () => _viewModel is { } vm && ScreenInput.Deferred(() => vm.OpenGalleryCommand.Execute(null)),
             [InputActionIds.Save] = () => _viewModel is { CanSaveList: true } vm && ScreenInput.Deferred(() => vm.SaveCommand.Execute(null)),
             [InputActionIds.SmartDuplicate] = () => _viewModel is { CanDuplicateList: true } vm && ScreenInput.Deferred(() => vm.DuplicateCommand.Execute(null)),
             [InputActionIds.Refresh] = () => _viewModel is { } vm && ScreenInput.Deferred(vm.RefreshSidebar),

@@ -24,6 +24,13 @@ public class Continuity
     public DateTime UpdatedAt { get; set; }
 
     /// <summary>
+    /// When the reader was told they had finished this continuity (every issue of every member series read), or null while it is not
+    /// complete (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.4). Same once-then-re-arm rule as
+    /// <see cref="StoryEvent.CompletedNotifiedAt"/>.
+    /// </summary>
+    public DateTime? CompletedNotifiedAt { get; set; }
+
+    /// <summary>
     /// Wikidata QID for this universe (e.g. "Q2246088" for Earth-616), set when a
     /// <see cref="Metadata.ContinuityWikidataMatchResolver"/> suggestion was accepted
     /// (docs/superpowers/specs/2026-09-17-storyevent-continuity-autopopulate-design.md). Null for

@@ -67,6 +67,32 @@ public partial class MissingFileRowViewModel : ViewModelBase
 
     public TwoStepConfirm DeleteConfirm { get; }
 
+    // --- Likely match (docs/superpowers/specs/2026-10-06-smart-features-design.md §5.1) ---
+
+    /// <summary>Another library entry that probably holds this row's file, or null when none was found.</summary>
+    public Paperbunkr.Data.Metadata.MissingFileMatch? Match { get; init; }
+
+    /// <summary>Relinks this row to <see cref="Match"/>; set together with it.</summary>
+    public Action<MissingFileRowViewModel>? OnRelinkToMatch { get; init; }
+
+    public bool HasMatch => Match is not null && OnRelinkToMatch is not null;
+
+    public bool IsExactMatch => Match?.Tier == Paperbunkr.Data.Metadata.MissingFileMatchTier.Exact;
+
+    /// <summary>"Likely match (same size and page count): D:\Comics\Saga\Saga 013.cbz".</summary>
+    public string? MatchLabel => Match is null
+        ? null
+        : IsExactMatch
+            ? $"Likely match (same size and page count): {Match.CandidatePath}"
+            : $"Possible match (same series, number and format): {Match.CandidatePath}";
+
+    [RelayCommand]
+    private void RelinkToMatch()
+    {
+        DeleteConfirm.Cancel();
+        OnRelinkToMatch?.Invoke(this);
+    }
+
     [RelayCommand]
     private async Task Relink()
     {

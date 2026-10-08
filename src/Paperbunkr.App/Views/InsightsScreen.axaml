@@ -371,6 +371,32 @@
                             </StackPanel>
                         </Border>
                     </WrapPanel>
+
+                    <!-- Drop-off watch (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.3): series now one issue short of where
+                         you usually stop. A nudge; the card is absent until there is a pattern and something near it. -->
+                    <Border Classes="card attnCard" IsVisible="{Binding HasDropOff}" HorizontalAlignment="Left" AutomationProperties.AutomationId="InsightsDropOffCard">
+                        <StackPanel Spacing="4">
+                            <TextBlock Classes="cardHeading" Text="DROP-OFF WATCH" />
+                            <TextBlock Classes="sub" Text="{Binding DropOffHeadline}" TextWrapping="Wrap" />
+                            <ItemsControl ItemsSource="{Binding DropOffRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:AttentionRow">
+                                        <Button Classes="attnRow"
+                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).OpenContinueCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Grid ColumnDefinitions="Auto,*">
+                                                <views:CoverThumb Grid.Column="0" Width="28" Height="40" Margin="0,0,8,0" CoverKey="{Binding CoverKey}" />
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}" Foreground="{DynamicResource PbTextBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Subtitle}" Classes="sub" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Recommendations beyond the hero pick (docs/superpowers/specs/2026-09-23-insights-

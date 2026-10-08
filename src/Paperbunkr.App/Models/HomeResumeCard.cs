@@ -20,7 +20,8 @@ public sealed class HomeResumeCard
     /// <summary>Issue number badge for comics; books show their author line instead.</summary>
     public string? Badge => Comic?.ResumeIssueBadge;
 
-    public string? Meta => Book?.Author;
+    /// <summary>A book's author line; a comic's time-left estimate, when there is one.</summary>
+    public string? Meta => Book is not null ? Book.Author : Comic?.TimeLeft;
 
     public bool ShowProgress => Comic is not null || Book?.ShowProgress == true;
 

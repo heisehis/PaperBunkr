@@ -32,7 +32,7 @@ public partial class LibraryHealthSectionState : ObservableObject
 }
 
 /// <summary>
-/// The eleven collapsible sections of the Library Health card, each with its open state, sub-tab and scroll anchor
+/// The thirteen collapsible sections of the Library Health card, each with its open state, sub-tab and scroll anchor
 /// (docs/superpowers/specs/2026-09-26-library-health-subtabs-design.md). All start closed; a deep link or search hit opens the
 /// one it targets. A closed section is never measured, so its list builds no rows.
 /// </summary>
@@ -48,13 +48,32 @@ public sealed class LibraryHealthSections
         ReportedPages = new("reportedPages", LibraryHealthTab.Review, "library.healthReportedPages");
         SimilarSeries = new("similarSeries", LibraryHealthTab.Review, "library.healthSimilarSeries");
         Publishers = new("publishers", LibraryHealthTab.Review, "library.healthPublishers");
+        CollectionGaps = new("collectionGaps", LibraryHealthTab.Review, "library.healthCollectionGaps");
+        MetadataConsistency = new("metadataConsistency", LibraryHealthTab.Review, "library.healthMetadataConsistency");
         Missing = new("missing", LibraryHealthTab.Files, "library.healthMissing");
         EmptyRows = new("emptyRows", LibraryHealthTab.Files, "library.healthEmptyRows");
         RecentlyRemoved = new("recentlyRemoved", LibraryHealthTab.Files, "library.healthRecentlyRemoved");
-        All = new[] { Duplicates, SeriesConflicts, ContentType, Proposals, AdPages, ReportedPages, SimilarSeries, Publishers, Missing, EmptyRows, RecentlyRemoved };
+        All = new[]
+        {
+            Duplicates, SeriesConflicts, ContentType, Proposals, AdPages, ReportedPages, SimilarSeries, Publishers, CollectionGaps, MetadataConsistency,
+            Missing, EmptyRows, RecentlyRemoved,
+        };
         MissingDismissed = new("missingDismissed", LibraryHealthTab.Files, Missing.Anchor);
         EmptyRowsDismissed = new("emptyRowsDismissed", LibraryHealthTab.Files, EmptyRows.Anchor);
+        CollectionGapsDismissed = new("collectionGapsDismissed", LibraryHealthTab.Review, CollectionGaps.Anchor);
+        MetadataConsistencyDismissed = new("metadataConsistencyDismissed", LibraryHealthTab.Review, MetadataConsistency.Anchor);
     }
+
+    /// <summary>Holes in each series' run of owned issue numbers (docs/superpowers/specs/2026-10-06-smart-features-design.md §3.3).</summary>
+    public LibraryHealthSectionState CollectionGaps { get; }
+
+    /// <summary>Issues whose year, publisher or age rating disagrees with the rest of their series (same spec, §3.4).</summary>
+    public LibraryHealthSectionState MetadataConsistency { get; }
+
+    /// <summary>The collapsed "Dismissed" sub-groups of the two sections above; like the other dismissed sub-groups, not in <see cref="All"/>.</summary>
+    public LibraryHealthSectionState CollectionGapsDismissed { get; }
+
+    public LibraryHealthSectionState MetadataConsistencyDismissed { get; }
 
     public LibraryHealthSectionState Duplicates { get; }
 

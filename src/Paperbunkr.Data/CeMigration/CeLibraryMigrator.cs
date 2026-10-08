@@ -261,6 +261,7 @@ public class CeLibraryMigrator
             var (contentType, readingMode) = MapMangaField(books[0].Manga);
             series.ContentType = contentType;
             series.ReadingMode = readingMode;
+            series.ContentTypeSource = contentType == ContentType.Unknown ? ContentTypeSource.Unset : ContentTypeSource.Embedded;
 
             if (books.Any(b => b.Manga == MangaYesNo.Unknown))
             {

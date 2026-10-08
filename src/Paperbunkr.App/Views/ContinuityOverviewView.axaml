@@ -133,7 +133,12 @@
                                               AutomationProperties.Name="{Binding Name}"
                                               Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).ToggleSeriesSelectionCommand}"
                                               CommandParameter="{Binding}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        <!-- "Also in: X, Y" - the series already belongs to other continuities (smart features §7.1). -->
+                                        <TextBlock Text="{Binding OtherContinuities}" IsVisible="{Binding HasOtherContinuities}" FontSize="11"
+                                                   Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding OtherContinuities}" />
+                                    </StackPanel>
                                     <Button Grid.Column="2" Classes="headerAction ghost" Content="Add"
                                             Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).AddSeriesCommand}"
                                             CommandParameter="{Binding}" />

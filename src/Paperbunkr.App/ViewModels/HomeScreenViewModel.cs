@@ -91,6 +91,7 @@ public partial class HomeScreenViewModel : ViewModelBase
             [HomeSectionKey.Spotlight] = new SpotlightSectionViewModel(this),
             [HomeSectionKey.NeedsAttention] = new NeedsAttentionSectionViewModel(this),
             [HomeSectionKey.ContinueReading] = new ContinueReadingSectionViewModel(this),
+            [HomeSectionKey.UpNext] = new UpNextSectionViewModel(this),
             [HomeSectionKey.RecentlyAdded] = new RecentlyAddedSectionViewModel(this),
             [HomeSectionKey.Collections] = new CollectionsSectionViewModel(this),
             [HomeSectionKey.BecauseYouRead] = new BecauseYouReadSectionViewModel(this),
@@ -141,6 +142,7 @@ public partial class HomeScreenViewModel : ViewModelBase
     {
         var wanted = _visibleKeys
             .Where(k => k != HomeSectionKey.NeedsAttention || NeedsAttention is not null)
+            .Where(k => k != HomeSectionKey.UpNext || UpNext.Count > 0)
             .Select(k => _sectionsByKey[k])
             .ToList();
 
@@ -437,6 +439,25 @@ public partial class HomeScreenViewModel : ViewModelBase
     private void OpenInsights() => _goInsights();
 
     // ---------------------------------------------------------------------------------------------------------------------
+    // Up Next (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.4)
+    // ---------------------------------------------------------------------------------------------------------------------
+
+    /// <summary>The ranked next-issue list. The section leaves Home entirely when this is empty.</summary>
+    public ObservableCollection<HomeUpNextRow> UpNext { get; } = new();
+
+    public bool HasUpNext => UpNext.Count > 0;
+
+    /// <summary>Opens the row's issue in the reader, the same as a Continue Reading card.</summary>
+    [RelayCommand]
+    private void OpenUpNext(HomeUpNextRow? row)
+    {
+        if (row is not null)
+        {
+            _goReaderForIssue(row.IssueId);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------------
     // Shelves
     // ---------------------------------------------------------------------------------------------------------------------
 
@@ -625,6 +646,21 @@ public partial class HomeScreenViewModel : ViewModelBase
         var layout = HomeLayout.Resolve(settings.HomeSectionOrder, settings.HomeHiddenSections);
         var visible = layout.Visible.ToHashSet();
 
+        // The reader's own pace, for the time-left estimates on Continue Reading and Up Next (smart features §4.2). Unknown until
+        // there are a handful of timed sessions, and then nothing shows an estimate.
+        var pace = ReadingPace.Unknown;
+        if (visible.Contains(HomeSectionKey.ContinueReading) || visible.Contains(HomeSectionKey.UpNext))
+        {
+            try
+            {
+                pace = ReadingPaceResolver.Load(context);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticsService.LogMilestone($"Home: reading pace lookup failed ({ex.GetType().Name}: {ex.Message}).");
+            }
+        }
+
         var continueReading = new List<HomeResumeCard>();
         if (visible.Contains(HomeSectionKey.ContinueReading))
         {
@@ -644,6 +680,7 @@ public partial class HomeScreenViewModel : ViewModelBase
                             ResumeIssueId = issue.Id,
                             ResumeProgressFraction = issue.ReadPercentage() / 100.0,
                             ResumeIssueBadge = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
+                            TimeLeft = TimeLeftFormatter.Left(pace.TimeLeftInIssue(issue)),
                         },
                     });
                 }
@@ -732,6 +769,36 @@ public partial class HomeScreenViewModel : ViewModelBase
             }
         }
 
+        var upNext = new List<HomeUpNextRow>();
+        if (visible.Contains(HomeSectionKey.UpNext))
+        {
+            try
+            {
+                var picks = UpNextResolver.Build(context, DateTime.UtcNow);
+                var pickSeriesIds = picks.Select(p => p.SeriesId).ToList();
+                var coverSeries = context.Series.Include(s => s.Issues).Where(s => pickSeriesIds.Contains(s.Id)).ToList()
+                    .ToDictionary(s => s.Id, SeriesCardSample.FromSeries);
+                foreach (var pick in picks)
+                {
+                    coverSeries.TryGetValue(pick.SeriesId, out var sample);
+                    upNext.Add(new HomeUpNextRow
+                    {
+                        Item = pick,
+                        Rank = upNext.Count + 1,
+                        CoverBrush = sample?.CoverBrush ?? SeriesCardSample.CoverBrushFor(pick.SeriesName),
+                        CoverImage = sample?.CoverKey is string key ? CoverImageCache.Get(key) : null,
+                        TimeLeft = pace.TimeFor(ReadingItemType.Comic, pick.PagesLeft) is { } left ? TimeLeftFormatter.Approximate(left) : null,
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                // Like Needs Attention: a failed lookup hides the section, never the whole Home load.
+                DiagnosticsService.LogMilestone($"Home: up-next lookup failed ({ex.GetType().Name}: {ex.Message}).");
+                upNext.Clear();
+            }
+        }
+
         var mastheadBackdrop = BuildMastheadBackdrop(recentlyAdded, becauseYouRead, continueReading, spotlight, themeBaseColor);
 
         var accentColor = spotlight.Count > 0 && spotlight[0].CoverImage is { } firstCover
@@ -746,7 +813,7 @@ public partial class HomeScreenViewModel : ViewModelBase
         }
 
         return new HomeFeedSnapshot(layout.Visible, settings.HomeSeasonalFlourish, continueReading, recentlyAdded, collections,
-            becauseYouRead, spotlight, attention, mastheadBackdrop, accentColor, readingListSpotlight);
+            becauseYouRead, spotlight, attention, mastheadBackdrop, accentColor, readingListSpotlight, upNext);
     }
 
     /// <summary>Pushes a <see cref="BuildSnapshot"/> result into the bound observable state. UI thread.</summary>
@@ -761,6 +828,8 @@ public partial class HomeScreenViewModel : ViewModelBase
         ReplaceAll(BecauseYouRead, s.BecauseYouRead);
         ReplaceAll(SpotlightItems, s.Spotlight);
         NeedsAttention = s.Attention;
+        ReplaceAll(UpNext, s.UpNext);
+        OnPropertyChanged(nameof(HasUpNext));
 
         ReplaceAll(SpotlightPanels, s.Spotlight.Select(sample => new SpotlightPanelViewModel(sample)).ToList());
         SpotlightIndex = 0;
@@ -805,7 +874,8 @@ public partial class HomeScreenViewModel : ViewModelBase
         HomeAttentionCard? Attention,
         Bitmap? MastheadBackdrop,
         Color AccentColor,
-        ReadingListSpotlightSample? ReadingListSpotlight);
+        ReadingListSpotlightSample? ReadingListSpotlight,
+        IReadOnlyList<HomeUpNextRow> UpNext);
 
     /// <summary>Re-renders the cover wall against the new theme's base colour (no DB requery) and re-evaluates the light-theme
     /// sky, so a theme switch while on Home updates the masthead live.</summary>

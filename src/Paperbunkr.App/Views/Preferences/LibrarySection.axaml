@@ -8,6 +8,7 @@
              xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:svc="using:Paperbunkr.App.Services"
+             xmlns:meta="using:Paperbunkr.Data.Metadata"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
@@ -56,9 +57,78 @@
     </UserControl.Styles>
 
     <UserControl.Resources>
+        <!-- Smart features S1 (docs/superpowers/specs/2026-10-06-smart-features-design.md): one row of the Library Health list that uses CollectionGapRowTemplate. -->
+        <DataTemplate x:Key="CollectionGapRowTemplate" x:DataType="meta:CollectionGapRow">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,0,0,6">
+                <Grid ColumnDefinitions="2*,1.5*,1.5*,220" ColumnSpacing="8">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding SeriesName}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SeriesName}" />
+                        <TextBlock Text="{Binding Publisher}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis"
+                                   IsVisible="{Binding Publisher, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="{Binding Owned}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Owned}" />
+                    <TextBlock Grid.Column="2" Text="{Binding Missing}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbDangerBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Missing}" />
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                        <Button Classes="headerAction ghost" Content="Open series"
+                                Command="{Binding $parent[controls:VirtualList].((vm:CollectionGapsViewModel)DataContext).OpenCommand}" CommandParameter="{Binding}" />
+                        <Button Classes="headerAction ghost" Content="Not a gap" ToolTip.Tip="Stop listing this series until a new gap appears"
+                                Command="{Binding $parent[controls:VirtualList].((vm:CollectionGapsViewModel)DataContext).NotAGapCommand}" CommandParameter="{Binding}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Smart features S1 (docs/superpowers/specs/2026-10-06-smart-features-design.md): one row of the Library Health list that uses ConsistencyFindingRowTemplate. -->
+        <DataTemplate x:Key="ConsistencyFindingRowTemplate" x:DataType="vm:ConsistencyFindingRow">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,0,0,6">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Border Classes="pbChip" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding CheckLabel}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            </Border>
+                            <TextBlock Text="{Binding SeriesName}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding ExpectedLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <Button Classes="headerAction ghost" Content="Open series"
+                                    Command="{Binding $parent[controls:VirtualList].((vm:MetadataConsistencyViewModel)DataContext).OpenCommand}" CommandParameter="{Binding}" />
+                            <Button Classes="headerAction ghost" Content="This is intended" ToolTip.Tip="Stop flagging this check for this series"
+                                    Command="{Binding $parent[controls:VirtualList].((vm:MetadataConsistencyViewModel)DataContext).IntendedCommand}" CommandParameter="{Binding}" />
+                        </StackPanel>
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding Outliers}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ConsistencyOutlierRow">
+                                <Button Classes="headerAction ghost" Margin="0,0,6,4" ToolTip.Tip="Open this issue in the editor"
+                                        Command="{Binding $parent[controls:VirtualList].((vm:MetadataConsistencyViewModel)DataContext).EditIssueCommand}" CommandParameter="{Binding}">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeXs}" />
+                                        <TextBlock Text="{Binding Label}" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
         <DataTemplate x:Key="MissingFileRowTemplate" x:DataType="vm:MissingFileRowViewModel">
             <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
-                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                    <!-- Likely match (docs/superpowers/specs/2026-10-06-smart-features-design.md §5.1): another library entry that probably
+                         holds this file. "Relink to this" keeps this entry (and its history) and removes the duplicate entry. -->
+                    <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,8,0,0" IsVisible="{Binding HasMatch}">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <fi:SymbolIcon Symbol="Link" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding MatchLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding MatchLabel}" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Classes="headerAction secondary" Content="Relink to this" Command="{Binding RelinkToMatchCommand}"
+                                ToolTip.Tip="Point this entry at that file and remove the duplicate entry. The file is not moved." />
+                    </Grid>
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                         <!-- Severity chip (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #5): dot + icon +
                              the text label, so colour is never the only signal. Warning = amber (PbBadge*, same family
@@ -273,16 +343,109 @@
             </Border>
         </DataTemplate>
 
-        <!-- Content Type: a series whose content type is still Unknown - opens its Detail screen. -->
+        <!-- Content Type queue (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md): a dense table row that opens in place into a card.
+             The toggle is the row's own Button (Enter/Space expand it, and a pad's A does the same through the app-wide focus keys); the actions sit beside it,
+             not inside it, so no Button is nested in another. Colour is never the only signal: a conflict shows a warning icon and the word "conflict". -->
         <DataTemplate x:Key="ContentTypeReviewRowTemplate" x:DataType="models:SeriesReviewItem">
-            <Button Classes="sideItemButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                    Command="{Binding $parent[ItemsControl].((vm:PreferencesScreenViewModel)DataContext).NeedsReview.OpenSeriesDetailCommand}"
-                    CommandParameter="{Binding}">
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0" Text="{Binding SeriesName}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                    <TextBlock Grid.Column="1" Text="Unknown" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,6">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Button Grid.Column="0" Classes="sideItemButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                Command="{Binding ToggleExpandedCommand}"
+                                AutomationProperties.Name="{Binding SeriesName, StringFormat='Details for {0}'}">
+                            <Grid ColumnDefinitions="*,82,110,2*,48" ColumnSpacing="10">
+                                <TextBlock Grid.Column="0" Text="{Binding SeriesName}" FontSize="13" Foreground="{DynamicResource PbTextBrush}"
+                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SeriesName}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding CurrentLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="{Binding HasSuggestion}">
+                                    <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding IsConflict}" />
+                                    <TextBlock Text="{Binding SuggestionLabel}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="3" Grid.ColumnSpan="2" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" IsVisible="{Binding !HasSuggestion}" Text="{Binding StatusLabel}" ToolTip.Tip="{Binding StatusLabel}" />
+                                <TextBlock Grid.Column="3" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" IsVisible="{Binding HasSuggestion}" Text="{Binding ChipSummary}" ToolTip.Tip="{Binding ChipSummary}" />
+                                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="{Binding HasSuggestion}">
+                                    <TextBlock Text="{Binding ConfidenceLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Button Classes="headerAction primary" Content="Accept" IsVisible="{Binding HasSuggestion}"
+                                    Command="{Binding $parent[ItemsControl].((vm:PreferencesScreenViewModel)DataContext).NeedsReview.AcceptContentTypeCommand}" CommandParameter="{Binding}"
+                                    ToolTip.Tip="Apply the suggested type and lock it" AutomationProperties.Name="{Binding SeriesName, StringFormat='Accept the suggested type for {0}'}" />
+                            <Button Classes="headerAction ghost" Content="Keep"
+                                    Command="{Binding $parent[ItemsControl].((vm:PreferencesScreenViewModel)DataContext).NeedsReview.KeepContentTypeCommand}" CommandParameter="{Binding}"
+                                    ToolTip.Tip="Keep the type it has now and stop asking" AutomationProperties.Name="{Binding SeriesName, StringFormat='Keep the current type of {0}'}" />
+                            <Button Classes="headerAction ghost" Content="Not a comic"
+                                    Command="{Binding $parent[ItemsControl].((vm:PreferencesScreenViewModel)DataContext).NeedsReview.SkipContentTypeCommand}" CommandParameter="{Binding}"
+                                    ToolTip.Tip="Not a comic or manga: never look this series up again" AutomationProperties.Name="{Binding SeriesName, StringFormat='Skip {0}, it is not a comic'}" />
+                        </StackPanel>
+                    </Grid>
+                    <Border IsVisible="{Binding IsExpanded}" Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                            BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,2">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <Border Grid.Column="0" Width="56" Height="80" CornerRadius="3" ClipToBounds="True" VerticalAlignment="Top"
+                                    Background="{DynamicResource PbSurface3Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+                                <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Spacing="8">
+                                <TextBlock Text="{Binding SeriesName}" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                                <TextBlock FontSize="11.5" Foreground="{DynamicResource PbBadgeBrush}" TextWrapping="Wrap" IsVisible="{Binding IsConflict}"
+                                           Text="The sources disagree on the type, so this one is never accepted in bulk." />
+                                <ItemsControl ItemsSource="{Binding Chips}" IsVisible="{Binding HasChips}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:ContentTypeEvidenceChip">
+                                            <Border CornerRadius="{StaticResource PbRadiusChip}" Padding="8,3" Margin="0,0,6,6" Background="{DynamicResource PbSurface3Brush}"
+                                                    ToolTip.Tip="{Binding ToolTip}">
+                                                <TextBlock Text="{Binding Text}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="Change to" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <WrapPanel Orientation="Horizontal">
+                                    <Button Classes="headerAction ghost" Content="Comic" Margin="0,0,6,6"
+                                            Command="{Binding $parent[ItemsControl].((vm:PreferencesScreenViewModel)DataContext).NeedsReview.ChangeContentTypeToComicCommand}" CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Manga" Margin="0,0,6,6"
+                                            Command="{Binding $parent[ItemsControl].((vm:PreferencesScreenViewModel)DataContext).NeedsReview.ChangeContentTypeToMangaCommand}" CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Manhwa" Margin="0,0,6,6"
+                                            Command="{Binding $parent[ItemsControl].((vm:PreferencesScreenViewModel)DataContext).NeedsReview.ChangeContentTypeToManhwaCommand}" CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Manhua" Margin="0,0,6,6"
+                                            Command="{Binding $parent[ItemsControl].((vm:PreferencesScreenViewModel)DataContext).NeedsReview.ChangeContentTypeToManhuaCommand}" CommandParameter="{Binding}" />
+                                    <Button Classes="headerAction ghost" Content="Open series" Margin="0,0,6,6"
+                                            Command="{Binding $parent[ItemsControl].((vm:PreferencesScreenViewModel)DataContext).NeedsReview.OpenSeriesDetailCommand}" CommandParameter="{Binding}" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- Recently auto-classified: applied on its own, one click to undo (the previous type and reading mode come back and the series is locked). -->
+        <DataTemplate x:Key="AutoClassifiedRowTemplate" x:DataType="models:SeriesReviewItem">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,6">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding SeriesName}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SeriesName}" />
+                        <TextBlock Text="{Binding ChipSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ChipSummary}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding CurrentLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <TextBlock Text="→" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding SuggestionLabel}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                        <TextBlock Text="{Binding ConfidenceLabel, StringFormat='· {0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Classes="headerAction ghost" Content="Undo" VerticalAlignment="Center"
+                            Command="{Binding $parent[ItemsControl].((vm:PreferencesScreenViewModel)DataContext).NeedsReview.UndoAutoClassifiedCommand}" CommandParameter="{Binding}"
+                            ToolTip.Tip="Put the previous type and reading mode back, and stop re-checking this series"
+                            AutomationProperties.Name="{Binding SeriesName, StringFormat='Undo the automatic classification of {0}'}" />
                 </Grid>
-            </Button>
+            </Border>
         </DataTemplate>
 
         <DataTemplate x:Key="DuplicateGroupRowTemplate" x:DataType="vm:DuplicateGroupRowViewModel">
@@ -304,7 +467,7 @@
                     <ItemsControl ItemsSource="{Binding Candidates}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:DuplicateCandidateViewModel">
-                                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,4,0,0">
+                                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" Margin="0,4,0,0">
                                     <RadioButton Grid.Column="0" GroupName="{Binding GroupKey}" IsChecked="{Binding IsKeep}" VerticalAlignment="Center"
                                                  AutomationProperties.Name="{Binding FileName, StringFormat='Keep {0}'}" />
                                     <Border Grid.Column="1" Width="28" Height="38" Margin="6,0" CornerRadius="3" ClipToBounds="True"
@@ -315,9 +478,14 @@
                                                Foreground="{DynamicResource PbTextBrush}" IsVisible="{Binding IsKeep}" />
                                     <TextBlock Grid.Column="2" Text="{Binding FileName}" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                                Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding !IsKeep}" />
-                                    <TextBlock Grid.Column="3" Text="{Binding SizeLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                    <!-- The ranker's pick, with its reason as the tooltip and accessible name (smart features §5.2). Advice only. -->
+                                    <Border Grid.Column="3" Classes="pbChip" Padding="7,1" Margin="8,0,0,0" VerticalAlignment="Center" IsVisible="{Binding IsRecommended}"
+                                            ToolTip.Tip="{Binding RecommendedReason}" AutomationProperties.Name="{Binding RecommendedReason, StringFormat='Recommended: {0}'}">
+                                        <TextBlock Text="Recommended" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource PbSuccessBrush}" />
+                                    </Border>
+                                    <TextBlock Grid.Column="4" Text="{Binding SizeLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}"
                                                VerticalAlignment="Center" Margin="10,0,0,0" />
-                                    <TextBlock Grid.Column="4" Text="{Binding DateLabel}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                                    <TextBlock Grid.Column="5" Text="{Binding DateLabel}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
                                                VerticalAlignment="Center" Margin="10,0,0,0" />
                                 </Grid>
                             </DataTemplate>
@@ -719,13 +887,36 @@
                                             <TextBlock Text="…" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" IsVisible="{Binding NeedsReview.AreCountsLoading}" />
                                         </StackPanel>
                                     </Button>
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" IsVisible="{Binding NeedsReview.HasContentTypeItems}">
-                                        
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                        <Button Classes="headerAction primary" Content="{Binding NeedsReview.AcceptAllHighConfidenceConfirm.Label}" Command="{Binding NeedsReview.AcceptAllHighConfidenceConfirm.TriggerCommand}"
+                                                IsVisible="{Binding NeedsReview.HasHighConfidenceItems}" AutomationProperties.AutomationId="LibraryHealthAcceptAllHighConfidenceButton"
+                                                ToolTip.Tip="Accept every suggestion where the match is near-exact and the sources agree. Rows with a conflict or a doubtful match are left for you." />
+                                        <Button Classes="headerAction ghost" Content="Re-check publisher guesses" Command="{Binding RecheckPublisherClassifiedCommand}"
+                                                AutomationProperties.AutomationId="LibraryHealthRecheckPublisherButton"
+                                                ToolTip.Tip="Unlocks series whose type could only have come from the publisher guess so the next Classify Library run looks at them again. A type you chose is never unlocked." />
                                     </StackPanel>
                                 </Grid>
                                 <StackPanel Spacing="8" IsVisible="{Binding LibraryHealthSections.ContentType.IsOpen}">
-                                    <TextBlock Text="Series whose content type (comic, manga, …) couldn't be worked out. Open one to set it." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="Series whose content type is unknown, or that MangaBaka, AniList or MangaDex suggested a type for. Select a row for the evidence and to change the type." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding NeedsReview.ContentTypeSummary}" IsVisible="{Binding NeedsReview.HasContentTypeSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
                                     <controls:VirtualList ItemsSource="{Binding NeedsReview.ContentTypeItems}" ItemTemplate="{StaticResource ContentTypeReviewRowTemplate}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,4" IsVisible="{Binding NeedsReview.HasAutoClassifiedItems}" Tag="library.healthAutoClassified">
+                            <StackPanel Spacing="8">
+                                <Button Classes="sideItemButton" HorizontalContentAlignment="Stretch" Padding="0"
+                                        Command="{Binding NeedsReview.ToggleAutoClassifiedOpenCommand}" AutomationProperties.AutomationId="LibraryHealthToggleAutoClassified">
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <fi:SymbolIcon Symbol="ChevronUp" IsVisible="{Binding NeedsReview.IsAutoClassifiedOpen}" FontSize="{StaticResource PbIconSizeXs}" />
+                                        <fi:SymbolIcon Symbol="ChevronDown" IsVisible="{Binding !NeedsReview.IsAutoClassifiedOpen}" FontSize="{StaticResource PbIconSizeXs}" />
+                                        <TextBlock Text="Recently auto-classified" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding NeedsReview.AutoClassifiedCountLabel, StringFormat='· {0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <StackPanel Spacing="8" IsVisible="{Binding NeedsReview.IsAutoClassifiedOpen}">
+                                    <TextBlock Text="Types applied on their own in the last 30 days, because the match was near-exact and the sources agreed. Undo puts the old type back." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                    <controls:VirtualList ItemsSource="{Binding NeedsReview.AutoClassifiedItems}" ItemTemplate="{StaticResource AutoClassifiedRowTemplate}" />
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -755,11 +946,29 @@
                                         
                                     </StackPanel>
                                 </Grid>
+                                <!-- How new proposals are handled (docs/superpowers/specs/2026-10-06-smart-features-design.md §6.1). Always shown, with
+                                     or without anything to review: the policy had no control anywhere before this. -->
+                                <WrapPanel Margin="24,0,0,0" AutomationProperties.AutomationId="LibraryHealthProposalSettings">
+                                    <ToggleSwitch IsChecked="{Binding NeedsReview.ApplyProposalsAutomatically}" OnContent="Apply new proposals automatically" OffContent="Apply new proposals automatically"
+                                                  Margin="0,0,18,0" VerticalAlignment="Center" AutomationProperties.AutomationId="ApplyProposalsAutomaticallyToggle"
+                                                  ToolTip.Tip="Off: every new proposal waits here until you accept it." />
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsEnabled="{Binding NeedsReview.ApplyProposalsAutomatically}">
+                                        <TextBlock x:Name="AutoApplyThresholdCaption" Text="Only when confidence is at least" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        <Slider Width="150" Minimum="0" Maximum="100" TickFrequency="5" IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                                Value="{Binding NeedsReview.AutoApplyThresholdPercent}" AutomationProperties.LabeledBy="{Binding #AutoApplyThresholdCaption}"
+                                                AutomationProperties.AutomationId="AutoApplyThresholdSlider"
+                                                ToolTip.Tip="Proposals read from a file name have a confidence of 60%. Proposals from a metadata provider always apply." />
+                                        <TextBlock Text="{Binding NeedsReview.AutoApplyThresholdLabel}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" MinWidth="110" />
+                                    </StackPanel>
+                                </WrapPanel>
                                 <StackPanel Spacing="8" IsVisible="{Binding LibraryHealthSections.Proposals.IsOpen}">
                                     <StackPanel Spacing="8" IsVisible="{Binding NeedsReview.HasPendingProposalItems}">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBlock Grid.Column="0" Text="{Binding NeedsReview.PendingProposalCountLabel, StringFormat='Pending · {0}'}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                                <!-- Accepts only the pending proposals at or above the confidence threshold; absent while the threshold is 0. -->
+                                                <Button Classes="headerAction secondary" Content="{Binding NeedsReview.AcceptAboveThresholdConfirm.Label}" Command="{Binding NeedsReview.AcceptAboveThresholdConfirm.TriggerCommand}"
+                                                        IsVisible="{Binding NeedsReview.HasThresholdAccept}" AutomationProperties.AutomationId="LibraryHealthAcceptAboveThresholdButton" />
                                                 <Button Classes="headerAction primary" Content="{Binding NeedsReview.AcceptAllProposalsConfirm.Label}" Command="{Binding NeedsReview.AcceptAllProposalsConfirm.TriggerCommand}" AutomationProperties.AutomationId="LibraryHealthAcceptAllProposalsButton" />
                                                 <Button Classes="headerAction ghost" Content="{Binding NeedsReview.RejectAllProposalsConfirm.Label}" Command="{Binding NeedsReview.RejectAllProposalsConfirm.TriggerCommand}" AutomationProperties.AutomationId="LibraryHealthRejectAllProposalsButton" />
                                             </StackPanel>
@@ -984,6 +1193,116 @@
                                 </StackPanel>
                             </StackPanel>
                         </Border>
+                        <!-- Collection gaps (docs/superpowers/specs/2026-10-06-smart-features-design.md §3.3): every series with holes in its run of
+                             owned issue numbers, as a compact table. Scanned when the section is opened and on Rescan. -->
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,4" Tag="library.healthCollectionGaps">
+                            <StackPanel Spacing="8" DataContext="{Binding CollectionGaps}" x:DataType="vm:CollectionGapsViewModel">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Button Grid.Column="0" Classes="sideItemButton" HorizontalContentAlignment="Stretch" Padding="0"
+                                            Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.CollectionGaps.ToggleCommand}"
+                                            AutomationProperties.AutomationId="LibraryHealthToggleCollectionGaps">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <fi:SymbolIcon Symbol="NumberSymbol" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                            <TextBlock Text="Collection gaps" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding HeaderDetail}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="1" Classes="headerAction ghost" Command="{Binding ScanCommand}" AutomationProperties.AutomationId="RescanCollectionGapsButton">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" />
+                                            <TextBlock Text="Rescan" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+
+                                <StackPanel Spacing="8" IsVisible="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.CollectionGaps.IsOpen}">
+                                    <TextBlock Text="Series where the issue numbers you own skip one or more. Only whole numbers count; annuals, specials and wanted issues are ignored."
+                                               FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="No gaps: every run you own is unbroken." IsVisible="{Binding IsClean}"
+                                               FontSize="11.5" Foreground="{DynamicResource PbSuccessBrush}" TextWrapping="Wrap" />
+
+                                    <Grid ColumnDefinitions="2*,1.5*,1.5*,220" Margin="12,0" IsVisible="{Binding HasRows}">
+                                        <TextBlock Grid.Column="0" Text="SERIES" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        <TextBlock Grid.Column="1" Text="OWNED" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        <TextBlock Grid.Column="2" Text="MISSING" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                    </Grid>
+                                    <controls:VirtualList ItemsSource="{Binding Rows}" IsVisible="{Binding HasRows}" ItemTemplate="{StaticResource CollectionGapRowTemplate}" />
+
+                                    <StackPanel Spacing="8" IsVisible="{Binding HasDismissed}">
+                                        <Button Classes="sideItemButton" HorizontalContentAlignment="Stretch" Padding="0"
+                                                Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.CollectionGapsDismissed.ToggleCommand}"
+                                                AutomationProperties.AutomationId="LibraryHealthToggleCollectionGapsDismissed">
+                                            <TextBlock Text="{Binding DismissedHeader}" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        </Button>
+                                        <controls:VirtualList ItemsSource="{Binding Dismissed}" MaxListHeight="220"
+                                                              IsVisible="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.CollectionGapsDismissed.IsOpen}">
+                                            <controls:VirtualList.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:DismissedFindingRow">
+                                                    <Grid ColumnDefinitions="*,Auto" Margin="12,2">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                        <Button Grid.Column="1" Classes="headerAction ghost" Content="Restore" ToolTip.Tip="Put this back in the list above"
+                                                                Command="{Binding $parent[controls:VirtualList].((vm:CollectionGapsViewModel)DataContext).RestoreCommand}" CommandParameter="{Binding}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </controls:VirtualList.ItemTemplate>
+                                        </controls:VirtualList>
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Metadata consistency (same spec, §3.4): issues whose year, publisher or age rating disagrees with the rest of their series.
+                             Report-only; each outlier opens in the issue editor. -->
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,4" Tag="library.healthMetadataConsistency">
+                            <StackPanel Spacing="8" DataContext="{Binding MetadataConsistency}" x:DataType="vm:MetadataConsistencyViewModel">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Button Grid.Column="0" Classes="sideItemButton" HorizontalContentAlignment="Stretch" Padding="0"
+                                            Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.MetadataConsistency.ToggleCommand}"
+                                            AutomationProperties.AutomationId="LibraryHealthToggleMetadataConsistency">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                            <TextBlock Text="Metadata consistency" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding HeaderDetail}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="1" Classes="headerAction ghost" Command="{Binding ScanCommand}" AutomationProperties.AutomationId="RescanMetadataConsistencyButton">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" />
+                                            <TextBlock Text="Rescan" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+
+                                <StackPanel Spacing="8" IsVisible="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.MetadataConsistency.IsOpen}">
+                                    <TextBlock Text="Issues whose year, publisher or age rating differs from most of their series. Nothing is changed for you: open an issue to correct it, or mark the series as intended."
+                                               FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="Nothing inconsistent: every series agrees with itself." IsVisible="{Binding IsClean}"
+                                               FontSize="11.5" Foreground="{DynamicResource PbSuccessBrush}" TextWrapping="Wrap" />
+
+                                    <controls:VirtualList ItemsSource="{Binding Rows}" IsVisible="{Binding HasRows}" ItemTemplate="{StaticResource ConsistencyFindingRowTemplate}" />
+
+                                    <StackPanel Spacing="8" IsVisible="{Binding HasDismissed}">
+                                        <Button Classes="sideItemButton" HorizontalContentAlignment="Stretch" Padding="0"
+                                                Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.MetadataConsistencyDismissed.ToggleCommand}"
+                                                AutomationProperties.AutomationId="LibraryHealthToggleMetadataConsistencyDismissed">
+                                            <TextBlock Text="{Binding DismissedHeader}" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        </Button>
+                                        <controls:VirtualList ItemsSource="{Binding Dismissed}" MaxListHeight="220"
+                                                              IsVisible="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.MetadataConsistencyDismissed.IsOpen}">
+                                            <controls:VirtualList.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:DismissedFindingRow">
+                                                    <Grid ColumnDefinitions="*,Auto" Margin="12,2">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                        <Button Grid.Column="1" Classes="headerAction ghost" Content="Restore" ToolTip.Tip="Put this back in the list above"
+                                                                Command="{Binding $parent[controls:VirtualList].((vm:MetadataConsistencyViewModel)DataContext).RestoreCommand}" CommandParameter="{Binding}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </controls:VirtualList.ItemTemplate>
+                                        </controls:VirtualList>
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
 
                     <!-- Files: file and row hygiene -->
@@ -1008,6 +1327,10 @@
                                         </StackPanel>
                                     </Button>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasMissingFileItems}">
+                                        <!-- Relinks every row whose match has the same size and page count (smart features §5.1); two clicks. -->
+                                        <Button Classes="headerAction secondary" Content="{Binding RelinkExactMatchesConfirm.Label}" Command="{Binding RelinkExactMatchesConfirm.TriggerCommand}"
+                                                IsVisible="{Binding HasExactMissingFileMatches}" ToolTip.Tip="{Binding RelinkExactMatchesLabel}"
+                                                AutomationProperties.AutomationId="LibraryHealthRelinkExactMatchesButton" />
                                         <Button Classes="headerAction ghost" Content="Dismiss All" Command="{Binding BulkDismissMissingFilesCommand}" AutomationProperties.AutomationId="LibraryHealthDismissAllButton" />
                                         <Button Classes="headerAction ghost" Content="Relink All from Folder…" Command="{Binding BulkRelinkMissingFilesCommand}" AutomationProperties.AutomationId="LibraryHealthRelinkAllButton" />
                                     </StackPanel>
@@ -1245,6 +1568,22 @@
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="ArrowClockwise" />
                                     <TextBlock Text="Sync Metadata" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="headerAction ghost" Margin="0,0,10,10" Command="{Binding ClassifyLibraryCommand}"
+                                    IsEnabled="{Binding !IsAnyComicFolderOperationRunning}"
+                                    ToolTip.Tip="Looks unknown series up on MangaBaka, AniList and MangaDex to tell manga, manhwa and manhua apart. Confident matches are applied with an Undo; the rest wait in Library Health &gt; Review. A type you chose is never changed">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <fi:SymbolIcon Symbol="Tag" />
+                                    <TextBlock Text="Classify Library" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="headerAction ghost" Margin="0,0,10,10" Command="{Binding RecheckPublisherClassifiedCommand}"
+                                    IsEnabled="{Binding !IsAnyComicFolderOperationRunning}"
+                                    ToolTip.Tip="Unlocks series whose type could only have come from the publisher guess, so Classify Library looks at them again. A type you chose yourself is never unlocked">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <fi:SymbolIcon Symbol="ArrowUndo" />
+                                    <TextBlock Text="Re-check publisher guesses" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="headerAction ghost" Margin="0,0,10,10" Command="{Binding RepairMissingCoversCommand}"

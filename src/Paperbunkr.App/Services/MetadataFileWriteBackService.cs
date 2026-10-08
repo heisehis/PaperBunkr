@@ -17,6 +17,9 @@ public enum MetadataWriteBackResult
 {
     Success,
 
+    /// <summary>ComicInfo.xml (and the sidecar) were written, but building <c>MetronInfo.xml</c> failed - the message says why.</summary>
+    SuccessWithoutMetronInfo,
+
     /// <summary>Fileless entry, no <see cref="Data.Entities.Issue.FilePath"/>, or the file is gone from disk.</summary>
     SkippedMissingFile,
 
@@ -72,12 +75,17 @@ public class MetadataFileWriteBackService
         _contextFactory = contextFactory;
     }
 
-    public Task<MetadataWriteBackOutcome> WriteAsync(int issueId, bool includeSidecar, CancellationToken ct = default)
+    public Task<MetadataWriteBackOutcome> WriteAsync(int issueId, bool includeSidecar, CancellationToken ct = default) =>
+        WriteAsync(issueId, includeSidecar, includeMetronInfo: false, ct);
+
+    /// <param name="includeMetronInfo">Also write a <c>MetronInfo.xml</c> (docs/superpowers/specs/2026-10-05-
+    /// metroninfo-write-back-design.md). When false, one the file already has is left exactly as it is.</param>
+    public Task<MetadataWriteBackOutcome> WriteAsync(int issueId, bool includeSidecar, bool includeMetronInfo, CancellationToken ct = default)
     {
-        return Task.Run(() => Write(issueId, includeSidecar, ct), ct);
+        return Task.Run(() => Write(issueId, includeSidecar, includeMetronInfo, ct), ct);
     }
 
-    private MetadataWriteBackOutcome Write(int issueId, bool includeSidecar, CancellationToken ct)
+    private MetadataWriteBackOutcome Write(int issueId, bool includeSidecar, bool includeMetronInfo, CancellationToken ct)
     {
         using var context = _contextFactory();
         var issue = context.Issues
@@ -143,6 +151,26 @@ public class MetadataFileWriteBackService
                 entries["paperbunkr.json"] = PaperbunkrSidecar.FromIssue(issue).ToJsonBytes();
             }
 
+            // A MetronInfo.xml that can't be built must not cost the user the ComicInfo.xml write.
+            string? metronInfoError = null;
+            if (includeMetronInfo)
+            {
+                try
+                {
+                    var metron = ReadExistingMetronInfo(path, isFolder) ?? new MetronInfo();
+                    IssueToMetronInfoMapper.Apply(issue, metron, MetronIdContext.FromDatabase(context, issue));
+                    entries["MetronInfo.xml"] = metron.ToArray();
+                }
+                catch (Exception ex)
+                {
+                    metronInfoError = ex.Message;
+                }
+            }
+
+            var written = metronInfoError is null
+                ? new MetadataWriteBackOutcome(MetadataWriteBackResult.Success, fileName, null)
+                : new MetadataWriteBackOutcome(MetadataWriteBackResult.SuccessWithoutMetronInfo, fileName, metronInfoError);
+
             if (isFolder)
             {
                 foreach (var entry in entries)
@@ -152,7 +180,7 @@ public class MetadataFileWriteBackService
                     File.WriteAllBytes(entryPath, entry.Value);
                 }
 
-                return new MetadataWriteBackOutcome(MetadataWriteBackResult.Success, fileName, null);
+                return written;
             }
 
             UpdateZipEntries(path, entries);
@@ -164,12 +192,41 @@ public class MetadataFileWriteBackService
                 context.SaveChanges();
             }
 
-            return new MetadataWriteBackOutcome(MetadataWriteBackResult.Success, fileName, null);
+            return written;
         }
         catch (Exception ex)
         {
             return new MetadataWriteBackOutcome(MetadataWriteBackResult.Failed, fileName, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// The file's current <c>MetronInfo.xml</c>, so what Paperbunkr holds nothing for (prices, universes,
+    /// reprints, another tool's ids) survives the rewrite. Null when there is none or it doesn't parse.
+    /// </summary>
+    private static MetronInfo? ReadExistingMetronInfo(string path, bool isFolder)
+    {
+        if (isFolder)
+        {
+            string entryPath = Path.Combine(path, "MetronInfo.xml");
+            if (!File.Exists(entryPath))
+            {
+                return null;
+            }
+
+            using var file = File.OpenRead(entryPath);
+            return MetronInfo.TryRead(file);
+        }
+
+        using var zip = ZipFile.OpenRead(path);
+        var entry = zip.Entries.FirstOrDefault(e => string.Equals(e.FullName, "MetronInfo.xml", StringComparison.OrdinalIgnoreCase));
+        if (entry is null)
+        {
+            return null;
+        }
+
+        using var stream = entry.Open();
+        return MetronInfo.TryRead(stream);
     }
 
     /// <summary>

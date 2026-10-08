@@ -20,4 +20,8 @@ public sealed class HomeContinueReadingCard
     /// "how many issues does this series have" badge on a card whose whole point is "here's the
     /// exact issue you're mid-way through" was the wrong piece of information to surface.</summary>
     public required string ResumeIssueBadge { get; init; }
+
+    /// <summary>"~25 min left" for the issue being resumed (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.2), or null
+    /// when there is no reading pace yet.</summary>
+    public string? TimeLeft { get; init; }
 }

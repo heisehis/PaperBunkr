@@ -26,6 +26,7 @@ public static class PluginGlobalsTypeMap
         [PluginHooks.LibraryScanCompleted] = typeof(LibraryScanCompletedHookGlobals),
         [PluginHooks.MissingFileDetected] = typeof(MissingFileDetectedHookGlobals),
         [PluginHooks.ReadingListChanged] = typeof(ReadingListChangedHookGlobals),
+        [PluginHooks.ContinuityCompleted] = typeof(ContinuityCompletedHookGlobals),
     };
 
     public static Type Resolve(string hook)

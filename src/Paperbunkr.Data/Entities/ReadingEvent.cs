@@ -45,6 +45,14 @@ public class ReadingEvent
     /// </summary>
     public int? PagesRead { get; set; }
 
+    /// <summary>
+    /// Seconds of active reading in the session this row represents (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.1):
+    /// time the reader was showing and the user had given input within the idle cutoff. Written at session teardown onto the same
+    /// <see cref="ReadingEventKind.Opened"/> row as <see cref="PagesRead"/>, so the two form one pace sample. Null for every row written
+    /// before this existed (no backfill) and for sessions too short to have a page delta; the pace calculation ignores nulls.
+    /// </summary>
+    public int? ActiveSeconds { get; set; }
+
     /// <summary>Frozen <see cref="Issue.SeriesId"/> / <see cref="Book.BookSeriesId"/> at write time. Nullable (standalone novel).</summary>
     public int? SeriesId { get; set; }
 

@@ -20,6 +20,10 @@ public static class PanelDetectionService
     private static readonly object Gate = new();
     private static OnnxPanelDetector? _onnx;
     private static bool _onnxTried;
+    private static bool _onnxFailed;
+
+    // Readers are inferences in flight; the writer is Unload, which must not free the native session under one of them.
+    private static readonly System.Threading.ReaderWriterLockSlim SessionLock = new();
     private static string? _modelPath;
 
     /// <summary>Where the model file lives. Defaults to <c>Models/panel-detector.onnx</c> next to the executable; the harness overrides it.</summary>
@@ -34,12 +38,21 @@ public static class PanelDetectionService
                 _onnx?.Dispose();
                 _onnx = null;
                 _onnxTried = false;
+                _onnxFailed = false;
             }
         }
     }
 
     /// <summary>False when the model was never loaded (missing file, unsupported runtime): the heuristic is doing all the work.</summary>
     public static bool OnnxAvailable => GetOnnx() is not null;
+
+    /// <summary>
+    /// Whether the model keeps ONNX Runtime's CPU memory arena between pages. Read when the model is loaded. Off: measured
+    /// 2026-10-07 on a 2-core machine with a 1988x3056 page, the arena cost about 300 MB of process memory after seven pages
+    /// (it keeps growing for the first several) against 20-60 MB without it, for the same time per page (about 250-340 ms
+    /// either way, within run-to-run noise).
+    /// </summary>
+    public static bool UseCpuArena { get; set; }
 
     /// <summary>Set to false to skip the model (used by the harness to measure the heuristic alone).</summary>
     public static bool UseOnnx { get; set; } = true;
@@ -63,7 +76,7 @@ public static class PanelDetectionService
             {
                 if (File.Exists(ModelPath))
                 {
-                    _onnx = new OnnxPanelDetector(ModelPath);
+                    _onnx = new OnnxPanelDetector(ModelPath, UseCpuArena);
                 }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -96,29 +109,71 @@ public static class PanelDetectionService
 
     private static PagePanels DetectPage(SKBitmap page, bool rightToLeft)
     {
-        var onnx = GetOnnx();
-        if (onnx is not null)
+        bool failed = false;
+        SessionLock.EnterReadLock();
+        try
         {
-            try
+            var onnx = GetOnnx();
+            if (onnx is not null)
             {
-                var result = onnx.Detect(page, rightToLeft);
-                if (result.Confident)
+                try
                 {
-                    return result;
+                    var result = onnx.Detect(page, rightToLeft);
+                    if (result.Confident)
+                    {
+                        return result;
+                    }
                 }
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                // A failing session is treated like a missing one from now on.
-                lock (Gate)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    _onnx?.Dispose();
-                    _onnx = null;
+                    failed = true;
                 }
             }
         }
+        finally
+        {
+            SessionLock.ExitReadLock();
+        }
+
+        if (failed)
+        {
+            // A failing session is treated like a missing one from now on.
+            Unload(failedForGood: true);
+        }
 
         return SkPanelAnalyzer.Analyze(page, rightToLeft);
+    }
+
+    /// <summary>
+    /// Frees the model and its native memory; the next <see cref="Detect"/> loads it again (about a second, once). Called when the
+    /// user leaves the Reader (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.5): the session otherwise stays
+    /// resident for the rest of the app run after one guided-view page. Waits for any inference in flight, so call it off the UI thread.
+    /// </summary>
+    public static void Unload() => Unload(failedForGood: false);
+
+    private static void Unload(bool failedForGood)
+    {
+        SessionLock.EnterWriteLock();
+        try
+        {
+            lock (Gate)
+            {
+                _onnx?.Dispose();
+                _onnx = null;
+                _onnxFailed |= failedForGood;
+                _onnxTried = _onnxFailed;
+            }
+        }
+        finally
+        {
+            SessionLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>True while the model is in memory (tests and diagnostics).</summary>
+    public static bool IsLoaded
+    {
+        get { lock (Gate) { return _onnx is not null; } }
     }
 
     /// <summary>Tall strips are cut at their empty bands (no model: it boxes speech balloons, and strips have no side-by-side panels); no bands means the whole page.</summary>

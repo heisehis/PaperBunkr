@@ -47,6 +47,87 @@ internal static class SkiaBitmapConverter
     }
 
     /// <summary>
+    /// An <see cref="SKImage"/> over <paramref name="source"/>'s <b>own</b> pixels: no copy. For drawing a page through a leased
+    /// canvas (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md, measured 2026-10-08): <see cref="ToSkImage"/>
+    /// makes three full-page buffers to produce one image (a 24 MB byte array on the large object heap, a scratch
+    /// <see cref="WriteableBitmap"/> and the image's own copy), and the reader kept one such image per visible page for as long
+    /// as an image adjustment was on - four of them, over 100 MB, in the measured session.
+    ///
+    /// The returned image is the caller's to dispose, exactly like <see cref="ToSkImage"/>'s. It holds its own reference to the
+    /// bitmap's pixel storage and releases it when the image is destroyed, so it stays valid even if the reader pipeline
+    /// disposes <paramref name="source"/> first (the reason callers convert up front at all).
+    ///
+    /// Avalonia has no public way to reach a bitmap's Skia image (see the class remarks), so this reads two non-public members
+    /// (<c>Bitmap.PlatformImpl</c> and <c>Avalonia.Skia.ImmutableBitmap._image</c>, as of Avalonia 12.1). If either is missing in
+    /// a later version, or the bitmap is not a plain decoded one (a <see cref="WriteableBitmap"/>), it falls back to
+    /// <see cref="ToSkImage"/>: slower and larger, never wrong. Pixels keep the bitmap's own colour and alpha type, so use it
+    /// for drawing, not for code that reads raw bytes in a fixed channel order.
+    /// </summary>
+    public static SKImage ShareSkImage(Bitmap source) => TryShareSkImage(source) ?? ToSkImage(source);
+
+    private static readonly System.Reflection.PropertyInfo? s_platformImpl = typeof(Bitmap).GetProperty(
+        "PlatformImpl", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, System.Reflection.FieldInfo?> s_imageFields = new();
+
+    /// <summary>The zero-copy image, or null when this bitmap (or this Avalonia version) does not allow it. Internal for tests.</summary>
+    internal static SKImage? TryShareSkImage(Bitmap source)
+    {
+        IDisposable? keepAlive = null;
+        try
+        {
+            if (s_platformImpl?.GetValue(source) is not { } reference)
+            {
+                return null;
+            }
+
+            var referenceType = reference.GetType();
+            object? impl = referenceType.GetProperty("Item")?.GetValue(reference);
+            if (impl is null || impl.GetType().FullName != "Avalonia.Skia.ImmutableBitmap")
+            {
+                return null;
+            }
+
+            var imageField = s_imageFields.GetOrAdd(impl.GetType(), static type =>
+                type.GetField("_image", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
+            if (imageField?.GetValue(impl) is not SKImage inner)
+            {
+                return null;
+            }
+
+            // Our own counted reference to the bitmap's storage: Avalonia frees the pixels when the last one goes.
+            keepAlive = referenceType.GetMethod("Clone", Type.EmptyTypes)?.Invoke(reference, null) as IDisposable;
+            if (keepAlive is null)
+            {
+                return null;
+            }
+
+            using var pixmap = inner.PeekPixels();
+            if (pixmap is null || pixmap.GetPixels() == IntPtr.Zero)
+            {
+                return null; // not a raster image: nothing to share
+            }
+
+            var held = keepAlive;
+            var shared = SKImage.FromPixels(pixmap, (_, _) => held.Dispose());
+            if (shared is not null)
+            {
+                keepAlive = null; // now released by the image itself
+            }
+
+            return shared;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null; // a changed internal shape, or a bitmap disposed under us: the caller's copy path decides what happens next
+        }
+        finally
+        {
+            keepAlive?.Dispose();
+        }
+    }
+
+    /// <summary>
     /// The reverse direction of <see cref="ToSkImage"/> - a raw <see cref="SKBitmap"/> (decoded
     /// straight off a <c>SkiaSharp.SKCodec</c> scanline session, docs/superpowers/specs/2026-09-09-
     /// reader-webtoon-strip-band-decode-design.md §4.1) into a real Avalonia <see cref="Bitmap"/>.

@@ -9,7 +9,8 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
 {
     public class TarSharpZipEngine : FileBasedAccessor
     {
-        private const int BufferSize = 131072;
+        // 64 KB, not CE's 128 KB: on .NET a buffer of 85,000 bytes or more is allocated on the large object heap, which is only cleaned by a full collection. One was allocated per archive opened, and a heap dump (2026-10-07) found 770 dead ones holding 100 MB.
+        private const int BufferSize = 65536;
 
         public TarSharpZipEngine()
             : base(5)

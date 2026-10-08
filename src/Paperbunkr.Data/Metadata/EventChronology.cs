@@ -84,6 +84,97 @@ public static class EventChronology
     }
 
     /// <summary>
+    /// The loops among the directional <paramref name="relations"/>: groups of events each of which is, by those relations, both before
+    /// and after the others ("A is a prequel of B" and "B is a prequel of A"). <see cref="Order"/> still returns an order for these by
+    /// breaking the loop at the earliest-dated event, silently; this is how a caller finds out and says so
+    /// (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.2). Each loop is listed once, smallest event id first.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<int>> FindCycles(IEnumerable<int> eventIds, IEnumerable<(int Source, int Target, RelationType Type)> relations)
+    {
+        var ids = eventIds.ToHashSet();
+        var successors = ids.ToDictionary(id => id, _ => new HashSet<int>());
+        foreach (var (source, target, type) in relations)
+        {
+            if (Direction(source, target, type) is { } d && d.Earlier != d.Later && ids.Contains(d.Earlier) && ids.Contains(d.Later))
+            {
+                successors[d.Earlier].Add(d.Later);
+            }
+        }
+
+        // Tarjan's strongly connected components, iteratively (an event graph can be deep enough to make recursion a risk).
+        var index = new Dictionary<int, int>();
+        var low = new Dictionary<int, int>();
+        var onStack = new HashSet<int>();
+        var stack = new Stack<int>();
+        var cycles = new List<IReadOnlyList<int>>();
+        int next = 0;
+
+        foreach (int root in ids.OrderBy(id => id))
+        {
+            if (index.ContainsKey(root))
+            {
+                continue;
+            }
+
+            var work = new Stack<(int Node, IEnumerator<int> Edges)>();
+            index[root] = low[root] = next++;
+            stack.Push(root);
+            onStack.Add(root);
+            work.Push((root, successors[root].OrderBy(id => id).GetEnumerator()));
+
+            while (work.Count > 0)
+            {
+                var (node, edges) = work.Peek();
+                if (edges.MoveNext())
+                {
+                    int to = edges.Current;
+                    if (!index.ContainsKey(to))
+                    {
+                        index[to] = low[to] = next++;
+                        stack.Push(to);
+                        onStack.Add(to);
+                        work.Push((to, successors[to].OrderBy(id => id).GetEnumerator()));
+                    }
+                    else if (onStack.Contains(to))
+                    {
+                        low[node] = Math.Min(low[node], index[to]);
+                    }
+
+                    continue;
+                }
+
+                work.Pop();
+                if (work.Count > 0)
+                {
+                    int parent = work.Peek().Node;
+                    low[parent] = Math.Min(low[parent], low[node]);
+                }
+
+                if (low[node] == index[node])
+                {
+                    var component = new List<int>();
+                    int member;
+                    do
+                    {
+                        member = stack.Pop();
+                        onStack.Remove(member);
+                        component.Add(member);
+                    }
+                    while (member != node);
+
+                    if (component.Count > 1)
+                    {
+                        component.Sort();
+                        cycles.Add(component);
+                    }
+                }
+            }
+        }
+
+        return cycles.OrderBy(c => c[0]).ToList();
+    }
+
+    /// <summary>
     /// An issue's date key: the Grand Comics Database on-sale (else key) date when the issue is matched and <paramref name="gcdDates"/>
     /// has it (docs/superpowers/specs/2026-09-27-gcd-data-design.md §4), else its cover date.
     /// </summary>

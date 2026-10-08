@@ -279,7 +279,7 @@ public class LibraryContextMenuBuilderTests : IDisposable
         Assert.Equal(new[]
         {
             "Open Series", "Bulk Edit…", "Mark as", "Add to Reading List", "Add to Collection",
-            "Content Type", "Publication Status", "Reading Status",
+            "Content Type", "Publication Status", "Reading Status", "Classify from trackers",
             "Scrape…", "Organize…", "Refresh", "Show in Explorer", "Copy file paths",
             "Select All", "Invert Selection", "Clear Selection", "Delete Series…",
         }, headers);

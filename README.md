@@ -331,10 +331,6 @@ A cover-forward dashboard driven by a relationship-aware recommendation engine.
 ### Insights
 
 <p align="center">
-  <img src="docs/assets/insights.png" alt="The Insights → Stats view" width="820" />
-</p>
-
-<p align="center">
   <img src="docs/assets/insights-trends.png" alt="Insights → Trends, highlights and reading activity" width="820" />
 </p>
 

@@ -1016,6 +1016,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         // primary genre is the first genre tag (a small extra query - Tags aren't Included here).
         _sessionStartPage = issue.LastPageRead ?? 0;
         _sessionMaxPage = _sessionStartPage;
+        MarkIssueActiveTimeStart();
         _finishedEmittedThisSession = false;
         _sessionSeriesId = series.Id;
         _sessionPublisher = string.IsNullOrWhiteSpace(issue.Publisher) ? series.Publisher : issue.Publisher;
@@ -2405,7 +2406,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        _readingEventRecorder?.UpdateSessionPages(ReadingItemType.Comic, issueId, _sessionMaxPage - _sessionStartPage);
+        _readingEventRecorder?.UpdateSessionPages(ReadingItemType.Comic, issueId, _sessionMaxPage - _sessionStartPage, TakeIssueActiveSeconds());
     }
 
     /// <summary>Shared by <see cref="GoToPage"/> (paged mode, immediate) and <see cref="OnCurrentContinuousPageIndexChanged"/> (continuous mode, per scroll-frame) so the format string/progress formula can't drift between the two paths.</summary>

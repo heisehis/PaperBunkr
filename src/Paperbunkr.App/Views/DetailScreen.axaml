@@ -55,10 +55,17 @@
 
             <views:DetailBand DataContext="{Binding Band}">
                 <views:DetailBand.LeadingContent>
-                    <controls:SuggestBox Classes="contentTypePicker" IsStrict="True"
-                                         Text="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).SelectedContentTypeText}"
-                                         Suggestions="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).ContentTypeNames}"
-                                         ToolTip.Tip="Content Type" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <controls:SuggestBox Classes="contentTypePicker" IsStrict="True"
+                                             Text="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).SelectedContentTypeText}"
+                                             Suggestions="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).ContentTypeNames}"
+                                             ToolTip.Tip="Content Type" />
+                        <Button Classes="headerAction ghost" Content="Undo" VerticalAlignment="Center"
+                                IsVisible="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).CanUndoContentType}"
+                                Command="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).UndoContentTypeCommand}"
+                                ToolTip.Tip="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).UndoContentTypeLabel, StringFormat='{}{0}. Undo puts the old type back.'}"
+                                AutomationProperties.Name="Undo the automatic content type" />
+                    </StackPanel>
                 </views:DetailBand.LeadingContent>
             </views:DetailBand>
 

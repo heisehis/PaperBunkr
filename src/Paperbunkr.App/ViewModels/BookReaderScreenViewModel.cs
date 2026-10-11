@@ -96,6 +96,9 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     private long _sessionStartCharOffset;
     private bool _finishedEmittedThisSession;
 
+    /// <summary>Active reading time for the open book, stored with the session's page delta (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.1).</summary>
+    private readonly Services.Reader.ReaderActivityTracker _activity = new();
+
     public BookReaderScreenViewModel(Action goBack, IReadingEventRecorder? readingEventRecorder = null)
     {
         _goBack = goBack;
@@ -462,6 +465,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         _sessionStartCharOffset = CharOffsetOf(_position);
         _finishedEmittedThisSession = false;
         _readingEventRecorder?.RecordOpened(ReadingItemType.Novel, _book.Id, _book.BookSeriesId, publisher: null, primaryGenre: null);
+        _activity.Start();
 
         IsChromeVisible = false;
         IsTocOpen = false;
@@ -732,6 +736,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     /// </summary>
     public void OnPositionCaptured(string blockId, double progressionFraction, string excerpt)
     {
+        _activity.NoteInput(); // the position only moves when the reader scrolls or turns a page
         if (_source is null)
         {
             return;
@@ -1242,7 +1247,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         int pages = ReadingPageMath.EstimatePagesFromChars(CharOffsetOf(_position) - _sessionStartCharOffset);
-        _readingEventRecorder?.UpdateSessionPages(ReadingItemType.Novel, _bookId, pages);
+        _readingEventRecorder?.UpdateSessionPages(ReadingItemType.Novel, _bookId, pages, _activity.Stop());
     }
 
     private void RecomputeCurrentPage()

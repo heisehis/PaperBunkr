@@ -72,6 +72,23 @@ public class WorkspaceStateTests
     }
 
     [Fact]
+    public void BlobSavedBeforeLenses_LoadsAsTheAllLens_AndKeepsItsUnreadFilter()
+    {
+        var state = WorkspaceStateJson.DeserializeLibrary("{\"FilterUnreadOnly\":true,\"IssueListSortField\":\"Opened\"}");
+
+        Assert.Equal(LibraryLens.All, state.Lens);
+        Assert.True(state.FilterUnreadOnly);
+    }
+
+    [Fact]
+    public void Lens_RoundTrips()
+    {
+        var restored = WorkspaceStateJson.DeserializeLibrary(WorkspaceStateJson.Serialize(new LibraryWorkspaceState(Lens: LibraryLens.Reading)));
+
+        Assert.Equal(LibraryLens.Reading, restored.Lens);
+    }
+
+    [Fact]
     public void UnknownKey_IsIgnored()
     {
         var state = WorkspaceStateJson.DeserializeLibrary("{\"ViewMode\":\"List\",\"SomethingRemovedLater\":true}");

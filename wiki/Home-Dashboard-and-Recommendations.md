@@ -10,6 +10,12 @@ are and what to read next.
 Issues you have in progress, most recent first, each with a **Read Now** button that drops
 you back exactly where you stopped. Empty until you've started something.
 
+### Up next
+
+A short ranked list of what to read next. Each row says why it is there, for example *Almost done: 2 issues left*, *Stalled 27 days* or *You read this recently*, and gives an estimate of how long the issue takes at your pace.
+
+![Home, Continue Reading and Up next](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/home-up-next.png)
+
 ### Recently Added
 
 The newest issues to enter your library, with **View Library →** to see the rest.
@@ -21,6 +27,8 @@ recommendation engine. **This needs data to work:** it draws on the **related se
 **continuities**, and **story events** you've linked from series
 [detail pages](Story-Events-and-Relations). With nothing linked yet, it shows a prompt
 instead of picks. **Refresh** re-runs it.
+
+![Home, Collections and Because you read rows](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/home-recommendations.png)
 
 ### Try This Reading List
 

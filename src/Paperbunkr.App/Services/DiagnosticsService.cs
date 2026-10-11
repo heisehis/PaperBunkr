@@ -243,6 +243,16 @@ public static class DiagnosticsService
         sb.AppendLine($".NET         : {Environment.Version}");
         sb.AppendLine($"Processors   : {Environment.ProcessorCount}");
         sb.AppendLine($"Working set  : {Environment.WorkingSet / 1024 / 1024} MB");
+
+        // Where the memory is (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.1). A report must still be
+        // written if reading it fails.
+        try
+        {
+            sb.Append(Performance.PerformanceSnapshot.Capture().Describe());
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private static void AppendException(StringBuilder sb, Exception? exception)

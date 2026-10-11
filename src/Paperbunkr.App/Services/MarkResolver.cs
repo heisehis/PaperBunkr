@@ -58,6 +58,58 @@ public sealed class MarkResolver
     private readonly PublisherIconIndex _publisherIcons;
     private readonly Dictionary<string, Uri> _publisherIconUris;
 
+    // The user's own logos (docs/superpowers/specs/2026-10-04-publisher-icons-user-folder-and-gaps-design.md): files in UserIconsFolder, indexed
+    // with the same CE filename rules as the bundled pack, and consulted FIRST - an icon you dropped in wins over the bundled SVG or CE raster.
+    // Swapped as a pair by ReloadUserIcons (a new instance each time, so a reader never sees a half-updated pair).
+    private (PublisherIconIndex Index, Dictionary<string, string> Paths) _userIcons = (PublisherIconIndex.Build(Array.Empty<string>()), new());
+
+    /// <summary>Where user publisher logos go: <c>%APPDATA%\Paperbunkr\publisher-icons</c>. Created on first use of <see cref="EnsureUserIconsFolder"/>.</summary>
+    public static string UserIconsFolder => PublisherIconFolder.Path;
+
+    /// <summary>How many image files the user icon folder currently supplies.</summary>
+    public int UserIconCount => _userIcons.Paths.Count;
+
+    /// <summary>Creates the user icon folder if it does not exist and returns its path.</summary>
+    public static string EnsureUserIconsFolder() => PublisherIconFolder.Ensure();
+
+    /// <summary>Re-reads the user icon folder, so files added since launch show up without a restart. Marks already drawn keep what they resolved until
+    /// their screen redraws.</summary>
+    public void ReloadUserIcons() => _userIcons = LoadUserIcons();
+
+    private static (PublisherIconIndex, Dictionary<string, string>) LoadUserIcons()
+    {
+        var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string? mapIni = null;
+        try
+        {
+            string dir = UserIconsFolder;
+            if (Directory.Exists(dir))
+            {
+                foreach (string file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+                {
+                    string name = Path.GetFileName(file);
+                    if (name.Equals("map.ini", StringComparison.OrdinalIgnoreCase))
+                    {
+                        mapIni = File.ReadAllText(file);
+                    }
+                    else
+                    {
+                        paths[name] = file; // a later file of the same name (another subfolder) replaces an earlier one
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // an unreadable folder just means no user icons - never a reason to break the marks
+        }
+
+        return (PublisherIconIndex.Build(paths.Keys, mapIni), paths);
+    }
+
+    private MarkSpec? UserRaster(string file) =>
+        _userIcons.Paths.TryGetValue(file, out string? path) ? new MarkSpec(MarkKind.Raster, AssetPath: path) : null;
+
     /// <summary>Canonical age-rating spellings from <c>age-rating-aliases.tsv</c> (the ComicInfo
     /// v2.1 value set + ESRB labels), for the metadata editors' Age Rating dropdown
     /// (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md §4.3).</summary>
@@ -75,6 +127,7 @@ public sealed class MarkResolver
         _formatAssets = ListAssetStems(Root + "Formats");
         _flagAssets = ListAssetStems(Root + "Flags");
         (_publisherIcons, _publisherIconUris) = LoadPublisherIcons();
+        _userIcons = LoadUserIcons();
     }
 
     private static string NormaliseRatingKey(string s) =>
@@ -133,6 +186,21 @@ public sealed class MarkResolver
         {
             names.Add(row.Canonical);
             names.Add(NormalisePublisher(row.Canonical));
+        }
+
+        // Your own logos first: an icon you dropped into the user folder beats the bundled SVG and the CE pack.
+        var user = _userIcons;
+        if (user.Paths.Count > 0)
+        {
+            if (year is int uy && user.Index.FindEra(names, uy, month) is { } userEra && UserRaster(userEra) is { } userEraSpec)
+            {
+                return userEraSpec;
+            }
+
+            if ((user.Index.FindUndated(names) ?? user.Index.FindNewestEra(names)) is { } userFile && UserRaster(userFile) is { } userSpec)
+            {
+                return userSpec;
+            }
         }
 
         if (year is int y && _publisherIcons.FindEra(names, y, month) is { } eraFile && Raster(eraFile) is { } era)

@@ -1,0 +1,94 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.SmartTemplateGallery"
+             x:DataType="vm:SmartTemplateGalleryViewModel">
+
+    <!-- The "New Smart List" gallery (docs/superpowers/specs/2026-10-06-smart-features-design.md §3.2): kind tabs, a card grid with
+         "Blank list" first, each template's rules as chips, and a Create button. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/ReadingListsChrome.axaml" />
+
+        <Style Selector="Button.tplCard">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="Margin" Value="0,0,10,10" />
+            <Setter Property="MinHeight" Value="84" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Top" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.tplCard.on">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <controls:OverlayShell IsOpen="{Binding IsOpen}" CloseCommand="{Binding CloseCommand}" CloseButtonAutomationId="SmartTemplateGalleryCloseButton">
+        <Border x:Name="GalleryCard" Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                CornerRadius="{DynamicResource PbRadius}" Padding="20" Margin="40" Width="680" MaxHeight="640"
+                HorizontalAlignment="Center" VerticalAlignment="Center" KeyboardNavigation.TabNavigation="Cycle"
+                AutomationProperties.AutomationId="SmartTemplateGallery">
+            <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+                <TextBlock Classes="pbTextHeading" FontSize="18" Text="New Smart List" />
+
+                <ItemsControl Grid.Row="1" ItemsSource="{Binding Kinds}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SmartTemplateKindTab">
+                            <Button Classes="segToggle" Classes.on="{Binding IsActive}" Content="{Binding Label}"
+                                    Command="{Binding $parent[ItemsControl].((vm:SmartTemplateGalleryViewModel)DataContext).SelectKindCommand}"
+                                    CommandParameter="{Binding}" AutomationProperties.Name="{Binding Label}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="CardList" ItemsSource="{Binding Cards}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SmartTemplateCard">
+                                <Button Classes="tplCard" Classes.on="{Binding IsSelected}"
+                                        Command="{Binding $parent[ItemsControl].((vm:SmartTemplateGalleryViewModel)DataContext).SelectCardCommand}"
+                                        CommandParameter="{Binding}" DoubleTapped="OnCardDoubleTapped"
+                                        AutomationProperties.Name="{Binding Name}">
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsBlank}" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                        <ItemsControl ItemsSource="{Binding Chips}" IsVisible="{Binding !IsBlank}">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="x:String">
+                                                    <Border Classes="pbChip" Margin="0,4,4,0">
+                                                        <TextBlock Text="{Binding}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+                    <Button Classes="headerAction ghost" Content="Cancel" Command="{Binding CloseCommand}" AutomationProperties.AutomationId="SmartTemplateGalleryCancelButton" />
+                    <Button Classes="headerAction primary" Content="{Binding CreateLabel}" Click="OnCreateClick" AutomationProperties.AutomationId="SmartTemplateGalleryCreateButton" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </controls:OverlayShell>
+</UserControl>

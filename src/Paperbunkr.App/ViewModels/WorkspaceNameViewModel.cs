@@ -21,11 +21,23 @@ public partial class WorkspaceNameViewModel : ViewModelBase
     }
 
     /// <summary>Opens the overlay's state for a fresh prompt. <paramref name="initial"/> pre-fills the field (a rename); null for a new name.</summary>
-    public void Begin(string? initial, Action<string> onConfirm)
+    public void Begin(string? initial, Action<string> onConfirm, string heading = WorkspaceHeading, string hint = WorkspaceHint)
     {
         Name = initial ?? string.Empty;
         _onConfirm = onConfirm;
+        Heading = heading;
+        Hint = hint;
     }
+
+    public const string WorkspaceHeading = "NAME THIS WORKSPACE";
+    public const string WorkspaceHint = "Reusing an existing name overwrites that workspace.";
+
+    /// <summary>The overlay's title; the same prompt also names list layouts (docs/superpowers/specs/2026-10-04-list-layouts-design.md).</summary>
+    [ObservableProperty]
+    private string _heading = WorkspaceHeading;
+
+    [ObservableProperty]
+    private string _hint = WorkspaceHint;
 
     [ObservableProperty]
     private string _name = string.Empty;

@@ -132,13 +132,19 @@ public sealed class OrganizeCoordinator(
 
         using var owned = existingJob is null
             ? activity.StartJob(ActivityJobKind.Import, $"Organizing {books.Count} comic{(books.Count == 1 ? string.Empty : "s")} ({profileLabel})",
-                cancellable: true, trigger: isInteractive ? ActivityTrigger.Manual : ActivityTrigger.Scheduled)
+                cancellable: true, trigger: isInteractive ? ActivityTrigger.Manual : ActivityTrigger.Scheduled,
+                startQueued: HeavyJobLane.Shared.WouldWait)
             : null;
         var job = existingJob ?? owned!;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, job.CancellationToken);
 
         try
         {
+            // One heavy job at a time (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.3). A scheduled run
+            // arrives already inside the lane with its own job, and passes straight through.
+            using var laneSlot = HeavyJobLane.Activate(await HeavyJobLane.Shared.EnterAsync(isInteractive, linked.Token));
+            owned?.Begin();
+
             var plans = await _service.PlanManyAsync(books, profiles, createContext).ConfigureAwait(false);
 
             // A manual run shows what is about to happen before any file moves. A scheduled run has nobody to ask. A run where nothing

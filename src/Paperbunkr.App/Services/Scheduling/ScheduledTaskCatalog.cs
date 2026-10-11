@@ -24,6 +24,7 @@ public static class ScheduledTaskCatalog
     public const string BookScan = "book-scan";
     public const string SyncMetadata = "sync-metadata";
     public const string ContentTypeSweep = "content-type-sweep";
+    public const string ContentTypeTrackerClassify = "content-type-tracker-classify";
     public const string VerifyCovers = "verify-covers";
     public const string GenerateCovers = "generate-covers";
     public const string StoryEventAutodetect = "story-event-autodetect";
@@ -37,6 +38,8 @@ public static class ScheduledTaskCatalog
     public const string GoalPaceCheck = "goal-pace-check";
     public const string DetectAdPages = "detect-ad-pages";
     public const string GcdMatch = "gcd-match";
+    public const string MetronSync = "metron-sync";
+    public const string SynopsisGenreSuggest = "synopsis-genre-suggest";
 
     public static IReadOnlyList<ScheduledTaskDescriptor> All { get; } = Build();
 
@@ -104,6 +107,26 @@ public static class ScheduledTaskCatalog
                 int changed = new LibraryFolderScanner().RunContentTypeSweepCore(ct);
                 return changed == 0 ? "Nothing to classify" : $"Classified {changed} series";
             }, ct)),
+
+        // Tracker-driven content-type classification (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md): off by default, a bounded number of searches
+        // per run (AniList is throttled), resumable, and it never changes a type you set yourself. Doubtful matches wait in Library Health > Review > Content type.
+        new ScheduledTaskDescriptor(
+            ContentTypeTrackerClassify, "Classify series from trackers",
+            "Looks unknown series up on MangaBaka, AniList and MangaDex to tell manga, manhwa and manhua apart. Confident matches are applied (with Undo); " +
+            "the rest wait in Library Health > Review. Never changes a type you chose yourself.",
+            ActivityJobKind.SyncMetadata, Priority: 20, SchedulerResourceClass.Network,
+            TimeSpan.FromDays(1), DefaultEnabled: false, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                handle.Report("Looking series up…");
+                var result = await ContentTypeClassifierRunner.RunAsync(
+                    ContentTypeClassifierRunner.ScheduledBudget,
+                    (done, total) => handle.Report(done, total, $"{done} / {total} series"),
+                    ct);
+                string summary = ContentTypeClassifierRunner.Summarize(result);
+                handle.Succeed(summary, result.Queued > 0 ? new ActivityLink(ActivityLinkKind.Preferences, "LibraryHealth") : null);
+                return summary;
+            }),
 
         new ScheduledTaskDescriptor(
             VerifyCovers, "Verify cover thumbnails",
@@ -387,6 +410,34 @@ public static class ScheduledTaskCatalog
             ActivityJobKind.SyncMetadata, Priority: 18, SchedulerResourceClass.Network,
             TimeSpan.FromDays(7), DefaultEnabled: true, ScheduleMode.Interval,
             static (handle, ct) => Task.Run(() => Paperbunkr.App.Services.Gcd.GcdMatching.RunAsync(() => PaperbunkrDb.CreateContext(), handle, ct), ct)),
+
+        // docs/superpowers/specs/2026-10-05-metron-account-sync-design.md. Ships disabled: the "Sync with my Metron account" switch under
+        // Preferences -> Connections turns this task on and off with it, so a library that never syncs has no hourly no-op run.
+        new ScheduledTaskDescriptor(
+            MetronSync, "Sync with Metron",
+            "Keeps your Metron account's pull list, collection, read dates and wish list in step with this library. " +
+            "Turned on and off by the account sync switch under Preferences → Connections.",
+            ActivityJobKind.SyncMetadata, Priority: 19, SchedulerResourceClass.Network,
+            TimeSpan.FromHours(1), DefaultEnabled: false, ScheduleMode.Interval,
+            static (handle, ct) => Task.Run(() => MetronAccountSyncRunner.RunScheduledAsync(() => PaperbunkrDb.CreateContext(), handle, ct), ct)),
+
+        // Synopsis genre suggestions (docs/superpowers/specs/2026-10-06-smart-features-design.md §6.2): keyword matching over synopses the
+        // library already holds - no network, no model. Off by default; every suggestion waits in Library Health > Review as a Pending
+        // proposal and nothing is ever applied for you.
+        new ScheduledTaskDescriptor(
+            SynopsisGenreSuggest, "Suggest genres from synopses",
+            "Reads the synopsis of series that have no genre and suggests one when the wording is clear enough. " +
+            "Suggestions wait in Library Health > Review > Metadata Proposals; nothing is changed until you accept one.",
+            ActivityJobKind.SyncMetadata, Priority: 21, SchedulerResourceClass.Db,
+            TimeSpan.FromDays(1), DefaultEnabled: false, ScheduleMode.Interval,
+            static (handle, ct) => Task.Run(() =>
+            {
+                handle.Report("Reading synopses…");
+                using var context = PaperbunkrDb.CreateContext();
+                var result = SynopsisGenreInferrer.SuggestForLibrary(context);
+                handle.Succeed(result.Summary, result.Suggested > 0 ? new ActivityLink(ActivityLinkKind.Preferences, "LibraryHealth/Review/Proposals") : null);
+                return result.Summary;
+            }, ct)),
     };
 
     public static ScheduledTaskDescriptor? Find(string id)

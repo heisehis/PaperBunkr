@@ -12,7 +12,8 @@ namespace cYo.Common.Xml
 {
 	public static class XmlUtility
 	{
-		private const int BufferSize = 131072;
+		// 64 KB, not CE's 128 KB: on .NET a buffer of 85,000 bytes or more is allocated on the large object heap, which is only cleaned by a full collection. One was allocated per XML file read, and a heap dump (2026-10-07) found 770 dead ones holding 100 MB.
+		private const int BufferSize = 65536;
 
 		private static readonly SimpleCache<Type, XmlSerializer> cachedSerialzers = new SimpleCache<Type, XmlSerializer>();
 

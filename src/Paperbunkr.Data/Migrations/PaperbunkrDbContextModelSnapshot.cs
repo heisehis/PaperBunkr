@@ -282,6 +282,14 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("default");
 
+                    b.Property<bool>("AskBeforeClassifying")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("AutoApplyMinConfidence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue(0m);
+
                     b.Property<bool>("AutoBackupEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -681,6 +689,13 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("Added");
 
+                    b.Property<string>("LibraryLens")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("All");
+
                     b.Property<string>("LibraryPreviewCollapsedSections")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -770,6 +785,24 @@ namespace Paperbunkr.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("TEXT")
                         .HasDefaultValue("Automatic");
+
+                    b.Property<bool>("MetronSyncCollection")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("MetronSyncEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("MetronSyncPullList")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("MetronSyncReading")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MetronSyncReadingEventId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("MetronSyncWishList")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("MinimizeToTray")
                         .HasColumnType("INTEGER");
@@ -878,6 +911,11 @@ namespace Paperbunkr.Data.Migrations
 
                     b.Property<bool>("ReducedMotion")
                         .HasColumnType("INTEGER");
+
+                    b.Property<bool>("RefreshProviderDataOnComplete")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("RenderingBackend")
                         .IsRequired()
@@ -1048,6 +1086,9 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("WriteMetadataToFiles")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("WriteMetronInfo")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("WriteNativeSidecar")
@@ -1563,6 +1604,9 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTime?>("CompletedNotifiedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -2058,6 +2102,36 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("ExternalRatings");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.HealthFindingDismissal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("DismissedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Label")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind", "Key")
+                        .IsUnique();
+
+                    b.ToTable("HealthFindingDismissals");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.Issue", b =>
                 {
                     b.Property<int>("Id")
@@ -2540,6 +2614,64 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("LibrarySnapshots");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ListLayout", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Screen")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("StateJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Screen", "Name")
+                        .IsUnique();
+
+                    b.ToTable("ListLayouts");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ListLayoutAssignment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Screen")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SelectionKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StateJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Screen", "SelectionKey")
+                        .IsUnique();
+
+                    b.ToTable("ListLayoutAssignments");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.Location", b =>
                 {
                     b.Property<int>("Id")
@@ -2684,6 +2816,38 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("MetadataProposals");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.MetronSyncLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LocalId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("PushedRating")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RemoteId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("State")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("SyncedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind", "LocalId")
+                        .IsUnique();
+
+                    b.ToTable("MetronSyncLinks");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.PageClip", b =>
@@ -2990,6 +3154,9 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("ActiveSeconds")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("HiddenFromHistory")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -3051,6 +3218,12 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<DateTime>("CreatedUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("DistinctOnly")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Metric")
                         .HasColumnType("INTEGER");
 
@@ -3079,6 +3252,31 @@ namespace Paperbunkr.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ReadingGoals");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingGoalScope", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Label")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ReadingGoalId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Value")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReadingGoalId");
+
+                    b.ToTable("ReadingGoalScopes");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingList", b =>
@@ -3603,6 +3801,39 @@ namespace Paperbunkr.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("ContentTypeAutoAppliedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentTypeCheck")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("None");
+
+                    b.Property<DateTime?>("ContentTypeCheckedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("ContentTypeConfidence")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("ContentTypeEvidence")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("ContentTypeLocked")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ContentTypeSource")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Unset");
+
+                    b.Property<string>("ContentTypeSuggestion")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("CoverIssueId")
                         .HasColumnType("INTEGER");
 
@@ -3631,6 +3862,14 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("PageLayoutMode")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PreviousContentType")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PreviousReadingMode")
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
@@ -3975,6 +4214,9 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ComicVineArcId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("CompletedNotifiedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
@@ -4367,6 +4609,9 @@ namespace Paperbunkr.Data.Migrations
 
                     b.Property<bool>("IsPaused")
                         .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("LastCatalogFetchAt")
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastRefreshedAt")
                         .HasColumnType("TEXT");
@@ -5137,6 +5382,17 @@ namespace Paperbunkr.Data.Migrations
                     b.Navigation("Issue");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingGoalScope", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.ReadingGoal", "ReadingGoal")
+                        .WithMany("Scopes")
+                        .HasForeignKey("ReadingGoalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ReadingGoal");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingList", b =>
                 {
                     b.HasOne("Paperbunkr.Data.Entities.Continuity", "Continuity")
@@ -5516,6 +5772,11 @@ namespace Paperbunkr.Data.Migrations
             modelBuilder.Entity("Paperbunkr.Data.Entities.MediaRelation", b =>
                 {
                     b.Navigation("Evidence");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingGoal", b =>
+                {
+                    b.Navigation("Scopes");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingList", b =>

@@ -31,6 +31,14 @@ public interface IReadingEventRecorder
     void UpdateSessionPages(ReadingItemType itemType, int itemId, int pagesRead);
 
     /// <summary>
+    /// As <see cref="UpdateSessionPages(ReadingItemType, int, int)"/>, also storing the session's active reading time
+    /// (<see cref="ReadingEvent.ActiveSeconds"/>, docs/superpowers/specs/2026-10-06-smart-features-design.md §4.1) on the same row.
+    /// The default drops the seconds, so a test double that only declares the three-argument form keeps working.
+    /// </summary>
+    void UpdateSessionPages(ReadingItemType itemType, int itemId, int pagesRead, int? activeSeconds) =>
+        UpdateSessionPages(itemType, itemId, pagesRead);
+
+    /// <summary>
     /// Sets <see cref="ReadingEvent.HiddenFromHistory"/> on every existing row of one Insights History
     /// group, or on every row when <paramref name="group"/> is null (Clear all) - docs/superpowers/specs/
     /// 2026-09-29-insights-reading-history-design.md §1. Hides only; never deletes, so Stats / Goals / Recap

@@ -261,7 +261,8 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
             return cached;
         }
 
-        var image = SkiaBitmapConverter.ToSkImage(source);
+        // Shares the page's own pixels (2026-10-08): the copy this used to make kept a second full page per visible page.
+        var image = SkiaBitmapConverter.ShareSkImage(source);
         _skImageCache[source] = image;
         return image;
     }
@@ -276,7 +277,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     {
         try
         {
-            return SkiaBitmapConverter.ToSkImage(bitmap);
+            return SkiaBitmapConverter.ShareSkImage(bitmap);
         }
         catch
         {
@@ -595,7 +596,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         if (lease is not null && (NeedsPaint(colorFilter) || alpha < 1.0 || cachedImage is not null || skImageResolver is not null))
         {
             bool ownsImage = cachedImage is null && skImageResolver is null;
-            SKImage skImage = cachedImage ?? skImageResolver?.Invoke(bitmap) ?? SkiaBitmapConverter.ToSkImage(bitmap);
+            SKImage skImage = cachedImage ?? skImageResolver?.Invoke(bitmap) ?? SkiaBitmapConverter.ShareSkImage(bitmap);
             try
             {
                 using var paint = new SKPaint { ColorFilter = colorFilter, ImageFilter = _sharpenFilter, IsAntialias = true, Color = new SKColor(255, 255, 255, (byte)(Math.Clamp(alpha, 0, 1) * 255)) };

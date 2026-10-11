@@ -64,6 +64,9 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ReadingListOverlapDismissal> ReadingListOverlapDismissals => Set<ReadingListOverlapDismissal>();
 
+    /// <summary>Dismissed computed findings: collection gaps, consistency findings, continuity suggestions, list-order checks (docs/superpowers/specs/2026-10-06-smart-features-design.md §2).</summary>
+    public DbSet<HealthFindingDismissal> HealthFindingDismissals => Set<HealthFindingDismissal>();
+
     /// <summary>Home "Not interested" dismissals (docs/superpowers/specs/2026-09-28-home-improvements-design.md I5).</summary>
     public DbSet<DismissedRecommendation> DismissedRecommendations => Set<DismissedRecommendation>();
 
@@ -127,6 +130,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ComicMetadataExternalId> ComicMetadataExternalIds => Set<ComicMetadataExternalId>();
 
+    public DbSet<MetronSyncLink> MetronSyncLinks => Set<MetronSyncLink>();
+
     public DbSet<SeriesAssociation> SeriesAssociations => Set<SeriesAssociation>();
 
     public DbSet<IssueVariantCover> IssueVariantCovers => Set<IssueVariantCover>();
@@ -176,6 +181,8 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<KeyBinding> KeyBindings => Set<KeyBinding>();
 
     public DbSet<Workspace> Workspaces => Set<Workspace>();
+    public DbSet<ListLayout> ListLayouts => Set<ListLayout>();
+    public DbSet<ListLayoutAssignment> ListLayoutAssignments => Set<ListLayoutAssignment>();
 
     public DbSet<BookSeries> BookSeries => Set<BookSeries>();
 
@@ -200,6 +207,8 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<LibrarySnapshot> LibrarySnapshots => Set<LibrarySnapshot>();
 
     public DbSet<ReadingGoal> ReadingGoals => Set<ReadingGoal>();
+
+    public DbSet<ReadingGoalScope> ReadingGoalScopes => Set<ReadingGoalScope>();
 
     public DbSet<SeriesActivityEvent> SeriesActivityEvents => Set<SeriesActivityEvent>();
 
@@ -229,6 +238,7 @@ public class PaperbunkrDbContext : DbContext
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         AnnounceUnmanagedReadingListWrites();
+        AnnounceSeriesStatusChanges();
 
         const int maxAttempts = 3;
         for (int attempt = 1; ; attempt++)
@@ -249,6 +259,7 @@ public class PaperbunkrDbContext : DbContext
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         AnnounceUnmanagedReadingListWrites();
+        AnnounceSeriesStatusChanges();
         int written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
         RunAfterSaveActions();
         return written;
@@ -267,6 +278,46 @@ public class PaperbunkrDbContext : DbContext
     /// reaches the caller; a context that is disposed without saving simply drops its queue.
     /// </summary>
     public void RunAfterSave(Action action) => (_afterSaveActions ??= new List<Action>()).Add(action);
+
+    /// <summary>
+    /// Every change to an existing series' publisher <see cref="Series.Status"/> is noticed here, whichever of the several places that
+    /// write it made the change (linking a provider, the bulk editors, the Library's own edit, undoing a proposal): a
+    /// <see cref="SeriesActivityEventKind.StatusChanged"/> entry is added to the same save, and
+    /// <see cref="Events.LibraryEvents.SeriesStatusChanged"/> is raised once the save lands
+    /// (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.3). Doing it at the save, not in a helper every writer must
+    /// remember to call, is what makes "every change" true - two of those writers are field setters with no context to call anything
+    /// with. A series being <em>created</em> with a status (a scan, a CE migration, an import) is not a change and raises nothing, so a
+    /// bulk import cannot fire thousands of events.
+    /// </summary>
+    private void AnnounceSeriesStatusChanges()
+    {
+        List<(Series Series, SeriesStatus Old, SeriesStatus New)>? changes = null;
+        foreach (var entry in ChangeTracker.Entries<Series>())
+        {
+            if (entry.State != EntityState.Modified)
+            {
+                continue;
+            }
+
+            var status = entry.Property(s => s.Status);
+            if (status.IsModified && status.OriginalValue != status.CurrentValue)
+            {
+                (changes ??= new()).Add((entry.Entity, status.OriginalValue, status.CurrentValue));
+            }
+        }
+
+        if (changes is null)
+        {
+            return;
+        }
+
+        var hub = Events.LibraryEvents.Default;
+        foreach (var (series, oldStatus, newStatus) in changes)
+        {
+            SeriesActivityLog.Record(this, series.Id, SeriesActivityEventKind.StatusChanged, $"Status changed from {oldStatus} to {newStatus}");
+            RunAfterSave(() => hub.Raise(new Events.SeriesStatusChangedEvent(series.Id, series.Name, oldStatus, newStatus)));
+        }
+    }
 
 
     // ---- ReadingListManager backstop (docs/superpowers/specs/2026-09-20-plugin-api-4-2-followons-design.md section 3) ----
@@ -565,6 +616,17 @@ public class PaperbunkrDbContext : DbContext
             builder.HasIndex(s => s.GcdSeriesId);
             builder.Property(s => s.ContentType).HasConversion<string>().HasMaxLength(32);
             builder.Property(s => s.ReadingMode).HasConversion<string>().HasMaxLength(32);
+            // Content-type provenance (2026-10-06-content-type-auto-classify-design.md). The two non-null enums get a default so the
+            // ALTER TABLE has a valid value for existing rows; the nullable ones need nothing.
+            builder.Property(s => s.ContentTypeSource).HasConversion<string>().HasMaxLength(16)
+                .HasDefaultValue(ContentTypeSource.Unset)
+                .HasSentinel(ContentTypeSource.Unset);
+            builder.Property(s => s.ContentTypeCheck).HasConversion<string>().HasMaxLength(16)
+                .HasDefaultValue(ContentTypeCheck.None)
+                .HasSentinel(ContentTypeCheck.None);
+            builder.Property(s => s.PreviousContentType).HasConversion<string>().HasMaxLength(32);
+            builder.Property(s => s.PreviousReadingMode).HasConversion<string>().HasMaxLength(32);
+            builder.Property(s => s.ContentTypeSuggestion).HasConversion<string>().HasMaxLength(32);
             builder.Property(s => s.PageLayoutMode).HasConversion<string>().HasMaxLength(32);
             builder.Property(s => s.PageFitModeOverride).HasConversion<string>().HasMaxLength(32);
             // Same enum-as-string HasSentinel treatment as PageTransitionStyle above, even though
@@ -973,6 +1035,14 @@ public class PaperbunkrDbContext : DbContext
             builder.HasIndex(d => new { d.ListAId, d.ListBId }).IsUnique();
             builder.HasOne<ReadingList>().WithMany().HasForeignKey(d => d.ListAId).OnDelete(DeleteBehavior.Cascade);
             builder.HasOne<ReadingList>().WithMany().HasForeignKey(d => d.ListBId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<HealthFindingDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.Property(d => d.Kind).IsRequired().HasMaxLength(48);
+            builder.Property(d => d.Key).IsRequired().HasMaxLength(512);
+            builder.HasIndex(d => new { d.Kind, d.Key }).IsUnique();
         });
 
         modelBuilder.Entity<ReadingListItem>(builder =>
@@ -1439,6 +1509,13 @@ public class PaperbunkrDbContext : DbContext
             builder.HasIndex(e => new { e.EntityKind, e.Provider, e.ExternalId }).IsUnique();
         });
 
+        // docs/superpowers/specs/2026-10-05-metron-account-sync-design.md - one ledger row per local thing sent.
+        modelBuilder.Entity<MetronSyncLink>(builder =>
+        {
+            builder.HasKey(l => l.Id);
+            builder.HasIndex(l => new { l.Kind, l.LocalId }).IsUnique();
+        });
+
         // Phase 5 items (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md).
         modelBuilder.Entity<SeriesAssociation>(builder =>
         {
@@ -1727,6 +1804,10 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.LibraryGridCoverFit).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(LibraryGridCoverFit.Poster)
                 .HasSentinel(LibraryGridCoverFit.Poster);
+            // All (0) is both the CLR default and the desired default - same case as LibraryGridCoverFit above.
+            builder.Property(a => a.LibraryLens).HasConversion<string>().HasMaxLength(16)
+                .HasDefaultValue(LibraryLens.All)
+                .HasSentinel(LibraryLens.All);
             // Desired default (true) diverges from the CLR/SQLite implicit zero-value (false) - same
             // explicit-DB-default requirement as CheckForUpdatesOnStartup above, or an existing
             // singleton row's backfill on this ALTER TABLE lands on false instead of true.
@@ -1788,6 +1869,9 @@ public class PaperbunkrDbContext : DbContext
 
             // Same enum-as-string HasSentinel treatment as PageTransitionStyle/LibraryIssueListGroupField
             // above, even though Automatic is both the CLR default and the desired default here.
+            // 0 = every proposal applies under the Automatic policy, the behaviour before the threshold existed.
+            builder.Property(a => a.AutoApplyMinConfidence).HasDefaultValue(0m);
+            builder.Property(a => a.RefreshProviderDataOnComplete).HasDefaultValue(true);
             builder.Property(a => a.MetadataResolutionPolicy).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(MetadataResolutionPolicy.Automatic)
                 .HasSentinel(MetadataResolutionPolicy.Automatic);
@@ -1906,6 +1990,26 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(w => w.Name).IsRequired();
             builder.Property(w => w.StateJson).IsRequired();
             builder.HasIndex(w => new { w.Screen, w.SortOrder });
+        });
+
+        // List layouts (docs/superpowers/specs/2026-10-04-list-layouts-design.md): named layouts per screen, and the
+        // layout each list remembers. Same enum-as-string Screen as Workspace.
+        modelBuilder.Entity<ListLayout>(builder =>
+        {
+            builder.HasKey(l => l.Id);
+            builder.Property(l => l.Screen).HasConversion<string>().HasMaxLength(16);
+            builder.Property(l => l.Name).IsRequired();
+            builder.Property(l => l.StateJson).IsRequired();
+            builder.HasIndex(l => new { l.Screen, l.Name }).IsUnique();
+        });
+
+        modelBuilder.Entity<ListLayoutAssignment>(builder =>
+        {
+            builder.HasKey(a => a.Id);
+            builder.Property(a => a.Screen).HasConversion<string>().HasMaxLength(16);
+            builder.Property(a => a.SelectionKey).IsRequired().HasMaxLength(64);
+            builder.Property(a => a.StateJson).IsRequired();
+            builder.HasIndex(a => new { a.Screen, a.SelectionKey }).IsUnique();
         });
 
         // Novels (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md §2) -
@@ -2044,6 +2148,15 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(s => s.Id);
             builder.HasIndex(s => s.SnapshotDate).IsUnique();
+        });
+
+        // Goal filters (docs/superpowers/specs/2026-10-04-insights-goal-scopes-design.md): a goal owns any number of
+        // scope rows, deleted with it.
+        modelBuilder.Entity<ReadingGoalScope>(builder =>
+        {
+            builder.HasKey(s => s.Id);
+            builder.HasOne(s => s.ReadingGoal).WithMany(g => g.Scopes).HasForeignKey(s => s.ReadingGoalId).OnDelete(DeleteBehavior.Cascade);
+            builder.HasIndex(s => s.ReadingGoalId);
         });
 
         modelBuilder.Entity<SeriesActivityEvent>(builder =>

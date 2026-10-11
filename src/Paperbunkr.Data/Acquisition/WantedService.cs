@@ -77,6 +77,7 @@ public static class WantedService
         }
 
         watched.LastRefreshedAt = DateTime.UtcNow;
+        watched.LastCatalogFetchAt = watched.LastRefreshedAt;
         context.SaveChanges();
     }
 

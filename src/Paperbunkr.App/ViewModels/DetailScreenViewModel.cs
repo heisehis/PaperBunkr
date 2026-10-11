@@ -250,7 +250,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
             return;
         }
 
-        series.ContentType = value;
+        SeriesContentTypeEditor.SetManual(series, value);
         context.SaveChanges();
 
         // Content type drives the ComicInfo <Manga> field for every issue in the series
@@ -264,6 +264,48 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         }
 
         _goDetailForSeries(seriesId);
+    }
+
+    /// <summary>
+    /// True while the series' type was applied on its own by the tracker classifier and nobody has confirmed, undone or changed it since
+    /// (docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md). Shows the header's Undo; there is no time limit here, unlike the
+    /// queue's 30-day "Recently auto-classified" list, because the previous type is stored on the series row.
+    /// </summary>
+    [ObservableProperty]
+    private bool _canUndoContentType;
+
+    /// <summary>"Auto-classified from MangaBaka / AniList: was Unknown".</summary>
+    [ObservableProperty]
+    private string _undoContentTypeLabel = string.Empty;
+
+    private void RefreshContentTypeUndo(Series series)
+    {
+        CanUndoContentType = series.ContentTypeSource == ContentTypeSource.Provider && !series.ContentTypeLocked && series.PreviousContentType is not null;
+        UndoContentTypeLabel = CanUndoContentType ? $"Auto-classified: was {series.PreviousContentType}" : string.Empty;
+    }
+
+    /// <summary>Puts back the type and reading mode from before the automatic classification, locks the series, and reloads the screen.</summary>
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void UndoContentType()
+    {
+        if (_seriesId is not int seriesId)
+        {
+            return;
+        }
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var series = context.Series.Find(seriesId);
+            if (series is null || !SeriesContentTypeEditor.Undo(series))
+            {
+                return;
+            }
+
+            context.SaveChanges();
+        }
+
+        // Reload on the next dispatcher tick: this runs from the header's own Button, and the reload replaces the screen it sits on.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => _goDetailForSeries(seriesId));
     }
 
     [ObservableProperty]
@@ -310,6 +352,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         SeriesTitle = series.Name;
         CoverTitle = series.Name.ToUpperInvariant();
         SelectedContentType = series.ContentType;
+        RefreshContentTypeUndo(series);
         StatusLabel = series.IsComplete ? "Complete" : "Ongoing";
         _readingStatus = series.ReadingStatus == Data.Entities.ReadingStatus.Unknown ? null : series.ReadingStatus.ToString();
         OnPropertyChanged(nameof(IDetailHeaderSource.ReadingStatus));
@@ -329,6 +372,8 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
             StatusLabel,
             _issueCountBadge,
             unread > 0 ? $"{unread} unread" : string.Empty,
+            // "~3 h to finish the series" once there is a reading pace and at least three issues to go (smart features §4.2).
+            TimeLeftFormatter.ToFinishSeries(LoadReadingPace().TimeToFinishSeries(series.Issues)) ?? string.Empty,
         }.Where(s => s.Length > 0));
         MetaLine = _seriesMetaLine;
         Band.StatusText = StatusLabel;
@@ -458,6 +503,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
                 issue.EffectiveNumber() is { Length: > 0 } n ? $"Issue #{n}" : string.Empty,
                 string.IsNullOrWhiteSpace(issue.StoryArc) ? string.Empty : issue.StoryArc!,
                 issue.ReleasedTime is { } rt ? rt.ToString("MMM yyyy") : string.Empty,
+                TimeLeftFormatter.Left(LoadReadingPace().TimeLeftInIssue(issue)) ?? string.Empty,
             }.Where(s => s.Length > 0));
             Band.Summary = Summary;
             Band.IsSynopsisExpanded = false;
@@ -556,6 +602,20 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         if (_focusedIssueId is int issueId)
         {
             _goToReader(issueId);
+        }
+    }
+
+    /// <summary>The reader's own pace for the time-left estimates; unknown (so nothing is shown) until there are a handful of timed sessions, or if the lookup fails.</summary>
+    private static ReadingPace LoadReadingPace()
+    {
+        try
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            return ReadingPaceResolver.Load(context);
+        }
+        catch (Exception)
+        {
+            return ReadingPace.Unknown;
         }
     }
 

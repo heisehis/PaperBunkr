@@ -1,0 +1,148 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="560"
+             x:Class="Paperbunkr.App.Views.ListOptionsOverlay"
+             x:DataType="vm:ListOptionsViewModel">
+
+    <!-- List Options (docs/superpowers/specs/2026-10-04-list-layouts-design.md §8) - CE's ListLayoutDialog: Details,
+         Thumbnails and Tiles tabs on the Library; Books has only sort and group. -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="TextBlock.hint">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+        <Style Selector="ListBox.optionList">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        </Style>
+        <Style Selector="ListBox.optionList ListBoxItem">
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="MinHeight" Value="30" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Classes="floatingPanel" Width="520">
+        <Grid RowDefinitions="Auto,Auto,*,Auto">
+            <Border Grid.Row="0" Padding="18,15" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
+                <TextBlock Classes="pbTextHeading" Text="LIST OPTIONS" />
+            </Border>
+
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="18,12,18,0" IsVisible="{Binding IsLibrary}">
+                <Button Classes="tab" Classes.active="{Binding IsDetailsTab}" Content="Details"
+                        Command="{Binding SelectTabCommand}" CommandParameter="details"
+                        AutomationProperties.AutomationId="ListOptionsTab_Details" />
+                <Button Classes="tab" Classes.active="{Binding IsThumbnailsTab}" Content="Thumbnails"
+                        Command="{Binding SelectTabCommand}" CommandParameter="thumbnails"
+                        AutomationProperties.AutomationId="ListOptionsTab_Thumbnails" />
+                <Button Classes="tab" Classes.active="{Binding IsTilesTab}" Content="Tiles"
+                        Command="{Binding SelectTabCommand}" CommandParameter="tiles"
+                        AutomationProperties.AutomationId="ListOptionsTab_Tiles" />
+            </StackPanel>
+
+            <Panel Grid.Row="2" Margin="18,14" MinHeight="120">
+                <!-- Details: which columns the Details table shows, in what order, how wide. -->
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,*" IsVisible="{Binding IsDetailsTab}">
+                    <TextBlock Grid.ColumnSpan="2" Classes="hint" Margin="0,0,0,8"
+                               Text="Columns of the Details table, shown when browsing issues. You can also drag a column header to move it, or its right edge to resize it." />
+                    <ListBox Grid.Row="1" Grid.Column="0" Classes="optionList" Height="320"
+                             ItemsSource="{Binding Columns}" SelectedItem="{Binding SelectedColumn}"
+                             AutomationProperties.Name="Columns" AutomationProperties.AutomationId="ListOptionsColumns">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ListOptionColumn">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}" VerticalAlignment="Center"
+                                              AutomationProperties.Name="{Binding Name, StringFormat='Show {0}'}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5" VerticalAlignment="Center" Margin="6,0"
+                                               Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                                    <TextBox Grid.Column="2" Text="{Binding Width}" Width="62" FontSize="11.5" VerticalAlignment="Center"
+                                             ToolTip.Tip="Column width"
+                                             AutomationProperties.Name="{Binding Name, StringFormat='Width of {0}'}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="6" Margin="12,0,0,0" Width="104">
+                        <Button Classes="ghost" Content="Move up" HorizontalAlignment="Stretch" Command="{Binding MoveColumnUpCommand}"
+                                AutomationProperties.AutomationId="ListOptionsMoveUp" />
+                        <Button Classes="ghost" Content="Move down" HorizontalAlignment="Stretch" Command="{Binding MoveColumnDownCommand}"
+                                AutomationProperties.AutomationId="ListOptionsMoveDown" />
+                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,4" />
+                        <Button Classes="ghost" Content="Show all" HorizontalAlignment="Stretch" Command="{Binding ShowAllColumnsCommand}"
+                                AutomationProperties.AutomationId="ListOptionsShowAll" />
+                        <Button Classes="ghost" Content="Hide all" HorizontalAlignment="Stretch" Command="{Binding HideAllColumnsCommand}"
+                                AutomationProperties.AutomationId="ListOptionsHideAll" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Thumbnails: the text lines under a Poster cover. -->
+                <StackPanel Spacing="10" IsVisible="{Binding IsThumbnailsTab}">
+                    <TextBlock Classes="hint" Text="The text under each cover in the Poster style." />
+                    <CheckBox Content="Do not show any text" IsChecked="{Binding HideCaptions}"
+                              AutomationProperties.AutomationId="ListOptionsHideCaptions" />
+                    <CheckBox Content="Use the standard two lines" IsChecked="{Binding UseBuiltInCaptions}" IsEnabled="{Binding !HideCaptions}"
+                              AutomationProperties.AutomationId="ListOptionsBuiltInCaptions" />
+                    <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8" IsEnabled="{Binding CanPickCaptions}">
+                        <TextBlock Grid.Row="0" Classes="fieldLabel" Text="FIRST LINE" VerticalAlignment="Center" />
+                        <controls:SuggestBox Grid.Row="0" Grid.Column="1" IsStrict="True" Text="{Binding Caption1}" Suggestions="{Binding CaptionChoices}"
+                                             AutomationProperties.Name="First line" />
+                        <TextBlock Grid.Row="1" Classes="fieldLabel" Text="SECOND LINE" VerticalAlignment="Center" />
+                        <controls:SuggestBox Grid.Row="1" Grid.Column="1" IsStrict="True" Text="{Binding Caption2}" Suggestions="{Binding CaptionChoices}"
+                                             AutomationProperties.Name="Second line" />
+                        <TextBlock Grid.Row="2" Classes="fieldLabel" Text="THIRD LINE" VerticalAlignment="Center" />
+                        <controls:SuggestBox Grid.Row="2" Grid.Column="1" IsStrict="True" Text="{Binding Caption3}" Suggestions="{Binding CaptionChoices}"
+                                             AutomationProperties.Name="Third line" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- Tiles: the text a tile shows beside its cover. -->
+                <Grid RowDefinitions="Auto,*,Auto" IsVisible="{Binding IsTilesTab}">
+                    <TextBlock Classes="hint" Margin="0,0,0,8"
+                               Text="The text beside each cover in the Tiles style. Title is the first line; everything else shares the second." />
+                    <ListBox Grid.Row="1" Classes="optionList" Height="290" ItemsSource="{Binding TileElements}"
+                             AutomationProperties.Name="Tile text" AutomationProperties.AutomationId="ListOptionsTileElements">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:TileElementOption">
+                                <CheckBox IsChecked="{Binding IsChecked}" Content="{Binding Name}" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button Grid.Row="2" Classes="ghost" Content="Default" HorizontalAlignment="Left" Margin="0,10,0,0"
+                            Command="{Binding ResetTileElementsCommand}" AutomationProperties.AutomationId="ListOptionsTilesDefault" />
+                </Grid>
+
+                <!-- Books: one list, no columns - sort and group. -->
+                <StackPanel Spacing="10" IsVisible="{Binding IsBooks}">
+                    <TextBlock Classes="hint" Text="How the Books list is ordered and grouped." />
+                    <Grid ColumnDefinitions="90,*,Auto" RowDefinitions="Auto,Auto" RowSpacing="8" ColumnSpacing="8">
+                        <TextBlock Grid.Row="0" Classes="fieldLabel" Text="SORT BY" VerticalAlignment="Center" />
+                        <controls:SuggestBox Grid.Row="0" Grid.Column="1" IsStrict="True" Text="{Binding BooksSort}" Suggestions="{Binding BooksSortChoices}"
+                                             AutomationProperties.Name="Sort by" />
+                        <CheckBox Grid.Row="0" Grid.Column="2" Content="Descending" IsChecked="{Binding BooksSortDescending}" />
+                        <TextBlock Grid.Row="1" Classes="fieldLabel" Text="GROUP BY" VerticalAlignment="Center" />
+                        <controls:SuggestBox Grid.Row="1" Grid.Column="1" IsStrict="True" Text="{Binding BooksGroup}" Suggestions="{Binding BooksGroupChoices}"
+                                             AutomationProperties.Name="Group by" />
+                    </Grid>
+                </StackPanel>
+            </Panel>
+
+            <Border Grid.Row="3" Padding="18,13" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0">
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" AutomationProperties.AutomationId="ListOptionsCancel" />
+                    <Button Classes="ghost" Content="Apply" Command="{Binding ApplyCommand}" AutomationProperties.AutomationId="ListOptionsApply" />
+                    <Button Classes="primary" Content="OK" Command="{Binding OkCommand}" AutomationProperties.AutomationId="ListOptionsOk" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

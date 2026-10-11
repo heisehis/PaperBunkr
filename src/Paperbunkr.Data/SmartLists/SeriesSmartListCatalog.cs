@@ -1,4 +1,5 @@
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.Data.SmartLists;
 
@@ -32,7 +33,28 @@ internal static class SeriesSmartListCatalog
             [SmartListField.SeriesStatus] = new(SmartListField.SeriesStatus, "Status", SmartListDataType.Text),
             [SmartListField.ReadingStatus] = new(SmartListField.ReadingStatus, "Reading Status", SmartListDataType.Text),
             [SmartListField.Continuity] = new(SmartListField.Continuity, "Continuity", SmartListDataType.Text),
+
+            // Smart features S1 (docs/superpowers/specs/2026-10-06-smart-features-design.md §3.1): per-series reading progress. Not in CE.
+            [SmartListField.UnreadCount] = new(SmartListField.UnreadCount, "Unread Issues", SmartListDataType.Number),
+            [SmartListField.ReadCount] = new(SmartListField.ReadCount, "Read Issues", SmartListDataType.Number),
+            [SmartListField.DaysSinceLastRead] = new(SmartListField.DaysSinceLastRead, "Days Since Last Read", SmartListDataType.Number),
         };
+
+    /// <summary>The fields derived from the series' issues and reading events (they make the query builder load both).</summary>
+    public static bool IsProgressField(SmartListField field) =>
+        field is SmartListField.UnreadCount or SmartListField.ReadCount or SmartListField.DaysSinceLastRead;
+
+    /// <summary>
+    /// The value of a progress <paramref name="field"/>, or null when there is none (a never-opened series has no
+    /// <see cref="SmartListField.DaysSinceLastRead"/>, and a null never matches a number condition).
+    /// </summary>
+    public static float? ProgressValue(SmartListField field, SeriesProgress progress, DateTime nowUtc) => field switch
+    {
+        SmartListField.UnreadCount => progress.UnreadCount,
+        SmartListField.ReadCount => progress.ReadCount,
+        SmartListField.DaysSinceLastRead => progress.DaysSinceLastRead(nowUtc),
+        _ => null,
+    };
 
     public static readonly IReadOnlyDictionary<SmartListField, Func<Series, string>> TextSelectors =
         new Dictionary<SmartListField, Func<Series, string>>

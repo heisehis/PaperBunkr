@@ -26,7 +26,7 @@ namespace Paperbunkr.App.ViewModels;
 /// editing-design.md). Folder management + scanning live in Preferences → Libraries. Sort/group
 /// persist via <see cref="AppSettings"/>; search and selection do not.
 /// </summary>
-public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
+public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider, IListLayoutHost
 {
     /// <summary>Right-click menu for a book tile / series-group header (docs/superpowers/specs/
     /// 2026-08-29-context-menu-rebuild-design.md's own follow-up list named this screen - the old
@@ -57,7 +57,8 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
         Action<IReadOnlyList<int>> goBulkEdit, Action<int> goEditSeries, Action goLibrarySettings,
         Action<string, string>? showToast = null,
         Action<string?, Action<string>>? promptForName = null,
-        WorkspaceService? workspaceService = null)
+        WorkspaceService? workspaceService = null,
+        ListLayoutService? listLayoutService = null)
     {
         _goBookDetail = goBookDetail;
         _goBookSeriesDetail = goBookSeriesDetail;
@@ -74,9 +75,71 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
         Collections = new ObservableCollection<CollectionSummary>();
 
         LoadBooksSettings();
+        InitializeListLayouts(listLayoutService);
         LoadFromDatabase();
         RefreshWorkspaces();
     }
+
+    // --- List layouts (docs/superpowers/specs/2026-10-04-list-layouts-design.md) ---
+    // Books has no columns, captions or tiles: a Books layout is its sort field, direction and group, the same three
+    // fields a Books workspace holds. It has one list, so one remembered layout (key "all").
+
+    /// <summary>The "List layouts" section of the Workspace menu, and the Edit Layouts overlay's view model.</summary>
+    public ListLayoutsViewModel ListLayouts { get; private set; } = null!;
+
+    WorkspaceScreen IListLayoutHost.LayoutScreen => WorkspaceScreen.Books;
+
+    string IListLayoutHost.LayoutSelectionKey => "all";
+
+    string IListLayoutHost.CaptureLayoutJson() => WorkspaceStateJson.Serialize(CaptureBooksState());
+
+    void IListLayoutHost.ApplyLayoutJson(string json)
+    {
+        SetBooksLayoutFields(WorkspaceStateJson.DeserializeBooks(json));
+        SaveBooksSettings();
+        Rebuild();
+        RaiseBooksLayoutBindings();
+    }
+
+    private void InitializeListLayouts(ListLayoutService? service)
+    {
+        ListLayouts = new ListLayoutsViewModel(this, service, _promptForName)
+        {
+            CloseMenu = () => ActiveDropdown = null,
+        };
+
+        if (ListLayouts.Initialize() is { } json)
+        {
+            SetBooksLayoutFields(WorkspaceStateJson.DeserializeBooks(json));
+        }
+
+        ListLayouts.MarkApplied();
+    }
+
+    private void SetBooksLayoutFields(BooksWorkspaceState s)
+    {
+#pragma warning disable MVVMTK0034
+        _sortField = s.SortField;
+        _sortDirection = s.SortDirection;
+        _groupField = s.GroupField;
+#pragma warning restore MVVMTK0034
+    }
+
+    private void RaiseBooksLayoutBindings()
+    {
+        foreach (var name in new[]
+        {
+            nameof(SortField), nameof(SortDirection), nameof(GroupField),
+            nameof(SortLabel), nameof(GroupLabel), nameof(SortDirectionGlyph), nameof(IsGrouped),
+        })
+        {
+            OnPropertyChanged(name);
+        }
+    }
+
+    /// <summary>A List Options editor over the Books list's sort and group.</summary>
+    public ListOptionsViewModel CreateListOptions(Action close) =>
+        ListOptionsViewModel.ForBooks(CaptureBooksState(), state => ListLayouts.ApplyToCurrentList(WorkspaceStateJson.Serialize(state)), close);
 
     // --- multi-select (B3, mirrors LibraryScreenViewModel.Selection) ---
 
@@ -673,6 +736,9 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
         settings.BooksSortDirection = SortDirection;
         settings.BooksGroupField = GroupField;
         context.SaveChanges();
+
+        // Null only while the constructor is still seeding.
+        ListLayouts?.TrackChange();
     }
 
     // --- navigation / actions ---

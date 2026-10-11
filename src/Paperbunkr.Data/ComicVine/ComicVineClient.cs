@@ -7,13 +7,17 @@ namespace Paperbunkr.Data.ComicVine;
 
 public sealed record ComicVineVolume(int Id, string Name, string? Publisher, int? StartYear, int CountOfIssues, string? ImageUrl);
 
-public sealed record ComicVineIssue(int Id, string IssueNumber, string? Name, DateTime? StoreDate, DateTime? CoverDate, string? ImageUrl, int? VolumeId);
+/// <param name="CoverHash">Metron's perceptual hash of the cover (<see cref="Scraping.MetronCoverHash"/>); ComicVine has none.</param>
+public sealed record ComicVineIssue(int Id, string IssueNumber, string? Name, DateTime? StoreDate, DateTime? CoverDate, string? ImageUrl, int? VolumeId, string? CoverHash = null);
 
 /// <summary>ComicVine could not be reached, rejected the request, or returned something unparseable.</summary>
 public sealed class ComicVineException(string message, int? apiStatusCode = null, Exception? inner = null) : Exception(message, inner)
 {
     /// <summary>ComicVine's own <c>status_code</c> when it answered (100 = invalid key, 101 = not found, 107 = rate limit...).</summary>
     public int? ApiStatusCode { get; } = apiStatusCode;
+
+    /// <summary>The HTTP status behind the failure when the server answered with one this class has no <see cref="ApiStatusCode"/> for (a 400 from a write, say).</summary>
+    public int? HttpStatus { get; init; }
 }
 
 /// <summary>Volume and issue lookups for the acquisition daemon and the "track this series" UI.</summary>

@@ -205,52 +205,12 @@ public static class InsightsResolver
             .ToList();
     }
 
-    private static IReadOnlyList<CollectionGap> ComputeGaps(List<Issue> issues)
-    {
-        var result = new List<CollectionGap>();
-        foreach (var group in issues.Where(i => i.Series != null).GroupBy(i => i.Series!))
-        {
-            var numeric = group
-                .Where(i => i.NumberType() == IssueNumberType.Numeric && i.NumberSortKey() is { } k && k >= 0)
-                .Select(i => (int)Math.Floor(i.NumberSortKey()!.Value))
-                .Distinct()
-                .OrderBy(n => n)
-                .ToList();
-
-            // Need a real run to talk about a "gap" in - two issues #1 and #400 is not one.
-            if (numeric.Count < 3)
-            {
-                continue;
-            }
-
-            int span = numeric[^1] - numeric[0] + 1;
-            double ownership = (double)numeric.Count / span;
-            if (ownership < GapOwnershipFloor)
-            {
-                continue; // you own a scattering across a wide range - not a fill-the-holes situation
-            }
-
-            var owned = numeric.ToHashSet();
-            var missing = new List<int>();
-            for (int n = numeric[0]; n <= numeric[^1]; n++)
-            {
-                if (!owned.Contains(n))
-                {
-                    missing.Add(n);
-                }
-            }
-
-            if (missing.Count is > 0 and <= GapMissingCap)
-            {
-                result.Add(new CollectionGap(group.Key.Id, group.Key.Name, missing));
-            }
-        }
-
-        return result
-            .OrderBy(g => g.MissingNumbers.Count) // closest-to-complete first
-            .Take(AttentionListLimit)
-            .ToList();
-    }
+    /// <summary>
+    /// The tile's strict view of <see cref="CollectionGapResolver"/>: a real run (two issues #1 and #400 is not one) you own most of,
+    /// with a handful of holes, closest-to-complete first. Library Health's "Collection gaps" runs the same code with looser options.
+    /// </summary>
+    private static IReadOnlyList<CollectionGap> ComputeGaps(List<Issue> issues) =>
+        CollectionGapResolver.Compute(issues, CollectionGapOptions.Insights);
 }
 
 public sealed record InsightsSnapshot(
@@ -264,4 +224,8 @@ public sealed record InsightsSnapshot(
 /// Needs Attention card, docs/superpowers/specs/2026-09-28-home-improvements-design.md I3).</param>
 public sealed record AttentionSeries(int SeriesId, string SeriesName, string Subtitle, int? ResumeIssueId, bool IsStalled = false);
 
-public sealed record CollectionGap(int SeriesId, string SeriesName, IReadOnlyList<int> MissingNumbers);
+public sealed record CollectionGap(int SeriesId, string SeriesName, IReadOnlyList<int> MissingNumbers)
+{
+    /// <summary>The numbers the series does have, sorted (Library Health's "Owned" column).</summary>
+    public IReadOnlyList<int> OwnedNumbers { get; init; } = [];
+}

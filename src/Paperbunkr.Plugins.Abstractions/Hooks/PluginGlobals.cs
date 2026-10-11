@@ -203,6 +203,20 @@ public sealed class MissingFileDetectedHookGlobals : PluginGlobals
 }
 
 /// <summary>
+/// <see cref="PluginHooks.ContinuityCompleted"/> (Plugin API 4.4) - the reader finished the last unread issue of a continuity or a
+/// story event. <see cref="Kind"/> says which; <see cref="Id"/> is that continuity's or story event's id. Announced once per
+/// completion: if issues are added later and the collection is incomplete again, finishing those announces it again.
+/// </summary>
+public sealed class ContinuityCompletedHookGlobals : PluginGlobals
+{
+    public required CompletedCollectionKind Kind { get; init; }
+    public required int Id { get; init; }
+    public required string Name { get; init; }
+    public required int IssueCount { get; init; }
+    public required DateTime CompletedAtUtc { get; init; }
+}
+
+/// <summary>
 /// <see cref="PluginHooks.ReadingListChanged"/> - one reading-list operation's net effect. Ids only: the
 /// items may already be gone. <see cref="Kind"/> is a flags value (an arc refresh can add, remove and
 /// reorder in one pass); creating, renaming or deleting a whole list is not an event.

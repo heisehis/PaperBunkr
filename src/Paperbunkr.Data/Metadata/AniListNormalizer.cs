@@ -33,7 +33,8 @@ internal static class AniListNormalizer
         PublicationYear: media.StartDate?.Year,
         PublicationFormat: media.Format,
         GenreTags: media.Genres is { Count: > 0 } genreTags ? genreTags : null,
-        OtherTags: ResolveOtherTags(media.Tags));
+        OtherTags: ResolveOtherTags(media.Tags),
+        CountryOfOrigin: media.CountryOfOrigin);
 
     /// <summary>English title when AniList has one, romaji otherwise - AniList's own MediaTitle
     /// object doesn't guarantee an English title exists, but every manga entry has a romaji one.</summary>

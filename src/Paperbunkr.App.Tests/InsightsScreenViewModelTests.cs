@@ -243,6 +243,55 @@ public class InsightsScreenViewModelTests : IDisposable
         Assert.True(vm.IsTodayTabSelected);
     }
 
+    // --- Drop-off watch (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.3) ---
+
+    private static void SeedProgress(string name, int read, int unread, DateTime lastOpened)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var series = new Series { Name = name };
+        for (int i = 1; i <= read + unread; i++)
+        {
+            bool isRead = i <= read;
+            series.Issues.Add(new Issue
+            {
+                Number = i.ToString(),
+                PageCount = 20,
+                LastPageRead = isRead ? 19 : null,
+                OpenedTime = isRead ? lastOpened : null,
+                FilePath = $@"C:\x\{name}-{i}.cbz",
+            });
+        }
+
+        context.Series.Add(series);
+        context.SaveChanges();
+    }
+
+    [Fact]
+    public void DropOffWatch_ShowsTheSeriesNearYourUsualStoppingPoint_AndIsAbsentWithoutAPattern()
+    {
+        var now = new DateTime(2026, 9, 5, 12, 0, 0, DateTimeKind.Utc);
+        SeedProgress("At risk", read: 2, unread: 8, now.AddDays(-2));
+        var vm = NewVm(nowUtc: () => now);
+
+        vm.Refresh();
+        Assert.False(vm.HasDropOff);     // nothing has stalled yet, so there is no pattern
+
+        for (int i = 0; i < 5; i++)
+        {
+            SeedProgress($"Stalled {i}", read: 3, unread: 5, now.AddDays(-60));
+        }
+
+        var again = NewVm(nowUtc: () => now);
+        again.Refresh();
+
+        Assert.True(again.HasDropOff);
+        Assert.Equal("You often stop after about 3 issues. 1 series is at issue 2.", again.DropOffHeadline);
+        var row = Assert.Single(again.DropOffRows);
+        Assert.Equal("At risk", row.Title);
+        Assert.Equal("2 issues read", row.Subtitle);
+        Assert.NotNull(row.ResumeIssueId);
+    }
+
     private sealed class FakeRecorder : IReadingEventRecorder
     {
         public event Action? ReadingEventRecorded;

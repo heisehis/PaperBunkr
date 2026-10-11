@@ -1,0 +1,80 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="420"
+             x:Class="Paperbunkr.App.Views.EditLayoutsOverlay"
+             x:DataType="vm:ListLayoutsViewModel">
+
+    <!-- Edit Layouts (docs/superpowers/specs/2026-10-04-list-layouts-design.md §8) - CE's ListEditorDialog for
+         Settings.ListConfigurations: rename, delete, reorder, set on the current list, set on all lists. -->
+    <UserControl.Styles>
+        <Style Selector="Button.rowAction">
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.rowAction:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Classes="floatingPanel" Width="560">
+        <Grid RowDefinitions="Auto,*,Auto">
+            <Border Grid.Row="0" Padding="18,15" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
+                <TextBlock Classes="pbTextHeading" Text="EDIT LAYOUTS" />
+            </Border>
+
+            <Panel Grid.Row="1" Margin="18,14" MinHeight="90">
+                <StackPanel IsVisible="{Binding !HasLayouts}" Spacing="10">
+                    <TextBlock FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbTextFaintBrush}"
+                               Text="No saved layouts yet. Set a list up the way you like it, then save it under a name to reuse it on other lists." />
+                    <Button Classes="primary" Content="Save the current layout…" HorizontalAlignment="Left"
+                            Command="{Binding SaveLayoutAsCommand}" AutomationProperties.AutomationId="EditLayoutsSaveCurrent" />
+                </StackPanel>
+                <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto" IsVisible="{Binding HasLayouts}">
+                    <ItemsControl ItemsSource="{Binding Layouts}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ListLayoutRow">
+                                <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+                                        <Button Classes="rowAction" Content="Use here" ToolTip.Tip="Set on the current list"
+                                                Command="{Binding $parent[ItemsControl].((vm:ListLayoutsViewModel)DataContext).ApplyLayoutCommand}" CommandParameter="{Binding Id}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat='Use {0} on the current list'}" />
+                                        <Button Classes="rowAction" Content="All lists" ToolTip.Tip="Set on all lists"
+                                                Command="{Binding $parent[ItemsControl].((vm:ListLayoutsViewModel)DataContext).SetLayoutOnAllListsCommand}" CommandParameter="{Binding Id}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat='Use {0} on all lists'}" />
+                                        <Button Classes="rowAction" Content="Up" ToolTip.Tip="Move up"
+                                                Command="{Binding $parent[ItemsControl].((vm:ListLayoutsViewModel)DataContext).MoveLayoutUpCommand}" CommandParameter="{Binding Id}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat='Move {0} up'}" />
+                                        <Button Classes="rowAction" Content="Down" ToolTip.Tip="Move down"
+                                                Command="{Binding $parent[ItemsControl].((vm:ListLayoutsViewModel)DataContext).MoveLayoutDownCommand}" CommandParameter="{Binding Id}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat='Move {0} down'}" />
+                                        <Button Classes="rowAction" Content="Rename"
+                                                Command="{Binding $parent[ItemsControl].((vm:ListLayoutsViewModel)DataContext).RenameLayoutCommand}" CommandParameter="{Binding Id}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat='Rename {0}'}" />
+                                        <Button Classes="rowAction" Content="Delete"
+                                                Command="{Binding $parent[ItemsControl].((vm:ListLayoutsViewModel)DataContext).DeleteLayoutCommand}" CommandParameter="{Binding Id}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat='Delete {0}'}" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Panel>
+
+            <Border Grid.Row="2" Padding="18,13" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0">
+                <TextBlock FontSize="10.5" TextWrapping="Wrap" Foreground="{DynamicResource PbTextFaintBrush}"
+                           Text="A list keeps its own copy of a layout: renaming or deleting one here does not change any list." />
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

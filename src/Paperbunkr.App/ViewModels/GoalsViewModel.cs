@@ -51,49 +51,120 @@ public partial class GoalsViewModel : ViewModelBase
         Cards.Clear();
         foreach (var p in progress)
         {
-            double percent = p.Goal.Target <= 0 ? 100 : Math.Clamp(p.CurrentValue / (double)p.Goal.Target * 100, 0, 100);
+            // A finish goal on an empty / deleted scope has nothing to measure against: show 0, never a full ring.
+            double percent = p.EffectiveTarget <= 0 ? (p.ScopeMissing || p.Goal.Kind == GoalKind.Finish ? 0 : 100)
+                : Math.Clamp(p.CurrentValue / (double)p.EffectiveTarget * 100, 0, 100);
             nextPercents[p.Goal.Id] = percent;
-            CheckMilestone(p.Goal.Id, percent);
+            if (p.Outcome == GoalOutcome.Missed)
+            {
+                RaiseMissed(p);
+            }
+            else
+            {
+                CheckMilestone(p.Goal.Id, percent);
+            }
+
             Cards.Add(new GoalCardViewModel(p.Goal.Id, p.Goal.Title, StatusText(p), percent, p.IsComplete,
-                p.CurrentValue, p.Goal.Target, p.Goal.PeriodEnd));
+                p.CurrentValue, p.EffectiveTarget, p.Goal.PeriodEnd, p.Outcome, p.PaceState == GoalPaceState.Behind, p.CompletedOn));
         }
 
         _previousPercents = nextPercents;
         OnPropertyChanged(nameof(HasGoals));
         OnPropertyChanged(nameof(HeroGoal));
+        OnPropertyChanged(nameof(ActiveCards));
         OnPropertyChanged(nameof(SecondaryCards));
         OnPropertyChanged(nameof(HasSecondaryGoals));
+        OnPropertyChanged(nameof(PastCards));
+        OnPropertyChanged(nameof(HasPastGoals));
+        OnPropertyChanged(nameof(PastGoalsExpandedByDefault));
+        if (!_pastToggledByUser)
+        {
+            PastGoalsOpen = PastGoalsExpandedByDefault;
+        }
     }
 
-    /// <summary>The Today tab's hero-row goal pick (docs/superpowers/specs/2026-09-23-insights-redesign-
-    /// design.md's Today tab section) - the goal nearest its own deadline, since that's the one most
-    /// worth surfacing at a glance.</summary>
-    public GoalCardViewModel? HeroGoal => Cards.OrderBy(c => c.PeriodEnd).FirstOrDefault();
+    private bool _pastToggledByUser;
 
-    /// <summary>Every goal except <see cref="HeroGoal"/> - kept reachable (with the same delete
+    /// <summary>Whether the Past goals group is showing its cards. Follows <see cref="PastGoalsExpandedByDefault"/> until the user toggles it once.</summary>
+    [ObservableProperty]
+    private bool _pastGoalsOpen;
+
+    [RelayCommand]
+    private void TogglePastGoals()
+    {
+        _pastToggledByUser = true;
+        PastGoalsOpen = !PastGoalsOpen;
+    }
+
+    /// <summary>Set by the shell: opens the goal editor pre-filled from the goal with this id (the "Renew" button on a past goal).</summary>
+    public Action<int>? RenewRequested { get; set; }
+
+    /// <summary>Goals still in play, nearest deadline first.</summary>
+    public IReadOnlyList<GoalCardViewModel> ActiveCards
+        => Cards.Where(c => c.Outcome == GoalOutcome.Active).OrderBy(c => c.PeriodEnd).ToList();
+
+    /// <summary>The Today tab's hero-row goal pick (docs/superpowers/specs/2026-09-23-insights-redesign-
+    /// design.md's Today tab section) - the active goal nearest its own deadline, since that's the one most
+    /// worth surfacing at a glance. With nothing active it falls back to the most recently ended goal, so the
+    /// tile still shows how the last one went (docs/superpowers/specs/2026-10-04-insights-goal-outcomes-and-chart-colour-design.md).</summary>
+    public GoalCardViewModel? HeroGoal
+        => ActiveCards.FirstOrDefault() ?? Cards.OrderByDescending(c => c.PeriodEnd).FirstOrDefault();
+
+    /// <summary>Every active goal except <see cref="HeroGoal"/> - kept reachable (with the same delete
     /// affordance) below the hero row rather than only through the hero tile, so having more than one
     /// active goal never hides the rest.</summary>
-    public IReadOnlyList<GoalCardViewModel> SecondaryCards => Cards.Where(c => c.GoalId != HeroGoal?.GoalId).ToList();
+    public IReadOnlyList<GoalCardViewModel> SecondaryCards => ActiveCards.Where(c => c.GoalId != HeroGoal?.GoalId).ToList();
 
     public bool HasSecondaryGoals => SecondaryCards.Count > 0;
 
+    /// <summary>Completed and Missed goals, newest first, other than a goal the hero tile is already showing.</summary>
+    public IReadOnlyList<GoalCardViewModel> PastCards
+        => Cards.Where(c => c.Outcome != GoalOutcome.Active && c.GoalId != HeroGoal?.GoalId)
+            .OrderByDescending(c => c.PeriodEnd).ToList();
+
+    public bool HasPastGoals => PastCards.Count > 0;
+
+    /// <summary>The Past goals group opens by itself when there is nothing active to look at instead.</summary>
+    public bool PastGoalsExpandedByDefault => ActiveCards.Count == 0;
+
     private static string StatusText(GoalProgress p)
     {
-        if (p.IsComplete)
+        string counts = $"{p.CurrentValue:N0} of {p.EffectiveTarget:N0}";
+        if (p.ScopeMissing)
         {
-            return "Complete!";
+            return $"{p.MissingScopeLabel} was deleted · {counts}";
         }
 
-        bool ended = p.Goal.PeriodKind == GoalPeriodKind.Custom
-            && p.Goal.PeriodEnd < DateOnly.FromDateTime(DateTime.Now);
-        if (ended)
+        return p.Outcome switch
         {
-            return $"Goal ended · {p.CurrentValue:N0} of {p.Goal.Target:N0}";
-        }
+            GoalOutcome.Completed => p.CompletedOn is { } on ? $"Completed {on:MMM d} · {counts}" : $"Completed · {counts}",
+            GoalOutcome.Missed => $"Missed · {counts}",
+            _ when p.Goal.Kind == GoalKind.Finish => p.EffectiveTarget <= 0
+                ? "Nothing in this scope yet"
+                : $"{counts} · {p.EffectiveTarget - p.CurrentValue:N0} to go",
+            _ => p.PaceState == GoalPaceState.Behind
+                ? $"{counts} · {p.BehindAmount:N0} behind pace"
+                : $"{counts} · on track",
+        };
+    }
 
-        return p.PaceState == GoalPaceState.Behind
-            ? $"{p.CurrentValue:N0} of {p.Goal.Target:N0} · {p.BehindAmount:N0} behind pace"
-            : $"{p.CurrentValue:N0} of {p.Goal.Target:N0} · on track";
+    /// <summary>One "Goal missed" alert per goal, once its period has ended below target (deduped, so reopening Insights never repeats it).</summary>
+    private void RaiseMissed(GoalProgress p)
+        => Activity?.RaiseAlert(new ActivityAlert
+        {
+            Severity = ActivityAlertSeverity.Warning,
+            Title = "Goal missed",
+            Detail = $"{p.Goal.Title} — {p.CurrentValue:N0} of {p.EffectiveTarget:N0}",
+            DedupeKey = $"goal-missed:{p.Goal.Id}",
+        });
+
+    [RelayCommand]
+    private void RenewGoal(GoalCardViewModel? card)
+    {
+        if (card is not null)
+        {
+            RenewRequested?.Invoke(card.GoalId);
+        }
     }
 
     private void CheckMilestone(int goalId, double percent)
@@ -150,4 +221,5 @@ public partial class GoalsViewModel : ViewModelBase
 /// readout (docs/superpowers/specs/2026-09-23-insights-redesign-design.md); <see cref="PeriodEnd"/> is
 /// what <see cref="GoalsViewModel.HeroGoal"/> sorts by.</summary>
 public sealed record GoalCardViewModel(int GoalId, string Title, string StatusText, double Percent, bool IsComplete,
-    long CurrentValue, long Target, DateOnly PeriodEnd);
+    long CurrentValue, long Target, DateOnly PeriodEnd, GoalOutcome Outcome = GoalOutcome.Active, bool IsBehind = false,
+    DateOnly? CompletedOn = null);

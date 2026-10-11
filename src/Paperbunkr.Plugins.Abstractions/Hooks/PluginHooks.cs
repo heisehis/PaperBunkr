@@ -41,13 +41,21 @@ public static class PluginHooks
     /// <summary>A reading list's membership or order changed (one event per operation).</summary>
     public const string ReadingListChanged = "ReadingListChanged";
 
-    /// <summary>The four hooks added in Plugin API 4.1 - the only ones that aren't in the 4.0 baseline.</summary>
-    public static readonly IReadOnlyList<string> DomainEventHooks = new[] { BookRead, LibraryScanCompleted, MissingFileDetected, ReadingListChanged };
+    /// <summary>
+    /// The reader finished the last unread issue of a continuity or a story event (Plugin API 4.4; docs/superpowers/specs/
+    /// 2026-10-06-smart-features-design.md §7.4). Fires once per completion; if new issues make it incomplete again, finishing those
+    /// fires it again.
+    /// </summary>
+    public const string ContinuityCompleted = "ContinuityCompleted";
+
+    /// <summary>The notification-only domain-event hooks - the only hooks that aren't in the 4.0 baseline: four from Plugin API 4.1, and <see cref="ContinuityCompleted"/> from 4.4.</summary>
+    public static readonly IReadOnlyList<string> DomainEventHooks = new[] { BookRead, LibraryScanCompleted, MissingFileDetected, ReadingListChanged, ContinuityCompleted };
 
     private const string DescBookRead = "Actions when a Book is finished";
     private const string DescLibraryScan = "Actions when a Library scan completes";
     private const string DescMissingFile = "Actions when a file is confirmed missing";
     private const string DescReadingList = "Actions when a Reading List changes";
+    private const string DescContinuityCompleted = "Actions when a Continuity or Story Event is finished";
 
     private const string DescEditBooks = "Edit/Update Books Commands";
     private const string DescNewBooks = "Create New Books Commands";
@@ -84,6 +92,7 @@ public static class PluginHooks
         [LibraryScanCompleted] = DescLibraryScan,
         [MissingFileDetected] = DescMissingFile,
         [ReadingListChanged] = DescReadingList,
+        [ContinuityCompleted] = DescContinuityCompleted,
     };
 
     /// <summary>
@@ -93,7 +102,7 @@ public static class PluginHooks
     /// <see cref="ValidHooks"/> rather than folded into it so <see cref="ValidHooks"/>'s shape is unchanged.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, Version> HookSince = ValidHooks.Keys
-        .ToDictionary(hook => hook, hook => DomainEventHooks.Contains(hook) ? new Version(4, 1) : new Version(4, 0));
+        .ToDictionary(hook => hook, hook => hook == ContinuityCompleted ? new Version(4, 4) : DomainEventHooks.Contains(hook) ? new Version(4, 1) : new Version(4, 0));
 
     /// <summary>The API version <paramref name="hook"/> first shipped in, or null for a hook name this host doesn't know.</summary>
     public static Version? Since(string hook) => HookSince.GetValueOrDefault(hook);

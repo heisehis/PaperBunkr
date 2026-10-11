@@ -259,13 +259,57 @@ public partial class InsightsScreenViewModel : ViewModelBase
         ? "No near-complete runs with holes."
         : $"{GapCount} near-complete {(GapCount == 1 ? "run has" : "runs have")} a few issues missing.";
 
+    // --- Drop-off watch (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.3) ---
+
+    private DropOffWatch? _dropOffCache;
+
+    /// <summary>Series now one issue short of where the reader usually stops. Empty hides the card.</summary>
+    public ObservableCollection<AttentionRow> DropOffRows { get; } = new();
+
+    public bool HasDropOff => DropOffRows.Count > 0;
+
+    /// <summary>"You often stop after about 3 issues. 4 series are at issue 2."</summary>
+    [ObservableProperty]
+    private string _dropOffHeadline = string.Empty;
+
+    // A row opens through OpenContinueCommand: its next issue in the reader when it has one, else its series.
+    private void PopulateDropOff()
+    {
+        DropOffRows.Clear();
+        if (_dropOffCache is { } watch)
+        {
+            var coverKeys = ResolveCoverKeys(watch.AtRisk.Select(s => s.SeriesId).ToList());
+            foreach (var s in watch.AtRisk)
+            {
+                string subtitle = s.IssuesRead == 0 ? "On the first issue" : s.IssuesRead == 1 ? "1 issue read" : $"{s.IssuesRead} issues read";
+                DropOffRows.Add(new AttentionRow(s.SeriesName, subtitle, s.NextIssueId, s.SeriesId, coverKeys.GetValueOrDefault(s.SeriesId)));
+            }
+
+            DropOffHeadline = watch.Headline;
+        }
+
+        OnPropertyChanged(nameof(HasDropOff));
+    }
+
     public void Refresh()
     {
         if (_cache is null)
         {
             using var context = PaperbunkrDb.CreateContext();
             _cache = InsightsResolver.Build(context, _nowUtc());
+            try
+            {
+                _dropOffCache = DropOffResolver.Build(context, _nowUtc());
+            }
+            catch (Exception ex)
+            {
+                // A nudge, never worth failing the Today tab over.
+                _dropOffCache = null;
+                DiagnosticsService.LogMilestone($"Insights: drop-off watch failed ({ex.GetType().Name}: {ex.Message}).");
+            }
         }
+
+        PopulateDropOff();
 
         Snapshot = _cache;
         PopulateLists(_cache);

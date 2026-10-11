@@ -280,6 +280,23 @@ public sealed class ScrapeOrchestrator
             }
 
             string? seriesName = issue.Series?.Name;
+
+            // An id the book already carries beats any search (docs/superpowers/specs/2026-10-05-metron-api-
+            // efficiency-and-matching-design.md section 2). Only on a run that chooses for itself: a run where
+            // the user confirms each match still shows its dialogs, which is how a wrong link gets put right.
+            if (phase != ScrapePhase.Reviewing && _settings.AutoChooseTopMatch
+                && await TryResolveByIdAsync(issue, createDbContext, cancellationToken).ConfigureAwait(false) is { } exact)
+            {
+                if (!string.IsNullOrWhiteSpace(seriesName))
+                {
+                    _matchMemory.RecordChoice(ComicVineMatchMemory.NormalizeSearchKey(seriesName), exact.Volume.Id);
+                }
+
+                await ApplyVolumeAndIssueAsync(issue, exact.Volume, exact.Details, createDbContext, cancellationToken).ConfigureAwait(false);
+                Record(ScrapeOutcomeKind.Applied, $"Matched \"{exact.Volume.Name}\" by {exact.How}");
+                return false;
+            }
+
             if (string.IsNullOrWhiteSpace(seriesName))
             {
                 Record(ScrapeOutcomeKind.NoMatchFound, "No series name on file");
@@ -437,9 +454,15 @@ public sealed class ScrapeOrchestrator
                         bool passedCoverGate = _getCoverPath is null
                             || await PassesCoverHashGateAsync(issue.Id, effectiveNumber, ranked, cancellationToken).ConfigureAwait(false);
 
-                        if (passedCoverGate)
+                        // A runner-up whose cover is the book's own is the match the text score got wrong
+                        // (same design, section 3) - tried only once the top candidate has failed.
+                        ComicVineVolumeSearchResult? confirmed = passedCoverGate
+                            ? ranked[0].Volume
+                            : await TryCoverTieBreakAsync(issue.Id, effectiveNumber, ranked, cancellationToken).ConfigureAwait(false);
+
+                        if (confirmed is not null)
                         {
-                            chosen = ranked[0].Volume;
+                            chosen = confirmed;
                         }
                         else if (allowDefer)
                         {
@@ -643,8 +666,143 @@ public sealed class ScrapeOrchestrator
             }
         }
 
+        // Metron publishes each cover's hash on the issue row, so there is nothing to download: hash
+        // the local cover the same way and compare. CE's check below stays for any source without one.
+        if (MetronCoverHash.Parse(matchedIssue?.CoverHash) is ulong published)
+        {
+            return MetronCoverHash.FromFile(_getCoverPath!(issueId)) is ulong local && MetronCoverHash.IsMatch(local, published);
+        }
+
         ulong? remoteHash = await HashRemoteCoverAsync(matchedIssue is null ? top.ImageUrl : matchedIssue.ImageUrl, cancellationToken).ConfigureAwait(false);
         return remoteHash is not null && CoverPerceptualHash.Similarity(localHash.Value, remoteHash.Value) > 0.87;
+    }
+
+    /// <summary>
+    /// Metron-Tagger's rule for several candidates: the one whose cover is this book's cover, if exactly
+    /// one is. Looks only at the second and third candidates (the first has just failed the gate), and
+    /// only where a published hash makes it one issue-list request each rather than an image download.
+    /// </summary>
+    private async Task<ComicVineVolumeSearchResult?> TryCoverTieBreakAsync(int issueId, string? bookNumber, IReadOnlyList<(ComicVineVolumeSearchResult Volume, double Score)> ranked, CancellationToken cancellationToken)
+    {
+        if (Provider != ComicProvider.Metron || _getCoverPath is null || string.IsNullOrWhiteSpace(bookNumber) || ranked.Count < 2
+            || MetronCoverHash.FromFile(_getCoverPath(issueId)) is not ulong local)
+        {
+            return null;
+        }
+
+        ComicVineVolumeSearchResult? match = null;
+        foreach (var (volume, _) in ranked.Skip(1).Take(2))
+        {
+            ComicVineIssueSummary? candidate;
+            try
+            {
+                candidate = await FindIssueSummaryAsync(volume.Id, bookNumber, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ComicVineException)
+            {
+                continue;
+            }
+
+            if (MetronCoverHash.Parse(candidate?.CoverHash) is ulong published && MetronCoverHash.IsMatch(local, published))
+            {
+                if (match is not null)
+                {
+                    return null; // two runner-ups share the cover: a reprint or a variant, not something to guess between
+                }
+
+                match = volume;
+            }
+        }
+
+        return match;
+    }
+
+    /// <summary>
+    /// The exact issue for a book that already carries an id Metron can look up: its own Metron id, its
+    /// ComicVine id, or its barcode, in that order. A lookup that fails or names anything but exactly one
+    /// issue returns null, and the caller goes on to its name search as if this had never run.
+    /// </summary>
+    private async Task<(ComicVineVolumeSearchResult Volume, ComicVineIssueDetails Details, string How)?> TryResolveByIdAsync(Issue issue, Func<PaperbunkrDbContext> createDbContext, CancellationToken cancellationToken)
+    {
+        if (Provider != ComicProvider.Metron)
+        {
+            return null;
+        }
+
+        int? metronId = null;
+        int? comicVineId = null;
+        string? upc;
+        using (PaperbunkrDbContext context = createDbContext())
+        {
+            var links = context.ComicMetadataExternalIds
+                .Where(e => e.EntityKind == ComicMetadataEntityKind.Issue && e.EntityId == issue.Id)
+                .Select(e => new { e.Provider, e.ExternalId })
+                .ToList();
+            foreach (var link in links)
+            {
+                if (int.TryParse(link.ExternalId, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int id) && id > 0)
+                {
+                    if (link.Provider == ComicProvider.Metron)
+                    {
+                        metronId = id;
+                    }
+                    else if (link.Provider == ComicProvider.ComicVine)
+                    {
+                        comicVineId = id;
+                    }
+                }
+            }
+
+            upc = context.Issues.Where(i => i.Id == issue.Id).Select(i => i.Upc).FirstOrDefault()?.Trim();
+        }
+
+        try
+        {
+            int? issueId = metronId;
+            string how = "its Metron id";
+
+            if (issueId is null && _comicVine is IComicIssueLookup lookup)
+            {
+                if (comicVineId is int cv)
+                {
+                    var hits = await lookup.FindIssuesByComicVineIdAsync(cv, cancellationToken).ConfigureAwait(false);
+                    if (hits.Count == 1)
+                    {
+                        (issueId, how) = (hits[0].IssueId, "its ComicVine id");
+                    }
+                }
+
+                // A barcode shorter than a UPC-A, or with anything but digits in it, isn't one worth a request.
+                if (issueId is null && upc is { Length: >= 12 } && upc.All(char.IsAsciiDigit))
+                {
+                    var hits = await lookup.FindIssuesByUpcAsync(upc, cancellationToken).ConfigureAwait(false);
+                    if (hits.Count == 1)
+                    {
+                        (issueId, how) = (hits[0].IssueId, "its barcode");
+                    }
+                }
+            }
+
+            if (issueId is null)
+            {
+                return null;
+            }
+
+            ComicVineIssueDetails? details = await _comicVine.GetIssueDetailsAsync(issueId.Value, cancellationToken).ConfigureAwait(false);
+            if (details is null || details.VolumeId <= 0)
+            {
+                return null;
+            }
+
+            ComicVineVolumeDetails? volume = await _comicVine.GetVolumeDetailsAsync(details.VolumeId, cancellationToken).ConfigureAwait(false);
+            return volume is null
+                ? null
+                : (new ComicVineVolumeSearchResult(volume.Id, volume.Name, volume.StartYear, volume.Publisher, volume.CountOfIssues, volume.ImageUrl), details, how);
+        }
+        catch (ComicVineException)
+        {
+            return null;
+        }
     }
 
     /// <summary>CE's <c>is_first_issue</c>: no number at all, or a number equal to 1.</summary>

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Models;
 
@@ -45,7 +46,7 @@ public static class SeriesBulkFieldRegistry
         Text("Sort Name", s => s.SortName, (s, v) => s.SortName = v),
         new("Content Type", FieldKind.Enum,
             s => s.ContentType.ToString(),
-            (s, v) => s.ContentType = Enum.Parse<ContentType>(v ?? nameof(ContentType.Unknown)),
+            (s, v) => SeriesContentTypeEditor.SetManual(s, Enum.Parse<ContentType>(v ?? nameof(ContentType.Unknown))),
             Options: Enum.GetNames<ContentType>()),
         new("Status", FieldKind.Enum,
             s => s.Status.ToString(),

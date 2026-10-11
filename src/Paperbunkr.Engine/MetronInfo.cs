@@ -1421,11 +1421,13 @@ namespace cYo.Projects.ComicRack.Engine
 	public partial class GtinType
 	{
 
+		// Paperbunkr: string, not the generator's object (the schema leaves both untyped) - an object
+		// is written with an xsi:type attribute, and reads back as an XmlNode[] instead of the digits.
 		[System.Xml.Serialization.XmlElementAttribute("ISBN")]
-		public object Isbn { get; set; }
+		public string Isbn { get; set; }
 
 		[System.Xml.Serialization.XmlElementAttribute("UPC")]
-		public object Upc { get; set; }
+		public string Upc { get; set; }
 	}
 
 	[System.CodeDom.Compiler.GeneratedCodeAttribute("XmlSchemaClassGenerator", "2.1.1167.0")]

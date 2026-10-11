@@ -42,6 +42,12 @@ public class WatchedSeries
 
     public DateTime? LastRefreshedAt { get; set; }
 
+    /// <summary>
+    /// When the issue list was last actually fetched. <see cref="LastRefreshedAt"/> also moves when a change sweep shows the series untouched
+    /// (docs/superpowers/specs/2026-10-05-metron-api-efficiency-and-matching-design.md section 1); this one doesn't, so a real fetch still happens every week.
+    /// </summary>
+    public DateTime? LastCatalogFetchAt { get; set; }
+
     public List<CatalogIssue> Catalog { get; set; } = new();
 
     public List<WantedIssue> WantedIssues { get; set; } = new();

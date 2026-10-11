@@ -32,10 +32,10 @@ public class HomePitchHelpersTests
         // readingList and recentlyAdded keep their saved relative order; every other known key is inserted at its default index.
         Assert.Equal(new[]
         {
-            HomeSectionKey.Spotlight, HomeSectionKey.NeedsAttention, HomeSectionKey.ContinueReading, HomeSectionKey.ReadingList,
+            HomeSectionKey.Spotlight, HomeSectionKey.NeedsAttention, HomeSectionKey.ContinueReading, HomeSectionKey.UpNext, HomeSectionKey.ReadingList,
             HomeSectionKey.Collections, HomeSectionKey.BecauseYouRead, HomeSectionKey.RecentlyAdded,
         }, layout.Order);
-        Assert.Equal(7, layout.Order.Distinct().Count());
+        Assert.Equal(8, layout.Order.Distinct().Count());
     }
 
     [Fact]

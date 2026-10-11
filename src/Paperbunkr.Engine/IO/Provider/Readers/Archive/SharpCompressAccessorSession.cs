@@ -53,7 +53,7 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
 			IArchive archive = null;
 			try
 			{
-				stream = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 17);
+				stream = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, ZipSharpZipEngine.BufferSize);
 				archive = ArchiveFactory.OpenArchive(stream, new ReaderOptions { LeaveStreamOpen = true });
 				return new SharpCompressAccessorSession(stream, archive);
 			}

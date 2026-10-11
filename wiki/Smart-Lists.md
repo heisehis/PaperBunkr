@@ -16,7 +16,10 @@ collapsible **Maintenance** group:
 
 ## Creating your own
 
-1. Click **New Smart List** in the sidebar.
+1. Click **New Smart List** in the sidebar. A gallery of templates opens, with **Issues**, **Series** and **Novels** tabs. Pick a template to start from its rules (for example *Unread manga*, *Recently added, ongoing* or *Missing metadata*), or choose **Blank list** and add your own.
+
+   ![The New Smart List template gallery](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/smart-list-templates.png)
+
 2. Give it a name.
 3. Under **Match ALL of the following**, click **Add condition**.
 4. For each condition pick a **field**, an **operator**, and a **value**:

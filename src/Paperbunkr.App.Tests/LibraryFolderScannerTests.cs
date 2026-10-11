@@ -260,6 +260,29 @@ public class LibraryFolderScannerTests : IDisposable
     }
 
     [Fact]
+    public async Task ScanAllAsync_TwoSeriesShareAName_StillImports_IntoTheOlderOne()
+    {
+        int olderId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var older = new Series { Name = "Kilo Station" };
+            context.Series.AddRange(older, new Series { Name = "kilo station" });
+            context.SaveChanges();
+            olderId = older.Id;
+        }
+
+        CbzFixture.Create(Path.Combine(_scanRoot, "Kilo Station 003 (2022).cbz"), pageCount: 1);
+        AddWatchedFolder(_scanRoot);
+
+        var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        Assert.Equal(1, result.IssuesAdded);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(2, verify.Series.Count());
+        Assert.Equal(olderId, verify.Issues.Single().SeriesId);
+    }
+
+    [Fact]
     public async Task ScanAllAsync_IgnoresUnsupportedExtensions()
     {
         File.WriteAllText(Path.Combine(_scanRoot, "notes.txt"), "hello");
@@ -694,6 +717,55 @@ public class LibraryFolderScannerTests : IDisposable
         Assert.Equal(0, second.IssuesUpdated);
     }
 
+    [Fact]
+    public async Task SyncMetadataAsync_AcrossSeveralPages_UpdatesEveryIssueOnce()
+    {
+        // Five issues, two per page (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md section 4.4): the id
+        // cursor must reach the last, partial page and count each update exactly once. One id is removed to leave a gap.
+        var ids = new List<int>();
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Existing Series" };
+            context.Series.Add(series);
+            for (int i = 0; i < 6; i++)
+            {
+                string cbzPath = Path.Combine(_scanRoot, $"paged-{i}.cbz");
+                CbzFixture.Create(cbzPath, pageCount: 1, new cYo.Projects.ComicRack.Engine.ComicInfo { Publisher = $"Publisher {i}" });
+                var issue = new Issue { Series = series, FilePath = cbzPath };
+                context.Issues.Add(issue);
+                context.SaveChanges();
+                ids.Add(issue.Id);
+            }
+
+            context.Issues.Remove(context.Issues.Single(i => i.Id == ids[2]));
+            context.SaveChanges();
+            ids.RemoveAt(2);
+        }
+
+        var scanner = CreateScanner();
+        scanner.PageSize = 2;
+        var reported = new List<(int Done, int Total)>();
+        var result = await scanner.SyncMetadataAsync(new SyncProgress(reported));
+
+        Assert.Equal(5, result.IssuesUpdated);
+        Assert.Equal((5, 5), reported[^1]);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.All(verify.Issues.Where(i => ids.Contains(i.Id)).ToList(), issue => Assert.StartsWith("Publisher ", issue.Publisher));
+        Assert.Equal(0, (await scanner.SyncMetadataAsync(new Progress<(int, int)>())).IssuesUpdated);
+    }
+
+    /// <summary>Reports on the calling thread, so the test sees every report before the sweep returns.</summary>
+    private sealed class SyncProgress(List<(int Done, int Total)> sink) : IProgress<(int Done, int Total)>
+    {
+        public void Report((int Done, int Total) value)
+        {
+            lock (sink)
+            {
+                sink.Add(value);
+            }
+        }
+    }
+
     // ===================== Manga/ContentType scan-time detection (docs/superpowers/specs/
     // 2026-08-16-manga-content-type-classification-design.md §4) =====================
 
@@ -1111,5 +1183,28 @@ public class LibraryFolderScannerTests : IDisposable
         using var verify = new PaperbunkrDbContext(_dbOptions);
         var updated = Assert.Single(verify.Series);
         Assert.Equal(ContentType.Unknown, updated.ContentType); // untouched - not due yet
+    }
+
+    // docs/superpowers/specs/2026-10-05-metroninfo-write-back-design.md - a file another tool identified arrives linked.
+    [Fact]
+    public async Task ScanAllAsync_MetronInfoIds_LinkTheNewIssue()
+    {
+        string cbz = CbzFixture.Create(Path.Combine(_scanRoot, "Kilo Station 004 (2022).cbz"), pageCount: 1);
+        using (var zip = System.IO.Compression.ZipFile.Open(cbz, System.IO.Compression.ZipArchiveMode.Update))
+        using (var writer = new StreamWriter(zip.CreateEntry("MetronInfo.xml").Open()))
+        {
+            writer.Write("<?xml version=\"1.0\" encoding=\"UTF-8\"?><MetronInfo><IDS><ID source=\"Metron\" primary=\"true\">290431</ID><ID source=\"Grand Comics Database\">543</ID></IDS><Series id=\"65478\"><Name>Kilo Station</Name></Series><Number>4</Number></MetronInfo>");
+        }
+
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var issue = verify.Issues.Single();
+        Assert.Equal(543, issue.GcdIssueId);
+        var links = verify.ComicMetadataExternalIds.ToList();
+        Assert.Equal("290431", links.Single(l => l.EntityKind == ComicMetadataEntityKind.Issue && l.EntityId == issue.Id).ExternalId);
+        Assert.Equal("65478", links.Single(l => l.EntityKind == ComicMetadataEntityKind.Series && l.EntityId == issue.SeriesId).ExternalId);
     }
 }

@@ -6,6 +6,7 @@ using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Models;
 
@@ -101,6 +102,16 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     public int UnreadCount { get; init; }
     public bool HasUnread => UnreadCount > 0;
 
+    /// <summary>
+    /// Every issue is read (past CE's read threshold), which is what the Read lens means and what the cover's check badge
+    /// marks (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 2). Stricter than <see cref="IsFinished"/>,
+    /// which only says nothing is unopened.
+    /// </summary>
+    public bool IsAllRead { get; init; }
+
+    /// <summary>More than one issue: the cover is drawn as a stack.</summary>
+    public bool HasMultipleIssues => IssueCount > 1;
+
     // --- ITileProgressSource (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #1/#2). ---
     public string? CoverTitle => Name;
     public double ReadFraction => IssueCount <= 0 ? 0.0 : Math.Clamp((IssueCount - UnreadCount) / (double)IssueCount, 0.0, 1.0);
@@ -118,7 +129,42 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     public string? LanguageIso { get; init; }
 
     /// <summary>First unread issue in reading order, or <see langword="null"/> if every issue is read - backs the Continue Reading overlay button.</summary>
+    /// <summary>
+    /// The issue Continue opens: the most recently opened issue that is still in progress, else the first unread issue in
+    /// number order (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 3 - the same rule Home's resume
+    /// cards follow). Null when every issue has been opened and none is mid-read.
+    /// </summary>
     public int? ContinueReadingIssueId { get; init; }
+
+    /// <summary>The number of <see cref="ContinueReadingIssueId"/>'s issue, for "Continue #N". Null when it has none.</summary>
+    public string? ContinueReadingNumber { get; init; }
+
+    /// <summary>1-based page to resume at when the continue issue is mid-read; null when it has not been opened.</summary>
+    public int? ContinueReadingPage { get; init; }
+
+    /// <summary>Continue strip caption, e.g. "Issue 4 of 12 · p. 9" (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 4).</summary>
+    public string ContinueLabel
+    {
+        get
+        {
+            string issue = ContinueReadingNumber is { } number ? $"Issue {number} of {IssueCount}" : IssueCountLabel;
+            return ContinueReadingPage is int page ? $"{issue} · p. {page}" : issue;
+        }
+    }
+
+    public string ContinueAccessibleName => $"Continue {Name}, {ContinueLabel}";
+
+    /// <summary>The series' own summary. The inspector prefers it over the cover issue's.</summary>
+    public string? Summary { get; init; }
+
+    private const int SynopsisMaxLength = 320;
+
+    /// <summary>What the inspector's About section shows: the series summary when there is one, else the cover issue's excerpt.</summary>
+    public string? SynopsisExcerpt => string.IsNullOrWhiteSpace(Summary)
+        ? RepresentativeRow.SummaryExcerpt
+        : Summary.Length <= SynopsisMaxLength ? Summary : Summary[..SynopsisMaxLength] + "…";
+
+    public bool HasSynopsis => !string.IsNullOrEmpty(SynopsisExcerpt);
 
     public bool HasContinueReading => ContinueReadingIssueId is not null;
     public bool HasPublisher => !string.IsNullOrWhiteSpace(Publisher);
@@ -279,6 +325,9 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     {
         int unreadCount = series.Issues.Count(i => i.LastPageRead is null or 0);
 
+        var inProgress = series.Issues.Where(i => i.IsInProgress()).OrderByDescending(i => i.OpenedTime ?? DateTime.MinValue).FirstOrDefault();
+        var continueIssue = inProgress ?? series.Issues.OrderByNumber().FirstOrDefault(i => i.LastPageRead is null or 0);
+
         var coverIssue = series.Issues.FirstOrDefault(i => i.Id == series.CoverIssueId)
             ?? series.Issues.OrderByNumber().FirstOrDefault();
 
@@ -335,6 +384,7 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
             ReadingDirectionLabel = series.ReadingMode.ToString(),
             IssueCount = series.Issues.Count,
             UnreadCount = unreadCount,
+            IsAllRead = series.Issues.Count > 0 && series.Issues.All(i => i.HasBeenRead()),
             Missing = series.Issues.Any(i => i.FileIsMissing),
             HasFile = series.RemoteSourceId is not null || series.Issues.Any(i => !string.IsNullOrEmpty(i.FilePath)),
             CoverBrush = CoverBrushFor(series.Name),
@@ -348,7 +398,10 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
             LastOpenedTime = series.Issues.Select(i => i.OpenedTime).Max(),
             TotalFileSize = series.Issues.Sum(i => i.FileSize ?? 0),
             LanguageIso = coverIssue?.LanguageISO,
-            ContinueReadingIssueId = series.Issues.OrderByNumber().FirstOrDefault(i => i.LastPageRead is null or 0)?.Id,
+            ContinueReadingIssueId = continueIssue?.Id,
+            ContinueReadingNumber = string.IsNullOrWhiteSpace(continueIssue?.EffectiveNumber()) ? null : continueIssue!.EffectiveNumber(),
+            ContinueReadingPage = inProgress?.LastPageRead + 1,
+            Summary = series.Summary,
         };
     }
 }

@@ -5,6 +5,8 @@ a Reading List) to enter the reader.
 
 ## Reader chrome
 
+![The comic reader with the Info panel and Reader Tools open](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/reader-comic.png)
+
 The reader is mostly full-bleed page. Move the mouse (or tap) to reveal the **chrome**:
 
 - **Top bar** — back breadcrumb (`← Series`), issue title, page indicator, and the

@@ -111,6 +111,35 @@
             </ItemsControl>
         </StackPanel>
 
+        <!-- Shared-character suggestions (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.1): series that share three or more
+             characters with a continuity's members. Local only, so they are here as soon as the panel opens. -->
+        <StackPanel Spacing="8" IsVisible="{Binding HasCharacterSuggestions}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="csSection" Text="Shared characters" />
+                <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding CharacterSuggestions.Count}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+            </StackPanel>
+            <ItemsControl ItemsSource="{Binding CharacterSuggestions}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CharacterSuggestionRowViewModel">
+                        <Border Classes="reviewCard">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                <StackPanel Grid.Column="0" Spacing="3">
+                                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap">
+                                        <Run Text="{Binding SeriesName, Mode=OneWay}" /> <Run Text="→" /> <Run Text="{Binding ContinuityName, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding Reason}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Button Classes="headerAction primary" Content="Accept" Command="{Binding AcceptCommand}" />
+                                    <Button Classes="headerAction ghost" Content="Dismiss" Command="{Binding DismissCommand}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
         <!-- Shared-universe suggestions -->
         <StackPanel Spacing="8" IsVisible="{Binding !HasNoNewContinuitySuggestions}">
             <StackPanel Orientation="Horizontal" Spacing="6">

@@ -66,7 +66,10 @@ public sealed class ReadingEventRecorder : IReadingEventRecorder
         }
     }
 
-    public void UpdateSessionPages(ReadingItemType itemType, int itemId, int pagesRead)
+    public void UpdateSessionPages(ReadingItemType itemType, int itemId, int pagesRead) =>
+        UpdateSessionPages(itemType, itemId, pagesRead, activeSeconds: null);
+
+    public void UpdateSessionPages(ReadingItemType itemType, int itemId, int pagesRead, int? activeSeconds)
     {
         if (pagesRead <= 0)
         {
@@ -87,6 +90,7 @@ public sealed class ReadingEventRecorder : IReadingEventRecorder
         }
 
         row.PagesRead = pagesRead;
+        row.ActiveSeconds = activeSeconds is > 0 ? activeSeconds : null;
         context.SaveChanges();
         ReadingEventRecorded?.Invoke();
     }

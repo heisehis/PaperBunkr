@@ -329,6 +329,261 @@ public class ShortcutsEditorViewModelTests : IDisposable
         Assert.Equal(Row(editor, InputActionIds.GoToPage).Chips.Single().Label, Row(editor, InputActionIds.LibraryReveal).Chips.Single().Label);
     }
 
+    // ----- List, filters, selection and the editor pane (docs/superpowers/specs/2026-10-04-keyboard-shortcuts-master-detail-design.md) -----
+
+    private static List<ShortcutRowViewModel> Listed(ShortcutsEditorViewModel editor) => editor.FilteredGroups.SelectMany(g => g.Rows).ToList();
+
+    [Fact]
+    public void WithNoFilters_TheListHoldsEveryAction_AndTheFirstOneIsSelected()
+    {
+        var (editor, input, _) = Create();
+
+        Assert.Equal(input.Actions.All.Count, Listed(editor).Count);
+        Assert.Same(editor.Groups[0].Rows[0], editor.SelectedRow);
+        Assert.True(editor.SelectedRow!.IsSelected);
+        Assert.True(editor.HasSelection);
+        Assert.False(editor.HasNoMatches);
+    }
+
+    [Fact]
+    public void SelectingARow_MovesTheSelectedFlag()
+    {
+        var (editor, _, _) = Create();
+        var first = editor.SelectedRow!;
+        var rotate = Row(editor, InputActionIds.RotateClockwise);
+
+        editor.SelectRow(rotate);
+
+        Assert.Same(rotate, editor.SelectedRow);
+        Assert.True(rotate.IsSelected);
+        Assert.False(first.IsSelected);
+    }
+
+    [Fact]
+    public void TheSelectionSurvivesARefresh()
+    {
+        var (editor, _, _) = Create();
+        editor.SelectRow(Row(editor, InputActionIds.RotateClockwise));
+
+        editor.Refresh();
+
+        Assert.Equal(InputActionIds.RotateClockwise, editor.SelectedRow!.ActionId);
+        Assert.True(editor.SelectedRow.IsSelected);
+    }
+
+    [Fact]
+    public void Search_MatchesTheLabelAndTheBindingText_AndHidesTheRest()
+    {
+        var (editor, _, _) = Create();
+
+        editor.SearchText = "rotate";
+        var byLabel = Listed(editor);
+        Assert.Contains(byLabel, r => r.ActionId == InputActionIds.RotateClockwise);
+        Assert.DoesNotContain(byLabel, r => r.ActionId == InputActionIds.GoToPage);
+
+        editor.SearchText = "ctrl+wheel up";
+        Assert.Contains(Listed(editor), r => r.ActionId == InputActionIds.ZoomIn);
+
+        var padRow = editor.Groups.SelectMany(g => g.Rows).First(r => r.Chips.Any(c => c.IsPad && !c.IsLocked));
+        editor.SearchText = padRow.Chips.First(c => c.IsPad && !c.IsLocked).Label.ToLowerInvariant();
+        Assert.Contains(padRow, Listed(editor));
+    }
+
+    [Fact]
+    public void Search_RequiresEveryWordToMatch_AndIsCaseInsensitive()
+    {
+        var (editor, _, _) = Create();
+
+        editor.SearchText = "ZOOM CTRL+WHEEL UP";
+        Assert.Contains(Listed(editor), r => r.ActionId == InputActionIds.ZoomIn);
+        Assert.DoesNotContain(Listed(editor), r => r.ActionId == InputActionIds.GoToPage);
+
+        editor.SearchText = "zoom nonsenseword";
+        Assert.True(editor.HasNoMatches);
+        Assert.Empty(editor.FilteredGroups);
+    }
+
+    [Fact]
+    public void WhileAFilterIsOn_AGroupShowsHowManyOfItsActionsRemain()
+    {
+        var (editor, _, _) = Create();
+        var navigation = editor.FilteredGroups.First(g => g.Group.Title == "Navigation");
+        Assert.Equal(navigation.Rows.Count.ToString(), navigation.CountText);
+
+        editor.SearchText = "zoom";
+
+        Assert.All(editor.FilteredGroups, g => Assert.NotEmpty(g.Rows));
+        Assert.Contains(editor.FilteredGroups, g => g.CountText.Contains(" of "));
+    }
+
+    [Fact]
+    public void TheDeviceFilter_KeepsActionsWithABindingOfThatKind()
+    {
+        var (editor, _, _) = Create();
+
+        editor.SetDeviceFilterCommand.Execute(ShortcutDeviceFilter.Controller);
+        Assert.True(editor.IsFilterController);
+        var controller = Listed(editor).Where(r => !ReferenceEquals(r, editor.SelectedRow)).ToList();
+        Assert.NotEmpty(controller);
+        Assert.All(controller, r => Assert.Contains(r.Chips, c => c.IsPad));
+
+        editor.SetDeviceFilterCommand.Execute(ShortcutDeviceFilter.KeyboardMouse);
+        var keyboard = Listed(editor).Where(r => !ReferenceEquals(r, editor.SelectedRow)).ToList();
+        Assert.NotEmpty(keyboard);
+        Assert.All(keyboard, r => Assert.Contains(r.Chips, c => !c.IsPad));
+
+        editor.SetDeviceFilterCommand.Execute(ShortcutDeviceFilter.All);
+        Assert.True(editor.IsFilterAll);
+    }
+
+    [Fact]
+    public void CustomisedOnly_ShowsAnActionOnceItsBindingsDifferFromTheDefaults()
+    {
+        var (editor, _, _) = Create();
+
+        editor.ToggleCustomisedOnlyCommand.Execute(null);
+        Assert.True(editor.CustomisedOnly);
+        Assert.True(editor.HasNoMatches);
+        Assert.Empty(editor.FilteredGroups);
+
+        Row(editor, InputActionIds.RotateClockwise).AddBindingCommand.Execute(Key_(Key.Q));
+        TestDispatcher.Drain();
+
+        Assert.False(editor.HasNoMatches);
+        Assert.Contains(Listed(editor), r => r.ActionId == InputActionIds.RotateClockwise);
+    }
+
+    [Fact]
+    public void TheSelectedAction_StaysInTheList_WhileOtherActionsMatch()
+    {
+        var (editor, _, _) = Create();
+        var rotate = Row(editor, InputActionIds.RotateClockwise);
+        editor.SelectRow(rotate);
+
+        editor.SearchText = "zoom in";
+
+        var listed = Listed(editor);
+        Assert.Contains(rotate, listed);
+        Assert.Contains(listed, r => r.ActionId == InputActionIds.ZoomIn);
+    }
+
+    [Fact]
+    public void SelectingAGroupByItsAnchor_ClearsTheFilters_AndSelectsItsFirstAction()
+    {
+        var (editor, _, _) = Create();
+        editor.SearchText = "rotate";
+        editor.SetDeviceFilterCommand.Execute(ShortcutDeviceFilter.Controller);
+        editor.CustomisedOnly = true;
+
+        editor.SelectGroupByTag("shortcuts.zoomFit");
+
+        Assert.Equal(string.Empty, editor.SearchText);
+        Assert.True(editor.IsFilterAll);
+        Assert.False(editor.CustomisedOnly);
+        Assert.Same(editor.Groups.First(g => g.Title == "Zoom & Fit").Rows[0], editor.SelectedRow);
+        Assert.Contains(editor.FilteredGroups, g => g.Tag == "shortcuts.zoomFit");
+    }
+
+    [Fact]
+    public void AListRowSummarisesItsBindings_AsTheFirstOneAndACountOfTheRest()
+    {
+        var (editor, _, _) = Create();
+        var many = editor.Groups.SelectMany(g => g.Rows).First(r => r.Chips.Count > 1);
+        var one = editor.Groups.SelectMany(g => g.Rows).First(r => r.Chips.Count == 1);
+
+        Assert.Equal(many.Chips[0].Label, many.SummaryLabel);
+        Assert.True(many.HasExtra);
+        Assert.Equal($"+{many.Chips.Count - 1}", many.ExtraText);
+        Assert.False(one.HasExtra);
+        Assert.Equal(string.Empty, one.ExtraText);
+
+        many.RemoveChipCommand.Execute(many.Chips[0]);
+        TestDispatcher.Drain();
+        Assert.Equal(many.Chips[0].Label, many.SummaryLabel);
+    }
+
+    [Fact]
+    public void TheControllersAnalogueAxes_ShowAsLockedChips_WithNoRemoveButton()
+    {
+        var (editor, _, _) = Create();
+
+        var chips = Row(editor, InputActionIds.PanHorizontal).Chips;
+
+        Assert.NotEmpty(chips);
+        Assert.All(chips, c =>
+        {
+            Assert.True(c.IsPad);
+            Assert.True(c.IsLocked);
+            Assert.False(c.IsRemovable);
+        });
+        Assert.DoesNotContain(Row(editor, InputActionIds.ZoomIn).Chips, c => c.IsLocked);
+    }
+
+    [Fact]
+    public void AConflictedRow_NamesTheOtherAction_AndFlagsTheSharedChipOnBoth()
+    {
+        var (editor, _, _) = Create();
+        var rotate = Row(editor, InputActionIds.RotateClockwise);
+        var zoomIn = Row(editor, InputActionIds.ZoomIn);
+
+        rotate.AddBindingCommand.Execute(Key_(Key.Z));
+        TestDispatcher.Drain();
+
+        Assert.True(rotate.HasConflictDetails);
+        Assert.Same(zoomIn, rotate.Conflicts.Single().Other);
+        Assert.Contains("Zoom in", rotate.Conflicts.Single().Message);
+        Assert.True(rotate.Chips.Single(c => c.Binding == Key_(Key.Z)).IsConflicted);
+        Assert.Same(rotate, zoomIn.Conflicts.Single().Other);
+        Assert.True(zoomIn.Chips.Single(c => c.Binding == Key_(Key.Z)).IsConflicted);
+
+        rotate.RemoveChipCommand.Execute(rotate.Chips.Single(c => c.Binding == Key_(Key.Z)));
+        TestDispatcher.Drain();
+
+        Assert.False(rotate.HasConflictDetails);
+        Assert.False(zoomIn.HasConflictDetails);
+        Assert.All(zoomIn.Chips, c => Assert.False(c.IsConflicted));
+    }
+
+    [Fact]
+    public void AnAlwaysAvailableAction_IsSaidToShadowAModeSpecificOneItCollidesWith_NotTheOtherWayRound()
+    {
+        var (editor, _, _) = Create();
+        var rotate = Row(editor, InputActionIds.RotateClockwise);
+        var pageLeft = Row(editor, InputActionIds.PageTurnLeft);
+
+        rotate.AddBindingCommand.Execute(Key_(Key.Left));
+        TestDispatcher.Drain();
+
+        Assert.True(pageLeft.Conflicts.Single(c => c.Other == rotate).Shadows);
+        Assert.False(rotate.Conflicts.First(c => c.Other == pageLeft).Shadows);
+    }
+
+    [Fact]
+    public void SelectingTheOtherActionOfAConflict_IsDeferredAndMovesTheSelection()
+    {
+        var (editor, _, _) = Create();
+        var rotate = Row(editor, InputActionIds.RotateClockwise);
+        var zoomIn = Row(editor, InputActionIds.ZoomIn);
+        rotate.AddBindingCommand.Execute(Key_(Key.Z));
+        TestDispatcher.Drain();
+        editor.SelectRow(rotate);
+
+        rotate.SelectConflictOtherCommand.Execute(rotate.Conflicts.Single());
+        Assert.Same(rotate, editor.SelectedRow);       // not before the click that raised it has finished routing
+        TestDispatcher.Drain();
+
+        Assert.Same(zoomIn, editor.SelectedRow);
+    }
+
+    [Fact]
+    public void ScopeText_SaysWhereTheActionWorks()
+    {
+        Assert.Equal("comic reader, paged mode", InputScopeDisplay.Describe(InputScope.Reader, InputContext.Paged));
+        Assert.Equal("library", InputScopeDisplay.Describe(InputScope.Library, InputContext.Always));
+        Assert.Equal("everywhere", InputScopeDisplay.Describe(InputScope.Global, InputContext.Always));
+        Assert.Contains("comic reader", Create().Editor.Groups.SelectMany(g => g.Rows).First(r => r.ActionId == InputActionIds.PageTurnLeft).Subtitle);
+    }
+
     // ----- Layout import / export -----
 
     [Fact]

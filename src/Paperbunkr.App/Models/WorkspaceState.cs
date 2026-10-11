@@ -26,7 +26,8 @@ public sealed record LibraryWorkspaceState(
     double GridDensity = 1.0,
     bool ShowTileTitles = true,
     bool ShowUnreadBadge = true,
-    bool ShowPublisherBadge = false,
+    // On by default since the 2026-10-04 Library redesign (the publisher label is one of the two default cover marks).
+    bool ShowPublisherBadge = true,
     bool ShowLanguageBadge = false,
     bool UseLanguageIcon = false,
     bool ShowContinueReadingButton = false,
@@ -41,7 +42,11 @@ public sealed record LibraryWorkspaceState(
     // Sub-toggle of ViewMode added by the Master-Detail redesign (docs/superpowers/specs/
     // 2026-09-14-library-visual-redesign-design.md §2) - appended at the end, defaulted, so an old
     // StateJson blob written before this existed still deserializes cleanly.
-    LibraryGridCoverFit GridCoverFit = LibraryGridCoverFit.Poster);
+    LibraryGridCoverFit GridCoverFit = LibraryGridCoverFit.Poster,
+    // The reading-state tab (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 1). Appended and
+    // defaulted like GridCoverFit, so a blob saved before lenses existed loads as All; its FilterUnreadOnly keeps
+    // meaning what it always did (the "Has unread" chip).
+    LibraryLens Lens = LibraryLens.All);
 
 /// <summary>
 /// The Books screen's persisted sort/group state - its whole three-field slice of
@@ -74,6 +79,10 @@ public static class WorkspaceStateJson
 
     public static BooksWorkspaceState DeserializeBooks(string? json) =>
         Deserialize(json, static () => new BooksWorkspaceState());
+
+    /// <summary>Raw read of a list layout; <see cref="ListLayoutStateJson.Deserialize"/> is the normalizing entry point.</summary>
+    public static ListLayoutState DeserializeListLayout(string? json) =>
+        Deserialize(json, static () => new ListLayoutState());
 
     /// <summary>Never throws. On any failure returns the all-app-default record and logs.</summary>
     private static T Deserialize<T>(string? json, Func<T> fallback)

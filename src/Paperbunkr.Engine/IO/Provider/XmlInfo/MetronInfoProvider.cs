@@ -67,7 +67,9 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.XmlInfo
 					Number = metronInfo.Number ?? string.Empty,
 					Count = metronInfo.Series?.IssueCountSpecified is null or false ? -1 : metronInfo.Series.IssueCount,
 					AlternateSeries = metronInfo.Arcs?.FirstOrDefault()?.Name ?? string.Empty,
-					AlternateNumber = metronInfo.Arcs?.FirstOrDefault()?.Number.ToString() ?? string.Empty,
+					// Paperbunkr: v1.1's AlternativeNumber is the real home of this field; CE's arc number stays the fallback.
+					AlternateNumber = !string.IsNullOrEmpty(metronInfo.AlternativeNumber) ? metronInfo.AlternativeNumber : metronInfo.Arcs?.FirstOrDefault()?.Number.ToString() ?? string.Empty,
+					CommunityRating = metronInfo.CommunityRating is null ? 0f : (float)metronInfo.CommunityRating.AverageRating,
 					Title = metronInfo.Stories?.FirstOrDefault()?.Value ?? string.Empty, //Some files seem to set the Title as the 1st Story
 					StoryArc = metronInfo.Stories?.Skip(1).FirstOrDefault()?.Value ?? string.Empty, //So we set the StoryArc as the 2nd Story
 					Summary = metronInfo.Summary ?? string.Empty,

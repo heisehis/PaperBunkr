@@ -793,6 +793,134 @@ public class NeedsReviewViewModelTests : IDisposable
 
     private PaperbunkrDbContext Ctx() => new(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
 
+    // --- Smart features S4 (docs/superpowers/specs/2026-10-06-smart-features-design.md §6.1, §6.2) ---
+
+    private void AddPending(MetadataProposalField field, string proposedValue, decimal confidence, bool seriesScoped = false, string? currentValue = null)
+    {
+        using var context = Ctx();
+        int seriesId = context.Issues.Single(i => i.Id == _issueId).SeriesId;
+        context.MetadataProposals.Add(new MetadataProposal
+        {
+            IssueId = seriesScoped ? null : _issueId,
+            SeriesId = seriesScoped ? seriesId : null,
+            Field = field,
+            CurrentValue = currentValue,
+            ProposedValue = proposedValue,
+            Source = seriesScoped ? MetadataProposalSource.Other : MetadataProposalSource.FilenameParser,
+            Confidence = confidence,
+            Status = MetadataProposalStatus.Pending,
+        });
+        context.SaveChanges();
+    }
+
+    [Fact]
+    public void AutoApplySettings_LoadFromTheDatabase_AndSaveBackAsSoonAsTheyChange()
+    {
+        using (var context = Ctx())
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.MetadataResolutionPolicy = MetadataResolutionPolicy.Prompt;
+            settings.AutoApplyMinConfidence = 0.65m;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        Assert.False(vm.ApplyProposalsAutomatically);
+        Assert.Equal(65, vm.AutoApplyThresholdPercent);
+        Assert.Equal("Nothing applies itself", vm.AutoApplyThresholdLabel);
+
+        vm.ApplyProposalsAutomatically = true;
+        vm.AutoApplyThresholdPercent = 80;
+
+        Assert.Equal("80% or more", vm.AutoApplyThresholdLabel);
+        using var verify = Ctx();
+        var saved = verify.GetOrCreateAppSettings();
+        Assert.Equal(MetadataResolutionPolicy.Automatic, saved.MetadataResolutionPolicy);
+        Assert.Equal(0.8m, saved.AutoApplyMinConfidence);
+    }
+
+    [Fact]
+    public void AcceptAboveThreshold_AcceptsOnlyTheConfidentProposals_AndIsNotOfferedWithoutAThreshold()
+    {
+        AddPending(MetadataProposalField.Number, "12", confidence: 0.6m);
+        AddPending(MetadataProposalField.Year, "2012", confidence: 0.9m);
+        var vm = CreateViewModel();
+        Assert.False(vm.HasThresholdAccept);     // threshold 0: plain "Accept All" already covers it
+
+        vm.AutoApplyThresholdPercent = 80;
+        Assert.True(vm.HasThresholdAccept);
+        Assert.Equal("Accept all at or above 80%", vm.AcceptAboveThresholdConfirm.Label);
+
+        Confirm(vm.AcceptAboveThresholdConfirm);
+
+        using var context = Ctx();
+        Assert.Equal(MetadataProposalStatus.Pending, context.MetadataProposals.Single(p => p.Field == MetadataProposalField.Number).Status);
+        var accepted = context.MetadataProposals.Single(p => p.Field == MetadataProposalField.Year);
+        Assert.Equal(MetadataProposalStatus.Accepted, accepted.Status);
+        Assert.NotNull(accepted.ReviewedAt);
+    }
+
+    [Fact]
+    public void AcceptingAPendingSeriesProposal_WritesTheSeriesField_AndRejectingOneLeavesTheFieldAlone()
+    {
+        AddPending(MetadataProposalField.Genre, "Horror", confidence: 0.7m, seriesScoped: true);
+        var vm = CreateViewModel();
+        Assert.Equal("Genre · Read from the synopsis", Assert.Single(vm.PendingProposalGroups).Title);
+
+        Assert.Single(PendingRows(vm)).AcceptCommand.Execute(null);
+
+        using (var context = Ctx())
+        {
+            Assert.Equal("Horror", context.Series.Single().Genre);
+        }
+
+        // A second suggestion, rejected while still pending: the genre the user now has must not be wiped back to the snapshot.
+        AddPending(MetadataProposalField.Summary, "A keyword guess.", confidence: 0.7m, seriesScoped: true, currentValue: null);
+        using (var context = Ctx())
+        {
+            context.Series.Single().Summary = "My own summary.";
+            context.SaveChanges();
+        }
+
+        var again = CreateViewModel();
+        Assert.Single(PendingRows(again)).RejectCommand.Execute(null);
+
+        using var verify = Ctx();
+        Assert.Equal("My own summary.", verify.Series.Single().Summary);
+        Assert.Equal("Horror", verify.Series.Single().Genre);
+    }
+
+    [Fact]
+    public void AcceptAll_WritesPendingSeriesProposalsToTheirSeries_NotJustTheirStatus()
+    {
+        AddPending(MetadataProposalField.Genre, "Horror", confidence: 0.7m, seriesScoped: true);
+        var vm = CreateViewModel();
+
+        Confirm(vm.AcceptAllProposalsConfirm);
+
+        using var context = Ctx();
+        Assert.Equal("Horror", context.Series.Single().Genre);
+        Assert.Equal(MetadataProposalStatus.Accepted, context.MetadataProposals.Single().Status);
+    }
+
+    [Fact]
+    public void RejectingAnAppliedCreatorProposal_RestoresThePreviousCreator()
+    {
+        using (var context = Ctx())
+        {
+            context.Series.Single().Creator = "Provider Name";
+            context.SaveChanges();
+        }
+
+        AddSeriesProposal(MetadataProposalField.Creator, currentValue: "My Creator", proposedValue: "Provider Name");
+        var vm = CreateViewModel();
+
+        Assert.Single(AppliedRows(vm)).RejectCommand.Execute(null);
+
+        using var verify = Ctx();
+        Assert.Equal("My Creator", verify.Series.Single().Creator);
+    }
+
     /// <summary>Two pending proposals matching one ad, and one matching a second ad.</summary>
     private (int FirstAd, int SecondAd, int[] ProposalIds) SeedAdProposals()
     {

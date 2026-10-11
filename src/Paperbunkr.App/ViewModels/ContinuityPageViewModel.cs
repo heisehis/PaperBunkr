@@ -690,11 +690,19 @@ public partial class ContinuityPageViewModel : ViewModelBase
         var matches = context.Series.AsNoTracking()
             .AsEnumerable()
             .Where(s => s.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .Take(20);
+            .Take(20)
+            .ToList();
 
+        // A nudge, not a block: a series already in other continuities says so under its name (smart features §7.1).
+        var alsoIn = ContinuityCharacterSuggestionResolver.OtherContinuityLines(context, matches.Select(s => s.Id).ToList(), ContinuityId);
         foreach (var series in matches)
         {
-            SeriesSearchResults.Add(new SeriesSearchResult { SeriesId = series.Id, Name = series.Name });
+            SeriesSearchResults.Add(new SeriesSearchResult
+            {
+                SeriesId = series.Id,
+                Name = series.Name,
+                OtherContinuities = alsoIn.GetValueOrDefault(series.Id),
+            });
         }
     }
 

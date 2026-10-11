@@ -33,12 +33,26 @@ public partial class BooksScreen : UserControl
         set => _screenInput.Service = value;
     }
 
+    private bool RunListLayoutCommand(Func<BooksScreenViewModel, System.Windows.Input.ICommand> command)
+    {
+        if (DataContext is not BooksScreenViewModel vm)
+        {
+            return false;
+        }
+
+        command(vm).Execute(null);
+        return true;
+    }
+
     public BooksScreen()
     {
         InitializeComponent();
         _screenInput = ScreenInput.Attach(this, InputScope.Books, new Dictionary<string, Func<bool>>
         {
             [InputActionIds.FocusSearch] = () => ScreenInput.FocusTextBox(this, "BooksSearchBox"),
+            [InputActionIds.ListOptions] = () => RunListLayoutCommand(vm => vm.ListLayouts.ShowListOptionsCommand),
+            [InputActionIds.SaveListLayout] = () => RunListLayoutCommand(vm => vm.ListLayouts.SaveLayoutAsCommand),
+            [InputActionIds.EditListLayouts] = () => RunListLayoutCommand(vm => vm.ListLayouts.ShowEditLayoutsCommand),
 
             // Reloading rebuilds the collections the focused card lives in, so the shortcuts that change them run after the key press has finished routing.
             [InputActionIds.Refresh] = () => DataContext is BooksScreenViewModel vm && ScreenInput.Deferred(vm.LoadFromDatabase),

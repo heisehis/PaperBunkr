@@ -147,10 +147,13 @@ public static class TextSpinner
         };
     }
 
-    private static void Nudge(TextBox box, decimal delta)
+    internal static void Nudge(TextBox box, decimal delta)
     {
         box.Text = Step(box.Text ?? string.Empty, delta, GetMinimum(box), GetMaximum(box));
-        box.CaretIndex = box.Text.Length;
+
+        // A binding can hand the text straight back as null (a numeric property that rejects or clears the value, for one), so read it again
+        // rather than trusting what was just assigned.
+        box.CaretIndex = box.Text?.Length ?? 0;
     }
 
     /// <summary>

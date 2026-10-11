@@ -43,6 +43,25 @@ public sealed record ReadingListChangedEvent(
     IReadOnlyList<int> RemovedIssueIds);
 
 /// <summary>
+/// An existing series' publisher status changed (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.3). Raised by the
+/// database context itself after the save that changed it, so it fires for every writer; never for a series being created.
+/// </summary>
+public sealed record SeriesStatusChangedEvent(int SeriesId, string SeriesName, SeriesStatus OldStatus, SeriesStatus NewStatus);
+
+/// <summary>What a <see cref="CollectionCompletedEvent"/> is about.</summary>
+public enum CompletedCollectionKind
+{
+    Continuity,
+    StoryEvent,
+}
+
+/// <summary>
+/// The reader finished the last unread issue of a continuity or a story event (docs/superpowers/specs/2026-10-06-smart-features-design.md
+/// §7.4). Raised once per completion; if new issues make the collection incomplete again, finishing those raises it again.
+/// </summary>
+public sealed record CollectionCompletedEvent(CompletedCollectionKind Kind, int Id, string Name, int IssueCount, DateTime CompletedAtUtc);
+
+/// <summary>
 /// The app-wide feed of library-level domain events (docs/superpowers/specs/2026-09-20-plugin-api-4-1-
 /// design.md §5). Producers (the folder scanner, Library Health, <c>ReadingListManager</c>) raise
 /// here and stay unaware of plugins; <c>PluginHostService</c> subscribes and dispatches the matching
@@ -70,6 +89,14 @@ public sealed class LibraryEvents
     /// The text names the list and the counts; the host logs it so whoever wrote the bypass can find it.
     /// </summary>
     public event Action<string>? ManagerBypassed;
+
+    public event Action<SeriesStatusChangedEvent>? SeriesStatusChanged;
+
+    public event Action<CollectionCompletedEvent>? CollectionCompleted;
+
+    public void Raise(SeriesStatusChangedEvent e) => Invoke(SeriesStatusChanged, e);
+
+    public void Raise(CollectionCompletedEvent e) => Invoke(CollectionCompleted, e);
 
     public void Raise(LibraryScanCompletedEvent e) => Invoke(LibraryScanCompleted, e);
 

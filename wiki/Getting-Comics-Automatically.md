@@ -23,6 +23,8 @@ Open **Wanted** from the left rail. It has three tabs.
 | **Series** | The series you track. **Track a series** opens a search; **Follow** turns on automatic requests for a series' new issues. |
 | **Releases** | The weekly pull list, described below. |
 
+![The Wanted screen, Queue tab](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/wanted-queue.png)
+
 **Working the Queue**
 
 - Each series is a group. Groups that need you (a failure, candidates to review, a download in flight) open on their own; the rest stay closed. Open or close any group with a click, and the screen remembers your choice.
@@ -58,6 +60,8 @@ Nothing is merged between them: each series belongs to one. Existing series stay
 
 The **Releases** tab is a shelf of covers, one week at a time, grouped by day.
 
+![The Releases tab, a week of new releases](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/wanted-releases.png)
+
 - Use **‹** and **›** to change week and **Today** to come back. Press the date to open a month calendar: a red dot marks a day with releases, a green dot a day with releases from a series you follow. Pick any day to jump to its week.
 - The list is kept for last week to four weeks ahead. If you jump to a week outside that, Paperbunkr fetches just that week when you get there (this uses a few requests to your source) and remembers it until the next automatic refresh.
 - **Request** wants one issue. **Follow** tracks its series and requests everything upcoming. The **…** button holds the rest: **Hide** removes a release you don't care about (turn on **Show hidden** to bring it back with **Restore**). Right-click a cover for the same menu.
@@ -66,6 +70,19 @@ The **Releases** tab is a shelf of covers, one week at a time, grouped by day.
 - The Activity Center tells you when new releases of followed series were added.
 
 The list comes from **Metron** when its login is saved, and from **ComicVine** when only a key is saved (smaller, because ComicVine allows far fewer requests). It refreshes in the background about twice a day; **Search now** can refresh it after an hour. The first refresh takes a while because each new series is looked up once, then remembered.
+
+## Syncing with your Metron account
+
+With a Metron login saved, **Preferences → Connections → Metron account** can keep your account on metron.cloud in step with the library. It runs about once an hour, and nothing is sent while **Sync with my Metron account** is off. Each part has its own switch:
+
+![Preferences, Connections, the Metron account section](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/preferences-connections-metron.png)
+
+- **Pull list.** Series you follow on Metron are added to your pull list, and series on your pull list are followed there. Unfollowing here removes it on Metron; removing it on Metron leaves your follow alone.
+- **Reading.** Each issue you finish in the reader is sent as a read date, with your rating if it has one. It starts from now.
+- **Collection.** Every issue in your library that Metron knows is added to your collection as a digital copy, and rating changes are sent. A large library is uploaded a little each hour. Nothing is ever deleted from your Metron collection.
+- **Wish list.** Issues you want from Metron series are added to your wish list, removed when you drop them, and marked acquired when they arrive.
+
+**Run by hand:** **Sync now** sends whatever is waiting. **Send my reading history** queues every issue you have finished, not just new ones. **Import from Metron** fills in ratings and read issues you have on Metron but not here, and never overwrites.
 
 ## After a download
 

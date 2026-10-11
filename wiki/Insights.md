@@ -18,6 +18,8 @@ set, what you've read lately, and how your reading and your library change over 
 
 ## Trends
 
+![Insights, Trends tab](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/insights-trends.png)
+
 Charts over a range you choose, with **Export**:
 
 - **Finished · range**, **Pace** and **Avg to finish**, each with a change badge against the previous
@@ -30,6 +32,8 @@ Charts over a range you choose, with **Export**:
 - **Highlights**: longest journey, fastest completion, most reread, highest rated.
 
 ## History
+
+![Insights, History tab](https://raw.githubusercontent.com/heisehis/PaperBunkr/master/docs/assets/insights-history.png)
 
 Everything you've been reading, newest first, one row per series (or per book, for a book that isn't in a
 series), grouped under **Today**, **Yesterday**, the day of the week, then the date. Reading a series again moves it

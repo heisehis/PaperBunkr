@@ -372,6 +372,22 @@ this file itself already did once (see the note below).
 > "Implementation notes" lists where reality differed from the pitch (e.g. Library Health had no text severity chip to
 > reskin; ring is bottom-centre and hover-only). Items 8–27 of the pitch (added 2026-09-21) are untouched.
 >
+> **Smart features pitch - designed and built 2026-10-06 (uncommitted, not seen in the running app).** Spec
+> `docs/superpowers/specs/2026-10-06-smart-features-design.md` (its "Implementation notes" list every place the build differs),
+> plan `…-smart-features-plan.md`. Pitch grew to 20 items; #9 and #12 dropped, #14/#15 (OCR, embeddings) out of scope. Built in five
+> slices: **S1** smart-list template gallery (dialog, 11 templates), series progress fields (unread / read / days since last read),
+> Library Health "Collection gaps" and "Metadata consistency" sections, shared `HealthFindingDismissal` table. **S2**
+> `ReadingEvent.ActiveSeconds` from all three readers, reading pace and time-left estimates (Home, Detail, Library inspector), Insights
+> "Drop-off watch", Home "Up next" ranked list, Wanted "Most likely to read" sort. **S3** relink suggestions for missing files
+> ("Relink to this", "Relink all exact matches"), "Recommended" badge on duplicates. **S4** auto-apply confidence threshold with
+> policy + slider controls, "Accept all at or above X%", synopsis genre suggestions (scheduled task, off by default). **S5**
+> shared-character continuity suggestions and the "Also in" nudge, reading-list order vs story-event chronology check,
+> `SeriesStatusChanged` event + refresh of a linked series marked completed, continuity / story-event completion with an Activity
+> Center notification and the `ContinuityCompleted` plugin hook (**Plugin API 4.4**). Three migrations:
+> `AddHealthFindingDismissals`, `AddReadingEventActiveSeconds`, `AddSmartFeaturesSettings`. Verified: unit tests for every resolver,
+> headless render tests for the new rows and the gallery, migration tests, the fast App suite and the Data and Plugins suites.
+> **Not verified:** anything on screen, in either theme; the provider refresh against a real provider; the plugin hook with a real plugin.
+>
 > **Manual session note (2026-09-18, 16 smart-feature + 7 cosmetic-feature pitch items recorded):**
 > Not scoped, not brainstormed, not started — pure idea capture so they aren't lost. Full detail and
 > rationale lives in `Paperbunkr-Roadmap.md`'s "Smart features pitch" and "Cosmetics pitch" sections
@@ -2722,6 +2738,286 @@ mouse buttons 4/5; Ctrl+F, F5, Shift+F6, Ctrl+wheel zoom, MouseButton4/5 = previ
   focus ring now looks on every other page that uses the shared adorner (rendered headlessly only for Insights and the Home carousel).
 - **Limits / follow-ups:** the metadata-entity detail page has no code-behind to register a scope on; the PDF reader relies on its page canvas's Reader scope; only Library-hook plugin commands become
   actions (the other hooks do not operate on a selection); Wanted, Continuity, Manga/Book detail and the editors are smoke-tested (register, decline when empty), not driven with real data.
+
+## 2026-10-04 - Preferences > Keyboard Shortcuts: master-detail redesign
+
+Design [2026-10-04-keyboard-shortcuts-master-detail-design.md](superpowers/specs/2026-10-04-keyboard-shortcuts-master-detail-design.md), plan
+[2026-10-04-keyboard-shortcuts-master-detail-plan.md](superpowers/specs/2026-10-04-keyboard-shortcuts-master-detail-plan.md). Not committed. Presentation only: the bindings model,
+`keymap.json`, capture box and conflict detection are unchanged. CE (`KeyboardShortcutEditor`) is a grouped list with an editor panel but has no search, filters or conflict detection; those are deliberate additions.
+- **Page:** search + device filter (All / Keyboard & mouse / Controller) + Customised only over a grouped one-line-per-action list, beside an editor for the selected action (chips, capture, reset, defaults, "where it works").
+  The red row glow and red banner are gone: a conflict is a quiet warning icon on the row and chip plus a note in the editor naming the other action, whether it can shadow this one, and a jump link.
+- **Code:** `ShortcutsEditorViewModel` (filters, `FilteredGroups`, selection, `SelectGroupByTag`), `ShortcutChip` is now an observable class, `InputScopeDisplay`, `KeyboardShortcutsSection` rewritten. Preferences search hits on a
+  `shortcuts.<group>` anchor select that group's first action and clear the filters; Ctrl+F on the page goes to its own search box.
+- **Behaviour change to know about:** the controller's analogue axes (sticks, triggers) now show a lock and no remove button. They could be removed before but never re-added (no capture for axes), so this stops an unrecoverable unbind.
+- **Verified:** 16 new view-model tests + 1 Preferences anchor test; a real-`MainWindow` test (Down walks the list and the editor follows, Right enters the editor, Left returns to the same row); headless renders of the dark skin at 1400 and 900 wide.
+  Found by that test: the screen-wide `TryMoveDirectionally` hops to the Preferences sidebar from this list, so the list steps through its own rows.
+- **User-seen:** on screen in the dark skin on 2026-10-04 ("way better"). **Not verified:** light and other skins, a controller driving the page with a real pad, Narrator, and capturing a pad button into the new editor pane.
+- **Test note:** the full fast set (Debug) had 6 failures outside this work (4 `PdfBookSourceTests` "resolver is already set", `BookFolderScanServiceTests` PDF import, `ReaderImagePipelineTests` detail-page budget); all 41 tests in those classes pass when run alone, so it looks like test ordering, not checked against a clean tree.
+
+## 2026-10-04 - Library redesign (lenses, two-row command bar, one-badge covers, inspector, continue strip)
+
+Design [2026-10-04-library-redesign-design.md](superpowers/specs/2026-10-04-library-redesign-design.md) (23 grilled decisions; mockup https://claude.ai/artifact/JmsuQFjQYsZqq5HeMZ24Fp),
+slice 1 plan [2026-10-04-library-redesign-slice1-plan.md](superpowers/specs/2026-10-04-library-redesign-slice1-plan.md). All four slices built in one session. Not committed. **Not seen on screen by anyone yet.**
+- **Slice 1, command bar and lenses:** `LibraryLens` (All / Reading / Unread / Read) + `AppSettings.LibraryLens` (migration `AddLibraryLens`, no-op `Down`). `LibraryViewPipeline` classifies and tallies both granularities
+  in its one pass (`LensCounts`), then applies the lens; counts follow scope, chips and search. The toolbar is two rows: row 1 gains Series | Issues and Covers / List / Details switches, row 2 is lens tabs, filter chips
+  (Content type, Publisher, Has unread, Missing, Tracked, Library source, Clear) and a result summary. The Filter dropdown is gone. Lens tabs carry the `tab` class, so `TabStrip.Step` drives them (Library now claims `TabNext`/`TabPrevious`).
+  `FilterUnreadOnly` is kept as the **Has unread** chip, so nothing saved changes meaning. Workspaces save the lens; built-in "Currently reading" is now the Reading lens and `EnsureBuiltInsSeeded` rewrites a changed Library starter.
+- **Slice 2, covers:** `TileCosmeticsOverlay` draws a bottom progress bar for in-progress items instead of the hover ring (the `ProgressRing` setting now switches the bar; Preferences label updated). Series covers: stack peek
+  (sibling Borders in the existing gutter, tile size unchanged, tested), all-read check in the unread badge's corner (`SeriesCardSample.IsAllRead`), hover Read + More buttons (not focusable; More opens the tile's context menu),
+  the last hardcoded `#B814161B` replaced. `PinnedGroupHeader` floats the current group's heading in grouped cover grids (no push-off). New installs default the publisher badge on (CLR initializer only, no model change).
+- **Slice 3, inspector:** Continue resumes the most recently opened in-progress issue, else the first unread (`ContinueReadingNumber`/`Page`, label "Continue #N · p. P"). Synopsis prefers `Series.Summary`. The cover rail in the
+  panel is replaced by number chips (`PreviewIssueChip`, capped at 150) with one shared cover popup on hover or focus; a missing file is a dashed chip. Esc in the panel returns focus to the grid.
+- **Slice 4, continue strip and sidebar:** `LibraryContinueStrip` heads each cover grid's scroller (up to 6 series with a mid-read issue, Home's rule, read off the cached cards; hidden unless All lens + no search + no chips + All Series).
+  The sidebar's Content type group is removed in favour of the chip.
+- **Deviations from the spec, on purpose:** (1) ~~the row-1 button is still "View & Sort"~~ resolved the same day, see the follow-up below. (2) The Content type chip drives the same
+  selection the sidebar rows did, so picking a type still leaves a collection; combining the two is not done. (3) The Publisher chip is session-only. (4) The strip is in the cover grids only, not List or Details.
+  (5) Hover buttons stay behind the existing toggle, off by default.
+- **Not done:** the spec's responsive rules (inspector overlay below ~1100px, row-1 compaction below ~900px); the stack and hover buttons on the Tiles cover style; the all-read check on per-issue tiles; a Publisher/lens entry in browse history.
+- **Verified:** new `LibraryLensTests`, `LibraryInspectorTests`, `LibraryContinueStripTests`, pipeline/workspace/overlay/view/keyboard tests (lens stepping with Ctrl+PageDown through the input service, Up/Down between strip and grid,
+  Esc from the inspector, focus rings not clipped on the chips and strip cards, stack does not change tile size, pinned header). Data migration tests pass. UI-automation tests were edited for the removed Filter button and sidebar group but **not run**.
+
+### 2026-10-04 follow-up - "View & Sort" split up after the user saw the build
+
+The user ran the build and found the popup redundant against the new row-1 switches; audit and three decisions agreed in chat (all recommended). Not committed.
+- **Gone from the popup:** the List and Details rows (row-1 switch) and the whole Card content group (Series | Issues switch).
+- **Row-1 button:** icon-only **Display options** (`LibraryDisplayButton`), no tabs: Cover style (Poster / Panorama / Tiles), Cover size (was "Grid density"), Show titles, then "On the cover":
+  Unread count, Publisher logo, Progress bar (new here; the same `AppSettings.ProgressRing` as Preferences), Rating, Language (Off / Text / Flag over the two stored settings), Hover buttons, Dog-ear preview.
+  Disabled in the Details table, where nothing in it applies.
+- **Sort and Group:** each its own popup on its row-2 chip ("Sort: …", "Group: …"). The group chip is always shown ("Group: None"). `ViewSortTab` and the tab state are deleted.
+- **Moved to Preferences > Appearance:** Fade in covers and Cover tooltips (Cover cosmetics), Smooth scrolling (Interface). `LibraryScreenViewModel` no longer reads or writes these three, so a Library settings save
+  cannot overwrite what Preferences wrote (tested). No schema change.
+- **Hover "More" button fix (user report: "glitched out"):** its menu was anchored to the button, which exists only while the cover is hovered, so the menu was torn down when the pointer moved onto it.
+  It now opens at the pointer, owned by the screen (`ContextMenuHost.ShowMenuAtPointer`), a tick after the click. Diagnosed from the code, not reproduced; no test clicks the button with a real pointer.
+- **Known unrelated failure:** `PreferencesScreenViewModelTests.Screen_FocusRings_AreNotClipped` throws `Static resource 'PbRadius' not found` at `KeyboardShortcutsSection.axaml:48` (the concurrent Keyboard Shortcuts work), so the
+  three new Appearance rows have not had their focus rings checked.
+- **Verified:** new `LibraryDisplayPopupTests`, a Preferences view-model test for the three moved switches, the existing Library suites. UI-automation driver and two tests repointed (`LibraryViewSwitch_*`, the chips) but **not run**.
+  Not seen on screen yet.
+
+## 2026-10-04 - Insights gaps: goal outcomes, chart colour, publisher logos, goal scopes
+
+Two design + plan pairs: `docs/superpowers/specs/2026-10-04-insights-goal-outcomes-and-chart-colour-{design,plan}.md` and
+`2026-10-04-insights-goal-scopes-design.md`. All of it **built, uncommitted, not yet seen in the real app** (the user's running Paperbunkr locks `bin/Debug`, so tests ran with `-c Release`).
+
+- **Goal outcomes.** `GoalOutcome` Active / Completed / Missed, derived in `GoalResolver` (no migration) - Missed for every period kind, not only Custom. Completed goals name the day they were
+  completed. `GoalRing` draws a check / cross / amber-behind. Today hero prefers active goals; ended ones sit in a collapsed "Past goals" group with Renew + Delete; a Missed goal raises one
+  `goal-missed:{id}` Activity Center alert.
+- **Chart colour.** `InsightsChartPalette` (meaning colours for reading state and content rating, neutral grey for Unknown/Other, positional fallback), `DonutLegend` (swatch + count + %), hover on donut and legend
+  (linked), score distribution on a red-to-green ramp with value labels and digit ticks (the `★` tofu was ScottPlot's font lacking the glyph), Top publishers rows show the publisher logo.
+  Found on the way: the original donut sweep arithmetic subtracted the padding from the largest slice twice, so the ring never closed (round caps hid it) - fixed in `DonutMath`, flat caps with a hairline gap now.
+- **Goal scopes.** Count goals and **Finish** goals; scopes: reading list, collection, story event, continuity, creator, media type (plus series/publisher/genre); several scopes per goal (AND); "count each once";
+  no-deadline finish goals; a goal whose list was deleted reads "<name> was deleted" and never "Completed". New table `ReadingGoalScopes` + two columns (migration `AddGoalScopes`, legacy single scope backfilled into a row, `Down` drops the table only).
+  Editor rebuilt (goal type, scope rows, SuggestBox pickers); "Set a goal…" on a reading list's Manage menu and on a collection's menu; a "Goal: 12 of 30" chip on the list page. **Reading status** was dropped as a scope
+  (a finish goal over "Planned" items shrinks as you read them); smart lists are out of scope.
+- **Verified:** Data.Tests `GoalResolverTests` + `GoalScopeResolverTests` + the two goal migration tests (37/37); App.Tests scoped filter `Goal|InsightsChart|DonutMath|InsightsScreen|ReadingList|Collection|Wanted|ScheduledTask`
+  (393/393, Release); controls and the editor rendered headlessly to PNG (the editor's `SuggestBox` pickers do not paint in that harness, so they are the unseen part). The full fast suite did **not** complete
+  in this session; four failures seen in its partial log were in reader / remote-reading tests (`ReaderScreenPanelTests`, `ReaderScreenViewModelTests`, `RemoteReadingTests`) and are not from this work.
+- **Not verified:** the real Insights screen (Past goals, Renew, hover tooltips), the goal editor with its pickers, the reading-list chip and both "Set a goal…" menu items.
+
+## 2026-10-04 - Publisher logos: user icon folder, publisher gaps, fill from siblings
+
+Design: `docs/superpowers/specs/2026-10-04-publisher-icons-user-folder-and-gaps-design.md`. **Built, uncommitted, not seen in the real app.**
+Diagnosis first: the bundled pack (751 files, identical to CE bar one rename) is fine - all 807 name keys resolve to an image - and the real library only has 16 distinct publishers, 12 of which already had a logo.
+The real gaps were 441 issues with no publisher (mostly manhwa/manga scans) and no runtime place to add icons.
+- `%APPDATA%\Paperbunkr\publisher-icons` (`PublisherIconFolder`): PNG/JPG, recursive, CE filename rules + `map.ini`, **consulted before every bundled mark**; loaded at startup and on *Reload icons*.
+- Library Health > Review > **Publisher logos** (`PublisherGapsViewModel`, `PublisherCoverage`): publishers with no logo, issues with no publisher, *Fill N from the rest of the series* (confirmed, DB only, ties skipped, never overwrites), Open folder / Reload icons.
+- Letter chips (not logos) for Penguin Random House, Abrams, Games Workshop via `publisher-aliases.tsv`.
+- **Verified:** `PublisherCoverageTests` + `MarkResolverUserIconTests` + resolver/BrandMark filter (137/137, Release); Preferences + Library Health filter incl. the updated section counts (296/296). A read-only dry run on the real library:
+  75 issues fillable (Green Arrow, Titans, The Flash, Gokurakugai -> Viz Media, Reality Quest -> Webtoon, ...); 366 issues in 17 series (the manhwa scans) have nothing local to infer from. **Not verified on screen.**
+
+## 2026-10-04 - List layouts (CE list layouts: column editor, named layouts, per-list layouts)
+
+Design: `docs/superpowers/specs/2026-10-04-list-layouts-design.md` (section 14 = as built); plan: `2026-10-04-list-layouts-plan.md`. **Built, uncommitted. The user confirmed the feature works in the Debug build on 2026-10-05; the itemised on-screen checks below were not each reported on.**
+CE facts were looked up in `_reference/ComicRackCE` first: the saved object is `ListConfiguration` (`Name` + `DisplayListConfig`), CE ships no preset layouts, a layout holds no fonts or colours, and each list keeps its own auto-saved copy.
+- **Data:** migration `AddListLayouts` (two new tables, nothing else): `ListLayouts` (named, per screen) and `ListLayoutAssignments` (one row per screen + list; key `*` is the screen default). `ListLayoutService` stores JSON only.
+- **Per-list memory:** `ListLayoutsViewModel` (one per screen) compares the captured layout with the last one applied and writes the list's row only when it differs, from the existing settings-save hook. Library keys: `all`, `content:<type>`, `collection:<id>`; Books: `all`.
+- **Library layout (`ListLayoutState`):** Details columns (order, visibility, **width**), view mode, cover style, up to three thumbnail caption lines, tile text elements, sort and group.
+- **Details header:** drag a header to move the column, the grip after it to resize (`LibraryScreen.DetailsHeader.cs`); the right-click column picker still works.
+- **Workspace menu** (Library and Books) gains *List layouts*: one row per saved layout, List options, Save list layout, Edit layouts, Default layout for this list.
+- **Overlays:** List Options (Details / Thumbnails / Tiles; Books: sort and group) and Edit Layouts (use here, all lists, up, down, rename, delete).
+- **Shortcuts** (input service): List options Ctrl+L, Edit layouts Ctrl+Alt+L (CE's keys), Save list layout unbound.
+- **Starter layouts (2026-10-05, user request; CE ships none):** Cover wall, Compact tiles, ComicRack classic, Reading progress, File details - seeded once at startup, ordinary layouts, a deleted one never returns (design section 15).
+- **Left out on purpose:** CE's series-statistics columns and the columns Paperbunkr has no data for, per-column date format, Ctrl+Shift+F6-F11, a Details table on Books, caption lines on Panorama cards.
+- **Verified:** `ListLayoutServiceTests`, `LibraryListLayoutTests`, `ListLayoutViewTests` (43/43, Release, including the starter layouts). The fast set (`Speed!=Slow`) ran 5,130 tests with 6 failures, none in this area:
+  four `PdfBookSourceTests` and one `BookFolderScanServiceTests` PDF test (all pass when run on their own) and one `LiveFolderWatchServiceTests` file-lock failure (that class fails a different test on each run).
+  Those six were not investigated further.
+- **Not verified:** anything on the real screen - the two header drags, both overlays in either skin, the menu section inside the Workspace popup, Ctrl+L / Ctrl+Alt+L in the running app, and a restart keeping a per-list layout.
+  The migration has only run through `EnsureCreated` in tests, not against the real database.
+
+## 2026-10-05 - MetronInfo.xml write-back and id import
+
+Design: `docs/superpowers/specs/2026-10-05-metroninfo-write-back-design.md`; plan (with the deviations found while building): `2026-10-05-metroninfo-write-back-plan.md`. **Built, uncommitted, not seen on screen.**
+Came out of a research pass over the Metron-Project repos. CE was checked first: it reads MetronInfo and deletes it on export (`Changes.txt`), so writing it is a deliberate deviation.
+- **Setting:** `AppSettings.WriteMetronInfo` (migration `AddWriteMetronInfo`, no-op `Down`), default off, under the master write-back toggle. Preferences > Advanced > Comic File Metadata, "Also write a MetronInfo.xml".
+- **Write:** `IssueToMetronInfoMapper` + `MetronIdContext` (Data), called from `MetadataFileWriteBackService`. `.cbz` and image folders, next to ComicInfo.xml. One `Credit` per creator from the eight credit fields.
+  `<IDS>` holds the Metron / Comic Vine ids from `ComicMetadataExternalId` plus `Issue.GcdIssueId`; the scrape source is primary, and `id=` attributes are only ever that provider's.
+- **Existing files:** setting off = an existing MetronInfo.xml is untouched. On = overwritten, keeping what we hold nothing for (prices, universes, reprints, store date, another tool's ids).
+- **Schema:** targets MetronInfo v1.1. `AlternativeNumber` and `CommunityRating` live in `MetronInfo.Paperbunkr.cs`, so CE's generated `MetronInfo.cs` only changed in its GTIN types (`object` -> `string`).
+- **Read:** `EmbeddedMetronIds` links a new file's Metron / Comic Vine / GCD ids on scan, only where the issue or series has no link yet. Hooked into the new-file scan only, not Sync Metadata or a single-issue rescan.
+- **Left out:** `LastModified` (a fresh stamp would defeat the no-op guard; Metron-Tagger may therefore treat our files as stale), cover prices, universes, finer credit roles, non-CBZ archives.
+- **Verified:** `IssueToMetronInfoMapperTests` (new, 25) + snapshot tests; all of `Paperbunkr.Data.Tests` (2,079/2,079); `MetadataFileWriteBackServiceTests`, `LibraryFolderScannerTests`, `MetadataWriteBackQueueTests` and the Preferences toggle test (74/74).
+  A full and a minimal written document both validate against the official v1.1 XSD (Python `xmlschema`, XSD 1.1); the full one fails v1.0 only on the two v1.1 elements, as designed.
+- **Not verified:** the Preferences row on screen, a write against a real library file, the migration against the real database, and whether Metron-Tagger / Codex accept the output. `avalonia-pro-max/review-checklist` applied by reading only.
+
+## 2026-10-05 - Metron: change sweep, exact id lookups, cover-hash matching
+
+Design: `docs/superpowers/specs/2026-10-05-metron-api-efficiency-and-matching-design.md`. **Built, uncommitted. Nothing here has run against the real Metron API.** CE has no Metron support, so there was no CE behaviour to match; the ComicVine paths are untouched.
+- **Change sweep:** `MetronClient.GetSeriesModifiedSinceAsync` (`series/?modified_gt=`, 5-page cap, null = "can't tell") behind `ISeriesChangeSource`. `AcquisitionCycle.FindUnchangedAsync` runs one sweep when two or more due series qualify and only bumps `LastRefreshedAt` for the unchanged ones.
+  New `WatchedSeries.LastCatalogFetchAt` (migration `AddWatchedSeriesCatalogFetch`) forces a real fetch every 7 days. A failed or capped sweep fetches everything as before. `If-Modified-Since` was deliberately not built.
+- **Exact ids:** `IComicIssueLookup` (`issue/?cv_id=`, `issue/?upc=`). `ScrapeOrchestrator.TryResolveByIdAsync` runs before the name search on a Metron scrape that chooses for itself: the book's Metron id, then its ComicVine id, then its UPC, accepted only on exactly one hit.
+  A run where the user confirms matches still shows its dialogs (that is how a wrong link is corrected).
+- **Cover hash:** `MetronCoverHash` is a port of Python `imagehash.phash`, which is what Metron's `cover_hash` is. It reproduces the hash Metron's API docs publish for a public cover (`c585eb18bf1e5423`) exactly, on the full image and on a thumbnail.
+  In the cover gate a Metron issue's published hash replaces the image download (match at 10 bits or fewer, Metron-Tagger's bar); when the top candidate fails, the second and third are tried and one is taken only if it alone matches.
+- **Verified:** `MetronCoverHashTests`, `MetronExactMatchTests`, `MetronClientTests`, `ScrapeOrchestratorTests`, `CatalogChangeSweepTests`, all of `Paperbunkr.Daemon.Tests` (203/203), all of `Paperbunkr.Data.Tests` (2,131/2,131).
+- **Not verified:** requests actually saved, match quality on a real library, and whether a 304 or a sweep counts against Metron's limit the way the docs imply.
+
+## 2026-10-05 - Metron account sync (pull list, reading, collection, wish list, reading lists)
+
+Design: `docs/superpowers/specs/2026-10-05-metron-account-sync-design.md` (its last section lists where the build departs from it). **Built, uncommitted, not seen on screen, and never run against a real Metron account** - every request and reply shape is from Metron's `api/README.md` alone.
+- **Off by default.** Preferences > Connections > "Metron account": a master switch, a switch per area, and Sync now / Send my reading history / Import from Metron. Nothing is sent while the master is off.
+- **Shape:** `MetronAccountSync` (Data) reconciles the database against a ledger (`MetronSyncLinks`, migration `AddMetronAccountSync`, plus six `AppSettings` columns) instead of hooking the dozen places follows, wants, reads and ratings change. A run spends at most 120 requests at background priority and stops cleanly on a rate limit; what wasn't sent is still a gap next run.
+- **Areas:** pull list (additions both ways, unfollow here removes there, a removal on Metron is neither undone nor mirrored); reading (each `Finished` read above a watermark is scrobbled with its date and rating); wish list (Metron wants: add / remove / acquire); collection (issues with a file are added as DIGITAL, rating changes are PATCHed, nothing is ever deleted).
+- **Import from Metron:** fills ratings and read state that are empty here, never overwrites; the reads it records are marked in the ledger so they are not scrobbled back.
+- **Reading lists:** a "Metron reading lists" source (`MetronReadingListSource`) in the new-reading-list flow, for the user's own and public lists. Works without the master switch (it only reads, on request).
+- **Hosting:** scheduled task "Sync with Metron" (hourly; a no-op with a plain message while sync is off or no login is saved).
+- **Known limits:** "Mark as read" writes no `Finished` event, so only reads finished in the reader are sent. Wants that came from a ComicVine series are not mirrored. A book with neither a Metron nor a ComicVine id never syncs. Login is still username + password (Metron now recommends API tokens).
+- **Verified:** `MetronAccountClientTests`, `MetronAccountSyncTests`, `MetronSyncSettingsViewModelTests`, `PreferenceIndexTests`, the model-drift check (`HasPendingModelChanges`) with all three new migrations.
+- **Not verified:** anything against metron.cloud; the Preferences section on screen (`avalonia-pro-max/review-checklist` by reading only); the migrations against the real database. **First real use should be with only the Pull list switch on, watched.**
+
+## 2026-10-05 (evening) - verification pass over today's Metron work
+
+Checked against a copy of the real database (`%AppData%\Paperbunkr\paperbunkr.db`, taken while the app was running) and the network. Nothing on screen was checked: that still needs the user, or their go-ahead for UI automation.
+- **Confirmed: the three new migrations applied to the real database.** `AddWriteMetronInfo`, `AddWatchedSeriesCatalogFetch` and `AddMetronAccountSync` are in `__EFMigrationsHistory`; the seven `AppSettings` columns, `WatchedSeries.LastCatalogFetchAt` and the `MetronSyncLinks` table exist; `PRAGMA integrity_check` is ok (4,261 issues, 571 series).
+- **Confirmed: the account-sync switches and buttons work in the running app.** The database shows the master switch and all four areas on, the reading watermark at the newest event (333), the hourly task enabled and run once, and two hand-started syncs.
+- **Both hand-started syncs failed with "Metron did not respond in time" - Metron was down.** `metron.cloud:443` refused connections from this machine and from an outside network at 18:20, while `static.metron.cloud`, GitHub and ComicVine answered. The run stopped at its first request and sent nothing (`MetronSyncLinks` is empty), which is the designed behaviour. **Still not verified: any account request against a working Metron.**
+- **Found and fixed: `MetronSyncSettingsViewModelTests` wrote to the real activity history.** It built `new ActivityService()`, whose default recorder is the real `ActivityHistoryStore`. Fifteen rows titled "Syncing with Metron" / "Sending reading history to Metron" / "Importing from Metron" (ids 1574-1578 and 1582-1591, all 2026-10-05) are from test runs, not the user. The test now passes a no-op recorder; a rerun added no rows. The rows themselves were left in place.
+  The same leak is older than this: five app classes fall back to `new ActivityService()` when a test passes none (`MetadataWriteBackQueueTests` left three "Writing metadata to files" rows today). Not fixed here.
+- **Stale notes:** `git status` shows only today's Metron work uncommitted, so every earlier "uncommitted" note in this file and in `Paperbunkr-Roadmap.md` predates the 0.7.7 release commit (`a2c826f`) and is out of date.
+
+## 2026-10-05 (night) - first real account sync: "Metron rejected your login", and a 24-hour block
+
+The user's first real Sync now runs (all four areas on) ended "Metron rejected your login". The login was fine: Import from Metron, ten seconds apart from a failed sync, read the collection with it.
+- **Cause: five write paths had no trailing slash.** Metron's `api/README.md` writes `pull_list/series/add`, both `remove`s, `wish_list/items/add` and `acquire` without one; its router only serves them with it (its own client, mokkari: `METRON_URL = "https://metron.cloud/api/{}/"`).
+  Without the slash Metron redirects, .NET drops the `Authorization` header when it follows a redirect, and the request that arrives is a 401. Fixed in `MetronAccountClient`; a test now asserts every account request path ends in `/`.
+- **Redirects are no longer followed** on the shared Metron client (`AllowAutoRedirect = false`); a redirect is reported as a Paperbunkr fault with its path, never as a bad login.
+- **Metron blocks an address for 24 hours after three 401s in five minutes** (its published `fail2ban/jail.d/metron.conf`; ten 403s also). New `MetronLoginGuard`: a rejected login is not sent again for 10 minutes, and no third rejection can happen inside a 6-minute window, across every Metron request in the process (`MetronClient` and the older `MetronSource`).
+  A 401 and a 403 now get different messages, each quoting Metron's own `detail` text.
+- ~~This machine's address is very likely blocked until about 19:00 UTC on 2026-10-06~~ **Wrong - see the next section: Metron answered again about 90 minutes later.** What was written at the time: five test requests sent without a login each got a 401 within seconds, and Metron stopped answering this machine right after. The app's own failed syncs were spaced too far apart to trip the rule.
+- **Verified:** all Metron test classes in `Paperbunkr.Data.Tests` (127), including the new `MetronLoginGuardTests` and the slash test.
+- **Not verified:** the fix against the real Metron (blocked), so no account write has succeeded yet. The Debug app was not rebuilt because it was running; it needs closing first.
+
+## 2026-10-05 (late) - account sync works against the real Metron; two runs collided
+
+- **Confirmed against the real Metron:** the scheduled run at 20:36 UTC (on the build with the trailing-slash fix) sent the whole pull list and part of the wish list. The ledger holds 59 pull-list rows, one per followed Metron series with the right series id, and 60 wish-list rows, each for a real Metron want; no duplicates.
+  That is exactly its 120-request budget (1 list + 59 adds + 60 adds); the other 42 open wants and the collection wait for later runs. So `pull_list/series/`, `pull_list/series/add/` and `wish_list/items/add/` are verified. **Still not verified live:** scrobble, collection add, rating PATCH, acquire, the two removes.
+- **Correction: there was no 24-hour block.** Metron stopped answering this machine right after five no-login test requests, but answered again within about 90 minutes. Either its deployed ban time is shorter than the published 24 hours, or it was the same instability seen earlier that evening. The guard added because of it stays: the published rule is real.
+- **Bug found by the user: "An error occurred while saving the entity changes."** Sync now was pressed 47 seconds into the hourly run; both reconciled the same ledger and the second hit the unique index on (`Kind`, `LocalId`). Fixed: `MetronAccountSync` runs one at a time, process-wide (a second run or import returns "another sync with Metron is already running"), and the settings page now shows the innermost exception message.
+- **Verified:** the Metron test classes in `Paperbunkr.Data.Tests` (128), including a test that holds one run open and starts another.
+- **Later the same night (user's Sync now, activity row 1623):** "48 issues added to the wish list, 53 issues added to the collection", stopped at the budget. The ledger then held 59 pull-list, 108 wish-list (every open Metron want) and 53 collection rows, no duplicates, so `collection/add/` is verified live too. The Debug app was rebuilt at 22:56 with the one-at-a-time fix.
+
+## 2026-10-06 - content-type auto-classify pipeline (tracker-driven), all three stages (uncommitted)
+
+Closes the "Content-type classification & manga metadata scraping" gap. Design `docs/superpowers/specs/2026-10-06-content-type-auto-classify-design.md` (grilled with the user; every answer "as recommended", except the queue layout: table + cards, built as table rows that expand into a card), plan beside it.
+- **Data:** `Series` records where its type came from and whether a person locked it (`ContentTypeSource/Confidence/Locked`, previous type and reading mode for Undo, a queued suggestion and its evidence, last-checked date); `AppSettings.AskBeforeClassifying`. Migration `AddContentTypeProvenance` locks every series that already has a type; `Down` is a no-op. `SeriesContentTypeEditor` is the only writer of `Series.ContentType`: Library menu, bulk edit, both Detail pickers and the queue all lock. The old weekly publisher sweep skips locked rows (it could overwrite a deliberate "Unknown").
+- **Classifier:** MangaBaka, then AniList (now fetches `countryOfOrigin`), then MangaDex (now fetches `originalLanguage`). Applies a type only for a near-exact title match that two sources, or one source plus a local guess, agree on; otherwise queues it. Series with Western evidence (GCD match, Western publisher, ComicVine/Metron scrape, `Manga=No`) are not searched. No tracker link and no file write-back from the pipeline.
+- **Entry points:** scheduled task "Classify series from trackers" (off by default, daily, 150 searches a run, resumable), Preferences "Classify Library" / "Re-check publisher guesses" / "Ask before changing a content type", Library "Classify from trackers".
+- **Queue (Library Health > Review > Content type):** rows with Accept / Keep / Not a comic, a card with evidence chips and Change-to buttons, Accept all high confidence, "Recently auto-classified" (30 days) with Undo, and an Undo in both Detail headers (no time limit).
+- **Verified:** `Paperbunkr.Data.Tests` all 2,183 pass. `Paperbunkr.App.Tests` fast set (`Speed!=Slow`): 2,590 pass, 2 failed because of this work (a duplicate scheduler priority and the series context-menu shape test); both fixed and the affected classes re-run (51 pass), but the whole fast set was **not** re-run after the fix. New tests cover the mapper, decision rule, editor, service, migration backfill, sweep lock, runner, queue rows and actions, the row templates rendered headlessly, and the Detail Undo.
+- **Bug the tests caught:** the queue query used correlated subqueries SQLite cannot translate; the app's refresh would have swallowed the error and shown a stale queue.
+- **Not verified:** how any of it looks on screen, any call to the real MangaBaka / AniList / MangaDex (fakes only), a real scheduled run. The MangaUpdates / Kitsu / MAL / Shikimori adapters were deliberately not extended.
+
+## 2026-10-07 - Performance and memory, first pass (uncommitted)
+
+Spec: `docs/superpowers/specs/2026-10-07-performance-and-memory-design.md`; plan: `...-plan.md`. Trigger: the app at 2.3-2.6 GB
+on a 2-core / 7.8 GB machine with ~5,000 comics.
+
+**Built, covered by tests:**
+- Memory readout: `Services/Performance/PerformanceSnapshot` (managed heap, private bytes, working set, native estimate, cache
+  sizes, threads, heavy jobs). Appended to the crash-report header. No on-screen readout yet.
+- Cover memory: budget is 5% of RAM clamped 150-500 MB (`ImageMemoryBudget`), split grid 60 / comics 30 / books 10.
+  `CoverImageCache` and `BookCoverImageCache` are byte-bounded (`BitmapByteCache`) instead of 5,000 entries each.
+  `GridCoverCache` disposes evicted bitmaps unless an `Image` holds a lease (`AsyncCoverImage` takes and releases it).
+  `NativeBitmapPressure` reports the legacy caches' native bytes to the GC. `MemoryPressureTrimmer` halves the caches after two
+  readings at 85% system memory (no timer, no blocking collection).
+- `HeavyJobLane`: one heavy job at a time, user-started first. Wired into the ten Preferences jobs, the scheduler, scrape,
+  organize and Metron sync. Off in tests (pass-through until `App` enables it).
+- Verify, metadata sync and series resync read 250 issues at a time by id cursor, one `DbContext` per page.
+- GC: `System.GC.ConserveMemory=1`. ONNX panel model: 2 intra-op threads, unloaded when the Reader is left.
+- Bug fixed on the way: the ten Preferences jobs rethrew `OperationCanceledException`, so cancelling one from the Activity
+  Center showed a crash report (the 0.7.7 crash log). They now end as Cancelled.
+
+**Not done, needs the running app:** before/after numbers for the three scenarios in spec 4.1 (nothing here has been measured);
+an on-screen readout; moving the legacy card screens onto the grid pipeline; the `TieredPGO` and ONNX-arena experiments; the
+UI-thread trace and any timer consolidation. Nothing in this entry has been seen on screen.
+
+**Behaviour changes to know about:** a cancelled Verify/sync keeps the pages it already saved (it used to save nothing);
+scheduled tasks now run one at a time, not two.
+
+### 2026-10-07 (evening) - first measurement of the new build: the real consumer was the dog-ear peek cache
+
+The new build still sat at 1.85 GB private after a normal session, so a heap dump was taken from the running app (dotnet-dump)
+plus a scan of its memory regions. What it showed:
+- Managed heap 222 MB of 1,848 MB private: the growth is native.
+- 674 decoded bitmaps, 802 MB. 646 of them are covers and total 168 MB (inside the new budget). The other 28 are whole comic
+  pages (12 at 1988x3056, three 3975x3056 spreads, one 3816x5868) totalling 634 MB, every one held by `DogEarThumbnailCache`.
+  The dog-ear hover peek decoded page 2 at full size for a 34 px image and kept up to 200 of them.
+- Fixed: `PageDecodeCore.DecodeSinglePageToWidth`, dog-ear decodes at 96 px (`DogEarThumbnailCacheTests`). Not yet re-measured.
+- Still unexplained: 21 native blocks of exactly 16,188 KB (331 MB), not Avalonia bitmaps. GPU shared memory was 233 MB.
+- "Checking for comics" (acquisition daemon, mirrored by `AcquisitionActivityBridge`) is not in `HeavyJobLane`, so it can run
+  beside a scheduled task.
+
+### 2026-10-07 (night) - second and third measurements
+
+- After the dog-ear fix: 1.15-1.3 GB. Dump: covers 185 MB, no full pages; 770 dead 128 KB byte arrays (100 MB) on the large
+  object heap from the ported engine opening archives with a 128 KB `FileStream` buffer. Buffers cut to 64 KB
+  (`ZipSharpZipEngine`, `TarSharpZipEngine`, `SharpCompressAccessorSession`, `XmlUtility`). Not re-measured.
+- With the reader open in guided view: 2.1 GB private. Found and changed (none re-measured in the app yet):
+  - ONNX Runtime CPU arena: measured in a probe, +300 MB with the arena against +20-60 MB without, same time per page
+    (250-340 ms). Now off (`PanelDetectionService.UseCpuArena`). The 12.5 MB input tensor is reused instead of allocated per page.
+  - Reader page budget: Auto was 25% of RAM clamped 128-512 MiB (always 512 on this machine); now RAM / 24 (about 330 MiB here,
+    512 from 12 GB up). The Preferences override is unchanged.
+  - Skia GPU cache: fixed 384 MB, now 2.5% of RAM clamped 96-384 MB (about 200 MB here). The 16,188 KB native blocks
+    numbered 21, 21 and 24 across three dumps (331-379 MB), which tracks the 384 MB limit; that they are this cache is an
+    inference, to be confirmed by the next dump.
+- Still open: dog-ear peek reported not showing (decode verified good on real files; display not seen); two copies of the
+  library's Issue entities and rows in memory; about 100 MB of strings.
+
+### 2026-10-08 - fourth measurement (reader open, after the arena / budget / GPU-cache changes)
+
+1,592 MB private with the reader open (was 2,143 MB in the same situation). Where it is:
+- Managed heap 524 MB committed: about 360 MB live, 150 MB free space inside it. 73 MB of that is the reader's encoded-page
+  tier (by design, 64 MB budget). The 128 KB archive buffers are gone (2 left, was 770).
+- Native C heap about 315 MB, in twenty 16 MB segments. CORRECTION: the "unexplained 16,188 KB blocks" are Windows heap
+  segments (header signature ffeeffee, 0xFCF pages each), not the GPU cache. The decoded cover bitmaps (200 MB) live inside
+  them, so earlier tables counted the covers twice. Lowering the GPU cache was still reasonable but was not what those were.
+- About 520 MB in individually allocated native blocks of 8-31 MB while the reader is open. Avalonia page bitmaps account for
+  only 82 MB of it; the rest is not yet identified (the reader pipeline's own Skia copies of pages are the first suspect).
+- Covers: 887 bitmaps, 283 MB including 82 MB of reader pages; cover part 200 MB.
+- 9,608 Issue entities against 5,460 rows and one LibraryProjection: a second set of entities exists; 7 DbContexts were alive.
+  Whether one of them tracks the whole library was not checked.
+- `System.GC.ConserveMemory` raised 1 -> 5 for the internal free space. Not built or measured.
+
+### 2026-10-08 - fifth measurement: reader open, guided view, after a full comic
+
+1,341 MB private (the same situation measured 2,143 MB before the arena / reader budget / GPU cache / GC changes). The panel
+model was loaded. Breakdown: managed heap 303 MB committed (14 MB free inside, was 150); native C heap 284 MB; reader pages
+158 MB in 7 bitmaps; 4 further full-page pixel copies held by `ReaderPageVisualHandler._skImageCache` (made while an image
+adjustment is on); GPU shared memory 259 MB (page textures; system RAM on this integrated GPU). The large native blocks
+that were unidentified last time are these page pixels and their copies - read from the dump, not inferred.
+One copy of the library this time (4,948 Issue entities, 5,434 rows): the doubling seen earlier was not present, which fits
+an uncollected old load but does not prove it.
+Not done: the fast test set has not been rerun since the dog-ear, buffer, ONNX, budget and GC changes (only the touched classes).
+
+### 2026-10-08 - reader: shared page images, smaller auto budget (built, tests pass, not on screen)
+
+- `SkiaBitmapConverter.ShareSkImage`: the reader's leased-canvas draw path (image adjustment on, crossfade transitions) now
+  wraps the page bitmap's own pixels instead of copying them (the copy made three full-page buffers per call and the handler
+  kept one image per visible page). Reads two non-public Avalonia 12.1 members (`Bitmap.PlatformImpl`,
+  `Avalonia.Skia.ImmutableBitmap._image`), holds its own counted reference so the image outlives a disposed bitmap, and falls
+  back to the old copy if either member is missing. `SharedSkImageTests` fails loudly if an Avalonia upgrade moves them.
+  The pipeline's own processing calls (`ReaderImagePipeline` lines ~396/428) still copy: they read raw bytes in a fixed order.
+- Reader Auto budget: RAM / 32 clamped 128-512 MiB (about 250 MiB on the 7.8 GB machine; 512 from 16 GB). User had no override set.
+- To check on screen: a comic with auto levels / an adjustment on, page turns with the crossfade style, and a PNG page with
+  transparency (the shared image keeps the page's alpha; the copy forced it opaque).
 
 ## 2026-10-10 - ComicRack smart-list import and Library Organizer profile import
 

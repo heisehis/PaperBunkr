@@ -203,6 +203,12 @@ public static class InputActions
             // ----- Library -----
             App(InputActionIds.ToggleLibraryPreview, LibraryGroup, "Toggle the preview panel", InputScope.Library, false, K(Key.B, Ctrl)),
 
+            // List layouts. Global, not Library: Books claims them too, and a screen with no list declines. CE's own keys
+            // (Edit List Layout Ctrl+L, Edit Layouts Ctrl+Alt+L; Save List Layout has none).
+            App(InputActionIds.ListOptions, LibraryGroup, "List options", InputScope.Global, false, K(Key.L, Ctrl)),
+            App(InputActionIds.SaveListLayout, LibraryGroup, "Save list layout", InputScope.Global, false),
+            App(InputActionIds.EditListLayouts, LibraryGroup, "Edit layouts", InputScope.Global, false, K(Key.L, Ctrl | Alt)),
+
             // The selection actions: what each runs for the issues or series currently selected is LibraryActionCatalog's call, so the menu, the bar and these keys cannot drift apart.
             App(InputActionIds.LibraryEdit, LibraryGroup, "Edit properties (bulk edit for several)", InputScope.Library, false, K(Key.I, Ctrl)),
             App(InputActionIds.LibraryRate0, LibraryGroup, "Rating: none", InputScope.Library, false, K(Key.D0, Alt | Shift)),

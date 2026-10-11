@@ -117,6 +117,13 @@
                     <ToggleSwitch IsChecked="{Binding WriteNativeSidecar}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
+            <pref:SettingsRow Icon="DocumentData" Title="Also write a MetronInfo.xml"
+                               Description="A second metadata file that Metron-Tagger, Codex and Comicbox read. It keeps what ComicInfo.xml can't: Metron, Comic Vine and GCD ids, and one credit per creator. Off leaves any MetronInfo.xml a file already has untouched."
+                               IsEnabled="{Binding WriteMetadataToFiles}">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding WriteMetronInfo}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
             <pref:SettingsRow Icon="Save" Title="Write all library metadata to files now"
                                Description="{Binding WriteAllMetadataStatus}">
                 <pref:SettingsRow.SettingsContent>

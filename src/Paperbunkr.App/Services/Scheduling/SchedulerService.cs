@@ -255,11 +255,15 @@ public sealed class SchedulerService : ISchedulerService, IDisposable
 
         _launch(async () =>
         {
-            handle.Begin();
             bool ok = false;
             try
             {
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, handle.CancellationToken);
+
+                // One heavy job at a time across the whole app, behind anything the user started by hand
+                // (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.3). The job stays Queued while it waits.
+                using var laneSlot = HeavyJobLane.Activate(await HeavyJobLane.Shared.EnterAsync(isManual, linked.Token).ConfigureAwait(false));
+                handle.Begin();
                 string summary = await descriptor.RunAsync(handle, linked.Token).ConfigureAwait(false);
                 handle.Succeed(summary);
                 _store.RecordRun(descriptor.Id, ScheduledRunStatus.Succeeded, _now().UtcDateTime);

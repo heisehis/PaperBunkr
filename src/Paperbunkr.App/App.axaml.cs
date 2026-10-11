@@ -187,6 +187,9 @@ public partial class App : Application
             }
 
             Services.Input.InputServiceLocator.Current = inputService;
+
+            // From here on heavy background jobs run one at a time (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.3).
+            Services.HeavyJobLane.EnableShared();
         }
         catch (Exception ex)
         {
@@ -400,6 +403,18 @@ public partial class App : Application
         // can't miss an early scheduled job's hooks.
         mainViewModel.Scheduler.Start();
         desktop.Exit += (_, _) => mainViewModel.Scheduler.Stop();
+
+        // The app's own reactions to library events (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.3, §7.4): finishing a
+        // continuity or story event is announced, and a linked series marked completed has its provider data refreshed once. Started
+        // here, not in MainViewModel's constructor, so only the running app subscribes to the app-wide event hub - and after the plugin
+        // host, so a plugin's ContinuityCompleted command is already registered when the first completion is announced.
+        var smartReactions = new Paperbunkr.App.Services.SmartLibraryReactions(
+            mainViewModel.ReadingEvents,
+            Paperbunkr.Data.Events.LibraryEvents.Default,
+            mainViewModel.Activity,
+            (seriesId, ct) => Paperbunkr.App.Services.SeriesProviderRefresh.RefreshAsync(Paperbunkr.App.Services.PaperbunkrDb.CreateContext, seriesId, ct),
+            Paperbunkr.App.Services.SeriesProviderRefresh.CanRefresh);
+        desktop.Exit += (_, _) => smartReactions.Dispose();
 
         // Comic acquisition daemon: the bridge drains its events into Activity Center, then the timer starts. On exit the
         // service is stopped with a short cap so a cycle stuck on the network can never hold the app open.

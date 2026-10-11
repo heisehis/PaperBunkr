@@ -1242,6 +1242,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             SeriesActivityEventKind.TrackerUnlinked => ($"Unlinked {e.Detail} tracker", FluentIcons.Common.Symbol.CloudSync),
             SeriesActivityEventKind.TrackerSynced => (e.Detail, FluentIcons.Common.Symbol.CloudSync),
             SeriesActivityEventKind.RatingChanged => ($"{e.Detail}{issueLabel}", FluentIcons.Common.Symbol.Star),
+            SeriesActivityEventKind.StatusChanged => (e.Detail, FluentIcons.Common.Symbol.Flag),
             _ => (e.Detail, FluentIcons.Common.Symbol.Info),
         };
 

@@ -119,12 +119,14 @@ public class MetadataWriteBackQueue : IDisposable
             bool masterEnabled;
             bool automaticEnabled;
             bool includeSidecar;
+            bool includeMetronInfo;
             using (var context = _contextFactory())
             {
                 var settings = context.GetOrCreateAppSettings();
                 masterEnabled = settings.WriteMetadataToFiles;
                 automaticEnabled = settings.WriteMetadataAutomatically;
                 includeSidecar = settings.WriteNativeSidecar;
+                includeMetronInfo = settings.WriteMetronInfo;
             }
 
             if (!masterEnabled)
@@ -136,6 +138,7 @@ public class MetadataWriteBackQueue : IDisposable
             int alreadyCurrent = 0;
             var skippedFormat = new List<string>();
             int failed = 0;
+            int withoutMetronInfo = 0;
             string? lastFailureMessage = null;
             string? singleSkipToast = null;
 
@@ -146,11 +149,16 @@ public class MetadataWriteBackQueue : IDisposable
                     continue;
                 }
 
-                var outcome = await _service.WriteAsync(issueId, includeSidecar).ConfigureAwait(false);
+                var outcome = await _service.WriteAsync(issueId, includeSidecar, includeMetronInfo).ConfigureAwait(false);
                 switch (outcome.Result)
                 {
                     case MetadataWriteBackResult.Success:
                         wrote++;
+                        break;
+                    case MetadataWriteBackResult.SuccessWithoutMetronInfo:
+                        wrote++;
+                        withoutMetronInfo++;
+                        lastFailureMessage = outcome.ErrorMessage;
                         break;
                     case MetadataWriteBackResult.SkippedUnsupportedFormat:
                         skippedFormat.Add(outcome.FileName ?? "a file");
@@ -170,7 +178,7 @@ public class MetadataWriteBackQueue : IDisposable
                 }
             }
 
-            ReportBatch(wrote, skippedFormat, alreadyCurrent, failed, lastFailureMessage, singleSkipToast);
+            ReportBatch(wrote, skippedFormat, alreadyCurrent, failed, withoutMetronInfo, lastFailureMessage, singleSkipToast);
         }
         finally
         {
@@ -178,7 +186,7 @@ public class MetadataWriteBackQueue : IDisposable
         }
     }
 
-    private void ReportBatch(int wrote, List<string> skippedFormat, int unwritable, int failed, string? lastFailureMessage, string? singleSkipToast)
+    private void ReportBatch(int wrote, List<string> skippedFormat, int unwritable, int failed, int withoutMetronInfo, string? lastFailureMessage, string? singleSkipToast)
     {
         if (singleSkipToast is not null)
         {
@@ -214,8 +222,13 @@ public class MetadataWriteBackQueue : IDisposable
             parts.Add($"{failed} failed");
         }
 
+        if (withoutMetronInfo > 0)
+        {
+            parts.Add($"{withoutMetronInfo} without MetronInfo.xml");
+        }
+
         string message = string.Join(" · ", parts) + ".";
-        if (failed > 0 && lastFailureMessage is not null)
+        if ((failed > 0 || withoutMetronInfo > 0) && lastFailureMessage is not null)
         {
             message += $" Last error: {lastFailureMessage}";
         }
@@ -228,7 +241,7 @@ public class MetadataWriteBackQueue : IDisposable
         // covers all three paths. Resolving it here (lazily, once this is provably the "general
         // summary" outcome) sidesteps that entirely instead of forcing one policy on all three.
         using var job = _activity.StartJob(ActivityJobKind.SyncMetadata, "Writing metadata to files");
-        if (failed > 0)
+        if (failed > 0 || withoutMetronInfo > 0)
         {
             job.Fail(message);
         }

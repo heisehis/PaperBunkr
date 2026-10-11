@@ -191,9 +191,19 @@ public class LibraryFolderScanner
         // Loaded once and updated in-memory as new series are created within this run, so multiple
         // new issues for the same not-yet-existing series in one scan land on the same Series row
         // instead of creating a duplicate per file.
-        var seriesByName = context.Series.ToList().ToDictionary(s => s.Name, s => s, StringComparer.OrdinalIgnoreCase);
+        // Series.Name is not unique: a ComicVine scrape renames a series to its volume's name (ScrapeOrchestrator), which another series can
+        // already carry - two volumes of one title, or a punctuation variant of the same run. ToDictionary threw on that and failed every scan
+        // (2026-10-05, two "Green Lantern: New Guardians" rows), so a shared name resolves to the series that has been in the library longest.
+        var seriesByName = new Dictionary<string, Series>(StringComparer.OrdinalIgnoreCase);
+        foreach (var existing in context.Series.OrderBy(s => s.Id).ToList())
+        {
+            seriesByName.TryAdd(existing.Name, existing);
+        }
+
+
         var seriesTouched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var addedIssues = new List<Issue>();
+        var embeddedMetronIds = new List<(Issue Issue, EmbeddedMetronIds Ids)>();
         int issuesAdded = 0;
 
         // Series-mismatch proposals that were auto-Accepted this scan (docs/superpowers/specs/
@@ -231,7 +241,8 @@ public class LibraryFolderScanner
                 string? filenameSeriesName = string.IsNullOrWhiteSpace(nameInfo.Series) ? null : nameInfo.Series.Trim();
                 bool seriesMismatch = embeddedSeriesName is not null && filenameSeriesName is not null
                     && !string.Equals(embeddedSeriesName, filenameSeriesName, StringComparison.OrdinalIgnoreCase);
-                bool autoAcceptSeriesProposal = seriesMismatch && appSettings.MetadataResolutionPolicy == MetadataResolutionPolicy.Automatic;
+                // Automatic policy, gated by the confidence threshold (smart features §6.1); filename proposals carry FilenameConfidence.
+                bool autoAcceptSeriesProposal = seriesMismatch && MetadataAutoApply.ShouldApply(appSettings, FilenameConfidence);
 
                 string seriesName = embeddedSeriesName ?? filenameSeriesName ?? "Unknown";
 
@@ -319,6 +330,7 @@ public class LibraryFolderScanner
                         var (contentType, readingMode) = CeLibraryMigrator.MapMangaField(embeddedInfo.Manga);
                         series.ContentType = contentType;
                         series.ReadingMode = readingMode;
+                        series.ContentTypeSource = ContentTypeSource.Embedded;
                     }
                     // Falls back to Publisher when the Manga field itself is absent/Unknown
                     // (docs/superpowers/specs/2026-08-30-publisher-content-type-classification-
@@ -330,6 +342,7 @@ public class LibraryFolderScanner
                     {
                         series.ContentType = publisherContentType;
                         series.ReadingMode = publisherReadingMode;
+                        series.ContentTypeSource = ContentTypeSource.Publisher;
                     }
                     // Falls back to LanguageISO when neither the Manga field nor Publisher matched
                     // (docs/superpowers/specs/2026-08-23-language-iso-content-type-heuristic-design.md)
@@ -339,6 +352,7 @@ public class LibraryFolderScanner
                     {
                         series.ContentType = languageContentType;
                         series.ReadingMode = languageReadingMode;
+                        series.ContentTypeSource = ContentTypeSource.Language;
                     }
                 }
 
@@ -372,7 +386,7 @@ public class LibraryFolderScanner
                         CurrentValue = embeddedSeriesName,
                         ProposedValue = filenameSeriesName,
                         Source = MetadataProposalSource.FilenameParser,
-                        Confidence = 0.6m,
+                        Confidence = FilenameConfidence,
                         Status = autoAcceptSeriesProposal ? MetadataProposalStatus.Accepted : MetadataProposalStatus.Pending,
                         CreatedAt = now,
                         ResolvedAt = autoAcceptSeriesProposal ? now : null,
@@ -388,6 +402,11 @@ public class LibraryFolderScanner
 
                 series.Issues.Add(issue);
                 context.Issues.Add(issue);
+
+                if (EmbeddedMetronIds.TryRead(file) is { } metronIds)
+                {
+                    embeddedMetronIds.Add((issue, metronIds));
+                }
 
                 addedIssues.Add(issue);
                 issuesAdded++;
@@ -411,6 +430,19 @@ public class LibraryFolderScanner
         foreach (var proposal in autoAcceptedSeriesProposals)
         {
             SeriesReassignmentResolver.Apply(context, proposal);
+        }
+
+        // The Metron / Comic Vine / GCD ids a file's MetronInfo.xml names (docs/superpowers/specs/2026-10-05-metroninfo-write-back-design.md),
+        // linked once the issues have ids and have settled on their series. One bad file doesn't stop the batch here either.
+        foreach (var (issue, metronIds) in embeddedMetronIds)
+        {
+            try
+            {
+                metronIds.ApplyTo(context, issue);
+            }
+            catch (DbUpdateException)
+            {
+            }
         }
 
         // Proactive scan alerts (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-scan-
@@ -443,44 +475,83 @@ public class LibraryFolderScanner
 
     private LibraryMetadataSyncResult SyncMetadata(IProgress<(int Done, int Total)> progress, CancellationToken ct)
     {
-        using var context = _contextFactory();
+        // A page at a time, each in its own context (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.4), so
+        // the sweep never tracks every issue and tag of the library at once. A cancelled run keeps the pages it already saved.
+        int total;
+        using (var counting = _contextFactory())
+        {
+            total = counting.Issues.Count(i => i.FilePath != null);
+        }
 
-        // Include(Tags) - MapStoryFields' onlyIfBlank guard and its diff-not-replace MergeFrom both
-        // read Issue.Tags (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-design.md);
-        // without it every issue looks like it has no existing Genre/Tags at all, so the guard would
-        // never fire and every run would re-add every value as a brand-new duplicate row.
-        var issues = context.Issues.Include(i => i.Tags).Where(i => i.FilePath != null).ToList();
-        int total = issues.Count;
         int done = 0;
+        int issuesUpdated = 0;
+        int lastId = 0;
         progress.Report((0, total));
 
-        foreach (var issue in issues)
+        while (true)
         {
             ct.ThrowIfCancellationRequested();
 
-            try
+            int pageCount;
+            using (var context = _contextFactory())
             {
-                if (File.Exists(issue.FilePath))
+                // Include(Tags) - MapStoryFields' onlyIfBlank guard and its diff-not-replace MergeFrom both
+                // read Issue.Tags (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-design.md);
+                // without it every issue looks like it has no existing Genre/Tags at all, so the guard would
+                // never fire and every run would re-add every value as a brand-new duplicate row.
+                int cursor = lastId;
+                var issues = context.Issues.Include(i => i.Tags)
+                    .Where(i => i.FilePath != null && i.Id > cursor)
+                    .OrderBy(i => i.Id)
+                    .Take(PageSize)
+                    .ToList();
+                pageCount = issues.Count;
+                if (pageCount == 0)
                 {
-                    var embeddedInfo = EmbeddedComicInfoReader.TryRead(issue.FilePath!);
-                    if (embeddedInfo is not null)
-                    {
-                        CeLibraryMigrator.MapStoryFields(embeddedInfo, issue, onlyIfBlank: true);
-                    }
+                    break;
                 }
-            }
-            catch
-            {
-                // One bad file doesn't stop the batch - same contract as ScanAllAsync.
+
+                foreach (var issue in issues)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    try
+                    {
+                        if (File.Exists(issue.FilePath))
+                        {
+                            var embeddedInfo = EmbeddedComicInfoReader.TryRead(issue.FilePath!);
+                            if (embeddedInfo is not null)
+                            {
+                                CeLibraryMigrator.MapStoryFields(embeddedInfo, issue, onlyIfBlank: true);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // One bad file doesn't stop the batch - same contract as ScanAllAsync.
+                    }
+
+                    progress.Report((++done, total));
+                }
+
+                lastId = issues[^1].Id;
+                issuesUpdated += context.ChangeTracker.Entries<Issue>().Count(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Modified);
+                context.SaveChanges();
             }
 
-            progress.Report((++done, total));
+            if (pageCount < PageSize)
+            {
+                break;
+            }
+
+            SweepPaging.PauseBetweenPages(ct);
         }
 
-        int issuesUpdated = context.ChangeTracker.Entries<Issue>().Count(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Modified);
-        context.SaveChanges();
         return new LibraryMetadataSyncResult(issuesUpdated);
     }
+
+    /// <summary>Issues read, processed and saved per round trip by the whole-library sweeps. Internal so a test can force several pages with a handful of rows.</summary>
+    internal int PageSize { get; set; } = SweepPaging.DefaultPageSize;
 
     public async Task<LibrarySeriesResyncResult> ResyncSeriesFromFileAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
     {
@@ -502,38 +573,71 @@ public class LibraryFolderScanner
     /// </summary>
     private LibrarySeriesResyncResult ResyncSeriesFromFile(IProgress<(int Done, int Total)> progress, CancellationToken ct)
     {
-        using var context = _contextFactory();
+        // Paged by id cursor, one context per page, like SyncMetadata. Each reassignment saves itself (SeriesReassignmentResolver.Apply).
+        int total;
+        using (var counting = _contextFactory())
+        {
+            total = counting.Issues.Count(i => i.FilePath != null);
+        }
 
-        var issues = context.Issues.Include(i => i.Series).Where(i => i.FilePath != null).ToList();
-        int total = issues.Count;
         int done = 0;
+        int reassigned = 0;
+        int lastId = 0;
         progress.Report((0, total));
 
-        int reassigned = 0;
-        foreach (var issue in issues)
+        while (true)
         {
             ct.ThrowIfCancellationRequested();
 
-            try
+            int pageCount;
+            using (var context = _contextFactory())
             {
-                if (File.Exists(issue.FilePath))
+                int cursor = lastId;
+                var issues = context.Issues.Include(i => i.Series)
+                    .Where(i => i.FilePath != null && i.Id > cursor)
+                    .OrderBy(i => i.Id)
+                    .Take(PageSize)
+                    .ToList();
+                pageCount = issues.Count;
+                if (pageCount == 0)
                 {
-                    var embeddedInfo = EmbeddedComicInfoReader.TryRead(issue.FilePath!);
-                    string? embeddedSeriesName = string.IsNullOrWhiteSpace(embeddedInfo?.Series) ? null : embeddedInfo!.Series.Trim();
-                    if (embeddedSeriesName is not null
-                        && !string.Equals(issue.Series?.Name, embeddedSeriesName, StringComparison.OrdinalIgnoreCase))
+                    break;
+                }
+
+                lastId = issues[^1].Id;
+                foreach (var issue in issues)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    try
                     {
-                        SeriesReassignmentResolver.Apply(context, new MetadataProposal { Issue = issue, ProposedValue = embeddedSeriesName });
-                        reassigned++;
+                        if (File.Exists(issue.FilePath))
+                        {
+                            var embeddedInfo = EmbeddedComicInfoReader.TryRead(issue.FilePath!);
+                            string? embeddedSeriesName = string.IsNullOrWhiteSpace(embeddedInfo?.Series) ? null : embeddedInfo!.Series.Trim();
+                            if (embeddedSeriesName is not null
+                                && !string.Equals(issue.Series?.Name, embeddedSeriesName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                SeriesReassignmentResolver.Apply(context, new MetadataProposal { Issue = issue, ProposedValue = embeddedSeriesName });
+                                reassigned++;
+                            }
+                        }
                     }
+                    catch
+                    {
+                        // One bad file doesn't stop the batch - same contract as SyncMetadata/ScanAllAsync.
+                    }
+
+                    progress.Report((++done, total));
                 }
             }
-            catch
+
+            if (pageCount < PageSize)
             {
-                // One bad file doesn't stop the batch - same contract as SyncMetadata/ScanAllAsync.
+                break;
             }
 
-            progress.Report((++done, total));
+            SweepPaging.PauseBetweenPages(ct);
         }
 
         return new LibrarySeriesResyncResult(reassigned);
@@ -585,7 +689,7 @@ public class LibraryFolderScanner
     {
         using var context = _contextFactory();
         var unclassifiedSeries = context.Series
-            .Where(s => s.ContentType == ContentType.Unknown)
+            .Where(s => s.ContentType == ContentType.Unknown && !s.ContentTypeLocked)
             .Include(s => s.Issues)
             .ToList();
 
@@ -597,9 +701,12 @@ public class LibraryFolderScanner
             {
                 if (PublisherContentTypeClassifier.TryClassify(issue.Publisher, out var contentType, out var readingMode))
                 {
-                    series.ContentType = contentType;
-                    series.ReadingMode = readingMode;
-                    changed++;
+                    // SetGuess refuses a locked series, so a person's deliberate "Unknown" can never be overwritten here.
+                    if (SeriesContentTypeEditor.SetGuess(series, contentType, readingMode, ContentTypeSource.Publisher))
+                    {
+                        changed++;
+                    }
+
                     break;
                 }
             }
@@ -701,9 +808,13 @@ public class LibraryFolderScanner
     /// queue. Confidence is a fixed constant, not computed - filename parsing is deterministic
     /// pattern-matching, not a scored signal.
     /// </summary>
+    /// <summary>The fixed confidence of everything parsed out of a filename: deterministic pattern-matching, not a scored signal.</summary>
+    internal const decimal FilenameConfidence = 0.6m;
+
     private static void AddFilenameProposal(PaperbunkrDbContext context, Issue issue, MetadataProposalField field, string proposedValue, AppSettings appSettings)
     {
-        bool automatic = appSettings.MetadataResolutionPolicy == MetadataResolutionPolicy.Automatic;
+        // Applies itself under the Automatic policy unless the confidence threshold asks for a review first (smart features §6.1).
+        bool automatic = MetadataAutoApply.ShouldApply(appSettings, FilenameConfidence);
         var now = DateTime.UtcNow;
         var proposal = new MetadataProposal
         {
@@ -712,7 +823,7 @@ public class LibraryFolderScanner
             CurrentValue = null,
             ProposedValue = proposedValue,
             Source = MetadataProposalSource.FilenameParser,
-            Confidence = 0.6m,
+            Confidence = FilenameConfidence,
             Status = automatic ? MetadataProposalStatus.Accepted : MetadataProposalStatus.Pending,
             CreatedAt = now,
             ResolvedAt = automatic ? now : null,

@@ -22,15 +22,31 @@ public sealed class OnnxPanelDetector : IDisposable
     /// <summary>Boxes smaller than this fraction of the page in either direction are noise.</summary>
     public const double MinSide = 0.03;
 
+    public const int MaxIntraOpThreads = 2;
+
     private const byte PadValue = 114;
     private const int PanelClass = 0;
 
     private readonly InferenceSession _session;
     private readonly string _inputName;
 
-    public OnnxPanelDetector(string modelPath)
+    // One input buffer (12.5 MB of floats) kept between pages. A fresh one per page went on the large object heap, which is
+    // only cleaned by a full collection, so every analysed page left 12.5 MB behind until then. Two pages analysed at once
+    // simply allocate a second one; whichever is handed back last is kept. Gone with the detector.
+    private float[]? _spareInput;
+
+    /// <param name="cpuArena">ONNX Runtime's CPU arena keeps the memory an inference needed for the next one (faster, larger);
+    /// off, each inference allocates and frees its own (smaller, slower). See <see cref="PanelDetectionService.UseCpuArena"/>.</param>
+    public OnnxPanelDetector(string modelPath, bool cpuArena = true)
     {
-        _session = new InferenceSession(modelPath);
+        // Two threads inside one inference (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.5): the default
+        // takes every physical core, which on a two-core machine leaves nothing for the UI while a page is analysed.
+        using var options = new SessionOptions
+        {
+            IntraOpNumThreads = Math.Min(MaxIntraOpThreads, Environment.ProcessorCount),
+            EnableCpuMemArena = cpuArena,
+        };
+        _session = new InferenceSession(modelPath, options);
         _inputName = _session.InputMetadata.Keys.First();
     }
 
@@ -68,9 +84,25 @@ public sealed class OnnxPanelDetector : IDisposable
             return [];
         }
 
-        var input = new DenseTensor<float>([1, 3, InputSize, InputSize]);
-        var span = input.Buffer.Span;
         int plane = InputSize * InputSize;
+        float[] buffer = System.Threading.Interlocked.Exchange(ref _spareInput, null) ?? new float[3 * plane];
+        try
+        {
+            return Run(page, buffer, resized, scale, nw, nh, padX, padY);
+        }
+        finally
+        {
+            _spareInput = buffer;
+        }
+    }
+
+    private List<PanelRect> Run(SKBitmap page, float[] buffer, SKBitmap resized, double scale, int nw, int nh, int padX, int padY)
+    {
+        int w = page.Width;
+        int h = page.Height;
+        int plane = InputSize * InputSize;
+        var input = new DenseTensor<float>(buffer, [1, 3, InputSize, InputSize]);
+        var span = buffer.AsSpan();
         span.Fill(PadValue / 255f);
         var pixels = resized.Pixels;
         for (int y = 0; y < nh; y++)

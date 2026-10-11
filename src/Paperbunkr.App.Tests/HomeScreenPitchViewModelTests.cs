@@ -96,7 +96,8 @@ public class HomeScreenPitchViewModelTests : IDisposable
     {
         var vm = Make();
 
-        Assert.Equal(HomeSectionKey.Default.Where(k => k != HomeSectionKey.NeedsAttention), vm.Sections.Select(s => s.Key));
+        // Needs Attention and Up Next both leave the list when they have nothing to show.
+        Assert.Equal(HomeSectionKey.Default.Where(k => k is not (HomeSectionKey.NeedsAttention or HomeSectionKey.UpNext)), vm.Sections.Select(s => s.Key));
         Assert.False(vm.AllSectionsHidden);
     }
 

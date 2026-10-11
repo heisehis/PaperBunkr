@@ -282,7 +282,7 @@ public class ScreenInputTests : IDisposable
     }
 
     [Fact]
-    public void SmartLists_CtrlN_AddsANewList()
+    public void SmartLists_CtrlN_OpensTheTemplateGallery_AndCreatesNothingUntilAskedTo()
     {
         WithThemeAndTokens(() =>
         {
@@ -295,6 +295,14 @@ public class ScreenInputTests : IDisposable
 
             stage.Press(Key.N, RawInputModifiers.Control, PhysicalKey.N);
 
+            Assert.True(vm.Gallery.IsOpen);
+            Assert.Equal(SmartListTargetKind.Issue, vm.Gallery.Kind);
+            Assert.Equal(before, CountLists());
+            Assert.DoesNotContain(InputActionIds.NewItem, stage.FellThrough);
+
+            vm.Gallery.CreateCommand.Execute(null);     // "Blank list" is the selected card
+
+            Assert.False(vm.Gallery.IsOpen);
             Assert.Equal(before + 1, CountLists());
         });
     }

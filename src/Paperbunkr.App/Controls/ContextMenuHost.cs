@@ -83,6 +83,20 @@ public sealed class ContextMenuHost
         flyout.ShowAt(anchor);
     }
 
+    /// <summary>Shows a menu built from <paramref name="entries"/> at the pointer, owned by <paramref name="host"/> - the same
+    /// placement a right-click gets. For a "…" button that does not outlive its own click (a hover-only button is removed as
+    /// soon as the pointer moves onto the menu, and a flyout anchored to it goes with it): pass a host that stays put.</summary>
+    public static void ShowMenuAtPointer(Control host, IEnumerable<ContextMenuEntry> entries)
+    {
+        var flyout = new MenuFlyout { Placement = PlacementMode.Pointer };
+        foreach (var item in Build(entries))
+        {
+            flyout.Items.Add(item);
+        }
+
+        flyout.ShowAt(host, showAtPointer: true);
+    }
+
     private static void OnPointerReleased(Control host, HostState state, PointerReleasedEventArgs e)
     {
         if (e.InitialPressMouseButton != MouseButton.Right)

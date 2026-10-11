@@ -41,6 +41,9 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
     /// Null for the test/design-time ctor - every call is null-guarded. PDF pages are real pages.</summary>
     private readonly IReadingEventRecorder? _readingEventRecorder;
     private int _sessionMaxPage;
+
+    /// <summary>Active reading time for the open book, stored with the session's page delta (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.1).</summary>
+    private readonly Services.Reader.ReaderActivityTracker _activity = new();
     private bool _finishedEmittedThisSession;
     private int? _sessionSeriesId;
 
@@ -90,6 +93,7 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
 
     partial void OnPageIndexChanged(int value)
     {
+        _activity.NoteInput();
         OnPropertyChanged(nameof(PageNumber));
         OnPropertyChanged(nameof(ProgressLabel));
     }
@@ -191,6 +195,7 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
         PageCount = Math.Max(1, _decoder.PageCount);
         _sessionSeriesId = book.BookSeriesId;
         _readingEventRecorder?.RecordOpened(ReadingItemType.Novel, bookId, book.BookSeriesId, publisher: null, primaryGenre: null);
+        _activity.Start();
         RefreshCurrentPage();
     }
 
@@ -199,7 +204,7 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
     {
         if (_bookId != 0)
         {
-            _readingEventRecorder?.UpdateSessionPages(ReadingItemType.Novel, _bookId, _sessionMaxPage);
+            _readingEventRecorder?.UpdateSessionPages(ReadingItemType.Novel, _bookId, _sessionMaxPage, _activity.Stop());
         }
     }
 

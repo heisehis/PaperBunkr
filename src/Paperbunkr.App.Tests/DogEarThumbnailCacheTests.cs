@@ -52,6 +52,20 @@ public class DogEarThumbnailCacheTests : IDisposable
     }
 
     [Fact]
+    public void Get_KeepsAPeekSizedBitmap_NotTheWholePage()
+    {
+        // The peek is drawn 34 px wide. Keeping whole pages here cost 634 MB in a measured session (2026-10-07).
+        CbzFixture.Create(_cbzPath, pageCount: 2);
+        string stem = $"dogear-small-{Guid.NewGuid():N}";
+
+        var decoded = DogEarThumbnailCache.Get(stem, _cbzPath);
+
+        Assert.NotNull(decoded);
+        Assert.Equal(DogEarThumbnailCache.DecodeWidth, decoded!.PixelSize.Width);
+        Assert.True(Paperbunkr.App.Services.GridCoverCache.EstimateBytes(decoded) < 256 * 1024);
+    }
+
+    [Fact]
     public void TryGetCached_BeforeAnyDecode_ReturnsNull()
     {
         Assert.Null(DogEarThumbnailCache.TryGetCached($"dogear-never-decoded-{Guid.NewGuid():N}"));

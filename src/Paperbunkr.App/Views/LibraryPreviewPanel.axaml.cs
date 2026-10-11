@@ -51,9 +51,46 @@ public partial class LibraryPreviewPanel : UserControl
             or nameof(LibraryScreenViewModel.PreviewIssue)
             or nameof(LibraryScreenViewModel.PreviewDrillIssue))
         {
+            // The strip is rebuilt (or hidden, on a drill-in) with the previewed item; a popup left open would point at a chip that is gone.
+            IssueChipPopup.IsOpen = false;
             FadeHeroes();
         }
     }
+
+    // ---- Issue strip popup (docs/superpowers/specs/2026-10-04-library-redesign-design.md, Slice 3). One shared Popup moved from chip to
+    // chip, the same idea as LibraryScreen's hover tooltip, so a long series does not carry a popup per chip. It opens on hover and on
+    // keyboard focus alike. Closing it here is safe to do inline: the chip raising the event is not inside the popup. ----
+
+    private void ShowIssueChipPopup(object? sender)
+    {
+        if (sender is Control { DataContext: Models.PreviewIssueChip chip } anchor)
+        {
+            IssueChipPopup.IsOpen = false;
+            IssueChipPopup.PlacementTarget = anchor;
+            if (IssueChipPopup.Child is { } content)
+            {
+                content.DataContext = chip;
+            }
+
+            IssueChipPopup.IsOpen = true;
+        }
+    }
+
+    private void HideIssueChipPopup(object? sender)
+    {
+        if (ReferenceEquals(IssueChipPopup.PlacementTarget, sender))
+        {
+            IssueChipPopup.IsOpen = false;
+        }
+    }
+
+    private void OnIssueChipPointerEntered(object? sender, Avalonia.Input.PointerEventArgs e) => ShowIssueChipPopup(sender);
+
+    private void OnIssueChipPointerExited(object? sender, Avalonia.Input.PointerEventArgs e) => HideIssueChipPopup(sender);
+
+    private void OnIssueChipGotFocus(object? sender, RoutedEventArgs e) => ShowIssueChipPopup(sender);
+
+    private void OnIssueChipLostFocus(object? sender, RoutedEventArgs e) => HideIssueChipPopup(sender);
 
     /// <summary>
     /// ~120 ms cross-fade of the hero (backdrop + cover) when the previewed item changes. The transition is attached only for the

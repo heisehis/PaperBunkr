@@ -96,7 +96,8 @@ public sealed class ScrapeCoordinator(
             : null;
         using var owned = existingJob is null
             ? activity.StartJob(ActivityJobKind.Scrape, jobTitle ?? $"Scraping {books.Count} comics",
-                cancellable: true, trigger: isInteractive ? ActivityTrigger.Manual : ActivityTrigger.Scheduled)
+                cancellable: true, trigger: isInteractive ? ActivityTrigger.Manual : ActivityTrigger.Scheduled,
+                startQueued: HeavyJobLane.Shared.WouldWait)
             : null;
         var job = existingJob ?? owned!;
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, job.CancellationToken);
@@ -104,6 +105,11 @@ public sealed class ScrapeCoordinator(
         ScrapeBatchResult result;
         try
         {
+            // One heavy job at a time (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.3). A scheduled run
+            // arrives already inside the lane with its own job, and passes straight through.
+            using var laneSlot = HeavyJobLane.Activate(await HeavyJobLane.Shared.EnterAsync(isInteractive, linked.Token));
+            owned?.Begin();
+
             if (!isInteractive)
             {
                 result = await orchestrator.ScrapeAsync(books, isInteractive: false, interactiveReview: null, createContext, linked.Token,

@@ -114,14 +114,15 @@ public class LibraryWorkspaceTests : IDisposable
     }
 
     [Fact]
-    public void CurrentlyReadingBuiltIn_AppliesUnreadFilterAndOpenedSort()
+    public void CurrentlyReadingBuiltIn_AppliesTheReadingLensAndOpenedSort()
     {
         new WorkspaceService().EnsureBuiltInsSeeded();
         var vm = CreateVm();
 
         vm.ApplyWorkspaceCommand.Execute(vm.Workspaces.Single(w => w.Name == "Currently reading").Id);
 
-        Assert.True(vm.FilterUnreadOnly);
+        Assert.Equal(LibraryLens.Reading, vm.ActiveLens);
+        Assert.False(vm.FilterUnreadOnly);
         Assert.Equal(IssueListSortField.Opened, vm.IssueList.SortField);
         Assert.Equal(SortDirection.Descending, vm.IssueList.SortDirection);
     }

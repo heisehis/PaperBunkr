@@ -61,6 +61,14 @@ public class StoryEvent
     /// <summary>When the smart connector last looked this event up on Wikidata; rechecked after 30 days.</summary>
     public DateTime? ChronologyCheckedAt { get; set; }
 
+    /// <summary>
+    /// When the reader was told they had finished this event (every issue in it read), or null while it is not complete
+    /// (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.4). It is what makes the completion fire once: set when the last
+    /// issue is finished, cleared again when the event is found to have unread issues (a newly added member), so finishing those
+    /// counts as completing it again.
+    /// </summary>
+    public DateTime? CompletedNotifiedAt { get; set; }
+
     /// <summary>Other names this event is known by: merged-away events' names and the other provider's spelling.</summary>
     public List<StoryEventAlias> Aliases { get; set; } = new();
 

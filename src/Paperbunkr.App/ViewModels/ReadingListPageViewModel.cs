@@ -405,8 +405,9 @@ public partial class ReadingListPageViewModel : ViewModelBase
         RefreshCanonicalAvailability();
 
         ShowTags(readingListId, list.Tags);
+        RefreshGoalChip(readingListId);
 
-        IsArcLinked = !string.IsNullOrEmpty(list.Source);
+        IsArcLinked =!string.IsNullOrEmpty(list.Source);
         _loadingFollowArc = true;
         FollowArc = IsArcLinked && list.FollowArc;
         _loadingFollowArc = false;
@@ -463,6 +464,7 @@ public partial class ReadingListPageViewModel : ViewModelBase
         RebuildPath();
         RefreshRail(context);
         RefreshOverlaps(context);
+        RefreshChronology(context);
         LoadHeroBackdrop(list.Id, items);
 
         if (switched || triggerEntrance)

@@ -33,7 +33,15 @@ internal static class GridCoverDecoder
             // DecodeToWidth scales while decoding (a fraction of a full decode's time and memory) and keeps the aspect ratio.
             using var stream = File.OpenRead(path);
             var decoded = Bitmap.DecodeToWidth(stream, bucket, BitmapInterpolationMode.HighQuality);
-            return GridCoverCache.Shared.Add(stem, bucket, decoded);
+            var stored = GridCoverCache.Shared.Add(stem, bucket, decoded);
+            if (!ReferenceEquals(stored, decoded))
+            {
+                // Another worker cached this cover first: nobody else has seen ours, so free it now.
+                decoded.Dispose();
+            }
+
+            Performance.MemoryPressureTrimmer.Shared.Check();
+            return stored;
         }
         catch
         {

@@ -172,6 +172,9 @@ internal static class ContinuityResolver
             SortOrder = nextOrder + 1,
         });
         continuity.UpdatedAt = DateTime.UtcNow;
+
+        // A continuity the reader had finished is unfinished again if the new series has unread issues (smart features §7.4).
+        CollectionCompletion.OnSeriesAdded(context, continuity, seriesId);
         context.SaveChanges();
         return true;
     }

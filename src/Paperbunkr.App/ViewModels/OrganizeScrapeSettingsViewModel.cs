@@ -123,6 +123,12 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
     /// <summary>One <c>Publisher --&gt; Alias</c> per line, applied after imprint resolution - distinct from <see cref="ImprintOverrides"/>.</summary>
     [ObservableProperty] private string _publisherAliases = string.Empty;
 
+    /// <summary>The user's own scan-group names, one per line, added to the built-in ones for "Find scanner from file name" (docs/superpowers/specs/2026-10-11-scan-credits-design.md). Kept in <c>scan-credits.json</c>, not the database.</summary>
+    [ObservableProperty] private string _scannerNames = string.Empty;
+
+    /// <summary>The user's own words that mean "this bracket is not a scanner", one per line.</summary>
+    [ObservableProperty] private string _scanIgnoredWords = string.Empty;
+
     [ObservableProperty] private bool _hasComicVineKey;
     [ObservableProperty] private bool _hasMetronLogin;
 
@@ -172,6 +178,9 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
         HasComicVineKey = !string.IsNullOrEmpty(CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey));
         HasMetronLogin = Paperbunkr.Data.ComicVine.ComicProviderFactory.IsAvailable(context, ComicProvider.Metron);
         DefaultProviderText = Paperbunkr.Data.ComicVine.ComicProviderFactory.DisplayName(settings.DefaultProvider);
+        var scanCredits = Paperbunkr.Data.Metadata.ScanCredits.ScanCreditSettings.Load();
+        ScannerNames = string.Join(Environment.NewLine, scanCredits.Scanners);
+        ScanIgnoredWords = string.Join(Environment.NewLine, scanCredits.Ignored);
         Profiles?.Reload();
     }
 
@@ -224,6 +233,16 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
 
         using var context = _createContext();
         settings.Save(context);
+        try
+        {
+            Paperbunkr.Data.Metadata.ScanCredits.ScanCreditSettings.Save(new(Lines(ScannerNames).ToList(), Lines(ScanIgnoredWords).ToList()));
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            SetStatus($"Saved, but the scanner lists could not be written: {ex.Message}", isError: true);
+            return;
+        }
+
         SetStatus("Saved.", isError: false);
     }
 

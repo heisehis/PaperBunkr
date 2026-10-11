@@ -289,6 +289,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject
     private readonly LibraryOrganizerService? _organizerService;
     private readonly Func<PaperbunkrDbContext>? _createDbContext;
     private readonly IActivityService? _activity;
+    private readonly IFilePickerService? _filePicker;
 
     public ObservableCollection<OrganizerProfileRowViewModel> Profiles { get; } = new();
 
@@ -323,9 +324,11 @@ public sealed partial class ProfileManagerViewModel : ObservableObject
         Action? onProfilesChanged = null,
         LibraryOrganizerService? organizerService = null,
         Func<PaperbunkrDbContext>? createDbContext = null,
-        IActivityService? activity = null)
+        IActivityService? activity = null,
+        IFilePickerService? filePicker = null)
     {
         _activity = activity;
+        _filePicker = filePicker;
         _store = store;
         _onProfilesChanged = onProfilesChanged;
         _organizerService = organizerService;
@@ -579,6 +582,63 @@ public sealed partial class ProfileManagerViewModel : ObservableObject
         OrganizerProfile saved = _store.Save(new OrganizerProfile { Name = "New Profile" });
         Refresh();
         Selected = Profiles.FirstOrDefault(p => p.Id == saved.Id);
+    }
+
+    // -- Import from Library Organizer (docs/superpowers/specs/2026-10-04-lop-profile-import-design.md) -----------------------------------
+
+    /// <summary>The Import button needs a file picker; a view model built without one (older tests) hides it.</summary>
+    public bool CanImport => _filePicker is not null;
+
+    /// <summary>One line on the last import ("Imported 3 profiles; 1 was not imported"), or null.</summary>
+    [ObservableProperty]
+    private string? _importStatusMessage;
+
+    /// <summary>What the last import could not carry over, one line each, named by profile. Shown until dismissed or replaced by the next import.</summary>
+    public ObservableCollection<string> ImportNotes { get; } = new();
+
+    public bool HasImportNotes => ImportNotes.Count > 0;
+
+    [RelayCommand]
+    private void DismissImportNotes()
+    {
+        ImportNotes.Clear();
+        OnPropertyChanged(nameof(HasImportNotes));
+    }
+
+    /// <summary>Picks a Library Organizer profile file (<c>.lop</c>), saves the profiles it can use, selects the first one and lists what needs a look.</summary>
+    [RelayCommand]
+    private async Task ImportProfiles()
+    {
+        if (_filePicker is null)
+        {
+            return;
+        }
+
+        string? path = await _filePicker.PickOpenFileAsync("Import Library Organizer profiles", "lop", "Library Organizer profiles (.lop)");
+        if (path is null)
+        {
+            return;
+        }
+
+        Paperbunkr.App.Scraper.Import.LopImportSummary summary = Paperbunkr.App.Scraper.Import.LopProfileImporter.Import(_store, path);
+        Refresh();
+        if (summary.Saved.Count > 0)
+        {
+            Selected = Profiles.FirstOrDefault(p => p.Id == summary.Saved[0].Id);
+        }
+
+        ImportNotes.Clear();
+        foreach (string note in summary.Notes)
+        {
+            ImportNotes.Add(note);
+        }
+
+        OnPropertyChanged(nameof(HasImportNotes));
+        ImportStatusMessage = summary.Failed
+            ? "Nothing was imported."
+            : summary.Rejected == 0
+                ? $"Imported {summary.Saved.Count} profile{(summary.Saved.Count == 1 ? "" : "s")}."
+                : $"Imported {summary.Saved.Count}; {summary.Rejected} not imported (see the notes).";
     }
 
     [RelayCommand]

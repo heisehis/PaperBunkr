@@ -119,6 +119,7 @@ collections and Smart Lists keep their own layout.
   - **Scrape…** and **Organize…** (see [Scraping & Organizing](Scraping-and-Organizing)),
     **Write metadata to file**, **Compare files…** (with exactly two issues selected; see
     [Comparing Duplicates](Comparing-Duplicates))
+  - **Tidy up**, a submenu of clean-ups that act on everything you have selected (see below)
   - **Delete…**, with a choice to delete the file or **Remove from the library, keep the file**
     (the file isn't imported again at the next scan)
 - **Continue Reading** — a button on series covers jumps you to where you left off.
@@ -129,6 +130,27 @@ collections and Smart Lists keep their own layout.
 toolbar. For issues it offers **Bulk Edit**, **Plugins**, **Mark Read**, **Mark Unread**,
 **Add to List**, **Delete** and **Clear**. For series cards it offers the same except Plugins; Mark
 Read, Mark Unread and Add to List then apply to every issue in the selected series, in order.
+
+### Tidy up
+
+Right-click a comic or a selection and open **Tidy up**. Each of these only touches the comics it
+would actually change and tells you how many; all but the last can be undone with **Ctrl+Z**.
+
+- **Commit proposed values** — a number, year, title, format, volume or count that was worked out from
+  the file name is shown everywhere but not saved on the comic. This saves it into the comic's own
+  field (only where that field is empty), so it is written to the file like any other edit.
+- **Complete count** — for a series marked **Completed**, sets each comic's Count to the series' last
+  issue number. Issue numbers of 1000 and over aren't taken as the last number.
+- **Guess format from name** — a comic with no format gets one when its series name, title or file
+  name says it: Annual, Director's Cut, TPB, One-Shot, Black & White.
+- **Find scanner from file name** — copies the scan or release group out of a name such as
+  `Saga 054 (2018) (Digital) (Zone-Empire)` into Scan Information. Add your own group names, or words
+  that are never a scanner, under **Preferences → Organize & Scrape → Filters & names**.
+- **First page is an ad…** — tags the first page an advertisement (the reader skips it) and the second
+  the cover, for files that open with a scanner's credit page. It asks first: page tags aren't part of
+  Undo, though you can change them again in the reader.
+
+Series cards offer Complete count, Guess format and Find scanner, applied to every comic in the series.
 
 ## The series detail page
 

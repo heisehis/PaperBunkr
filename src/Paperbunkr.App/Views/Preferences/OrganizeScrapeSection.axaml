@@ -194,6 +194,20 @@
                             <TextBox Text="{Binding PublisherAliases}" AcceptsReturn="True" Height="80" Width="520" HorizontalAlignment="Left" AutomationProperties.Name="Publisher aliases" />
                         </StackPanel>
                     </StackPanel>
+
+                    <StackPanel Tag="organizeScrape.scanCredits" Spacing="10">
+                        <TextBlock Classes="settingsGroupCaption" Text="SCANNER CREDITS" />
+                        <TextBlock Text="Right-click comics and choose Find scanner from file name to copy the scan or release group out of a name such as “Saga 054 (2018) (Digital) (Zone-Empire)” into Scan Information. Common group names and the words that are never a scanner (Digital, c2c, of 4, a year, a language) are built in; add your own here."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="More scanner names (one per line)" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBox Text="{Binding ScannerNames}" AcceptsReturn="True" Height="80" Width="520" HorizontalAlignment="Left" AutomationProperties.Name="More scanner names" />
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="More words that are never a scanner (one per line)" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBox Text="{Binding ScanIgnoredWords}" AcceptsReturn="True" Height="80" Width="520" HorizontalAlignment="Left" AutomationProperties.Name="Words that are never a scanner" />
+                        </StackPanel>
+                    </StackPanel>
                 </StackPanel>
             </ScrollViewer>
 

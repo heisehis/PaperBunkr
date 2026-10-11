@@ -34,11 +34,20 @@ public partial class SmartScreenViewModel : ViewModelBase
 {
     private readonly Action<int> _goToSeries;
     private readonly Action<int> _goToBook;
+    private readonly IFilePickerService? _filePicker;
+    private readonly IActivityService? _activity;
 
-    public SmartScreenViewModel(Action<int> goToSeries, Action<int> goToBook, bool loadOnConstruction = true)
+    public SmartScreenViewModel(
+        Action<int> goToSeries,
+        Action<int> goToBook,
+        bool loadOnConstruction = true,
+        IFilePickerService? filePicker = null,
+        IActivityService? activity = null)
     {
         _goToSeries = goToSeries;
         _goToBook = goToBook;
+        _filePicker = filePicker;
+        _activity = activity;
         BuiltInLists = new ObservableCollection<SmartListSummary>();
         MaintenanceLists = new ObservableCollection<SmartListSummary>();
         CustomLists = new ObservableCollection<SmartListSummary>();
@@ -797,6 +806,67 @@ public partial class SmartScreenViewModel : ViewModelBase
         context.SmartLists.Add(clone);
         context.SaveChanges();
         LoadSmartList(clone.Id);
+    }
+
+    /// <summary>
+    /// Imports a ComicRack smart list (<c>.cbl</c>) as a native smart list (docs/superpowers/specs/2026-10-04-smart-list-cbl-import-design.md) and opens it.
+    /// A reading-list <c>.cbl</c> is refused here - it would silently create a reading list from the Smart screen - and what could not be carried over is
+    /// reported as one Activity Center alert.
+    /// </summary>
+    [RelayCommand]
+    private async Task ImportComicRackList()
+    {
+        if (_filePicker is null)
+        {
+            return;
+        }
+
+        string? path = await _filePicker.PickOpenFileAsync("Import ComicRack Smart List", "cbl", "ComicRack list (.cbl)");
+        if (path is null)
+        {
+            return;
+        }
+
+        var notes = new List<string>();
+        int? importedId = null;
+        try
+        {
+            switch (Paperbunkr.Data.ReadingLists.CblFile.Detect(path))
+            {
+                case Paperbunkr.Data.ReadingLists.CblFileKind.SmartList:
+                    using (var context = PaperbunkrDb.CreateContext())
+                    {
+                        var result = Paperbunkr.Data.SmartLists.CeImport.SmartListFileImporter.Import(context, path);
+                        notes.AddRange(result.Warnings.Select(w => w.ToString()));
+                        if (result.RefusedReason is not null)
+                        {
+                            notes.Add(result.RefusedReason);
+                        }
+
+                        importedId = result.List?.Id;
+                    }
+
+                    break;
+                case Paperbunkr.Data.ReadingLists.CblFileKind.ReadingList:
+                    notes.Add($"'{System.IO.Path.GetFileName(path)}' is a reading list, not a smart list. Import it from the Reading screen.");
+                    break;
+                default:
+                    notes.Add($"'{System.IO.Path.GetFileName(path)}' is not a ComicRack list.");
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or System.IO.InvalidDataException or UnauthorizedAccessException)
+        {
+            notes.Add($"Couldn't read '{System.IO.Path.GetFileName(path)}': {ex.Message}");
+        }
+
+        if (importedId is int id)
+        {
+            RefreshSidebar();
+            LoadSmartList(id);
+        }
+
+        CeImportAlerts.RaiseIfAny(_activity, notes, "smart list");
     }
 
     [RelayCommand]

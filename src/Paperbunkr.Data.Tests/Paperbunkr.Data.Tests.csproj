@@ -30,6 +30,10 @@
          real ported ComicDatabase.SaveXml serializer rather than hand-written, so its shape is
          guaranteed valid. See CeLibraryMigratorTests.Migrate_FromCheckedInFixture. -->
     <None Include="TestData\SampleComicDb.xml" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Real ComicRack smart-list .cbl files (a user's workflow lists), one per matcher type, for the CE smart-list import reader. -->
+    <None Include="TestData\CeSmartLists\*.cbl" CopyToOutputDirectory="PreserveNewest" />
+    <!-- A few real ComicRack reading-order .cbl files (event reading orders), to check the reading-list import against files made by ComicRack itself. -->
+    <None Include="TestData\ReadingOrders\*.cbl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

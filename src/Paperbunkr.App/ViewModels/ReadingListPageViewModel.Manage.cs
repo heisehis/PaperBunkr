@@ -234,7 +234,24 @@ public partial class ReadingListPageViewModel
         }
 
         using var context = PaperbunkrDb.CreateContext();
-        var list = CblReadingListIO.Import(context, path);
+        CblImportResult imported = CblImport.ImportAny(context, path);
+        if (imported.Kind == CblFileKind.SmartList)
+        {
+            // A ComicRack smart list: it becomes a Smart List, not a reading list, so there is nothing to place or open here.
+            var notes = imported.Warnings.Select(w => w.ToString()).ToList();
+            if (imported.Refused)
+            {
+                notes.Add(imported.RefusedReason!);
+            }
+
+            CeImportAlerts.RaiseIfAny(_activity, notes, "smart list");
+            StatusMessage = imported.Refused
+                ? imported.RefusedReason
+                : $"That file is a ComicRack smart list. Imported it as the smart list '{imported.SmartList!.Name}' - find it on the Smart screen.";
+            return;
+        }
+
+        var list = imported.ReadingList!;
         PlaceInThisFolder(list.Id);
         _openList(list.Id);
         StatusMessage = $"Imported '{list.Name}' with {list.Items.Count} issues.";

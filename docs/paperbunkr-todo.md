@@ -2723,6 +2723,82 @@ mouse buttons 4/5; Ctrl+F, F5, Shift+F6, Ctrl+wheel zoom, MouseButton4/5 = previ
 - **Limits / follow-ups:** the metadata-entity detail page has no code-behind to register a scope on; the PDF reader relies on its page canvas's Reader scope; only Library-hook plugin commands become
   actions (the other hooks do not operate on a selection); Wanted, Continuity, Manga/Book detail and the editors are smoke-tested (register, decline when empty), not driven with real data.
 
+## 2026-10-10 - ComicRack smart-list import and Library Organizer profile import
+
+From an audit of files a user collected for the ComicRack Data Manager (`docs/superpowers/specs/2026-10-04-ce-preset-audit-overview-design.md`; the plan files are
+`2026-10-10-smart-list-cbl-import-plan.md` and `2026-10-10-lop-profile-import-plan.md`). Pieces A and B were built on this date; C (proposed-values field), E (same-X-different-Y, Complete Count,
+first-page-is-an-ad), D (scanner/noise lists) and F (generic Format presets) were built the next day (next entry).
+
+### A. Smart-list `.cbl` import (built, tested, not seen on screen)
+- A `.cbl` with `<Matchers>` and no books is a ComicRack smart list. `CblFile.Detect` tells the kinds apart; `CblImport.ImportAny` routes it; `CeSmartListReader` + `CeMatcherMap` read the
+  XML (not CE's `XmlSerializer`, which cannot read the plugin matcher type) into a native Smart List; `SmartListFileImporter` saves it (name clashes get " (2)"). The three existing `.cbl` entry
+  points (drag and drop, New Reading List dialog, the Reading screen's Import) route by content, and the Smart screen has an **Import** button that refuses a reading-list file.
+- New `SmartListField`s (appended, never inserted - `ExcludeRuleJson` stores them by number): `NumberValue` (the numeric view of the issue number; `Number` stays Text), `Published` (date from
+  year/month/day, CE's `ComicBook.Published`), and the four "Series: ..." figures `SeriesLastNumber` / `SeriesMaxYear` / `SeriesMaxCount` / `SeriesMaxGapSize`, computed over the **whole library**
+  per `(series, volume)` like CE's `ComicBookSeriesStatistics` (gap size is the largest *step* between numbers, not the count of missing issues).
+- A condition that cannot be imported is **dropped, never approximated**, and one Activity Center alert names each, saying whether the list may now match more or fewer books. A list where every
+  condition was dropped is refused. Only the plugin matchers (`SameXDifferentY`, `findProposedValues`) hit this in the supplied files; they map through `PluginMatcherRegistry` (both registered on 2026-10-11, see the next entry).
+- Found on the way: CE's root `<ReadingList MatcherMode="Or">` (10 of the 154 files); `Limit` / `BaseListId` on a list (reported, none of the files use them); a CE "Published is <empty>" means "no
+  published date" (read through the year); a missing custom value compares as the empty string in CE, so **`SmartListQueryBuilder.EvaluateCustomValue` changed**: `Is ""` now matches comics
+  that never had the value, and `Is not X` matches them too. Existing lists that used either spelling now behave like CE.
+- Verified: reader tests against 20 real files plus inline cases (operator tables, `Not` groups checked over every truth assignment, De Morgan wording of warnings); all 154 supplied files read
+  (on 2026-10-10: 1023 conditions kept, 11 script matchers dropped, 1 list refused because its only condition was a script; after 2026-10-11 all 154 import, see the next entry); `CblImportTests`, `CeImportRoutingTests`,
+  `DragImportServiceTests`, `SmartListSeriesFieldsTests`. The corpus test runs with `PAPERBUNKR_CE_SMARTLIST_CORPUS=<folder;folder>`.
+- **Not verified:** nothing on screen - the Smart screen's new Import button, the alert's look, a drag of a real `.cbl` onto the Library. The four series fields in the rule builder (they are
+  Number fields in the existing picker, labelled "Series: ...").
+- **Follow-ups:** CE's four **date** series matchers (last added / opened / released / published time) are recognised but not imported; importing a whole `ComicDb.xml`'s smart lists (the CE
+  migrator still strips them). A CE "Number in range 0-1" imports as the numeric `NumberValue` field ("Number (numeric)" in the picker), not the text `Number`, so such a list reads differently
+  from one built by hand with "Number".
+
+### B. Library Organizer `.lop` profile import (built, tested, not seen on screen)
+- `LopProfileReader` reads a profile file (one `<Profile>` or several in `<Profiles>`) into `OrganizerProfile`s; `LopProfileImporter` saves them (clashing names get " (2)"; nothing is replaced);
+  **Preferences > Organize** has an **Import...** button (one file, which may hold several profiles; a notes card stays up until dismissed) and dropped `.lop` files import too. Code is in
+  `Paperbunkr.App/Scraper/Import/` because the stored rule is a `Paperbunkr.Plugins.Abstractions` type.
+- **`ExcludeMode = Only` is inverted**: five of the ten supplied profiles organize *only* the books matching their rules, our profile can only skip books, so the rules are stored as their
+  complement by De Morgan. Checked by an equivalence test: 250 random rule trees in both modes, a port of the plugin's `check_metadata_rules` against the stored JSON run through the real rules
+  engine, over 216 books.
+- A rule that cannot be matched exactly **rejects the whole profile** (the reason is shown): an unknown or date field (`Start Year`, `Added Date`, `Manga`, `File Format`, ...), a numeric `is`
+  (the plugin compares a number with text and it never matches), a text `greater than`, or a Yes/No rule for anything but `Yes`. Dropping a rule would change which files move.
+- An imported profile never runs by itself: `UseForScheduledRun` is false, the base folder is kept as written, and a `Move` profile gets a note to check it first. Settings the profile model lacks
+  are reported when the file uses them (per-token Prefix/Postfix/Separator/TextBox, a non-standard illegal-character table, move-fileless / move-failed, space handling switches, copy-adds-to-library,
+  folders to keep when empty). No per-profile illegal-character table or migration was added: every supplied profile uses the standard one, which `Sanitizer` already is.
+- Verified: reader tests against the nine distinct supplied files and inline cases, importer tests against a real temp database, converter equivalence tests, the view-model's Import command,
+  dropped `.lop` files. Existing `OrganizerUiTests` still pass.
+- **Not verified:** nothing on screen (the Import button, the notes card, the Organize tab's layout with the new row). The folder and file templates the supplied profiles use were run through the
+  existing template validator only; none was run against a real library.
+- **Follow-ups:** a multi-file picker (the picker is single-file, so several files arrive through drag and drop); pre-2.0 `Settings` profile files.
+
+## 2026-10-11 - The rest of the ComicRack preset audit: proposed values, same-X-different-Y, Complete count, first-page ad, scanner credits, format guess
+
+Pieces C, E, D and F of `docs/superpowers/specs/2026-10-04-ce-preset-audit-overview-design.md` (specs and plans `2026-10-11-proposed-values-*`, `-series-checks-and-bulk-fixes-*`, `-scan-credits-*`,
+`-format-presets-*`). All built and tested; **nothing seen on screen**.
+
+- **Two new smart-list fields** (appended to `SmartListField`): `HasProposedValue` (an *accepted*, filename-inferred `MetadataProposal` for a field whose own stored value is empty; the value box is a field list such as
+  `number, year`, blank = all; pending proposals do not count) and `SameXDifferentY` (ComicRack's script: X in the value box, Y in the second, `|`-separated; names are smart-list fields by name or label, otherwise custom values;
+  no Y = every book of a group of two or more, i.e. a duplicate finder). Both hide the operator picker; Not negates. `SameXDifferentY` is computed over the **whole library** per evaluation.
+- **Both ComicRack scripts now import.** `PluginMatcherRegistry.Default` maps `findProposedValues` and `SameXDifferentY`. All 154 supplied lists import: 1034 conditions kept, none dropped, none refused. One list gets an
+  "approximated" note: its `SameXDifferentY` sits inside a group after other rules, where ComicRack only looked at the books those rules kept (in the other 8 uses it is the first rule, so the whole library is the same thing).
+  `CeWarningEffect.Approximated` is new ("list may differ").
+- **Library right-click → Tidy up** (one submenu, so the menu did not grow by five entries): *Commit proposed values* (books), *Complete count*, *Guess format from name*, *Find scanner from file name* (books and series),
+  *First page is an ad…* (books). All but the last are one undo step with the usual file write-back, touch only the books that would change, and say so when there is nothing to do.
+  - *Commit proposed values* writes accepted proposals into the book's own empty Title / Format / Volume / Number / Count / Year. **Design bug caught by its test:** with proposals loaded in the editing context, `Effective*()` already
+    reads the value, so the undo snapshot and the write-back check saw no change; the values are now read in a separate query and applied to books loaded without proposals. Complete count and Guess format follow the same shape.
+  - *Complete count* (ComicRack's script): books of a **Completed** series get the series' last issue number as Count; per series and volume; numbers of 1000 and over are not the last number; the script's numbering-jump rule is ported
+    (a step above 12 issues per month once a series passes 30); placeholders for missing issues do not count; a series with no numbered book is left alone.
+  - *First page is an ad…* tags page 1 `Advertisement` and page 2 `Cover` after a confirm (page tags are not in the metadata undo history). The scripts also moved the page to the end of the file; archives are not rewritten here.
+  - *Find scanner from file name*: `ScanCreditDetector` reads the last bracketed piece of the name that is not noise and does not repeat one of the book's own fields, else a known group name, and adds it to Scan Information.
+    Built-in group names and noise words (`ScanCreditCatalog`; the word list and rules are our own, written from the behaviour of ComicRack's script, not copied from its unlicensed blacklist) plus the user's additions in
+    `scan-credits.json` next to the database, edited in **Preferences → Organize & Scrape → Filters & names → Scanner credits** (saved with the page; in Preferences search). No migration.
+  - *Guess format from name*: `FormatGuesser`'s five starter rules (Director's Cut, Trade Paper Back, One Shot, Black & White, Annual; ComicRack's own format names) against the series name, title and file name, only for a book with
+    no format, stored or proposed.
+- **Deliberately not carried over:** a Data Manager `.dat` importer; stripping "Annual" from a series name (a series is an entity here); moving the first page inside the archive; the scanner script's "Unknown" marker and "Scanner:" prefix;
+  bundling the reading orders (four real ones are test fixtures for the reading-list import).
+- **Verified:** `Paperbunkr.Data.Tests` in full (2264 passed); `Paperbunkr.App.Tests` fast set (`Speed!=Slow`: 5085 passed, 0 failed); the slow-tagged set was not run. New or touched App classes: (`CommitProposedValuesTests`, `SeriesBulkFixesTests`, `FindScannerActionTests`, `LibraryContextMenuBuilderTests`, `LibraryBulkActionsTests`,
+  `CeImportRoutingTests`, `DragImportServiceTests`, `LopImport*`, `ExcludeRuleConverterTests`); the corpus run over the 154 real lists.
+- **Not verified:** every on-screen part: the Tidy up submenu, the two new condition rows in the Smart Lists editor (value boxes and their hints), the Scanner credits boxes in Preferences, the first-page confirm. The scanner detector was
+  tested on release-name shapes I wrote, not on a real library's file names; expect group names it does not know and noise words it lacks (both can be added in Preferences).
+- **Follow-ups:** a pipeline model for a `SameXDifferentY` that is not the first rule; user-editable format rules; a Library Health entry for "has proposed values".
+
 ## Explicitly not in scope here
 
 - **Content-type classification manual dropdown** — flagged as a known gap, but the real

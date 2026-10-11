@@ -5,8 +5,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using cYo.Projects.ComicRack.Engine.IO.Provider;
+using Paperbunkr.App.Scraper.Import;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Organizing;
 using Paperbunkr.Data.ReadingLists;
 
 namespace Paperbunkr.App.Services;
@@ -15,12 +17,19 @@ namespace Paperbunkr.App.Services;
 /// drive the Library/Reading-List screens' completion toast, and <see cref="IssueIds"/> lets the
 /// Reading List screen attach membership for every comic in the drop (freshly imported ones plus
 /// ones that already matched an existing <see cref="Issue"/> by path).</summary>
+/// <remarks><see cref="SmartListsImported"/> counts ComicRack smart lists among the dropped <c>.cbl</c> files, and <see cref="ImportNotes"/> says, one line each,
+/// what a smart-list import could not carry over (docs/superpowers/specs/2026-10-04-smart-list-cbl-import-design.md) - the caller raises one alert for them.
+/// <see cref="ProfilesImported"/> counts Library Organizer profiles from dropped <c>.lop</c> files (docs/superpowers/specs/2026-10-04-lop-profile-import-design.md); what
+/// they could not carry over is in the same <see cref="ImportNotes"/>.</remarks>
 public record DragImportResult(
     int Imported,
     int AlreadyInLibrary,
     int SkippedUnsupported,
     int ReadingListsImported,
-    IReadOnlyList<int> IssueIds);
+    IReadOnlyList<int> IssueIds,
+    int SmartListsImported = 0,
+    IReadOnlyList<string>? ImportNotes = null,
+    int ProfilesImported = 0);
 
 /// <summary>
 /// Shared entry point for the drag-and-drop file/folder import both the Library and Reading List
@@ -97,7 +106,8 @@ public class DragImportService
                 else if (File.Exists(path))
                 {
                     string ext = Path.GetExtension(path);
-                    if (ext.Equals(".cbl", StringComparison.OrdinalIgnoreCase) || ext.Equals(".csv", StringComparison.OrdinalIgnoreCase))
+                    if (ext.Equals(".cbl", StringComparison.OrdinalIgnoreCase) || ext.Equals(".csv", StringComparison.OrdinalIgnoreCase)
+                        || ext.Equals(".lop", StringComparison.OrdinalIgnoreCase))
                     {
                         readingListFiles.Add(path);
                     }
@@ -132,22 +142,47 @@ public class DragImportService
 
         // Step 3: import reading-list files, one bad file skipped and counted rather than aborting.
         int readingListsImported = 0;
+        int smartListsImported = 0;
+        int profilesImported = 0;
+        var importNotes = new List<string>();
         foreach (string file in readingListFiles)
         {
             ct.ThrowIfCancellationRequested();
 
             try
             {
+                if (Path.GetExtension(file).Equals(".lop", StringComparison.OrdinalIgnoreCase))
+                {
+                    // A Library Organizer profile file: the profiles go to the organizer's store, never to the library.
+                    var summary = LopProfileImporter.Import(new OrganizerProfileStore(_contextFactory), file);
+                    profilesImported += summary.Saved.Count;
+                    importNotes.AddRange(summary.Notes);
+                    continue;
+                }
+
                 using var context = _contextFactory();
                 if (Path.GetExtension(file).Equals(".cbl", StringComparison.OrdinalIgnoreCase))
                 {
-                    CblReadingListIO.Import(context, file);
-                }
-                else
-                {
-                    CsvReadingListIO.Import(context, file);
+                    // A .cbl is either a reading list or a ComicRack smart list; ImportAny tells them apart by content.
+                    CblImportResult cbl = CblImport.ImportAny(context, file);
+                    importNotes.AddRange(cbl.Warnings.Select(w => w.ToString()));
+                    if (cbl.Refused)
+                    {
+                        importNotes.Add(cbl.RefusedReason!);
+                    }
+                    else if (cbl.Kind == CblFileKind.SmartList)
+                    {
+                        smartListsImported++;
+                    }
+                    else
+                    {
+                        readingListsImported++;
+                    }
+
+                    continue;
                 }
 
+                CsvReadingListIO.Import(context, file);
                 readingListsImported++;
             }
             catch
@@ -176,7 +211,7 @@ public class DragImportService
         // nowhere, matching LibraryFolderScanner's own silent per-file skip.
         int alreadyInLibrary = Math.Max(0, issueIds.Count - imported);
 
-        return new DragImportResult(imported, alreadyInLibrary, skippedUnsupported, readingListsImported, issueIds);
+        return new DragImportResult(imported, alreadyInLibrary, skippedUnsupported, readingListsImported, issueIds, smartListsImported, importNotes, profilesImported);
     }
 
     private static IEnumerable<string> EnumerateComicFiles(string folder, HashSet<string> supportedExtensions)

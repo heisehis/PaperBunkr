@@ -159,6 +159,99 @@ public class DragImportServiceTests : IDisposable
         Assert.Single(result.IssueIds);
     }
 
+    private const string CeHeader = "<?xml version=\"1.0\"?><ReadingList xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">";
+
+    private const string CeFormatMatcher = "<ComicBookMatcher xsi:type=\"ComicBookFormatMatcher\"><MatchValue>Annual</MatchValue></ComicBookMatcher>";
+
+    private const string CeScriptMatcher = "<ComicBookMatcher xsi:type=\"ComicBookPluginMatcher\" MatchOperator=\"1\" PluginKey=\"someScript\"><MatchValue /></ComicBookMatcher>";
+
+    private async Task<string> WriteCeSmartListAsync(string name, params string[] matchers)
+    {
+        string path = Path.Combine(_root, name + ".cbl");
+        await File.WriteAllTextAsync(path, $"{CeHeader}<Name>{name}</Name><Books /><Matchers>{string.Concat(matchers)}</Matchers></ReadingList>");
+        return path;
+    }
+
+    [Fact]
+    public async Task ImportAsync_ComicRackSmartListFile_ImportsAsASmartList_NotAReadingList()
+    {
+        string file = await WriteCeSmartListAsync("Annuals", CeFormatMatcher);
+
+        var result = await CreateService().ImportAsync(new[] { file });
+
+        Assert.Equal(1, result.SmartListsImported);
+        Assert.Equal(0, result.ReadingListsImported);
+        Assert.Empty(result.ImportNotes!);
+        using var db = Db();
+        Assert.Empty(db.ReadingLists);
+        Assert.Equal("Annuals", Assert.Single(db.SmartLists.Where(s => !s.IsSystem)).Name);
+    }
+
+    [Fact]
+    public async Task ImportAsync_SmartListWithADroppedCondition_ReportsItInTheNotes()
+    {
+        string file = await WriteCeSmartListAsync("Half", CeFormatMatcher, CeScriptMatcher);
+
+        var result = await CreateService().ImportAsync(new[] { file });
+
+        Assert.Equal(1, result.SmartListsImported);
+        Assert.Contains("someScript", Assert.Single(result.ImportNotes!));
+    }
+
+    [Fact]
+    public async Task ImportAsync_SmartListWithNothingUsable_IsRefusedAndNotCounted()
+    {
+        string file = await WriteCeSmartListAsync("Scripty", CeScriptMatcher);
+
+        var result = await CreateService().ImportAsync(new[] { file });
+
+        Assert.Equal(0, result.SmartListsImported);
+        Assert.Equal(0, result.ReadingListsImported);
+        Assert.Equal(2, result.ImportNotes!.Count);
+        using var db = Db();
+        Assert.Empty(db.SmartLists.Where(s => !s.IsSystem));
+    }
+
+    private static string LopFixture(string name) => Path.Combine(AppContext.BaseDirectory, "TestData", "Lop", name);
+
+    [Fact]
+    public async Task ImportAsync_LibraryOrganizerProfileFile_ImportsTheProfile_NotAReadingList()
+    {
+        var result = await CreateService().ImportAsync(new[] { LopFixture("05 - Publishers.lop") });
+
+        Assert.Equal(1, result.ProfilesImported);
+        Assert.Equal(0, result.ReadingListsImported);
+        Assert.Equal(0, result.SkippedUnsupported);
+        Assert.Contains(result.ImportNotes!, n => n.Contains("Check the base folder"));
+        using var db = Db();
+        Assert.Equal("05 - Publishers", Assert.Single(db.OrganizerProfiles).Name);
+        Assert.Empty(db.ReadingLists);
+    }
+
+    [Fact]
+    public async Task ImportAsync_SeveralProfileFiles_ImportEveryProfile()
+    {
+        var result = await CreateService().ImportAsync(new[] { LopFixture("Events.lop"), LopFixture("05 - Publishers.lop"), LopFixture("Events.lop") });
+
+        Assert.Equal(3, result.ProfilesImported);
+        using var db = Db();
+        Assert.Equal(["05 - Publishers", "Events", "Events (2)"], db.OrganizerProfiles.AsEnumerable().Select(p => p.Name).Order());
+    }
+
+    [Fact]
+    public async Task ImportAsync_ABadProfileFile_IsReportedAndDoesNotStopTheBatch()
+    {
+        string bad = Path.Combine(_root, "bad.lop");
+        await File.WriteAllTextAsync(bad, "not a profile file");
+        string comic = CbzFixture.Create(Path.Combine(_root, "Kilo Station 001 (2020).cbz"), pageCount: 1);
+
+        var result = await CreateService().ImportAsync(new[] { bad, comic });
+
+        Assert.Equal(0, result.ProfilesImported);
+        Assert.Equal(1, result.Imported);
+        Assert.Contains("bad.lop", Assert.Single(result.ImportNotes!));
+    }
+
     [Fact]
     public async Task ImportAsync_MixedBatch_FolderPlusLooseFilePlusCsv_AllHandledInOneCall()
     {

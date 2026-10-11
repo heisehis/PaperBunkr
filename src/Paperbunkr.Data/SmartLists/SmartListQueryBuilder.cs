@@ -43,7 +43,14 @@ internal static class SmartListQueryBuilder
         public required IReadOnlyList<Issue> Issues { get; init; }
         public HashSet<int>? DuplicateIds { get; init; }
         public Dictionary<int, VirtualTagDefinition>? VirtualTags { get; init; }
+
+        /// <summary>Library-wide series figures for the <c>Series*</c> fields, null when no condition uses one.</summary>
+        public Dictionary<SeriesStatistics.Key, SeriesStatistics.Stats>? SeriesStats { get; init; }
     }
+
+    /// <summary>The four CE "Series: …" fields, which read figures computed over the whole library rather than one issue.</summary>
+    private static bool IsSeriesStatField(SmartListField field) =>
+        field is SmartListField.SeriesLastNumber or SmartListField.SeriesMaxYear or SmartListField.SeriesMaxCount or SmartListField.SeriesMaxGapSize;
 
     /// <summary>
     /// Loads the issue set plus the derived data any of <paramref name="conditions"/> reference.
@@ -60,7 +67,7 @@ internal static class SmartListQueryBuilder
         // Genre/Tags selectors - both broadly enough reached to always load. CustomValues is only
         // ever touched by the CustomValue / HasCustomValues fields, so it's the one include worth
         // gating (a library's worth of custom values is pure dead weight for the common list).
-        bool needsCustomValues = conditions.Any(c => c.Field is SmartListField.CustomValue or SmartListField.HasCustomValues);
+        bool needsCustomValues = conditions.Any(c => c.Field is SmartListField.CustomValue or SmartListField.HasCustomValues or SmartListField.SameXDifferentY);
 
         var query = ctx.Issues
             .Include(i => i.Series)
@@ -95,7 +102,9 @@ internal static class SmartListQueryBuilder
             ? ctx.VirtualTagDefinitions.Where(v => v.IsEnabled).ToDictionary(v => v.Id)
             : null;
 
-        return new LibrarySnapshot { Issues = issues, DuplicateIds = duplicateIds, VirtualTags = virtualTags };
+        var seriesStats = conditions.Any(c => IsSeriesStatField(c.Field)) ? SeriesStatistics.Compute(issues) : null;
+
+        return new LibrarySnapshot { Issues = issues, DuplicateIds = duplicateIds, VirtualTags = virtualTags, SeriesStats = seriesStats };
     }
 
     /// <summary>
@@ -105,7 +114,7 @@ internal static class SmartListQueryBuilder
     /// </summary>
     public static List<Issue> Evaluate(LibrarySnapshot snapshot, SmartList list)
     {
-        var evalContext = new EvalContext(snapshot.DuplicateIds, snapshot.VirtualTags);
+        var evalContext = new EvalContext(snapshot.DuplicateIds, snapshot.VirtualTags, snapshot.SeriesStats, SameXGroups(snapshot.Issues, list.RootGroup));
         return snapshot.Issues.Where(i => EvaluateGroup(i, list.RootGroup, evalContext)).ToList();
     }
 
@@ -144,7 +153,32 @@ internal static class SmartListQueryBuilder
         }
     }
 
-    private sealed record EvalContext(HashSet<int>? DuplicateIds, Dictionary<int, VirtualTagDefinition>? VirtualTags);
+    private sealed record EvalContext(
+        HashSet<int>? DuplicateIds,
+        Dictionary<int, VirtualTagDefinition>? VirtualTags,
+        Dictionary<SeriesStatistics.Key, SeriesStatistics.Stats>? SeriesStats = null,
+        Dictionary<object, HashSet<int>>? SameXIds = null);
+
+    /// <summary>
+    /// The flagged books of every "same X, different Y" condition in the tree, worked out over the whole library once per evaluation (docs/superpowers/specs/2026-10-11-series-checks-and-bulk-fixes-design.md §1).
+    /// Keyed by the condition object itself, since two conditions of one list can have different X and Y.
+    /// </summary>
+    private static Dictionary<object, HashSet<int>>? SameXGroups(IReadOnlyList<Issue> issues, SmartListConditionGroup root)
+    {
+        var conditions = Flatten(root).Where(c => c.Field == SmartListField.SameXDifferentY).ToList();
+        if (conditions.Count == 0)
+        {
+            return null;
+        }
+
+        var groups = new Dictionary<object, HashSet<int>>(ReferenceEqualityComparer.Instance);
+        foreach (var condition in conditions)
+        {
+            groups[condition] = SameXDifferentY.Compute(issues, condition.Value, condition.Value2);
+        }
+
+        return groups;
+    }
 
     /// <summary>
     /// A group matches when its conditions (XOR'd with <see cref="SmartListCondition.Not"/>) and
@@ -171,6 +205,23 @@ internal static class SmartListQueryBuilder
         {
             bool isDuplicate = ctx.DuplicateIds?.Contains(issue.Id) ?? false;
             return condition.Operator == SmartListOperator.IsNot ? !isDuplicate : isDuplicate;
+        }
+
+        if (IsSeriesStatField(condition.Field))
+        {
+            return SmartListLeafEvaluator.EvaluateNumber(SeriesStatValue(issue, condition.Field, ctx.SeriesStats), condition);
+        }
+
+        if (condition.Field == SmartListField.SameXDifferentY)
+        {
+            bool flagged = ctx.SameXIds is not null && ctx.SameXIds.TryGetValue(condition, out var ids) && ids.Contains(issue.Id);
+            return condition.Operator == SmartListOperator.IsNot ? !flagged : flagged;
+        }
+
+        if (condition.Field == SmartListField.HasProposedValue)
+        {
+            bool has = ProposedValues.Has(issue, ProposedValues.ParseFields(condition.Value));
+            return condition.Operator == SmartListOperator.IsNot ? !has : has;
         }
 
         if (condition.Field == SmartListField.CustomValue)
@@ -210,10 +261,32 @@ internal static class SmartListQueryBuilder
         SearchFieldBundleCatalog.For(condition.SearchMode)(issue)
             .Any(value => SmartListLeafEvaluator.EvaluateText(value ?? string.Empty, condition));
 
+    /// <summary>
+    /// CE's <c>ComicBookCustomValuesMatcher</c> reads <c>GetCustomValue(name)</c>, which is null for a custom value the comic does not have, and the string
+    /// matcher compares <c>value ?? ""</c> (<c>ComicBookStringMatcher.MatchBook</c>). So a missing custom value is the empty string: "is ''" matches every comic
+    /// without it, which is how ComicRack lists spell "not tagged yet".
+    /// </summary>
     private static bool EvaluateCustomValue(Issue issue, SmartListCondition c)
     {
         var match = issue.CustomValues.FirstOrDefault(cv => cv.Name == c.CustomValueName);
-        return match is not null && SmartListLeafEvaluator.EvaluateText(match.Value, c);
+        return SmartListLeafEvaluator.EvaluateText(match?.Value ?? string.Empty, c);
+    }
+
+    /// <summary>The group's figure for <paramref name="field"/>; CE's invalid value (-1) for a comic with no statistics (a stale snapshot).</summary>
+    private static float SeriesStatValue(Issue issue, SmartListField field, Dictionary<SeriesStatistics.Key, SeriesStatistics.Stats>? stats)
+    {
+        if (stats is null || !stats.TryGetValue(SeriesStatistics.KeyOf(issue), out var s))
+        {
+            return -1f;
+        }
+
+        return field switch
+        {
+            SmartListField.SeriesLastNumber => s.LastNumber,
+            SmartListField.SeriesMaxYear => s.MaxYear,
+            SmartListField.SeriesMaxCount => s.MaxCount,
+            _ => s.MaxGapSize,
+        };
     }
 
     /// <summary>

@@ -267,7 +267,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         IssueProperties = new IssuePropertiesScreenViewModel(CloseIssuePropertiesOverlayAndReload, ShowToast, enqueueMetadataWriteBack: id => EnqueueMetadataWriteBack(id));
         BulkIssueProperties = new BulkIssuePropertiesScreenViewModel(CloseBulkIssuePropertiesOverlayAndReload, ShowToast, enqueueMetadataWriteBack: id => EnqueueMetadataWriteBack(id));
         BulkSeriesProperties = new BulkSeriesPropertiesScreenViewModel(CloseBulkSeriesPropertiesOverlayAndReload, id => EnqueueMetadataWriteBack(id));
-        Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook, loadOnConstruction: false);
+        Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook, loadOnConstruction: false, filePicker: new FilePickerService(), activity: Activity);
         Reading = new ReadingListsScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, activity: Activity, loadOnConstruction: false, trackerAutoSync: TrackerAutoSync, dialogs: Dialogs);
         // "from <continuity>" on a continuity-built list (docs/superpowers/specs/2026-09-28-reading-lists-build-from-events-design.md §2).
         Reading.OpenContinuity = id =>
@@ -305,7 +305,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             CloseWelcomeTourOverlay);
         ReadingListProperties = new ReadingListPropertiesScreenViewModel(CloseReadingListPropertiesOverlay);
         CollectionProperties = new CollectionPropertiesScreenViewModel(CloseCollectionPropertiesOverlay);
-        NewReadingList = new NewReadingListViewModel(new FilePickerService(), OnNewReadingListCreated, CloseNewReadingListDialog);
+        NewReadingList = new NewReadingListViewModel(new FilePickerService(), OnNewReadingListCreated, CloseNewReadingListDialog, Activity);
         NewEventOrContinuity = new NewEventOrContinuityViewModel(OnEventOrContinuityCreated, CloseNewEventDialog);
         GoalEditor = new GoalEditorViewModel(OnGoalCreated, CloseNewGoalDialog);
         QuickRate = new QuickRateScreenViewModel(CloseQuickRateOverlay, id => EnqueueMetadataWriteBack(id));

@@ -67,7 +67,7 @@ public sealed class LibraryActionCatalog
         "edit", "rating", "mark", "add-list", "add-collection", "show-in-list", Sep,
         "go-series", "series-setters", Sep,
         "scrape", "organize", Sep,
-        "copy-data", "paste-data", "clear-data", "write-files", "refresh", Sep,
+        "copy-data", "paste-data", "clear-data", "tidy", "write-files", "refresh", Sep,
         "reveal", "copy-paths", "compare", Sep,
         "plugins", Sep,
         "select-all", "invert", "clear-selection", Sep,
@@ -83,7 +83,7 @@ public sealed class LibraryActionCatalog
     {
         "open", "edit", "mark", "add-list", "add-collection", Sep,
         "content-type", "reading-direction", "publication-status", "reading-status", Sep,
-        "scrape", "organize", "write-files", "refresh", "merge", Sep,
+        "scrape", "organize", "tidy", "write-files", "refresh", "merge", Sep,
         "reveal", "copy-paths", Sep,
         "plugins", Sep,
         "select-all", "invert", "clear-selection", Sep,
@@ -460,6 +460,28 @@ public sealed class LibraryActionCatalog
 
         yield return new("clear-data", issue, c =>
             ContextMenuEntry.Item(c.IsMulti ? $"Clear Data of {c.Count}…" : "Clear Data…", _vm.ClearDataCommand, c.Target, Symbol.Eraser));
+
+        // The fix-ups that came from ComicRack scripts (docs/superpowers/specs/2026-10-04-ce-preset-audit-overview-design.md), kept together in one submenu so the menu stays short.
+        // A series offers the ones that make sense for all of its books; the two that are about one book's own values or pages are for books only.
+        yield return new("tidy", local, c =>
+        {
+            string of = c.IsMulti ? (c.IsSeries ? $" ({c.Count} series)" : $" ({c.Count})") : string.Empty;
+            var children = new List<ContextMenuEntry>();
+            if (!c.IsSeries)
+            {
+                children.Add(ContextMenuEntry.Item("Commit proposed values", _vm.CommitProposedValuesCommand, c.Target, Symbol.CheckmarkCircle));
+            }
+
+            children.Add(ContextMenuEntry.Item("Complete count", _vm.CompleteSeriesCountCommand, c.Target, Symbol.NumberSymbol));
+            children.Add(ContextMenuEntry.Item("Guess format from name", _vm.GuessFormatFromNameCommand, c.Target, Symbol.Tag));
+            children.Add(ContextMenuEntry.Item("Find scanner from file name", _vm.FindScannerFromFileNameCommand, c.Target, Symbol.ScanText, isEnabled: c.HasFile));
+            if (!c.IsSeries)
+            {
+                children.Add(ContextMenuEntry.Item("First page is an ad…", _vm.MarkFirstPageAsAdCommand, c.Target, Symbol.DocumentDismiss));
+            }
+
+            return ContextMenuEntry.SubMenu("Tidy up" + of, children, Symbol.Wand);
+        });
 
         yield return new("write-files", local, c =>
         {

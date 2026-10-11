@@ -2678,6 +2678,17 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             parts.Add($"{result.ReadingListsImported} reading list{(result.ReadingListsImported == 1 ? "" : "s")} imported");
         }
 
+        if (result.SmartListsImported > 0)
+        {
+            parts.Add($"{result.SmartListsImported} smart list{(result.SmartListsImported == 1 ? "" : "s")} imported");
+        }
+
+        if (result.ProfilesImported > 0)
+        {
+            parts.Add($"{result.ProfilesImported} organizer profile{(result.ProfilesImported == 1 ? "" : "s")} imported");
+        }
+
+        CeImportAlerts.RaiseIfAny(_activity, result.ImportNotes, string.Empty);
         job.Succeed(parts.Count > 0 ? string.Join(", ", parts) + "." : "Nothing to import.");
     }
 

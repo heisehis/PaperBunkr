@@ -166,6 +166,11 @@ Already shipped in Paperbunkr with CE field parity. CE's dual rule-builder/raw-q
 modes and recursive AND/OR matcher-group UI are worth a UX glance if the Smart Lists editor gets
 revisited, but this is not missing functionality.
 
+**2026-10-10:** CE smart-list `.cbl` files now import (`CeSmartListReader`; docs/superpowers/specs/2026-10-04-smart-list-cbl-import-design.md), with the four numeric
+"Series: ..." matchers (`SmartListSeriesMaxNumbertMatcher`/`MaxYear`/`MaxCount`/`MaxGapSize`), `ComicBookPublishedMatcher` and a numeric view of the issue number added as fields.
+Not imported: the four date series matchers (`SmartListSeriesLast{Added,Opened,Published,Released}TimeMatcher`), `ComicBookPluginMatcher` rules other than the two scripts with a native equivalent (2026-10-11: `findProposedValues` -> "Has Proposed Value", `SameXDifferentY` -> "Same X, Different Y"),
+and a list's `Limit` / `BaseListId` options. Library Organizer 2.x `.lop` profiles also import (docs/superpowers/specs/2026-10-04-lop-profile-import-design.md).
+
 ### E. Preferences / Settings
 **Stale header — this whole section predates a lot of shipped work.** Appearance, Behavior,
 Libraries, Reader, and Advanced tabs are all real today (`PreferencesScreenViewModel`); Scripts was

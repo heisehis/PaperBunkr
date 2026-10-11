@@ -113,6 +113,15 @@ public static class SmartListCatalog
             new(SmartListField.BookStore, "Book Store", SmartListDataType.Text),
             new(SmartListField.ISBN, "ISBN", SmartListDataType.Text),
             new(SmartListField.ScanInformation, "Scan Information", SmartListDataType.Text),
+
+            // ComicRack smart-list parity (docs/superpowers/specs/2026-10-04-smart-list-cbl-import-design.md). The four Series
+            // fields have no selector here: they read library-wide figures and are evaluated by SmartListQueryBuilder.
+            new(SmartListField.NumberValue, "Number (numeric)", SmartListDataType.Number),
+            new(SmartListField.Published, "Date Published", SmartListDataType.Date),
+            new(SmartListField.SeriesLastNumber, "Series: Last Number", SmartListDataType.Number),
+            new(SmartListField.SeriesMaxYear, "Series: Last Year", SmartListDataType.Number),
+            new(SmartListField.SeriesMaxCount, "Series: Highest Count", SmartListDataType.Number),
+            new(SmartListField.SeriesMaxGapSize, "Series: Biggest Gap", SmartListDataType.Number),
         }.ToDictionary(d => d.Field);
 
     /// <summary>
@@ -214,6 +223,9 @@ public static class SmartListCatalog
             [SmartListField.ReadPercentage] = ReadPercentage.Of,
             [SmartListField.BookmarkCount] = _ => 0, // deferred — no bookmarks feature/backing data yet
             [SmartListField.NewPages] = i => i.NewPages ?? -1,
+
+            // CE's ComicBookNumberMatcher: the number parsed to a float, -1 when it is not one ("1a" reads as 1, "1/2" as 0.5).
+            [SmartListField.NumberValue] = i => SeriesStatistics.ParseNumber(i.EffectiveNumber(), out float n) ? n : -1f,
         };
 
     public static readonly IReadOnlyDictionary<SmartListField, Func<Issue, bool>> ToggleSelectors =
@@ -235,7 +247,24 @@ public static class SmartListCatalog
             [SmartListField.Released] = i => i.ReleasedTime,
             [SmartListField.Modified] = i => i.FileModifiedTime,
             [SmartListField.Created] = i => i.FileCreationTime,
+
+            // CE's ComicBook.Published: built from Year/Month/Day, month and day clamped; unset (no positive year) never matches.
+            [SmartListField.Published] = PublishedDate,
         };
+
+    private static DateTime? PublishedDate(Issue issue)
+    {
+        int year = issue.EffectiveYear() ?? 0;
+        if (year <= 0)
+        {
+            return null;
+        }
+
+        year = Math.Clamp(year, 1, 9999);
+        int month = Math.Clamp(issue.Month ?? 1, 1, 12);
+        int day = Math.Clamp(issue.Day ?? 1, 1, DateTime.DaysInMonth(year, month));
+        return new DateTime(year, month, day);
+    }
 }
 
 /// <summary>

@@ -39,6 +39,8 @@
        (which src/Paperbunkr.Plugins.Tests/SamplePlugins/DuplicateFinder/ already covers). -->
   <ItemGroup>
     <None Include="..\..\sample-plugins\DuplicateFinder.zip" Link="SamplePlugins\DuplicateFinder.zip" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Real Library Organizer profile files (2.1.8 / 2.1.11), for the .lop reader. -->
+    <None Include="TestData\Lop\*.lop" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

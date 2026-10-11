@@ -43,6 +43,8 @@ public partial class SmartListConditionViewModel : ViewModelBase
             .Append(new FieldOption(SmartListField.AllProperties, "All Properties"))
             .Append(new FieldOption(SmartListField.CustomValue, "Custom Value"))
             .Append(new FieldOption(SmartListField.Duplicate, "Duplicate"))
+            .Append(new FieldOption(SmartListField.HasProposedValue, "Has Proposed Value"))
+            .Append(new FieldOption(SmartListField.SameXDifferentY, "Same X, Different Y"))
             .Append(new FieldOption(SmartListField.VirtualTag, "Virtual Tag"))
             .ToList(),
     };
@@ -112,6 +114,11 @@ public partial class SmartListConditionViewModel : ViewModelBase
             OnPropertyChanged(nameof(IsCustomValueField));
             OnPropertyChanged(nameof(IsVirtualTagField));
             OnPropertyChanged(nameof(IsAllPropertiesField));
+            OnPropertyChanged(nameof(IsProposedValueField));
+            OnPropertyChanged(nameof(IsSameXDifferentYField));
+            OnPropertyChanged(nameof(Value2Watermark));
+            OnPropertyChanged(nameof(ShowOperator));
+            OnPropertyChanged(nameof(ValueWatermark));
             OnPropertyChanged(nameof(SelectedVirtualTag));
             OnPropertyChanged(nameof(SelectedVirtualTagText));
             OnPropertyChanged(nameof(SelectedSearchMode));
@@ -130,6 +137,19 @@ public partial class SmartListConditionViewModel : ViewModelBase
 
     public bool IsAllPropertiesField => _condition.Field == SmartListField.AllProperties;
 
+    /// <summary>"Has Proposed Value": the value box is the list of fields to look at (docs/superpowers/specs/2026-10-11-proposed-values-design.md); the operator is fixed (the Not toggle negates).</summary>
+    public bool IsProposedValueField => _condition.Field == SmartListField.HasProposedValue;
+
+    /// <summary>The operator picker is hidden for the fields that only ask "does it have one" (Duplicate, Has Proposed Value).</summary>
+    public bool ShowOperator => !IsDuplicateField && !IsProposedValueField && !IsSameXDifferentYField;
+
+    public string ValueWatermark => IsProposedValueField ? "fields, e.g. number, year (blank = all)" : IsSameXDifferentYField ? "same: e.g. Series|Volume" : string.Empty;
+
+    /// <summary>"Same X, Different Y" (docs/superpowers/specs/2026-10-11-series-checks-and-bulk-fixes-design.md §1): X is the value box, Y the second one; the operator is fixed (the Not toggle negates).</summary>
+    public bool IsSameXDifferentYField => _condition.Field == SmartListField.SameXDifferentY;
+
+    public string Value2Watermark => IsSameXDifferentYField ? "but different: e.g. Format (optional)" : string.Empty;
+
     /// <summary>The condition ultimately routes through <c>SmartListQueryBuilder.EvaluateText</c> — Text fields plus the Custom Value / Virtual Tag / All Properties special fields, but not Duplicate (toggle-only).</summary>
     private bool IsTextLike =>
         IsCustomValueField || IsVirtualTagField || IsAllPropertiesField ||
@@ -147,7 +167,7 @@ public partial class SmartListConditionViewModel : ViewModelBase
                 : SmartListDataType.Toggle; // CustomValue/VirtualTag/AllProperties behave text-like but Duplicate is toggle-only
             var operators = IsCustomValueField || IsVirtualTagField || IsAllPropertiesField
                 ? SmartListOperatorLabels.For(SmartListDataType.Text)
-                : IsDuplicateField
+                : IsDuplicateField || IsProposedValueField || IsSameXDifferentYField
                     ? SmartListOperatorLabels.For(SmartListDataType.Toggle)
                     : SmartListOperatorLabels.For(dataType);
             return operators.Select(op => new OperatorOption(op, SmartListOperatorLabels.Labels[op])).ToList();
@@ -206,7 +226,7 @@ public partial class SmartListConditionViewModel : ViewModelBase
         }
     }
 
-    public bool ShowValue2 => _condition.Operator is SmartListOperator.InRange or SmartListOperator.DateInRange;
+    public bool ShowValue2 => IsSameXDifferentYField || _condition.Operator is SmartListOperator.InRange or SmartListOperator.DateInRange;
 
     public string Value
     {

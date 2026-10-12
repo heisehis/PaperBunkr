@@ -324,8 +324,11 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     public void LoadSeries(int seriesId)
     {
         using var context = PaperbunkrDb.CreateContext(includeRemote: true);
+        // AsSplitQuery: two collection includes under Issues in one query return every issue's proposals times its tags,
+        // which took 1.2-1.5 s on the UI thread for an ordinary series (2026-10-11 measurement).
         var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals)
             .Include(s => s.Issues).ThenInclude(i => i.Tags)
+            .AsSplitQuery()
             .FirstOrDefault(s => s.Id == seriesId);
         if (series is null)
         {

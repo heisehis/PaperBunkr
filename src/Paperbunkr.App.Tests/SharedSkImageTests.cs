@@ -129,6 +129,46 @@ public class SharedSkImageTests
         Assert.Equal(expectedMib, ReaderMemoryBudget.AutoFor(ramGb * 1024 * Mib) / Mib);
     }
 
+    [Theory]
+    [InlineData(128, 112)]   // tiny limit: the whole display budget, never more than it
+    [InlineData(256, 128)]   // a quarter would be 56 MiB, too small to hold a strip's visible and margin bands
+    [InlineData(512, 128)]   // a quarter is 120 MiB: the floor still applies
+    [InlineData(1024, 248)]  // a quarter above the floor
+    public void StripBandCache_IsAQuarterOfTheDisplayBudget_ButNeverUnderItsFloor(int limitMb, long expectedMib)
+    {
+        Assert.Equal(expectedMib, ReaderMemoryBudget.Resolve(limitMb).BandBytes / (1024 * 1024));
+    }
+
+    [Fact]
+    public void StripBandCache_HoldsAnOrdinaryStripsResidentBands_OnTheAutoBudgetOfAn8GbMachine()
+    {
+        // 800 px wide webtoon, 4,096-row bands: two visible, one margin each side, three prefetched.
+        const long band = 800L * 4096 * 4;
+        long auto = ReaderMemoryBudget.AutoFor(8L * 1024 * 1024 * 1024);
+
+        Assert.True(ReaderMemoryBudget.Resolve((int)(auto / (1024 * 1024))).BandBytes >= 7 * band);
+    }
+
+    [Theory]
+    [InlineData(720, 135)]    // twelve bands of 11 MiB
+    [InlineData(800, 150)]
+    [InlineData(1600, 300)]   // raws and high-quality releases: twelve bands of 25 MiB
+    [InlineData(2000, 375)]
+    [InlineData(6000, 512)]   // absurdly wide: the ceiling
+    public void StripBandCache_GrowsWithTheStripsWidth_SoEveryBandThePlanKeepsFits(int stripWidth, long expectedMib)
+    {
+        const int bandHeight = 4096; // ReaderImagePipeline.BandHeight
+        var budget = ReaderMemoryBudget.Resolve(256);
+
+        long bytes = budget.BandBytesFor(stripWidth, bandHeight);
+
+        Assert.Equal(expectedMib, bytes / (1024 * 1024));
+        if (bytes < ReaderMemoryBudget.BandCeiling)
+        {
+            Assert.True(bytes >= (long)ReaderMemoryBudget.ResidentBands * stripWidth * bandHeight * 4);
+        }
+    }
+
     [Fact]
     public void AReaderLimitSetInPreferences_OverridesTheAutoBudget()
     {

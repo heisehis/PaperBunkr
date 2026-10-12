@@ -238,6 +238,9 @@ public partial class App : Application
             easing: new CubicEaseOut());
         DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] transition coordinator ready; constructing MainViewModel...");
         var mainViewModel = new MainViewModel(transitionCoordinator.RunAsync, themeService);
+
+        // Temporary measurement for the UI-thread responsiveness work (2026-10-10): logs/ui-thread.log.
+        mainViewModel.LoadScreensInBackground = true;
         DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] MainViewModel ready; constructing MainWindow...");
         var mainWindow = new MainWindow
         {
@@ -263,6 +266,10 @@ public partial class App : Application
         splashViewModel.ReportPhase(4, TotalPhases, "Almost there…");
         mainWindow.Show();
         DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] MainWindow.Show() returned.");
+
+        // Compile the plugin scripts on a thread-pool thread while the splash finishes and the first screen loads. Plugin
+        // discovery further down used to do it on the UI thread: 6.3 s of an unresponsive window after every start.
+        var pluginScriptsWarm = Task.Run(() => Paperbunkr.Plugins.PluginEngine.WarmScripts(Paperbunkr.App.Plugins.PluginPaths.RootDirectory));
 
         // The UI thread is free again now that construction is done. Hold the splash to its
         // MinimumVisible floor, then give the emblem motion one more short beat on the free UI
@@ -364,6 +371,8 @@ public partial class App : Application
         // discovers/precompiles plugins and fires the Startup hook. Runs after the main window
         // exists (adapters need MainWindow/MainViewModel.Reader to be real) and now after it is
         // shown, so plugin precompile janks a visible window rather than delaying its appearance.
+        // Discovery needs the compiled scripts; if the warm-up is still going, wait for it here without holding the UI thread.
+        await pluginScriptsWarm;
         var pluginHost = new PluginHostService();
         pluginHost.Initialize(mainViewModel, mainWindow);
         // Plugin commands are keyboard actions too (Plugin API 4.3): the Library-hook ones are listed in Preferences > Keyboard Shortcuts and follow the plugin list as commands are switched on and off.
@@ -451,6 +460,30 @@ public partial class App : Application
         // checkpoint+file-copy is fast enough not to perceptibly delay exit, and
         // RunAutoBackupIfDue() swallows its own failures rather than blocking shutdown on one.
         desktop.Exit += (_, _) => new BackupService().RunAutoBackupIfDue();
+
+        // The first visit to Preferences and to Reading Lists each cost a one-off 0.6-0.9 s on the UI thread (settings reads
+        // wired into the screen; the gallery's first query). Pay it once the app has been idle a while after startup instead
+        // of on the click. Skipped while a reader is open: a hitch there is worse than a slow first visit later.
+        Avalonia.Threading.DispatcherTimer.RunOnce(
+            () =>
+            {
+                if (!mainViewModel.IsInReader)
+                {
+                    mainViewModel.Preferences.EnsureLoaded();
+                }
+            },
+            TimeSpan.FromSeconds(20),
+            Avalonia.Threading.DispatcherPriority.ApplicationIdle);
+        Avalonia.Threading.DispatcherTimer.RunOnce(
+            () =>
+            {
+                if (!mainViewModel.IsInReader && !mainViewModel.IsReading)
+                {
+                    mainViewModel.Reading.RefreshSidebar();
+                }
+            },
+            TimeSpan.FromSeconds(24),
+            Avalonia.Threading.DispatcherPriority.ApplicationIdle);
 
         DiagnosticsService.LogMilestone("Startup complete.");
     }

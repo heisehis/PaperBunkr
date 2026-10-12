@@ -52,23 +52,20 @@ public sealed class CSharpCommand : Command
 
     private Script<object>? _script;
 
+    // Compiled scripts by file, its last write time and hook, so a compile done ahead of discovery on another thread
+    // (Warm) is the one PreCompile then uses. Only a finished compile is kept: a failure to read the file is not.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Path, DateTime Stamp, string Hook), (Script<object>? Script, string? Error)> s_compiled = new();
+
     public override void PreCompile()
     {
         try
         {
-            string code = File.ReadAllText(ScriptPath);
-            Type globalsType = PluginGlobalsTypeMap.Resolve(Hook);
-            var script = CSharpScript.Create<object>(code, Options, globalsType);
-            var diagnostics = script.Compile();
-            var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
-            if (errors.Count > 0)
-            {
-                CompileError = string.Join('\n', errors.Select(e => e.ToString()));
-                _script = null;
-                return;
-            }
-
+            var (script, error) = CompileCached(ScriptPath, Hook);
             _script = script;
+            if (error is not null)
+            {
+                CompileError = error;
+            }
         }
         catch (Exception ex)
         {
@@ -76,6 +73,35 @@ public sealed class CSharpCommand : Command
             _script = null;
         }
     }
+
+    /// <summary>
+    /// Compiles a script ahead of <see cref="PreCompile"/>, from any thread. Compiling is the slow part of plugin discovery
+    /// (about 6 s of UI-thread freeze after startup on a 2-core machine, 2026-10-11) and touches nothing but the file, so the
+    /// app does it in the background and discovery then finds the result here. Never throws.
+    /// </summary>
+    public static void Warm(string scriptPath, string hook)
+    {
+        try
+        {
+            CompileCached(scriptPath, hook);
+        }
+        catch (Exception)
+        {
+            // PreCompile will meet the same failure and report it on the command.
+        }
+    }
+
+    private static (Script<object>? Script, string? Error) CompileCached(string scriptPath, string hook) =>
+        s_compiled.GetOrAdd((scriptPath, File.GetLastWriteTimeUtc(scriptPath), hook), static key =>
+        {
+            string code = File.ReadAllText(key.Path);
+            Type globalsType = PluginGlobalsTypeMap.Resolve(key.Hook);
+            var script = CSharpScript.Create<object>(code, Options, globalsType);
+            var errors = script.Compile().Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+            return errors.Count > 0
+                ? ((Script<object>?)null, string.Join('\n', errors.Select(e => e.ToString())))
+                : (script, (string?)null);
+        });
 
     protected override async Task<object?> OnInvokeAsync(PluginGlobals globals)
     {

@@ -1066,6 +1066,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void OnThemeAppliedForMatrixRain() =>
         IsMatrixThemeActive = string.Equals(_themeService.GetActiveThemeKey(), "matrix", StringComparison.OrdinalIgnoreCase);
 
+    private bool _trueBlackSuspended;
+
     partial void OnCurrentScreenChanged(string value)
     {
         // Reader true-black auto-suspend (§ Reader auto-suspend) - live resources only, the
@@ -1075,7 +1077,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // runs, so "old" state isn't cheaply available here; re-applying live resources on a
         // non-reader-to-non-reader navigation is a few redundant DynamicResource writes, not a
         // correctness issue.
-        _themeService.SetTrueBlackReaderSuspend(value is "reader" or "bookReader" or "pdfReader");
+        // Only when entering or leaving a reader: the call reloads the theme and rewrites every theme resource, which
+        // made each plain screen switch restyle the whole window for nothing.
+        bool suspendTrueBlack = value is "reader" or "bookReader" or "pdfReader";
+        if (suspendTrueBlack != _trueBlackSuspended)
+        {
+            _trueBlackSuspended = suspendTrueBlack;
+            _themeService.SetTrueBlackReaderSuspend(suspendTrueBlack);
+        }
         if (value != "compare" && Compare is { IsOpen: true })
         {
             Compare.Dispose();   // both editions' files are released whichever way the screen was left
@@ -1145,6 +1154,54 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         ResetHistoryRoot("library");
     });
 
+    /// <summary>
+    /// When true, a rail screen that has to reload on a visit reads its data on a thread-pool thread and fills in when it
+    /// arrives, as Home and Insights always do. Off by default so a view model built in a test has its data as soon as the
+    /// navigation command returns; the running app turns it on at startup (<c>App.axaml.cs</c>).
+    /// </summary>
+    public bool LoadScreensInBackground
+    {
+        get => _loadScreensInBackground;
+        set
+        {
+            _loadScreensInBackground = value;
+            Library.ReloadInBackground = value;
+        }
+    }
+
+    private bool _loadScreensInBackground;
+
+    // What DataChangeStamp read when each rail screen last loaded, and when.
+    private readonly Dictionary<string, (long Stamp, DateTime LoadedUtc)> _screenLoads = new();
+
+    /// <summary>How long a rail screen may go without reloading even when nothing was written: some of what they show
+    /// depends on today's date (release dates, forecasts), and a write from outside this process is not seen.</summary>
+    internal static readonly TimeSpan ScreenLoadMaxAge = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// Whether a rail screen has to reload on this visit: true on the first visit, after any database write since its last
+    /// load (<see cref="Paperbunkr.Data.DataChangeStamp"/>), and after <see cref="ScreenLoadMaxAge"/>. Returning true records
+    /// the load, so call it only when about to load. The stamp is read before the load on purpose: a write that lands while
+    /// the screen is loading leaves it stale for the next visit.
+    /// </summary>
+    private bool NeedsLoad(string screenKey)
+    {
+        if (IsFresh(screenKey))
+        {
+            return false;
+        }
+
+        _screenLoads[screenKey] = (Paperbunkr.Data.DataChangeStamp.Current, DateTime.UtcNow);
+        return true;
+    }
+
+    /// <summary>Whether a rail screen's last full load is still current. Unlike <see cref="NeedsLoad"/> it records nothing,
+    /// for a path that reloads only part of the screen (the back trip reloads the open list but not the sidebar).</summary>
+    private bool IsFresh(string screenKey) =>
+        _screenLoads.TryGetValue(screenKey, out var last)
+        && last.Stamp == Paperbunkr.Data.DataChangeStamp.Current
+        && DateTime.UtcNow - last.LoadedUtc < ScreenLoadMaxAge;
+
     [RelayCommand]
     private void GoLibrary() => TryLeaveCurrentEditor(() =>
     {
@@ -1153,7 +1210,25 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // change from several places while the user is elsewhere (Book Folders scan, CE migration
         // commit, Generate Covers). Reloading on every visit is simplest fix that covers all of
         // those instead of special-casing each caller to remember to refresh Library itself.
-        Library.LoadFromDatabase();
+        // 2026-10-10: "every time" now means every time something was written since the last load (NeedsLoad) - the
+        // reload was 1.3-1.4 s of UI-thread freeze per visit at ~5,000 comics.
+        if (!Library.IsCurrent)
+        {
+            if (LoadScreensInBackground)
+            {
+                // Off the UI thread: the screen switches at once and the snapshot lands when it has been read.
+                _ = Library.LoadFromDatabaseAsync();
+            }
+            else
+            {
+                Library.LoadFromDatabase();
+            }
+        }
+        else
+        {
+            Library.RefreshPluginState();
+        }
+
         CurrentScreen = "library";
         ResetHistoryRoot("library");
     });
@@ -1170,15 +1245,28 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void GoInsights() => TryLeaveCurrentEditor(() =>
     {
         CurrentScreen = "insights";
-        Insights.Refresh();
+        _ = Insights.RefreshAsync();
         ResetHistoryRoot("insights");
     });
 
     [RelayCommand]
     private void GoSmart() => TryLeaveCurrentEditor(() =>
     {
-        Smart.RefreshSidebar();
-        Smart.EnsureListLoaded();
+        if (NeedsLoad("smart"))
+        {
+            if (LoadScreensInBackground)
+            {
+                // One background read covers the open list and every sidebar count (it used to be two full library
+                // loads on the UI thread, 1.8-2.5 s).
+                _ = Smart.EnsureListLoadedAsync();
+            }
+            else
+            {
+                Smart.RefreshSidebar();
+                Smart.EnsureListLoaded();
+            }
+        }
+
         CurrentScreen = "smart";
         ResetHistoryRoot("smart");
     });
@@ -1186,9 +1274,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void GoReading() => TryLeaveCurrentEditor(() =>
     {
-        Reading.InvalidateForecast();
-        Reading.RefreshSidebar();
-        Reading.EnsureListLoaded();
+        if (NeedsLoad("reading"))
+        {
+            Reading.InvalidateForecast();
+            Reading.RefreshSidebar();
+            Reading.EnsureListLoaded();
+        }
+
         CurrentScreen = "reading";
         ResetHistoryRoot("reading");
     });
@@ -1205,11 +1297,23 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void GoEvents() => TryLeaveCurrentEditor(() =>
     {
-        Events.RefreshSidebar();
-        Events.RefreshContinuitiesSidebar();
-        Events.RefreshStoryEventCandidates();
-        Events.RefreshPossibleDuplicates();
-        Events.EnsureEventLoaded();
+        if (NeedsLoad("events"))
+        {
+            Events.RefreshSidebar();
+            Events.RefreshContinuitiesSidebar();
+            if (LoadScreensInBackground)
+            {
+                _ = Events.RefreshStoryEventCandidatesAsync();
+            }
+            else
+            {
+                Events.RefreshStoryEventCandidates();
+            }
+
+            Events.RefreshPossibleDuplicates();
+            Events.EnsureEventLoaded();
+        }
+
         CurrentScreen = "events";
         ResetHistoryRoot("events");
     });
@@ -1217,7 +1321,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void GoWanted() => TryLeaveCurrentEditor(() =>
     {
-        Wanted.Refresh();
+        if (NeedsLoad("wanted"))
+        {
+            Wanted.Refresh();
+        }
+
         CurrentScreen = "wanted";
         ResetHistoryRoot("wanted");
     });
@@ -1312,7 +1420,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void CloseMigrationOverlay()
     {
         IsMigrationOverlayOpen = false;
-        Library.LoadFromDatabase();
+        Library.ReloadAfterChange();
     }
 
     private void OpenSeriesDetailFromReview(int seriesId) => GoDetailForSeries(seriesId);
@@ -1419,7 +1527,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void CloseCollectionPropertiesOverlay()
     {
         IsCollectionPropertiesOverlayOpen = false;
-        Library.LoadFromDatabase();
+        Library.ReloadAfterChange();
     }
 
     /// <summary>The sidebar's "＋" opens this (docs/superpowers/specs/2026-08-28-reading-lists-screen-redesign-design.md → v2).</summary>
@@ -1559,6 +1667,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 break;
             case "addIssue":
                 GoLibraryCommand.Execute(null);
+                Library.EnsureLoadedNow(); // the dialog below works on the loaded library
                 Library.OpenAddIssueCommand.Execute(null);
                 break;
             case "newReadingList":
@@ -1796,7 +1905,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void CloseQuickRateOverlay()
     {
         IsQuickRateOverlayOpen = false;
-        Library.LoadFromDatabase();
+        Library.ReloadAfterChange();
     }
 
     /// <summary>docs/superpowers/specs/2026-08-24-design-language-foundation-design.md "Internal showcase view" - entry point wired into Preferences' debug-only Developer group.</summary>
@@ -1838,7 +1947,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         }
         else if (IsLibrary)
         {
-            Library.LoadFromDatabase();
+            Library.ReloadAfterChange();
         }
         else if (IsBookDetail)
         {
@@ -2027,7 +2136,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void CloseBulkSeriesPropertiesOverlayAndReload()
     {
         IsBulkSeriesPropertiesOverlayOpen = false;
-        Library.LoadFromDatabase();
+        Library.ReloadAfterChange();
         Library.ClearSeriesSelectionCommand.Execute(null);
     }
 
@@ -2327,6 +2436,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             _ => null,
         };
 
+        // Bookkeeping no screen displays: it must not mark every screen stale on every navigation (NeedsLoad).
+        using var quiet = Paperbunkr.Data.DataChangeStamp.Suppress();
         using var context = PaperbunkrDb.CreateContext();
         var settings = context.GetOrCreateAppSettings();
         settings.LastScreenKey = CurrentScreen == "compare" ? "library" : CurrentScreen;
@@ -2576,7 +2687,24 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         switch (rootScreenKey)
         {
             case "library":
-                Library.LoadFromDatabase();
+                // Coming back from a detail screen is the commonest navigation there is; it reloaded the whole library
+                // (1.2-1.4 s) even when the visit changed nothing.
+                if (Library.IsCurrent)
+                {
+                    Library.RefreshPluginState();
+                }
+                else if (LoadScreensInBackground)
+                {
+                    // The tiles of the snapshot still on screen are what the flight back lands on; the fresh one replaces
+                    // them when it has been read, off the UI thread (this reload was a 1.2 s freeze on every return that
+                    // followed a change).
+                    _ = Library.LoadFromDatabaseAsync();
+                }
+                else
+                {
+                    Library.LoadFromDatabase();
+                }
+
                 // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - back-
                 // trip realization: scroll the flight's destination tile into view before
                 // NavigationTransitionCoordinator's poll starts looking for it. A no-op when
@@ -2592,22 +2720,38 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 break;
             case "insights":
                 CurrentScreen = "insights";
-                Insights.Refresh();
+                _ = Insights.RefreshAsync();
                 break;
             case "smart":
-                Smart.EnsureListLoaded();
+                if (!IsFresh("smart"))
+                {
+                    Smart.EnsureListLoaded();
+                }
+
                 CurrentScreen = "smart";
                 break;
             case "reading":
-                Reading.EnsureListLoaded();
+                if (!IsFresh("reading"))
+                {
+                    Reading.EnsureListLoaded();
+                }
+
                 CurrentScreen = "reading";
                 break;
             case "events":
-                Events.EnsureEventLoaded();
+                if (!IsFresh("events"))
+                {
+                    Events.EnsureEventLoaded();
+                }
+
                 CurrentScreen = "events";
                 break;
             case "wanted":
-                Wanted.Refresh();
+                if (NeedsLoad("wanted"))
+                {
+                    Wanted.Refresh();
+                }
+
                 CurrentScreen = "wanted";
                 break;
             case "preferences":

@@ -576,6 +576,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         DropActiveWorkspaceLabel();
 
+        // The Library's own view state, already applied in memory: saving it must not make the Library (or any other
+        // rail screen) reload on its next visit (MainViewModel.NeedsLoad).
+        using var quiet = Paperbunkr.Data.DataChangeStamp.Suppress();
         using var context = PaperbunkrDb.CreateContext();
         var settings = context.GetOrCreateAppSettings();
 
@@ -965,6 +968,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [ObservableProperty]
     private bool _hasThumbnailOverlayPlugin;
 
+    /// <summary>The part of a load that does not come from the database, for a visit that skips the reload because nothing was written.</summary>
+    public void RefreshPluginState() => HasThumbnailOverlayPlugin = Paperbunkr.App.Views.AsyncPluginOverlayImage.HasOverlayCommands;
+
     /// <summary>
     /// Re-reads the library into the <see cref="_allSeries"/>/<see cref="_allCollections"/> snapshot
     /// (plus <see cref="ReadingLists"/>), then hands off to <see cref="RebuildView"/> for all the
@@ -975,12 +981,134 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// </summary>
     public void LoadFromDatabase()
     {
-        HasThumbnailOverlayPlugin = Paperbunkr.App.Views.AsyncPluginOverlayImage.HasOverlayCommands;
+        MarkLoadStarted();
+        ApplyLibrary(ReadLibrary(_activeCollectionId));
+    }
 
-        // A new snapshot: any projection built for the previous one is stale. The next view
-        // computation (synchronous, below) builds and adopts a fresh one.
-        _dataVersion++;
-        _projection = null;
+    // What DataChangeStamp read when the snapshot on screen started loading, and when that was. Read before the load on
+    // purpose: a write that lands while it runs leaves the snapshot stale.
+    private long _loadedAtStamp = -1;
+    private DateTime _loadedAtUtc;
+
+    private void MarkLoadStarted()
+    {
+        _loadedAtStamp = DataChangeStamp.Current;
+        _loadedAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>How long a snapshot may stand without a reload even when nothing was written: a write from outside this
+    /// process is not seen by <see cref="DataChangeStamp"/>.</summary>
+    internal static readonly TimeSpan SnapshotMaxAge = TimeSpan.FromMinutes(10);
+
+    /// <summary>Whether the snapshot on screen still matches the database: nothing has been written through this process
+    /// since it started loading, and it is younger than <see cref="SnapshotMaxAge"/>.</summary>
+    public bool IsCurrent => _loadedAtStamp == DataChangeStamp.Current && DateTime.UtcNow - _loadedAtUtc < SnapshotMaxAge;
+
+    /// <summary>
+    /// When true, <see cref="ReloadAfterChange"/> reloads on a thread-pool thread, and not at all when nothing was written.
+    /// Off by default so a view model built in a test has its data as soon as a command returns; the running app turns it on
+    /// (<c>MainViewModel.LoadScreensInBackground</c>).
+    /// </summary>
+    public bool ReloadInBackground { get; set; }
+
+    /// <summary>
+    /// The reload after something may have changed the library (an action on this screen, an editor closing over it), for
+    /// callers that do not go on to read the reloaded data themselves. In the running app the screen stays responsive and the
+    /// change shows when the snapshot lands; each of these used to be a 1.2-1.7 s freeze (2026-10-11 measurement).
+    /// </summary>
+    public void ReloadAfterChange()
+    {
+        if (!ReloadInBackground)
+        {
+            LoadFromDatabase();
+            return;
+        }
+
+        if (IsCurrent)
+        {
+            RefreshPluginState(); // nothing was written (an editor cancelled): the snapshot on screen is still right
+            return;
+        }
+
+        _ = LoadFromDatabaseAsync();
+    }
+
+    /// <summary>True only while the very first load is running in the background, so the screen does not claim the library
+    /// is empty before it has been read.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowEmptyState))]
+    private bool _isLoadingLibrary;
+
+    /// <summary>
+    /// Same as <see cref="LoadFromDatabase"/>, but every query runs on a thread-pool thread (<see cref="ReadLibrary"/>) and
+    /// only the hand-over to the view (<see cref="ApplyLibrary"/>) touches the UI thread. What the screen showed before stays
+    /// up until the new snapshot lands. The result is dropped if a synchronous load or a change of collection overtook it.
+    /// Logs and falls back to a synchronous load on failure.
+    /// </summary>
+    public async Task LoadFromDatabaseAsync()
+    {
+        long startedAt = _dataVersion;
+        int? collectionId = _activeCollectionId;
+        bool first = _allSeries.Count == 0;
+        try
+        {
+            IsLoadingLibrary = first;
+            _backgroundLoadPending = true;
+            MarkLoadStarted();
+            var load = await Task.Run(() => ReadLibrary(collectionId)).ConfigureAwait(true);
+            _backgroundLoadPending = false;
+            IsLoadingLibrary = false;
+            if (_dataVersion != startedAt)
+            {
+                return; // a synchronous load already put something newer on screen
+            }
+
+            if (_activeCollectionId != collectionId)
+            {
+                LoadFromDatabase(); // the members were read for a collection the user has since left
+                return;
+            }
+
+            ApplyLibrary(load, computeViewInBackground: true);
+        }
+        catch (Exception ex)
+        {
+            _backgroundLoadPending = false;
+            IsLoadingLibrary = false;
+            DiagnosticsService.LogMilestone($"Library async load failed ({ex.GetType().Name}: {ex.Message}) - loading synchronously.");
+            if (_dataVersion == startedAt)
+            {
+                LoadFromDatabase();
+            }
+        }
+    }
+
+    private bool _backgroundLoadPending;
+
+    /// <summary>For a caller that is about to use the loaded library straight after navigating here: if a background load is
+    /// still on its way, loads now instead of waiting for it (the background result is then dropped).</summary>
+    public void EnsureLoadedNow()
+    {
+        if (_backgroundLoadPending)
+        {
+            LoadFromDatabase();
+        }
+    }
+
+    /// <summary>Everything one Library load reads from the database, built by <see cref="ReadLibrary"/>.</summary>
+    private sealed record LibraryLoad(
+        List<Series> Series,
+        List<VirtualTagDefinition> VirtualTags,
+        List<Collection> Collections,
+        bool CanWriteMetadataToFiles,
+        Dictionary<SearchMode, SuggestionCandidateList> SuggestionIndex,
+        List<CollectionMember> ActiveCollectionMembers,
+        Dictionary<int, int> CollectionMemberCounts,
+        List<ReadingListOption> ReadingLists);
+
+    /// <summary>Every database read for one Library load, safe off the UI thread: no observable state touched.</summary>
+    private static LibraryLoad ReadLibrary(int? activeCollectionId)
+    {
 
         // The one load that opts in to books mirrored from other libraries (docs/superpowers/specs/2026-09-19-remote-
         // library-sharing-design.md section 7.2): everything else in the app still sees local rows only.
@@ -991,15 +1119,15 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         // List's Genre/Tags columns for everyone.
         // AsNoTracking + AsSplitQuery: this is a pure read (the context is disposed at method end,
         // nothing here mutates a loaded entity), and at 2000+ series a single query carrying four
-        // collection includes multiplies out to millions of rows for EF to de-duplicate and track
-        // on the UI thread. Split query = one linear query per include level; no-tracking drops the
+        // collection includes multiplies out to millions of rows for EF to de-duplicate and track.
+        // Split query = one linear query per include level; no-tracking drops the
         // identity map and change-snapshot cost.
         // ThenInclude(MetadataProposals) - IssueListRow.HasPendingProposal/PendingProposalCount
         // (docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md §2) need it eager-
         // loaded; a separate Include(s => s.Issues) call rather than chaining off the Tags
         // ThenInclude, since AsSplitQuery makes this one more linear query pass, not a multiplied
         // join - same rationale as the other sibling Includes here.
-        _allSeries = context.Series
+        var series = context.Series
             .Include(s => s.Issues).ThenInclude(i => i.Tags)
             .Include(s => s.Issues).ThenInclude(i => i.MetadataProposals)
             .Include(s => s.CollectionItems)
@@ -1011,17 +1139,62 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             .OrderBy(s => s.SortName ?? s.Name)
             .ToList();
 
+        // Enabled Virtual Tags, for IssueList's dynamic per-tag sort/group entries (design §1) -
+        // same query shape as SmartScreenViewModel's own _virtualTagOptions load.
+        var virtualTags = context.VirtualTagDefinitions
+            .Where(t => t.IsEnabled)
+            .OrderBy(t => t.SortOrder)
+            .ToList();
+
+        var collections = context.Collections.Include(c => c.Items).AsNoTracking().AsSplitQuery().OrderBy(c => c.SortOrder).ToList();
+
+        // Re-read here (not just in LoadLibrarySettings) so toggling the Preferences master and
+        // returning to Library reflects it - a load runs on every nav to this screen that follows a write.
+        bool canWrite = context.GetOrCreateAppSettings().WriteMetadataToFiles;
+
+        var suggestionIndex = BuildSuggestionIndex(context, series);
+
+        // Resolved separately from the collections (which only carry bare CollectionItem rows for
+        // the sidebar counts) - the mixed grid needs the actual Series/Issue/Book entities, which
+        // CollectionResolver.GetMembers already joins in. Only worth the extra query when a
+        // collection is actually active.
+        var activeMembers = activeCollectionId is int loadCollectionId
+            ? new List<CollectionMember>(CollectionResolver.GetMembers(context, loadCollectionId))
+            : new List<CollectionMember>();
+
+        var memberCounts = collections.ToDictionary(
+            c => c.Id,
+            c => c.IsSmart ? CollectionResolver.GetMembers(context, c.Id).Count : c.Items.Count);
+
+        // "Add to Reading List" flyout (docs/superpowers/specs/2026-08-24-library-multiselect-
+        // slice2-design.md §2) - same ordering the Reading Lists gallery uses.
+        var readingLists = context.ReadingLists.OrderBy(l => l.SortOrder)
+            .Select(l => new ReadingListOption { Id = l.Id, Name = l.Name })
+            .ToList();
+
+        return new LibraryLoad(series, virtualTags, collections, canWrite, suggestionIndex, activeMembers, memberCounts, readingLists);
+    }
+
+    /// <summary>Adopts a snapshot and rebuilds everything derived from it. UI thread.</summary>
+    /// <param name="computeViewInBackground">Filter, sort and group the new snapshot through <see cref="ViewScheduler"/>
+    /// (a worker thread in the running app) instead of on the calling thread, for a load that is not blocking a navigation.</param>
+    private void ApplyLibrary(LibraryLoad load, bool computeViewInBackground = false)
+    {
+        RefreshPluginState();
+
+        // A new snapshot: any projection built for the previous one is stale. The next view
+        // computation (synchronous, below) builds and adopts a fresh one.
+        _dataVersion++;
+        _projection = null;
+
+        _allSeries = load.Series;
+
         // Which ids belong to a remote library, so read-only gating (menus, editors, scrape, delete) never has to hit the database.
         _remoteSeriesIds = _allSeries.Where(s => s.RemoteSourceId is not null).Select(s => s.Id).ToHashSet();
         _remoteIssueIds = _allSeries.SelectMany(s => s.Issues).Where(i => i.RemoteSourceId is not null).Select(i => i.Id).ToHashSet();
         RefreshSourceOptions();
 
-        // Enabled Virtual Tags, for IssueList's dynamic per-tag sort/group entries (design §1) -
-        // same query shape as SmartScreenViewModel's own _virtualTagOptions load.
-        IssueList.SetVirtualTags(context.VirtualTagDefinitions
-            .Where(t => t.IsEnabled)
-            .OrderBy(t => t.SortOrder)
-            .ToList());
+        IssueList.SetVirtualTags(load.VirtualTags);
 
         // Warm the aspect-ratio store from what's already persisted, so Panorama renders correct
         // cover shapes on the very first frame (no progressive-learning reflow) once a library has
@@ -1031,36 +1204,30 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 .Where(i => i.CoverAspectRatio is double r && r > 0)
                 .Select(i => (i.Id, i.CoverAspectRatio!.Value)));
 
-        _allCollections = context.Collections.Include(c => c.Items).AsNoTracking().AsSplitQuery().OrderBy(c => c.SortOrder).ToList();
+        _allCollections = load.Collections;
+        CanWriteMetadataToFiles = load.CanWriteMetadataToFiles;
+        _suggestionIndex = load.SuggestionIndex;
+        _activeCollectionMembers = load.ActiveCollectionMembers;
+        _collectionMemberCounts = load.CollectionMemberCounts;
 
-        // Re-read here (not just in LoadLibrarySettings) so toggling the Preferences master and
-        // returning to Library reflects it - LoadFromDatabase runs on every nav to this screen.
-        CanWriteMetadataToFiles = context.GetOrCreateAppSettings().WriteMetadataToFiles;
-
-        _suggestionIndex = BuildSuggestionIndex(context, _allSeries);
-
-        // Resolved separately from _allCollections (which only carries bare CollectionItem rows for
-        // the sidebar counts) - the mixed grid needs the actual Series/Issue/Book entities, which
-        // CollectionResolver.GetMembers already joins in. Only worth the extra query when a
-        // collection is actually active.
-        _activeCollectionMembers = _activeCollectionId is int loadCollectionId
-            ? new List<CollectionMember>(CollectionResolver.GetMembers(context, loadCollectionId))
-            : new List<CollectionMember>();
-
-        _collectionMemberCounts = _allCollections.ToDictionary(
-            c => c.Id,
-            c => c.IsSmart ? CollectionResolver.GetMembers(context, c.Id).Count : c.Items.Count);
-
-        // "Add to Reading List" flyout (docs/superpowers/specs/2026-08-24-library-multiselect-
-        // slice2-design.md §2) - same ordering the Reading Lists gallery uses. Its own
-        // table, so it only refreshes with a real reload, not on every RebuildView.
+        // Its own table, so it only refreshes with a real reload, not on every RebuildView.
         ReadingLists.Clear();
-        foreach (var list in context.ReadingLists.OrderBy(l => l.SortOrder))
+        foreach (var list in load.ReadingLists)
         {
-            ReadingLists.Add(new ReadingListOption { Id = list.Id, Name = list.Name });
+            ReadingLists.Add(list);
         }
 
-        RebuildView();
+        if (computeViewInBackground)
+        {
+            // RebuildView(Full) without its synchronous compute: the sidebar now, the cards and rows when the worker is done.
+            RebuildSidebar();
+            var request = CaptureViewRequest(ViewTrigger.Full);
+            ViewScheduler.Schedule(TimeSpan.Zero, ct => ComputeView(request, ct), result => ApplyView(result, request));
+        }
+        else
+        {
+            RebuildView();
+        }
 
         // Once per data load, not per rebuild: it used to hang off RebuildView, so every search
         // keystroke re-checked the cover cache (docs/superpowers/specs/2026-09-19-library-search-perf-design.md section 6).
@@ -1817,7 +1984,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         using var context = PaperbunkrDb.CreateContext();
         CollectionService.Reorder(context, ids);
-        LoadFromDatabase();
+        ReloadAfterChange();
     }
 
     /// <summary>"Edit…" in a collection row's menu - wired to <see cref="MainViewModel"/>'s
@@ -2852,7 +3019,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 result.IssuesReassigned == 0
                     ? "Every issue's series already matched its file."
                     : $"Reassigned {result.IssuesReassigned} issue{(result.IssuesReassigned == 1 ? "" : "s")} to match its file's embedded series.");
-            LoadFromDatabase();
+            ReloadAfterChange();
         }
         finally
         {
@@ -2894,7 +3061,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         // indeterminate job, but completion now follows the normal toast-policy path.
         using var job = _activity.StartJob(ActivityJobKind.Import, "Importing dropped files");
         var result = await new DragImportService().ImportAsync(paths);
-        LoadFromDatabase();
+        ReloadAfterChange();
 
         var parts = new List<string>();
         if (result.Imported > 0)
@@ -3050,7 +3217,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [RelayCommand] private void ClearTrackedFilter() => FilterTrackedOnly = false;
     [RelayCommand] private void ClearSearchScope() => SearchMode = SearchMode.All;
 
-    public bool ShowEmptyState => !HasAnyResults;
+    public bool ShowEmptyState => !IsLoadingLibrary && !HasAnyResults;
 
     public string EmptyStateMessage
     {
@@ -3444,7 +3611,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         context.SaveChanges();
-        LoadFromDatabase();
+        ReloadAfterChange();
 
         // "Update progress when marked as read" (docs/superpowers/specs/2026-09-18-tracker-behavior-
         // settings-design.md §3.3) - one call for the whole bulk action, so one job + one toast/prompt.
@@ -3480,7 +3647,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         context.SaveChanges();
-        LoadFromDatabase();
+        ReloadAfterChange();
 
         if (marked > 1)
         {
@@ -3549,7 +3716,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         AddIssuesToReadingList(context, list, Selection.UnionForAction(issueId));
         context.SaveChanges();
-        LoadFromDatabase();
+        ReloadAfterChange();
     }
 
     /// <summary>Context-menu "Add to Collection ▸ {name}" for an issue tile - respects the current
@@ -3574,7 +3741,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         using var context = PaperbunkrDb.CreateContext();
         var collection = CollectionService.Create(context, "New Collection");
         AddTargetsToCollection(context, collection, issueIds: Selection.UnionForAction(issueId));
-        LoadFromDatabase();
+        ReloadAfterChange();
     }
 
     /// <summary>Context-menu "Add to Collection ▸ {name}" for a series card - respects the current
@@ -3599,7 +3766,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         using var context = PaperbunkrDb.CreateContext();
         var collection = CollectionService.Create(context, "New Collection");
         AddTargetsToCollection(context, collection, seriesIds: SeriesSelection.UnionForAction(seriesId));
-        LoadFromDatabase();
+        ReloadAfterChange();
     }
 
     /// <summary>
@@ -3652,7 +3819,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         // Deferred for the same reason as SelectSuggestion above: this command runs from the
         // "+ New Reading List…" Button.Click still routing through the "Add to List" Popup's own content.
         Dispatcher.UIThread.Post(() => ActiveDropdown = null);
-        LoadFromDatabase();
+        ReloadAfterChange();
     }
 
     private void AddIssuesToReadingList(PaperbunkrDbContext context, ReadingList list, IReadOnlyList<int> issueIds)
@@ -4024,7 +4191,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         {
             SeriesContentTypeEditor.SetManual(series, type);
             context.SaveChanges();
-            LoadFromDatabase();
+            ReloadAfterChange();
         }
     }
 

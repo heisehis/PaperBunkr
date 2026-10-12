@@ -103,7 +103,7 @@ public interface IReaderPageSource : IPageImageDecoder
     /// that isn't a strip (or isn't currently in the window <see cref="SetVirtualizationWindow"/>
     /// last declared).
     /// </summary>
-    void SetStripBandWindow(int pageIndex, int minBand, int maxBand);
+    void SetStripBandWindow(int pageIndex, int minBand, int maxBand, bool edgeOnly = false);
 
     /// <summary>
     /// Non-blocking: whether <paramref name="pageIndex"/> is currently known to be a strip whose

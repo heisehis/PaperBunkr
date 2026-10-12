@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -64,6 +65,7 @@ public partial class InsightsScreenViewModel : ViewModelBase
             readingEventRecorder.ReadingEventRecorded += () =>
             {
                 _cache = null;
+                _refreshGeneration++; // a load already running was built from the old events
                 // Cheap: only recompute if the screen is the one on show. The shell calls Refresh()
                 // on navigation anyway, so a stale cache while elsewhere is harmless.
                 if (IsActive)
@@ -273,16 +275,15 @@ public partial class InsightsScreenViewModel : ViewModelBase
     private string _dropOffHeadline = string.Empty;
 
     // A row opens through OpenContinueCommand: its next issue in the reader when it has one, else its series.
-    private void PopulateDropOff()
+    private void PopulateDropOff(TodayLoad load)
     {
         DropOffRows.Clear();
-        if (_dropOffCache is { } watch)
+        if (load.DropOff is { } watch)
         {
-            var coverKeys = ResolveCoverKeys(watch.AtRisk.Select(s => s.SeriesId).ToList());
             foreach (var s in watch.AtRisk)
             {
                 string subtitle = s.IssuesRead == 0 ? "On the first issue" : s.IssuesRead == 1 ? "1 issue read" : $"{s.IssuesRead} issues read";
-                DropOffRows.Add(new AttentionRow(s.SeriesName, subtitle, s.NextIssueId, s.SeriesId, coverKeys.GetValueOrDefault(s.SeriesId)));
+                DropOffRows.Add(new AttentionRow(s.SeriesName, subtitle, s.NextIssueId, s.SeriesId, load.CoverKeys.GetValueOrDefault(s.SeriesId)));
             }
 
             DropOffHeadline = watch.Headline;
@@ -291,33 +292,140 @@ public partial class InsightsScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasDropOff));
     }
 
+    /// <summary>Everything the Today tab reads from the database for one refresh, built by <see cref="BuildToday"/>.</summary>
+    private sealed record TodayLoad(
+        InsightsSnapshot Snapshot,
+        DropOffWatch? DropOff,
+        Dictionary<int, string?> CoverKeys,
+        string? RecommendationsSeedName,
+        IReadOnlyList<InsightsRecommendationCard> Recommendations);
+
+    // Bumped by every refresh and by a cache invalidation, so a background load that was overtaken is dropped.
+    private int _refreshGeneration;
+
+    /// <summary>Reloads the screen synchronously on the calling thread. Prefer <see cref="RefreshAsync"/> on navigation.</summary>
     public void Refresh()
     {
-        if (_cache is null)
+        _refreshGeneration++;
+        ApplyToday(BuildToday(_cache, _dropOffCache, _nowUtc()));
+    }
+
+    /// <summary>Same as <see cref="Refresh"/>, but the queries and card mapping run on a thread-pool thread; only the
+    /// collection repopulation touches the UI thread. What the screen showed last stays up until the new data lands.
+    /// Logs and falls back to a synchronous load on failure.</summary>
+    public async Task RefreshAsync()
+    {
+        int generation = ++_refreshGeneration;
+        try
         {
-            using var context = PaperbunkrDb.CreateContext();
-            _cache = InsightsResolver.Build(context, _nowUtc());
+            var cache = _cache;
+            var dropOffCache = _dropOffCache;
+            var now = _nowUtc();
+            var load = await Task.Run(() => BuildToday(cache, dropOffCache, now)).ConfigureAwait(true);
+            if (generation == _refreshGeneration)
+            {
+                ApplyToday(load);
+            }
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsService.LogMilestone($"Insights async load failed ({ex.GetType().Name}: {ex.Message}) - loading synchronously.");
+            if (generation == _refreshGeneration)
+            {
+                Refresh();
+            }
+        }
+    }
+
+    /// <summary>Every database read for one Today refresh, safe off the UI thread: no observable state touched.
+    /// <paramref name="cachedSnapshot"/> non-null means the session cache is still good and only the recommendations and
+    /// cover keys are read again.</summary>
+    private static TodayLoad BuildToday(InsightsSnapshot? cachedSnapshot, DropOffWatch? cachedDropOff, DateTime nowUtc)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var snapshot = cachedSnapshot;
+        var dropOff = cachedDropOff;
+        if (snapshot is null)
+        {
+            snapshot = InsightsResolver.Build(context, nowUtc);
+
             try
             {
-                _dropOffCache = DropOffResolver.Build(context, _nowUtc());
+                dropOff = DropOffResolver.Build(context, nowUtc);
             }
             catch (Exception ex)
             {
                 // A nudge, never worth failing the Today tab over.
-                _dropOffCache = null;
+                dropOff = null;
                 DiagnosticsService.LogMilestone($"Insights: drop-off watch failed ({ex.GetType().Name}: {ex.Message}).");
             }
         }
 
-        PopulateDropOff();
+        Dictionary<int, string?> coverKeys;
+        // One query for every series named anywhere on the tab (docs/superpowers/specs/2026-09-23-insights-redesign-
+        // design.md's global cover rule), reusing SeriesCardSample.FromSeries's own cover-issue logic.
+        var seriesIds = snapshot.Continue.Select(s => s.SeriesId)
+            .Concat(snapshot.AlmostDone.Select(s => s.SeriesId))
+            .Concat(snapshot.DiveIn.Select(s => s.SeriesId))
+            .Concat(snapshot.Gaps.Select(g => g.SeriesId))
+            .Concat(dropOff?.AtRisk.Select(s => s.SeriesId) ?? Enumerable.Empty<int>())
+            .Distinct()
+            .ToList();
+        coverKeys = seriesIds.Count == 0
+            ? new Dictionary<int, string?>()
+            : context.Series
+                .AsNoTracking()
+                .Include(s => s.Issues)
+                .Where(s => seriesIds.Contains(s.Id))
+                .ToDictionary(s => s.Id, s => SeriesCardSample.FromSeries(s).CoverKey);
 
-        Snapshot = _cache;
-        PopulateLists(_cache);
+        var cards = new List<InsightsRecommendationCard>();
+        string? seedName = null;
+        var seed = InsightsRecommendationResolver.GetSeedWithRecommendations(context);
+        if (seed is not null)
+        {
+            var targetIds = seed.Recommendations.Select(r => r.TargetSeriesId).ToList();
+            var targetSeriesById = context.Series
+                .Include(s => s.Issues)
+                .Where(s => targetIds.Contains(s.Id))
+                .ToDictionary(s => s.Id);
+
+            foreach (var recommendation in seed.Recommendations)
+            {
+                if (targetSeriesById.TryGetValue(recommendation.TargetSeriesId, out var target))
+                {
+                    cards.Add(new InsightsRecommendationCard(SeriesCardSample.FromSeries(target), recommendation.Explanation));
+                }
+            }
+
+            seedName = cards.Count > 0 ? seed.SeedSeriesName : null;
+        }
+
+        return new TodayLoad(snapshot, dropOff, coverKeys, seedName, cards);
+    }
+
+    private void ApplyToday(TodayLoad load)
+    {
+        _cache = load.Snapshot;
+        _dropOffCache = load.DropOff;
+
+        PopulateDropOff(load);
+
+        Snapshot = load.Snapshot;
+        PopulateLists(load);
         Goals.Refresh();
-        RefreshRecommendations();
+
+        Recommendations.Clear();
+        foreach (var card in load.Recommendations)
+        {
+            Recommendations.Add(card);
+        }
+
+        RecommendationsSeedName = load.RecommendationsSeedName;
 
         foreach (var name in new[]
         {
+            nameof(HasRecommendations), nameof(PrimaryRecommendation), nameof(SecondaryRecommendations), nameof(HasSecondaryRecommendations),
             nameof(ContinueCount), nameof(AlmostDoneCount), nameof(DiveInCount), nameof(GapCount),
             nameof(ContinueEmpty), nameof(AlmostDoneEmpty), nameof(DiveInEmpty), nameof(GapEmpty),
             nameof(ReadingAllClear), nameof(ReadingSectionEmpty), nameof(GapLine), nameof(PrimaryContinueRow), nameof(HeroRowEmpty),
@@ -342,15 +450,10 @@ public partial class InsightsScreenViewModel : ViewModelBase
         }
     }
 
-    private void PopulateLists(InsightsSnapshot snap)
+    private void PopulateLists(TodayLoad load)
     {
-        var seriesIds = snap.Continue.Select(s => s.SeriesId)
-            .Concat(snap.AlmostDone.Select(s => s.SeriesId))
-            .Concat(snap.DiveIn.Select(s => s.SeriesId))
-            .Concat(snap.Gaps.Select(g => g.SeriesId))
-            .Distinct()
-            .ToList();
-        var coverKeyBySeriesId = ResolveCoverKeys(seriesIds);
+        var snap = load.Snapshot;
+        var coverKeyBySeriesId = load.CoverKeys;
 
         ContinueRows.Clear();
         foreach (var s in snap.Continue)
@@ -375,55 +478,6 @@ public partial class InsightsScreenViewModel : ViewModelBase
         {
             GapRows.Add(new GapRow(g.SeriesName, FormatMissing(g.MissingNumbers), g.SeriesId, coverKeyBySeriesId.GetValueOrDefault(g.SeriesId)));
         }
-    }
-
-    /// <summary>Batch cover-key lookup for the Today tab's row-level thumbnails (docs/superpowers/specs/
-    /// 2026-09-23-insights-redesign-design.md's global cover rule) - one query for every series named
-    /// anywhere on the tab, reusing <see cref="SeriesCardSample.FromSeries"/>'s own cover-issue logic
-    /// rather than duplicating it.</summary>
-    private static Dictionary<int, string?> ResolveCoverKeys(IReadOnlyList<int> seriesIds)
-    {
-        if (seriesIds.Count == 0)
-        {
-            return new Dictionary<int, string?>();
-        }
-
-        using var context = PaperbunkrDb.CreateContext();
-        return context.Series
-            .Include(s => s.Issues)
-            .Where(s => seriesIds.Contains(s.Id))
-            .ToDictionary(s => s.Id, s => SeriesCardSample.FromSeries(s).CoverKey);
-    }
-
-    private void RefreshRecommendations()
-    {
-        using var context = PaperbunkrDb.CreateContext();
-        var seed = InsightsRecommendationResolver.GetSeedWithRecommendations(context);
-
-        Recommendations.Clear();
-        if (seed is not null)
-        {
-            var targetIds = seed.Recommendations.Select(r => r.TargetSeriesId).ToList();
-            var targetSeriesById = context.Series
-                .Include(s => s.Issues)
-                .Where(s => targetIds.Contains(s.Id))
-                .ToDictionary(s => s.Id);
-
-            foreach (var recommendation in seed.Recommendations)
-            {
-                if (targetSeriesById.TryGetValue(recommendation.TargetSeriesId, out var target))
-                {
-                    Recommendations.Add(new InsightsRecommendationCard(SeriesCardSample.FromSeries(target), recommendation.Explanation));
-                }
-            }
-        }
-
-        RecommendationsSeedName = Recommendations.Count > 0 ? seed!.SeedSeriesName : null;
-        OnPropertyChanged(nameof(HasRecommendations));
-        OnPropertyChanged(nameof(PrimaryRecommendation));
-        OnPropertyChanged(nameof(SecondaryRecommendations));
-        OnPropertyChanged(nameof(HasSecondaryRecommendations));
-        OnPropertyChanged(nameof(HeroRowEmpty));
     }
 
     private static string FormatMissing(IReadOnlyList<int> missing)

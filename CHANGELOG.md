@@ -3,6 +3,45 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.85-beta] - 2026-10-12
+
+### Added
+
+- **Import ComicRack smart lists.** A smart list exported from ComicRack (a `.cbl` with rules instead of
+  books) now imports as a real smart list: use the new import button on the Smart screen, or drop the file
+  where you drop comics. A rule with no equivalent is left out, never guessed at, and one alert tells you
+  which rule and whether the list may now match more or fewer comics.
+- **Import Library Organizer profiles.** Preferences → Organize & Scrape → Organize has an **Import…** button
+  for the plugin's `.lop` files (dropping them works too). Templates, base folder, mode and rules come across.
+  A profile whose rules can't be matched exactly is not imported, and imported profiles never run by themselves.
+- **Tidy up.** A new submenu on the Library's right-click menu: **Commit proposed values** (save a number,
+  year or title that was only worked out from the file name), **Complete count** (set Count from a finished
+  series' last issue), **Guess format from name** (Annual, Director's Cut, TPB, One-Shot, Black & White),
+  **Find scanner from file name** (fills Scan Information) and **First page is an ad…**.
+- **New smart-list rules.** *Has Proposed Value*, *Same X, Different Y* (also a duplicate finder), *Date
+  Published*, a numeric *Number*, and the four *Series: Last Number / Last Year / Highest Count / Biggest Gap*
+  rules ComicRack has.
+- **Scanner credits** in Preferences → Organize & Scrape → Filters & names: your own scan-group names and
+  words that are never a scanner, for Find scanner from file name.
+
+### Changed
+
+- **Screens open faster.** Library, Smart Lists, Insights and Continuity load their data in the background
+  instead of freezing the window, and a screen you return to is not reloaded when nothing has changed.
+  Going back from a detail page to the Library is now near-instant.
+- **Detail pages open faster**, most of all for manga with many chapters; the "More like this" row fills in
+  after the page is up.
+- **Startup.** The window no longer hangs for several seconds after it appears while plugin scripts compile;
+  that now happens in the background.
+- A custom value a comic doesn't have now counts as empty in smart lists, as it does in ComicRack, so
+  *is (nothing)* finds the comics that never had it.
+
+### Fixed
+
+- **Long strips (webtoons, manhwa, manhua)** in the continuous reading modes: stuttering and very high memory
+  use while scrolling, worst on progressive JPEGs. Off-screen strips no longer keep re-decoding, strips are
+  recognised without being decoded whole first, and scrolling back is smooth.
+
 ## [0.7.8-beta] - 2026-10-08
 
 ### Added

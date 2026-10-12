@@ -3019,6 +3019,297 @@ Not done: the fast test set has not been rerun since the dog-ear, buffer, ONNX, 
 - To check on screen: a comic with auto levels / an adjustment on, page turns with the crossfade style, and a PNG page with
   transparency (the shared image keeps the page's alpha; the copy forced it opaque).
 
+### 2026-10-09 - regression from the reader budget cut: long strips struggled in the continuous modes
+
+User report: continuous modes struggle with webtoon/manhua/manhwa long strips. Cause found by arithmetic, not yet confirmed
+on screen: the strip band cache was a quarter of the display budget, and the two Auto-budget cuts (512 -> ~330 -> 256 MiB)
+took it from 120 MiB to 56 MiB. A band is 4,096 rows (13 MiB at 800 px wide, 26 MiB at 1,600 px) and the reader keeps the
+visible bands, a margin band each side and one to three prefetched, so 56 MiB could not hold even the visible and margin
+bands; they were evicted and re-decoded while on screen. Fix: `ReaderMemoryBudget.BandBytes` = a quarter of the display
+budget with a 128 MiB floor (capped at the display budget). Reader tests pass (139 + 17). Not seen on screen.
+Still possible and unchecked: PNG strips, which cannot be band-decoded and go whole through the display cache (now 224 MiB,
+was 480), and strips wider than about 1,400 px, where even 128 MiB holds fewer than seven bands (also true before the cuts).
+
+### 2026-10-10 - long strips, continued: band cache sized from the strip; progressive JPEG measured
+
+- `ReaderMemoryBudget.BandBytesFor(width, bandHeight)`: the band cache grows to seven bands of the strip actually being read
+  (floor 128 MiB, ceiling 512 MiB), set when the pipeline learns a page is a strip (`EnsureBandCapacity`). 92 MiB needed at
+  800 px, 184 MiB at 1,600 px. 149 reader tests pass. Not seen on screen.
+- The series the bug was found on (Reincarnation Of The Veteran Soldier, 221 chapters, 720 px wide, pages up to 14,635 rows,
+  chapters 290-440 MB decoded): chapters are either all baseline or all progressive JPEG (10 of 41 scanned were progressive).
+  Measured on this machine, one 720x12,041 page: a baseline strip session opens in 0-10 ms and adds 1 MB; a progressive one
+  takes 70-113 ms and holds 25 MB while open (the decoder must read the whole image first). Going back to an earlier band
+  needs a new session: 25 ms baseline, 90-100 ms progressive. So with the band cache thrashing, progressive chapters paid
+  about four times as much per re-decode, which is why this series showed it and a larger baseline one did not.
+- Not done: nothing changed for progressive pages themselves; the 25 MB each open session holds is outside every budget.
+
+### 2026-10-10 (later) - long strips: user still saw hiccups scrolling back, app at 2,052 MB in Long Strip mode
+
+Dump taken in that state (Chapter 1 of the test series, progressive JPEG, 720 px):
+- 49 native blocks of exactly one band (720 x 4096 x 4 = 11.5 MB), 551 MB, for 16 cached bands and 28 writeable bitmaps.
+  Bands were cached as `WriteableBitmap` (`SkiaBitmapConverter.FromSkBitmap`); Avalonia draws a writeable bitmap through a
+  snapshot copy, so each band that reached the screen existed twice and the copy was made on the render thread at first
+  draw. Fixed: bands are now immutable bitmaps (`ToImmutableBitmap`), one copy, no managed band-sized array on the way.
+- 8 open strip sessions at about 34 MB each (progressive). Scrolling back needed a new session each time (90-100 ms).
+  Fixed: `StripDecodeSession` holds a progressive JPEG decoded whole and serves any band in any order (`CanSeek`,
+  `IsProgressiveJpeg`, `TryCreateWhole`); baseline files keep the forward-only scanline walk. `StripDecodeSessionTests` (new).
+- 163 reader tests pass. Not seen on screen and not re-measured.
+- Still true: the pipeline evicts bands more than two margins away regardless of cache room, so scrolling back through a
+  baseline strip still re-decodes (about 25 ms a band plus skipping to it); open sessions' memory is outside the budget.
+
+### 2026-10-10 (evening) - long strips: the decode-evict loop (root cause), 2,926 MB measured
+
+After the immutable-band and whole-progressive changes the user re-tested and the app measured 2,926 MB private in Long
+Strip mode: 150 band-sized native buffers (1.7 GB), 302 band-sized bitmap objects, 41 items in a band cache sized for 11,
+and the pipeline deferred-dispose queue holding bands (4 of 14 sampled were rooted there; the rest were unrooted).
+- Root cause, in `ReaderImagePipeline.SetStripBandWindow` since the band design landed: prefetch reached up to 4 bands
+  beyond the screen (margin 1 + adaptive 1-3) but eviction dropped anything beyond 2. With the adaptive fringe above its
+  minimum, every call evicted the bands the previous call had prefetched and queued them again. Each evicted band waits 4 s
+  in the deferred-dispose queue (no count cap, by design), so live bands = churn rate x 4 s. Making progressive bands cheap
+  to read (earlier today) raised the churn rate, which is why memory went up, not down.
+- Fix: `StripBandPlan` (new, pure): decode +-1, prefetch +-2..3, keep one band beyond the prefetch; at most 10 resident
+  bands. `ReaderMemoryBudget.ResidentBands` now comes from the plan (10, was 7), so the cache holds what the plan keeps
+  (125 MiB at 800 px, 250 MiB at 1,600 px, floor 128).
+- `ReaderImagePipelineBandTests...KeepsResidentBandBytesBounded` updated: it asserted the old 5-band bound, which held only
+  because of the churn; it now uses an 11-band strip and the plan keep range (9 bands for one visible band).
+- 167 reader tests pass. Not seen on screen, not re-measured. The fast test set has not been rerun since 2026-10-07.
+
+### 2026-10-10 (16:30) - long strips NOT fixed: band-sized native buffers with no managed owner
+
+Measured after `StripBandPlan`: 3,089 then 3,164 MB private in Long Strip mode on the progressive test chapter. 178 native
+blocks of exactly one band. Of 810 band-sized bitmap objects in the heap only 14 still had a live Skia handle (9 held by the
+view's band slots, 3 by the cache, 2 by shared images), so the buffers are not owned by any live managed bitmap. Ruled out
+by inspection: offscreen render targets (all 256x256), GPU memory (53 MB shared). Ruled out by a headless probe (120
+rounds each, no growth): whole-session `ReadBand`, `ToImmutableBitmap`, `CreateScaledBitmap`, `ShareSkImage` in either
+dispose order. The old `FromSkBitmap` path grew 25 MB in the same probe.
+Next step in place: `ReaderNativeStats`, static counters on both sides of every reader create/free pair, built into the
+app; read them from a dump after one more strip session. Until then the cause is unknown.
+
+### 2026-10-10 (17:15) - long strips: cause found with the counter log
+
+`logs/reader-native-stats.log` (new: `ReaderNativeStats.WriteIfDue`, one line per 10 s while a book is open; the static
+counters could not be read from a dump on .NET 10). One strip session, about 100 s:
+- 3,074 bands read and cached for a chapter of about 30 bands: roughly 40 a second, continuously.
+- Every create/free pair balanced (shared images 50/48, handler images 50/48, reader bitmaps 3,098/2,964). Nothing leaks.
+- The deferred-dispose queue tracked the churn exactly (3,065 queued, 2,962 drained): live memory = 40 bands/s x 4 s grace
+  x 11.5 MB = 1.8 GB, private bytes 2.6-3.9 GB. The "buffers with no managed owner" of the earlier dumps were this queue;
+  that analysis was wrong.
+- Cause, in `PageCanvas.BuildStripBandEntry`: the band range defaulted to the whole strip and was only narrowed when the page
+  was on screen. Every OFF-SCREEN strip in the layout therefore asked for all of its bands, every frame. Several strips x 3-4
+  bands is more than the band cache holds, so it evicted and re-decoded them without end. Present since the band design.
+- Fix: `StripBandPlan.BandsInView` (pure, tested): on screen = the bands the viewport overlaps; within one viewport length =
+  only the edge band it will enter by (`SetStripBandWindow(..., edgeOnly: true)`, no margin or prefetch); further = nothing.
+  Prefetch for the visible strip cut to one band; `MaxResidentBands` 12 (8 visible strip + 2 each for a strip above and
+  below), and the band cache is sized to that (135 MiB at 720 px, 300 MiB at 1,600 px).
+- 176 reader tests pass. NOT yet seen on screen or re-measured. The counter log stays in until this is confirmed, then
+  it and `ReaderNativeStats` should come out.
+
+### 2026-10-10 (17:20) - long strips: fix confirmed by the counter log
+
+Same chapter, Long Strip mode, about 2.5 minutes: 52 bands read (was 3,074 in 100 s), private bytes 1.09-1.49 GB (was
+2.6-3.9 GB), settling at 1.12 GB; reader bitmaps live 200-450 MB. All pairs balanced. Smoothness on screen still to be
+confirmed by the user. Still to do: remove `ReaderNativeStats` and its log once confirmed; rerun the fast test set (not run
+since 2026-10-07); the pipeline decodes each strip page whole once before it knows it is a strip (about 34 MB each, seen as
+200 MB live with only 3 bands read), which is a possible later saving.
+
+### 2026-10-10 (17:45) - long strips: no whole-page decode for a JPEG strip
+
+`ReaderImagePipeline.LearnsItIsABandableStrip`, called at the top of `ProcessQueuedPage`: reads the header from the cached
+bytes, and if the page is a JPEG strip records the size and strip verdict (raising `PageSizeAvailable`) and skips the whole
+decode. Before, a page not yet KNOWN to be a strip was decoded whole first (its size peek was queued behind it), about
+34 MB each for every strip in the window, never drawn. PNG strips and JPEGs that fail to open a band session still decode
+whole. Tests: `AJpegStrip_IsRecognisedFromItsHeader_AndNeverDecodedWhole`, `AnOrdinaryJpegPage_IsStillDecodedWhole`; the
+band test helper no longer waits for a priming whole decode on a strip. 176 + 7 reader tests pass. Not on screen, not measured.
+
+### 2026-10-10 (22:00) - long strips: confirmed by the user; diagnostics removed
+
+- Last counter log: reader bitmaps 68 MB at the start of a strip chapter (was 204 MB) and 44-124 MB while scrolling (was
+  200-450 MB); 31 bands in 2 minutes; every pair balanced. The user confirmed scrolling is smooth in both directions.
+- `ReaderNativeStats`, its 20 counter calls, the log writer and the three log files are removed.
+- Whole-app private bytes were 1.30-1.42 GB in that session, not lower than the one before, because the app started the
+  reading at 1,339 MB (1,094 MB the time before). That part is outside the reader and was not investigated.
+- The fast test set (`Speed!=Slow`) was started after the removal; its result belongs in the next entry.
+
+### 2026-10-10 (23:00) - fast test set after the strip work; UI-thread measurement started
+
+- Fast set (`Speed!=Slow`): 2,688 passed, 0 failed, 39 m 15 s. The run printed one stack trace from
+  `StripDecodeSession.ReadBand` on the pipeline consumer thread without failing a test; rerunning `StripDecodeSessionTests`
+  and `ReaderImagePipelineBandTests` alone did not print it. Not explained yet.
+- Spec 4.6 (UI thread): `Services/Performance/UiThreadMonitor` is a temporary measurement. It writes
+  `logs/ui-thread.log`: one `nav` line per screen change (`sync` = time the navigation code held the UI thread, `settled` =
+  time until the UI thread was next idle), `step` lines for the stages of `Insights.Refresh()`, and `stall` lines when the
+  UI thread took 100 ms or more to answer a ping. Started in `App.axaml.cs`; navigations are wrapped in
+  `MainViewModel.LeaveAndNavigate` and `RunDrill`. Built, not yet read. Remove it when this work is done.
+- Reading the code: every screen except Home loads its data synchronously on the UI thread before or just after the switch.
+
+### 2026-10-10 (23:45) - UI thread: first measurement of screen switches; Insights load moved off the UI thread
+
+Measured on the benchmark machine (`logs/ui-thread.log`, ~5,000 comics). `sync` is the navigation code holding the UI
+thread; `settled` is until the UI thread was next idle.
+
+| Switch to | sync | settled |
+|---|---|---|
+| Insights (first visit) | 4,143 ms | 4,248 ms |
+| Insights (later visits) | 1,829-2,115 ms | 2,090-2,185 ms |
+| Continuity | 2,581 ms | 3,083 ms |
+| Smart Lists | 2,408 ms | 2,621 ms |
+| Library | 1,505-2,038 ms | 1,668-2,470 ms |
+| Preferences (first / later) | 1,807 / 683 ms | 1,852 / 831 ms |
+| Reading Lists | 964 ms | 1,229 ms |
+| Wanted | 728 ms | 829 ms |
+| Home | 432 ms | 743 ms |
+| Books | 296 ms | 521 ms |
+
+- The data load is the freeze: building and drawing the new screen adds only 100-500 ms on top of `sync`.
+- Insights steps: snapshot 1,395 ms and drop-off 288 ms (first visit only), recommendations 1,292-1,622 ms on every visit.
+- Fix built, not yet measured: `InsightsScreenViewModel.RefreshAsync` runs every query on a thread-pool thread
+  (`BuildToday`) and only repopulates the collections on the UI thread (`ApplyToday`), the same split Home uses.
+  `GoInsights` and the history restore call it. `Refresh()` stays synchronous for the reading-event handler and the tests.
+  The 67 Insights tests pass; there is no test of `RefreshAsync` itself.
+- Per-call `step` timing added to the other screens' navigation for the next measurement. Those screens are unchanged.
+- Also seen: a 6.8 s stall on Home right after startup and stalls of 0.3-2 s while sitting on a screen. Not investigated.
+
+### 2026-10-11 (00:30) - UI thread: Insights measured; rail screens skip an unneeded reload
+
+- Insights after `RefreshAsync`: 4,248 ms frozen on the first visit -> 463 ms; later visits 416-841 ms. The user confirmed
+  it is faster.
+- Second log, per call: `Library.LoadFromDatabase` 1,266-1,444 ms every visit; `Smart.RefreshSidebar` 1,101 ms +
+  `Smart.EnsureListLoaded` 821 ms; `Reading.RefreshSidebar` 92-570 ms; `Events.RefreshStoryEventCandidates` 249-351 ms;
+  `Wanted.Refresh` 431 ms; `Preferences.EnsureLoaded` 751 ms of a 1,819 ms switch (the rest not located). Every switch
+  also carried about 300 ms that no load call accounts for.
+- Built, not yet measured:
+  - `Paperbunkr.Data/DataChangeStamp`: a process-wide counter moved by every non-SELECT/PRAGMA command and every
+    transaction commit, through interceptors added in `PaperbunkrDbContext.OnConfiguring`. `MainViewModel.NeedsLoad`
+    lets Library, Smart, Reading, Continuity and Wanted skip their reload on a visit when the counter has not moved and
+    the last load is under 10 minutes old. `PersistLastScreen` writes inside `DataChangeStamp.Suppress()`.
+    Limits: a write from another process is not seen; the first visit after startup costs what it did.
+  - `OnCurrentScreenChanged` calls `ThemeService.SetTrueBlackReaderSuspend` only when entering or leaving a reader. It
+    reloaded the theme and rewrote every theme resource on every switch. Suspected to be most of the 300 ms; unconfirmed.
+- Tests: `DataChangeStampTests` 14 passed; `MainViewModelTests`, `NavRailKeyboardTests`, `ThemeServiceTests`, Insights and
+  navigation-history classes 224 passed. No test covers `NeedsLoad` itself. The full fast set has not been rerun.
+- Next: move the first-visit loads of Library and Smart Lists off the UI thread; find Preferences' missing second; the
+  6.4-6.8 s stall on Home after startup.
+
+### 2026-10-11 (07:00) - UI thread: skip-reload measured; back trip and detail queries
+
+Measured (benchmark machine, `logs/ui-thread.log`, runs 3-6):
+
+| Move | Before | After |
+|---|---|---|
+| Any switch, fixed cost (theme reload) | ~300 ms | gone: Books 20-80 ms, Home 10-50 ms |
+| Rail screen to rail screen, nothing written | 0.5-2.7 s | 40-330 ms |
+| Detail back to Library, nothing written | 1.2-1.4 s | 7-40 ms |
+| Insights | 4.2 s first / 2.1 s later | 0.3-0.5 s / 0.1-0.4 s |
+
+- `GoToRootScreen` (the back trip) now uses `NeedsLoad`/`IsFresh` too; it reloaded the whole Library on every return.
+- `DataChangeStamp` does not count: the `ActivityRuns` insert (job log), the tracker throttle update
+  (`TrackingLinks.LastSyncedAt` alone; only `TrackerAutoSyncService` reads it), and a commit whose connection ran no
+  counted write. `LibraryScreenViewModel.SaveLibrarySettings` runs inside `Suppress()`.
+- Detail pages: `manga.query` 0.3-3.2 s and `Detail.LoadSeries` 1.2-1.5 s. Both queries included `Issues.MetadataProposals`
+  and `Issues.Tags` in one joined query (proposals x tags per issue). `AsSplitQuery()` added to both. Built, not measured.
+- Tests: `DataChangeStampTests` 21 passed; Detail/MangaDetail view-model tests 76 passed. No test of `NeedsLoad`.
+  The fast set has not been rerun since 2026-10-10.
+- Open: first visit to each rail screen (Library 1.3-1.5 s, Smart 1.8-2.5 s, Continuity 0.9-2.6 s, Preferences 1.4-1.9 s);
+  Home 5.8-6.6 s unresponsive after startup; `manga.tabs` 120-400 ms; stalls of 0.5-1.1 s while idle on Smart Lists;
+  a reload after any real write still costs the full amount.
+
+### 2026-10-11 (09:00) - UI thread: detail pages measured
+
+| Move | Before | After |
+|---|---|---|
+| Open a manga page | 0.5-3.8 s | 0.2-0.45 s |
+| Open a comic page (load) | 1.2-2.0 s | 0.32 s average, 0.66 s worst of 12 |
+| Open a comic page (until idle) | 1.3-2.1 s | 0.65 s average, 1.4 s worst of 12 |
+| Detail back to Library, nothing written | 1.2-1.4 s | 0.02 s average over 24 |
+
+- Manga: the joined query was the cost (`manga.query` 0.3-3.2 s -> 13-190 ms with `AsSplitQuery`).
+- Comic: the query was 14-55 ms after the same change; the cost was `DetailTabsViewModel.RefreshMoreLikeThis`
+  (0.93 s average, 1.23 s worst), the recommendation query plus up to 15 synchronous cover decodes. It now runs on a
+  thread-pool thread (`BuildMoreLikeThis`) and fills the rail when done, dropped if the page changed meanwhile. It takes
+  1.5 s average in the background on this machine.
+- Issue tiles on the comic page (`DetailTabs.axaml`, both templates) use `AsyncCoverImage.SourceId` in place of a
+  synchronous `CoverImageCache.Get` per issue in `BuildIssueCard`. This was not the main cost, as first claimed.
+  `RefreshIssueTile` (change/reset one issue's cover) sets the key too; not verified on screen.
+- `DataChangeStamp` also ignores the `SeriesActivityEvents` insert (read only by the detail page's Activity tab).
+- Tests: detail, manga detail, detail tabs, recommendation classes 193 passed; `DataChangeStampTests` 22 passed. Nothing
+  asserts the rail's contents. The full fast set has not been rerun since 2026-10-10.
+- Open, in order of size: Home 6-8.5 s unresponsive after startup; first visits (Library 1.3-1.9 s, Smart 1.8-2.5 s,
+  Continuity 0.9-2.6 s, Preferences 1.4-1.9 s); a reload after a real write; 1.2-1.8 s stalls on Library while a scrape
+  runs; `UiThreadMonitor` and its `Step` calls still in the code.
+
+### 2026-10-11 (10:30) - UI thread: startup freeze after the window appears
+
+- Measured cause: `PluginHostService.Initialize` held the UI thread 6.3 s of a 6.8 s freeze (`startup.pluginInit`), compiling
+  each C# plugin script (`CSharpCommand.PreCompile`) with the main window already shown.
+- Fix: `PluginEngine.WarmScripts` compiles the same scripts on a thread-pool thread, started right after
+  `MainWindow.Show()`; `CSharpCommand` keeps compiled scripts in a static cache keyed by path, last write time and hook, and
+  `PreCompile` reads it. `App.axaml.cs` awaits the warm-up before `pluginHost.Initialize`. The warm-up applies discovery's
+  gates (Native tier, `requiresApi`, invalid settings definition) before touching a plugin's code.
+- One launch measured after: `startup.pluginInit` 132 ms; Home idle 438 ms after its navigation (was 6.1-8.5 s); stalls of
+  0.3-0.8 s remain in the following seconds. The warm-up itself took 9.2 s in the background, so plugin commands arrive
+  about 7.5 s after Home on this machine. Python scripts are not warmed.
+- Tests: full `Paperbunkr.Plugins.Tests` run: 228 passed, 2 failed (`CommandStatsTests.Every_dropped_event_...`,
+  `DomainHookDispatcherTests.A_hung_plugin_costs_one_lane_...`), in a run that reported 20 m 48 s with single tests at
+  1-5 minutes. Rerun of those two classes plus the script-engine tests: 43 passed in 26 s. Both failures are timing tests
+  and the run was stretched (machine asleep or starved); not shown to be unrelated to this change beyond the clean rerun.
+
+### 2026-10-11 (11:20) - UI thread: Library and Smart Lists load in the background
+
+| | Before | After |
+|---|---|---|
+| Click Library, has to load | 1.7-2.4 s frozen | 0.13-0.5 s, data 1.0-1.2 s later |
+| Click Smart Lists, has to load | 1.8-2.7 s frozen | 0.04-0.1 s, data 1.0-1.2 s later |
+| UI-thread work when Library's data lands | 0.65 s | 0.03-0.05 s (`library.apply` + `library.applyView`) |
+
+- `LibraryScreenViewModel`: `LoadFromDatabase` = `ApplyLibrary(ReadLibrary(...))`; `LoadFromDatabaseAsync` runs `ReadLibrary` on
+  the thread pool and, for that path, computes the view through `ViewScheduler.Schedule` (a worker in the app) instead of
+  `RunNow`. Dropped when `_dataVersion` moved; `EnsureLoadedNow()` for a caller that needs the data at once (the "addIssue"
+  quick action). `IsLoadingLibrary` keeps the empty state hidden during the first background load.
+- `SmartScreenViewModel`: `ReadSmartList` / `ApplySmartList` / `EnsureListLoadedAsync`. `GoSmart` no longer calls
+  `RefreshSidebar` before it: the load already refreshed the sidebar, so the screen was loading the library twice.
+- `MainViewModel.LoadScreensInBackground` (false by default, set true in `App.axaml.cs`) selects the background paths, so a
+  view model built in a test still has its data when the navigation command returns.
+- Tests: 3 new (`LoadFromDatabaseAsync_...` x2, `EnsureListLoadedAsync_...`); Library/Main/NavRail/Insights/Plugin classes
+  517 passed before the view-compute change, the 17 Library load and scheduler tests after it.
+- Still on the UI thread: `GoToRootScreen("library")` after a write (1.2 s; left because of the scroll-into-view it does);
+  every `LoadFromDatabase()` a Library action triggers while the screen is open (one measured: 1.7 s stall after one
+  issue update); first visits to Reading Lists (0.8 s), Continuity (0.9-1.5 s) and Preferences (1.4-1.9 s).
+
+### 2026-10-11 (12:30) - UI thread: Library reloads after a change, Continuity suggestions
+
+- `LibraryScreenViewModel.ReloadAfterChange()` (background in the app, synchronous when `ReloadInBackground` is false, and
+  no reload at all when `IsCurrent`): used by ten Library actions (mark read/unread, the reading-list and collection
+  "add" commands, collection reorder, set content type, drag-drop import, series resync) and by five shell call sites
+  (quick-rate, collection properties, bulk series editor, migration overlay, the issue editor closing over Library).
+  Still synchronous on purpose: delete issues, delete series, create collection from the sidebar, apply workspace.
+- `Library.IsCurrent` (its own stamp + 10-minute age) replaces `NeedsLoad("library")`; `GoToRootScreen("library")` loads
+  in the background when the snapshot is stale. Scroll position after that background reload: not verified on screen.
+- `SuggestionsChecksViewModel.RefreshStoryEventCandidatesAsync`: both resolvers off the UI thread.
+- Measured: Continuity click 0.18-0.67 s (was 0.9-2.6 s), suggestions 0.5 s later; Library click 0.12-0.5 s; no
+  synchronous Library reload appeared in the run, but no Library action was exercised in it either.
+- Tests: 433 run, 432 passed. `MainViewModelTests.GoReaderForIssue_FromHome_BackReturnsToHome_NotDetail` failed, then
+  2 of 3 reruns alone: Home's fire-and-forget load from `GoHome` races the test's own `Home.LoadFromDatabase()` on a
+  thread-pool thread. Believed to predate today's work (Home loading was not touched); not checked against a clean tree.
+- Not done: Preferences first visit (1.4-1.9 s), Reading Lists first visit (0.8 s), removal of `UiThreadMonitor`.
+
+### 2026-10-11 (14:00) - UI thread pass closed out
+
+- `UiThreadMonitor`, every `Step(...)` call, `MeasureNavigation`, `DataChangeStamp.Trace` and the `ui-thread*.log` files
+  are removed. Any further measurement has to add timing again.
+- `HomeScreenViewModel`: a background load is dropped when a later load has started (`_loadGeneration`). This was the
+  cause of the flaky `MainViewModelTests.GoReaderForIssue_FromHome_BackReturnsToHome_NotDetail` (failed 2 of 3 alone
+  before, passed 5 of 5 after).
+- `App.axaml.cs`: `Preferences.EnsureLoaded()` 20 s and `Reading.RefreshSidebar()` 24 s after startup, at
+  `ApplicationIdle`, skipped while a reader is open. This moves a one-off 0.6-0.9 s each off the first click; it does not
+  remove it, and it was not measured (the timing code was already gone). Preferences' first screen build (~1 s) is unchanged.
+- Fast set (`Speed!=Slow`) on the final code: 2,700 run, 2,699 passed in 1 h 6 m.
+  `ReaderScreenPanelTests.DoubleClick_WithSmartZoomOff_IsTheOldTwoHundredPercent_EvenOnAPanel` failed once (42 s in that
+  run) and passed 3 of 3 alone (9-15 s). Reader code was not touched today; treated as load-sensitive, cause not found.
+  `DataChangeStampTests` 22 passed. The slow classes were not run.
+- Accepted without an on-screen check, at the user's direction: Library actions reloading in the background, scroll
+  position after a background reload on the back trip, editors closing over Library without a reload.
+- Everything from this pass is uncommitted.
+
 ## 2026-10-10 - ComicRack smart-list import and Library Organizer profile import
 
 From an audit of files a user collected for the ComicRack Data Manager (`docs/superpowers/specs/2026-10-04-ce-preset-audit-overview-design.md`; the plan files are

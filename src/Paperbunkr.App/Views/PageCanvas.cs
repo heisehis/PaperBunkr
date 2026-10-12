@@ -2114,29 +2114,25 @@ public partial class PageCanvas : Control
         double displayMain = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? page.Rect.Height : page.Rect.Width;
         int bandCount = Math.Max(1, (int)Math.Ceiling(nativeMain / bandHeight));
 
-        int minBand = 0;
-        int maxBand = bandCount - 1;
-        if (nativeMain > 0 && displayMain > 0)
-        {
-            double scale = displayMain / nativeMain;
-            var viewport = new Rect(Bounds.Size);
-            double stripStart = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? page.Rect.Top : page.Rect.Left;
-            double viewportStart = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? viewport.Top : viewport.Left;
-            double viewportEnd = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? viewport.Bottom : viewport.Right;
+        var viewport = new Rect(Bounds.Size);
+        double stripStart = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? page.Rect.Top : page.Rect.Left;
+        double viewportStart = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? viewport.Top : viewport.Left;
+        double viewportEnd = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? viewport.Bottom : viewport.Right;
 
-            // The visible sub-range of the strip, in viewport space, clamped to the strip's own
-            // extent - then mapped back to source-pixel band indices via the same single scale
-            // factor ComputeStripBandRect itself uses.
-            double visibleDisplayStart = Math.Max(stripStart, viewportStart) - stripStart;
-            double visibleDisplayEnd = Math.Min(stripStart + displayMain, viewportEnd) - stripStart;
-            if (visibleDisplayEnd > visibleDisplayStart)
-            {
-                minBand = Math.Clamp((int)Math.Floor(visibleDisplayStart / scale / bandHeight), 0, bandCount - 1);
-                maxBand = Math.Clamp((int)Math.Floor((visibleDisplayEnd / scale) / bandHeight), 0, bandCount - 1);
-            }
+        // Which bands this page needs depends on where it is against the viewport (2026-10-10). This used to ask for the whole
+        // strip whenever the page was NOT on screen (the visible range was only narrowed when there was one), so every
+        // off-screen strip in the layout wanted all its bands at once: more than the band cache holds, so it evicted and
+        // re-decoded them continuously (measured: 40 bands a second on a chapter of about 30).
+        var view = Paperbunkr.App.Services.Reader.StripBandPlan.BandsInView(stripStart, displayMain, nativeMain, viewportStart, viewportEnd, bandHeight);
+        if (view.Reach == Paperbunkr.App.Services.Reader.StripReach.Far)
+        {
+            // Nowhere near the screen: ask for nothing. Whatever it has cached stays until the cache needs the room.
+            return new ContinuousPageEntry(page.Rect, null, Array.Empty<StripBandSlot>());
         }
 
-        decodeService.SetStripBandWindow(page.Index, minBand, maxBand);
+        int minBand = view.MinBand;
+        int maxBand = view.MaxBand;
+        decodeService.SetStripBandWindow(page.Index, minBand, maxBand, edgeOnly: view.Reach == Paperbunkr.App.Services.Reader.StripReach.Near);
 
         int slotMin = Math.Max(0, minBand - 1);
         int slotMax = Math.Min(bandCount - 1, maxBand + 1);

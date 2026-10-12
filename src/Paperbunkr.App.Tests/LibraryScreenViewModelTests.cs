@@ -137,6 +137,35 @@ public class LibraryScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadFromDatabaseAsync_PicksUpWhatWasAddedSinceTheLastLoad_LikeTheSynchronousLoad()
+    {
+        CreateSeries("Comic One", ContentType.Comic);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        CreateSeries("Comic Two", ContentType.Comic);
+        CreateSeries("Manga One", ContentType.Manga);
+
+        await vm.LoadFromDatabaseAsync();
+
+        Assert.False(vm.IsLoadingLibrary);
+        Assert.Equal(2, vm.ContentTypes.Single(c => c.ContentType == ContentType.Comic).Count);
+        Assert.Equal(1, vm.ContentTypes.Single(c => c.ContentType == ContentType.Manga).Count);
+    }
+
+    [Fact]
+    public async Task LoadFromDatabaseAsync_IsDropped_WhenASynchronousLoadOvertakesIt()
+    {
+        CreateSeries("Comic One", ContentType.Comic);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        var background = vm.LoadFromDatabaseAsync();
+        CreateSeries("Comic Two", ContentType.Comic);
+        vm.EnsureLoadedNow(); // loads now: the background read, started before "Comic Two", must not replace it
+        await background;
+
+        Assert.Equal(2, vm.ContentTypes.Single(c => c.ContentType == ContentType.Comic).Count);
+    }
+
+    [Fact]
     public void LoadFromDatabase_GroupsContentTypes_SkippingEmptyBuckets()
     {
         CreateSeries("Comic One", ContentType.Comic);

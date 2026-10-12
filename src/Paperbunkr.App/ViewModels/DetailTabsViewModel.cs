@@ -343,7 +343,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             RefreshContinuity(context, series.Id);
             RefreshCollections(context, series.Id);
             RefreshSameEvent(context, series.Id);
-            RefreshMoreLikeThis(context, series.Id);
+            RefreshMoreLikeThis(series.Id);
             RefreshExternalLinks(context, series.Id);
             RefreshTrackerLinks(context, series.Id);
             RefreshActivity(context, series.Id);
@@ -529,7 +529,10 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             Title = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
             IsUnread = issue.LastPageRead is null or 0,
             CoverBrush = coverBrush,
-            CoverImage = CoverImageCache.Get(issue.Id, issue.FilePath, issue.FileSize),
+            // The tile loads its cover through AsyncCoverImage. Decoding here ran once per issue on the UI thread while the
+            // page opened: 1.4-2.0 s for an ordinary comic series (2026-10-11 measurement).
+            CoverIssueId = issue.Id,
+            CoverKey = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize),
             FilePath = issue.FilePath,
             FullTitle = issue.EffectiveTitle(),
             ArcTitle = issue.StoryArc,
@@ -2655,6 +2658,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             IsUnread = updated.LastPageRead is null or 0,
             CoverBrush = old.CoverBrush,
             CoverImage = old.CoverImage,
+            CoverIssueId = old.CoverIssueId,
+            CoverKey = old.CoverKey,
             FilePath = old.FilePath,
             FullTitle = old.FullTitle,
             ArcTitle = old.ArcTitle,
@@ -2728,7 +2733,9 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             Title = old.Title,
             IsUnread = old.IsUnread,
             CoverBrush = old.CoverBrush,
-            CoverImage = CoverImageCache.Get(issueId, info?.FilePath, info?.FileSize),
+            // A new tile gets a new Image, which loads the replaced cover through AsyncCoverImage.
+            CoverIssueId = issueId,
+            CoverKey = CoverFingerprint.Stem(issueId, info?.FilePath, info?.FileSize),
             FilePath = old.FilePath,
             FullTitle = old.FullTitle,
             ArcTitle = old.ArcTitle,
@@ -2783,9 +2790,52 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Any related-media rail has content - drives the Related tab's empty-state.</summary>
     public bool HasAnyRelatedRail => Related.Count > 0 || SameContinuity.Count > 0 || SameCollection.Count > 0 || SameEvent.Count > 0 || MoreLikeThisRail.Count > 0;
 
-    private void RefreshMoreLikeThis(PaperbunkrDbContext context, int seriesId)
+    // Bumped by every load, so a rail computed for a series the user has already left is dropped.
+    private int _moreLikeThisGeneration;
+
+    /// <summary>
+    /// Fills the rail from a thread-pool thread: the recommendation query plus up to 15 cover decodes held the UI thread for
+    /// about a second on every comic page open (2026-10-11 measurement). The rail is on the Related tab, not the tab a page
+    /// opens on, so it arriving a moment after the page costs nothing.
+    /// </summary>
+    private async void RefreshMoreLikeThis(int seriesId)
     {
+        int generation = ++_moreLikeThisGeneration;
         MoreLikeThisRail.Clear();
+        OnPropertyChanged(nameof(HasMoreLikeThis));
+        OnPropertyChanged(nameof(HasAnyRelatedRail));
+
+        List<PosterRailItem> items;
+        try
+        {
+            var contextFactory = _contextFactory;
+            items = await Task.Run(() => BuildMoreLikeThis(contextFactory, seriesId)).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // A missing rail, never worth failing the page over.
+            DiagnosticsService.LogMilestone($"Detail: More Like This failed ({ex.GetType().Name}: {ex.Message}).");
+            return;
+        }
+
+        if (generation != _moreLikeThisGeneration)
+        {
+            return;
+        }
+
+        foreach (var item in items)
+        {
+            MoreLikeThisRail.Add(item);
+        }
+
+        OnPropertyChanged(nameof(HasMoreLikeThis));
+        OnPropertyChanged(nameof(HasAnyRelatedRail));
+    }
+
+    private static List<PosterRailItem> BuildMoreLikeThis(Func<PaperbunkrDbContext> contextFactory, int seriesId)
+    {
+        using var context = contextFactory();
+        var items = new List<PosterRailItem>();
         foreach (var candidate in RecommendationResolver.GetRecommendations(context, seriesId, limit: 15))
         {
             var target = context.Series.Find(candidate.TargetSeriesId);
@@ -2794,7 +2844,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
                 continue;
             }
 
-            MoreLikeThisRail.Add(new PosterRailItem
+            items.Add(new PosterRailItem
             {
                 Id = target.Id,
                 Name = target.Name,
@@ -2805,8 +2855,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             });
         }
 
-        OnPropertyChanged(nameof(HasMoreLikeThis));
-        OnPropertyChanged(nameof(HasAnyRelatedRail));
+        return items;
     }
 
     /// <summary>Card-view "Read"/"Continue" - opens that issue in the reader.</summary>

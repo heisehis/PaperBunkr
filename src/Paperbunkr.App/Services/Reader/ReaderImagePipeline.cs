@@ -217,7 +217,7 @@ public sealed class ReaderImagePipeline : IReaderPageSource, IReaderPageProcessi
         // whole pages which can span the full prefetch fringe.
         _bandCache = new Cache<StripBandId, ReaderBitmap>(itemCapacity: int.MaxValue, sizeCapacity: 1)
         {
-            SizeCapacity = Math.Max(1, budget.DisplayBytes / 4),
+            SizeCapacity = Math.Max(1, budget.BandBytes),
             MinimalTimeInCache = 0
         };
 
@@ -634,7 +634,35 @@ public sealed class ReaderImagePipeline : IReaderPageSource, IReaderPageProcessi
         {
             _stripVerdict[pageIndex] = verdict;
         }
+
+        if (verdict)
+        {
+            EnsureBandCapacity(size!.Value.Width);
+        }
+
         return verdict;
+    }
+
+    /// <summary>
+    /// Grows the band cache to what a strip this wide needs (<see cref="ReaderMemoryBudget.BandBytesFor"/>). Only ever grows:
+    /// a chapter of mixed widths settles on its widest strip, and the cache dies with the pipeline when the book is closed.
+    /// </summary>
+    private void EnsureBandCapacity(int stripWidth)
+    {
+        long needed = _budget.BandBytesFor(stripWidth, BandHeight);
+        lock (_sync)
+        {
+            if (needed > _bandCache.SizeCapacity)
+            {
+                _bandCache.SizeCapacity = needed;
+            }
+        }
+    }
+
+    /// <summary>Test seam: the band cache's current byte capacity.</summary>
+    internal long BandCacheCapacity
+    {
+        get { lock (_sync) { return _bandCache.SizeCapacity; } }
     }
 
     private void RecordDecodeMs(double ms)
@@ -1260,7 +1288,7 @@ public sealed class ReaderImagePipeline : IReaderPageSource, IReaderPageProcessi
     /// no-op if <paramref name="pageIndex"/> isn't currently in <see cref="_window"/> (i.e. this
     /// call raced a <see cref="SetVirtualizationWindow"/> that already moved past it).
     /// </summary>
-    public void SetStripBandWindow(int pageIndex, int minBand, int maxBand)
+    public void SetStripBandWindow(int pageIndex, int minBand, int maxBand, bool edgeOnly = false)
     {
         if (pageIndex < 0 || pageIndex >= PageCount || maxBand < minBand)
         {
@@ -1274,14 +1302,14 @@ public sealed class ReaderImagePipeline : IReaderPageSource, IReaderPageProcessi
             return;
         }
 
-        int bandFringe = 1 + Math.Clamp((_forwardFringe - MinForwardFringe) / 2, 0, 2); // maps 2..6 -> 1..3
-
-        int decodeMin = Math.Max(0, minBand - 1);
-        int decodeMax = maxBand + 1;
-        int prefetchMin = Math.Max(0, minBand - 1 - bandFringe);
-        int prefetchMax = maxBand + 1 + bandFringe;
-        int evictMin = minBand - 2;
-        int evictMax = maxBand + 2;
+        // edgeOnly: a strip just off screen. Only the band at the edge it will enter by, so it is there when it scrolls in.
+        var plan = edgeOnly ? StripBandPlan.EdgeOnly(minBand, maxBand) : StripBandPlan.For(minBand, maxBand, _forwardFringe - MinForwardFringe);
+        int decodeMin = plan.DecodeMin;
+        int decodeMax = plan.DecodeMax;
+        int prefetchMin = plan.PrefetchMin;
+        int prefetchMax = plan.PrefetchMax;
+        int evictMin = plan.KeepMin;
+        int evictMax = plan.KeepMax;
 
         lock (_sync)
         {
@@ -1393,6 +1421,10 @@ public sealed class ReaderImagePipeline : IReaderPageSource, IReaderPageProcessi
         // the per-frame window/routing pass (SetVirtualizationWindow) never has to peek itself, only
         // read this already-cached verdict.
         bool isStrip = resolved.Height / (double)resolved.Width > StripAspectThreshold;
+        if (isStrip)
+        {
+            EnsureBandCapacity(resolved.Width);
+        }
 
         lock (_sync)
         {
@@ -1540,7 +1572,11 @@ public sealed class ReaderImagePipeline : IReaderPageSource, IReaderPageProcessi
         AvaloniaBitmap converted;
         try
         {
-            converted = SkiaBitmapConverter.FromSkBitmap(skBand);
+            // An immutable bitmap, not the WriteableBitmap FromSkBitmap makes (measured 2026-10-10 on a 720 px strip: 49 band-sized
+            // native blocks, 551 MB, for 16-28 cached bands). Avalonia draws a writeable bitmap through a snapshot copy of its
+            // pixels, so every band that reached the screen was held twice, the copy was made on the render thread the first
+            // time the band was drawn, and FromSkBitmap itself went through a band-sized managed array on the large object heap.
+            converted = SkiaBitmapConverter.ToImmutableBitmap(skBand);
         }
         finally
         {
@@ -1581,6 +1617,75 @@ public sealed class ReaderImagePipeline : IReaderPageSource, IReaderPageProcessi
         }
     }
 
+    /// <summary>
+    /// Called just before a whole-page decode: if this page turns out to be a long strip that can be decoded in bands, record
+    /// that (exactly as the size peek would) and report true, so the caller skips the whole decode.
+    ///
+    /// A page is queued for a whole decode whenever it is not yet KNOWN to be a strip, and its size peek is queued right
+    /// behind it, so the first time a chapter was opened every strip in the window was decoded whole (about 34 MB for a
+    /// 720x12,000 page) and then never drawn, because the canvas switches to bands the moment the size arrives. Measured
+    /// 2026-10-10: about 200 MB of reader bitmaps live with only three bands read. The header read here costs no decode and
+    /// uses the same cached bytes the decode would have.
+    ///
+    /// Only JPEG is treated as bandable up front (PNG strips cannot be scanline-decoded and still go whole). If a JPEG
+    /// later fails to open a band session, <see cref="_stripBandable"/> turns false and the page comes back here for the whole
+    /// decode, which this then lets through.
+    /// </summary>
+    private bool LearnsItIsABandableStrip(int pageIndex)
+    {
+        bool? verdict;
+        lock (_sync)
+        {
+            if (_stripBandable.TryGetValue(pageIndex, out bool bandable) && !bandable)
+            {
+                return false;
+            }
+
+            verdict = _stripVerdict.TryGetValue(pageIndex, out bool known) ? known : null;
+        }
+
+        if (verdict == false)
+        {
+            return false;
+        }
+
+        byte[]? bytes = ReadRawBytes(pageIndex);
+        if (bytes is not { Length: > 3 } || bytes[0] != 0xFF || bytes[1] != 0xD8)
+        {
+            return false; // not a JPEG: no band decode for it
+        }
+
+        if (verdict == true)
+        {
+            return true;
+        }
+
+        if (PeekPageSize(pageIndex) is not { } size)
+        {
+            return false;
+        }
+
+        bool isStrip = size.Height / (double)size.Width > StripAspectThreshold;
+        if (isStrip)
+        {
+            EnsureBandCapacity(size.Width);
+        }
+
+        lock (_sync)
+        {
+            if (!_window.Contains(pageIndex))
+            {
+                return isStrip;
+            }
+
+            _knownPageSize[pageIndex] = size;
+            _stripVerdict[pageIndex] = isStrip;
+        }
+
+        try { PageSizeAvailable?.Invoke(pageIndex, size); } catch { }
+        return isStrip;
+    }
+
     private void ProcessQueuedPage(int pageIndex)
     {
         lock (_sync)
@@ -1593,6 +1698,12 @@ public sealed class ReaderImagePipeline : IReaderPageSource, IReaderPageProcessi
         }
 
         DrainPendingDispose();
+
+        if (LearnsItIsABandableStrip(pageIndex))
+        {
+            return;
+        }
+
         OnBeforeBackgroundDecode?.Invoke(pageIndex);
         Stats.RecordBackgroundDecode();
 

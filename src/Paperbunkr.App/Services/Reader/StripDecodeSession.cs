@@ -33,11 +33,19 @@ namespace Paperbunkr.App.Services.Reader;
 /// time. This class is otherwise a plain, independently-testable decode primitive: pass a no-op
 /// passthrough for the lock in a test and every other behavior (forward-only contract, correct
 /// pixels, chunk count) is verifiable without the pipeline at all.
+///
+/// <b>Progressive JPEG is held whole</b> (2026-10-10). A progressive file stores the picture as several passes over the whole
+/// image, so the codec has to read all of it before it can produce the first row: measured on a 720x12,041 page, opening a
+/// scanline session cost 70-113 ms and held about 34 MB, against 0-10 ms and 1 MB for a baseline file, and because a session
+/// only moves forward, every scroll back up paid that again. For those pages this class decodes the image once and serves
+/// any band, in any order, as a copy of its rows (<see cref="CanSeek"/>). Same memory as the codec was already holding, one
+/// decode per page instead of one per change of direction.
 /// </summary>
 internal sealed class StripDecodeSession : IDisposable
 {
-    private readonly SKCodec _codec;
+    private readonly SKCodec? _codec;
     private readonly SKImageInfo _fullImageInfo;
+    private SKBitmap? _whole;
     private bool _faulted;
 
     private StripDecodeSession(SKCodec codec, SKImageInfo fullImageInfo)
@@ -45,6 +53,93 @@ internal sealed class StripDecodeSession : IDisposable
         _codec = codec;
         _fullImageInfo = fullImageInfo;
         PixelSize = new PixelSize(fullImageInfo.Width, fullImageInfo.Height);
+    }
+
+    private StripDecodeSession(SKBitmap whole)
+    {
+        _whole = whole;
+        _fullImageInfo = whole.Info;
+        PixelSize = new PixelSize(whole.Width, whole.Height);
+    }
+
+    /// <summary>True when any band can be read at any time (the image is held decoded); false for the forward-only scanline walk.</summary>
+    public bool CanSeek => _codec is null;
+
+    /// <summary>
+    /// Whether <paramref name="bytes"/> is a progressive JPEG: its frame header is SOF2 (marker FFC2), not baseline SOF0 or
+    /// extended SOF1. Walks the marker segments up to the first frame header; anything that is not a JPEG is not progressive.
+    /// </summary>
+    internal static bool IsProgressiveJpeg(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8)
+        {
+            return false;
+        }
+
+        int i = 2;
+        while (i + 3 < bytes.Length)
+        {
+            if (bytes[i] != 0xFF)
+            {
+                i++;
+                continue;
+            }
+
+            byte marker = bytes[i + 1];
+            if (marker == 0xFF)
+            {
+                i++; // fill byte
+                continue;
+            }
+
+            if (marker is 0xC0 or 0xC1 or 0xC2)
+            {
+                return marker == 0xC2;
+            }
+
+            if (marker == 0xDA || marker == 0xD9)
+            {
+                return false; // scan data or end of image before any frame header
+            }
+
+            if (marker == 0x01 || (marker >= 0xD0 && marker <= 0xD8))
+            {
+                i += 2; // markers with no length
+                continue;
+            }
+
+            int length = (bytes[i + 2] << 8) | bytes[i + 3];
+            if (length < 2)
+            {
+                return false;
+            }
+
+            i += 2 + length;
+        }
+
+        return false;
+    }
+
+    /// <summary>Decodes <paramref name="bytes"/> whole and returns a session that can read any band in any order, or null if it does not decode.</summary>
+    internal static StripDecodeSession? TryCreateWhole(byte[] bytes, Action<Action> withLock)
+    {
+        SKBitmap? whole = null;
+        try
+        {
+            withLock(() => whole = SKBitmap.Decode(bytes));
+            if (whole is null || whole.Width <= 0 || whole.Height <= 0)
+            {
+                whole?.Dispose();
+                return null;
+            }
+
+            return new StripDecodeSession(whole);
+        }
+        catch
+        {
+            whole?.Dispose();
+            return null;
+        }
     }
 
     /// <summary>
@@ -58,6 +153,12 @@ internal sealed class StripDecodeSession : IDisposable
     /// </summary>
     public static StripDecodeSession? TryCreate(byte[] bytes, Action<Action> withLock)
     {
+        if (IsProgressiveJpeg(bytes))
+        {
+            // Null here (it would not decode) sends the page down the pipeline's ordinary whole-page path, like any other failure.
+            return TryCreateWhole(bytes, withLock);
+        }
+
         SKCodec? codec = null;
         try
         {
@@ -119,6 +220,11 @@ internal sealed class StripDecodeSession : IDisposable
     /// <returns>The decoded band as an <see cref="SKBitmap"/> (caller disposes), or <see langword="null"/> if the strip's total height is exhausted before <paramref name="bandHeightRows"/> rows could be read, or any codec call failed/faulted (this session is then unusable and should be disposed).</returns>
     public SKBitmap? ReadBand(int bandStart, int bandHeightRows, Action<Action> withLock)
     {
+        if (_codec is null)
+        {
+            return ReadBandFromWhole(bandStart, bandHeightRows, withLock);
+        }
+
         if (bandStart < NextUnreadRow)
         {
             throw new InvalidOperationException(
@@ -162,7 +268,7 @@ internal sealed class StripDecodeSession : IDisposable
             withLock(() =>
             {
                 IntPtr dst = IntPtr.Add(basePixels, rowsReadThisChunk * rowBytes);
-                int got = _codec.GetScanlines(dst, chunk, rowBytes);
+                int got = _codec!.GetScanlines(dst, chunk, rowBytes);
                 if (got != chunk)
                 {
                     chunkOk = false;
@@ -184,6 +290,33 @@ internal sealed class StripDecodeSession : IDisposable
         return bandBitmap;
     }
 
+    /// <summary>A copy of the requested rows out of the held image. <see cref="NextUnreadRow"/> stays 0: nothing is ever "passed".</summary>
+    private SKBitmap? ReadBandFromWhole(int bandStart, int bandHeightRows, Action<Action> withLock)
+    {
+        if (bandHeightRows <= 0 || bandStart < 0 || bandStart >= PixelSize.Height)
+        {
+            return null;
+        }
+
+        int rows = Math.Min(bandHeightRows, PixelSize.Height - bandStart);
+        SKBitmap? band = null;
+        withLock(() =>
+        {
+            // Under the lock the caller supplies, like every codec call: Dispose runs under the same one.
+            if (_whole is not { } whole)
+            {
+                return;
+            }
+
+            using var rowsView = new SKBitmap();
+            if (whole.ExtractSubset(rowsView, new SKRectI(0, bandStart, PixelSize.Width, bandStart + rows)))
+            {
+                band = rowsView.Copy();
+            }
+        });
+        return band;
+    }
+
     private bool SkipTo(int targetRow, Action<Action> withLock)
     {
         int remaining = targetRow - NextUnreadRow;
@@ -194,7 +327,7 @@ internal sealed class StripDecodeSession : IDisposable
 
             withLock(() =>
             {
-                if (!_codec.SkipScanlines(chunk))
+                if (!_codec!.SkipScanlines(chunk))
                 {
                     chunkOk = false;
                     return;
@@ -213,5 +346,10 @@ internal sealed class StripDecodeSession : IDisposable
         return true;
     }
 
-    public void Dispose() => _codec.Dispose();
+    public void Dispose()
+    {
+        _codec?.Dispose();
+        _whole?.Dispose();
+        _whole = null;
+    }
 }

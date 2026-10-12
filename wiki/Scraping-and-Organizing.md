@@ -57,6 +57,10 @@ Files already where the templates put them are left alone, so running an organiz
 
 **Undo last organize** (same section) puts the most recent run's moved files back and removes the folders that run created. Only the last run can be undone; undone moves are kept in the history, not deleted.
 
+## Scanner credits
+
+**Preferences → Organize & Scrape → Filters & names → Scanner credits** holds two lists used by the Library's **Tidy up → Find scanner from file name**: more scan or release group names, and more words that are never a scanner. Common ones are built in; yours are added to them. They are saved with the page's **Save** button.
+
 ## Automatically
 
 Two tasks in **Preferences → Automation**, both **off** until you turn them on:
@@ -68,4 +72,11 @@ Downloaded issues (see Acquisition) get their ComicVine details automatically by
 
 ## If you used the plugin
 
-An installed Cluster Library Manager is no longer loaded; the Plugins screen says it is now built in, and you can remove it. Profiles you made in the plugin were not carried over; create them again under Organize & Scrape.
+An installed Cluster Library Manager is no longer loaded; the Plugins screen says it is now built in, and you can remove it.
+
+If you used the **Library Organizer** plugin, its profiles can be brought across: in **Preferences → Organize & Scrape**, click **Import…** and pick a `.lop` file (or drop one or more `.lop` files on the Library). Each profile arrives with its templates, base folder, mode and rules.
+
+- **Nothing runs by itself.** An imported profile is never the scheduled one. A profile that moves files carries a note to check its base folder first.
+- **Rules are exact or not at all.** A profile whose rules can't be matched exactly here (a rule on *Start Year*, *Added Date*, *Manga*, *File Format*, a number compared with *is*, a text compared with *greater than*) is **not imported**, and the notes say which rule. Importing it without the rule would organize different books than it did in the plugin. Profiles set to organize *only* the books that match their rules (the plugin's "Only" mode) are converted to the equivalent here.
+- **What isn't carried over is listed.** Per-token prefix/postfix/separator text, a non-standard illegal-character table, moving covers for books with no file, and the plugin's switches for field spacing are reported when a profile uses them.
+- A name already in use gets "(2)" instead of replacing your profile.

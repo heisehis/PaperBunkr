@@ -159,7 +159,7 @@
                                                   IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
                                         <controls:SuggestBox Classes="conditionPicker" IsStrict="True" Suggestions="{Binding OperatorNames}"
-                                                  Text="{Binding SelectedOperatorText}" IsVisible="{Binding !IsDuplicateField}"
+                                                  Text="{Binding SelectedOperatorText}" IsVisible="{Binding ShowOperator}"
                                                   IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
                                         <ToggleButton Classes="conditionFlag" Content="Aa" IsChecked="{Binding IgnoreCase}"
@@ -167,12 +167,12 @@
                                                       ToolTip.Tip="Ignore case (on) / match case exactly (off)"
                                                       IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
-                                        <TextBox Classes="conditionValue" Text="{Binding Value}" IsVisible="{Binding !IsDuplicateField}"
+                                        <TextBox Classes="conditionValue" Text="{Binding Value}" Watermark="{Binding ValueWatermark}" IsVisible="{Binding !IsDuplicateField}"
                                                   IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
                                         <TextBlock Text="and" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}"
                                                    VerticalAlignment="Center" IsVisible="{Binding ShowValue2}" />
-                                        <TextBox Classes="conditionValue" Width="90" Text="{Binding Value2}" IsVisible="{Binding ShowValue2}"
+                                        <TextBox Classes="conditionValue" Width="90" Text="{Binding Value2}" Watermark="{Binding Value2Watermark}" IsVisible="{Binding ShowValue2}"
                                                   IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
                                         <Button Classes="headerAction ghost" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove condition"

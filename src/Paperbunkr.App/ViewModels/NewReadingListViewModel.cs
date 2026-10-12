@@ -31,12 +31,14 @@ public partial class NewReadingListViewModel : ViewModelBase
     private readonly IFilePickerService _filePicker;
     private readonly Action<int> _onCreated;
     private readonly Action _onCancel;
+    private readonly IActivityService? _activity;
 
-    public NewReadingListViewModel(IFilePickerService filePicker, Action<int> onCreated, Action onCancel)
+    public NewReadingListViewModel(IFilePickerService filePicker, Action<int> onCreated, Action onCancel, IActivityService? activity = null)
     {
         _filePicker = filePicker;
         _onCreated = onCreated;
         _onCancel = onCancel;
+        _activity = activity;
         ArcSourceOptions = ReadingListsScreenViewModel.ArcSourceOptions;
         ArcSourceNames = ArcSourceOptions.Select(o => o.DisplayName).ToArray();
         _selectedArcSource = ArcSourceOptions[0];
@@ -150,7 +152,16 @@ public partial class NewReadingListViewModel : ViewModelBase
         }
         else
         {
-            var list = CblReadingListIO.Import(context, path);
+            // A .cbl is a reading list or a ComicRack smart list; the content decides.
+            CblImportResult imported = CblImport.ImportAny(context, path);
+            if (imported.Kind == CblFileKind.SmartList)
+            {
+                // No reading list was made, so there is nothing to open: say what happened here and keep the dialog up.
+                ReportSmartListImport(imported);
+                return;
+            }
+
+            var list = imported.ReadingList!;
             if (NameWasCustomised)
             {
                 list.Name = ResolvedName;
@@ -161,6 +172,23 @@ public partial class NewReadingListViewModel : ViewModelBase
         }
 
         _onCreated(listId);
+    }
+
+    /// <summary>The message and the one alert for a smart list imported (or refused) through this dialog.</summary>
+    private void ReportSmartListImport(CblImportResult imported)
+    {
+        var notes = imported.Warnings.Select(w => w.ToString()).ToList();
+        if (imported.Refused)
+        {
+            notes.Add(imported.RefusedReason!);
+            StatusMessage = imported.RefusedReason;
+        }
+        else
+        {
+            StatusMessage = $"That file is a ComicRack smart list. Imported it as the smart list '{imported.SmartList!.Name}' - find it on the Smart screen.";
+        }
+
+        CeImportAlerts.RaiseIfAny(_activity, notes, "smart list");
     }
 
     private void CreateFromEvent()

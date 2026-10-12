@@ -467,9 +467,14 @@
                             <Style Selector="Border.smRow:pointerover Button.smDelete"><Setter Property="Opacity" Value="1" /><Setter Property="IsHitTestVisible" Value="True" /></Style>
                         </StackPanel.Styles>
 
-                        <Grid ColumnDefinitions="*,Auto" Margin="8,0,6,14">
+                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="8,0,6,14">
                             <TextBlock Grid.Column="0" Text="Smart Lists" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                            <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6"
+                            <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6" Margin="0,0,6,0"
+                                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                    Command="{Binding Smart.ImportComicRackListCommand}" ToolTip.Tip="Import a ComicRack smart list (.cbl)">
+                                <fi:SymbolIcon Symbol="ArrowImport" FontSize="{StaticResource PbIconSizeXs}" />
+                            </Button>
+                            <Button Grid.Column="2" Width="24" Height="24" Padding="0" CornerRadius="6"
                                     Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                                     Command="{Binding Smart.OpenGalleryCommand}" ToolTip.Tip="New Smart List">
                                 <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />

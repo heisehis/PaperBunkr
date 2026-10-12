@@ -43,8 +43,42 @@ public class ReaderImagePipelineBandTests : IDisposable
         pipeline.SetVirtualizationWindow(pageIndex, pageIndex);
 
         Assert.True(sizeLanded.Wait(TimeSpan.FromSeconds(10)), "page size never landed");
-        Assert.True(decodeLanded.Wait(TimeSpan.FromSeconds(10)), "priming whole-page decode never landed");
+        if (!pipeline.IsKnownBandableStrip(pageIndex))
+        {
+            // Only a page that is not routed to bands gets a whole-page decode (2026-10-10): a JPEG strip is recognised
+            // from its header first and never decoded whole.
+            Assert.True(decodeLanded.Wait(TimeSpan.FromSeconds(10)), "priming whole-page decode never landed");
+        }
+
         Thread.Sleep(50);
+    }
+
+    [Fact]
+    public void AJpegStrip_IsRecognisedFromItsHeader_AndNeverDecodedWhole()
+    {
+        // The whole decode of a 720x12,000 strip is about 34 MB that is never drawn once the canvas switches to bands
+        // (2026-10-10: 200 MB of them at the start of a chapter).
+        CbzFixture.Create(_cbzPath, pageCount: 1, pageSize: _ => new Size(200, 10000), imageFormat: _ => ImageFormat.Jpeg);
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+
+        OpenAndSettleFirstPass(pipeline, 0);
+        Thread.Sleep(200); // long enough for a whole decode to have landed if one had been started
+
+        Assert.True(pipeline.IsKnownBandableStrip(0));
+        Assert.Null(pipeline.TryGetCachedPage(0));
+        Assert.Equal(0, pipeline.DecodedPageCount);
+    }
+
+    [Fact]
+    public void AnOrdinaryJpegPage_IsStillDecodedWhole()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1, pageSize: _ => new Size(400, 600), imageFormat: _ => ImageFormat.Jpeg);
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+
+        OpenAndSettleFirstPass(pipeline, 0);
+
+        Assert.False(pipeline.IsKnownBandableStrip(0));
+        Assert.NotNull(pipeline.TryGetCachedPage(0));
     }
 
     [Fact]
@@ -159,24 +193,23 @@ public class ReaderImagePipelineBandTests : IDisposable
     [Fact]
     public void SetStripBandWindow_ScrollingThroughAWholeStrip_KeepsResidentBandBytesBounded()
     {
-        // 800x24000 is the design's own §6 memory-bound example. 24000/4096 = 6 bands total for the
-        // whole strip (~13.1MB/band at 800px wide, Bgra8888) - if nothing were ever evicted while
-        // scrolling through it, resident bytes would climb toward that whole-strip total. The bound
-        // this test enforces (design §6, fixed-source-pixels-so-no-zoom-conversion-needed):
-        // ~4*BandHeight*width*4 bytes + slack - comfortably less than half the whole strip.
+        // A strip tall enough (11 bands) that keeping all of it would show: resident bytes must stay at what StripBandPlan
+        // keeps around one visible band, not climb toward the whole strip (~13.1MB/band at 800px wide, Bgra8888).
         const int width = 800;
-        CbzFixture.Create(_cbzPath, pageCount: 1, pageSize: _ => new Size(width, 24000), imageFormat: _ => ImageFormat.Jpeg);
+        const int height = 45000;
+        CbzFixture.Create(_cbzPath, pageCount: 1, pageSize: _ => new Size(width, height), imageFormat: _ => ImageFormat.Jpeg);
         using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
 
         OpenAndSettleFirstPass(pipeline, 0);
         Assert.True(pipeline.IsStrip(0));
 
-        // The eviction range is [visibleBand - 2*BandHeight, visibleBand + 2*BandHeight] (design
-        // §4.2/§6) - a *closed* range, so for a single visible band that's band-2..band+2
-        // surviving = 5 bands resident at steady state, not 4 (the design text's own "~4*BandHeight"
-        // was a rough approximation predating the exact eviction-range arithmetic landing at ±2).
-        long bound = (5L * ReaderImagePipeline.BandHeight * width * 4) + (8L * 1024 * 1024); // + 8MiB slack
-        int bandCount = (int)Math.Ceiling(24000.0 / ReaderImagePipeline.BandHeight);
+        // The plan keeps the visible band plus (margin + prefetch + slack) each side: nine bands for one visible band
+        // (2026-10-10). It was +-2 (five bands) while the prefetch reached +-4, which evicted every prefetched band on the
+        // next call and decoded it again; the old five-band bound passed only because of that churn.
+        int kept = 1 + (2 * (StripBandPlan.Margin + StripBandPlan.MaxPrefetch + StripBandPlan.KeepSlack));
+        long bound = ((long)kept * ReaderImagePipeline.BandHeight * width * 4) + (8L * 1024 * 1024); // + 8MiB slack
+        int bandCount = (int)Math.Ceiling(height / (double)ReaderImagePipeline.BandHeight);
+        Assert.True(kept < bandCount, "the strip must be taller than what the plan keeps, or the bound proves nothing");
 
         for (int center = 0; center < bandCount; center++)
         {

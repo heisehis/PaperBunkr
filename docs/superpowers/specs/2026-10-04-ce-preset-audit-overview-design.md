@@ -1,6 +1,6 @@
 # CE preset audit — overview and decomposition
 
-Date: 2026-10-04. Status: design approved in chat 2026-10-04; sub-specs A and B written, C–F still to write.
+Date: 2026-10-04. Status: design approved in chat 2026-10-04; all six pieces specced, planned and built by 2026-10-11.
 
 ## Where this came from
 
@@ -17,10 +17,12 @@ Six independent pieces, each its own spec → plan → build. Order: **A → B �
 |---|---|---|
 | A | CE smart-list `.cbl` import, four series-level fields, `Published` date field, plugin-matcher mapping hook | [2026-10-04-smart-list-cbl-import-design.md](2026-10-04-smart-list-cbl-import-design.md) |
 | B | Library Organizer `.lop` profile import | [2026-10-04-lop-profile-import-design.md](2026-10-04-lop-profile-import-design.md) |
-| C | `HasProposedValue` smart-list field + bulk "Commit proposed values" | not written |
-| E | `SameXDifferentY` smart-list condition; bulk "Complete Count" and "First page is an ad" | not written |
-| D | Scanner-name list and filename-noise regexes (`ScanCreditCatalog`) | not written |
-| F | Generic Format rules (Annual, Director's Cut) as starter presets; trimmed reading orders as test fixtures | not written |
+| C | `HasProposedValue` smart-list field + bulk "Commit proposed values" | [2026-10-11-proposed-values-design.md](2026-10-11-proposed-values-design.md) |
+| E | `SameXDifferentY` smart-list condition; bulk "Complete Count" and "First page is an ad" | [2026-10-11-series-checks-and-bulk-fixes-design.md](2026-10-11-series-checks-and-bulk-fixes-design.md) |
+| D | Scanner names and filename noise words (`ScanCreditCatalog`), "Find scanner from file name" | [2026-10-11-scan-credits-design.md](2026-10-11-scan-credits-design.md) |
+| F | Generic Format rules as starter presets ("Guess format from name"); real reading orders as test fixtures | [2026-10-11-format-presets-design.md](2026-10-11-format-presets-design.md) |
+
+All six are built (A and B on 2026-10-10, C, E, D and F on 2026-10-11); each spec has its plan beside it. None has been seen on screen.
 
 C and E register entries in A's plugin-matcher hook, so A lands first.
 

@@ -93,6 +93,25 @@ public class SmartScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureListLoadedAsync_OpensTheFirstCustomList_WithResultsAndSidebarCounts()
+    {
+        CreateSeriesWithIssues("Series One", "1", "2");
+        CreateSeriesWithIssues("Series Two", "1");
+        int listId = CreateSmartList("Everything"); // zero conditions -> matches every issue
+
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
+        await vm.EnsureListLoadedAsync();
+
+        Assert.Equal("Everything", vm.ListName);
+        Assert.Equal(3, vm.Results.Count);
+        Assert.Equal("3", vm.MatchCountLabel);
+        var summary = Assert.Single(vm.CustomLists);
+        Assert.Equal(listId, summary.Id);
+        Assert.Equal(3, summary.MatchCount);
+        Assert.True(summary.IsActive);
+    }
+
+    [Fact]
     public void EditingCondition_UpdatesResultsAndCount_Live()
     {
         int matchSeriesId = CreateSeriesWithIssues("Match Me", "1");

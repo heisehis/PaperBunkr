@@ -180,7 +180,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 new Paperbunkr.Data.Organizing.OrganizerProfileStore(_contextFactory),
                 organizerService: Scraper.OrganizeCoordinator.CreateService(_contextFactory),
                 createDbContext: _contextFactory,
-                activity: _activity));
+                activity: _activity,
+                filePicker: _filePicker));
         Acquisition.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(AcquisitionSettingsViewModel.IsProwlarrConnected) or nameof(AcquisitionSettingsViewModel.IsQBittorrentConnected))

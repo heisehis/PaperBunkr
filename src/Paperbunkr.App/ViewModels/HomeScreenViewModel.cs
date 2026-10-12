@@ -618,7 +618,15 @@ public partial class HomeScreenViewModel : ViewModelBase
 
     /// <summary>Reloads every visible section from the database, synchronously on the calling thread. Prefer
     /// <see cref="LoadFromDatabaseAsync"/> on any hot UI path.</summary>
-    public void LoadFromDatabase() => ApplySnapshot(BuildSnapshot(GetThemeBaseColor()));
+    public void LoadFromDatabase()
+    {
+        _loadGeneration++;
+        ApplySnapshot(BuildSnapshot(GetThemeBaseColor()));
+    }
+
+    // Bumped by every load, so a background load that a later one overtook is dropped instead of being applied over (or,
+    // where nothing marshals it back to one thread, at the same time as) the newer result.
+    private int _loadGeneration;
 
     /// <summary>Same as <see cref="LoadFromDatabase"/>, but the queries, card mapping and cover-wall render run on a thread-pool
     /// thread; only the collection repopulation touches the UI thread. Logs and falls back to a synchronous load on failure.</summary>
@@ -626,9 +634,13 @@ public partial class HomeScreenViewModel : ViewModelBase
     {
         try
         {
+            int generation = ++_loadGeneration;
             var themeBaseColor = GetThemeBaseColor(); // UI thread - reads Application.Current.Resources
             var snapshot = await Task.Run(() => BuildSnapshot(themeBaseColor)).ConfigureAwait(true);
-            ApplySnapshot(snapshot);
+            if (generation == _loadGeneration)
+            {
+                ApplySnapshot(snapshot);
+            }
         }
         catch (Exception ex)
         {

@@ -86,3 +86,16 @@ An unreadable or non-XML file is a `FileError` and skipped. A profile node that 
 ## Not verified when this spec was written
 
 The rule serializer used by the profile editor, the `name_to_field` table, whether the evaluator applies `AutoSpaceFields`/`ReplaceMultipleSpaces` the plugin's way, and where the profile list lives in the UI are unread; the plan's first task reads them. Nothing has been seen on screen.
+
+## As built (2026-10-10)
+
+Differences from the text above; the plan (`2026-10-10-lop-profile-import-plan.md`) has the detail.
+
+- **The code is in `Paperbunkr.App/Scraper/Import/`, not `Paperbunkr.Data`.** The stored rule is a `Paperbunkr.Plugins.Abstractions` type (`PluginConditionGroup`), and that project already depends on Data.
+- **One file at a time from the button.** `IFilePickerService` has no multi-select; a file can hold several profiles, and several files arrive through drag and drop.
+- **No highlighted base-folder field.** The note on a `Move` profile ("Check the base folder before running it: ...") is shown in a notes card above the editor, which stays until dismissed or replaced.
+- **Numeric rules.** The plugin compares a number with the rule's text, so `is` / `is not` / `contains` on a numeric field never match there; those rules reject the profile. Only `greater than` / `less than` with a whole number translate.
+- **Yes/No rules** translate only for `Yes` (`is Yes`, `is not Yes`): our toggle has no "unknown", so `No` is not the same thing. Anything else rejects.
+- **`File Format` is not a supported rule field** (our value is lower-case without the dot; the plugin's differs), nor are `Counter`, `First Letter`, `Start/End Year/Month`, `Added Date`, `Released Date`, `Manga`.
+- **Profiles are read with the plugin's own tolerance:** an `<ExcludeRule>` may carry `Text` instead of `Value` (older files); the operator and mode may be plain elements when there is no `<ExcludeRules>` node.
+- **Verification:** `ExcludeRuleConverterTests` runs 250 random rule trees in both modes against a port of the plugin's `check_metadata_rules`, evaluating the stored JSON through the app's rules engine.

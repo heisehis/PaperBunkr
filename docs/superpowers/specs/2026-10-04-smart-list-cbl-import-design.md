@@ -98,3 +98,20 @@ A file that is not XML, has no `ReadingList` root, or is unreadable becomes `Inv
 ## Not verified when this spec was written
 
 How the Activity Center alert is raised, where the three callers surface a created smart list, and whether `SmartListField` is stored by name or by number are unread; the plan's first task reads them. None of the behavior has been seen on screen.
+
+## As built (2026-10-10)
+
+Differences from the text above, found while reading the code and the real files; the plan (`2026-10-10-smart-list-cbl-import-plan.md`) has the detail.
+
+- **`ComicBookNumberMatcher` maps to a new numeric field `NumberValue`**, not `Number`: the catalog keeps `Number` as Text on purpose, and the supplied files use "number in range 0-1".
+- **The list's own `MatcherMode`.** A `<ReadingList MatcherMode="Or">` combines the top-level matchers with OR (10 of the 154 files). The root group is not always AND.
+- **`Limit` and `BaseListId`** (child elements of the list) narrow a list beyond its matchers; set ones are reported as warnings. None of the supplied files set them.
+- **"Published is <empty>"** means "has no published date" in CE; it is imported as a condition on the year (`Year < 1`), since our date conditions never match an unset date. "Is after <empty>" becomes `Year > 0`.
+- **Duplicate "off"** (operator 1) returns every book in CE and has no native spelling; it is dropped with a warning. Only "on" imports.
+- **A group that loses every condition is dropped whole** (with a warning), rather than left empty, because an empty group inside an OR would match everything.
+- **Empty `.cbl`** (no books, no matchers) stays a reading list, as it always imported; only a file with matchers and no books is a smart list.
+- **Where the code lives:** reader, map, importer and registry in `Paperbunkr.Data/SmartLists/CeImport/`; `CblFile` and `CblImport` in `Paperbunkr.Data/ReadingLists/`; the alert helper `CeImportAlerts` in the app.
+- **The custom-value fix is confirmed** against `ComicBook.GetCustomValue` / `ValuesStore.GetValue` / `ComicBookStringMatcher.MatchBook`, and is in.
+- **Number parsing** uses CE's own `TextNumberFloat` / `StringUtility.TryParse` (already ported), so "1a" reads as 1, "1/2" as 0.5 and "4-6" as 4 with 5 and 6 from its range.
+- **Series statistics** are keyed `(series name, effective volume text)` like CE's `ComicBookSeriesStatistics.Key`, computed once per snapshot, only when a condition uses one of the four fields.
+- The four date series matchers and the CE migrator's smart lists remain follow-ups, as written above.

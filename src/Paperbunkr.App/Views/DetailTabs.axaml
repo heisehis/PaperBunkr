@@ -132,7 +132,7 @@
                         PointerPressed="OnIssueTilePointerPressed" DoubleTapped="OnIssueTileDoubleTapped"
                         KeyDown="OnIssueTileKeyDown">
                     <Grid>
-                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                        <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                         <Border Classes="posterScrim" />
                         <pbc:StatusBadge Variant="InProgress" IconSize="{StaticResource PbIconSizeSm}"
                                          HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
@@ -192,7 +192,7 @@
                 <Grid ColumnDefinitions="54,*">
                     <Border Grid.Column="0" Width="54" Height="80" CornerRadius="3" ClipToBounds="True"
                             Background="{Binding CoverBrush}" VerticalAlignment="Top">
-                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                        <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                     </Border>
                     <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="4">
                         <Grid ColumnDefinitions="Auto,*">

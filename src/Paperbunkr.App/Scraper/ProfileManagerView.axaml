@@ -116,6 +116,10 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
                     <Button Content="New profile" Classes="secondary" Command="{Binding AddProfileCommand}" HorizontalAlignment="Stretch" />
+                    <Button Content="Import…" Classes="secondary" Command="{Binding ImportProfilesCommand}" HorizontalAlignment="Stretch"
+                            IsVisible="{Binding CanImport}" ToolTip.Tip="Import profiles from a Library Organizer profile file (.lop)" />
+                    <TextBlock Text="{Binding ImportStatusMessage}" Classes="hint"
+                               IsVisible="{Binding ImportStatusMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                 </StackPanel>
             </Border>
 
@@ -131,7 +135,23 @@
             </Border>
         </StackPanel>
 
-        <ScrollViewer Grid.Column="1" Margin="16,0,0,0"
+        <!-- What the last Library Organizer import could not carry over. Kept apart from the editor so it still shows when every profile was refused and nothing is selected. -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,*" Margin="16,0,0,0">
+        <Border Grid.Row="0" Classes="card" Margin="0,0,0,12" IsVisible="{Binding HasImportNotes}">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Library Organizer import" Classes="cardHeader" />
+                <ItemsControl ItemsSource="{Binding ImportNotes}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <TextBlock Text="{Binding}" Classes="hint" TextWrapping="Wrap" Margin="0,2" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Content="Dismiss" Classes="secondary" Command="{Binding DismissImportNotesCommand}" HorizontalAlignment="Right" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="1"
                       IsVisible="{Binding Selected, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
             <StackPanel Spacing="12">
                 <Border Classes="card">
@@ -241,5 +261,6 @@
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
+        </Grid>
     </Grid>
 </UserControl>

@@ -347,6 +347,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
             .Include(s => s.Issues).ThenInclude(i => i.Tags)
             .Include(s => s.MetadataProposals)
             .Include(s => s.Titles)
+            .AsSplitQuery() // one query per include: joined, each chapter's proposals multiply by its tags (0.3-3.2 s measured)
             .FirstOrDefault(s => s.Id == seriesId);
         if (series is null)
         {

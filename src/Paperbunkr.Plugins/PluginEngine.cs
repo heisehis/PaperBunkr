@@ -125,6 +125,65 @@ public sealed class PluginEngine
     };
 
     /// <summary>Walks <paramref name="pluginsRoot"/> for <c>plugin.xml</c> manifests, initializing and precompiling every command found. Never throws - a broken plugin is flagged via <see cref="Command.IsBroken"/>, not skipped from discovery, and never aborts loading the rest (docs §2).</summary>
+    /// <summary>
+    /// Compiles every C# script <see cref="Discover"/> is about to compile, so that it finds them ready. Safe on any thread and
+    /// never throws. It applies the same gates as discovery before touching a plugin's code: a Native-tier package, one blocked
+    /// by <c>requiresApi</c>, and one with an invalid settings definition are all skipped.
+    /// </summary>
+    public static void WarmScripts(string pluginsRoot)
+    {
+        try
+        {
+            if (!Directory.Exists(pluginsRoot))
+            {
+                return;
+            }
+
+            foreach (string manifestFile in Directory.EnumerateFiles(pluginsRoot, "plugin.xml", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    PluginManifest? manifest = XmlPluginInitializer.ReadManifest(manifestFile);
+                    if (manifest is not null && string.Equals(manifest.Tier, "Native", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (PluginApiCompatibility.Evaluate(manifest?.RequiresApi, PluginApi.Current).Reason is not null)
+                    {
+                        continue;
+                    }
+
+                    if (manifest is not null)
+                    {
+                        PluginSettingsSchema? schema = PluginSettingsSchema.Parse(manifest, out string? schemaError);
+                        if (schemaError is not null
+                            || (schema is not null && manifest.Commands.Any(c => string.Equals(c.Hook, PluginHooks.ConfigScript, StringComparison.OrdinalIgnoreCase))))
+                        {
+                            continue;
+                        }
+                    }
+
+                    foreach (Command cmd in XmlPluginInitializer.GetCommands(manifestFile))
+                    {
+                        if (cmd is CSharpCommand script)
+                        {
+                            CSharpCommand.Warm(script.ScriptPath, script.Hook);
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    // One unreadable package must not stop the rest; discovery reports it properly.
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // A warm-up only: discovery does the real work and the real reporting.
+        }
+    }
+
     public void Discover(string pluginsRoot, IPluginEnvironment baseEnvironment)
     {
         // A native module holding its own file-backed resources (a local database, a timer) never

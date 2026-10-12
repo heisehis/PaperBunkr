@@ -34,11 +34,20 @@ public partial class SmartScreenViewModel : ViewModelBase
 {
     private readonly Action<int> _goToSeries;
     private readonly Action<int> _goToBook;
+    private readonly IFilePickerService? _filePicker;
+    private readonly IActivityService? _activity;
 
-    public SmartScreenViewModel(Action<int> goToSeries, Action<int> goToBook, bool loadOnConstruction = true)
+    public SmartScreenViewModel(
+        Action<int> goToSeries,
+        Action<int> goToBook,
+        bool loadOnConstruction = true,
+        IFilePickerService? filePicker = null,
+        IActivityService? activity = null)
     {
         _goToSeries = goToSeries;
         _goToBook = goToBook;
+        _filePicker = filePicker;
+        _activity = activity;
         BuiltInLists = new ObservableCollection<SmartListSummary>();
         MaintenanceLists = new ObservableCollection<SmartListSummary>();
         CustomLists = new ObservableCollection<SmartListSummary>();
@@ -386,35 +395,71 @@ public partial class SmartScreenViewModel : ViewModelBase
     /// <summary>Loads the given smart list into the rule builder and refreshes the sidebar's live counts.</summary>
     public void LoadSmartList(int smartListId)
     {
-        _activeSmartListId = smartListId;
+        _loadGeneration++;
+        ApplySmartList(ReadSmartList(smartListId));
+    }
 
-        using var context = PaperbunkrDb.CreateContext();
-        var list = SmartListTreeLoader.LoadWithTree(context, smartListId);
-        if (list is null)
+    // Bumped by every load, so a background read that was overtaken by another load is dropped.
+    private int _loadGeneration;
+
+    /// <summary>
+    /// What <see cref="EnsureListLoaded"/> does, with every query on a thread-pool thread (<see cref="ReadSmartList"/>): the
+    /// screen keeps what it showed until the list and the sidebar counts arrive. Logs and falls back to a synchronous load on
+    /// failure. The sidebar is refreshed by the load itself, so no separate <see cref="RefreshSidebar"/> is needed.
+    /// </summary>
+    public async Task EnsureListLoadedAsync()
+    {
+        int generation = ++_loadGeneration;
+        int? requested = _activeSmartListId;
+        try
         {
-            return;
+            var load = await Task.Run(() => ReadSmartList(requested)).ConfigureAwait(true);
+            if (generation == _loadGeneration)
+            {
+                ApplySmartList(load);
+            }
         }
+        catch (Exception ex)
+        {
+            DiagnosticsService.LogMilestone($"Smart Lists async load failed ({ex.GetType().Name}: {ex.Message}) - loading synchronously.");
+            if (generation == _loadGeneration)
+            {
+                RefreshSidebar();
+                EnsureListLoaded();
+            }
+        }
+    }
 
-        _workingList = list;
-        ListName = list.Name;
-        IsReadOnly = list.IsSystem;
-        Subtitle = list.IsSystem
-            ? "Built-in smart list · read-only"
-            : "Custom smart list · updates live as your library changes";
+    /// <summary>Everything one smart-list load reads from the database, built by <see cref="ReadSmartList"/>.
+    /// <see cref="List"/> is null when there is no such list (or no list at all); the sidebar parts are still filled.</summary>
+    private sealed record SmartLoad(
+        int? SmartListId,
+        SmartList? List,
+        IReadOnlyList<VirtualTagOption> VirtualTags,
+        List<SmartList> All,
+        List<SmartList> IssueTrees,
+        SmartListQueryBuilder.LibrarySnapshot Snapshot,
+        Dictionary<int, int> SeriesAndNovelCounts);
 
-        _virtualTagOptions = context.VirtualTagDefinitions
+    /// <summary>Every database read for one smart-list load, safe off the UI thread: no observable state touched.
+    /// A null <paramref name="smartListId"/> means "the first custom list, else the first list".</summary>
+    private static SmartLoad ReadSmartList(int? smartListId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+
+        smartListId ??= context.SmartLists
+            .OrderBy(s => s.IsSystem) // custom (false) lists first
+            .ThenBy(s => s.SortOrder)
+            .Select(s => (int?)s.Id)
+            .FirstOrDefault();
+
+        var list = smartListId is int id ? SmartListTreeLoader.LoadWithTree(context, id) : null;
+
+        IReadOnlyList<VirtualTagOption> virtualTags = context.VirtualTagDefinitions
             .Where(t => t.IsEnabled)
             .OrderBy(t => t.SortOrder)
             .Select(t => new VirtualTagOption(t.Id, t.Name))
             .ToList();
-
-        RootGroup = new SmartListGroupViewModel(
-            list.RootGroup,
-            list.TargetKind,
-            onChanged: RecomputeMatchCount,
-            isReadOnly: () => IsReadOnly,
-            _virtualTagOptions,
-            onRemove: null);
 
         // One library load feeds both the active Issue-kind list's Results and every Issue-kind
         // list's sidebar count - opening the screen used to materialize the whole library twice
@@ -427,27 +472,67 @@ public partial class SmartScreenViewModel : ViewModelBase
         var snapshot = SmartListQueryBuilder.LoadSnapshot(
             context, issueTrees.SelectMany(t => SmartListQueryBuilder.Flatten(t.RootGroup)).ToList());
 
+        var otherCounts = new Dictionary<int, int>();
+        foreach (var seriesList in trees.Where(t => t.TargetKind == SmartListTargetKind.Series))
+        {
+            otherCounts[seriesList.Id] = SeriesSmartListQueryBuilder.MatchCount(context, seriesList);
+        }
+
+        foreach (var novelList in trees.Where(t => t.TargetKind == SmartListTargetKind.Novel))
+        {
+            otherCounts[novelList.Id] = NovelSmartListQueryBuilder.MatchCount(context, novelList);
+        }
+
+        return new SmartLoad(smartListId, list, virtualTags, all, issueTrees, snapshot, otherCounts);
+    }
+
+    /// <summary>Puts a loaded list into the rule builder and refreshes the sidebar's counts. UI thread.</summary>
+    private void ApplySmartList(SmartLoad load)
+    {
+        if (load.SmartListId is int requestedId)
+        {
+            _activeSmartListId = requestedId;
+        }
+
+        var list = load.List;
+        if (list is null)
+        {
+            return;
+        }
+
+        _workingList = list;
+        ListName = list.Name;
+        IsReadOnly = list.IsSystem;
+        Subtitle = list.IsSystem
+            ? "Built-in smart list · read-only"
+            : "Custom smart list · updates live as your library changes";
+
+        _virtualTagOptions = load.VirtualTags;
+
+        RootGroup = new SmartListGroupViewModel(
+            list.RootGroup,
+            list.TargetKind,
+            onChanged: RecomputeMatchCount,
+            isReadOnly: () => IsReadOnly,
+            _virtualTagOptions,
+            onRemove: null);
+
         if (list.TargetKind == SmartListTargetKind.Issue)
         {
-            RecomputeMatchCount(snapshot);
+            RecomputeMatchCount(load.Snapshot);
         }
         else
         {
             RecomputeMatchCount();
         }
 
-        var matchCounts = issueTrees.ToDictionary(t => t.Id, t => SmartListQueryBuilder.Evaluate(snapshot, t).Count);
-        foreach (var seriesList in trees.Where(t => t.TargetKind == SmartListTargetKind.Series))
+        var matchCounts = load.IssueTrees.ToDictionary(t => t.Id, t => SmartListQueryBuilder.Evaluate(load.Snapshot, t).Count);
+        foreach (var (id, count) in load.SeriesAndNovelCounts)
         {
-            matchCounts[seriesList.Id] = SeriesSmartListQueryBuilder.MatchCount(context, seriesList);
+            matchCounts[id] = count;
         }
 
-        foreach (var novelList in trees.Where(t => t.TargetKind == SmartListTargetKind.Novel))
-        {
-            matchCounts[novelList.Id] = NovelSmartListQueryBuilder.MatchCount(context, novelList);
-        }
-
-        RefreshSidebarCore(all, matchCounts);
+        RefreshSidebarCore(load.All, matchCounts);
     }
 
     /// <summary>Loads each list's full nested condition tree (<see cref="SmartListTreeLoader"/>), dropping any that vanished.</summary>
@@ -797,6 +882,67 @@ public partial class SmartScreenViewModel : ViewModelBase
         context.SmartLists.Add(clone);
         context.SaveChanges();
         LoadSmartList(clone.Id);
+    }
+
+    /// <summary>
+    /// Imports a ComicRack smart list (<c>.cbl</c>) as a native smart list (docs/superpowers/specs/2026-10-04-smart-list-cbl-import-design.md) and opens it.
+    /// A reading-list <c>.cbl</c> is refused here - it would silently create a reading list from the Smart screen - and what could not be carried over is
+    /// reported as one Activity Center alert.
+    /// </summary>
+    [RelayCommand]
+    private async Task ImportComicRackList()
+    {
+        if (_filePicker is null)
+        {
+            return;
+        }
+
+        string? path = await _filePicker.PickOpenFileAsync("Import ComicRack Smart List", "cbl", "ComicRack list (.cbl)");
+        if (path is null)
+        {
+            return;
+        }
+
+        var notes = new List<string>();
+        int? importedId = null;
+        try
+        {
+            switch (Paperbunkr.Data.ReadingLists.CblFile.Detect(path))
+            {
+                case Paperbunkr.Data.ReadingLists.CblFileKind.SmartList:
+                    using (var context = PaperbunkrDb.CreateContext())
+                    {
+                        var result = Paperbunkr.Data.SmartLists.CeImport.SmartListFileImporter.Import(context, path);
+                        notes.AddRange(result.Warnings.Select(w => w.ToString()));
+                        if (result.RefusedReason is not null)
+                        {
+                            notes.Add(result.RefusedReason);
+                        }
+
+                        importedId = result.List?.Id;
+                    }
+
+                    break;
+                case Paperbunkr.Data.ReadingLists.CblFileKind.ReadingList:
+                    notes.Add($"'{System.IO.Path.GetFileName(path)}' is a reading list, not a smart list. Import it from the Reading screen.");
+                    break;
+                default:
+                    notes.Add($"'{System.IO.Path.GetFileName(path)}' is not a ComicRack list.");
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or System.IO.InvalidDataException or UnauthorizedAccessException)
+        {
+            notes.Add($"Couldn't read '{System.IO.Path.GetFileName(path)}': {ex.Message}");
+        }
+
+        if (importedId is int id)
+        {
+            RefreshSidebar();
+            LoadSmartList(id);
+        }
+
+        CeImportAlerts.RaiseIfAny(_activity, notes, "smart list");
     }
 
     [RelayCommand]

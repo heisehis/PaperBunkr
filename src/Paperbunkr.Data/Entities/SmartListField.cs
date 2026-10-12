@@ -162,4 +162,39 @@ public enum SmartListField
 
     /// <summary>Issue-target only - the issue has at least one Pending <see cref="MetadataProposal"/>.</summary>
     HasPendingProposal,
+
+    // Appended, never inserted: PluginCondition (and so OrganizerProfile.ExcludeRuleJson) serializes this
+    // enum as a number. Added for ComicRack smart-list import (docs/superpowers/specs/2026-10-04-smart-list-cbl-import-design.md).
+
+    /// <summary>CE's <c>ComicBookNumberMatcher</c>: the issue number parsed to a float, -1 when it is not a number. <see cref="Number"/> stays Text on purpose, so this is the numeric view of it.</summary>
+    NumberValue,
+
+    /// <summary>CE's <c>ComicBookPublishedMatcher</c>: the date built from Year/Month/Day (<c>ComicBook.Published</c>). Distinct from <see cref="Released"/>.</summary>
+    Published,
+
+    /// <summary>CE's <c>SmartListSeriesLastNumberMatcher</c> ("Series: Last Number"): the highest numeric issue number among every comic of the same series and volume.</summary>
+    SeriesLastNumber,
+
+    /// <summary>CE's <c>SmartListSeriesMaxYearMatcher</c> ("Series: Last Year").</summary>
+    SeriesMaxYear,
+
+    /// <summary>CE's <c>SmartListSeriesMaxCountMatcher</c> ("Series: Highest Count").</summary>
+    SeriesMaxCount,
+
+    /// <summary>CE's <c>SmartListSeriesMaxGapSizeMatcher</c> ("Series: Biggest Gap").</summary>
+    SeriesMaxGapSize,
+
+    /// <summary>
+    /// The books that have a proposed value (an accepted, filename-inferred <c>MetadataProposal</c>) for a field whose own stored value is empty - ComicRack's "Proposed Values"
+    /// script (docs/superpowers/specs/2026-10-11-proposed-values-design.md). Special-cased in <see cref="SmartLists.SmartListQueryBuilder"/> like <see cref="Duplicate"/>: operator
+    /// Is = has one, IsNot = has none; <see cref="SmartListCondition.Value"/> is the field list (<c>number, year</c>; blank = every field).
+    /// </summary>
+    HasProposedValue,
+
+    /// <summary>
+    /// ComicRack's "Same X and different Y" script (docs/superpowers/specs/2026-10-11-series-checks-and-bulk-fixes-design.md §1): the books in a group that share the values of the X attributes
+    /// (<see cref="SmartListCondition.Value"/>, <c>|</c>-separated) and, when Y (<see cref="SmartListCondition.Value2"/>) is given, differ in one of the Y attributes. Special-cased in
+    /// <see cref="SmartLists.SmartListQueryBuilder"/> like <see cref="Duplicate"/>; the operator Is = flagged, IsNot = not.
+    /// </summary>
+    SameXDifferentY,
 }

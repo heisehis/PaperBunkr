@@ -223,6 +223,13 @@ public class PaperbunkrDbContext : DbContext
     {
     }
 
+    /// <summary>Every context reports its writes to <see cref="DataChangeStamp"/>, however its options were built.</summary>
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        base.OnConfiguring(optionsBuilder);
+        optionsBuilder.AddInterceptors(DataChangeStamp.Interceptors);
+    }
+
     /// <summary>
     /// Retries on SQLite's own transient lock errors (BUSY=5, LOCKED=6) - each call site in this
     /// app opens a fresh short-lived context/connection (<c>PaperbunkrDb.CreateContext</c>'s own

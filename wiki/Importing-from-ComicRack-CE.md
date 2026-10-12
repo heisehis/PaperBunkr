@@ -35,6 +35,10 @@ CE's data model is less expressive than PaperBunkr's, so some values are **infer
 CE cannot distinguish **manhua/manhwa** from manga at all, so every manga-flagged series
 imports as *Manga* until you correct it.
 
+## Smart lists and Library Organizer profiles
+
+The migration reads your library, not your saved lists. Export a smart list from ComicRack as a `.cbl` and import it from the **Smart** screen ([Smart Lists](Smart-Lists#importing-a-comicrack-smart-list)); bring Library Organizer profiles (`.lop`) across from **Preferences → Organize & Scrape** ([Scraping and Organizing](Scraping-and-Organizing#if-you-used-the-plugin)). Both tell you what they couldn't carry over instead of guessing.
+
 ## Reviewing what the import couldn't decide
 
 Anything the importer had to guess or couldn't resolve lands in **Preferences → Library →

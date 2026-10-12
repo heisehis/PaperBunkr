@@ -36,6 +36,40 @@ collapsible **Maintenance** group:
 The condition list matches ComicRack CE's matcher catalog field-for-field, so lists you
 relied on in CE can be rebuilt here.
 
+## Importing a ComicRack smart list
+
+A smart list you exported from ComicRack is a `.cbl` file, the same extension as a reading list.
+Click the **import** button next to **New Smart List**. Dropping the file on the Library or on a reading
+list, or picking it in **New Reading List → Import**, works too: the file is recognised by what it holds.
+
+- The list arrives as a normal smart list, with every rule that has an equivalent here.
+- A rule that has **no equivalent** is left out, never guessed at, and one alert in the Activity Center
+  names it and says whether the list may now match **more** or **fewer** books. The usual cause is a
+  ComicRack script rule; scripts can't run here.
+- Two common scripts do have an equivalent and come across as ordinary rules: **Proposed Values**
+  becomes *Has Proposed Value*, and **Same X and different Y** becomes *Same X, Different Y* (both below).
+  ComicRack ran that second script only over the books the rules before it had kept; here it looks at
+  the whole library. When it was the first rule that is the same thing; when it wasn't, the alert says
+  the list may differ.
+- A list whose rules were *all* left out isn't imported, because it would match your whole library.
+- CE's "Series: Last Number / Last Year / Highest Count / Biggest Gap" rules come across as fields of
+  the same names. CE's "Series: last added / opened / released / published" date rules don't yet.
+
+One difference from before: a custom value a comic doesn't have now counts as empty, as in ComicRack,
+so a rule such as *Custom value comicvine_issue is (nothing)* finds the comics that were never scraped.
+
+## Two rules that look across your library
+
+- **Has Proposed Value** finds comics whose number, year, title, format, volume or count was worked out
+  from the file name but never saved on the comic itself. Leave the box empty for any of them, or name
+  the ones you care about (`number, year`). Select the results and use **Tidy up → Commit proposed
+  values** in [the Library](The-Library) to save them.
+- **Same X, Different Y** groups comics that share the first box's fields and keeps the groups that
+  disagree on the second box's. `Series|Volume` and `Format` finds series whose books don't agree on
+  their format. Leave the second box empty and you get every comic that shares the first box's values
+  with another one: `Series|Number|Format` is a duplicate finder. Separate names with `|`; a name that
+  isn't a field is looked up as a custom value.
+
 ## Working with a list
 
 - Selecting a list shows its results using the same grid, sort, group, and display

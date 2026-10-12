@@ -316,6 +316,9 @@ public partial class ContinuityScreenViewModel : ViewModelBase
 
     public void RefreshStoryEventCandidates() => Suggestions.RefreshStoryEventCandidates();
 
+    /// <summary>The background form of <see cref="RefreshStoryEventCandidates"/>, for navigation in the running app.</summary>
+    public Task RefreshStoryEventCandidatesAsync() => Suggestions.RefreshStoryEventCandidatesAsync();
+
     public void RefreshPossibleDuplicates() => Suggestions.RefreshPossibleDuplicates();
 
     [RelayCommand]

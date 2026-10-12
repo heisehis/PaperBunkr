@@ -118,8 +118,70 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
 
     // --- New story-event suggestions: local-only on load, verified once on Accept. ---
 
+    // Bumped by every refresh, so a background read that was overtaken is dropped.
+    private int _candidatesGeneration;
+
+    /// <summary>
+    /// Same as <see cref="RefreshStoryEventCandidates"/>, with both resolvers on a thread-pool thread (0.25-0.5 s of every
+    /// visit to the Continuity screen that had to reload, 2026-10-11 measurement). The lists keep what they showed until the
+    /// new ones arrive. Logs and falls back to the synchronous refresh on failure.
+    /// </summary>
+    public async Task RefreshStoryEventCandidatesAsync()
+    {
+        int generation = ++_candidatesGeneration;
+        try
+        {
+            var (candidates, suggestions) = await Task.Run(() =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                var found = StoryArcGroupingResolver.GetCandidates(context);
+                IReadOnlyList<ContinuityCharacterSuggestion> shared;
+                try
+                {
+                    shared = ContinuityCharacterSuggestionResolver.GetSuggestions(context);
+                }
+                catch (Exception ex)
+                {
+                    // A suggestion list is never worth losing the rest of the panel over.
+                    DiagnosticsService.LogMilestone($"Continuity: shared-character suggestions failed ({ex.GetType().Name}: {ex.Message}).");
+                    shared = Array.Empty<ContinuityCharacterSuggestion>();
+                }
+
+                return (found, shared);
+            }).ConfigureAwait(true);
+
+            if (generation != _candidatesGeneration)
+            {
+                return;
+            }
+
+            NewStoryEventCandidates.Clear();
+            foreach (var candidate in candidates)
+            {
+                NewStoryEventCandidates.Add(new StoryEventCandidateRowViewModel(candidate, AcceptStoryEventCandidateAsync, DismissStoryEventCandidate));
+            }
+
+            CharacterSuggestions.Clear();
+            foreach (var suggestion in suggestions)
+            {
+                CharacterSuggestions.Add(new CharacterSuggestionRowViewModel(suggestion, AcceptCharacterSuggestion, DismissCharacterSuggestion));
+            }
+
+            RaiseCounts();
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsService.LogMilestone($"Continuity: async suggestions refresh failed ({ex.GetType().Name}: {ex.Message}) - refreshing synchronously.");
+            if (generation == _candidatesGeneration)
+            {
+                RefreshStoryEventCandidates();
+            }
+        }
+    }
+
     public void RefreshStoryEventCandidates()
     {
+        _candidatesGeneration++;
         using var context = PaperbunkrDb.CreateContext();
         NewStoryEventCandidates.Clear();
         foreach (var candidate in StoryArcGroupingResolver.GetCandidates(context))

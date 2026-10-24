@@ -26,14 +26,21 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
-> **Release preparation (2026-10-24, v0.8.0-beta; base `2c256dc`):** the accumulated source,
-> artwork, installer and documentation changes are being committed together on
-> `codex/release-v0.8.0`. This supersedes earlier "uncommitted" labels as a statement about Git
+> **Release preparation (2026-10-24, v0.8.0-beta; source `0be8125`, focus-ring fix `a003b76`):**
+> the accumulated source, artwork, installer and documentation changes are committed on
+> `codex/release-v0.8.0` (PR #106). This supersedes earlier "uncommitted" labels as a statement about Git
 > status only; their individual visual-review and verification caveats still apply. App version
 > is `0.8.0.0`; the release retains the existing `-beta` convention. Installer verification passed
 > all 16 PowerShell/build checks and the shared native Pascal checks, including compilation with
-> and without the thumbnail handler. Broader release validation and publication are pending;
-> no complete test-suite or manual accessibility sign-off is claimed here.
+> and without the thumbnail handler. Website builds passed locally and in CI. The app and compiled
+> XAML rebuilt successfully; all 139 focused release-version, mark resolver/render, plugin API and
+> focus-ring tests passed. Four stale Australian-rating assertions were updated to the CE raster
+> artwork contract. A real Home focus-ring clipping defect was reproduced in isolation and fixed
+> by expanding the tile's top gutter while compensating shelf margins to preserve cover alignment.
+> The broad `Speed!=Slow` run was stopped after the machine became unresponsive; the user confirmed
+> terminating its testhost. No complete fast/slow-suite or manual accessibility sign-off is claimed.
+> Packaging/publication follows the existing tag-triggered workflow, with the external Six Labors
+> licence supplied through a repository secret rather than committed source.
 
 > **Manual session note (2026-10-24, installer polish; implementation uncommitted,
 > design/plan `2c256dc`):** implemented restrained welcome/finish copy, accurate Library quick-start,

@@ -28,7 +28,7 @@ public class BrandMarkRenderSmokeTests
     [InlineData(MarkFamily.Format, "Annual", MarkKind.SvgAsset)]
     [InlineData(MarkFamily.Format, "EPUB", MarkKind.Glyph)]
     [InlineData(MarkFamily.AgeRating, "Teen", MarkKind.SvgAsset)]
-    [InlineData(MarkFamily.AgeRating, "MA15+", MarkKind.LetterMark)]
+    [InlineData(MarkFamily.AgeRating, "MA15+", MarkKind.Raster)]
     [InlineData(MarkFamily.Language, "ja", MarkKind.Flag)]
     [InlineData(MarkFamily.Language, "eo", MarkKind.Text)]
     [InlineData(MarkFamily.ReadingStatus, "Reading", MarkKind.Glyph)]

@@ -58,7 +58,7 @@ public abstract class ContinuityScreenTestBase : IDisposable
         };
         vm.Suggestions.IdentityRunner = work => work();
         vm.Suggestions.IdentitySources = () => new Dictionary<ComicProvider, IArcIdentitySource>();
-        vm.Suggestions.IdentityWikidata = () => new NoWikidata();
+        vm.Suggestions.OrderInputs = () => Paperbunkr.App.Services.StoryEventChecks.EventOrderInputs.None;
         return vm;
     }
 
@@ -135,15 +135,4 @@ public abstract class ContinuityScreenTestBase : IDisposable
         context.SaveChanges();
     }
 
-    /// <summary>An empty Wikidata: every search misses, so the connector runs without the network.</summary>
-    protected sealed class NoWikidata : IWikidataLookup
-    {
-        public Task<IReadOnlyList<WikidataSearchResult>> SearchEntitiesAsync(string name, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<WikidataSearchResult>>(Array.Empty<WikidataSearchResult>());
-
-        public Task<WikidataEntity?> GetEntityAsync(string qid, CancellationToken cancellationToken) => Task.FromResult<WikidataEntity?>(null);
-
-        public Task<IReadOnlyList<string>> FindByComicVineIdAsync(string comicVineId, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
-    }
 }

@@ -52,8 +52,8 @@ A log of recent changes and reading activity for the series.
   publisher's logo and how many issues the continuity holds; event rows show the start year and issue count. **＋** makes a new
   continuity or event. Right-click a row to open, edit or delete it.
 - **Suggestions & checks**, the row under the list, opens one panel with everything waiting for a decision: new story-event
-  suggestions, possible duplicate events and shared-universe suggestions, plus the **Check story events** and **Check Wikidata**
-  buttons. Its badge counts what's waiting.
+  suggestions, possible duplicate events and any shared-universe suggestions, plus the **Check story events** button.
+  Its badge counts what's waiting.
 - **Every page** has a hero band across the top: a blurred collage of covers, the name, a stats line and the buttons, with
   **Overview | Map | Timeline** on the right.
 
@@ -134,12 +134,23 @@ which events come before which:
 
 - **From your library**, when an event picks up exactly where another left off in a shared series (Hulk #105, then #106), when
   a name says so ("Prelude to …", "… : Aftermath"), or when one event's issues all come before another's in the series they share.
-- **From Wikidata**, where it records that one storyline follows another (for example *Planet Hulk* → *World War Hulk*).
+- **From Metron's reading lists**, where the community has put one event's reading list before another's (for example
+  *Planet Hulk* → *World War Hulk*). This needs your Metron login in Preferences → Connections.
+
+It also looks up where each event sits in a reading order, so the map and timeline put events in the order people read them:
+
+- **Comic Book Reading Orders** keeps a story order of the Marvel and DC events. Events it lists are placed in that order, even
+  when their own dates disagree (a collected edition dated years after the story). It is checked at most once a week and no
+  more than one page every five seconds, as the site asks.
+- **Dates** from the Grand Comics Database (when installed), then the issues' cover dates, place everything else.
+- An event no source can place goes by its own dates, with nothing to review.
+
+A date order on its own is never turned into a "sequel": it only places the event.
 
 Before/after links show in an event's **Follows / Followed by** strip and crossovers under **Related events**, where the
-automatic ones are marked *inferred* or *Wikidata*. Weaker hints (same name years apart, overlapping events
-sharing issues) appear under **Suggested** as "Looks like the sequel of …" with **Accept** and **Dismiss**. Relations you set
-yourself are never changed, and removing an automatic one stops it coming back.
+automatic ones are marked *inferred* or *Metron*. Relations you set yourself are never changed, and removing an automatic one
+stops it coming back. Under **Suggested** you'll still see events that look connected (a shared word in the name, close dates,
+a shared series); **Accept** connects them as *Related* and **Dismiss** hides them.
 
 ### Grand Comics Database data
 
@@ -183,11 +194,12 @@ Accept**, and anything you **Dismiss** stays dismissed.
   event, optionally checked against ComicVine or Metron. Suggestions refresh weekly in the
   background and wait in **Suggestions & checks**. In **Issue Properties**, a look-up
   button checks a single issue.
-- **Continuities** — PaperBunkr matches your series to shared universes using Wikidata (and the
-  recurring characters in your series), leaving out things like Elseworlds so they don't get mixed
-  into a main timeline. Click **Check Wikidata** in **Suggestions & checks**, or use **Look up on
-  Wikidata** on a series' **Continuities** tab. Accepting a suggestion fills in the continuity's
-  Wikidata ID, description and publisher. It also runs daily in the background.
+- **Continuities** — a series joins a continuity from the universes **Metron** lists for its issues
+  (Earth-616, Earth-1610 and so on, across many publishers), as soon as you scrape it. The weekly **Check
+  story events** also fills in each universe's designation, shown as a small tag on the continuity's page.
+  Wikidata is no longer asked in the background or from **Suggestions & checks**; if you want it for one
+  series, use **Look up on Wikidata** on its **Continuities** tab (it covers few publishers, mostly Marvel
+  and DC). Accepting a suggestion fills in the continuity's Wikidata ID, description and publisher.
 
 Progress for the manual checks shows in the Activity Center.
 

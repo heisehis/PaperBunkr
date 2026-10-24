@@ -9,6 +9,7 @@ using Paperbunkr.App.Services.Reader;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Tests;
 
@@ -274,6 +275,63 @@ public class ReaderScreenViewModelTests : IDisposable
         context.Issues.Add(issue);
         context.SaveChanges();
         return issue.Id;
+    }
+
+    /// <summary>Marks the long issue read (and optionally sets its series' reading status), so the read-state tests start from a finished book.</summary>
+    private int CreateReadLongIssue(ReadingStatus seriesStatus)
+    {
+        int issueId = CreateLongIssue();
+        using var context = PaperbunkrDb.CreateContext();
+        var issue = context.Issues.Find(issueId)!;
+        issue.PageCount = 12;
+        issue.LastPageRead = 11;
+        context.Series.Find(_seriesId)!.ReadingStatus = seriesStatus;
+        context.SaveChanges();
+        return issueId;
+    }
+
+    [Fact]
+    public void ReadIssue_StaysRead_WhenOpenedAndPagedBack()
+    {
+        try
+        {
+            int issueId = CreateReadLongIssue(ReadingStatus.Completed);
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(issueId);
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[2]);
+            vm.FlushPendingPositionSave();
+
+            Assert.Equal("PAGE 3 / 12", vm.PageLabel);
+            using var context = PaperbunkrDb.CreateContext();
+            var issue = context.Issues.Find(issueId)!;
+            Assert.Equal(11, issue.LastPageRead);
+            Assert.True(issue.HasBeenRead());
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
+    }
+
+    [Fact]
+    public void ReadIssue_InAReReadingSeries_TracksThePositionAgain()
+    {
+        try
+        {
+            int issueId = CreateReadLongIssue(ReadingStatus.ReReading);
+            var vm = new ReaderScreenViewModel(goBack: () => { });
+            vm.LoadIssue(issueId);
+
+            vm.SelectThumbnailCommand.Execute(vm.Thumbnails[2]);
+
+            using var context = PaperbunkrDb.CreateContext();
+            Assert.Equal(2, context.Issues.Find(issueId)!.LastPageRead);
+        }
+        finally
+        {
+            TryDeleteLongIssue();
+        }
     }
 
     [Fact]
@@ -4511,9 +4569,16 @@ public class ReaderScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void RefreshDisplaySettings_TextureMode_SetsShowPageShadow_ButNotInContinuousMode()
+    public void RefreshDisplaySettings_SoftShadowFrame_SetsShowPageShadow_ButNotInContinuousMode()
     {
-        SetImageBackgroundMode(ImageBackgroundMode.Texture);
+        // The drop shadow follows Preferences > Reader > page frame (AppSettings.ReaderPageFrameStyle, 2026-10-18), not the
+        // background mode it used to piggyback on.
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.GetOrCreateAppSettings().ReaderPageFrameStyle = ReaderPageFrameStyle.SoftShadow;
+            context.SaveChanges();
+        }
+
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
 

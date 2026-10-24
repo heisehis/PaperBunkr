@@ -103,17 +103,40 @@ public static class EventMapLoader
         return ReadStateOf(issue);
     }
 
-    /// <summary>Distinct events with at least one member issue whose series belongs to the continuity, by name.</summary>
+    /// <summary>
+    /// Distinct events that belong to the continuity, by name (docs/superpowers/specs/2026-10-12-continuity-sources-design.md §4.3): at least
+    /// half of the member issues whose series is in <i>any</i> continuity are in this one. An event that crosses several continuities
+    /// is listed in each it carries half of, not forced into one; issues of series with no continuity at all neither count for nor against.
+    /// </summary>
     public static IReadOnlyList<ContinuityEventEntry> EventsInContinuity(PaperbunkrDbContext context, int continuityId)
     {
         var seriesIds = context.ContinuityMemberships
             .Where(m => m.ContinuityId == continuityId)
             .Select(m => m.SeriesId);
 
-        return context.StoryEvents.AsNoTracking()
+        var touching = context.StoryEvents.AsNoTracking()
             .Where(e => e.Members.Any(m => seriesIds.Contains(m.Issue!.SeriesId)))
             .Select(e => new { e.Id, e.Name, Count = e.Members.Count })
-            .AsEnumerable()
+            .ToList();
+        if (touching.Count == 0)
+        {
+            return Array.Empty<ContinuityEventEntry>();
+        }
+
+        var here = seriesIds.ToList().ToHashSet();
+        var inAnyContinuity = context.ContinuityMemberships.Select(m => m.SeriesId).Distinct().ToList().ToHashSet();
+        var ids = touching.Select(e => e.Id).ToList();
+        var perEvent = context.EventMemberships.AsNoTracking()
+            .Where(m => ids.Contains(m.StoryEventId))
+            .Select(m => new { m.StoryEventId, m.Issue!.SeriesId })
+            .ToList()
+            .GroupBy(m => m.StoryEventId)
+            .ToDictionary(
+                g => g.Key,
+                g => (Here: g.Count(m => here.Contains(m.SeriesId)), Known: g.Count(m => inAnyContinuity.Contains(m.SeriesId))));
+
+        return touching
+            .Where(e => perEvent.TryGetValue(e.Id, out var share) && share.Here > 0 && share.Here * 2 >= share.Known)
             .OrderBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase)
             .Select(e => new ContinuityEventEntry(e.Id, e.Name, e.Count))
             .ToList();

@@ -78,6 +78,10 @@ public static class TeamResolver
         var orphans = context.Teams.Where(t => !t.Appearances.Any()).ToList();
         if (orphans.Count > 0)
         {
+            // See CharacterResolver.PruneOrphans: a dead row must not keep owning the provider id.
+            var orphanIds = orphans.Select(t => t.Id).ToList();
+            context.ComicMetadataExternalIds.RemoveRange(
+                context.ComicMetadataExternalIds.Where(e => e.EntityKind == ComicMetadataEntityKind.Team && orphanIds.Contains(e.EntityId)));
             context.Teams.RemoveRange(orphans);
             context.SaveChanges();
         }

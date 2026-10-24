@@ -31,7 +31,7 @@ namespace Paperbunkr.App.ViewModels;
 /// embedded here with its own Issues tab suppressed (<see cref="DetailTabsViewModel.ShowIssuesTab"/>)
 /// - Related/Details(tracker linking + external metadata)/Activity are shared, not duplicated.
 /// </summary>
-public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSource, IContextMenuProvider
+public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSource, IContextMenuProvider, IListLayoutHost
 {
     /// <summary>Right-click/Menu-key menu for the chapter list (docs/superpowers/specs/2026-08-31-
     /// keyboard-operability-design.md) - delegated out, same pattern as
@@ -39,8 +39,9 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
         new MangaDetailContextMenuBuilder(this).Build(target);
 
-    public MangaDetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? goLibraryWithCollection = null, Action<int>? enqueueMetadataWriteBack = null, ITrackerAutoSyncService? trackerAutoSync = null)
+    public MangaDetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? goLibraryWithCollection = null, Action<int>? enqueueMetadataWriteBack = null, ITrackerAutoSyncService? trackerAutoSync = null, Action<int>? editSeries = null)
     {
+        _editSeries = editSeries;
         _trackerAutoSync = trackerAutoSync ?? NoOpTrackerAutoSyncService.Instance;
         _goBack = goBack;
         _goToReader = goToReader;
@@ -48,7 +49,10 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         _goToBulkProperties = goToBulkProperties;
         _goDetailForSeries = goDetailForSeries ?? (_ => { });
         _enqueueMetadataWriteBack = enqueueMetadataWriteBack;
-        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, navigateToSeries: _goDetailForSeries, openInReader: goToReader, navigateToCollection: goLibraryWithCollection, goLibraryWithSearch: goLibraryWithSearch, trackerAutoSync: trackerAutoSync) { ShowIssuesTab = false, ShowTabStrip = false, IsMangaDetailHost = true };
+        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, navigateToSeries: _goDetailForSeries, openInReader: goToReader, navigateToCollection: goLibraryWithCollection, goLibraryWithSearch: goLibraryWithSearch, trackerAutoSync: trackerAutoSync, onSeriesCoverChanged: ReloadCurrentSeries) { ShowIssuesTab = false, ShowTabStrip = false, IsMangaDetailHost = true };
+        // A provider link on a confirmed series changes chapters (tags, summary fallback): queue the ones now owing a write.
+        Tabs.SeriesMetadataLinked = EnqueueDirtyChapters;
+        Tabs.ReadingModeChanged = mode => ReadingModeBadge = ReadingModeCatalog.BadgeFor(mode);
         // No reweight callback - LoadSeries below is always the series-aggregated view (chapter-list
         // screen, no single-issue pill focus like the Western DetailScreenViewModel has), so every
         // chip's CanReweight is naturally false here regardless.
@@ -65,12 +69,103 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     private readonly Action<IReadOnlyList<int>> _goToBulkProperties;
     private readonly Action<int> _goDetailForSeries;
     private readonly Action<int>? _enqueueMetadataWriteBack;
+    private readonly Action<int>? _editSeries;
     private int? _seriesId;
     private int? _continueIssueId;
     private int? _coverIssueId;
     private readonly ITrackerAutoSyncService _trackerAutoSync;
     private bool _isLoadingSeries;
     private List<ChapterRowSample> _allChapters = new();
+    private DetailListLayoutState _detailLayoutState = DetailListLayoutState.MangaDefault;
+
+    // --- Detail layout (docs/superpowers/specs/2026-10-19-detail-layouts-v2-design.md): one default for every manga series unless a
+    // series has its own layout (Library right-click menu); on-screen changes land wherever the series' layout lives. ---
+
+    private bool _seriesHasOwnLayout;
+    private bool _applyingLayout;
+    private IReadOnlyList<VirtualTagDefinition> _virtualTags = Array.Empty<VirtualTagDefinition>();
+
+    public WorkspaceScreen LayoutScreen => WorkspaceScreen.MangaDetail;
+    public string LayoutSelectionKey => _seriesHasOwnLayout && _seriesId is int id ? ListLayoutsViewModel.SeriesKey(id) : ListLayoutAssignment.DefaultKey;
+    public bool UsesSingleDefault => true;
+    public string CaptureLayoutJson() => DetailListLayoutStateJson.Serialize(_detailLayoutState);
+    public string BuiltInDefaultLayoutJson => DetailListLayoutStateJson.Serialize(DetailListLayoutState.MangaDefault);
+    /// <summary>The manga chapter layouts. Their menu lives in the Library's Workspace popup, beside the Library's own list layouts, not on this screen.</summary>
+    public ListLayoutsViewModel ListLayouts { get; private set; } = null!;
+
+    /// <summary>The chapter table's header row, one cell per visible column - resize and reorder drags act on these.</summary>
+    public ObservableCollection<DetailListHeaderCell> ChapterHeaderCells { get; } = new();
+
+    public void InitializeListLayouts(ListLayoutService? service)
+    {
+        ListLayouts = new ListLayoutsViewModel(this, service, post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
+        ListLayouts.AssignmentsChanged += ReapplyLayoutForSeries;
+        if (ListLayouts.Initialize() is { } json)
+            ListLayouts.ApplyWithoutTracking(() => ApplyLayoutJson(json));
+        ListLayouts.MarkApplied();
+    }
+
+    /// <summary>Re-reads which layout the shown series uses (its own, else the default) and shows it.</summary>
+    private void ReapplyLayoutForSeries()
+    {
+        if (ListLayouts is null)
+        {
+            return;
+        }
+
+        _seriesHasOwnLayout = _seriesId is int id && ListLayouts.HasAssignment(ListLayoutsViewModel.SeriesKey(id));
+        if (ListLayouts.ResolveForSelection() is { } json)
+        {
+            ListLayouts.ApplyWithoutTracking(() => ApplyLayoutJson(json));
+        }
+    }
+
+    public DetailListOptionsViewModel CreateDetailListOptions(Action close) =>
+        DetailListOptionsViewModel.ForManga(_detailLayoutState, _virtualTags, state =>
+        {
+            ApplyState(state);
+            ListLayouts.TrackChange();
+        }, close);
+
+    public void ApplyLayoutJson(string json) => ApplyState(DetailListLayoutStateJson.Deserialize(json, manga: true));
+
+    private void ApplyState(DetailListLayoutState state)
+    {
+        _detailLayoutState = state;
+        _applyingLayout = true;
+        try
+        {
+            ChapterSortBy = state.ChapterSortBy;
+            ChapterSortDirection = state.ChapterSortDirection;
+        }
+        finally
+        {
+            _applyingLayout = false;
+        }
+
+        RenderChapters();
+    }
+
+    /// <summary>Header drag: a column's new width, committed on release.</summary>
+    public void SetChapterColumnWidth(string field, double width)
+    {
+        var columns = (_detailLayoutState.ChapterColumns ?? DetailListLayoutState.MangaDefault.ChapterColumns!)
+            .Select(c => c.Field == field ? c with { Width = width } : c).ToList();
+        _detailLayoutState = DetailListLayoutStateJson.Normalize(_detailLayoutState with { ChapterColumns = columns }, manga: true);
+        RenderChapters();
+        ListLayouts?.TrackChange();
+    }
+
+    /// <summary>Header drag: moves a column in front of (dragging left) or behind (dragging right) another one.</summary>
+    public void MoveChapterColumn(string field, string targetField)
+    {
+        _detailLayoutState = _detailLayoutState with
+        {
+            ChapterColumns = DetailColumnMoves.Move(_detailLayoutState.ChapterColumns ?? DetailListLayoutState.MangaDefault.ChapterColumns!, field, targetField),
+        };
+        RenderChapters();
+        ListLayouts?.TrackChange();
+    }
 
     public DetailTabsViewModel Tabs { get; }
 
@@ -121,13 +216,13 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     public IReadOnlyList<DetailHeroAction> Actions => new[]
     {
         new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true, IsEnabled: _continueIssueId is not null, Icon: Symbol.Play),
-        new DetailHeroAction("Edit", EditCommand, IsEnabled: CanEdit, Icon: Symbol.Edit),
+        new DetailHeroAction("Edit Series", EditSeriesCommand, IsEnabled: CanEdit, Icon: Symbol.Edit),
         new DetailHeroAction("Change Cover", Command: null, Icon: Symbol.Image, FlyoutContext: BuildCoverPickerViewModel()),
     }.Where(a => !IsRemoteSeries || a.Label != "Change Cover").ToArray();   // a remote series' cover isn't ours to change
 
     /// <summary>Same shape as <see cref="DetailScreenViewModel.BuildCoverPickerViewModel"/> - see its doc comment.</summary>
     private CoverPickerViewModel? BuildCoverPickerViewModel() =>
-        !IsRemoteSeries && _coverIssueId is int issueId ? new CoverPickerViewModel(issueId, _seriesId, ReloadCurrentSeries, FindMangaBakaCoverContext()) : null;
+        !IsRemoteSeries && _seriesId is int seriesId ? new CoverPickerViewModel(seriesId, ReloadCurrentSeries, FindMangaBakaCoverContext()) : null;
 
     /// <summary>Same shape as <see cref="DetailScreenViewModel.FindMangaBakaCoverContext"/> - see its doc comment.</summary>
     private (ExternalMetadataProvider Provider, string ExternalId)? FindMangaBakaCoverContext()
@@ -301,13 +396,24 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     /// <summary>True when this series is a mirror of another library's; editing and cover changes are unavailable.</summary>
     public bool IsRemoteSeries { get; private set; }
 
-    public bool CanEdit => !IsRemoteSeries && _continueIssueId is not null;
+    /// <summary>The chapters disagree on something and nobody has confirmed the series' values yet; shows a "Needs review" chip that opens Edit Series.</summary>
+    [ObservableProperty]
+    private bool _needsReview;
+
+    /// <summary>Edit Series is rooted in the series, not in a chapter (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md D11), so it works for a series with no chapters too.</summary>
+    public bool CanEdit => !IsRemoteSeries && _seriesId is not null && _editSeries is not null;
 
     [ObservableProperty]
     private ChapterListFilter _chapterFilter = ChapterListFilter.All;
 
+    /// <summary>The chapter sort - any Library field (detail layouts v2). The "By Number" / "By Date" pills are shortcuts for Number and Released.</summary>
     [ObservableProperty]
-    private ChapterSortField _chapterSortField = ChapterSortField.Number;
+    [NotifyPropertyChangedFor(nameof(IsChapterSortByNumber), nameof(IsChapterSortByDate))]
+    private IssueListSortField _chapterSortBy = IssueListSortField.Number;
+
+    public bool IsChapterSortByNumber => ChapterSortBy == IssueListSortField.Number;
+
+    public bool IsChapterSortByDate => ChapterSortBy == IssueListSortField.Released;
 
     [ObservableProperty]
     private SortDirection _chapterSortDirection = SortDirection.Ascending;
@@ -321,19 +427,37 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
 
     partial void OnChapterFilterChanged(ChapterListFilter value) => RenderChapters();
 
-    partial void OnChapterSortFieldChanged(ChapterSortField value) => RenderChapters();
+    partial void OnChapterSortByChanged(IssueListSortField value) => OnChapterSortChanged();
 
     partial void OnChapterSortDirectionChanged(SortDirection value)
     {
         OnPropertyChanged(nameof(ChapterSortDirectionSymbol));
+        OnChapterSortChanged();
+    }
+
+    private void OnChapterSortChanged()
+    {
+        if (_applyingLayout)
+        {
+            return;
+        }
+
+        _detailLayoutState = _detailLayoutState with
+        {
+            ChapterSortBy = ChapterSortBy,
+            ChapterSortDirection = ChapterSortDirection,
+            ChapterSortVirtualTagId = ChapterSortBy == IssueListSortField.VirtualTag ? _detailLayoutState.ChapterSortVirtualTagId : null,
+        };
         RenderChapters();
+        ListLayouts?.TrackChange();
     }
 
     [RelayCommand]
     private void SetChapterFilter(ChapterListFilter filter) => ChapterFilter = filter;
 
     [RelayCommand]
-    private void SetChapterSortField(ChapterSortField field) => ChapterSortField = field;
+    private void SetChapterSortField(ChapterSortField field) =>
+        ChapterSortBy = field == ChapterSortField.Date ? IssueListSortField.Released : IssueListSortField.Number;
 
     [RelayCommand]
     private void ToggleChapterSortDirection() =>
@@ -347,6 +471,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
             .Include(s => s.Issues).ThenInclude(i => i.Tags)
             .Include(s => s.MetadataProposals)
             .Include(s => s.Titles)
+            .Include(s => s.Credits)
             .AsSplitQuery() // one query per include: joined, each chapter's proposals multiply by its tags (0.3-3.2 s measured)
             .FirstOrDefault(s => s.Id == seriesId);
         if (series is null)
@@ -356,6 +481,11 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
 
         // A series mirrored from another library is read-only here (remote-library-sharing design 7.2): hero Edit / Change Cover go away.
         IsRemoteSeries = series.RemoteSourceId is not null;
+
+        // Until the user confirms the series' values in Edit Series, chapters that disagree (two publishers, two writers) are flagged rather than silently decided
+        // (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md D7). In memory only: the chapters are already loaded.
+        NeedsReview = !IsRemoteSeries && series.CanonicalReviewVersion == 0
+            && Paperbunkr.Data.Metadata.Manga.SeriesCanonicalSeeder.Seed(series, series.Issues).Candidates.Count > 0;
 
         _isLoadingSeries = true;
         _seriesId = seriesId;
@@ -387,13 +517,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         _readingStatusPicker = new ReadingStatusPickerViewModel(seriesId, onChanged: OnReadingStatusPicked);
         OnPropertyChanged(nameof(IDetailHeaderSource.ReadingStatusPicker));
         Band.ReadingStatusPicker = _readingStatusPicker;
-        ReadingModeBadge = series.ReadingMode switch
-        {
-            ReadingMode.RightToLeft or ReadingMode.HorizontalContinuousRightToLeft => "RTL",
-            ReadingMode.TopToBottom or ReadingMode.VerticalContinuous or ReadingMode.HorizontalContinuous => "Vertical",
-            ReadingMode.Webtoon => "Webtoon",
-            _ => "LTR",
-        };
+        ReadingModeBadge = ReadingModeCatalog.BadgeFor(series.ReadingMode);
         Summary = string.IsNullOrWhiteSpace(series.Summary) ? "No summary available." : series.Summary;
         SummaryAttribution = AttributionLabel(series, MetadataProposalField.Summary);
         IsSynopsisExpanded = false;
@@ -430,9 +554,21 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
                 ? $"Re-read — {continueIssue.EffectiveNumber()}"
                 : $"Continue — {continueIssue.EffectiveNumber()}";
 
-        _allChapters = series.Issues.OrderByNumber().Select(ToChapterRow).ToList();
+        var enabledVirtualTags = context.VirtualTagDefinitions.Where(t => t.IsEnabled).OrderBy(t => t.SortOrder).ToList();
+        _virtualTags = enabledVirtualTags;
+        _allChapters = series.Issues.OrderByNumber().Select(issue => ToChapterRow(issue, series, enabledVirtualTags)).ToList();
         ChapterFilter = ChapterListFilter.All;
-        RenderChapters();
+
+        // A series with its own detail layout shows it; every other series shows the manga default.
+        bool ownLayout = ListLayouts is not null && ListLayouts.HasAssignment(ListLayoutsViewModel.SeriesKey(seriesId));
+        if (ListLayouts is not null && (ownLayout || _seriesHasOwnLayout))
+        {
+            ReapplyLayoutForSeries();
+        }
+        else
+        {
+            RenderChapters();
+        }
         MangaActiveTab = "chapters";
 
         ChapterCountBadge = _allChapters.Count == 1 ? "1 chapter" : $"{_allChapters.Count} chapters";
@@ -444,7 +580,6 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
             _ => $"{volumeCount} volumes",
         };
 
-        var enabledVirtualTags = context.VirtualTagDefinitions.Where(t => t.IsEnabled).OrderBy(t => t.SortOrder).ToList();
         Tabs.LoadSeries(series);
         Band.LoadSeries(series, enabledVirtualTags);
         Band.StatusText = StatusLabel;
@@ -455,7 +590,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         var markIssue = series.Issues.FirstOrDefault(i => i.Id == _coverIssueId) ?? series.Issues.FirstOrDefault();
         Band.FormatText = markIssue?.Format ?? string.Empty;
         Band.AgeRatingText = markIssue?.AgeRating ?? string.Empty;
-        Band.SetSpecialMarks(markIssue);
+        Band.SetSpecialMarks(markIssue, SelectedContentTypeText);
 
         // Series-aggregate fields (Part 4) - publisher/format/rating/language pulled across every
         // chapter, not off the cover one.
@@ -483,15 +618,17 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
 
         _isLoadingSeries = false;
         OnPropertyChanged(nameof(CanEdit));
+        EditSeriesCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(Actions));
     }
 
-    private static ChapterRowSample ToChapterRow(Issue issue)
+    private static ChapterRowSample ToChapterRow(Issue issue, Series series, IReadOnlyList<VirtualTagDefinition> virtualTags)
     {
         var date = issue.ReleasedTime ?? issue.AddedTime;
         bool read = issue.HasBeenRead();
         return new ChapterRowSample
         {
+            Row = IssueListRow.FromIssue(issue, series, isSelected: null, virtualTags),
             Id = issue.Id,
             DisplayNumber = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
             NumberSortKey = issue.NumberSortKey(),
@@ -518,25 +655,89 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
             _ => _allChapters,
         };
 
-        var sorted = ChapterSortField == ChapterSortField.Date
-            ? (ChapterSortDirection == SortDirection.Ascending ? filtered.OrderBy(c => c.Date) : filtered.OrderByDescending(c => c.Date))
-            : (ChapterSortDirection == SortDirection.Ascending ? filtered.OrderBy(c => c.NumberSortKey) : filtered.OrderByDescending(c => c.NumberSortKey));
+        var list = filtered.ToList();
+        if (list.All(c => c.Row is not null))
+        {
+            var comparer = DetailLayoutRendering.Comparer(ChapterSortBy, _detailLayoutState.ChapterSortVirtualTagId, ChapterSortDirection, _virtualTags);
+            list.Sort((a, b) => comparer(a.Row!, b.Row!));
+        }
+        else
+        {
+            list = (ChapterSortDirection == SortDirection.Ascending ? list.OrderBy(c => c.NumberSortKey) : list.OrderByDescending(c => c.NumberSortKey)).ToList();
+        }
 
         Chapters.Clear();
-        foreach (var row in sorted)
+        foreach (var row in list)
         {
+            ConfigureChapterCells(row);
             Chapters.Add(row);
+        }
+
+        ChapterHeaderCells.Clear();
+        foreach (var cell in DetailLayoutRendering.HeaderCells(_detailLayoutState.ChapterColumns ?? DetailListLayoutState.MangaDefault.ChapterColumns!, manga: true))
+        {
+            ChapterHeaderCells.Add(cell);
         }
 
         RebuildChapterGroups();
         OnPropertyChanged(nameof(HasChapters));
     }
 
-    /// <summary>Groups the currently-visible <see cref="Chapters"/> by volume, "No volume" bucket last,
-    /// preserving <see cref="RenderChapters"/>' sort within each group.</summary>
+    private void ConfigureChapterCells(ChapterRowSample row)
+    {
+        row.ListCells.Clear();
+        var columns = _detailLayoutState.ChapterColumns ?? DetailListLayoutState.MangaDefault.ChapterColumns!;
+        row.ShowProgressColumn = columns.Any(c => c.Field == DetailColumnKeys.Progress && c.Visible);
+        foreach (var column in columns)
+        {
+            if (!column.Visible) continue;
+            if (DetailLayoutRendering.CatalogCell(column, row.Row, manga: true) is { } catalogCell)
+            {
+                row.ListCells.Add(catalogCell);
+                continue;
+            }
+
+            string text = column.Field switch
+            {
+                DetailColumnKeys.NewStatus => row.IsNew ? "NEW" : string.Empty,
+                DetailColumnKeys.ReadStatus => row.ShowReadGlyph ? "Read" : row.IsInProgress ? $"{row.ReadPercentage:0}%" : string.Empty,
+                DetailColumnKeys.Bookmark => row.HasBookmark ? "★" : string.Empty,
+                DetailColumnKeys.Missing => row.IsMissing ? "Missing" : string.Empty,
+                _ => row.IsInProgress ? $"{row.ReadPercentage:0}%" : string.Empty,
+            };
+            var kind = DetailColumnKeys.IsStatus(column.Field) ? DetailListFieldKind.Status : DetailListFieldKind.Text;
+            row.ListCells.Add(new DetailListCell(column.Field, text, column.Width, kind, DetailColumnKeys.DisplayName(column.Field, manga: true)));
+        }
+    }
+
+    /// <summary>
+    /// Groups the currently-visible <see cref="Chapters"/>, preserving <see cref="RenderChapters"/>' sort within each group: by volume
+    /// (the default, "No volume" last), not at all, or by a Library group field.
+    /// </summary>
     private void RebuildChapterGroups()
     {
         ChapterGroups.Clear();
+        string groupBy = _detailLayoutState.ChapterGroupBy;
+        if (groupBy == DetailGrouping.None)
+        {
+            if (Chapters.Count > 0)
+            {
+                ChapterGroups.Add(new ChapterVolumeGroup { VolumeLabel = "All chapters", Chapters = Chapters.ToList() });
+            }
+
+            return;
+        }
+
+        if (DetailLayoutRendering.Grouping(groupBy, _virtualTags) is { } grouping && Chapters.All(c => c.Row is not null))
+        {
+            foreach (var bucket in Chapters.GroupBy(c => grouping.GroupKey(c.Row!)).OrderBy(g => g.Key, Comparer<string>.Create(grouping.GroupOrder)))
+            {
+                ChapterGroups.Add(new ChapterVolumeGroup { VolumeLabel = bucket.Key, Chapters = bucket.ToList() });
+            }
+
+            return;
+        }
+
         var ordered = Chapters
             .GroupBy(c => string.IsNullOrWhiteSpace(c.Volume) ? null : c.Volume!.Trim())
             .OrderBy(g => g.Key is null)
@@ -610,16 +811,17 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         }
     }
 
-    /// <summary>Header action-row Edit button - targets the same issue Continue Reading would open
-    /// (docs/superpowers/specs/2026-08-23-manga-detail-screen-design.md), since the Chapters tab has
-    /// no tile-multi-select the way the Western Issues tab does. Any other specific chapter is
-    /// reachable via <see cref="EditChapterProperties"/>'s per-row context menu.</summary>
-    [RelayCommand]
-    private void Edit()
+    /// <summary>
+    /// Header action-row Edit Series button: opens the series editor (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md D11). It replaced the old "Edit",
+    /// which opened the properties of whichever chapter Continue would open and so edited one chapter while looking like an edit of the series. Continue is unaffected.
+    /// A specific chapter is edited from its row's context menu (<see cref="EditChapterProperties"/>).
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanEdit))]
+    private void EditSeries()
     {
-        if (_continueIssueId is int issueId)
+        if (_seriesId is int seriesId)
         {
-            _goToProperties(issueId);
+            _editSeries?.Invoke(seriesId);
         }
     }
 
@@ -722,7 +924,12 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     }
 
     [RelayCommand]
-    private Task ChangeSeriesCoverAsync() => _coverIssueId is int issueId ? ChangeCoverAsync(issueId) : Task.CompletedTask;
+    private async Task ChangeSeriesCoverAsync()
+    {
+        if (_seriesId is not int seriesId) return;
+        string? path = await new FilePickerService().PickImageFileAsync("Choose Series Cover Image");
+        if (path is not null && new SeriesCoverService().TrySetCustomCover(seriesId, path)) ReloadCurrentSeries();
+    }
 
     [RelayCommand]
     private async Task ChangeChapterCoverAsync(ChapterRowSample? row)
@@ -772,6 +979,21 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         }
 
         OnPropertyChanged(nameof(HasExternalLinks));
+    }
+
+    /// <summary>Queues every chapter of the series that is marked as owing a write to its file; the queue applies the user's write-back settings.</summary>
+    private void EnqueueDirtyChapters(int seriesId)
+    {
+        if (_enqueueMetadataWriteBack is null)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        foreach (int issueId in context.Issues.AsNoTracking().Where(i => i.SeriesId == seriesId && i.EmbeddedDirty).Select(i => i.Id).ToList())
+        {
+            _enqueueMetadataWriteBack(issueId);
+        }
     }
 
     /// <summary>Re-runs <see cref="LoadSeries"/> for whichever series is currently loaded - same

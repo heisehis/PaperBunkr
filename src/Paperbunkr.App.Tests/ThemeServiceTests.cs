@@ -94,7 +94,11 @@ public class ThemeServiceTests : IDisposable
 
         var themes = service.GetAvailableThemes();
 
-        Assert.Equal(10, themes.Count);
+        // Ten version 1 built-ins (one look each) plus the ten v2 families, which list one entry per variant: 18 between them.
+        Assert.Equal(10, themes.Count(t => t.IsLegacy));
+        Assert.Equal(28, themes.Count);
+        Assert.Equal(20, themes.Select(t => t.FamilyKey).Distinct().Count());
+        Assert.All(themes, t => Assert.True(t.IsBuiltIn));
         Assert.Contains(themes, t => t.Key == ThemeService.DefaultThemeKey && t.IsActive);
         Assert.Contains(themes, t => t.Key == "windows_11");
         Assert.Contains(themes, t => t.Key == "cool_technical");
@@ -152,6 +156,32 @@ public class ThemeServiceTests : IDisposable
         service.ApplyTheme(key);
 
         Assert.Equal(key, service.GetAvailableThemes().Single(t => t.IsActive).Key);
+    }
+
+    /// <summary>
+    /// Weighted tag chips (DetailBand) draw text on the accent fill and accent strokes on the band's surface. They used badge text and the
+    /// raw accent, which vanished on several themes (dark brown on Vintage Paperback's dark red); the tokens they use now must read everywhere.
+    /// </summary>
+    [Fact]
+    public void ApplyTheme_EveryBuiltIn_GivesWeightedTagChipsReadableColours()
+    {
+        var service = CreateService();
+        var app = Application.Current!;
+        Avalonia.Media.Color Resource(string key) => app.TryGetResource(key, null, out object? value) && value is Avalonia.Media.Color color
+            ? color
+            : throw new Xunit.Sdk.XunitException($"{key} is missing");
+
+        foreach (string key in service.GetAvailableThemes().Select(t => t.Key).ToList())
+        {
+            service.ApplyTheme(key);
+
+            var accent = Resource("PbAccentColor");
+            Assert.True(Paperbunkr.App.Theming.ThemeColorMath.ContrastRatio(Resource("PbOnAccentColor"), accent) >= 3.0, $"{key}: text on a Core chip");
+            Assert.True(Paperbunkr.App.Theming.ThemeColorMath.ContrastRatio(Resource("PbAccentTextColor"), Resource("PbSurface2Color")) >= 3.0, $"{key}: Defining chip and weight dot");
+            Assert.True(app.TryGetResource("PbAccentHoverBrush", null, out _), $"{key}: Core chip hover");
+        }
+
+        service.ApplyTheme(ThemeService.DefaultThemeKey);
     }
 
     // --- Era colours (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md, "Colour tokens") ---

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.ObjectModel;
 
 namespace Paperbunkr.App.Models;
 
@@ -11,6 +12,11 @@ namespace Paperbunkr.App.Models;
 /// </summary>
 public sealed class ChapterRowSample
 {
+    public ObservableCollection<DetailListCell> ListCells { get; } = new();
+
+    /// <summary>The Library's own row for this chapter (docs/superpowers/specs/2026-10-19-detail-layouts-v2-design.md), so its columns, sort and grouping use the Library's field catalog. Null in tests that build rows by hand.</summary>
+    public IssueListRow? Row { get; init; }
+
     public int Id { get; init; }
     public required string DisplayNumber { get; init; }
     public float? NumberSortKey { get; init; }
@@ -25,6 +31,8 @@ public sealed class ChapterRowSample
     public double ReadPercentage { get; init; }
     public int BookmarkCount { get; init; }
     public bool IsMissing { get; init; }
+    public bool ShowProgressColumn { get; set; } = true;
+    public bool ShowProgressIndicator => ShowProgressColumn && IsInProgress;
     public string? ScanInformation { get; init; }
     public DateTime? Date { get; init; }
 
@@ -56,7 +64,7 @@ public enum ChapterListFilter
     Missing,
 }
 
-/// <summary>Session-only sort field for the Chapters tab - see <see cref="ChapterListFilter"/>'s own doc comment.</summary>
+/// <summary>Sort field for the Chapters tab. The active filter remains session-only; the saved Manga detail layout owns this sort.</summary>
 public enum ChapterSortField
 {
     Number,

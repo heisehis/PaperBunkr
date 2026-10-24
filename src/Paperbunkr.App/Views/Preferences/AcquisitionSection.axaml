@@ -15,11 +15,11 @@
          shell as Automation: one ScrollViewer, SettingsRow rows, Pb* tokens only (no hardcoded colors). Groups: Prowlarr, ComicVine,
          Searching, qBittorrent, Import, Automatic downloads. One view model, one Save; the status line repeats beside each action. -->
     <ScrollViewer>
-        <StackPanel Margin="28,20,28,40" Spacing="20">
+        <StackPanel Margin="24,20,24,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="Acquisition" />
 
             <TextBlock Text="Find missing and upcoming comics through your own Prowlarr and download them with your own qBittorrent. You approve each release unless you turn on automatic downloads. Paperbunkr ships with no indexers — you bring your own."
-                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+                       FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
 
             <pref:SettingsRow Icon="Search" Title="Look for comics automatically"
                                Description="While Paperbunkr is open, check your wanted issues on the interval below. Every check shows in the Activity Center. Off by default.">
@@ -35,11 +35,11 @@
                 <pref:SettingsRow Icon="Link" Title="Prowlarr, qBittorrent and ComicVine"
                                    Description="Their addresses, keys and passwords are all managed under Connections, with everything else you connect to.">
                     <pref:SettingsRow.SettingsContent>
-                        <Button Classes="headerAction ghost" Content="Open Connections" Command="{Binding OpenConnectionsCommand}"
+                        <Button Classes="ghost" Content="Open Connections" Command="{Binding OpenConnectionsCommand}"
                                 AutomationProperties.AutomationId="AcquisitionOpenConnectionsButton" />
                     </pref:SettingsRow.SettingsContent>
                 </pref:SettingsRow>
-                <TextBlock Text="{Binding ConnectionsSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                <TextBlock Text="{Binding ConnectionsSummary}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
                            MaxWidth="640" HorizontalAlignment="Left" Margin="0,4,0,0" AutomationProperties.LiveSetting="Polite" />
             </StackPanel>
 
@@ -80,13 +80,13 @@
 
                 <StackPanel Spacing="4" Margin="0,4,0,10">
                     <TextBlock Text="Preferred release groups" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
-                    <TextBox Text="{Binding PreferredReleaseGroups}" Watermark="Comma-separated, e.g. Zone-Empire, Minutemen" Width="520" MaxWidth="520" HorizontalAlignment="Left"
+                    <TextBox Text="{Binding PreferredReleaseGroups}" PlaceholderText="Comma-separated, e.g. Zone-Empire, Minutemen" Width="520" MaxWidth="520" HorizontalAlignment="Left"
                              AutomationProperties.Name="Preferred release groups" />
                 </StackPanel>
 
                 <StackPanel Spacing="4" Margin="0,0,0,10">
                     <TextBlock Text="Ignored words" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
-                    <TextBox Text="{Binding IgnoredWords}" Watermark="Comma-separated; a release whose title has any of them is skipped" Width="520" MaxWidth="520" HorizontalAlignment="Left"
+                    <TextBox Text="{Binding IgnoredWords}" PlaceholderText="Comma-separated; a release whose title has any of them is skipped" Width="520" MaxWidth="520" HorizontalAlignment="Left"
                              AutomationProperties.Name="Ignored words" />
                 </StackPanel>
 
@@ -97,25 +97,25 @@
             <StackPanel Tag="acquisition.import" Spacing="10">
                 <TextBlock Classes="settingsGroupCaption" Text="IMPORT" />
                 <TextBlock Text="Finished downloads are copied (your seeding copy is never touched), repacked to .cbz if needed, tagged, named from the template and added to your library."
-                           FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left" />
+                           FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left" />
 
                 <StackPanel Spacing="4">
                     <TextBlock Text="Destination library folder" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
                     <controls:SuggestBox Text="{Binding DestinationFolderPath}" Suggestions="{Binding DestinationChoices}" Width="520" HorizontalAlignment="Left"
                                          AutomationProperties.Name="Destination library folder" AutomationProperties.AutomationId="AcquisitionDestination" />
                     <TextBlock Text="Pick one of your library folders. Imports stay pending until one is chosen."
-                               FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                               FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                 </StackPanel>
 
                 <StackPanel Spacing="4">
                     <TextBlock Text="Naming template" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
                     <TextBox Text="{Binding RenameTemplate}" Width="520" HorizontalAlignment="Left" AutomationProperties.Name="Naming template"
                              AutomationProperties.AutomationId="AcquisitionTemplate" />
-                    <TextBlock Text="{Binding RenameTemplatePreview}" FontSize="11.5" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left"
+                    <TextBlock Text="{Binding RenameTemplatePreview}" FontSize="12" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left"
                                Foreground="{DynamicResource PbTextMutedBrush}" AutomationProperties.LiveSetting="Polite" />
-                    <TextBlock FontSize="11.5" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left" Foreground="{DynamicResource PbTextFaintBrush}"
+                    <TextBlock FontSize="12" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left" Foreground="{DynamicResource PbTextMutedBrush}"
                                Text="Tokens go inside braces and angle brackets, like {&lt;series&gt;}. Any text next to a token inside the same braces goes with it and disappears when the value is empty: {(&lt;volumeyear&gt;)}. A digit after a name zero-pads it: {&lt;number3&gt;} gives 007. Common tokens: series, title, volume, volumeyear, number, year, month#, Day, publisher, format, filename. / or \ starts a folder."/>
-                    <TextBlock IsVisible="{Binding HasTemplateUpgradeNotice}" Text="{Binding TemplateUpgradeNotice}" FontSize="11.5" TextWrapping="Wrap" MaxWidth="560"
+                    <TextBlock IsVisible="{Binding HasTemplateUpgradeNotice}" Text="{Binding TemplateUpgradeNotice}" FontSize="12" TextWrapping="Wrap" MaxWidth="560"
                                HorizontalAlignment="Left" Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
                 </StackPanel>
 
@@ -160,13 +160,13 @@
             </StackPanel>
 
             <StackPanel Spacing="8">
-                <Button Classes="headerAction primary" Command="{Binding SaveCommand}" HorizontalAlignment="Left">
+                <Button Classes="primary" Command="{Binding SaveCommand}" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <fi:SymbolIcon Symbol="Save" FontSize="{StaticResource PbIconSizeXs}" />
                         <TextBlock Text="Save" />
                     </StackPanel>
                 </Button>
-                <TextBlock Text="Changes apply when you press Save." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                <TextBlock Text="Changes apply when you press Save." FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                 <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasErrorStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"
                            Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
                 <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasInfoStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"

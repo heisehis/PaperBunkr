@@ -34,11 +34,11 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="Margin" Value="0,0,0,2" />
             <Setter Property="Padding" Value="12,0,0,0" />
-            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -61,12 +61,15 @@
 
         <!-- Rail expand/collapse (docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-
              design.md) - width transition uses the same PbMotionFast/PbMotionEase tokens as every
-             Phase 1 primitive. Label fades in once there's room for it. -->
+             Phase 1 primitive. Label fades in once there's room for it.
+             motion: reflow - Width, not a RenderTransform, on purpose (2026-10-20 UI polish SP5 Q1): the rail pushes the content aside, which
+             needs layout anyway, and the tree is small enough that a layout pass per frame is cheap. Hover move token (Motion v2): it opens on
+             hover, and Reduced zeroes it so the rail snaps instead of travelling. -->
         <Style Selector="Border.navRail">
             <Setter Property="Width" Value="64" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Width" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                    <DoubleTransition Property="Width" Duration="{DynamicResource PbMotionHoverMove}" Easing="{StaticResource PbMotionMoveEase}" />
                 </Transitions>
             </Setter>
         </Style>
@@ -82,12 +85,13 @@
         <!-- Contextual sidebar slide (docs/superpowers/specs/2026-09-07-chrome-content-motion-
              polish-design.md item 3) - same Width-transition mechanism as Border.navRail above,
              PbMotionStandard per App.axaml:124's own documented (previously unimplemented) intent
-             for this specific surface. -->
+             for this specific surface. motion: reflow - Width on purpose too (SP5 Q1): the sidebar pushes the content aside. Reveal move
+             token (Motion v2), so Reduced snaps it. -->
         <Style Selector="Border.contextualSidebar">
             <Setter Property="Width" Value="0" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Width" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+                    <DoubleTransition Property="Width" Duration="{DynamicResource PbMotionRevealMove}" Easing="{StaticResource PbMotionMoveEase}" />
                 </Transitions>
             </Setter>
         </Style>
@@ -97,19 +101,7 @@
 
         <!-- Sidebar nav row -->
         <Style Selector="Button.sideItemButton">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="Padding" Value="{DynamicResource PbSidebarItemPadding}" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.sideItemButton:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-        </Style>
-        <Style Selector="Button.sideItemButton.active /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
         </Style>
         <!-- Real bug found 2026-09-03: unlike Button.card (LibraryScreen.axaml's own :focus-within
              glow ring), sideItemButton had no focus-visible style at all - keyboard focus genuinely
@@ -117,10 +109,6 @@
              OnSidebarKeyDown's own diagnostic log), but with only :pointerover/.active (a
              ViewModel-bound selection state, not focus) styled, arrow-key navigation looked
              completely inert since nothing ever rendered differently. -->
-        <Style Selector="Button.sideItemButton:focus-within /template/ ContentPresenter">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-        </Style>
         <Style Selector="Button.sideItemButton.active TextBlock.sideItemLabel">
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
@@ -130,34 +118,15 @@
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="LetterSpacing" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
 
         <Style Selector="TextBlock.count">
             <Setter Property="FontFamily" Value="Consolas,monospace" />
-            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontSize" Value="10" />
         </Style>
 
         <!-- Discard-confirm banner buttons, styled to match IssuePropertiesScreen's headerAction ghost/primary pair -->
-        <Style Selector="Button.discardConfirm">
-            <Setter Property="Padding" Value="14,8" />
-            <Setter Property="CornerRadius" Value="5" />
-            <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.discardConfirm.ghost">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        </Style>
-        <Style Selector="Button.discardConfirm.primary">
-            <Setter Property="Background" Value="#D96C6C" />
-            <Setter Property="BorderBrush" Value="#D96C6C" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="#241505" />
-        </Style>
     </Window.Styles>
 
     <Grid>
@@ -201,7 +170,7 @@
                             Command="{Binding GoHomeCommand}" ToolTip.Tip="Home"
                             AutomationProperties.AutomationId="HomeRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Home" IconVariant="{Binding IsHome, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
+                            <controls:ThemedIcon IconName="navigation.home" IconVariant="{Binding IsHome, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Home" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -209,7 +178,7 @@
                             Command="{Binding GoInsightsCommand}" ToolTip.Tip="Insights"
                             AutomationProperties.AutomationId="InsightsRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="DataHistogram" IconVariant="{Binding IsInsights, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
+                            <controls:ThemedIcon IconName="navigation.insights" IconVariant="{Binding IsInsights, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Insights" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -217,7 +186,7 @@
                             Command="{Binding GoLibraryCommand}" ToolTip.Tip="Library"
                             AutomationProperties.AutomationId="LibraryRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Library" IconVariant="{Binding IsLibrary, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
+                            <controls:ThemedIcon IconName="navigation.library" IconVariant="{Binding IsLibrary, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Library" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -225,21 +194,21 @@
                             Command="{Binding GoBooksCommand}" ToolTip.Tip="Books"
                             AutomationProperties.AutomationId="BooksRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="BookOpen" IconVariant="{Binding IsBooks, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
+                            <controls:ThemedIcon IconName="navigation.books" IconVariant="{Binding IsBooks, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Books" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
                     <Button x:Name="SmartListsRailButton" Classes="rail" Classes.active="{Binding IsSmart}"
                             Command="{Binding GoSmartCommand}" ToolTip.Tip="Smart Lists">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Filter" IconVariant="{Binding IsSmart, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
+                            <controls:ThemedIcon IconName="navigation.smart" IconVariant="{Binding IsSmart, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Smart Lists" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
                     <Button x:Name="ReadingListsRailButton" Classes="rail" Classes.active="{Binding IsReading}"
                             Command="{Binding GoReadingCommand}" ToolTip.Tip="Reading Lists">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Bookmark" IconVariant="{Binding IsReading, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
+                            <controls:ThemedIcon IconName="navigation.reading" IconVariant="{Binding IsReading, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Reading Lists" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -247,7 +216,7 @@
                             Command="{Binding GoEventsCommand}" ToolTip.Tip="Continuity"
                             AutomationProperties.AutomationId="EventsRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Planet" IconVariant="{Binding IsEvents, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
+                            <controls:ThemedIcon IconName="navigation.continuity" IconVariant="{Binding IsEvents, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Continuity" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -256,7 +225,7 @@
                             AutomationProperties.AutomationId="WantedRailButton"
                             AutomationProperties.Name="Wanted">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Search" IconVariant="{Binding IsWanted, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
+                            <controls:ThemedIcon IconName="navigation.wanted" IconVariant="{Binding IsWanted, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Wanted" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -273,7 +242,7 @@
                             Command="{Binding GoPreferencesCommand}" ToolTip.Tip="Preferences"
                             AutomationProperties.AutomationId="PreferencesRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Settings" IconVariant="{Binding IsPreferences, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
+                            <controls:ThemedIcon IconName="navigation.preferences" IconVariant="{Binding IsPreferences, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Preferences" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -281,7 +250,7 @@
                             Command="{Binding ToggleNavRailPinCommand}"
                             ToolTip.Tip="Pin nav rail open" IsVisible="{Binding IsNavRailExpanded}">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Pin" IconVariant="{Binding NavRailPinned, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
+                            <controls:ThemedIcon IconName="navigation.pin" IconVariant="{Binding NavRailPinned, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Pin" IsVisible="{Binding !NavRailPinned}" />
                             <TextBlock Classes="railLabel" Text="Unpin" IsVisible="{Binding NavRailPinned}" />
                         </StackPanel>
@@ -308,8 +277,8 @@
 
                     <!-- Library sidebar content -->
                     <StackPanel IsVisible="{Binding IsLibrary}" Spacing="2">
-                        <TextBlock Text="Library" FontSize="16" FontWeight="Bold"
-                                   Foreground="{DynamicResource PbTextBrush}" Margin="8,0,8,14" />
+                        <TextBlock Classes="pbTextHeading" Text="Library"
+                                    Margin="8,0,8,14" />
 
                         <Button Classes="sideItemButton" Classes.active="{Binding Library.IsAllSeriesActive}"
                                 Command="{Binding Library.SelectAllSeriesCommand}"
@@ -321,7 +290,7 @@
                                 <TextBlock Grid.Column="1" Classes="sideItemLabel" Text="All Series" Margin="9,0,0,0" FontSize="13"
                                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="2" Classes="count" Text="{Binding Library.AllSeriesCount}"
-                                           Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                             </Grid>
                         </Button>
 
@@ -361,8 +330,8 @@
 
                             <Grid ColumnDefinitions="*,Auto" Margin="8,12,6,6">
                                 <TextBlock Grid.Column="0" Classes="sideHeading" Text="COLLECTIONS" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6"
-                                        Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                <Button Classes="iconButton sm" AutomationProperties.Name="New collection" Grid.Column="1"
+                                       
                                         Command="{Binding Library.BeginCreateCollectionCommand}" ToolTip.Tip="New collection"
                                         IsVisible="{Binding !Library.IsCreatingCollection}">
                                     <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
@@ -370,27 +339,27 @@
                             </Grid>
 
                             <Grid ColumnDefinitions="*,Auto,Auto" Margin="8,0,6,8" IsVisible="{Binding Library.IsCreatingCollection}">
-                                <TextBox Grid.Column="0" Text="{Binding Library.NewCollectionName}" Watermark="Collection name" FontSize="12.5"
+                                <TextBox Grid.Column="0" Text="{Binding Library.NewCollectionName}" PlaceholderText="Collection name" FontSize="13"
                                          AutomationProperties.AutomationId="NewCollectionNameBox">
                                     <TextBox.KeyBindings>
                                         <KeyBinding Gesture="Enter" Command="{Binding Library.CommitCreateCollectionCommand}" />
                                         <KeyBinding Gesture="Escape" Command="{Binding Library.CancelCreateCollectionCommand}" />
                                     </TextBox.KeyBindings>
                                 </TextBox>
-                                <Button Grid.Column="1" Classes="headerAction ghost" Padding="6" Command="{Binding Library.CommitCreateCollectionCommand}">
+                                <Button AutomationProperties.Name="Create collection" Grid.Column="1" Classes="iconButton" Command="{Binding Library.CommitCreateCollectionCommand}">
                                     <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" />
                                 </Button>
-                                <Button Grid.Column="2" Classes="headerAction ghost" Padding="6" Command="{Binding Library.CancelCreateCollectionCommand}">
+                                <Button AutomationProperties.Name="Cancel new collection" Grid.Column="2" Classes="iconButton" Command="{Binding Library.CancelCreateCollectionCommand}">
                                     <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                                 </Button>
                             </Grid>
 
-                            <TextBlock Text="No collections yet." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                            <TextBlock Text="No collections yet." FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                        Margin="8,0,8,4" IsVisible="{Binding !Library.HasCollections}" />
                             <ItemsControl x:Name="LibraryCollections" ItemsSource="{Binding Library.Collections}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:CollectionSummary">
-                                        <Border Classes="colRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                        <Border Classes="colRow" Classes.active="{Binding IsActive}" CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="3,0,0,0" Margin="0,1">
                                             <Grid ColumnDefinitions="Auto,*">
                                                 <Panel Grid.Column="0" Width="14" Height="8" Margin="9,0,0,0" VerticalAlignment="Center">
                                                     <Ellipse Width="8" Height="8" HorizontalAlignment="Left"
@@ -399,7 +368,7 @@
                                                                    Foreground="{DynamicResource PbTextFaintBrush}"
                                                                    IsVisible="{Binding IsSmart}" ToolTip.Tip="Has a rule-based membership slot" />
                                                 </Panel>
-                                                <Button Grid.Column="1" Classes="sideItemButton" Padding="8,7" HorizontalContentAlignment="Stretch"
+                                                <Button Grid.Column="1" Classes="sideItemButton" HorizontalContentAlignment="Stretch"
                                                         Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.SelectCollectionCommand}"
                                                         CommandParameter="{Binding}">
                                                     <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Stretch">
@@ -408,12 +377,12 @@
                                                                    Foreground="{DynamicResource PbTextMutedBrush}" />
                                                         <TextBlock Grid.Column="1" Classes="count colCount" Text="{Binding Count}" Margin="8,0,0,0"
                                                                    HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                                   Foreground="{DynamicResource PbTextMutedBrush}" />
                                                     </Grid>
                                                 </Button>
                                                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"
                                                             VerticalAlignment="Center" Margin="0,0,4,0">
-                                                    <Button Classes="headerAction ghost colAction" Padding="6" ToolTip.Tip="More"
+                                                    <Button Classes="ghost colAction" ToolTip.Tip="More"
                                                             AutomationProperties.Name="{Binding Name, StringFormat='More actions for {0}'}">
                                                         <fi:SymbolIcon Symbol="MoreVertical" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" />
                                                         <Button.Flyout>
@@ -433,7 +402,7 @@
                                                             </MenuFlyout>
                                                         </Button.Flyout>
                                                     </Button>
-                                                    <Button Classes="headerAction ghost colAction" Padding="6" Margin="2,0,0,0"
+                                                    <Button Classes="iconButton colAction" Margin="2,0,0,0"
                                                             Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}"
                                                             AutomationProperties.Name="{Binding DeleteConfirm.Label}">
                                                         <Panel>
@@ -468,14 +437,14 @@
                         </StackPanel.Styles>
 
                         <Grid ColumnDefinitions="*,Auto,Auto" Margin="8,0,6,14">
-                            <TextBlock Grid.Column="0" Text="Smart Lists" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                            <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6" Margin="0,0,6,0"
-                                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                            <TextBlock Grid.Column="0" Text="Smart Lists" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                            <Button Classes="iconButton sm" AutomationProperties.Name="Import a ComicRack smart list (.cbl)" Grid.Column="1" Margin="0,0,6,0"
+                                   
                                     Command="{Binding Smart.ImportComicRackListCommand}" ToolTip.Tip="Import a ComicRack smart list (.cbl)">
                                 <fi:SymbolIcon Symbol="ArrowImport" FontSize="{StaticResource PbIconSizeXs}" />
                             </Button>
-                            <Button Grid.Column="2" Width="24" Height="24" Padding="0" CornerRadius="6"
-                                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                            <Button Classes="iconButton sm" AutomationProperties.Name="New Smart List" Grid.Column="2"
+                                   
                                     Command="{Binding Smart.OpenGalleryCommand}" ToolTip.Tip="New Smart List">
                                 <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
                             </Button>
@@ -484,8 +453,8 @@
                         <ItemsControl x:Name="BuiltInSmartLists" ItemsSource="{Binding Smart.BuiltInLists}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SmartListSummary">
-                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
-                                        <Button Classes="sideItemButton" Padding="11,7"
+                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="3,0,0,0" Margin="0,1">
+                                        <Button Classes="sideItemButton"
                                                 Command="{Binding #BuiltInSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
                                                 CommandParameter="{Binding}">
                                             <Grid ColumnDefinitions="*,Auto">
@@ -503,9 +472,9 @@
                         <ItemsControl x:Name="CustomSmartLists" ItemsSource="{Binding Smart.CustomLists}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SmartListSummary">
-                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="3,0,0,0" Margin="0,1">
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <Button Grid.Column="0" Classes="sideItemButton" Padding="11,7"
+                                            <Button Grid.Column="0" Classes="sideItemButton"
                                                     Command="{Binding #CustomSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
                                                     CommandParameter="{Binding}">
                                                 <Grid ColumnDefinitions="*,Auto">
@@ -513,7 +482,7 @@
                                                     <Border Grid.Column="1" Classes="countPill"><TextBlock Classes="count" Text="{Binding MatchCount}" /></Border>
                                                 </Grid>
                                             </Button>
-                                            <Button Grid.Column="1" Classes="headerAction ghost smDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                            <Button AutomationProperties.Name="{Binding DeleteConfirm.Label}" Grid.Column="1" Classes="iconButton smDelete" Margin="2,0,4,0" VerticalAlignment="Center"
                                                     Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                 <Panel>
                                                     <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
@@ -527,10 +496,9 @@
                         </ItemsControl>
 
                         <Button Classes="sideItemButton" Command="{Binding Smart.ToggleMaintenanceCommand}"
-                                Padding="8,7" HorizontalContentAlignment="Left">
+                                HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="ArrowDown" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding Smart.IsMaintenanceExpanded}" />
-                                <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding !Smart.IsMaintenanceExpanded}" />
+                                <fi:SymbolIcon Symbol="ChevronRight" Classes="chevronToggle" Classes.open="{Binding Smart.IsMaintenanceExpanded}" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <TextBlock Text="Maintenance" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
                             </StackPanel>
                         </Button>
@@ -539,13 +507,13 @@
                                 <ItemsControl x:Name="MaintenanceSmartLists" ItemsSource="{Binding Smart.MaintenanceLists}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:SmartListSummary">
-                                            <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
-                                                <Button Classes="sideItemButton" Padding="11,7"
+                                            <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="3,0,0,0" Margin="0,1">
+                                                <Button Classes="sideItemButton"
                                                         Command="{Binding #MaintenanceSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
                                                         CommandParameter="{Binding}">
                                                     <Grid ColumnDefinitions="*,Auto">
                                                         <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                        <TextBlock Grid.Column="1" Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                        <Border Grid.Column="1" Classes="countPill"><TextBlock Classes="count" Text="{Binding MatchCount}" /></Border>
                                                     </Grid>
                                                 </Button>
                                             </Border>
@@ -560,8 +528,8 @@
                              split, so each kind is just a flat heading + list like CUSTOM above. -->
                         <Grid ColumnDefinitions="*,Auto" Margin="8,12,6,6">
                             <TextBlock Grid.Column="0" Classes="sideHeading" Text="SERIES" VerticalAlignment="Center" />
-                            <Button Grid.Column="1" Width="20" Height="20" Padding="0" CornerRadius="5"
-                                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                            <Button Classes="iconButton sm" AutomationProperties.Name="New Series Smart List" Grid.Column="1"
+                                   
                                     Command="{Binding Smart.OpenSeriesGalleryCommand}" ToolTip.Tip="New Series Smart List">
                                 <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
                             </Button>
@@ -569,9 +537,9 @@
                         <ItemsControl x:Name="SeriesSmartLists" ItemsSource="{Binding Smart.SeriesLists}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SmartListSummary">
-                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="3,0,0,0" Margin="0,1">
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <Button Grid.Column="0" Classes="sideItemButton" Padding="11,7"
+                                            <Button Grid.Column="0" Classes="sideItemButton"
                                                     Command="{Binding #SeriesSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
                                                     CommandParameter="{Binding}">
                                                 <Grid ColumnDefinitions="*,Auto">
@@ -579,7 +547,7 @@
                                                     <Border Grid.Column="1" Classes="countPill"><TextBlock Classes="count" Text="{Binding MatchCount}" /></Border>
                                                 </Grid>
                                             </Button>
-                                            <Button Grid.Column="1" Classes="headerAction ghost smDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                            <Button AutomationProperties.Name="{Binding DeleteConfirm.Label}" Grid.Column="1" Classes="iconButton smDelete" Margin="2,0,4,0" VerticalAlignment="Center"
                                                     Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                 <Panel>
                                                     <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
@@ -594,8 +562,8 @@
 
                         <Grid ColumnDefinitions="*,Auto" Margin="8,12,6,6">
                             <TextBlock Grid.Column="0" Classes="sideHeading" Text="NOVELS" VerticalAlignment="Center" />
-                            <Button Grid.Column="1" Width="20" Height="20" Padding="0" CornerRadius="5"
-                                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                            <Button Classes="iconButton sm" AutomationProperties.Name="New Novel Smart List" Grid.Column="1"
+                                   
                                     Command="{Binding Smart.OpenNovelGalleryCommand}" ToolTip.Tip="New Novel Smart List">
                                 <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
                             </Button>
@@ -603,9 +571,9 @@
                         <ItemsControl x:Name="NovelSmartLists" ItemsSource="{Binding Smart.NovelLists}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SmartListSummary">
-                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="3,0,0,0" Margin="0,1">
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <Button Grid.Column="0" Classes="sideItemButton" Padding="11,7"
+                                            <Button Grid.Column="0" Classes="sideItemButton"
                                                     Command="{Binding #NovelSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
                                                     CommandParameter="{Binding}">
                                                 <Grid ColumnDefinitions="*,Auto">
@@ -613,7 +581,7 @@
                                                     <Border Grid.Column="1" Classes="countPill"><TextBlock Classes="count" Text="{Binding MatchCount}" /></Border>
                                                 </Grid>
                                             </Button>
-                                            <Button Grid.Column="1" Classes="headerAction ghost smDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                            <Button AutomationProperties.Name="{Binding DeleteConfirm.Label}" Grid.Column="1" Classes="iconButton smDelete" Margin="2,0,4,0" VerticalAlignment="Center"
                                                     Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                 <Panel>
                                                     <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
@@ -634,8 +602,8 @@
                         <ItemsControl x:Name="PluginSmartLists" ItemsSource="{Binding Smart.PluginLists}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SmartListSummary">
-                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
-                                        <Button Classes="sideItemButton" Padding="11,7"
+                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="3,0,0,0" Margin="0,1">
+                                        <Button Classes="sideItemButton"
                                                 Command="{Binding #PluginSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
                                                 CommandParameter="{Binding}">
                                             <TextBlock Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
@@ -659,25 +627,14 @@
                             </Style>
                             <Style Selector="Border.ecRow Button.ecDelete"><Setter Property="Opacity" Value="0" /><Setter Property="IsHitTestVisible" Value="False" /></Style>
                             <Style Selector="Border.ecRow:pointerover Button.ecDelete"><Setter Property="Opacity" Value="1" /><Setter Property="IsHitTestVisible" Value="True" /></Style>
-                            <Style Selector="Button.ecTab">
-                                <Setter Property="Background" Value="Transparent" />
-                                <Setter Property="BorderThickness" Value="0" />
-                                <Setter Property="CornerRadius" Value="4" />
-                                <Setter Property="Padding" Value="8,4" />
+                            <Style Selector="Button.segItem">
                                 <Setter Property="HorizontalAlignment" Value="Stretch" />
-                                <Setter Property="HorizontalContentAlignment" Value="Center" />
-                                <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-                                <Setter Property="Cursor" Value="Hand" />
-                            </Style>
-                            <Style Selector="Button.ecTab.on">
-                                <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-                                <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
                             </Style>
                         </StackPanel.Styles>
 
                         <Grid ColumnDefinitions="*,Auto" Margin="8,0,6,10">
                             <TextBlock Grid.Column="0" Text="Continuity" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                            <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6"
+                            <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="{DynamicResource PbRadiusSm}"
                                     Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                                     ToolTip.Tip="New..." AutomationProperties.Name="New continuity or event">
                                 <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
@@ -692,20 +649,20 @@
 
                         <!-- Continuities | Events -->
                         <Border Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                                CornerRadius="6" Padding="3" Margin="6,0,6,10">
+                                CornerRadius="{DynamicResource PbRadiusSm}" Padding="3" Margin="6,0,6,10">
                             <Grid ColumnDefinitions="*,*" ColumnSpacing="2">
-                                <Button Grid.Column="0" Classes="ecTab" Classes.on="{Binding Events.Sidebar.IsContinuitiesTab}"
+                                <Button Grid.Column="0" Classes="segItem" Classes.on="{Binding Events.Sidebar.IsContinuitiesTab}"
                                         Command="{Binding Events.Sidebar.ShowContinuitiesTabCommand}" AutomationProperties.Name="Continuities">
                                     <StackPanel Orientation="Horizontal" Spacing="5">
-                                        <TextBlock Text="Continuities" FontSize="11.5" />
-                                        <TextBlock Text="{Binding Events.Sidebar.ContinuitiesCountLabel}" FontSize="10.5" Opacity="0.7" VerticalAlignment="Center" />
+                                        <TextBlock Text="Continuities" FontSize="12" />
+                                        <TextBlock Text="{Binding Events.Sidebar.ContinuitiesCountLabel}" FontSize="10" Opacity="0.7" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </Button>
-                                <Button Grid.Column="1" Classes="ecTab" Classes.on="{Binding Events.Sidebar.IsEventsTab}"
+                                <Button Grid.Column="1" Classes="segItem" Classes.on="{Binding Events.Sidebar.IsEventsTab}"
                                         Command="{Binding Events.Sidebar.ShowEventsTabCommand}" AutomationProperties.Name="Events">
                                     <StackPanel Orientation="Horizontal" Spacing="5">
-                                        <TextBlock Text="Events" FontSize="11.5" />
-                                        <TextBlock Text="{Binding Events.Sidebar.EventsCountLabel}" FontSize="10.5" Opacity="0.7" VerticalAlignment="Center" />
+                                        <TextBlock Text="Events" FontSize="12" />
+                                        <TextBlock Text="{Binding Events.Sidebar.EventsCountLabel}" FontSize="10" Opacity="0.7" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </Button>
                             </Grid>
@@ -716,12 +673,13 @@
                             <ItemsControl x:Name="ContinuityList" ItemsSource="{Binding Events.Sidebar.Continuities}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:ContinuitySummary">
-                                        <Border Classes="ecRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                        <Border Classes="ecRow" Classes.active="{Binding IsActive}" CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="3,0,0,0" Margin="0,1">
                                             <Grid ColumnDefinitions="*,Auto">
-                                                <Button Grid.Column="0" Classes="sideItemButton" Padding="9,7"
+                                                <Button Grid.Column="0" Classes="sideItemButton"
                                                         Command="{Binding #ContinuityList.((vm:MainViewModel)DataContext).Events.SelectContinuityCommand}"
                                                         CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}">
-                                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
+                                                    <!-- Fixed 34 px logo column (= MaxMarkWidth): a continuity without an image logo keeps the slot, so every name starts at the same x. -->
+                                                    <Grid ColumnDefinitions="34,*,Auto" ColumnSpacing="7">
                                                         <controls:BrandMark Grid.Column="0" Family="Publisher" Value="{Binding Publisher}" MarkSize="14" MaxMarkWidth="34" ShowText="False" EnsureContrast="True"
                                                                             VerticalAlignment="Center">
                                                             <controls:BrandMark.IsVisible>
@@ -732,13 +690,13 @@
                                                                 </MultiBinding>
                                                             </controls:BrandMark.IsVisible>
                                                         </controls:BrandMark>
-                                                        <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                        <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
                                                                    TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
-                                                        <TextBlock Grid.Column="2" Text="{Binding IssueCountLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                        <TextBlock Grid.Column="2" Text="{Binding IssueCountLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
                                                                    VerticalAlignment="Center" ToolTip.Tip="Issues across its series" />
                                                     </Grid>
                                                 </Button>
-                                                <Button Grid.Column="1" Classes="headerAction ghost ecDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                                <Button Grid.Column="1" Classes="iconButton ecDelete" Margin="2,0,4,0" VerticalAlignment="Center"
                                                         Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}"
                                                         AutomationProperties.Name="{Binding DeleteConfirm.Label}">
                                                     <Panel>
@@ -751,28 +709,35 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <TextBlock Text="No continuities yet" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4"
+                            <TextBlock Text="No continuities yet" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" Margin="11,4"
                                        IsVisible="{Binding Events.Sidebar.HasNoContinuities}" />
                         </StackPanel>
 
                         <!-- Events -->
                         <StackPanel IsVisible="{Binding Events.Sidebar.IsEventsTab}">
+                            <ComboBox Margin="8,4" ItemsSource="{Binding Events.Sidebar.EventTypeFilters}"
+                                      SelectedItem="{Binding Events.Sidebar.SelectedEventTypeFilter}"
+                                      AutomationProperties.Name="Filter Events by type" />
                             <ItemsControl x:Name="StoryEvents" ItemsSource="{Binding Events.Sidebar.Events}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:StoryEventSummary">
-                                        <Border Classes="ecRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                        <Border Classes="ecRow" Classes.active="{Binding IsActive}" CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="3,0,0,0" Margin="0,1">
                                             <Grid ColumnDefinitions="*,Auto">
-                                                <Button Grid.Column="0" Classes="sideItemButton" Padding="11,7"
+                                                <Button Grid.Column="0" Classes="sideItemButton"
                                                         Command="{Binding #StoryEvents.((vm:MainViewModel)DataContext).Events.SelectEventCommand}"
                                                         CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}">
                                                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="7">
-                                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}"
-                                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
-                                                        <TextBlock Grid.Column="1" Text="{Binding MetaLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                        <StackPanel Grid.Column="0" Spacing="1" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                                       TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                                                            <TextBlock Text="{Binding EventTypesLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                                       IsVisible="{Binding HasEventTypes}" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="1" Text="{Binding MetaLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
                                                                    VerticalAlignment="Center" ToolTip.Tip="Start year · issues" />
                                                     </Grid>
                                                 </Button>
-                                                <Button Grid.Column="1" Classes="headerAction ghost ecDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                                <Button Grid.Column="1" Classes="iconButton ecDelete" Margin="2,0,4,0" VerticalAlignment="Center"
                                                         Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}"
                                                         AutomationProperties.Name="{Binding DeleteConfirm.Label}">
                                                     <Panel>
@@ -785,18 +750,18 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <TextBlock Text="No events yet" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4"
+                            <TextBlock Text="No events yet" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" Margin="11,4"
                                        IsVisible="{Binding Events.Sidebar.HasNoEvents}" />
                         </StackPanel>
 
                         <!-- Suggestions & checks -->
                         <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,4" />
-                        <Border Classes="ecRow" Classes.active="{Binding Events.Sidebar.IsSuggestionsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
-                            <Button Classes="sideItemButton" Padding="11,7" Command="{Binding Events.OpenSuggestionsCommand}"
+                        <Border Classes="ecRow" Classes.active="{Binding Events.Sidebar.IsSuggestionsActive}" CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="3,0,0,0" Margin="0,1">
+                            <Button Classes="sideItemButton" Command="{Binding Events.OpenSuggestionsCommand}"
                                     AutomationProperties.Name="Suggestions and checks">
                                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                                     <fi:SymbolIcon Grid.Column="0" Symbol="Lightbulb" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                    <TextBlock Grid.Column="1" Text="Suggestions &amp; checks" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="Suggestions &amp; checks" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                                     <Border Grid.Column="2" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{DynamicResource PbRadiusChip}" Padding="6,0"
                                             IsVisible="{Binding Events.Sidebar.HasSuggestions}" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Events.Sidebar.SuggestionsCountLabel}" FontSize="10" FontWeight="SemiBold"
@@ -833,7 +798,7 @@
 
             <!-- Matrix theme's code-rain background layer (docs/superpowers/specs/2026-09-16-theme-
                  system-design.md § Matrix rain effect) - mounted first (bottom of z-order) so both
-                 TransitioningContentControls below paint over it normally; IsVisible gated to the
+                 RouteHost below paints over it normally; IsVisible gated to the
                  Matrix theme specifically. Screens have no root Background of their own (the window's
                  PbBg shows through), so the rain is visible wherever a screen leaves bare space -
                  gutters, text rows, empty areas - and hidden behind opaque cards/panels by normal
@@ -842,20 +807,15 @@
                  rendered anywhere). Reserve that attached property for genuinely opaque panels. -->
             <views:MatrixRainOverlay Grid.Row="0" Grid.RowSpan="2" IsVisible="{Binding IsMatrixRainVisible}" />
 
-            <!-- The 7 rail-ordered lateral screens (docs/superpowers/specs/2026-08-24-navigation-
-                 shell-motion-system-design.md) share one TransitioningContentControl - direction
-                 comes from MainViewModel.IsTransitionReversed (computed from rail-order comparison
-                 in OnCurrentScreenChanging), content from ActiveScreenContent. The drill-down
-                 screens (BookReader/PdfReader/Detail/BookDetail/MangaDetail/Reader) get their own
-                 sibling TransitioningContentControl just below (docs/superpowers/specs/2026-09-04-
-                 navigation-transition-system-design.md) - kept as a second control rather than
-                 unifying the two groups (fork B1 over B2 in that design doc) so this working lateral
-                 system stays untouched. -->
-            <TransitioningContentControl Grid.Row="1" IsVisible="{Binding IsLateralScreen}"
-                                          Content="{Binding ActiveScreenContent}"
-                                          IsTransitionReversed="{Binding IsTransitionReversed}"
-                                          PageTransition="{StaticResource PbScreenSlide}">
-                <TransitioningContentControl.DataTemplates>
+            <!-- Every screen, lateral and drill-down, in one host (docs/superpowers/specs/2026-10-20-motion-system-v2-navigation-design.md
+                 §3.1). It keeps one view per screen view model, so coming back keeps scroll, focus and selection (the readers, which are
+                 ITransientScreen, are rebuilt per visit), and plays the route transition RouteIntent names: a rail switch settles up, a
+                 drill-in grows from 0.985, Back reverses it, a reader crossfades. This replaced two TransitioningContentControls that went
+                 blank while the other group was active (crossing groups was a cut) and rebuilt a screen's view on every return. The
+                 cover flight (Library <-> Detail hero <-> Reader first page) plays on TransitionOverlay above it, driven by
+                 NavigationTransitionCoordinator. -->
+            <controls:RouteHost Grid.Row="1" Content="{Binding ActiveRouteContent}" Intent="{Binding RouteIntent}">
+                <controls:RouteHost.DataTemplates>
                     <DataTemplate DataType="vm:HomeScreenViewModel">
                         <views:HomeScreen />
                     </DataTemplate>
@@ -883,24 +843,6 @@
                     <DataTemplate DataType="vm:PreferencesScreenViewModel">
                         <views:PreferencesScreen />
                     </DataTemplate>
-                </TransitioningContentControl.DataTemplates>
-            </TransitioningContentControl>
-
-            <!-- The 6 drill-down screens (docs/superpowers/specs/2026-09-04-navigation-transition-
-                 system-design.md) - previously six always-instantiated ContentControls each toggled
-                 by its own IsVisible, an instant cut. Now one TransitioningContentControl bound to
-                 ActiveDrillDownContent; push/pop direction from IsDrillTransitionReversed. Each
-                 screen's own ViewModel instance is unchanged (MainViewModel still owns Detail/
-                 MangaDetail/Reader/BookReader/PdfReader/BookDetail permanently) - only which one this
-                 control's Content points at changes, same as the lateral group above. The cover-art
-                 shared-element flight (Library <-> Detail hero <-> Reader first page) plays on
-                 TransitionOverlay above both this and the lateral control, driven by
-                 NavigationTransitionCoordinator, not by anything declared here. -->
-            <TransitioningContentControl Grid.Row="1" IsVisible="{Binding !IsLateralScreen}"
-                                          Content="{Binding ActiveDrillDownContent}"
-                                          IsTransitionReversed="{Binding IsDrillTransitionReversed}"
-                                          PageTransition="{StaticResource PbDrillTransition}">
-                <TransitioningContentControl.DataTemplates>
                     <DataTemplate DataType="vm:BookReaderScreenViewModel">
                         <views:BookReaderScreen />
                     </DataTemplate>
@@ -925,8 +867,8 @@
                     <DataTemplate DataType="vm:MetadataEntityDetailScreenViewModel">
                         <views:MetadataEntityDetailScreenView />
                     </DataTemplate>
-                </TransitioningContentControl.DataTemplates>
-            </TransitioningContentControl>
+                </controls:RouteHost.DataTemplates>
+            </controls:RouteHost>
 
             <!-- docs/superpowers/specs/2026-08-30-app-shell-navigation-history-design.md - Row 0,
                  real layout space above whichever drill-down ContentControl (Row 1) is visible; only
@@ -948,10 +890,10 @@
 
     <!-- ============ Activity Center drawer (docs/superpowers/specs/2026-09-03-activity-center-design.md) ============ -->
     <!-- Tier 2. Overlay sibling of the DockPanel, non-blocking (no scrim) - the app stays usable
-         behind it. IsVisible gates hit-testing when closed; the slide-up is the DrawerRoot.open
-         pseudo-class inside the view. -->
+         behind it. controls:Reveal.IsOpen owns visibility and the exit (Motion v2 §5.2): hidden when
+         closed, interactive only while open, collapsed once its exit has played. -->
     <views:ActivityDrawerView DataContext="{Binding ActivityCenter}"
-                              IsVisible="{Binding IsDrawerOpen}"
+                              controls:Reveal.IsOpen="{Binding IsDrawerOpen}"
                               VerticalAlignment="Bottom" />
 
     <!-- ============ Migration overlay (docs/superpowers/specs/2026-08-06-migration-ux-design.md §B) ============ -->
@@ -1000,27 +942,16 @@
          card now that it has a real visible border/shadow. Own close button below instead, drawn
          inside this Border's own padding - same "overlayCloseButton" class (hover/danger-red) as
          the shared one, same DismissCommand, just positioned to stay on the card. ============ -->
-    <controls:OverlayShell IsOpen="{Binding NativePluginModalHost.IsOpen}" CloseCommand="{Binding NativePluginModalHost.DismissCommand}"
-                            ShowCloseButton="False">
-        <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                BorderThickness="1" CornerRadius="8" Padding="20" MaxWidth="680"
-                BoxShadow="{StaticResource PbElevationShadow}">
-            <Grid>
-                <!-- HeaderContent (docs/superpowers/specs/2026-09-13-cluster-scraper-ui-redesign-
-                     design.md §4) persists across a plugin's BeginModalBatch session, independent of
-                     whatever HostedContent is currently swapped in below it. -->
-                <StackPanel Spacing="14">
-                    <ContentControl Content="{Binding NativePluginModalHost.HeaderContent}"
-                                    IsVisible="{Binding NativePluginModalHost.HeaderContent, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
-                    <ContentControl Content="{Binding NativePluginModalHost.HostedContent}" />
-                </StackPanel>
-                <Button Classes="overlayCloseButton" Width="28" Height="28"
-                        HorizontalAlignment="Right" VerticalAlignment="Top"
-                        Command="{Binding NativePluginModalHost.DismissCommand}" ToolTip.Tip="Close">
-                    <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeSm}" />
-                </Button>
-            </Grid>
-        </Border>
+    <controls:OverlayShell IsOpen="{Binding NativePluginModalHost.IsOpen}" CloseCommand="{Binding NativePluginModalHost.DismissCommand}">
+        <!-- Plugin dialogs (ComicVine review, file conflicts, organize preview, ...) bring their own title row as HeaderContent/HostedContent,
+             so the card itself has no title - just the shared anatomy: ✕ in the card, window-relative max height, scrolling body. -->
+        <controls:DialogCard Size="Large">
+            <StackPanel Spacing="14">
+                <ContentControl Content="{Binding NativePluginModalHost.HeaderContent}"
+                                IsVisible="{Binding NativePluginModalHost.HeaderContent, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                <ContentControl Content="{Binding NativePluginModalHost.HostedContent}" />
+            </StackPanel>
+        </controls:DialogCard>
     </controls:OverlayShell>
 
     <!-- ============ Reading List properties overlay (docs/superpowers/specs/2026-08-23-reading-
@@ -1065,6 +996,14 @@
         <controls:OverlayShell.ContentTemplate>
             <DataTemplate x:DataType="vm:MainViewModel">
                 <views:ListOptionsOverlay DataContext="{Binding ListOptions}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
+    </controls:OverlayShell>
+    <controls:OverlayShell IsOpen="{Binding IsDetailListOptionsOverlayOpen}" CloseCommand="{Binding CloseDetailListOptionsOverlayCommand}"
+                            CloseButtonAutomationId="DetailListOptionsOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:DetailListOptionsOverlay DataContext="{Binding DetailListOptions}" />
             </DataTemplate>
         </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
@@ -1206,6 +1145,16 @@
         </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
+    <!-- ============ Edit Series overlay for a manga series (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md D11) ============ -->
+    <controls:OverlayShell IsOpen="{Binding IsMangaSeriesEditorOverlayOpen}" CloseCommand="{Binding CloseMangaSeriesEditorOverlayCommand}"
+                            CloseButtonAutomationId="MangaSeriesEditorOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:MangaSeriesEditorOverlay DataContext="{Binding MangaSeriesEditor}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
+    </controls:OverlayShell>
+
     <!-- ============ Bulk Issue Editing overlay (docs/superpowers/specs/2026-08-23-issue-editor-
          borderless-overlay-design.md) ============ -->
     <controls:OverlayShell IsOpen="{Binding IsBulkIssuePropertiesOverlayOpen}" CloseCommand="{Binding CloseBulkIssuePropertiesOverlayCommand}"
@@ -1231,29 +1180,24 @@
     <!-- ============ Unsaved-changes discard confirm (P6 follow-up, docs/paperbunkr-todo.md) - guards
          the rail nav against silently abandoning an in-progress Issue Properties/Bulk Editing edit,
          see MainViewModel.TryLeaveCurrentEditor ============ -->
-    <!-- Fade+scale (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-design.md item 4)
-         - Classes.open rather than IsVisible so the exit leg actually plays; IsHitTestVisible bound
-         the same way so a closed-but-still-fading-out scrim can't intercept clicks once its opacity
-         has settled to 0. -->
-    <Border Classes="modalScrim" Classes.open="{Binding IsDiscardConfirmOpen}" IsHitTestVisible="{Binding IsDiscardConfirmOpen}" Background="#B0000000">
-        <Border Classes="modalCard" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360"
-                Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                BorderThickness="1" CornerRadius="8" Padding="20">
-            <StackPanel Spacing="14">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeLg}" Foreground="#D96C6C" />
-                    <TextBlock Text="Unsaved changes" FontSize="15" FontWeight="Bold"
-                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+    <!-- On the shared OverlayShell + DialogCard since Motion v2 (docs/superpowers/specs/2026-10-20-motion-system-v2-foundation-overlays-
+         design.md §5.1): it was one of the two hand-rolled modalScrim/modalCard overlays, a second dialog motion system. -->
+    <controls:OverlayShell IsOpen="{Binding IsDiscardConfirmOpen}" CloseCommand="{Binding CancelDiscardCommand}">
+        <controls:DialogCard Title="Unsaved changes" Size="Small">
+            <Grid ColumnDefinitions="Auto,*">
+                <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbDangerBrush}"
+                               VerticalAlignment="Top" Margin="0,0,8,0" />
+                <TextBlock Grid.Column="1" Classes="pbTextBody" Text="You have unsaved edits on this screen. Leaving now will discard them."
+                           Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+            </Grid>
+            <controls:DialogCard.Footer>
+                <StackPanel>
+                    <Button Classes="ghost" Content="Keep Editing" Command="{Binding CancelDiscardCommand}" />
+                    <Button Classes="primary destructive" Content="Discard" Command="{Binding ConfirmDiscardCommand}" />
                 </StackPanel>
-                <TextBlock Text="You have unsaved edits on this screen. Leaving now will discard them."
-                           FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                    <Button Classes="discardConfirm ghost" Content="Keep Editing" Command="{Binding CancelDiscardCommand}" />
-                    <Button Classes="discardConfirm primary" Content="Discard" Command="{Binding ConfirmDiscardCommand}" />
-                </StackPanel>
-            </StackPanel>
-        </Border>
-    </Border>
+            </controls:DialogCard.Footer>
+        </controls:DialogCard>
+    </controls:OverlayShell>
 
     <!-- ============ First-run welcome overlay (docs/superpowers/specs/2026-08-31-first-run-
          onboarding-design.md) - same backdrop-popup pattern as the Migration overlay above, opened
@@ -1294,27 +1238,20 @@
     <!-- ============ Post-welcome tour offer (docs/superpowers/specs/2026-08-31-first-run-
          onboarding-design.md) - same small centered card pattern as the discard-confirm block above,
          shown once regardless of which welcome-screen path (including Skip) was taken ============ -->
-    <Border Classes="modalScrim" Classes.open="{Binding IsTourOfferOpen}" IsHitTestVisible="{Binding IsTourOfferOpen}" Background="#B0000000">
-        <Border Classes="modalCard" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360"
-                Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                BorderThickness="1" CornerRadius="8" Padding="20">
-            <StackPanel Spacing="14">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <fi:SymbolIcon Symbol="Sparkle" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbAccentTextBrush}" />
-                    <TextBlock Text="Want a quick tour?" FontSize="15" FontWeight="Bold"
-                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                </StackPanel>
-                <TextBlock Text="A short walkthrough of what's where - Library, Smart Lists, Reading Lists, and more."
-                           FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                    <Button Classes="discardConfirm ghost" Content="No thanks" Command="{Binding DeclineTourCommand}"
+    <controls:OverlayShell IsOpen="{Binding IsTourOfferOpen}" CloseCommand="{Binding DeclineTourCommand}">
+        <controls:DialogCard Title="Want a quick tour?" Size="Small">
+            <TextBlock Classes="pbTextBody" Text="A short walkthrough of what's where - Library, Smart Lists, Reading Lists, and more."
+                       Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+            <controls:DialogCard.Footer>
+                <StackPanel>
+                    <Button Classes="ghost" Content="No thanks" Command="{Binding DeclineTourCommand}"
                             AutomationProperties.AutomationId="TourOfferDecline" />
-                    <Button Classes="discardConfirm primary" Content="Take the tour" Command="{Binding TakeTourCommand}"
+                    <Button Classes="primary" Content="Take the tour" Command="{Binding TakeTourCommand}"
                             AutomationProperties.AutomationId="TourOfferAccept" />
                 </StackPanel>
-            </StackPanel>
-        </Border>
-    </Border>
+            </controls:DialogCard.Footer>
+        </controls:DialogCard>
+    </controls:OverlayShell>
 
     <!-- ============ Live spotlight tour (docs/superpowers/specs/2026-08-31-first-run-onboarding-
          design.md) - topmost of everything, including the rail/sidebar/content area, since it needs
@@ -1337,7 +1274,7 @@
     <Border Background="{DynamicResource PbBgBrush}" Opacity="{Binding ThemeCrossfadeOpacity}" IsHitTestVisible="False">
         <Border.Transitions>
             <Transitions>
-                <DoubleTransition Property="Opacity" Duration="0:0:0.3" Easing="CubicEaseOut" />
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionReplace}" Easing="{StaticResource PbMotionEase}" />
             </Transitions>
         </Border.Transitions>
     </Border>

@@ -172,6 +172,10 @@ public partial class LibraryScreenViewModel
 
         using var context = PaperbunkrDb.CreateContext();
         var issues = context.Issues.Include(i => i.Series).Include(i => i.Tags).Where(i => ids.Contains(i.Id)).ToList();
+        // Re-reading a file must not undo what the user confirmed on a manga series: the series' values go back on top of whatever the file said
+        // (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §5), except on chapters with an override.
+        var inheritanceBySeries = new Dictionary<int, Paperbunkr.Data.Metadata.Manga.MangaSeriesInheritance?>();
+        var overrides = Paperbunkr.Data.Metadata.Manga.MangaSeriesInheritance.LoadOverrides(context, issues.Select(i => i.Id));
         foreach (var issue in issues)
         {
             if (token.IsCancellationRequested)
@@ -180,7 +184,18 @@ public partial class LibraryScreenViewModel
             }
 
             var snapshot = Services.MetadataEditHistoryService.CaptureSnapshot(issue);
-            switch (IssueFileRescanService.Rescan(issue))
+            var outcome = IssueFileRescanService.Rescan(issue);
+            if (outcome == IssueRescanOutcome.Updated)
+            {
+                if (!inheritanceBySeries.TryGetValue(issue.SeriesId, out var inheritance))
+                {
+                    inheritanceBySeries[issue.SeriesId] = inheritance = Paperbunkr.Data.Metadata.Manga.MangaSeriesInheritance.Load(context, issue.SeriesId);
+                }
+
+                inheritance?.Apply(issue, overrides.GetValueOrDefault(issue.Id));
+            }
+
+            switch (outcome)
             {
                 case IssueRescanOutcome.Updated:
                     before[issue.Id] = snapshot;

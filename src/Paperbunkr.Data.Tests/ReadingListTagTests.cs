@@ -45,7 +45,8 @@ public class ReadingListTagTests : IDisposable
 
         using var verify = CreateContext();
         var reloaded = verify.ReadingLists.Include(r => r.Tags).Single(r => r.Id == listId);
-        var tag = Assert.Single(reloaded.Tags);
+        // Saving a list also gives it the generated "List type" tag (docs/superpowers/specs/2026-10-15-reading-list-auto-tags-design.md); this is about the user's tag.
+        var tag = Assert.Single(reloaded.Tags, t => t.Origin == ReadingListTagOrigin.User);
         Assert.Equal("Dark", tag.Value);
         Assert.Equal("Tone", tag.Category);
         Assert.Equal(IssueTagWeight.Core, tag.Weight);

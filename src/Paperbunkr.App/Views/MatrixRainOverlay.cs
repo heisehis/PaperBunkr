@@ -6,6 +6,7 @@ using Avalonia.Interactivity;
 using Avalonia.Rendering.Composition;
 using Avalonia.Threading;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Theming.Motion;
 
 namespace Paperbunkr.App.Views;
 
@@ -245,9 +246,8 @@ public sealed class MatrixRainOverlay : Control
 
     /// <summary>
     /// Whether the frame loop should be running right now: visible, not reduced-motion, not
-    /// battery-throttled. Reduced motion is read the same way <c>ThemeService.ApplyReducedMotion</c>
-    /// signals it everywhere else in this codebase - PbMotionFast resolved to TimeSpan.Zero - rather
-    /// than a second database read.
+    /// battery-throttled - asked of the shared policy (<c>MotionPolicy.AllowsContinuous</c>: Full motion, High quality, battery
+    /// not low), the same answer every continuous decoration gets, rather than a second database read.
     /// </summary>
     private void SendRunState()
     {
@@ -256,9 +256,7 @@ public sealed class MatrixRainOverlay : Control
             return;
         }
 
-        bool reducedMotion = Application.Current?.TryGetResource("PbMotionFast", null, out var fast) == true && fast is TimeSpan { Ticks: 0 };
-
-        bool shouldRun = IsVisible && !reducedMotion && !_lastThrottled;
+        bool shouldRun = IsVisible && MotionPolicy.AllowsContinuous(_lastThrottled);
         _visual.SendHandlerMessage(new MatrixRainRunState(shouldRun));
     }
 }

@@ -208,6 +208,27 @@ public class RoleDetectionUiTests : IDisposable
         var tokens = new Dictionary<string, object>
         {
             ["PbMotionEase"] = new Avalonia.Animation.Easings.CubicEaseOut(),
+            ["PbMotionExitEase"] = new Avalonia.Animation.Easings.CubicEaseIn(),
+            ["PbMotionMoveEase"] = new Avalonia.Animation.Easings.CubicEaseInOut(),
+            ["PbMotionSpring"] = new Paperbunkr.App.Theming.Motion.DampedSpringEasing(),
+            // Motion is pinned instant: these tests check states, and a real-window test earlier in the run leaves real durations in the
+            // shared app resources (a transition caught mid-flight then reads as the wrong colour).
+            ["PbMotionFast"] = TimeSpan.Zero,
+            ["PbMotionStandard"] = TimeSpan.Zero,
+            ["PbMotionLarge"] = TimeSpan.Zero,
+            ["PbMotionSlow"] = TimeSpan.Zero,
+            ["PbMotionAcknowledge"] = TimeSpan.Zero,
+            ["PbMotionAcknowledgeMove"] = TimeSpan.Zero,
+            ["PbMotionHoverFade"] = TimeSpan.Zero,
+            ["PbMotionHoverMove"] = TimeSpan.Zero,
+            ["PbMotionRevealFade"] = TimeSpan.Zero,
+            ["PbMotionRevealMove"] = TimeSpan.Zero,
+            ["PbMotionRevealExit"] = TimeSpan.Zero,
+            ["PbMotionReplace"] = TimeSpan.Zero,
+            ["PbMotionTravelFade"] = TimeSpan.Zero,
+            ["PbMotionTravelMove"] = TimeSpan.Zero,
+            ["PbMotionFlight"] = TimeSpan.Zero,
+            ["PbMotionAmbient"] = TimeSpan.Zero,
             ["PbIconSizeXs"] = 14d,
             ["PbIconSizeSm"] = 16d,
             ["PbIconSizeLg"] = 24d,

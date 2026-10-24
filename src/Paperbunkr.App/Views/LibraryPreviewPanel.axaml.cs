@@ -17,7 +17,6 @@ namespace Paperbunkr.App.Views;
 /// </summary>
 public partial class LibraryPreviewPanel : UserControl
 {
-    private static readonly TimeSpan FadeDuration = TimeSpan.FromMilliseconds(120);
 
     /// <summary>A second change inside this window snaps instead of animating, so the panel never lags arrow-key browsing.</summary>
     private static readonly TimeSpan RapidWindow = TimeSpan.FromMilliseconds(180);
@@ -102,7 +101,7 @@ public partial class LibraryPreviewPanel : UserControl
         var now = DateTime.UtcNow;
         bool rapid = now - _lastSwapUtc < RapidWindow;
         _lastSwapUtc = now;
-        if (rapid || MotionTokens.IsReducedMotion())
+        if (rapid || !Paperbunkr.App.Theming.Motion.MotionPolicy.AllowsMotion(Paperbunkr.App.Theming.Motion.MotionRole.Replace))
         {
             return;
         }
@@ -115,7 +114,7 @@ public partial class LibraryPreviewPanel : UserControl
             {
                 hero.Transitions = new Transitions
                 {
-                    new DoubleTransition { Property = OpacityProperty, Duration = FadeDuration, Easing = new CubicEaseOut() },
+                    new DoubleTransition { Property = OpacityProperty, Duration = Controls.MotionTokens.GetFast(), Easing = new CubicEaseOut() },
                 };
                 hero.Opacity = 1;
             }, DispatcherPriority.Render);

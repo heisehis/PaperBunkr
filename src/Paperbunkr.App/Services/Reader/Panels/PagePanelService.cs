@@ -31,7 +31,7 @@ public static class PagePanelAnalyzer
 
             using var scaled = page.CreateScaledBitmap(target, BitmapInterpolationMode.MediumQuality);
             using var stream = new MemoryStream();
-            scaled.Save(stream);
+            scaled.Save(stream, PngBitmapEncoderOptions.Default);
             stream.Position = 0;
             using var sk = SKBitmap.Decode(stream);
             if (sk is null)

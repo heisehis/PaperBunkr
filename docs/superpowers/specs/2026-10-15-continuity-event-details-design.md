@@ -1,7 +1,7 @@
 # Continuity event details
 
 **Date:** 2026-10-15
-**Status:** Draft for user review
+**Status:** Approved and implemented
 **Phase:** 3 of the ordered Reading Lists / Continuity improvements
 
 ## Goal
@@ -72,3 +72,4 @@ Extend the existing Edit Event workflow for event tags, start/end dates, and a c
 ## Out of scope
 
 Redesigning Reading Lists; changing Continuity event ordering or membership; inferring new event relationships; fetching source data every time a view opens; changing Event Map or Timeline layouts; new provider IDs or title-based cross-provider identity assumptions.
+

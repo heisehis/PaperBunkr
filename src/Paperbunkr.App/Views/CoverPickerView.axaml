@@ -19,23 +19,11 @@
         LibrarySection's own Folders/Maintenance 2-tab toggle - no converter class needed.
     -->
     <UserControl.Styles>
-        <Style Selector="Button.coverPickerTab">
-            <Setter Property="Padding" Value="10,5" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-            <Setter Property="FontSize" Value="11.5" />
-            <Setter Property="CornerRadius" Value="6" />
-        </Style>
-        <Style Selector="Button.coverPickerTab.active">
-            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-        </Style>
         <Style Selector="Button.coverCandidate">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
@@ -44,29 +32,35 @@
         </Style>
     </UserControl.Styles>
 
-    <Border Width="460" Padding="10" Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="8">
+    <!-- Shown in a Flyout, whose presenter is already the floating-panel card: no second card here (audit shot 5). -->
+    <Border Width="460">
         <StackPanel Spacing="10">
-            <StackPanel Orientation="Horizontal" Spacing="2">
-                <Button Classes="coverPickerTab" Classes.active="{Binding IsBrowseFileTabActive}"
-                        Content="Browse File" Command="{Binding ShowBrowseFileTabCommand}" />
-                <Button Classes="coverPickerTab" Classes.active="{Binding IsSeriesTabActive}"
-                        Content="From Series" Command="{Binding ShowSeriesTabCommand}" />
-                <Button Classes="coverPickerTab" Classes.active="{Binding IsReadingListTabActive}"
-                        Content="Reading List" Command="{Binding ShowReadingListTabCommand}" />
-                <Button Classes="coverPickerTab" Classes.active="{Binding IsExternalProviderTabActive}"
-                        Content="External" Command="{Binding ShowExternalProviderTabCommand}"
+            <!-- Equal-width segments in one row so every tab fits; a hidden "External" tab takes no cell. -->
+            <Border Classes="segGroup" HorizontalAlignment="Stretch">
+            <UniformGrid Rows="1" ColumnSpacing="2">
+                <Button Classes="segItem" Classes.active="{Binding IsBrowseFileTabActive}"
+                        Content="Browse File" HorizontalAlignment="Stretch" Command="{Binding ShowBrowseFileTabCommand}" />
+                <Button Classes="segItem" Classes.active="{Binding IsSeriesTabActive}"
+                        Content="From Series" HorizontalAlignment="Stretch" Command="{Binding ShowSeriesTabCommand}" />
+                <Button Classes="segItem" Classes.active="{Binding IsReadingListTabActive}"
+                        Content="Reading List" HorizontalAlignment="Stretch" Command="{Binding ShowReadingListTabCommand}" />
+                <Button Classes="segItem" Classes.active="{Binding IsExternalProviderTabActive}"
+                        Content="External" HorizontalAlignment="Stretch" Command="{Binding ShowExternalProviderTabCommand}"
                         IsVisible="{Binding HasExternalProviderTab}" />
-            </StackPanel>
+            </UniformGrid>
+            </Border>
 
             <!-- Browse File -->
             <StackPanel Spacing="8" IsVisible="{Binding IsBrowseFileTabActive}">
-                <TextBlock Text="Choose an image file from disk." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                <Button Classes="headerAction primary" Content="Browse…" Command="{Binding BrowseFileCommand}" HorizontalAlignment="Left" />
+                <TextBlock Text="Choose an image file from disk." FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                <Button Classes="primary" Content="Browse…" Command="{Binding BrowseFileCommand}" HorizontalAlignment="Left" />
+                <Button Classes="ghost" Content="Reset to series cover" Command="{Binding ResetCoverCommand}"
+                        IsVisible="{Binding IsSeriesTarget}" HorizontalAlignment="Left" />
             </StackPanel>
 
             <!-- From Series -->
             <StackPanel Spacing="8" IsVisible="{Binding IsSeriesTabActive}">
-                <TextBlock Text="No other issues in this series have a cover yet." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
+                <TextBlock Text="No other issues in this series have a cover yet." FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
                            IsVisible="{Binding !HasSeriesCandidates}" />
                 <ScrollViewer MaxHeight="380" IsVisible="{Binding HasSeriesCandidates}">
                     <ItemsControl ItemsSource="{Binding SeriesCandidates}">
@@ -77,7 +71,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:CoverPickerCandidate">
-                                <Button Classes="coverCandidate" Width="64" Height="94" Margin="3"
+                                <Button Classes="coverCandidate" Width="64" Height="94" Margin="4"
                                         Command="{Binding #Root.((vm:CoverPickerViewModel)DataContext).SelectCandidateCommand}"
                                         CommandParameter="{Binding}" ToolTip.Tip="{Binding Label}">
                                     <Image views:AsyncCoverImage.SourceId="{Binding SourceKey}" Stretch="UniformToFill" />
@@ -90,7 +84,7 @@
 
             <!-- From Reading List -->
             <StackPanel Spacing="8" IsVisible="{Binding IsReadingListTabActive}">
-                <TextBlock Text="No other issues in a shared reading list have a cover yet." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
+                <TextBlock Text="No other issues in a shared reading list have a cover yet." FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
                            IsVisible="{Binding !HasReadingListCandidates}" />
                 <ScrollViewer MaxHeight="380" IsVisible="{Binding HasReadingListCandidates}">
                     <ItemsControl ItemsSource="{Binding ReadingListCandidates}">
@@ -101,7 +95,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:CoverPickerCandidate">
-                                <Button Classes="coverCandidate" Width="64" Height="94" Margin="3"
+                                <Button AutomationProperties.Name="{Binding Label}" Classes="coverCandidate" Width="64" Height="94" Margin="4"
                                         Command="{Binding #Root.((vm:CoverPickerViewModel)DataContext).SelectCandidateCommand}"
                                         CommandParameter="{Binding}" ToolTip.Tip="{Binding Label}">
                                     <Image views:AsyncCoverImage.SourceId="{Binding SourceKey}" Stretch="UniformToFill" />
@@ -114,9 +108,9 @@
 
             <!-- From External Provider (MangaBaka's multi-cover archive) -->
             <StackPanel Spacing="8" IsVisible="{Binding IsExternalProviderTabActive}">
-                <TextBlock Text="Loading covers…" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                <TextBlock Text="Loading covers…" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                            IsVisible="{Binding IsLoadingExternalProviderCandidates}" />
-                <TextBlock Text="No covers found." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                <TextBlock Text="No covers found." FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                            IsVisible="{Binding ShowNoExternalProviderCandidatesMessage}" />
                 <ScrollViewer MaxHeight="380" IsVisible="{Binding HasExternalProviderCandidates}">
                     <ItemsControl ItemsSource="{Binding ExternalProviderCandidates}">
@@ -127,7 +121,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="metadata:CoverCandidate">
-                                <Button Classes="coverCandidate" Width="64" Height="94" Margin="3"
+                                <Button AutomationProperties.Name="{Binding Source}" Classes="coverCandidate" Width="64" Height="94" Margin="4"
                                         Command="{Binding #Root.((vm:CoverPickerViewModel)DataContext).SelectExternalCandidateCommand}"
                                         CommandParameter="{Binding}" ToolTip.Tip="{Binding Source}">
                                     <Image views:RemoteThumbnailImage.SourceUrl="{Binding ThumbnailUrl}" Stretch="UniformToFill" />

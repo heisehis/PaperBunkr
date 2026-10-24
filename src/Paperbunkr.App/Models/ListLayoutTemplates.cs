@@ -44,6 +44,71 @@ public static class ListLayoutTemplates
             (IssueListSortField.FileDirectory, 320))),
     };
 
+    /// <summary>Comic detail starters (docs/superpowers/specs/2026-10-19-detail-layouts-v2-design.md, Q9).</summary>
+    public static IReadOnlyList<(string Name, DetailListLayoutState State)> ComicDetail { get; } = new[]
+    {
+        ("Cover wall", DetailListLayoutState.ComicDefault with
+        {
+            ViewMode = DetailIssueViewMode.Poster,
+            CaptionFields = new[] { IssueListSortField.Number },
+            ShowEditionOverlay = true,
+            GroupBy = DetailGrouping.None,
+        }),
+        ("Checklist table", DetailListLayoutState.ComicDefault with
+        {
+            ViewMode = DetailIssueViewMode.List,
+            ComicColumns = new[]
+            {
+                new DetailListColumn(DetailColumnKeys.ReadStatus, true, 54),
+                new DetailListColumn(nameof(IssueListSortField.Number), true, 52),
+                new DetailListColumn(nameof(IssueListSortField.Title), true, 240),
+                new DetailListColumn(nameof(IssueListSortField.Writer), true, 150),
+                new DetailListColumn(nameof(IssueListSortField.Released), true, 96),
+                new DetailListColumn(nameof(IssueListSortField.PageCount), true, 60),
+                new DetailListColumn(nameof(IssueListSortField.ReadPercentage), true, 64),
+                new DetailListColumn(nameof(IssueListSortField.Rating), true, 56),
+            },
+        }),
+        ("Reading cards", DetailListLayoutState.ComicDefault with
+        {
+            ViewMode = DetailIssueViewMode.Card,
+            CardElements = new[] { TileTextElement.Title, TileTextElement.Number, TileTextElement.Writer, TileTextElement.Released, TileTextElement.ReadPercentage },
+        }),
+    };
+
+    /// <summary>Manga detail starters (docs/superpowers/specs/2026-10-19-detail-layouts-v2-design.md, Q9).</summary>
+    public static IReadOnlyList<(string Name, DetailListLayoutState State)> MangaDetail { get; } = new[]
+    {
+        ("Compact chapters", DetailListLayoutState.MangaDefault with
+        {
+            ChapterColumns = new[]
+            {
+                new DetailListColumn(nameof(IssueListSortField.Number), true, 60),
+                new DetailListColumn(nameof(IssueListSortField.Title), true, 300),
+                new DetailListColumn(DetailColumnKeys.ReadStatus, true, 48),
+                new DetailListColumn(DetailColumnKeys.Progress, true, 74),
+            },
+        }),
+        ("Full chapter table", DetailListLayoutState.MangaDefault with
+        {
+            ChapterColumns = new[]
+            {
+                new DetailListColumn(nameof(IssueListSortField.Number), true, 60),
+                new DetailListColumn(nameof(IssueListSortField.Title), true, 230),
+                new DetailListColumn(DetailColumnKeys.NewStatus, true, 48),
+                new DetailListColumn(DetailColumnKeys.ReadStatus, true, 48),
+                new DetailListColumn(DetailColumnKeys.Bookmark, true, 50),
+                new DetailListColumn(nameof(IssueListSortField.ScanInformation), true, 120),
+                new DetailListColumn(nameof(IssueListSortField.Translator), true, 120),
+                new DetailListColumn(nameof(IssueListSortField.PageCount), true, 60),
+                new DetailListColumn(nameof(IssueListSortField.Released), true, 104),
+                new DetailListColumn(nameof(IssueListSortField.FileSize), true, 80),
+                new DetailListColumn(DetailColumnKeys.Progress, true, 74),
+            },
+            ChapterGroupBy = DetailGrouping.None,
+        }),
+    };
+
     private static ListLayoutState Details(IssueListSortField sort, SortDirection direction, params (IssueListSortField Field, double Width)[] columns) =>
         new(
             Columns: columns.Select(c => new ListLayoutColumn(c.Field, true, c.Width)).ToList(),

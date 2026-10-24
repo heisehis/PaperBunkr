@@ -17,12 +17,29 @@
         C# than a fragile binding workaround for a handful of segments.
     -->
     <UserControl.Styles>
+        <Style Selector="StackPanel.crumbs">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="RenderTransform" Value="translateY(-6px)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionReplace}" Easing="{StaticResource PbMotionEase}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionReplace}" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="StackPanel.crumbs.entered">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="RenderTransform" Value="none" />
+        </Style>
+        <Style Selector="Window.motionReduced StackPanel.crumbs">
+            <Setter Property="RenderTransform" Value="none" />
+        </Style>
         <Style Selector="Button.breadcrumbSegment">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="4,2" />
-            <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
         <Style Selector="Button.breadcrumbSegment:pointerover /template/ ContentPresenter">
@@ -33,8 +50,8 @@
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
         <Style Selector="TextBlock.breadcrumbSeparator">
-            <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="2,0" />
         </Style>
@@ -46,11 +63,9 @@
             Padding="16,6"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Top">
-        <!-- Fade+slide on trail change (docs/superpowers/specs/2026-09-07-chrome-content-motion-
-             polish-design.md item 4) - reuses the same entranceReady/entered class pair Library's
-             staggered entrance uses (Styles/Primitives.axaml); here it's one whole-bar toggle rather
-             than per-item indexing, matching Rebuild()'s own existing "cheap enough, no diffing"
-             reasoning. Breadcrumb.axaml.cs's Rebuild() flips the classes around each rebuild. -->
-        <StackPanel x:Name="Segments" Classes="entranceReady" Orientation="Horizontal" />
+        <!-- Trail entrance (Motion v2 navigation, Q18): on every trail change the segments fade in and slide 6 px down on the Replace
+             token - one whole-bar toggle, Rebuild() flips "entered" around each rebuild. The bar itself shows and hides instantly: it is a
+             real layout row, and a delayed collapse would shift the incoming screen after the swap. -->
+        <StackPanel x:Name="Segments" Classes="crumbs" Orientation="Horizontal" />
     </Border>
 </UserControl>

@@ -5,7 +5,7 @@
 
 ## Problem
 
-On a Reading List detail page, the list's own tags wrap into as many rows as needed. A list with many tags can make the hero taller than the window, pushing the checks and issue content below the visible area. The issue content already has its own scroll viewer, but it cannot help while the unbounded hero and checks occupy the page. The page also lacks the requested scroll-linked depth on its hero artwork.
+On a Reading List detail page, the list's own tags wrap into as many rows as needed. A list with many tags can make the hero taller than the window, pushing the checks and issue content below the visible area. The issue content currently has its own scroll viewers, splitting the page into independently moving regions. The page also lacks the requested scroll-linked depth on its hero artwork.
 
 The attached example shows a dense tag wall in a 1366×720 window. The user wants the tag wall collapsed to two lines, the page content to be scrollable, and parallax while scrolling.
 
@@ -44,7 +44,8 @@ The `_reference/ComicRackCE` source has no equivalent Reading List detail tag wa
 
 - Make the main Reading List surface vertically scrollable so the hero, checks/status content, and issue area are all reachable. The cover rail keeps its existing independent scroll behavior.
 - Preserve `TidyVirtualizingStackPanel` for Path mode and `VirtualizingWrapPanel` for Covers mode. Do not put an issue panel under an infinite-height measure or replace it with a plain `WrapPanel`/`StackPanel` that realizes the entire list.
-- Keep the issue viewport bounded to the space available in the page. When its own viewport reaches an end, normal scroll chaining passes further movement to the page; when the pointer is over other page content, the page scrolls directly.
+- Remove issue-local scroll viewers so the hero, checks, and every issue share the page's single vertical scroll surface.
+- Preserve the existing virtualizing panels and verify that they use the outer page's effective viewport rather than realizing every issue at once.
 - Preserve keyboard focus restoration and `BringIntoView` behavior for list rows when the viewport/layout changes. The correct scroll container must remain discoverable by the existing focus and navigation code.
 - Use the app's normal scroll behavior and scrollbar affordance; do not add a Reading List-specific speed or intensity preference.
 
@@ -58,8 +59,8 @@ The `_reference/ComicRackCE` source has no equivalent Reading List detail tag wa
 ## Alternatives considered
 
 1. **Cap tags only and leave the hero fixed.** This is the smallest change and would reduce the worst overflow, but it would not meet the request to make the whole page scrollable when other header content is tall.
-2. **One unbounded scroll viewer for every element.** This gives a single continuous scrollbar but causes Avalonia to measure virtualized issue panels with infinite height, realizing every item. This is unsuitable for large lists.
-3. **Scrollable page with a bounded, virtualized issue viewport (recommended).** This makes all page regions reachable, retains list virtualization, and uses scroll chaining at the nested viewport boundary. It has a more complex layout than option 1 but fits the user's requirements without changing large-list behavior.
+2. **One page scroll with nested issue scroll viewers.** The outer page moves, but separate issue scroll zones make movement depend on pointer position and do not feel continuous.
+3. **One page scroll owner with virtualizing issue panels using its effective viewport (revised recommendation).** Every page region moves together while large issue collections remain virtualized under the outer scroller.
 
 ## Accessibility and input
 
@@ -73,19 +74,18 @@ The `_reference/ComicRackCE` source has no equivalent Reading List detail tag wa
 
 - View tests load the compiled Reading List view and verify the tag wall's collapsed/expanded states, the two-row cap, overflow-control visibility, add-tag availability, and that hidden chips are not focusable.
 - Layout coverage verifies the cap responds to a width change and does not split a chip across the clipped boundary.
-- Scrolling tests verify that the hero/checks can move, path and cover content remain scrollable, scroll chaining works at the nested viewport edge, and the existing virtualizing panels remain in use.
+- Scrolling tests verify that hero, checks, and issue content share one vertical scroll owner, that issue-local scroll viewers are absent, and that the existing virtualizing panels stay virtualized.
 - Parallax tests cover zero offset at rest, bounded movement while scrolling, no layout/input impact, and zero offset under Reduced Motion.
 - Run the focused Reading Lists view tests and any added pure layout/parallax tests; do not run the full App suite for this UI change.
 - Visually inspect a list with many tags at a short window height and confirm that Continue/actions, checks, and issue content are reachable without the tag wall blocking selection.
 
 ## Risks and mitigations
 
-- **Nested scroll ambiguity:** wheel input may go to the issue viewport when the user expects page movement. Keep normal scroll chaining enabled and verify both directions at each viewport boundary.
 - **Responsive chip layout:** a fixed-height clip can leave visually hidden chips keyboard-focusable. Use a width-aware two-row layout that excludes hidden items from focus/accessibility rather than relying only on clipping.
-- **Virtualization regression:** an outer scroller can measure its content with infinite height. Keep the issue viewport explicitly bounded and test that the virtualizing panels remain active.
+- **Virtualization regression:** an outer scroller can measure content with unbounded height. Test large path and cover collections under the shared effective viewport; adjust panel integration if realization grows with the full list.
 - **Parallax image edges:** use the existing overscan implementation rather than translating a frame-sized image.
 - **Existing local edits:** `ReadingListPageView.axaml` and `ReadingListPageViewModel.cs` already contain unrelated uncommitted work in this checkout. Implementation must preserve and build on those edits.
 
 ## Open questions
 
-None. The user approved the two-row collapsed wall, scrollable page with virtualization preserved, and Reduced-Motion-aware hero-only parallax on 2026-10-19.
+The user clarified on 2026-10-19 that “whole page scroll” means one unified scrolling surface with no separate issue-area scrolling. This supersedes the earlier bounded nested-scroll approach. The user approved the two-row collapsed wall, virtualization preservation, and Reduced-Motion-aware hero-only parallax on 2026-10-19.

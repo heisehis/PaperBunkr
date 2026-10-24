@@ -73,6 +73,8 @@ public partial class ReadingListPageViewModel
         IsDrawerOpen = false;
         IsArcSearchOpen = false;
         LinkingRow = null;
+        SuggestedMatches.Clear();
+        OnPropertyChanged(nameof(HasSuggestedMatches));
         SearchResults.Clear();
         SearchQuery = string.Empty;
         SearchSelection.Clear();
@@ -350,12 +352,82 @@ public partial class ReadingListPageViewModel
         OpenDrawer(DrawerLibraryTab);
         SearchResults.Clear();
         SearchQuery = string.Empty;
+        LoadSuggestedMatches(row);
+    }
+
+    // --- Suggested matches (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §7, decision Q15): while linking, the comics
+    // the match engine considers for this entry are listed above the search, each with the reasons the engine weighed. ---
+
+    /// <summary>One comic the engine considers for the entry being linked.</summary>
+    public sealed record SuggestedMatch(int IssueId, string Label, string Reason);
+
+    public ObservableCollection<SuggestedMatch> SuggestedMatches { get; } = new();
+
+    public bool HasSuggestedMatches => SuggestedMatches.Count > 0;
+
+    private void LoadSuggestedMatches(ReadingListItemRowViewModel row)
+    {
+        SuggestedMatches.Clear();
+        if (row.Item.Issue is { } issue)
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            var source = context.ReadingListItemSources.AsNoTracking().FirstOrDefault(s => s.ReadingListItemId == row.Item.Id);
+
+            // An entry with no source record (made before they existed, or by hand) is asked for by what its placeholder holds.
+            var reference = source is not null
+                ? Paperbunkr.Data.ReadingLists.Matching.ReadingListResolver.ToReference(source)
+                : new Paperbunkr.Data.ReadingLists.Matching.ComicReference(issue.Series?.Name ?? string.Empty, issue.Number ?? string.Empty, issue.Volume, issue.Year, issue.Format);
+            var match = Paperbunkr.Data.ReadingLists.Matching.MatchEngine.Match(reference, Paperbunkr.Data.ReadingLists.Matching.LibraryIndex.Load(context));
+            foreach (var candidate in match.Candidates.Where(c => c.Issue.Id != issue.Id).Take(8))
+            {
+                var comic = candidate.Issue;
+                string label = comic.Year is int year ? $"{comic.SeriesName} #{comic.Number} ({year})" : $"{comic.SeriesName} #{comic.Number}";
+                SuggestedMatches.Add(new SuggestedMatch(comic.Id, label, candidate.Summary + (comic.FileIsMissing ? " · file missing" : string.Empty)));
+            }
+        }
+
+        OnPropertyChanged(nameof(HasSuggestedMatches));
+    }
+
+    /// <summary>Links the entry being resolved to a suggested comic. Recorded as the user's own choice, which no automatic pass revisits.</summary>
+    [RelayCommand]
+    private void LinkSuggestion(SuggestedMatch? suggestion)
+    {
+        if (suggestion is null || LinkingRow is not { } row || _activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            // A list holds a comic once; linking a second entry to it would break that.
+            if (context.ReadingListItems.Any(i => i.ReadingListId == listId && i.IssueId == suggestion.IssueId && i.Id != row.Item.Id))
+            {
+                StatusMessage = $"{suggestion.Label} is already in this list under another entry.";
+                return;
+            }
+
+            ReadingListItemLinker.Relink(context, row.Item.Id, suggestion.IssueId);
+        }
+
+        // Deferred: the suggestion row that raised this click is removed by the reload (CLAUDE.md runtime gotcha).
+        Dispatcher.UIThread.Post(() =>
+        {
+            LinkingRow = null;
+            SuggestedMatches.Clear();
+            OnPropertyChanged(nameof(HasSuggestedMatches));
+            SearchResults.Clear();
+            SearchQuery = string.Empty;
+            LoadReadingList(listId);
+        });
     }
 
     [RelayCommand]
     private void CancelLink()
     {
         LinkingRow = null;
+        SuggestedMatches.Clear();
+        OnPropertyChanged(nameof(HasSuggestedMatches));
         SearchResults.Clear();
         SearchQuery = string.Empty;
     }
@@ -534,12 +606,15 @@ public partial class ReadingListPageViewModel
         using var context = PaperbunkrDb.CreateContext();
         try
         {
-            var list = await ArcReadingListBuilder.CreateFromArcAsync(context, source, row.Result, CancellationToken.None);
+            var created = await ArcReadingListBuilder.CreateFromArcWithReportAsync(context, source, row.Result, CancellationToken.None);
+            var list = created.List;
             PlaceInThisFolder(list.Id);
             ArcSearchResults.Clear();
             ArcSearchQuery = string.Empty;
             CloseDrawer();
             _openList(list.Id);
+            StatusMessage = $"Built '{list.Name}': {created.Report.Summary}"
+                + (created.Report.Details() is { } details ? Environment.NewLine + details : string.Empty);
         }
         catch (Exception ex) when (ex is ReadingListSourceException or InvalidOperationException)
         {

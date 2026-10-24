@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -14,6 +16,7 @@ using Paperbunkr.App.Services;
 using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.Services.Reader;
 using Paperbunkr.Data;
+using Paperbunkr.Data.ComicVine;
 using Paperbunkr.Data.Credentials;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
@@ -154,6 +157,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         PageReportItems = new ObservableCollection<PageReportRowViewModel>();
         RecentlyRemovedItems = new ObservableCollection<RemovedLibraryEntryRowViewModel>();
         SimilarSeriesCandidates = new ObservableCollection<SeriesConflictRowViewModel>();
+        SimilarSeriesCandidates.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasSimilarSeriesCandidates));
+            OnPropertyChanged(nameof(NoSimilarSeriesCandidates));
+        };
         EmptySeriesItems = new ObservableCollection<EmptySeriesRowViewModel>();
         EmptyIssueItems = new ObservableCollection<MissingFileRowViewModel>();
         DismissedMissingFileItems = new ObservableCollection<MissingFileRowViewModel>();
@@ -193,6 +201,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ComicVineRow.SaveCommand = SaveComicVineCredentialsCommand;
         ComicVineRow.DisconnectCommand = DisconnectComicVineCommand;
         MetronRow.PrimaryCommand = SaveMetronCredentialsCommand;
+        MetronRow.TestCommand = TestMetronConnectionCommand;
         MetronRow.DisconnectCommand = DisconnectMetronCommand;
 
         AniListRow.ConnectCommand = ConnectAniListCommand;
@@ -214,6 +223,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         KitsuRow.DisconnectCommand = DisconnectKitsuCommand;
         MangaDexRow.PrimaryCommand = ConnectMangaDexCommand;
         MangaDexRow.DisconnectCommand = DisconnectMangaDexCommand;
+
+        // Connections service gallery (docs/superpowers/specs/2026-10-12-connections-appearance-redesign-design.md): tile groups, status, two-step disconnect.
+        InitConnectionTiles();
 
         // Clear Cover Cache (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
         // verification-design.md) - manual escape hatch, independent of VerifyCovers' detection
@@ -281,6 +293,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public string[] PageTransitionStyleNames { get; } = Enum.GetNames<PageTransitionStyle>();
 
+    public string ReaderPageFrameStyleText
+    {
+        get => ReaderPageFrameStyle.ToString();
+        set { if (Enum.TryParse<ReaderPageFrameStyle>(value, out var parsed)) ReaderPageFrameStyle = parsed; }
+    }
+
+    public string[] ReaderPageFrameStyleNames { get; } = Enum.GetNames<ReaderPageFrameStyle>();
+
     public string ImageBackgroundModeText
     {
         get => ImageBackgroundMode.ToString();
@@ -328,10 +348,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         try
         {
             var info = await _updateService.CheckForUpdatesAsync();
-            if (info.Status == UpdateStatus.UpdateAvailable)
+            if (info.Status == UpdateStatus.UpdateAvailable
+                && info.Updates is { Count: > 0 } updates
+                && updates[0] is { Version: { } version } update)
             {
-                UpdateCheckResultText = $"Update available: v{info.Updates[0].Version}";
-                RaiseUpdateAvailableAlert(info.Updates[0].Version.ToString());
+                UpdateCheckResultText = $"Update available: v{version}";
+                RaiseUpdateAvailableAlert(version.ToString());
             }
             else
             {
@@ -540,8 +562,39 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private string? _selectedFontFamily;
 
     /// <summary>docs/superpowers/specs/2026-08-24-design-language-foundation-design.md - shortens UI transitions to effectively instant when true.</summary>
-    [ObservableProperty]
-    private bool _reducedMotion;
+    private string _motionPreferenceText = MotionPreferenceMode.System.ToString();
+
+    public string MotionPreferenceText
+    {
+        get => _motionPreferenceText;
+        set
+        {
+            if (SetProperty(ref _motionPreferenceText, value) && Enum.TryParse(value, true, out MotionPreferenceMode mode))
+            {
+                if (!_suppressMotionApply)
+                {
+                    _themeService.ApplyMotionPreference(mode);
+                    OnPropertyChanged(nameof(ReducedMotion));
+                    OnPropertyChanged(nameof(MotionPreferenceDescription));
+                }
+            }
+        }
+    }
+
+    public string[] MotionPreferenceModeNames { get; } = Enum.GetNames<MotionPreferenceMode>();
+
+    /// <summary>Compatibility projection for existing motion-aware view code.</summary>
+    public bool ReducedMotion => _themeService.GetReducedMotion();
+
+    public string MotionPreferenceDescription => MotionPreferenceText switch
+    {
+        nameof(MotionPreferenceMode.System) when !_themeService.IsSystemMotionPreferenceAvailable =>
+            "Follow Windows' \"Show animations\" setting. It could not be read here, so motion stays Full.",
+        nameof(MotionPreferenceMode.System) => "Follow Windows' \"Show animations\" setting: on is Full, off is Reduced.",
+        nameof(MotionPreferenceMode.Reduced) => "Short fades only: nothing slides, scales or flies, and continuous effects stop.",
+        nameof(MotionPreferenceMode.Off) => "No animation at all. Every change applies immediately.",
+        _ => "The full motion style, subject to the effect quality and battery settings.",
+    };
 
     [ObservableProperty]
     private bool _openLastPage;
@@ -632,6 +685,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private bool _minimizeToTray;
 
+    /// <summary>Taskbar overlay count and accent-dotted tray icon for wanted issues released this week (Cosmetics pitch #24). Default on.</summary>
+    [ObservableProperty]
+    private bool _showTaskbarBadge = true;
+
     /// <summary>Window tab toggle (on-screen feedback) - asks "Close Paperbunkr?" on the X button,
     /// only when that click would actually quit the app (i.e. <see cref="MinimizeToTray"/> isn't
     /// already redirecting it to the tray instead). No CE precedent - this app's own addition, off
@@ -652,6 +709,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// toolbar), not a parity gap.</summary>
     [ObservableProperty]
     private bool _readerAutoHideChrome;
+
+    /// <summary>Preferences > Reader > Ambient motion (Motion v2 E, Q34).</summary>
+    [ObservableProperty]
+    private bool _readerAmbientMotion;
+
+    /// <summary>Preferences > Reader > Book look for spreads (Motion v2 reader §7).</summary>
+    [ObservableProperty]
+    private bool _readerBookLook = true;
 
     /// <summary>Which mechanism reveals the reader's chrome clusters - swappable per direct user
     /// request (2026-09-16): per-corner hover (shipped default) or the original ambient
@@ -766,6 +831,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PageTransitionStyleText))]
     private PageTransitionStyle _pageTransitionStyle = PageTransitionStyle.None;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ReaderPageFrameStyleText))]
+    private ReaderPageFrameStyle _readerPageFrameStyle = ReaderPageFrameStyle.None;
 
     [ObservableProperty]
     private int _pageTransitionDurationMs = 250;
@@ -884,6 +953,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         {
             GcdData?.Refresh();   // null only while the constructor is still running
             MetronSync?.Refresh();
+            if (Acquisition is not null)
+            {
+                _ = CheckLocalServicesAsync();
+            }
         }
 
         OnPropertyChanged(nameof(IsAcquisitionSection));
@@ -986,7 +1059,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _suppressFontApply = false;
 
         _suppressMotionApply = true;
-        ReducedMotion = _themeService.GetReducedMotion();
+        MotionPreferenceText = _themeService.GetMotionPreference().ToString();
         _suppressMotionApply = false;
 
         _suppressThemeOptionsApply = true;
@@ -1032,9 +1105,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         NavRailHoverExpandEnabled = settings.NavRailHoverExpandEnabled;
         CheckForUpdatesOnStartup = settings.CheckForUpdatesOnStartup;
         MinimizeToTray = settings.MinimizeToTray;
+        ShowTaskbarBadge = settings.ShowTaskbarBadge;
         ConfirmBeforeClose = settings.ConfirmBeforeClose;
         HighQualityPageDisplay = settings.HighQualityPageDisplay;
         ReaderAutoHideChrome = settings.ReaderAutoHideChrome;
+        ReaderAmbientMotion = settings.ReaderAmbientMotion;
+        ReaderBookLook = settings.ReaderBookLook;
         ReaderChromeHoverMode = settings.ReaderChromeHoverMode;
         ResetZoomOnPageChange = settings.ResetZoomOnPageChange;
         SkipDeletedPages = settings.SkipDeletedPages;
@@ -1052,6 +1128,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         DefaultAutoRotate = settings.DefaultAutoRotate;
         DefaultPageLayoutMode = settings.DefaultPageLayoutMode;
         PageTransitionStyle = settings.PageTransitionStyle;
+        ReaderPageFrameStyle = settings.ReaderPageFrameStyle;
         PageTransitionDurationMs = settings.PageTransitionDurationMs;
         DefaultBrightness = settings.DefaultBrightness;
         DefaultContrast = settings.DefaultContrast;
@@ -1101,6 +1178,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         Shortcuts.Refresh();
         RefreshSourceCredentials(context);
         RefreshTrackerConnectionState(context);
+        LoadStoredChecks();
         RefreshLibraryHealth(context);
     }
 
@@ -1115,6 +1193,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
         OnPropertyChanged(nameof(IsActiveThemeDarkMode));
         OnPropertyChanged(nameof(IsActiveThemeMatrix));
+        RefreshThemeGallery();
     }
 
     /// <summary>Gates the Matrix-rain toggle row's visibility - keyed on the theme key, same test <c>MainViewModel.IsMatrixThemeActive</c> uses for the overlay itself.</summary>
@@ -1138,16 +1217,6 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         _themeService.ApplyFont(value);
-    }
-
-    partial void OnReducedMotionChanged(bool value)
-    {
-        if (_suppressMotionApply)
-        {
-            return;
-        }
-
-        _themeService.ApplyReducedMotion(value);
     }
 
     // ===================== Cosmetics (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md) =====================
@@ -1261,6 +1330,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     partial void OnDensityTextChanged(string value)
     {
+        RefreshAppearanceSamples();
         if (_suppressThemeOptionsApply)
         {
             return;
@@ -1279,6 +1349,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     partial void OnGlowTierTextChanged(string value)
     {
+        RefreshAppearanceSamples();
         if (_suppressThemeOptionsApply)
         {
             return;
@@ -1407,6 +1478,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         _themeService.SetAccentOverrideHex(value);
+        _themeCustomization?.Refresh();
     }
 
     partial void OnOpenLastPageChanged(bool value) => PersistBehaviorSetting(s => s.OpenLastPage = value);
@@ -1439,6 +1511,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     partial void OnCheckForUpdatesOnStartupChanged(bool value) => PersistBehaviorSetting(s => s.CheckForUpdatesOnStartup = value);
 
+    partial void OnShowTaskbarBadgeChanged(bool value) => PersistBehaviorSetting(s => s.ShowTaskbarBadge = value);
+
     partial void OnMinimizeToTrayChanged(bool value) => PersistBehaviorSetting(s => s.MinimizeToTray = value);
 
     partial void OnConfirmBeforeCloseChanged(bool value) => PersistBehaviorSetting(s => s.ConfirmBeforeClose = value);
@@ -1446,6 +1520,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnHighQualityPageDisplayChanged(bool value) => PersistBehaviorSetting(s => s.HighQualityPageDisplay = value);
 
     partial void OnReaderAutoHideChromeChanged(bool value) => PersistBehaviorSetting(s => s.ReaderAutoHideChrome = value);
+
+    partial void OnReaderAmbientMotionChanged(bool value) => PersistBehaviorSetting(s => s.ReaderAmbientMotion = value);
+
+    partial void OnReaderBookLookChanged(bool value) => PersistBehaviorSetting(s => s.ReaderBookLook = value);
 
     partial void OnReaderChromeHoverModeChanged(ReaderChromeHoverMode value) => PersistBehaviorSetting(s => s.ReaderChromeHoverMode = value);
 
@@ -1518,6 +1596,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnPageTransitionStyleChanged(PageTransitionStyle value)
     {
         PersistBehaviorSetting(s => s.PageTransitionStyle = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
+
+    partial void OnReaderPageFrameStyleChanged(ReaderPageFrameStyle value)
+    {
+        PersistBehaviorSetting(s => s.ReaderPageFrameStyle = value);
         ReaderDisplaySettingsChanged?.Invoke();
     }
 
@@ -1691,6 +1775,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         {
             InstallSkinError = error;
         }
+
+        RefreshInstallNotes();
     }
 
     [RelayCommand]
@@ -1847,6 +1933,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// these 5 operations don't otherwise guard against each other.</summary>
     public bool IsAnyComicFolderOperationRunning =>
         IsScanning || IsGeneratingCovers || IsSyncingMetadata || IsRepairingCovers || IsVerifyingCovers || IsClassifyingLibrary;
+
+    /// <summary>Toolbar-facing entry point that reuses the Preferences scan path and reloads the caller when it settles.</summary>
+    public Task ScanComicFoldersFromToolbarAsync(Action afterScan) => ScanNowAsync(afterScan);
 
     /// <summary>Folder management redesign (docs/superpowers/specs/2026-09-07-library-folder-
     /// management-redesign-design.md) - the currently-running Comic Folders operation (Scan Now or
@@ -2030,6 +2119,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// <see cref="IsAnyComicFolderOperationRunning"/>.</summary>
     public bool IsAnyBookFolderOperationRunning => IsScanningBooks || IsClearingBookCoverCache;
 
+    /// <summary>Toolbar-facing entry point that reuses the Preferences book-scan path and reloads the caller when it settles.</summary>
+    public Task ScanBookFoldersFromToolbarAsync(Action afterScan) => ScanBooksNowAsync(afterScan);
+
     /// <summary>Book Folders' own job reference, same rationale as
     /// <see cref="CurrentComicFolderJob"/>.</summary>
     [ObservableProperty]
@@ -2109,7 +2201,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task ScanBooksNow()
+    private Task ScanBooksNow() => ScanBooksNowAsync();
+
+    private async Task ScanBooksNowAsync(Action? afterScan = null)
     {
         if (IsScanningBooks)
         {
@@ -2152,12 +2246,21 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         {
             IsScanningBooks = false;
             CurrentBookFolderJob = null;
-            RefreshBookFolders();
+            try
+            {
+                RefreshBookFolders();
+            }
+            finally
+            {
+                afterScan?.Invoke();
+            }
         }
     }
 
     [RelayCommand]
-    private async Task ScanNow()
+    private Task ScanNow() => ScanNowAsync();
+
+    private async Task ScanNowAsync(Action? afterScan = null)
     {
         if (IsScanning)
         {
@@ -2176,6 +2279,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             string summary = result.IssuesAdded == 0
                 ? "No new issues found."
                 : $"Added {result.IssuesAdded} issue{(result.IssuesAdded == 1 ? "" : "s")} across {result.SeriesTouched} series.";
+            TimeSpan? coverGenerationDuration = null;
+            TimeSpan? verificationDuration = null;
 
             if (result.IssuesAdded > 0)
             {
@@ -2183,16 +2288,18 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 // leaving Library showing blank placeholders until someone finds the separate
                 // "Generate Covers" button on the Library screen (same pipeline it uses).
                 var coverProgress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"Covers {p.Done} / {p.Total}"));
+                var coverTimer = Stopwatch.StartNew();
                 await new CoverThumbnailService(_contextFactory).GenerateAllAsync(coverProgress, job.CancellationToken);
+                coverTimer.Stop();
+                coverGenerationDuration = coverTimer.Elapsed;
                 DuplicateAlertHelper.RaiseIfAny(_activity, result.AddedIssueIds);
             }
 
             // Auto-remove-missing-on-scan (docs/superpowers/specs/2026-09-06-scan-missing-file-
-            // handling-design.md) - Scan Now only, never the live-watch path (LiveFolderWatchService
-            // never calls ScanNow). Runs the same full-library VerifyAsync Verify Now uses (Scan Now
-            // already covers every library folder, so no new scoped variant needed), then the same
-            // two-strikes eligibility ConfirmBulkRemove already uses, plus a drive-reachability
-            // guard the unattended path needs that the human-reviewed manual button doesn't.
+            // handling-design.md and 2026-10-15-scan-auto-verification-design.md) - Scan Now only, never the live-watch path (LiveFolderWatchService
+            // never calls ScanNow). Reuses the completed scan's path snapshot for watched roots and
+            // falls back to live checks outside them; unlike explicit Verify Now, this missing-only
+            // pass does not open every present archive to check its content health.
             bool autoRemoveOnScan;
             using (var settingsContext = _contextFactory())
             {
@@ -2202,7 +2309,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             if (autoRemoveOnScan)
             {
                 var healthProgress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"Verifying {p.Done} / {p.Total}"));
-                var healthResult = await _libraryHealth.VerifyAsync(healthProgress, job.CancellationToken);
+                var verificationTimer = Stopwatch.StartNew();
+                var healthResult = await _libraryHealth.VerifyMissingAsync(
+                    result.PresenceSnapshot ?? throw new InvalidOperationException("A completed library scan must provide its presence snapshot."),
+                    healthProgress,
+                    job.CancellationToken);
+                verificationTimer.Stop();
+                verificationDuration = verificationTimer.Elapsed;
 
                 using (var healthContext = _contextFactory())
                 {
@@ -2228,6 +2341,28 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 RefreshLibraryHealth(refreshContext);
             }
 
+            if (result.Diagnostics is { } scanDiagnostics)
+            {
+                summary += $" Scan: {scanDiagnostics.FilePathsEnumerated.ToString("N0", CultureInfo.CurrentCulture)} paths / "
+                    + $"{scanDiagnostics.SupportedComicFiles.ToString("N0", CultureInfo.CurrentCulture)} supported / "
+                    + $"{scanDiagnostics.AlreadyTrackedPaths.ToString("N0", CultureInfo.CurrentCulture)} already tracked / "
+                    + $"{scanDiagnostics.CandidateFiles.ToString("N0", CultureInfo.CurrentCulture)} new; "
+                    + $"enumerate {FormatScanDuration(scanDiagnostics.EnumerationAndFiltering)}, "
+                    + $"import {FormatScanDuration(scanDiagnostics.ImportProcessing)}";
+
+                if (coverGenerationDuration is { } coverDuration)
+                {
+                    summary += $"; covers {FormatScanDuration(coverDuration)}";
+                }
+
+                if (verificationDuration is { } verifyDuration)
+                {
+                    summary += $"; verification {FormatScanDuration(verifyDuration)}";
+                }
+
+                summary += $"; total {FormatScanDuration(scanDiagnostics.TotalScan)}.";
+            }
+
             job.Succeed(summary, itemsProcessed: result.IssuesAdded);
             _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.LibraryScan, ScheduledRunStatus.Succeeded);
         }
@@ -2245,8 +2380,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         {
             IsScanning = false;
             CurrentComicFolderJob = null;
+            afterScan?.Invoke();
         }
     }
+
+    private static string FormatScanDuration(TimeSpan duration)
+        => $"{duration.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture)} s";
 
     /// <summary>
     /// The auto-remove-on-scan body (docs/superpowers/specs/2026-09-06-scan-missing-file-handling-
@@ -2939,14 +3078,18 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private void RefreshSourceCredentials(PaperbunkrDbContext context)
     {
         ComicVineRow.SecretValue = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey) ?? string.Empty;
+        MetronRow.SecretValue = CredentialStore.Get(context, "Metron", CredentialKind.ApiToken) ?? string.Empty;
         MetronRow.Username = CredentialStore.Get(context, "Metron", CredentialKind.Username) ?? string.Empty;
         MetronRow.Password = CredentialStore.Get(context, "Metron", CredentialKind.Password) ?? string.Empty;
+
+        // The legacy login opens by itself only for someone who still has one and no token yet (spec 2026-10-21 A, Part 1).
+        MetronRow.IsLegacyLoginExpanded = MetronAuth.HasLegacyLogin(context) && !MetronAuth.HasToken(context);
 
         // New (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-redesign-design.md) -
         // ComicVine/Metron previously had no "connected" concept at all, just a one-line status
         // message after Save. Same CredentialStore.HasCredentials check the Trackers already use.
         IsComicVineConnected = CredentialStore.HasCredentials(context, "ComicVine", CredentialKind.ApiKey);
-        IsMetronConnected = CredentialStore.HasCredentials(context, "Metron", CredentialKind.Username, CredentialKind.Password);
+        IsMetronConnected = MetronAuth.IsConfigured(context);
 
         SyncProviderRowConnectedState(SourceProviderRows, "ComicVine", IsComicVineConnected);
         SyncProviderRowConnectedState(SourceProviderRows, "Metron", IsMetronConnected);
@@ -2969,11 +3112,68 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private void SaveMetronCredentials()
     {
         using var context = _contextFactory();
-        CredentialStore.Set(context, "Metron", CredentialKind.Username, MetronRow.Username);
-        CredentialStore.Set(context, "Metron", CredentialKind.Password, MetronRow.Password);
-        ConnectionDialogStatus = "Metron credentials saved.";
+        var token = MetronRow.SecretValue.Trim();
+        if (token.Length > 0)
+        {
+            if (!string.Equals(CredentialStore.Get(context, "Metron", CredentialKind.ApiToken), token, StringComparison.Ordinal))
+            {
+                // A new token starts from the default scheme (Bearer) again; Test connection learns the right one if it differs.
+                CredentialStore.Delete(context, "Metron", CredentialKind.AuthScheme);
+            }
+
+            CredentialStore.Set(context, "Metron", CredentialKind.ApiToken, token);
+        }
+        else
+        {
+            CredentialStore.Delete(context, "Metron", CredentialKind.ApiToken);
+            CredentialStore.Delete(context, "Metron", CredentialKind.AuthScheme);
+        }
+
+        if (string.IsNullOrWhiteSpace(MetronRow.Username) || string.IsNullOrEmpty(MetronRow.Password))
+        {
+            CredentialStore.Delete(context, "Metron", CredentialKind.Username);
+            CredentialStore.Delete(context, "Metron", CredentialKind.Password);
+        }
+        else
+        {
+            CredentialStore.Set(context, "Metron", CredentialKind.Username, MetronRow.Username);
+            CredentialStore.Set(context, "Metron", CredentialKind.Password, MetronRow.Password);
+        }
+
+        ConnectionDialogStatus = token.Length > 0 ? "Metron API token saved." : "Metron credentials saved.";
+        MetronRow.TestStatus = string.Empty;
         RefreshSourceCredentials(context);
     }
+
+    /// <summary>Metron's Test connection: one request, and for a token the other scheme on a 401; the working scheme is saved.</summary>
+    [RelayCommand]
+    private async Task TestMetronConnectionAsync()
+    {
+        MetronAuth? auth;
+        using (var context = _contextFactory())
+        {
+            auth = MetronAuth.Load(context);
+        }
+
+        if (auth is null)
+        {
+            MetronRow.TestStatus = "Save an API token first.";
+            return;
+        }
+
+        MetronRow.TestStatus = "Testing…";
+        var result = await MetronAuthProbe.ProbeAsync(auth, MetronProbeVerify, CancellationToken.None);
+        if (result.Accepted && result.Working is { IsToken: true } working)
+        {
+            using var context = _contextFactory();
+            CredentialStore.Set(context, "Metron", CredentialKind.AuthScheme, working.Scheme);
+        }
+
+        MetronRow.TestStatus = result.Message;
+    }
+
+    /// <summary>Test seam for <see cref="TestMetronConnectionAsync"/>: the request that proves a credential works.</summary>
+    internal Func<MetronAuth, CancellationToken, Task> MetronProbeVerify { get; set; } = (auth, ct) => new MetronClient(auth).VerifyAsync(ct);
 
     [RelayCommand]
     private void DisconnectComicVine()
@@ -2989,10 +3189,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private void DisconnectMetron()
     {
         using var context = _contextFactory();
+        CredentialStore.Delete(context, "Metron", CredentialKind.ApiToken);
+        CredentialStore.Delete(context, "Metron", CredentialKind.AuthScheme);
         CredentialStore.Delete(context, "Metron", CredentialKind.Username);
         CredentialStore.Delete(context, "Metron", CredentialKind.Password);
+        MetronRow.SecretValue = string.Empty;
         MetronRow.Username = string.Empty;
         MetronRow.Password = string.Empty;
+        MetronRow.TestStatus = string.Empty;
         ConnectionDialogStatus = "Metron disconnected.";
         RefreshSourceCredentials(context);
     }
@@ -3586,6 +3790,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public bool HasSimilarSeriesCandidates => SimilarSeriesCandidates.Count > 0;
 
+    public bool NoSimilarSeriesCandidates => HasScannedSimilarSeries && !HasSimilarSeriesCandidates;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NoSimilarSeriesCandidates))]
+    private bool _hasScannedSimilarSeries;
+
     public bool HasEmptyRowItems => EmptySeriesItems.Count > 0 || EmptyIssueItems.Count > 0;
 
     /// <summary>Empty series plus empty issue rows, for the section header.</summary>
@@ -4113,6 +4323,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [RelayCommand]
     private void FindSimilarSeries()
     {
+        LibraryHealthSections.SimilarSeries.IsOpen = true;
         SimilarSeriesCandidates.Clear();
 
         using var context = _contextFactory();
@@ -4139,20 +4350,31 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             }
         }
 
+        HasScannedSimilarSeries = true;
         OnPropertyChanged(nameof(HasSimilarSeriesCandidates));
     }
 
     private void MergeSimilarSeries(int sourceId, int targetId, SeriesConflictRowViewModel row)
     {
-        using (var context = _contextFactory())
+        try
         {
+            using var context = _contextFactory();
             var source = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == sourceId);
             var target = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == targetId);
-            if (source is not null && target is not null)
+            if (source is null || target is null)
             {
-                SeriesMergeHelper.MergeInto(context, source, target);
-                context.SaveChanges();
+                return;
             }
+
+            SeriesMergeHelper.MergeInto(context, source, target);
+            context.SaveChanges();
+        }
+        catch (DbUpdateException ex)
+        {
+            // Keep the candidate visible for another attempt and report the database rejection
+            // instead of letting it escape through Avalonia's dispatcher event route.
+            _showToast("Series merge failed", ex.InnerException?.Message ?? ex.Message);
+            return;
         }
 
         // Deferred: same reason as RemoveMissingFile below - this runs from the row's own Merge

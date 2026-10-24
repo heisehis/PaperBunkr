@@ -9,7 +9,7 @@
              x:DataType="vm:PreferencesScreenViewModel">
 
     <ScrollViewer>
-        <StackPanel Margin="28,20,28,40" Spacing="20">
+        <StackPanel Margin="24,20,24,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="Plugins" />
             <views:PluginScreen DataContext="{Binding Plugin}" />
         </StackPanel>

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.Data.Metadata;
 
@@ -34,7 +35,72 @@ internal static class AniListNormalizer
         PublicationFormat: media.Format,
         GenreTags: media.Genres is { Count: > 0 } genreTags ? genreTags : null,
         OtherTags: ResolveOtherTags(media.Tags),
-        CountryOfOrigin: media.CountryOfOrigin);
+        CountryOfOrigin: media.CountryOfOrigin,
+        CrossReferences: media.IdMal is int mal and > 0 ? [(ExternalMetadataProvider.MyAnimeList, mal.ToString())] : null,
+        WeightedTags: ResolveWeightedTags(media),
+        Authors: StaffNames(media.Staff, story: true),
+        Artists: StaffNames(media.Staff, story: false),
+        ContentRating: ResolveContentRating(media),
+        Rating: media.AverageScore is int score and > 0 ? score : null,
+        AlternateTitles: media.Synonyms is { Count: > 0 } syn ? syn.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList() : null,
+        PublicationStart: PublicationDate(media.StartDate),
+        PublicationEnd: PublicationDate(media.EndDate),
+        Popularity: media.Popularity is >= 0 ? media.Popularity : null);
+
+    private static ProviderPublicationDate? PublicationDate(AniListFuzzyDateDto? date) =>
+        date is null || (date.Year is null && date.Month is null && date.Day is null)
+            ? null : new(date.Year, date.Month, date.Day);
+
+    /// <summary>AniList ranks a tag 0-100 by how well it fits; genres carry no rank, so they are listed as unweighted.</summary>
+    internal static IssueTagWeight WeightFromRank(int? rank) => rank switch
+    {
+        >= 85 => IssueTagWeight.Core,
+        >= 65 => IssueTagWeight.Defining,
+        >= 40 => IssueTagWeight.Recurrent,
+        > 0 => IssueTagWeight.Incidental,
+        _ => IssueTagWeight.Unset,
+    };
+
+    private static IReadOnlyList<ProviderTag>? ResolveWeightedTags(AniListMediaDto media)
+    {
+        var tags = new List<ProviderTag>();
+        foreach (string genre in media.Genres ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(genre))
+            {
+                tags.Add(new ProviderTag(genre, "Genre", IssueTagWeight.Unset, IsGenre: true, IsSpoiler: false));
+            }
+        }
+
+        foreach (var tag in media.Tags ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(tag.Name))
+            {
+                string category = string.IsNullOrWhiteSpace(tag.Category) ? "Uncategorized" : tag.Category!.Split('-')[0].Trim();
+                tags.Add(new ProviderTag(tag.Name!, category, WeightFromRank(tag.Rank), IsGenre: false, tag.IsMediaSpoiler));
+            }
+        }
+
+        return tags.Count > 0 ? tags : null;
+    }
+
+    /// <summary>The freeform role decides: "Story" and "Original" are authors, "Art" and "Illustration" are artists, "Story &amp; Art" is both; anything else (translation, lettering) is neither.</summary>
+    private static IReadOnlyList<string>? StaffNames(AniListStaffConnectionDto? staff, bool story)
+    {
+        var names = staff?.Edges?
+            .Where(e => e.Role is { Length: > 0 } role && (story
+                ? role.Contains("Story", StringComparison.OrdinalIgnoreCase) || role.Contains("Original", StringComparison.OrdinalIgnoreCase)
+                : role.Contains("Art", StringComparison.OrdinalIgnoreCase) || role.Contains("Illustrat", StringComparison.OrdinalIgnoreCase)))
+            .Select(e => e.Node?.Name?.Full)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return names is { Count: > 0 } ? names : null;
+    }
+
+    private static string? ResolveContentRating(AniListMediaDto media) =>
+        media.IsAdult ? "adult" : media.Genres?.Contains("Ecchi", StringComparer.OrdinalIgnoreCase) == true ? "suggestive" : null;
 
     /// <summary>English title when AniList has one, romaji otherwise - AniList's own MediaTitle
     /// object doesn't guarantee an English title exists, but every manga entry has a romaji one.</summary>

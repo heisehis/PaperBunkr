@@ -1,7 +1,7 @@
 # Faster automatic missing-file verification after Scan Now
 
 **Date:** 2026-10-15  
-**Status:** Approved in conversation; written spec awaiting user review  
+**Status:** Implemented 2026-10-15; focused tests pass; real-library timing pending  
 **Builds on:** `2026-09-06-scan-missing-file-handling-design.md`, `2026-10-15-library-scan-diagnostics-design.md`
 
 ## Problem
@@ -118,4 +118,20 @@ behavior. Its progress, counts, and user-visible behavior remain unchanged.
 
 Expected implementation surfaces are `LibraryFolderScanner.cs`, `LibraryHealthService.cs`,
 `PreferencesScreenViewModel.cs`, and their existing scanner, service, and view-model test files.
-There is no schema migration or XAML change.
+`LibrarySection.axaml` updates the setting description to reflect the missing-only automatic check.
+There is no schema migration.
+
+## Implementation notes (2026-10-15)
+
+- `LibraryFolderScanResult.PresenceSnapshot` carries canonical supported-comic paths and completed
+  roots in memory. It includes comics imported by the same scan and excludes unavailable roots.
+- Automatic cleanup calls `LibraryHealthService.VerifyMissingAsync`; explicit **Verify Now** still
+  calls the full verifier. The Scan Now setting description now makes that distinction clear.
+- The **Find Similar Series** scan button is now available before the first scan, the section opens
+  when a scan completes, and empty results have an explicit state. This closes the separate UI
+  dead-end found during the Library Health audit.
+- Focused verification: 85 scanner, health-service, Scan Now cleanup, and similar-series tests
+  passed. The full `PreferencesScreenViewModelTests` class also has a pre-existing theme-fixture
+  failure (`PbRadius` missing); its Library Health section-count assertion was stale after the
+  reading-list repair section was added and has been updated from 13 to 14.
+- A real-library Activity Center comparison is still needed to report the measured time saved.

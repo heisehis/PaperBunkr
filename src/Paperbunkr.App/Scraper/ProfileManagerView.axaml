@@ -12,13 +12,6 @@
     <!-- Config screen redesign (2026-09-13) - same card language as SettingsView.axaml's Comic Vine
          tabs, applied to the master-detail layout this tab already had. -->
     <UserControl.Styles>
-        <Style Selector="Border.card">
-            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="10" />
-            <Setter Property="Padding" Value="16" />
-        </Style>
         <Style Selector="TextBlock.cardHeader">
             <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="Medium" />
@@ -26,48 +19,15 @@
         </Style>
         <Style Selector="TextBlock.hint">
             <Setter Property="FontSize" Value="11" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-            <Setter Property="TextWrapping" Value="Wrap" />
-        </Style>
-        <Style Selector="TextBlock.fieldLabel">
-            <Setter Property="FontSize" Value="12" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        </Style>
-        <Style Selector="Button.secondary">
-            <Setter Property="Height" Value="30" />
-            <Setter Property="Padding" Value="12,0" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-        </Style>
-        <Style Selector="Button.secondary:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        </Style>
-        <Style Selector="Button.primary">
-            <Setter Property="Height" Value="30" />
-            <Setter Property="Padding" Value="16,0" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
-            <Setter Property="FontWeight" Value="Medium" />
-        </Style>
-        <Style Selector="Button.destructive">
-            <Setter Property="Height" Value="30" />
-            <Setter Property="Padding" Value="16,0" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Background" Value="{DynamicResource PbDangerSoftBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
     </UserControl.Styles>
 
     <UserControl.DataTemplates>
         <!-- One exclude group. Child groups render through this same template (no ItemTemplate on the inner ItemsControl), so groups nest to any depth. -->
         <DataTemplate DataType="vm:ExcludeGroupViewModel" x:DataType="vm:ExcludeGroupViewModel">
-            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,6">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="10" Margin="0,0,0,6">
                 <StackPanel Spacing="6">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="Skip a book that matches" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
@@ -86,7 +46,7 @@
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <controls:SuggestBox IsStrict="True" Text="{Binding FieldText}" Suggestions="{x:Static vm:ExcludeConditionRowViewModel.FieldNames}" Width="150" />
                                     <controls:SuggestBox IsStrict="True" Text="{Binding OperatorText}" Suggestions="{x:Static vm:ExcludeConditionRowViewModel.OperatorNames}" Width="150" />
-                                    <TextBox Text="{Binding Value}" Watermark="Value" Width="140" />
+                                    <TextBox Text="{Binding Value}" PlaceholderText="Value" Width="140" />
                                     <CheckBox Content="Not" IsChecked="{Binding Not}" />
                                     <Button Content="Remove" Classes="secondary" Command="{Binding RemoveCommand}" />
                                 </StackPanel>
@@ -159,7 +119,7 @@
                         <TextBlock Text="Name" Classes="cardHeader" />
                         <TextBox Text="{Binding Selected.Name}" />
                         <TextBlock Text="Base folder" Classes="cardHeader" Margin="0,4,0,0" />
-                        <TextBox Text="{Binding Selected.BaseFolder}" Watermark="Root folder this profile organizes into" />
+                        <TextBox Text="{Binding Selected.BaseFolder}" PlaceholderText="Root folder this profile organizes into" />
                     </StackPanel>
                 </Border>
 
@@ -183,10 +143,10 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:InsertableToken">
                                     <StackPanel Orientation="Horizontal" Spacing="2" Margin="0,0,4,4">
-                                        <Button Content="{Binding Token}" Classes="secondary" FontSize="11" Height="24" Padding="6,0"
+                                        <Button Content="{Binding Token}" Classes="secondary sm"
                                                 Command="{Binding InsertIntoFolder}" CommandParameter="{Binding Token}"
                                                 ToolTip.Tip="Insert into folder template" />
-                                        <Button Content="→file" Classes="secondary" FontSize="11" Height="24" Padding="6,0"
+                                        <Button Content="→file" Classes="secondary sm"
                                                 Command="{Binding InsertIntoFile}" CommandParameter="{Binding Token}"
                                                 ToolTip.Tip="Insert into file template" />
                                     </StackPanel>
@@ -235,11 +195,11 @@
                     <StackPanel Spacing="8">
                         <TextBlock Text="When a value is missing" Classes="cardHeader" />
                         <TextBlock Text="Folder name for an empty folder part" Classes="fieldLabel" />
-                        <TextBox Text="{Binding Selected.EmptyFolder}" Watermark="Blank leaves the part out of the path" />
+                        <TextBox Text="{Binding Selected.EmptyFolder}" PlaceholderText="Blank leaves the part out of the path" />
                         <TextBlock Text="Text to use when a token is empty (one token=text per line, e.g. publisher=Unknown)" Classes="fieldLabel" Margin="0,4,0,0" />
                         <TextBox Text="{Binding Selected.EmptyDataText}" AcceptsReturn="True" Height="70" />
                         <CheckBox Content="Leave a book where it is when one of these tokens is empty" IsChecked="{Binding Selected.FailEmptyValues}" Margin="0,4,0,0" />
-                        <TextBox Text="{Binding Selected.FailedFieldsText}" Watermark="series, number" IsEnabled="{Binding Selected.FailEmptyValues}" />
+                        <TextBox Text="{Binding Selected.FailedFieldsText}" PlaceholderText="series, number" IsEnabled="{Binding Selected.FailEmptyValues}" />
                     </StackPanel>
                 </Border>
 
@@ -256,7 +216,7 @@
                 <TextBlock Text="{Binding SaveStatusMessage}" Foreground="{DynamicResource PbDangerBrush}" TextWrapping="Wrap"
                            IsVisible="{Binding SaveStatusMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                 <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                    <Button Content="Delete" Classes="destructive" Command="{Binding DeleteSelectedCommand}" />
+                    <Button Content="Delete" Classes="danger" Command="{Binding DeleteSelectedCommand}" />
                     <Button Content="Save" Classes="primary" Command="{Binding SaveSelectedCommand}" />
                 </StackPanel>
             </StackPanel>

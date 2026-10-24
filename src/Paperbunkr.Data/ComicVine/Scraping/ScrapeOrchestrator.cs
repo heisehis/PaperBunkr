@@ -88,6 +88,7 @@ public sealed class ScrapeOrchestrator
     private readonly ScrapeSettings _settings;
     private readonly Func<ComicProvider, (IScrapeComicVine Source, ComicVineMatchMemory Memory)?>? _providerSwitcher;
     private readonly Func<int, string?>? _getCoverPath;
+    private readonly HashSet<int> _metronUniversesRefreshed = new();
 
     /// <param name="getCoverPath">Resolves a local <see cref="Issue"/> id to the file path of its own
     /// decoded cover, for the auto-match cover-hash safety gate (docs/superpowers/specs/2026-09-24-
@@ -112,6 +113,48 @@ public sealed class ScrapeOrchestrator
     /// <summary>The book currently being reviewed's own effective issue number - set once per book at
     /// the top of <see cref="ScrapeAsync"/>'s loop, read by <see cref="FindIssueCoverUrlAsync"/>.</summary>
     public string? CurrentBookNumber { get; private set; }
+
+    /// <summary>
+    /// Preview mode: every match is worked out (searches, dialogs, issue details) but nothing is written; each comic's would-be changes land in
+    /// <see cref="Proposals"/> instead, for <see cref="ApplyProposalsAsync"/>.
+    /// </summary>
+    public bool DryRun { get; set; }
+
+    private readonly List<ScrapeProposal> _proposals = new();
+
+    /// <summary>What a <see cref="DryRun"/> would change, one entry per matched comic.</summary>
+    public IReadOnlyList<ScrapeProposal> Proposals => _proposals;
+
+    /// <summary>The label of the comic being processed (for proposals).</summary>
+    public string? CurrentBookLabel { get; private set; }
+
+    /// <summary>Writes the chosen proposals of a dry run, with the decisions already made: no search, no dialog. Returns the applied issue ids.</summary>
+    public async Task<IReadOnlyList<int>> ApplyProposalsAsync(IEnumerable<ScrapeProposal> chosen, Func<PaperbunkrDbContext> createDbContext, CancellationToken cancellationToken = default)
+    {
+        bool wasDryRun = DryRun;
+        DryRun = false;
+        var applied = new List<int>();
+        try
+        {
+            foreach (var proposal in chosen)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (proposal.Provider != Provider && !TrySwitchProvider(proposal.Provider))
+                {
+                    continue;
+                }
+
+                await ApplyVolumeAndIssueAsync(new Issue { Id = proposal.IssueId }, proposal.Volume, proposal.Details, createDbContext, cancellationToken).ConfigureAwait(false);
+                applied.Add(proposal.IssueId);
+            }
+        }
+        finally
+        {
+            DryRun = wasDryRun;
+        }
+
+        return applied;
+    }
 
     /// <summary>The local <see cref="Issue.Id"/> currently being reviewed - set once per book at the
     /// top of <see cref="ScrapeAsync"/>'s loop, read by the caller when wiring a review dialog's
@@ -207,6 +250,14 @@ public sealed class ScrapeOrchestrator
         bool twoPhaseAutoChoose = isInteractive && _settings.AutoChooseTopMatch && interactiveReview is not null;
         var deferred = new List<Issue>();
 
+        // Series-first (docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-core-design.md section 2): the volume chosen for one book
+        // of a library series - by the user or the automatic matcher - is used for that series' other books in this run, so a 50-issue
+        // series is searched and confirmed once instead of 50 times. Keyed by source, since a volume id means nothing on the other one.
+        // Keyed by format too: "Lobo Annual #1" filed under the library series "Lobo" must not follow the regular series' match.
+        // And by the file's own title: a library series can hold comics of two source series ("Secret Wars" with "Secret Wars 2099"), and one
+        // must not follow the other's match (reported 2026-10-22).
+        var seriesChoice = new Dictionary<(ComicProvider Provider, int SeriesId, ComicFormatKind Format, string FileTitle), ComicVineVolumeSearchResult>();
+
         int index = 0;
         foreach (Issue issue in books)
         {
@@ -216,7 +267,9 @@ public sealed class ScrapeOrchestrator
             // scrape delay to pass after scraping each book...don't do this for...the first book") -
             // distinct from and in addition to the existing per-HTTP-request 1100ms spacing inside the
             // client itself. Never waits before the first book of this phase.
-            if (index > 0)
+            // Only the Careful speed keeps it (docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-core-design.md section 4): the
+            // clients' own limiters already pace every request, so the pause was dead time - a 500-book batch spent 1000+ s in it.
+            if (index > 0 && (ScrapeDelayOverride is not null || _settings.Speed == ScrapeSpeed.Careful))
             {
                 DelayInvocationCount++;
                 TimeSpan delay = ScrapeDelayOverride ?? TimeSpan.FromMilliseconds(Math.Clamp(_settings.ScrapeDelayMs, 2000, 3_600_000));
@@ -263,6 +316,17 @@ public sealed class ScrapeOrchestrator
             (string? effectiveNumber, int? effectiveYear) = await ResolveEffectiveNumberAndYearAsync(issue, createDbContext, cancellationToken).ConfigureAwait(false);
             CurrentBookNumber = effectiveNumber;
             string bookLabel = BookLabel(issue, effectiveNumber);
+            CurrentBookLabel = bookLabel;
+
+            // The comic's format from its Format field, file name or folder (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md
+            // section 5), and a year from a file-style name when the comic has none.
+            ComicFormatKind bookFormat = ComicFormatHints.Detect(issue.EffectiveFormat(), issue.FilePath);
+            int? scoringYear = effectiveYear ?? ComicFormatHints.YearHint(issue.Series?.Name, issue.FilePath);
+
+            // "#Halloween Special" instead of a number: the source files such a book as its own series ("Amazing Spider-Man: Halloween Special"),
+            // so it is also searched for, and candidates are scored against the series name plus these words (reported 2026-10-22).
+            string? designation = ComicFormatHints.IssueDesignation(issue.FilePath);
+            string fileTitleKey = Metadata.TitleNormalizer.StripDown((ComicFormatHints.FileTitle(issue.FilePath) ?? string.Empty).ToLowerInvariant());
 
             onProgress?.Invoke(phase, total, bookIndex, issue, bookLabel);
 
@@ -279,7 +343,8 @@ public sealed class ScrapeOrchestrator
                 return false;
             }
 
-            string? seriesName = issue.Series?.Name;
+            // The file's title when it extends the library series name: a "Secret Wars 2099" comic filed under "Secret Wars" searches for itself.
+            string? seriesName = issue.Series?.Name is { } libraryName ? ComicFormatHints.SearchName(libraryName, issue.FilePath) : null;
 
             // An id the book already carries beats any search (docs/superpowers/specs/2026-10-05-metron-api-
             // efficiency-and-matching-design.md section 2). Only on a run that chooses for itself: a run where
@@ -291,6 +356,8 @@ public sealed class ScrapeOrchestrator
                 {
                     _matchMemory.RecordChoice(ComicVineMatchMemory.NormalizeSearchKey(seriesName), exact.Volume.Id);
                 }
+
+                seriesChoice[(Provider, issue.SeriesId, bookFormat, fileTitleKey)] = exact.Volume;
 
                 await ApplyVolumeAndIssueAsync(issue, exact.Volume, exact.Details, createDbContext, cancellationToken).ConfigureAwait(false);
                 Record(ScrapeOutcomeKind.Applied, $"Matched \"{exact.Volume.Name}\" by {exact.How}");
@@ -327,9 +394,10 @@ public sealed class ScrapeOrchestrator
                     // name-contains filter, where rewriting "Batman & Robin" to "batman and robin" would
                     // stop it matching, so Metron keeps getting the query as typed.
                     bool comicVineQuery = Provider == ComicProvider.ComicVine;
+                    string fileSafe = ComicFormatHints.CleanQuery(query);   // "Batman_Beyond_Neo-Gothic_(2023-)" -> "Batman Beyond Neo-Gothic"
                     string cleaned = comicVineQuery
-                        ? SearchTermCleaner.Clean(StripIgnoredSearchTerms(query), alternate: false)
-                        : StripIgnoredSearchTerms(query);
+                        ? SearchTermCleaner.Clean(StripIgnoredSearchTerms(fileSafe), alternate: false)
+                        : StripIgnoredSearchTerms(fileSafe);
                     found = string.IsNullOrWhiteSpace(cleaned)
                         ? Array.Empty<ComicVineVolumeSearchResult>()
                         : await _comicVine.SearchVolumesAsync(cleaned, cancellationToken: ct).ConfigureAwait(false);
@@ -342,7 +410,7 @@ public sealed class ScrapeOrchestrator
                         }
                     }
                 }
-                catch (ComicVineException ex)
+                catch (ComicVineException ex) when (!IsCredentialFailure(ex))
                 {
                     // A network/API failure for this one search shouldn't abort the batch - same
                     // per-item isolation principle as LibraryOrganizerService.ExecuteAsync. Returning
@@ -354,18 +422,62 @@ public sealed class ScrapeOrchestrator
                     return Array.Empty<(ComicVineVolumeSearchResult, double)>();
                 }
 
+                if (designation is not null)
+                {
+                    try
+                    {
+                        var byDesignation = await _comicVine.SearchVolumesAsync(designation, cancellationToken: ct).ConfigureAwait(false);
+                        var seen = found.Select(f => f.Id).ToHashSet();
+                        found = found.Concat(byDesignation.Where(d => seen.Add(d.Id))).ToList();
+                    }
+                    catch (ComicVineException ex) when (!IsCredentialFailure(ex))
+                    {
+                    }
+                }
+
+                // Series found through this comic's issue number (2026-10-22: "X-Men" never matched anything after 2007 - a busy name buries the
+                // right series past what a name search returns). Added to the name search's candidates; a failure here costs only these extras.
+                if (!string.IsNullOrWhiteSpace(effectiveNumber) && _comicVine is IScrapeIssueFirstSearch byIssue)
+                {
+                    try
+                    {
+                        string issueQuery = StripIgnoredSearchTerms(ComicFormatHints.CleanQuery(query));
+                        var throughIssue = await byIssue.FindSeriesByIssueAsync(issueQuery, effectiveNumber, scoringYear, ct).ConfigureAwait(false);
+                        var known = found.Select(f => f.Id).ToHashSet();
+                        found = found.Concat(throughIssue.Where(t => known.Add(t.Id))).ToList();
+                    }
+                    catch (ComicVineException ex) when (!IsCredentialFailure(ex))
+                    {
+                    }
+                }
+
                 found = ApplyAdvancedFilters(found);
                 return found
                     .Select(c => (Volume: c, Score: MatchScoreCalculator.Compute(
-                        seriesName,
+                        designation is null ? ComicFormatHints.CleanQuery(seriesName) : $"{ComicFormatHints.CleanQuery(seriesName)} {designation}",
                         issue.EffectiveFormat(),
                         effectiveNumber,
-                        effectiveYear,
+                        scoringYear,
                         c,
                         _matchMemory.WasChosen(searchKey, c.Id),
-                        DateTime.UtcNow.Year)))
+                        DateTime.UtcNow.Year) + ComicFormatHints.Agreement(bookFormat, c.Name)))
                     .OrderByDescending(c => c.Score)
                     .ToList();
+            }
+
+            // A series already matched earlier in this run - by the user, by an id, or by the automatic matcher - carries its other comics
+            // along: each one is applied from that volume without asking, as long as the volume has an issue with this comic's number.
+            // When it doesn't (a different volume, an annual, a number the source lacks), this comic stops following and gets the usual
+            // search and dialogs. Applies in the Reviewing pass too, so picking one deferred comic's series settles the rest of it.
+            // "Confirm the issue too" still shows its dialog for the first comic of each series, not for every one.
+            if (seriesChoice.TryGetValue((Provider, issue.SeriesId, bookFormat, fileTitleKey), out var sameSeries))
+            {
+                if (KnownIssueFor(sameSeries.Id, effectiveNumber) is not null)
+                {
+                    await ApplyAsync(issue, sameSeries, effectiveNumber, createDbContext, cancellationToken).ConfigureAwait(false);
+                    Record(ScrapeOutcomeKind.Applied, $"Matched \"{sameSeries.Name}\" (same series as an earlier comic)");
+                    return false;
+                }
             }
 
             // Loops on "Go Back" from the issue dialog (design doc §3) - re-shows the series dialog
@@ -542,6 +654,7 @@ public sealed class ScrapeOrchestrator
                 }
 
                 _matchMemory.RecordChoice(searchKey, chosen.Id);
+                seriesChoice[(Provider, issue.SeriesId, bookFormat, fileTitleKey)] = chosen;
 
                 // Same gate CE's own two checkboxes express (design doc §3): the issue dialog only
                 // ever shows when the series one could have too - non-interactive and auto-choose-on
@@ -613,45 +726,51 @@ public sealed class ScrapeOrchestrator
     /// </summary>
     private async Task<bool> PassesCoverHashGateAsync(int issueId, string? bookNumber, IReadOnlyList<(ComicVineVolumeSearchResult Volume, double Score)> ranked, CancellationToken cancellationToken)
     {
-        // Rebuilt 2026-09-25 to match automatcher.py's real find_series_ref (verified). The old gate
-        // hashed the volume's generic series art, which is nearly always issue #1's cover, so for any
-        // other issue it could never match - almost every book failed and was deferred to review - and
-        // it ran its runner-up check on every book, comparing the book's own cover instead of the top
-        // series' art against the runner-ups.
-        //
-        // 1. Trade-paperback-vs-issue-#1 guard: only for a first or unnumbered book, the top series' art
-        //    must not look too much like the 2nd (or, failing that, 3rd) series' art (> 0.77, i.e. the
-        //    0.87 threshold minus CE's 0.10 margin) - if it does, a TPB and a regular issue are
-        //    indistinguishable here and CE bails rather than guess.
+        // Both measurements are taken before deciding (they used to stop at the first failure) so each decision can be written down for the
+        // Strictness preview (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 1); the verdict itself is
+        // unchanged - ConfidencePolicy.Passes is the same rule the early returns applied.
+
+        // 1. Trade-paperback-vs-issue-#1 guard (automatcher.py find_series_ref): only for a first or unnumbered book, the top series' art must
+        //    not look too much like the 2nd or 3rd series' art.
+        double? runnerUp = null;
         if (IsFirstIssueOrUnnumbered(bookNumber) && ranked.Count >= 2)
         {
-            ulong? primary = await HashRemoteCoverAsync(ranked[0].Volume.ImageUrl, cancellationToken).ConfigureAwait(false);
-            ulong? secondary = await HashRemoteCoverAsync(ranked[1].Volume.ImageUrl, cancellationToken).ConfigureAwait(false);
-            if (primary is not null && secondary is not null && CoverPerceptualHash.Similarity(primary.Value, secondary.Value) > 0.77)
+            ulong? primary, secondary;
+            if (_settings.Speed == ScrapeSpeed.Careful)
             {
-                return false;
+                primary = await HashRemoteCoverAsync(ranked[0].Volume.ImageUrl, cancellationToken).ConfigureAwait(false);
+                secondary = await HashRemoteCoverAsync(ranked[1].Volume.ImageUrl, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                var both = await Task.WhenAll(
+                    HashRemoteCoverAsync(ranked[0].Volume.ImageUrl, cancellationToken),
+                    HashRemoteCoverAsync(ranked[1].Volume.ImageUrl, cancellationToken)).ConfigureAwait(false);
+                (primary, secondary) = (both[0], both[1]);
             }
 
-            if (ranked.Count >= 3)
+            if (primary is not null && secondary is not null)
+            {
+                runnerUp = CoverPerceptualHash.Similarity(primary.Value, secondary.Value);
+            }
+
+            if (ranked.Count >= 3 && primary is not null)
             {
                 ulong? tertiary = await HashRemoteCoverAsync(ranked[2].Volume.ImageUrl, cancellationToken).ConfigureAwait(false);
-                if (primary is not null && tertiary is not null && CoverPerceptualHash.Similarity(primary.Value, tertiary.Value) > 0.77)
+                if (tertiary is not null)
                 {
-                    return false;
+                    runnerUp = Math.Max(runnerUp ?? 0, CoverPerceptualHash.Similarity(primary.Value, tertiary.Value));
                 }
             }
         }
 
-        // 2. No hashable local cover means nothing to confirm against: fail, don't skip the check.
+        // 2. The book's own cover against the top candidate's issue cover (or its series art when no issue matched).
         ulong? localHash = CoverPerceptualHash.HashFromFile(_getCoverPath!(issueId));
         if (localHash is null)
         {
-            return false;
+            return Decide(new CoverCheck(null, runnerUp, null));
         }
 
-        // 3. Compare against this book's own issue cover (found by its number), falling back to the
-        //    series art only when there's no number or no such issue - CE's
-        //    "ref = query_issue_ref(...) if issue_num else series_ref; ref = series_ref if not ref".
         ComicVineVolumeSearchResult top = ranked[0].Volume;
         ComicVineIssueSummary? matchedIssue = null;
         if (!string.IsNullOrWhiteSpace(bookNumber))
@@ -660,21 +779,27 @@ public sealed class ScrapeOrchestrator
             {
                 matchedIssue = await FindIssueSummaryAsync(top.Id, bookNumber, cancellationToken).ConfigureAwait(false);
             }
-            catch (ComicVineException)
+            catch (ComicVineException ex) when (!IsCredentialFailure(ex))
             {
-                // A failed lookup here just means falling back to the series art, as "no such issue" does.
+                // A failed lookup here just means falling back to the series art below, same as a genuine no-match.
             }
         }
 
-        // Metron publishes each cover's hash on the issue row, so there is nothing to download: hash
-        // the local cover the same way and compare. CE's check below stays for any source without one.
+        // Metron publishes a cover hash per issue: its own match rule, no download (docs/superpowers/specs/2026-10-05-metron-api-efficiency-and-matching-design.md).
         if (MetronCoverHash.Parse(matchedIssue?.CoverHash) is ulong published)
         {
-            return MetronCoverHash.FromFile(_getCoverPath!(issueId)) is ulong local && MetronCoverHash.IsMatch(local, published);
+            bool same = MetronCoverHash.FromFile(_getCoverPath!(issueId)) is ulong local && MetronCoverHash.IsMatch(local, published);
+            return Decide(new CoverCheck(null, runnerUp, same));
         }
 
         ulong? remoteHash = await HashRemoteCoverAsync(matchedIssue is null ? top.ImageUrl : matchedIssue.ImageUrl, cancellationToken).ConfigureAwait(false);
-        return remoteHash is not null && CoverPerceptualHash.Similarity(localHash.Value, remoteHash.Value) > 0.87;
+        return Decide(new CoverCheck(remoteHash is null ? null : CoverPerceptualHash.Similarity(localHash.Value, remoteHash.Value), runnerUp, null));
+
+        bool Decide(CoverCheck check)
+        {
+            ScrapeDecisionHistory.Shared?.Record(check);
+            return ConfidencePolicy.Passes(_settings.Strictness, check);
+        }
     }
 
     /// <summary>
@@ -698,7 +823,7 @@ public sealed class ScrapeOrchestrator
             {
                 candidate = await FindIssueSummaryAsync(volume.Id, bookNumber, cancellationToken).ConfigureAwait(false);
             }
-            catch (ComicVineException)
+            catch (ComicVineException ex) when (!IsCredentialFailure(ex))
             {
                 continue;
             }
@@ -797,13 +922,20 @@ public sealed class ScrapeOrchestrator
             ComicVineVolumeDetails? volume = await _comicVine.GetVolumeDetailsAsync(details.VolumeId, cancellationToken).ConfigureAwait(false);
             return volume is null
                 ? null
-                : (new ComicVineVolumeSearchResult(volume.Id, volume.Name, volume.StartYear, volume.Publisher, volume.CountOfIssues, volume.ImageUrl), details, how);
+                : (new ComicVineVolumeSearchResult(volume.Id, volume.Name, volume.StartYear, volume.Publisher, volume.CountOfIssues, volume.ImageUrl, volume.Status, volume.Description), details, how);
         }
-        catch (ComicVineException)
+        catch (ComicVineException ex) when (!IsCredentialFailure(ex))
         {
             return null;
         }
     }
+
+    /// <summary>
+    /// The source refused the API key, token or login with an HTTP 401 (or the login guard is holding a refused one back). Every
+    /// other request in the batch would fail the same way, and treating it as "issue not found" quietly wrote only the series-level fields
+    /// (reported 2026-10-21: a Metron token sent with the wrong scheme left comics with 5 fields). So it is never swallowed: it ends the batch.
+    /// </summary>
+    public static bool IsCredentialFailure(ComicVineException ex) => ex.ApiStatusCode == 100 && ex.HttpStatus == 401;
 
     /// <summary>CE's <c>is_first_issue</c>: no number at all, or a number equal to 1.</summary>
     private static bool IsFirstIssueOrUnnumbered(string? bookNumber) =>
@@ -817,10 +949,27 @@ public sealed class ScrapeOrchestrator
             return null;
         }
 
+        // Each cover is downloaded and hashed once, ever (docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-core-design.md
+        // section 3): the same series' candidates come up for every one of its books.
+        var cache = Caching.ProviderCache.Shared;
+        if (cache is not null && cache.TryGet<ulong>("Covers", Caching.ProviderCacheKind.CoverHash, imageUrl, out var known))
+        {
+            return known;
+        }
+
         try
         {
-            byte[] bytes = await CoverHttp.GetByteArrayAsync(imageUrl, cancellationToken).ConfigureAwait(false);
-            return CoverPerceptualHash.HashFromBytes(bytes);
+            // ComicVine's own images are paced like its API, or a burst gets every ComicVine call paused for up to an hour (ComicVineImagePacer).
+            byte[] bytes = ComicVineImagePacer.IsComicVineImage(imageUrl)
+                ? await ComicVineImagePacer.RunAsync(() => CoverHttp.GetByteArrayAsync(imageUrl, cancellationToken), cancellationToken).ConfigureAwait(false)
+                : await CoverHttp.GetByteArrayAsync(imageUrl, cancellationToken).ConfigureAwait(false);
+            ulong? hash = CoverPerceptualHash.HashFromBytes(bytes);
+            if (hash is { } value)
+            {
+                cache?.Set("Covers", Caching.ProviderCacheKind.CoverHash, imageUrl, value);
+            }
+
+            return hash;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
@@ -917,12 +1066,20 @@ public sealed class ScrapeOrchestrator
     private async Task ApplyVolumeAndIssueAsync(Issue issue, ComicVineVolumeSearchResult volume, ComicVineIssueDetails? details, Func<PaperbunkrDbContext> createDbContext, CancellationToken cancellationToken)
     {
         using PaperbunkrDbContext context = createDbContext();
-        Issue? tracked = await context.Issues.Include(i => i.Series)
+        Issue? tracked = await context.Issues.Include(i => i.Series).ThenInclude(s => s!.Titles)
             .FirstOrDefaultAsync(i => i.Id == issue.Id, cancellationToken).ConfigureAwait(false);
         if (tracked is null)
         {
             return;
         }
+
+        // A match to a different source series than the one this comic's library series is linked to moves the comic out instead of renaming
+        // the series everyone shares (docs/superpowers/specs/2026-10-22-scrape-series-split-and-series-fields-design.md). Only a match that owns
+        // the series renames it, fills its fields and links it.
+        SeriesPlacement placement = tracked.Series is null
+            ? new SeriesPlacement(null!, false, false, null)
+            : SeriesSplit.Resolve(context, tracked, Provider, volume);
+        bool ownsSeries = tracked.Series is not null && placement.OwnsSeries;
 
         // Imprint resolution (docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md §1.1)
         // - fixed a real bug found by comparing against CE's actual source (comicbook.py:444-493): CV's
@@ -984,8 +1141,14 @@ public sealed class ScrapeOrchestrator
         // CE's ComicInfo <Series> field - every issue shares one Series row, so this corrects the
         // canonical series name (e.g. CV's exact capitalization/title) for the whole series at once,
         // which is strictly better than CE's per-book-redundant-string approach for the same field.
-        if (tracked.Series is not null && ShouldWrite(ScrapeField.Series, tracked.Series.Name, volume.Name))
+        if (ownsSeries && ShouldWrite(ScrapeField.Series, tracked.Series!.Name, volume.Name)
+            && !string.Equals(tracked.Series.Name, volume.Name, StringComparison.Ordinal))
         {
+            if (!placement.Moved && tracked.Series.Id != 0)
+            {
+                SeriesSplit.RememberNameBeforeRename(tracked.Series);
+            }
+
             tracked.Series.Name = volume.Name;
         }
 
@@ -997,6 +1160,27 @@ public sealed class ScrapeOrchestrator
             tracked.Count = volumeCount;
         }
 
+        // Use facts already returned by search or exact-id lookup before making an optional detail request.
+        ApplySeriesFacts(ownsSeries ? tracked.Series : null, volume.Status, volume.Description);
+        if (ownsSeries && Provider == ComicProvider.Metron
+            && (tracked.Series.Status == SeriesStatus.Unknown || string.IsNullOrWhiteSpace(tracked.Series.Summary)))
+        {
+            ComicVineVolumeDetails? seriesFacts = null;
+            try
+            {
+                seriesFacts = await _comicVine.GetVolumeDetailsAsync(volume.Id, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ComicVineException ex) when (!IsCredentialFailure(ex))
+            {
+                // A failed extra lookup must not undo the scrape that already worked.
+            }
+
+            if (seriesFacts is not null)
+            {
+                ApplySeriesFacts(tracked.Series, seriesFacts.Status, seriesFacts.Description);
+            }
+        }
+
         if (details is not null)
         {
             StoryArcPositions? arcPositions = null;
@@ -1006,9 +1190,30 @@ public sealed class ScrapeOrchestrator
             }
 
             ApplyIssueDetails(tracked, details, arcPositions);
+            await ApplySecondarySourceAsync(tracked, details, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (ownsSeries)
+        {
+            ApplySeriesFields(tracked.Series!, tracked, details);
         }
 
         tracked.MetadataSource = Provider;      // the chosen match came from whichever source the run is on now (the dialog may have switched it)
+
+        if (DryRun)
+        {
+            // A preview: note what would change and keep the decision, write nothing (docs/superpowers/specs/2026-10-21-scraper-organizer-c-
+            // automation-ux-design.md section 3). ApplyProposalsAsync writes the ones the user keeps.
+            var changes = ScrapeProposal.Collect(context).ToList();
+            if (placement.Moved)
+            {
+                bool isNew = placement.Target.Id == 0;
+                changes.Insert(0, new ScrapeFieldChange("Moved to series", placement.PreviousSeriesName ?? "—", placement.Target.Name + (isNew ? " (new series)" : string.Empty), true));
+            }
+
+            _proposals.Add(new ScrapeProposal(issue.Id, CurrentBookLabel ?? $"#{issue.Number}", Provider, volume, details, changes));
+            return;
+        }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -1027,12 +1232,32 @@ public sealed class ScrapeOrchestrator
         // book (pluginbookdata.py:23-24, verified); Paperbunkr had no equivalent, so "already scraped"
         // was only ever inferred heuristically. Series identity is always known (the chosen volume);
         // issue identity only when a specific issue was actually matched (details is not null).
-        ComicMetadataExternalIdSync.AttachEntityId(context, ComicMetadataEntityKind.Series, Provider, tracked.SeriesId, volume.Id);
+        if (ownsSeries)
+        {
+            ComicMetadataExternalIdSync.AttachEntityId(context, ComicMetadataEntityKind.Series, Provider, tracked.SeriesId, volume.Id);
+        }
         if (details is not null)
         {
             ComicMetadataExternalIdSync.AttachEntityId(context, ComicMetadataEntityKind.Issue, Provider, tracked.Id, details.Id);
             ComicMetadataExternalIdSync.SyncFromIssueDetails(context, tracked.Id, Provider, details);
             ContinuityMetronMatchResolver.SyncFromIssueDetails(context, tracked.SeriesId, Provider, details.Universes);
+            if (Provider == ComicProvider.Metron && _comicVine is IMetronUniverses universeSource)
+            {
+                foreach (int universeId in details.Universes.Where(universe => universe.ExternalId is > 0)
+                             .Select(universe => universe.ExternalId!.Value).Distinct())
+                {
+                    if (!_metronUniversesRefreshed.Add(universeId)) continue;
+                    try
+                    {
+                        await ContinuityMetronMatchResolver.RefreshUniverseDetailsAsync(context, universeSource, universeId, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (ComicVineException ex) when (!IsCredentialFailure(ex))
+                    {
+                        // Universe details are enrichment. Keep the issue scrape successful; the scheduled sweep retries later.
+                        _metronUniversesRefreshed.Remove(universeId);
+                    }
+                }
+            }
             IssueVariantCoverSync.SyncFromIssueDetails(context, tracked.Id, details.Variants);
 
             // Metron carries the Grand Comics Database id on every issue (docs/superpowers/specs/2026-09-27-gcd-data-design.md §3).
@@ -1040,6 +1265,80 @@ public sealed class ScrapeOrchestrator
             {
                 tracked.GcdIssueId = gcdIssueId;
             }
+        }
+    }
+
+    /// <summary>
+    /// The same issue on the other source, for per-field source choices and for filling Metron's blanks from ComicVine
+    /// (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 4). Given the matched source and its details, returns the
+    /// other source's details for that issue (found through the cross-reference id), or null. Supplied by the caller, which owns both clients.
+    /// </summary>
+    public Func<ComicProvider, ComicVineIssueDetails, CancellationToken, Task<ComicVineIssueDetails?>>? SecondaryDetails { get; init; }
+
+    private async Task ApplySecondarySourceAsync(Issue tracked, ComicVineIssueDetails primary, CancellationToken cancellationToken)
+    {
+        var other = Provider == ComicProvider.Metron ? ComicProvider.ComicVine : ComicProvider.Metron;
+        var preferOther = _settings.FieldSourcePreference
+            .Where(p => p.Value == other && _settings.EnabledScrapeFields.Contains(p.Key) && ScrapeSettings.SourcePreferableFields.Contains(p.Key))
+            .Select(p => p.Key)
+            .ToHashSet();
+        bool fillBlanks = _settings.FillBlanksFromComicVine && Provider == ComicProvider.Metron;
+        if (SecondaryDetails is null || (preferOther.Count == 0 && !fillBlanks))
+        {
+            return;
+        }
+
+        ComicVineIssueDetails? secondary;
+        try
+        {
+            secondary = await SecondaryDetails(Provider, primary, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ComicVineException)
+        {
+            return; // the other source refusing or failing must not end this run: the matched source's values stand
+        }
+
+        if (secondary is null)
+        {
+            return;
+        }
+
+        if (preferOther.Count > 0)
+        {
+            // The other source wins these fields - where it has a value; an empty one never wipes the matched source's.
+            IssueDetailsApplier.Apply(tracked, secondary, new ScrapeFieldPolicy { Enabled = preferOther, OverwriteExisting = true, IgnoreBlankValues = true }, arcPositions: null);
+        }
+
+        if (fillBlanks)
+        {
+            var blanksOnly = new ScrapeFieldPolicy { Enabled = new HashSet<ScrapeField>(_settings.EnabledScrapeFields), OverwriteExisting = false, IgnoreBlankValues = true };
+            IssueDetailsApplier.Apply(tracked, secondary, blanksOnly, arcPositions: null);
+        }
+    }
+
+    /// <summary>
+    /// Series-level Publisher, Imprint, Genre, Sort Name and Age Rating (docs/superpowers/specs/2026-10-22-scrape-series-split-and-series-fields-design.md
+    /// Q6), from what the match just gave the comic: the same field toggles and "Overwrite existing" as the issue fields, and never a field locked
+    /// in the series editor. Only for a match that owns the series.
+    /// </summary>
+    private void ApplySeriesFields(Series series, Issue issue, ComicVineIssueDetails? details)
+    {
+        var locks = Metadata.Manga.MangaFieldLocks.Parse(series.LockedFields);
+        void Write(ScrapeField field, string lockKey, string? current, string? value, Action<string> set)
+        {
+            if (!string.IsNullOrWhiteSpace(value) && !locks.Contains(lockKey) && ShouldWrite(field, current, value))
+            {
+                set(value.Trim());
+            }
+        }
+
+        Write(ScrapeField.Publisher, Metadata.Manga.MangaInheritedFields.Publisher, series.Publisher, issue.Publisher, v => series.Publisher = v);
+        Write(ScrapeField.Imprint, Metadata.Manga.MangaInheritedFields.Imprint, series.Imprint, issue.Imprint, v => series.Imprint = v);
+        if (details is not null)
+        {
+            Write(ScrapeField.Genre, Metadata.Manga.MangaInheritedFields.Genre, series.Genre, details.Genres.Count == 0 ? null : string.Join(", ", details.Genres), v => series.Genre = v);
+            Write(ScrapeField.AgeRating, Metadata.Manga.MangaInheritedFields.AgeRating, series.AgeRating, details.AgeRating, v => series.AgeRating = v);
+            Write(ScrapeField.Series, "SortName", series.SortName, details.SeriesSortName, v => series.SortName = v);
         }
     }
 
@@ -1069,7 +1368,7 @@ public sealed class ScrapeOrchestrator
                 ? null
                 : await _comicVine.GetIssueDetailsAsync(summary.Id, cancellationToken).ConfigureAwait(false);
         }
-        catch (ComicVineException)
+        catch (ComicVineException ex) when (!IsCredentialFailure(ex))
         {
             return null;
         }
@@ -1078,6 +1377,19 @@ public sealed class ScrapeOrchestrator
     // Per (volume, book number), including "no match" - the cover gate and the apply step both need the
     // same lookup for the same book, and a whole-series scrape asks it once per issue; without this each
     // book paid for the volume's issue list twice.
+    internal void ApplySeriesFacts(Series? series, string? status, string? description)
+    {
+        if (series is null) return;
+        if (!Paperbunkr.Data.Metadata.Manga.MangaFieldLocks.IsLocked(series, "Status")
+            && series.Status == SeriesStatus.Unknown
+            && SeriesStatusNormalizer.Normalize(status) is var normalized && normalized != SeriesStatus.Unknown)
+            series.Status = normalized;
+        if (_settings.EnabledScrapeFields.Contains(ScrapeField.Summary)
+            && !Paperbunkr.Data.Metadata.Manga.MangaFieldLocks.IsLocked(series, "Summary")
+            && string.IsNullOrWhiteSpace(series.Summary) && !string.IsNullOrWhiteSpace(description))
+            series.Summary = description;
+    }
+
     private readonly Dictionary<(int VolumeId, string Number), ComicVineIssueSummary?> _issueSummaryCache = new();
 
     /// <summary>The volume's own issue matching <paramref name="bookNumber"/> (or its only issue, for a
@@ -1126,8 +1438,30 @@ public sealed class ScrapeOrchestrator
         }
 
         _issueSummaryCache[key] = result;
+        RememberVolumeIssues(volumeId, allSummaries);
         return result;
     }
+
+    // Every issue seen for a volume this run, for the series-first reuse below (docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-
+    // core-design.md section 2): the next book of the same series is matched from it without another request or another dialog.
+    private readonly Dictionary<int, Dictionary<int, ComicVineIssueSummary>> _volumeIssueMemo = new();
+
+    private void RememberVolumeIssues(int volumeId, IEnumerable<ComicVineIssueSummary> summaries)
+    {
+        if (!_volumeIssueMemo.TryGetValue(volumeId, out var known))
+        {
+            _volumeIssueMemo[volumeId] = known = new Dictionary<int, ComicVineIssueSummary>();
+        }
+
+        foreach (var summary in summaries)
+        {
+            known[summary.Id] = summary;
+        }
+    }
+
+    /// <summary>This book's issue in a volume already looked at this run, or null when that volume's issues haven't been seen (no request is made).</summary>
+    private ComicVineIssueSummary? KnownIssueFor(int volumeId, string? bookNumber) =>
+        _volumeIssueMemo.TryGetValue(volumeId, out var known) ? FindByNumber(known.Values.ToList(), bookNumber) : null;
 
     private static ComicVineIssueSummary? FindByNumber(IReadOnlyList<ComicVineIssueSummary> summaries, string? bookNumber)
     {
@@ -1201,7 +1535,7 @@ public sealed class ScrapeOrchestrator
             {
                 batch = await _comicVine.SearchIssuesAsync(volumeId, page, cancellationToken).ConfigureAwait(false);
             }
-            catch (ComicVineException)
+            catch (ComicVineException ex) when (!IsCredentialFailure(ex))
             {
                 // A later page failing shouldn't discard whatever earlier pages already returned -
                 // same per-item resilience principle as the rest of this orchestrator, just applied
@@ -1214,6 +1548,7 @@ public sealed class ScrapeOrchestrator
                 break;
             }
 
+            RememberVolumeIssues(volumeId, batch);
             bool sawNewIssue = false;
             foreach (ComicVineIssueSummary summary in batch)
             {
@@ -1244,7 +1579,7 @@ public sealed class ScrapeOrchestrator
         {
             return await _comicVine.GetIssueDetailsAsync(issueId, cancellationToken).ConfigureAwait(false);
         }
-        catch (ComicVineException)
+        catch (ComicVineException ex) when (!IsCredentialFailure(ex))
         {
             return null;
         }

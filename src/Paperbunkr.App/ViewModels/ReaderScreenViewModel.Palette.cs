@@ -88,15 +88,7 @@ public partial class ReaderScreenViewModel
     }
 
     private static readonly (ReadingMode Mode, string Label)[] PaletteReadingModes =
-    [
-        (ReadingMode.LeftToRight, "Left to Right"),
-        (ReadingMode.RightToLeft, "Right to Left"),
-        (ReadingMode.TopToBottom, "Top to Bottom"),
-        (ReadingMode.Webtoon, "Long Strip"),
-        (ReadingMode.VerticalContinuous, "Longstrip (gapped)"),
-        (ReadingMode.HorizontalContinuous, "Horizontal Long Strip"),
-        (ReadingMode.HorizontalContinuousRightToLeft, "Horizontal Long Strip (RTL)"),
-    ];
+        ReadingModeCatalog.All.Select(m => (m.Mode, m.Label)).ToArray();
 
     private static readonly (ImageFitMode Mode, string Label)[] PaletteFitModes =
     [

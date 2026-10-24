@@ -26,13 +26,15 @@
     -->
     <UserControl.Styles>
         <!-- Kavita-style meta badge chip (docs/superpowers/specs/2026-09-04-detail-screen-icons-
-             and-glyphs-design.md Part 4). Hardcoded light-on-dark hex, like the rest of the hero -
-             it always sits on a dark photographic backdrop, never theme-reactive. -->
+             and-glyphs-design.md Part 4). A veil of the theme's own text colour, and the
+             hero's text below uses the theme's text brushes: on a light theme HeroWash lightens the backdrop, so none of it can be fixed light-on-dark. -->
         <Style Selector="Border.heroBadge">
-            <Setter Property="Background" Value="#26FFFFFF" />
-            <Setter Property="CornerRadius" Value="5" />
-            <Setter Property="Padding" Value="7,3" />
-            <Setter Property="Margin" Value="0,0,6,5" />
+            <Setter Property="Background">
+                <SolidColorBrush Color="{DynamicResource PbTextColor}" Opacity="0.15" />
+            </Setter>
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Margin" Value="0,0,6,4" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
     </UserControl.Styles>
@@ -62,8 +64,11 @@
                 </Border.Background>
             </Border>
 
+            <!-- A light theme's text is dark and the blurred cover is dark: veil the art and its fade with the theme background (invisible on a dark theme). -->
+            <controls:HeroWash Background="{DynamicResource PbBgBrush}" />
+
             <!-- Foreground -->
-            <Grid Margin="28,0,28,20" VerticalAlignment="Bottom" ColumnDefinitions="Auto,*,Auto">
+            <Grid Margin="24,0,24,20" VerticalAlignment="Bottom" ColumnDefinitions="Auto,*,Auto">
                 <!-- Shared-element cover flight destination/source (docs/superpowers/specs/2026-09-04-
                      navigation-transition-system-design.md) - the same visual object a Library series
                      card's own SharedElement.Key registers under, forward (Library -> here) and back
@@ -81,14 +86,14 @@
                 </Border>
 
                 <StackPanel Grid.Column="1" Margin="18,0,18,2" VerticalAlignment="Bottom" Spacing="3">
-                    <TextBlock Text="{Binding SecondaryTitle}" FontSize="11" Foreground="#CFECE7DB"
+                    <TextBlock Text="{Binding SecondaryTitle}" FontSize="11" Foreground="{DynamicResource PbTextBrush}" Opacity="0.82"
                                IsVisible="{Binding SecondaryTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                     <controls:SplitText Text="{Binding HeaderTitle}" FontSize="32" Foreground="{DynamicResource PbTextBrush}" />
                     <!-- Meta badge row (Part 4): reading-status picker + Kavita-style icon chips
                          (publisher / status / year / format / age-rating / language), falling back
                          to the plain MetaLine string only when there are no badges (Home spotlight). -->
-                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
-                        <views:ReadingStatusPicker DataContext="{Binding ReadingStatusPicker}" Margin="0,0,8,5" VerticalAlignment="Center"
+                    <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
+                        <views:ReadingStatusPicker DataContext="{Binding ReadingStatusPicker}" Margin="0,0,8,4" VerticalAlignment="Center"
                                                    IsVisible="{Binding #Hero.((vm:IDetailHeaderSource)DataContext).ReadingStatusPicker, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
                         <ItemsControl ItemsSource="{Binding MetaBadges.Visible}">
                             <ItemsControl.ItemsPanel>
@@ -105,8 +110,8 @@
                                                                 Foreground="{DynamicResource PbTextBrush}" />
                                             <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" IsVisible="{Binding IsPlain}">
                                                 <fi:SymbolIcon Symbol="{Binding IconGlyph}" FontSize="{StaticResource PbIconSizeXs}"
-                                                               Foreground="#CFECE7DB" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Text}" FontSize="12" Foreground="#F0ECE7DB" VerticalAlignment="Center" />
+                                                               Foreground="{DynamicResource PbTextBrush}" Opacity="0.82" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Text}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                                             </StackPanel>
                                         </Panel>
                                     </Border>
@@ -128,8 +133,8 @@
                          under the badge row, above the action buttons; same styling the original
                          MetaLine text used. -->
                     <TextBlock Text="{Binding IssueSummaryLine}" FontSize="12" Foreground="{DynamicResource PbAccentTextBrush}"
-                               Margin="0,3,0,0" IsVisible="{Binding IssueSummaryLine, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                    <TextBlock Text="{Binding Synopsis}" FontSize="12" Foreground="#C8ECE7DB" Margin="0,4,0,0"
+                               Margin="0,4,0,0" IsVisible="{Binding IssueSummaryLine, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                    <TextBlock Text="{Binding Synopsis}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" Opacity="0.8" Margin="0,4,0,0"
                                TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" MaxWidth="520"
                                HorizontalAlignment="Left" ToolTip.Tip="{Binding Synopsis}"
                                IsVisible="{Binding Synopsis, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
@@ -178,13 +183,16 @@
                 <Border Grid.Column="2" VerticalAlignment="Bottom" Margin="0,0,0,2"
                         IsVisible="{Binding TrackerProgress, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
                         CornerRadius="{StaticResource PbRadiusChip}" BorderThickness="2" BorderBrush="{DynamicResource PbAccentBrush}"
-                        Background="#99000000" Padding="14,10" MinWidth="58">
+                        Padding="14,10" MinWidth="58">
+                    <Border.Background>
+                        <SolidColorBrush Color="{DynamicResource PbBgColor}" Opacity="0.6" />
+                    </Border.Background>
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="{Binding TrackerProgress.Current}" FontSize="16" FontWeight="Bold"
+                        <TextBlock Text="{Binding TrackerProgress.Current}" FontSize="18" FontWeight="Bold"
                                    Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Center" />
-                        <TextBlock Text="{Binding TrackerProgress.Total, StringFormat='/ {0}'}" FontSize="9"
-                                   Foreground="#B8ECE7DB" HorizontalAlignment="Center" />
-                        <TextBlock Text="{Binding TrackerProgress.Label}" FontSize="8" Foreground="#99ECE7DB"
+                        <TextBlock Text="{Binding TrackerProgress.Total, StringFormat='/ {0}'}" FontSize="10"
+                                   Foreground="{DynamicResource PbTextBrush}" Opacity="0.72" HorizontalAlignment="Center" />
+                        <TextBlock Text="{Binding TrackerProgress.Label}" FontSize="10" Foreground="{DynamicResource PbTextBrush}" Opacity="0.6"
                                    HorizontalAlignment="Center" Margin="0,2,0,0" />
                     </StackPanel>
                 </Border>

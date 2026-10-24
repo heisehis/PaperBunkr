@@ -79,6 +79,21 @@ public static class ComicProviderAdopt
 
         using var context = createContext();
         var changed = ComicProviderMerge.MergeIssue(context, issueId, metronDetails, comicVineDetails);
+        if (metronSource is IMetronUniverses universes)
+        {
+            foreach (int universeId in metronDetails.Universes.Where(universe => universe.ExternalId is > 0)
+                         .Select(universe => universe.ExternalId!.Value).Distinct())
+            {
+                try
+                {
+                    await ContinuityMetronMatchResolver.RefreshUniverseDetailsAsync(context, universes, universeId, cancellationToken).ConfigureAwait(false);
+                }
+                catch (ComicVineException)
+                {
+                    // Universe details are secondary enrichment; the issue data merge has succeeded.
+                }
+            }
+        }
         return ScrapeOutcome.Success(issueId, changed);
     }
 }

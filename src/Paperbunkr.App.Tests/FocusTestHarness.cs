@@ -22,10 +22,32 @@ internal static class FocusTestHarness
         var tokens = new Dictionary<string, object>
         {
             ["PbMotionEase"] = new Avalonia.Animation.Easings.CubicEaseOut(),
+            ["PbMotionExitEase"] = new Avalonia.Animation.Easings.CubicEaseIn(),
+            ["PbMotionMoveEase"] = new Avalonia.Animation.Easings.CubicEaseInOut(),
+            ["PbMotionSpring"] = new Paperbunkr.App.Theming.Motion.DampedSpringEasing(),
+            // Motion is pinned instant: these tests check states, and a real-window test earlier in the run leaves real durations in the
+            // shared app resources (a transition caught mid-flight then reads as the wrong colour).
+            ["PbMotionFast"] = TimeSpan.Zero,
+            ["PbMotionStandard"] = TimeSpan.Zero,
+            ["PbMotionLarge"] = TimeSpan.Zero,
+            ["PbMotionSlow"] = TimeSpan.Zero,
+            ["PbMotionAcknowledge"] = TimeSpan.Zero,
+            ["PbMotionAcknowledgeMove"] = TimeSpan.Zero,
+            ["PbMotionHoverFade"] = TimeSpan.Zero,
+            ["PbMotionHoverMove"] = TimeSpan.Zero,
+            ["PbMotionRevealFade"] = TimeSpan.Zero,
+            ["PbMotionRevealMove"] = TimeSpan.Zero,
+            ["PbMotionRevealExit"] = TimeSpan.Zero,
+            ["PbMotionReplace"] = TimeSpan.Zero,
+            ["PbMotionTravelFade"] = TimeSpan.Zero,
+            ["PbMotionTravelMove"] = TimeSpan.Zero,
+            ["PbMotionFlight"] = TimeSpan.Zero,
+            ["PbMotionAmbient"] = TimeSpan.Zero,
             ["PbIconSizeXs"] = 14d,
             ["PbIconSizeSm"] = 16d,
             ["PbIconSizeLg"] = 24d,
             ["PbRadiusChip"] = new CornerRadius(6),
+            ["PbRadius"] = new CornerRadius(7),
             ["PbRadiusSm"] = new CornerRadius(5),
             ["PbElevationShadow"] = BoxShadows.Parse("0 2 8 0 #40000000"),
             ["PbAccentBrush"] = Brushes.OrangeRed,
@@ -104,9 +126,17 @@ internal static class FocusTestHarness
     /// <summary>Loads the app's Primitives.axaml (which holds the app-wide focus-ring adorner) for the duration of the returned scope.</summary>
     public static IDisposable AppStyles()
     {
-        var include = new StyleInclude(new Uri("avares://Paperbunkr.App/")) { Source = new Uri("avares://Paperbunkr.App/Styles/Primitives.axaml") };
-        Application.Current!.Styles.Add(include);
-        return new Removal(() => Application.Current!.Styles.Remove(include));
+        // Controls.axaml holds the shared families (card padding, buttons, tabs) since the 2026-10-19 shared-controls pass; without it a card has
+        // no padding here and its controls' focus rings sit on the card edge, unlike in the app.
+        var includes = new[] { "Primitives", "Controls" }
+            .Select(name => new StyleInclude(new Uri("avares://Paperbunkr.App/")) { Source = new Uri($"avares://Paperbunkr.App/Styles/{name}.axaml") })
+            .ToList();
+        foreach (var include in includes)
+        {
+            Application.Current!.Styles.Add(include);
+        }
+
+        return new Removal(() => includes.ForEach(include => Application.Current!.Styles.Remove(include)));
     }
 
     private static ResourceDictionary? _appResources;

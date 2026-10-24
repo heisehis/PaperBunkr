@@ -37,7 +37,11 @@ internal sealed record ReaderPageVisualData(
     bool IsRightToLeft = false,
     // Item 1 §1.5 of docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md - drawn
     // behind the page/spread rect, texture-background mode only.
-    bool ShowShadow = false);
+    bool ShowShadow = false,
+    ReaderPageFrameStyle FrameStyle = ReaderPageFrameStyle.None,
+    Color FrameColor = default,
+    bool BookLook = false,
+    double BookProgress = 0);
 
 /// <summary>
 /// One page's already-computed on-screen placement (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §2/§4) - <see cref="Rect"/> comes straight from <see cref="ReaderLayoutModel.ComputeContinuousLayout"/>, already in viewport space, so the handler just scales-and-draws rather than repeating fit/pan math per page.
@@ -54,7 +58,8 @@ internal readonly record struct ContinuousPageEntry(Rect Rect, Bitmap? Bitmap, I
 internal readonly record struct StripBandSlot(Rect Rect, Bitmap? Bitmap);
 
 /// <summary>Continuous mode's per-frame draw data - unlike <see cref="ReaderPageVisualData"/>'s single bitmap, a whole page list, each with its own placement. No fit-mode/rotation fields - continuous mode has neither (spec §5/§9's named scope, rotation isn't part of this pass for continuous mode).</summary>
-internal sealed record ReaderContinuousVisualData(Size Bounds, IReadOnlyList<ContinuousPageEntry> Pages, bool HighQuality);
+internal sealed record ReaderContinuousVisualData(Size Bounds, IReadOnlyList<ContinuousPageEntry> Pages, bool HighQuality,
+    ReaderPageFrameStyle FrameStyle = ReaderPageFrameStyle.None, Color FrameColor = default);
 
 /// <summary>
 /// Which spatial edge a paged-mode page-turn animates from/to (docs/superpowers/specs/
@@ -100,7 +105,9 @@ internal sealed record ReaderPageTransitionData(
     Bitmap? OldSecondaryBitmap = null,
     Bitmap? NewSecondaryBitmap = null,
     bool IsRightToLeft = false,
-    bool OldIsRightToLeft = false);
+    bool OldIsRightToLeft = false,
+    bool BookLook = false,
+    double BookProgress = 0);
 
 /// <summary>
 /// Live brightness/contrast/saturation/gamma (docs/superpowers/specs/2026-08-10-reader-polish-
@@ -391,6 +398,12 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// </summary>
     public override void OnAnimationFrameUpdate()
     {
+        if (_transitionData is null && _continuousReveals.Count > 0)
+        {
+            Invalidate();
+            return;
+        }
+
         if (_transitionData is not { } data || _transitionStart is null)
         {
             return;
@@ -483,6 +496,18 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         {
             DrawPagedShadowsOnly(context, shadowSource);
         }
+        if (_pagedData is { FrameStyle: ReaderPageFrameStyle.PaperEdge } framedPage)
+        {
+            DrawPagedFramesOnly(context, framedPage);
+        }
+        if (_continuousData is { FrameStyle: ReaderPageFrameStyle.PaperEdge } framedContinuous)
+        {
+            DrawContinuousFramesOnly(context, framedContinuous);
+        }
+        if (_continuousData is { FrameStyle: ReaderPageFrameStyle.SoftShadow } shadowedContinuous)
+        {
+            foreach (var page in shadowedContinuous.Pages) DrawPageShadow(context, page.Rect);
+        }
 
         // A crossfade needs the leased-canvas/SKPaint path regardless of whether a brightness/
         // contrast colorFilter is active - plain ImmediateDrawingContext.DrawBitmap has no opacity
@@ -492,7 +517,8 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         // Any transition takes the leased path now, not just Crossfade: it draws the pre-converted
         // SKImages (OnMessage) rather than the raw page bitmaps, so an in-flight animation survives
         // the reader pipeline freeing a bitmap.
-        bool needsLease = NeedsPaint(colorFilter) || _transitionData is not null;
+        bool needsLease = NeedsPaint(colorFilter) || _transitionData is not null || _continuousGaps.Count > 0 || _continuousReveals.Count > 0
+            || _pagedData is { BookLook: true, SecondaryBitmap: not null };
         using ISkiaSharpApiLease? lease = needsLease && context.TryGetFeature<ISkiaSharpApiLeaseFeature>() is { } leaseFeature
             ? leaseFeature.Lease()
             : null;
@@ -666,7 +692,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
 
         RenderSpread(context, data.Bounds, data.Bitmap, data.SecondaryBitmap, data.Zoom, data.PanOffsetX, data.PanOffsetY,
             data.FitMode, data.FitOnlyIfOversized, data.HighQuality, data.IsRightToLeft, lease, colorFilter, offset: default, alpha: 1.0,
-            skImageResolver: NeedsPaint(colorFilter) ? GetOrCreateSkImage : null);
+            skImageResolver: NeedsPaint(colorFilter) ? GetOrCreateSkImage : null, bookLook: data.BookLook, bookProgress: data.BookProgress);
     }
 
     /// <summary>
@@ -695,12 +721,46 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
             return;
         }
 
-        // One shadow behind the whole spread (not one per half) - it reads as a single card.
         var primaryPixelSize = data.Bitmap.PixelSize;
         var secondaryPixelSize = data.SecondaryBitmap.PixelSize;
         var spreadSize = SpreadLayoutMath.ComputeCombinedSize(primaryPixelSize, secondaryPixelSize);
         var combinedPlan = ComputeDrawPlan(data.Bounds, spreadSize.Combined, data.Zoom, data.PanOffsetX, data.PanOffsetY, data.FitMode, data.FitOnlyIfOversized, rotationDegrees: 0);
-        DrawPageShadow(context, combinedPlan.DestRect);
+        double primaryLeftFraction = data.IsRightToLeft ? 1 - spreadSize.LeftWidthFraction : spreadSize.LeftWidthFraction;
+        var (left, right) = SpreadLayoutMath.SplitSpread(combinedPlan.DestRect, primaryLeftFraction);
+        DrawPageShadow(context, left);
+        DrawPageShadow(context, right);
+    }
+
+    private static void DrawPageFrame(ImmediateDrawingContext context, Rect rect, Color color)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0) return;
+        context.DrawRectangle(null, new ImmutablePen(new ImmutableSolidColorBrush(color), 1.25), rect);
+    }
+
+    private static void DrawPagedFramesOnly(ImmediateDrawingContext context, ReaderPageVisualData data)
+    {
+        if (data.Bitmap is null || data.Bounds.Width <= 0 || data.Bounds.Height <= 0) return;
+        if (data.SecondaryBitmap is null)
+        {
+            var plan = ComputeDrawPlan(data.Bounds, data.Bitmap.PixelSize, data.Zoom, data.PanOffsetX, data.PanOffsetY,
+                data.FitMode, data.FitOnlyIfOversized, data.RotationDegrees);
+            DrawPageFrame(context, plan.DestRect, data.FrameColor);
+            return;
+        }
+
+        var spread = SpreadLayoutMath.ComputeCombinedSize(data.Bitmap.PixelSize, data.SecondaryBitmap.PixelSize);
+        var combined = ComputeDrawPlan(data.Bounds, spread.Combined, data.Zoom, data.PanOffsetX, data.PanOffsetY,
+            data.FitMode, data.FitOnlyIfOversized, rotationDegrees: 0).DestRect;
+        double primaryLeftFraction = data.IsRightToLeft ? 1 - spread.LeftWidthFraction : spread.LeftWidthFraction;
+        var (left, right) = SpreadLayoutMath.SplitSpread(combined, primaryLeftFraction);
+        DrawPageFrame(context, left, data.FrameColor);
+        DrawPageFrame(context, right, data.FrameColor);
+    }
+
+    private static void DrawContinuousFramesOnly(ImmediateDrawingContext context, ReaderContinuousVisualData data)
+    {
+        foreach (var page in data.Pages)
+            DrawPageFrame(context, page.Rect, data.FrameColor);
     }
 
     /// <summary>
@@ -743,7 +803,8 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     private void RenderSpread(ImmediateDrawingContext context, Rect bounds, Bitmap primary, Bitmap secondary,
         double zoom, double panOffsetX, double panOffsetY, ImageFitMode fitMode, bool fitOnlyIfOversized, bool highQuality,
         bool isRightToLeft, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter, Vector offset, double alpha,
-        SKImage? primaryCachedImage = null, SKImage? secondaryCachedImage = null, Func<Bitmap, SKImage>? skImageResolver = null)
+        SKImage? primaryCachedImage = null, SKImage? secondaryCachedImage = null, Func<Bitmap, SKImage>? skImageResolver = null,
+        bool bookLook = false, double bookProgress = 0)
     {
         if (alpha <= 0)
         {
@@ -773,6 +834,75 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
 
         DrawBitmap(context, primary, primaryPixelSize, primaryPlan, rotationDegrees: 0, highQuality, lease, colorFilter, alpha, primaryCachedImage, skImageResolver);
         DrawBitmap(context, secondary, secondaryPixelSize, secondaryPlan, rotationDegrees: 0, highQuality, lease, colorFilter, alpha, secondaryCachedImage, skImageResolver);
+
+        if (bookLook && lease is not null)
+        {
+            DrawBookLook(lease.SkCanvas, left, right, bookProgress, isRightToLeft, alpha);
+        }
+    }
+
+    /// <summary>
+    /// Book look on a spread (Motion v2 reader §7). CE's "Realistic pages": a soft bell-shaped bow of shade at the spine on both pages and a
+    /// lighter one at each outer edge (<c>ComicDisplayControl.DrawPageOrnaments</c>, <c>PageRendering.CreatePageBow</c>), plus a thin
+    /// outline per page. Then page-stack edges outside each outer edge, thicker on the side with more pages: the read side grows as you go
+    /// (left when reading left-to-right, right when right-to-left).
+    /// </summary>
+    internal static void DrawBookLook(SKCanvas canvas, Rect left, Rect right, double progress, bool isRightToLeft, double alpha = 1)
+    {
+        if (left.Width <= 0 || right.Width <= 0 || alpha <= 0)
+        {
+            return;
+        }
+
+        byte A(double a) => (byte)Math.Clamp(a * alpha * 255, 0, 255);
+
+        void Bow(float edgeX, float innerX, Rect page, double strength)
+        {
+            using var shader = SKShader.CreateLinearGradient(new SKPoint(edgeX, 0), new SKPoint(innerX, 0),
+                [new SKColor(0, 0, 0, A(strength)), new SKColor(0, 0, 0, A(strength * 0.35)), SKColors.Transparent], [0f, 0.35f, 1f], SKShaderTileMode.Clamp);
+            using var paint = new SKPaint { Shader = shader, IsAntialias = true };
+            canvas.DrawRect(new SKRect((float)Math.Min(edgeX, innerX), (float)page.Top, (float)Math.Max(edgeX, innerX), (float)page.Bottom), paint);
+        }
+
+        // Spine bows (deep) and outer-edge bows (light).
+        Bow((float)left.Right, (float)(left.Right - (left.Width * 0.09)), left, 0.42);
+        Bow((float)right.Left, (float)(right.Left + (right.Width * 0.09)), right, 0.42);
+        Bow((float)left.Left, (float)(left.Left + (left.Width * 0.035)), left, 0.16);
+        Bow((float)right.Right, (float)(right.Right - (right.Width * 0.035)), right, 0.16);
+
+        using (var outline = new SKPaint { Color = new SKColor(0, 0, 0, A(0.30)), Style = SKPaintStyle.Stroke, StrokeWidth = 1, IsAntialias = true })
+        {
+            canvas.DrawRect(new SKRect((float)left.Left + 0.5f, (float)left.Top + 0.5f, (float)left.Right - 0.5f, (float)left.Bottom - 0.5f), outline);
+            canvas.DrawRect(new SKRect((float)right.Left + 0.5f, (float)right.Top + 0.5f, (float)right.Right - 0.5f, (float)right.Bottom - 0.5f), outline);
+        }
+
+        // Page-stack edges: 1-6 sheet edges per side, from the reading progress.
+        var (leftSheets, rightSheets) = PageStackSheets(progress, isRightToLeft);
+        DrawStack(canvas, left, leftSheets, towardLeft: true, alpha);
+        DrawStack(canvas, right, rightSheets, towardLeft: false, alpha);
+    }
+
+    /// <summary>How many sheet edges each side of a spread shows for <paramref name="progress"/> through the issue: the side already read grows
+    /// from 1 to 6 while the other shrinks from 6 to 1.</summary>
+    internal static (int Left, int Right) PageStackSheets(double progress, bool isRightToLeft)
+    {
+        int read = 1 + (int)Math.Round(Math.Clamp(progress, 0, 1) * 5, MidpointRounding.AwayFromZero);
+        int unread = 7 - read;
+        return isRightToLeft ? (unread, read) : (read, unread);
+    }
+
+    private static void DrawStack(SKCanvas canvas, Rect page, int sheets, bool towardLeft, double alpha)
+    {
+        using var paper = new SKPaint { Color = new SKColor(232, 228, 218, (byte)(alpha * 255)), IsAntialias = true };
+        using var line = new SKPaint { Color = new SKColor(150, 144, 132, (byte)(alpha * 200)), IsAntialias = true };
+        for (int i = sheets; i >= 1; i--)
+        {
+            float x = towardLeft ? (float)(page.Left - (i * 1.6)) : (float)(page.Right + ((i - 1) * 1.6));
+            float inset = (float)(i * 0.9);
+            var rect = new SKRect(x, (float)page.Top + inset, x + 1.6f, (float)page.Bottom - inset);
+            canvas.DrawRect(rect, paper);
+            canvas.DrawRect(towardLeft ? new SKRect(rect.Left, rect.Top, rect.Left + 0.6f, rect.Bottom) : new SKRect(rect.Right - 0.6f, rect.Top, rect.Right, rect.Bottom), line);
+        }
     }
 
     /// <summary>
@@ -793,6 +923,11 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
             return;
         }
 
+        if (RenderPhysicalTransition(context, data, progress, oldImage, newImage, oldSecondaryImage, newSecondaryImage, lease, colorFilter))
+        {
+            return;
+        }
+
         if (data.Style == Data.Entities.PageTransitionStyle.Slide)
         {
             bool vertical = data.Direction is PageTransitionDirection.Up or PageTransitionDirection.Down;
@@ -808,6 +943,381 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         DrawTransitionSide(context, data.OldBitmap, data.OldSecondaryBitmap, oldImage, oldSecondaryImage, data, data.OldIsRightToLeft, offset: default, outgoingAlpha, lease, colorFilter);
         DrawTransitionSide(context, data.NewBitmap, data.NewSecondaryBitmap, newImage, newSecondaryImage, data, data.IsRightToLeft, offset: default, incomingAlpha, lease, colorFilter);
     }
+
+    /// <summary>
+    /// The physical page-turn styles (Motion v2 E, Q30): <see cref="Data.Entities.PageTransitionStyle.Vertical"/> slides on the vertical axis
+    /// whatever the reading direction (CE <c>TopDown</c>); <see cref="Data.Entities.PageTransitionStyle.Book"/> moves one page with a spine
+    /// shadow (CE <c>Paging</c>); <see cref="Data.Entities.PageTransitionStyle.Curl"/> folds the old page away from its outer corner. Returns
+    /// false for a style this method doesn't draw (Slide, Crossfade), or a Curl with no Skia canvas, so the caller falls back.
+    /// </summary>
+    private bool RenderPhysicalTransition(ImmediateDrawingContext context, ReaderPageTransitionData data, double progress,
+        SKImage? oldImage, SKImage? newImage, SKImage? oldSecondaryImage, SKImage? newSecondaryImage,
+        ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
+    {
+        switch (data.Style)
+        {
+            case Data.Entities.PageTransitionStyle.Vertical:
+            {
+                var direction = PageTransitionMath.IsForwardReading(data.Direction, data.IsRightToLeft) ? PageTransitionDirection.Down : PageTransitionDirection.Up;
+                var (outgoing, incoming) = PageTransitionMath.SlideOffset(direction, progress, data.Bounds.Height);
+                DrawTransitionSide(context, data.OldBitmap, data.OldSecondaryBitmap, oldImage, oldSecondaryImage, data, data.OldIsRightToLeft, new Vector(0, outgoing), 1.0, lease, colorFilter);
+                DrawTransitionSide(context, data.NewBitmap, data.NewSecondaryBitmap, newImage, newSecondaryImage, data, data.IsRightToLeft, new Vector(0, incoming), 1.0, lease, colorFilter);
+                return true;
+            }
+
+            case Data.Entities.PageTransitionStyle.Book:
+                RenderBook(context, data, progress, oldImage, newImage, oldSecondaryImage, newSecondaryImage, lease, colorFilter);
+                return true;
+
+            // Spread to spread turns one leaf over the spine; a solo page on either side (a cover beside a spread) curls as one sheet.
+            case Data.Entities.PageTransitionStyle.Curl when lease is not null && data.OldBitmap is not null && data.NewBitmap is not null
+                                                             && data.OldSecondaryBitmap is not null && data.NewSecondaryBitmap is not null:
+                RenderSpreadCurl(context, data, progress, oldImage, newImage, oldSecondaryImage, newSecondaryImage, lease, colorFilter);
+                return true;
+
+            case Data.Entities.PageTransitionStyle.Curl when lease is not null:
+                RenderCurl(context, data, progress, oldImage, newImage, oldSecondaryImage, newSecondaryImage, lease, colorFilter);
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    private void RenderBook(ImmediateDrawingContext context, ReaderPageTransitionData data, double progress,
+        SKImage? oldImage, SKImage? newImage, SKImage? oldSecondaryImage, SKImage? newSecondaryImage,
+        ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
+    {
+        bool vertical = data.Direction is PageTransitionDirection.Up or PageTransitionDirection.Down;
+        double extent = vertical ? data.Bounds.Height : data.Bounds.Width;
+        bool forward = PageTransitionMath.IsForwardReading(data.Direction, data.IsRightToLeft);
+        var (newMoves, offset) = PageTransitionMath.BookOffset(data.Direction, forward, progress, extent);
+        var shift = vertical ? new Vector(0, offset) : new Vector(offset, 0);
+
+        // The still page underneath first, then the moving one over it.
+        if (newMoves)
+        {
+            DrawTransitionSide(context, data.OldBitmap, data.OldSecondaryBitmap, oldImage, oldSecondaryImage, data, data.OldIsRightToLeft, default, 1.0, lease, colorFilter);
+        }
+        else
+        {
+            DrawTransitionSide(context, data.NewBitmap, data.NewSecondaryBitmap, newImage, newSecondaryImage, data, data.IsRightToLeft, default, 1.0, lease, colorFilter);
+        }
+
+        var movingRect = (newMoves ? SideRect(data, data.NewBitmap, data.NewSecondaryBitmap) : SideRect(data, data.OldBitmap, data.OldSecondaryBitmap)).Translate(shift);
+
+        // Spine shadow: cast onto the still page just beyond the moving page's edge, strongest mid-turn.
+        if (lease is not null && movingRect.Width > 0)
+        {
+            double strength = Math.Sin(Math.PI * PageTransitionMath.Smooth(progress)) * 0.45;
+            const float shadowSize = 28f;
+            SKPoint from, to;
+            SKRect band;
+            if (vertical)
+            {
+                bool below = offset >= 0;
+                float edge = (float)(below ? movingRect.Top : movingRect.Bottom);
+                from = new SKPoint(0, edge);
+                to = new SKPoint(0, below ? edge - shadowSize : edge + shadowSize);
+                band = below ? new SKRect((float)movingRect.Left, edge - shadowSize, (float)movingRect.Right, edge) : new SKRect((float)movingRect.Left, edge, (float)movingRect.Right, edge + shadowSize);
+            }
+            else
+            {
+                bool right = offset >= 0;
+                float edge = (float)(right ? movingRect.Left : movingRect.Right);
+                from = new SKPoint(edge, 0);
+                to = new SKPoint(right ? edge - shadowSize : edge + shadowSize, 0);
+                band = right ? new SKRect(edge - shadowSize, (float)movingRect.Top, edge, (float)movingRect.Bottom) : new SKRect(edge, (float)movingRect.Top, edge + shadowSize, (float)movingRect.Bottom);
+            }
+
+            using var shader = SKShader.CreateLinearGradient(from, to,
+                [new SKColor(0, 0, 0, (byte)(strength * 255)), SKColors.Transparent], SKShaderTileMode.Clamp);
+            using var paint = new SKPaint { Shader = shader, IsAntialias = true };
+            lease.SkCanvas.DrawRect(band, paint);
+        }
+
+        if (newMoves)
+        {
+            DrawTransitionSide(context, data.NewBitmap, data.NewSecondaryBitmap, newImage, newSecondaryImage, data, data.IsRightToLeft, shift, 1.0, lease, colorFilter);
+        }
+        else
+        {
+            DrawTransitionSide(context, data.OldBitmap, data.OldSecondaryBitmap, oldImage, oldSecondaryImage, data, data.OldIsRightToLeft, shift, 1.0, lease, colorFilter);
+        }
+    }
+
+    /// <summary>
+    /// The corner curl. Reading forward the old page folds away and the new one is uncovered; reading backward the curl plays in reverse
+    /// with the pages swapped, so the previous page folds back down over the current one. The turning page is clipped to its unturned
+    /// side of the fold; the page beneath gets a shadow along the fold; the turned-over part lands mirrored across the fold as the paper's
+    /// back, with a soft shadow under it.
+    /// </summary>
+    private void RenderCurl(ImmediateDrawingContext context, ReaderPageTransitionData data, double progress,
+        SKImage? oldImage, SKImage? newImage, SKImage? oldSecondaryImage, SKImage? newSecondaryImage,
+        ISkiaSharpApiLease lease, SKColorFilter? colorFilter)
+    {
+        bool forward = PageTransitionMath.IsForwardReading(data.Direction, data.IsRightToLeft);
+        double t = forward ? progress : 1 - progress;
+        var canvas = lease.SkCanvas;
+
+        void DrawTurning() => (forward ? (Action)(() => DrawTransitionSide(context, data.OldBitmap, data.OldSecondaryBitmap, oldImage, oldSecondaryImage, data, data.OldIsRightToLeft, default, 1.0, lease, colorFilter))
+            : () => DrawTransitionSide(context, data.NewBitmap, data.NewSecondaryBitmap, newImage, newSecondaryImage, data, data.IsRightToLeft, default, 1.0, lease, colorFilter))();
+        void DrawUnder() => (forward ? (Action)(() => DrawTransitionSide(context, data.NewBitmap, data.NewSecondaryBitmap, newImage, newSecondaryImage, data, data.IsRightToLeft, default, 1.0, lease, colorFilter))
+            : () => DrawTransitionSide(context, data.OldBitmap, data.OldSecondaryBitmap, oldImage, oldSecondaryImage, data, data.OldIsRightToLeft, default, 1.0, lease, colorFilter))();
+
+        var page = forward ? SideRect(data, data.OldBitmap, data.OldSecondaryBitmap) : SideRect(data, data.NewBitmap, data.NewSecondaryBitmap);
+        var (on, normal, active) = PageTransitionMath.CurlFold(page, t, mirrored: data.IsRightToLeft);
+
+        DrawUnder();
+        if (!active || page.Width <= 0)
+        {
+            if (t < 0.5)
+            {
+                DrawTurning();
+            }
+
+            return;
+        }
+
+        var corners = PageTransitionMath.Corners(page);
+        var unturned = PageTransitionMath.ClipToSide(corners, on, normal, normalSide: false);
+        var turned = PageTransitionMath.ClipToSide(corners, on, normal, normalSide: true);
+        var flap = turned.ConvertAll(p => PageTransitionMath.Reflect(p, on, normal));
+
+        // 1. The part of the turning page still lying flat.
+        if (unturned.Count >= 3)
+        {
+            using var clip = ToPath(unturned);
+            int save = canvas.Save();
+            canvas.ClipPath(clip, antialias: true);
+            DrawTurning();
+            canvas.RestoreToCount(save);
+        }
+
+        // 2. The shadow the lifting page casts on the page beneath.
+        double lift = Math.Sin(Math.PI * PageTransitionMath.Smooth(t));
+        DrawCastShadow(canvas, turned, on, normal, lift, page);
+
+        // 3. The folded-over paper back, with a soft shadow beneath it and curvature shading.
+        if (flap.Count >= 3)
+        {
+            using var flapPath = ToPath(flap);
+            using (var shadow = new SKPaint { Color = new SKColor(0, 0, 0, (byte)(50 + (40 * lift))), IsAntialias = true, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, (float)(4 + (6 * lift))) })
+            {
+                int save = canvas.Save();
+                canvas.Translate((float)(-normal.X * 3), (float)(-normal.Y * 3 + 2));
+                canvas.DrawPath(flapPath, shadow);
+                canvas.RestoreToCount(save);
+            }
+
+            using (var paper = new SKPaint { Color = new SKColor(240, 236, 228), IsAntialias = true })
+            {
+                canvas.DrawPath(flapPath, paper);
+            }
+
+            DrawFlapCurvature(canvas, flapPath, on, normal, page.Width);
+        }
+    }
+
+
+    /// <summary>
+    /// The curl on a double-page spread: like a book, only one leaf turns. Reading forward from spread A to spread B, A's later page (the
+    /// right one left-to-right, the left one right-to-left - always the spread's secondary page) lifts at its outer corner and folds over the
+    /// spine. Beneath it B's secondary page is uncovered; the leaf's back is B's primary page, landing over A's primary as the turn completes.
+    /// Reading backward the same turn plays in reverse with the spreads swapped, so the earlier spread's leaf folds back down.
+    /// </summary>
+    private void RenderSpreadCurl(ImmediateDrawingContext context, ReaderPageTransitionData data, double progress,
+        SKImage? oldImage, SKImage? newImage, SKImage? oldSecondaryImage, SKImage? newSecondaryImage,
+        ISkiaSharpApiLease lease, SKColorFilter? colorFilter)
+    {
+        bool forward = PageTransitionMath.IsForwardReading(data.Direction, data.IsRightToLeft);
+        double t = forward ? progress : 1 - progress;
+        var canvas = lease.SkCanvas;
+
+        // A = the earlier spread, B = the later one.
+        var (aPrimary, aSecondary, aPrimaryImage, aSecondaryImage, aRtl) = forward
+            ? (data.OldBitmap!, data.OldSecondaryBitmap!, oldImage, oldSecondaryImage, data.OldIsRightToLeft)
+            : (data.NewBitmap!, data.NewSecondaryBitmap!, newImage, newSecondaryImage, data.IsRightToLeft);
+        var (bPrimary, bSecondary, bPrimaryImage, bSecondaryImage, bRtl) = forward
+            ? (data.NewBitmap!, data.NewSecondaryBitmap!, newImage, newSecondaryImage, data.IsRightToLeft)
+            : (data.OldBitmap!, data.OldSecondaryBitmap!, oldImage, oldSecondaryImage, data.OldIsRightToLeft);
+
+        var (aPrimaryRect, aSecondaryRect) = SpreadHalves(data, aPrimary, aSecondary, aRtl);
+        var (bPrimaryRect, bSecondaryRect) = SpreadHalves(data, bPrimary, bSecondary, bRtl);
+
+        void Draw(Bitmap bitmap, SKImage? image, Rect rect) =>
+            DrawBitmap(context, bitmap, bitmap.PixelSize, new PageDrawPlan(rect, rect.Center.X, rect.Center.Y), rotationDegrees: 0,
+                data.HighQuality, lease, colorFilter, 1.0, image);
+
+        // The page the leaf will cover stays put, and the next page waits beneath the leaf - with the book look, as when still.
+        Draw(aPrimary, aPrimaryImage, aPrimaryRect);
+        Draw(bSecondary, bSecondaryImage, bSecondaryRect);
+        if (data.BookLook)
+        {
+            var (leftPage, rightPage) = aRtl ? (bSecondaryRect, aPrimaryRect) : (aPrimaryRect, bSecondaryRect);
+            DrawBookLook(canvas, leftPage, rightPage, data.BookProgress, aRtl);
+        }
+
+        var leaf = aSecondaryRect;
+        var (on, normal, active) = PageTransitionMath.CurlFold(leaf, t, mirrored: aRtl);
+        if (!active || leaf.Width <= 0)
+        {
+            if (t < 0.5)
+            {
+                Draw(aSecondary, aSecondaryImage, leaf);
+            }
+            else
+            {
+                Draw(bPrimary, bPrimaryImage, bPrimaryRect);
+            }
+
+            return;
+        }
+
+        var corners = PageTransitionMath.Corners(leaf);
+        var flat = PageTransitionMath.ClipToSide(corners, on, normal, normalSide: false);
+        var turned = PageTransitionMath.ClipToSide(corners, on, normal, normalSide: true);
+        var flap = turned.ConvertAll(p => PageTransitionMath.Reflect(p, on, normal));
+
+        // 1. The part of the leaf still lying flat.
+        if (flat.Count >= 3)
+        {
+            using var clip = ToPath(flat);
+            int save = canvas.Save();
+            canvas.ClipPath(clip, antialias: true);
+            Draw(aSecondary, aSecondaryImage, leaf);
+            canvas.RestoreToCount(save);
+        }
+
+        // 2. The lifted leaf darkens the spine on both pages, and casts its shadow on the page it uncovers.
+        double lift = Math.Sin(Math.PI * PageTransitionMath.Smooth(t));
+        double spine = aRtl ? aPrimaryRect.Left : aPrimaryRect.Right;
+        DrawSpineShadow(canvas, spine, aPrimaryRect.Union(bSecondaryRect), lift);
+        DrawCastShadow(canvas, turned, on, normal, lift, leaf);
+
+        // 3. The leaf's back - the next spread's first page - folded over the spine, with a soft shadow beneath and a curve shade near the
+        //    fold. Paper fills any part of the flap the page itself doesn't reach (pages of different sizes).
+        if (flap.Count >= 3)
+        {
+            using var flapPath = ToPath(flap);
+            using (var shadow = new SKPaint { Color = new SKColor(0, 0, 0, 70), IsAntialias = true, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 6) })
+            {
+                int save = canvas.Save();
+                canvas.Translate((float)(-normal.X * 3), (float)(-normal.Y * 3 + 2));
+                canvas.DrawPath(flapPath, shadow);
+                canvas.RestoreToCount(save);
+            }
+
+            int flapSave = canvas.Save();
+            canvas.ClipPath(flapPath, antialias: true);
+            using (var paper = new SKPaint { Color = new SKColor(236, 232, 223), IsAntialias = true })
+            {
+                canvas.DrawPath(flapPath, paper);
+            }
+
+            Draw(bPrimary, bPrimaryImage, bPrimaryRect);
+            canvas.RestoreToCount(flapSave);
+            DrawFlapCurvature(canvas, flapPath, on, normal, leaf.Width);
+        }
+    }
+
+    /// <summary>A spread's two page rects on screen (unshifted), placed exactly as <see cref="RenderSpread"/> places them.</summary>
+    private static (Rect Primary, Rect Secondary) SpreadHalves(ReaderPageTransitionData data, Bitmap primary, Bitmap secondary, bool isRightToLeft)
+    {
+        var spreadSize = SpreadLayoutMath.ComputeCombinedSize(primary.PixelSize, secondary.PixelSize);
+        var combined = ComputeDrawPlan(data.Bounds, spreadSize.Combined, data.Zoom, data.PanOffsetX, data.PanOffsetY, data.FitMode,
+            data.FitOnlyIfOversized, rotationDegrees: 0).DestRect;
+        double primaryLeftFraction = isRightToLeft ? 1 - spreadSize.LeftWidthFraction : spreadSize.LeftWidthFraction;
+        var (left, right) = SpreadLayoutMath.SplitSpread(combined, primaryLeftFraction);
+        return isRightToLeft ? (right, left) : (left, right);
+    }
+
+    /// <summary>
+    /// Curl polish (Motion v2 reader §7): the shadow the lifting page casts on the page beneath, wider and darker the higher it lifts.
+    /// </summary>
+    private static void DrawCastShadow(SKCanvas canvas, IReadOnlyList<Point> turned, Point on, Vector normal, double lift, Rect clipRect)
+    {
+        if (turned.Count < 3)
+        {
+            return;
+        }
+
+        using var clip = ToPath(turned);
+        int save = canvas.Save();
+        canvas.ClipPath(clip, antialias: true);
+        double reach = 24 + (70 * lift);
+        var from = new SKPoint((float)on.X, (float)on.Y);
+        var to = new SKPoint((float)(on.X + (normal.X * reach)), (float)(on.Y + (normal.Y * reach)));
+        using var shader = SKShader.CreateLinearGradient(from, to,
+            [new SKColor(0, 0, 0, (byte)(70 + (90 * lift))), new SKColor(0, 0, 0, (byte)(25 + (30 * lift))), SKColors.Transparent], [0f, 0.4f, 1f], SKShaderTileMode.Clamp);
+        using var paint = new SKPaint { Shader = shader, IsAntialias = true };
+        canvas.DrawRect(ToSk(clipRect), paint);
+        canvas.RestoreToCount(save);
+    }
+
+    /// <summary>
+    /// Curl polish: the turned-over paper reads as curved, not cut - a dark crease right at the fold, a highlight where the curve faces the
+    /// light, easing back to flat - and a fine light line along the flap's edges. Drawn over whatever fills the flap.
+    /// </summary>
+    private static void DrawFlapCurvature(SKCanvas canvas, SKPath flapPath, Point on, Vector normal, double leafWidth)
+    {
+        int save = canvas.Save();
+        canvas.ClipPath(flapPath, antialias: true);
+        var from = new SKPoint((float)on.X, (float)on.Y);
+        var to = new SKPoint((float)(on.X - (normal.X * leafWidth * 0.5)), (float)(on.Y - (normal.Y * leafWidth * 0.5)));
+        using var shader = SKShader.CreateLinearGradient(from, to,
+            [new SKColor(0, 0, 0, 95), new SKColor(255, 255, 255, 70), new SKColor(255, 255, 255, 0), new SKColor(0, 0, 0, 22)],
+            [0f, 0.12f, 0.45f, 1f], SKShaderTileMode.Clamp);
+        using var paint = new SKPaint { Shader = shader, IsAntialias = true };
+        canvas.DrawPath(flapPath, paint);
+        canvas.RestoreToCount(save);
+
+        using var edge = new SKPaint { Color = new SKColor(255, 255, 255, 120), Style = SKPaintStyle.Stroke, StrokeWidth = 1, IsAntialias = true };
+        canvas.DrawPath(flapPath, edge);
+    }
+
+    /// <summary>On a spread, the lifted leaf darkens the spine on both pages; strongest mid-turn.</summary>
+    private static void DrawSpineShadow(SKCanvas canvas, double spineX, Rect span, double lift)
+    {
+        if (lift <= 0.01)
+        {
+            return;
+        }
+
+        float half = (float)(10 + (34 * lift));
+        using var shader = SKShader.CreateLinearGradient(new SKPoint((float)spineX - half, 0), new SKPoint((float)spineX + half, 0),
+            [SKColors.Transparent, new SKColor(0, 0, 0, (byte)(110 * lift)), SKColors.Transparent], SKShaderTileMode.Clamp);
+        using var paint = new SKPaint { Shader = shader, IsAntialias = true };
+        canvas.DrawRect(new SKRect((float)spineX - half, (float)span.Top, (float)spineX + half, (float)span.Bottom), paint);
+    }
+
+    /// <summary>Where one side (solo page or spread) of a turn sits on screen, unshifted.</summary>
+    private static Rect SideRect(ReaderPageTransitionData data, Bitmap? primary, Bitmap? secondary)
+    {
+        if (primary is null)
+        {
+            return default;
+        }
+
+        var size = secondary is null ? primary.PixelSize : SpreadLayoutMath.ComputeCombinedSize(primary.PixelSize, secondary.PixelSize).Combined;
+        return ComputeDrawPlan(data.Bounds, size, data.Zoom, data.PanOffsetX, data.PanOffsetY, data.FitMode, data.FitOnlyIfOversized,
+            secondary is null ? data.RotationDegrees : 0).DestRect;
+    }
+
+    private static SKPath ToPath(IReadOnlyList<Point> polygon)
+    {
+        var path = new SKPath();
+        path.MoveTo((float)polygon[0].X, (float)polygon[0].Y);
+        for (int i = 1; i < polygon.Count; i++)
+        {
+            path.LineTo((float)polygon[i].X, (float)polygon[i].Y);
+        }
+
+        path.Close();
+        return path;
+    }
+
+    private static SKRect ToSk(Rect r) => new((float)r.Left, (float)r.Top, (float)r.Right, (float)r.Bottom);
 
     /// <summary>
     /// Draws one side (old or new) of an in-flight turn (docs/superpowers/specs/2026-08-15-reader-
@@ -842,8 +1352,15 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
 
         RenderSpread(context, data.Bounds, bitmap, secondaryBitmap, data.Zoom, data.PanOffsetX, data.PanOffsetY,
             data.FitMode, data.FitOnlyIfOversized, data.HighQuality, isRightToLeft, lease, colorFilter, offset, alpha,
-            primaryCachedImage: cachedImage, secondaryCachedImage: secondaryCachedImage);
+            primaryCachedImage: cachedImage, secondaryCachedImage: secondaryCachedImage,
+            bookLook: data.BookLook, bookProgress: data.BookProgress);
     }
+
+    // Decode reveal (Motion v2 E, Q37): pages seen on screen as a gap (still decoding) fade in once their bitmap arrives; a page decoded
+    // before it scrolled in just appears, and none fades twice. Keyed by position in the page list, reset when the document changes.
+    private readonly HashSet<int> _continuousGaps = new();
+    private readonly Dictionary<int, TimeSpan> _continuousReveals = new();
+    private int _continuousPageCount = -1;
 
     /// <summary>
     /// Each <see cref="ContinuousPageEntry.Rect"/> is already the final on-screen placement -
@@ -858,8 +1375,17 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         var mode = data.HighQuality ? BitmapInterpolationMode.HighQuality : BitmapInterpolationMode.LowQuality;
         var viewport = new Rect(data.Bounds);
 
-        foreach (var entry in data.Pages)
+        if (data.Pages.Count != _continuousPageCount)
         {
+            _continuousPageCount = data.Pages.Count;
+            _continuousGaps.Clear();
+            _continuousReveals.Clear();
+        }
+
+        var revealFade = Theming.Motion.MotionPolicy.Resolve(Theming.Motion.MotionRole.Replace).Fade;
+        for (int index = 0; index < data.Pages.Count; index++)
+        {
+            var entry = data.Pages[index];
             if (entry.Rect.Width <= 0 || entry.Rect.Height <= 0)
             {
                 continue;
@@ -892,22 +1418,52 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
 
             if (entry.Bitmap is null)
             {
+                if (revealFade > TimeSpan.Zero)
+                {
+                    _continuousGaps.Add(index);
+                }
+
                 continue;
             }
-            DrawOneContinuousBitmap(context, entry.Bitmap, entry.Rect, mode, lease, colorFilter);
+
+            double alpha = 1;
+            if (_continuousGaps.Remove(index))
+            {
+                _continuousReveals[index] = CompositionNow;
+            }
+
+            if (_continuousReveals.TryGetValue(index, out var revealStart))
+            {
+                double t = revealFade > TimeSpan.Zero ? (CompositionNow - revealStart).TotalMilliseconds / revealFade.TotalMilliseconds : 1;
+                if (t >= 1)
+                {
+                    _continuousReveals.Remove(index);
+                }
+                else
+                {
+                    alpha = 1 - Math.Pow(1 - Math.Clamp(t, 0, 1), 3);
+                }
+            }
+
+            DrawOneContinuousBitmap(context, entry.Bitmap, entry.Rect, mode, lease, colorFilter, alpha);
+        }
+
+        if (_continuousReveals.Count > 0)
+        {
+            RegisterForNextAnimationFrameUpdate();
         }
 
         EvictStaleContinuousScales(data.Pages);
     }
 
     /// <summary>One page's or one band's actual draw call - split out of <see cref="RenderContinuous"/> so the whole-page and per-band paths (design §4.3) share identical draw logic rather than two copies drifting apart.</summary>
-    private void DrawOneContinuousBitmap(ImmediateDrawingContext context, Bitmap bitmap, Rect rect, BitmapInterpolationMode mode, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
+    private void DrawOneContinuousBitmap(ImmediateDrawingContext context, Bitmap bitmap, Rect rect, BitmapInterpolationMode mode, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter, double alpha = 1)
     {
-        if (lease is not null && NeedsPaint(colorFilter))
+        if (lease is not null && (NeedsPaint(colorFilter) || alpha < 1))
         {
             var pixelSize = bitmap.PixelSize;
             var skImage = GetOrCreateSkImage(bitmap); // cached across frames (§10), not per-frame
-            using var paint = new SKPaint { ColorFilter = colorFilter, ImageFilter = _sharpenFilter, IsAntialias = true };
+            using var paint = new SKPaint { ColorFilter = colorFilter, ImageFilter = _sharpenFilter, IsAntialias = true, Color = new SKColor(255, 255, 255, (byte)(Math.Clamp(alpha, 0, 1) * 255)) };
             var sourceRect = new SKRect(0, 0, pixelSize.Width, pixelSize.Height);
             var destRectSk = new SKRect((float)rect.X, (float)rect.Y, (float)(rect.X + rect.Width), (float)(rect.Y + rect.Height));
             lease.SkCanvas.DrawImage(skImage, sourceRect, destRectSk, SamplingFor(mode == BitmapInterpolationMode.HighQuality, rect.Width, pixelSize.Width), paint);

@@ -7,19 +7,20 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="600"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              x:Class="Paperbunkr.App.Views.MigrationOverlay"
              x:DataType="vm:MigrationOverlayViewModel">
 
     <UserControl.Resources>
         <DataTemplate x:Key="ConflictRowTemplate" x:DataType="vm:SeriesConflictRowViewModel">
-            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="12,10" Margin="0,0,0,8">
                 <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
                     <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6">
                         <TextBlock Text="{Binding IncomingName}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" FontSize="13" />
-                        <TextBlock Text="↔" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <fi:SymbolIcon Symbol="ArrowSwap" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                         <TextBlock Text="{Binding MatchedName}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" FontSize="13" />
                     </StackPanel>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding SimilarityLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,3,0,0" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding SimilarityLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,4,0,0" />
 
                     <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Orientation="Horizontal" Spacing="6"
                                 VerticalAlignment="Center" IsVisible="{Binding !IsResolved}">
@@ -37,7 +38,7 @@
     <UserControl.Styles>
         <Style Selector="Button.pillAction">
             <Setter Property="Padding" Value="12,6" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Cursor" Value="Hand" />
@@ -45,15 +46,9 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
         </Style>
-        <Style Selector="Button.pillAction.ghost">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        </Style>
         <Style Selector="Button.primaryWide">
             <Setter Property="Padding" Value="14,10" />
-            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Cursor" Value="Hand" />
@@ -63,18 +58,18 @@
             <Setter Property="HorizontalContentAlignment" Value="Center" />
         </Style>
         <Style Selector="TextBlock.statLabel">
-            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="TextBlock.statValue">
-            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontSize" Value="22" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
         </Style>
         <Style Selector="Button.rowAction">
-            <Setter Property="Padding" Value="10,5" />
-            <Setter Property="CornerRadius" Value="5" />
-            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
@@ -83,133 +78,122 @@
         </Style>
     </UserControl.Styles>
 
-    <Border Width="580" MaxHeight="640" Classes="floatingPanel">
-        <DockPanel LastChildFill="True">
+    <controls:DialogCard Title="ComicRack CE migration" Size="Medium">
+        <StackPanel>
 
-            <!-- Header: title (the Needs Review tab moved to Preferences -> Library -> Library Health) -->
-            <StackPanel DockPanel.Dock="Top" Margin="20,18,20,0">
-                <TextBlock Text="ComicRack CE Migration" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,14,0,0" />
+            <!-- ============ Migrate mode ============ -->
+            <StackPanel>
+
+                <!-- Locate -->
+                <StackPanel IsVisible="{Binding Migration.IsLocate}" Spacing="12">
+                    <TextBlock Text="Locate your ComicRack CE library" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Migration.DefaultPathFound}">
+                        <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentTextBrush}" />
+                        <TextBlock Text="Found the default CE install" Foreground="{DynamicResource PbAccentTextBrush}" FontSize="13" />
+                    </StackPanel>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Grid.Column="0" Text="{Binding Migration.SelectedPath}" PlaceholderText="Path to ComicDb.xml" />
+                        <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding Migration.BrowseCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeSm}" />
+                                <TextBlock Text="Browse…" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Migration.HasErrorMessage}">
+                        <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeSm}" Foreground="#E06060" />
+                        <TextBlock Text="{Binding Migration.ErrorMessage}" Foreground="#E06060" FontSize="13" />
+                    </StackPanel>
+                    <Button Classes="primaryWide" Content="Scan" Command="{Binding Migration.ScanCommand}"
+                            HorizontalAlignment="Left" IsEnabled="{Binding !Migration.IsBusy}" />
+                </StackPanel>
+
+                <!-- Preview -->
+                <StackPanel IsVisible="{Binding Migration.IsPreview}" Spacing="14">
+                    <TextBlock Text="Here's what will be imported" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="28">
+                        <StackPanel>
+                            <TextBlock Classes="statValue" Text="{Binding Migration.SeriesCountLabel}" />
+                            <TextBlock Classes="statLabel" Text="Series" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Classes="statValue" Text="{Binding Migration.IssueCountLabel}" />
+                            <TextBlock Classes="statLabel" Text="Issues" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Classes="statValue" Text="{Binding Migration.GuessedContentTypeLabel}" />
+                            <TextBlock Classes="statLabel" Text="Guessed content type" />
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock Text="Possible duplicate series names were found - you'll review them next."
+                               Foreground="{DynamicResource PbTextMutedBrush}" FontSize="13" TextWrapping="Wrap"
+                               IsVisible="{Binding Migration.HasConflicts}" />
+                    <Button Classes="primaryWide" Content="Continue" Command="{Binding Migration.ContinueFromPreviewCommand}" HorizontalAlignment="Left" />
+                </StackPanel>
+
+                <!-- Conflicts -->
+                <StackPanel IsVisible="{Binding Migration.IsConflicts}" Spacing="10">
+                    <TextBlock Text="Possible duplicate series" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="Merge names that are the same series, or keep them separate. Anything left unresolved is safe - it lands in Library Health, nothing is blocked."
+                               Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="rowAction" Content="Keep All Separate" Command="{Binding Migration.KeepAllSeparateCommand}" />
+                        <Button Classes="rowAction" Content="Merge All Above 90%" Command="{Binding Migration.MergeAllAboveNinetyCommand}" />
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding Migration.Conflicts}" ItemTemplate="{StaticResource ConflictRowTemplate}" />
+                    <Button Classes="primaryWide" Content="Continue" Command="{Binding Migration.ContinueFromConflictsCommand}" HorizontalAlignment="Left" />
+                </StackPanel>
+
+                <!-- Commit -->
+                <StackPanel IsVisible="{Binding Migration.IsCommit}" Spacing="14">
+                    <TextBlock Text="Ready to migrate" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="Your ComicRack CE install is never modified - this only writes into Paperbunkr's library, and it's always safe to re-run."
+                               Foreground="{DynamicResource PbTextMutedBrush}" FontSize="13" TextWrapping="Wrap" />
+                    <Button Classes="primaryWide" Content="Start Migration" Command="{Binding Migration.CommitCommand}"
+                            HorizontalAlignment="Left" IsEnabled="{Binding !Migration.IsBusy}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Migration.IsBusy}">
+                        <ProgressBar IsIndeterminate="True" Width="140" Height="6" />
+                        <TextBlock Text="Migrating…" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Results -->
+                <StackPanel IsVisible="{Binding Migration.IsResults}" Spacing="14">
+                    <TextBlock Text="Migration complete" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="28">
+                        <StackPanel>
+                            <TextBlock Classes="statValue" Text="{Binding Migration.SeriesCreatedLabel}" />
+                            <TextBlock Classes="statLabel" Text="Series created" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Classes="statValue" Text="{Binding Migration.IssuesCreatedLabel}" />
+                            <TextBlock Classes="statLabel" Text="Issues added" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Classes="statValue" Text="{Binding Migration.SeriesMergedLabel}" />
+                            <TextBlock Classes="statLabel" Text="Series merged" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Classes="statValue" Text="{Binding Migration.ConflictsPendingLabel}" />
+                            <TextBlock Classes="statLabel" Text="Left for review" />
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Classes="primaryWide" Content="Review in Library Health" Command="{Binding ReviewInLibraryHealthCommand}" />
+                        <Button Content="Migrate Again" Command="{Binding SwitchToMigrateCommand}" />
+                        <Button Content="Generate Covers" Command="{Binding Migration.GenerateCoversCommand}"
+                                IsEnabled="{Binding !Migration.IsGeneratingCovers}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Migration.IsGeneratingCovers}">
+                        <ProgressBar Minimum="0" Maximum="1" Value="{Binding Migration.CoverGenerationFraction}"
+                                     Width="140" Height="6" />
+                        <TextBlock Text="{Binding Migration.CoverGenerationDone, StringFormat='Generating covers… {0}'}"
+                                   FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    </StackPanel>
+                </StackPanel>
+
             </StackPanel>
 
-            <ScrollViewer Padding="20,16,20,20">
-                <StackPanel>
-
-                    <!-- ============ Migrate mode ============ -->
-                    <StackPanel>
-
-                        <!-- Locate -->
-                        <StackPanel IsVisible="{Binding Migration.IsLocate}" Spacing="12">
-                            <TextBlock Text="Locate your ComicRack CE library" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                            <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Migration.DefaultPathFound}">
-                                <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentTextBrush}" />
-                                <TextBlock Text="Found the default CE install" Foreground="{DynamicResource PbAccentTextBrush}" FontSize="12.5" />
-                            </StackPanel>
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBox Grid.Column="0" Text="{Binding Migration.SelectedPath}" PlaceholderText="Path to ComicDb.xml" />
-                                <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding Migration.BrowseCommand}">
-                                    <StackPanel Orientation="Horizontal" Spacing="5">
-                                        <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeSm}" />
-                                        <TextBlock Text="Browse…" />
-                                    </StackPanel>
-                                </Button>
-                            </Grid>
-                            <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Migration.HasErrorMessage}">
-                                <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeSm}" Foreground="#E06060" />
-                                <TextBlock Text="{Binding Migration.ErrorMessage}" Foreground="#E06060" FontSize="12.5" />
-                            </StackPanel>
-                            <Button Classes="primaryWide" Content="Scan" Command="{Binding Migration.ScanCommand}"
-                                    HorizontalAlignment="Left" IsEnabled="{Binding !Migration.IsBusy}" />
-                        </StackPanel>
-
-                        <!-- Preview -->
-                        <StackPanel IsVisible="{Binding Migration.IsPreview}" Spacing="14">
-                            <TextBlock Text="Here's what will be imported" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                            <StackPanel Orientation="Horizontal" Spacing="28">
-                                <StackPanel>
-                                    <TextBlock Classes="statValue" Text="{Binding Migration.SeriesCountLabel}" />
-                                    <TextBlock Classes="statLabel" Text="Series" />
-                                </StackPanel>
-                                <StackPanel>
-                                    <TextBlock Classes="statValue" Text="{Binding Migration.IssueCountLabel}" />
-                                    <TextBlock Classes="statLabel" Text="Issues" />
-                                </StackPanel>
-                                <StackPanel>
-                                    <TextBlock Classes="statValue" Text="{Binding Migration.GuessedContentTypeLabel}" />
-                                    <TextBlock Classes="statLabel" Text="Guessed content type" />
-                                </StackPanel>
-                            </StackPanel>
-                            <TextBlock Text="Possible duplicate series names were found - you'll review them next."
-                                       Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12.5" TextWrapping="Wrap"
-                                       IsVisible="{Binding Migration.HasConflicts}" />
-                            <Button Classes="primaryWide" Content="Continue" Command="{Binding Migration.ContinueFromPreviewCommand}" HorizontalAlignment="Left" />
-                        </StackPanel>
-
-                        <!-- Conflicts -->
-                        <StackPanel IsVisible="{Binding Migration.IsConflicts}" Spacing="10">
-                            <TextBlock Text="Possible duplicate series" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                            <TextBlock Text="Merge names that are the same series, or keep them separate. Anything left unresolved is safe - it lands in Library Health, nothing is blocked."
-                                       Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12" TextWrapping="Wrap" />
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Classes="rowAction" Content="Keep All Separate" Command="{Binding Migration.KeepAllSeparateCommand}" />
-                                <Button Classes="rowAction" Content="Merge All Above 90%" Command="{Binding Migration.MergeAllAboveNinetyCommand}" />
-                            </StackPanel>
-                            <ItemsControl ItemsSource="{Binding Migration.Conflicts}" ItemTemplate="{StaticResource ConflictRowTemplate}" />
-                            <Button Classes="primaryWide" Content="Continue" Command="{Binding Migration.ContinueFromConflictsCommand}" HorizontalAlignment="Left" />
-                        </StackPanel>
-
-                        <!-- Commit -->
-                        <StackPanel IsVisible="{Binding Migration.IsCommit}" Spacing="14">
-                            <TextBlock Text="Ready to migrate" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                            <TextBlock Text="Your ComicRack CE install is never modified - this only writes into Paperbunkr's library, and it's always safe to re-run."
-                                       Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12.5" TextWrapping="Wrap" />
-                            <Button Classes="primaryWide" Content="Start Migration" Command="{Binding Migration.CommitCommand}"
-                                    HorizontalAlignment="Left" IsEnabled="{Binding !Migration.IsBusy}" />
-                            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Migration.IsBusy}">
-                                <ProgressBar IsIndeterminate="True" Width="140" Height="6" />
-                                <TextBlock Text="Migrating…" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!-- Results -->
-                        <StackPanel IsVisible="{Binding Migration.IsResults}" Spacing="14">
-                            <TextBlock Text="Migration complete" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                            <StackPanel Orientation="Horizontal" Spacing="28">
-                                <StackPanel>
-                                    <TextBlock Classes="statValue" Text="{Binding Migration.SeriesCreatedLabel}" />
-                                    <TextBlock Classes="statLabel" Text="Series created" />
-                                </StackPanel>
-                                <StackPanel>
-                                    <TextBlock Classes="statValue" Text="{Binding Migration.IssuesCreatedLabel}" />
-                                    <TextBlock Classes="statLabel" Text="Issues added" />
-                                </StackPanel>
-                                <StackPanel>
-                                    <TextBlock Classes="statValue" Text="{Binding Migration.SeriesMergedLabel}" />
-                                    <TextBlock Classes="statLabel" Text="Series merged" />
-                                </StackPanel>
-                                <StackPanel>
-                                    <TextBlock Classes="statValue" Text="{Binding Migration.ConflictsPendingLabel}" />
-                                    <TextBlock Classes="statLabel" Text="Left for review" />
-                                </StackPanel>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button Classes="primaryWide" Content="Review in Library Health" Command="{Binding ReviewInLibraryHealthCommand}" />
-                                <Button Content="Migrate Again" Command="{Binding SwitchToMigrateCommand}" />
-                                <Button Content="Generate Covers" Command="{Binding Migration.GenerateCoversCommand}"
-                                        IsEnabled="{Binding !Migration.IsGeneratingCovers}" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Migration.IsGeneratingCovers}">
-                                <ProgressBar Minimum="0" Maximum="1" Value="{Binding Migration.CoverGenerationFraction}"
-                                             Width="140" Height="6" />
-                                <TextBlock Text="{Binding Migration.CoverGenerationDone, StringFormat='Generating covers… {0}'}"
-                                           FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" />
-                            </StackPanel>
-                        </StackPanel>
-
-                    </StackPanel>
-
-                </StackPanel>
-            </ScrollViewer>
-        </DockPanel>
-    </Border>
+        </StackPanel>
+    </controls:DialogCard>
 </UserControl>

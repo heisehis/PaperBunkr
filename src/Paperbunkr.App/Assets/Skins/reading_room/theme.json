@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.reading_room",
+  "name": "Reading Room",
+  "base": {
+    "palette": {
+      "accent": "#8C4A2F",
+      "success": "#4F7A4A",
+      "badge": "#C2913A"
+    },
+    "metrics": {
+      "radius": 4,
+      "radiusSm": 3,
+      "radiusLg": 8
+    },
+    "typography": {
+      "display": {
+        "family": "Georgia",
+        "size": 44,
+        "weight": "Bold"
+      },
+      "heading": {
+        "family": "Georgia",
+        "size": 26
+      }
+    },
+    "components": {
+      "chip": {
+        "radius": 3
+      }
+    }
+  },
+  "variants": {
+    "paper": {
+      "name": "Paper",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#F3EAD7",
+        "ink": "#2B2118"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#EADFC8",
+          "raised": "#F9F2E3",
+          "overlay": "#FFFAF0"
+        },
+        "border": {
+          "default": "#D3C4A6"
+        },
+        "reader": {
+          "background": {
+            "page": "#F6EEDC",
+            "text": "#2B2118"
+          }
+        }
+      }
+    },
+    "lamplight": {
+      "name": "Lamplight",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#1C1612",
+        "ink": "#EADCC6",
+        "accent": "#D08A5B",
+        "success": "#8DB37F",
+        "badge": "#D9A94E"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#241C16",
+          "raised": "#28201A",
+          "overlay": "#322820"
+        },
+        "border": {
+          "default": "#43362B"
+        },
+        "reader": {
+          "background": {
+            "page": "#1F1814",
+            "text": "#E6D6BC"
+          }
+        }
+      }
+    }
+  }
+}

@@ -672,6 +672,84 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
 
     // ===================== Load / Save / Cancel =====================
 
+    // ===================== Manga chapter inheritance (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md D13) =====================
+
+    private Paperbunkr.Data.Metadata.Manga.MangaSeriesInheritance? _seriesInheritance;
+
+    /// <summary>True when this chapter belongs to a confirmed manga series, so some of its fields come from the series.</summary>
+    [ObservableProperty]
+    private bool _isInheritingFromSeries;
+
+    /// <summary>The fields this chapter holds its own value for (exceptions to the series), each with a Reset to series button.</summary>
+    public ObservableCollection<ChapterExceptionRowViewModel> ChapterExceptions { get; } = new();
+
+    public bool HasChapterExceptions => ChapterExceptions.Count > 0;
+
+    private void LoadChapterInheritance(PaperbunkrDbContext context, Issue issue)
+    {
+        _seriesInheritance = Paperbunkr.Data.Metadata.Manga.MangaSeriesInheritance.Load(context, issue.SeriesId);
+        IsInheritingFromSeries = _seriesInheritance is not null;
+        ChapterExceptions.Clear();
+        if (_seriesInheritance is not null)
+        {
+            foreach (var field in Paperbunkr.Data.Metadata.Manga.MangaInheritedFields.All.Where(f => issue.FieldOverrides.Any(o => o.FieldKey == f.Key)))
+            {
+                string seriesText = SeriesValueText(_seriesInheritance.Values, field);
+                if (seriesText.Length > 0)
+                {
+                    ChapterExceptions.Add(new ChapterExceptionRowViewModel(field.Key, field.Label, seriesText, ResetFieldToSeries));
+                }
+            }
+        }
+
+        OnPropertyChanged(nameof(HasChapterExceptions));
+    }
+
+    private static string SeriesValueText(Paperbunkr.Data.Metadata.Manga.MangaFieldValues values, Paperbunkr.Data.Metadata.Manga.MangaField field) => field.Kind switch
+    {
+        Paperbunkr.Data.Metadata.Manga.MangaFieldKind.Tags => string.Join(", ", (field.TagField == IssueTagField.Genre ? values.Genres : values.Tags).Select(t => t.Value)),
+        _ => Paperbunkr.Data.Metadata.Manga.MangaInheritedFields.IssueTextFor(values, field) ?? string.Empty,
+    };
+
+    /// <summary>Puts the series value into the editor's buffer for one field. Saving then stores it on the chapter and drops the exception.</summary>
+    private void ResetFieldToSeries(ChapterExceptionRowViewModel row)
+    {
+        if (_seriesInheritance is null)
+        {
+            return;
+        }
+
+        var field = Paperbunkr.Data.Metadata.Manga.MangaInheritedFields.Find(row.Key);
+        if (field is null)
+        {
+            return;
+        }
+
+        string text = SeriesValueText(_seriesInheritance.Values, field);
+        switch (row.Key)
+        {
+            case "Publisher": Publisher = text; break;
+            case "Imprint": Imprint = text; break;
+            case "AgeRating": AgeRating = text; break;
+            case "Writer": Writer = text; break;
+            case "Penciller": Penciller = text; break;
+            case "Inker": Inker = text; break;
+            case "Colorist": Colorist = text; break;
+            case "Letterer": Letterer = text; break;
+            case "CoverArtist": CoverArtist = text; break;
+            case "Editor": Editor = text; break;
+            case "Genre": Genre = text; break;
+            case "Tags": Tags = text; break;
+        }
+
+        // Not removed inline: this runs from the row's own button, and removing a row from its own click detaches the control mid-event.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            ChapterExceptions.Remove(row);
+            OnPropertyChanged(nameof(HasChapterExceptions));
+        });
+    }
+
     public void Load(int issueId, bool deleteIfUnedited = false)
     {
         _isLoading = true;
@@ -679,12 +757,14 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         _deleteIfUnedited = deleteIfUnedited;
 
         using var context = _contextFactory();
-        var issue = context.Issues.Include(i => i.Series).Include(i => i.MetadataProposals).Include(i => i.Tags).FirstOrDefault(i => i.Id == issueId);
+        var issue = context.Issues.Include(i => i.Series).Include(i => i.MetadataProposals).Include(i => i.Tags).Include(i => i.FieldOverrides).FirstOrDefault(i => i.Id == issueId);
         if (issue is null)
         {
             _isLoading = false;
             return;
         }
+
+        LoadChapterInheritance(context, issue);
 
         _seriesName = issue.Series?.Name ?? string.Empty;
         _beforeSnapshot = MetadataEditHistoryService.CaptureSnapshot(issue);
@@ -811,7 +891,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         // Include(Series) - needed by MetadataEditHistoryService.CaptureSnapshot below, whose
         // Content Type/Status/Reading Status fields reach through Issue.Series (docs/ce-feature-
         // inventory.md §A "Undo/Redo").
-        var issue = context.Issues.Include(i => i.Series).Include(i => i.Tags).FirstOrDefault(i => i.Id == issueId);
+        var issue = context.Issues.Include(i => i.Series).Include(i => i.Tags).Include(i => i.FieldOverrides).FirstOrDefault(i => i.Id == issueId);
         if (issue is null)
         {
             _goBack();
@@ -872,6 +952,9 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         issue.Summary = NullIfEmpty(Summary);
         issue.Notes = NullIfEmpty(Notes);
         issue.Review = NullIfEmpty(Review);
+
+        // A manga chapter that now differs from its series becomes an exception (so the next series save leaves it alone); one reset to match stops being one.
+        Paperbunkr.Data.Metadata.Manga.MangaChapterOverrides.SyncAfterEdit(context, issue);
 
         context.SaveChanges();
         _isDirty = false;

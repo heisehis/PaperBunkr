@@ -64,12 +64,19 @@ public static class PullListService
     {
         var provider = source.Kind;
         var followedNames = context.WatchedSeries.Where(w => w.WatchFutureReleases && !w.IsPaused).Select(w => w.Name).ToList();
-        var known = context.ReleaseSeries.Where(m => m.Provider == provider).Select(m => m.SeriesId).ToHashSet();
+        var cached = context.ReleaseSeries.Where(m => m.Provider == provider).ToDictionary(m => m.SeriesId);
+        var now = DateTime.UtcNow;
+        var known = cached.Values.Where(m => now - m.FetchedAt <
+                (string.IsNullOrWhiteSpace(m.Publisher) || (provider == ComicProvider.Metron && m.ComicVineId is null)
+                    ? TimeSpan.FromDays(1) : TimeSpan.FromDays(30)))
+            .Select(m => m.SeriesId).ToHashSet();
         var unknown = entries
             .GroupBy(e => e.SeriesId)
             .Where(g => !known.Contains(g.Key))
             .Select(g => (Id: g.Key, Name: g.First().SeriesName))
-            .OrderByDescending(s => followedNames.Any(n => SeriesNames.Same(n, s.Name)))
+            .OrderBy(s => cached.ContainsKey(s.Id) ? 1 : 0)
+            .ThenBy(s => cached.TryGetValue(s.Id, out var row) ? row.FetchedAt : DateTime.MinValue)
+            .ThenByDescending(s => followedNames.Any(n => SeriesNames.Same(n, s.Name)))
             .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
             .Take(lookupCap)
             .ToList();
@@ -87,16 +94,16 @@ public static class PullListService
                 break; // rate limited: the rest is looked up on a later refresh
             }
 
-            context.ReleaseSeries.Add(new ReleaseSeriesInfo
+            if (!cached.TryGetValue(id, out var row))
             {
-                Provider = provider,
-                SeriesId = id,
-                Name = info?.Name ?? name,
-                Publisher = info?.Publisher,
-                YearBegan = info?.YearBegan,
-                ComicVineId = info?.ComicVineId,
-                FetchedAt = DateTime.UtcNow,
-            });
+                row = new ReleaseSeriesInfo { Provider = provider, SeriesId = id, Name = name };
+                context.ReleaseSeries.Add(row);
+            }
+            row.Name = info?.Name ?? row.Name;
+            row.Publisher = info?.Publisher ?? row.Publisher;
+            row.YearBegan = info?.YearBegan ?? row.YearBegan;
+            row.ComicVineId = info?.ComicVineId ?? row.ComicVineId;
+            row.FetchedAt = now;
             context.SaveChanges();
         }
     }

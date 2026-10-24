@@ -2,6 +2,7 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Paperbunkr.App.Theming.Motion;
 using Avalonia.VisualTree;
 
 namespace Paperbunkr.App.Controls;
@@ -74,7 +75,7 @@ public sealed class ParallaxBackdrop : Control
     /// given distance scrolled past the viewport top. Reduced Motion always yields 0.</summary>
     internal void ApplyScroll(double scrolledPast)
     {
-        double next = MotionTokens.IsReducedMotion() ? 0 : ParallaxMath.Offset(scrolledPast, Bounds.Height);
+        double next = MotionPolicy.AllowsContinuous() ? ParallaxMath.Offset(scrolledPast, Bounds.Height) : 0;
 
         if (Math.Abs(next - _offset) > 0.01)
         {

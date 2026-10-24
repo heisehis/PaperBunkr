@@ -129,7 +129,6 @@ public sealed partial class WantedScreenViewModel
     public bool IsViewingThisWeek => ReleaseWeekStart == WeekStart(_today());
     public string CalendarTitle => CalendarMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
 
-    private bool _releasesLoaded;
     private DateTime? _releasesRefreshedAt;
     private string _releaseSignature = string.Empty;
     private readonly HashSet<DateTime> _fetchedWeeks = new();
@@ -159,7 +158,6 @@ public sealed partial class WantedScreenViewModel
 
     private void LoadReleases(PaperbunkrDbContext context, DateTime today)
     {
-        _releasesLoaded = true;
         var releases = context.PullListReleases.AsNoTracking().OrderBy(r => r.StoreDate).ThenBy(r => r.SeriesName).ThenBy(r => r.IssueNumber).ToList();
         var listProvider = releases.FirstOrDefault()?.Provider ?? ComicProvider.Metron;
         var seriesInfo = context.ReleaseSeries.AsNoTracking().Where(m => m.Provider == listProvider).ToDictionary(m => m.SeriesId);
@@ -272,7 +270,7 @@ public sealed partial class WantedScreenViewModel
             : weekHasAny
                 ? "Nothing matches these filters."
                 : !hasSource
-                    ? "The weekly pull list comes from Metron, or from ComicVine when there is no Metron login. Save either under Preferences → Connections and it fills in on the next check."
+                    ? "The weekly pull list comes from Metron, or from ComicVine when Metron is not connected. Save either under Preferences → Connections and it fills in on the next check."
                     : releases.Count == 0 && settings.PullListRefreshedAt is null
                         ? "Nothing fetched yet. Press Search now, or wait for the next automatic check."
                         : "No releases this week.";

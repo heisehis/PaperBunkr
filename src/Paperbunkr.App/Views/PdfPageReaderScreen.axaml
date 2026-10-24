@@ -10,16 +10,6 @@
              x:Class="Paperbunkr.App.Views.PdfPageReaderScreen"
              x:DataType="vm:PdfPageReaderScreenViewModel">
 
-    <UserControl.Resources>
-        <!-- Kept only for the error-state box below - the chrome bars/toolbar themselves moved onto
-             ReaderChrome's theme-tinted brushes (docs/superpowers/specs/2026-09-03-books-reader-hud-
-             redesign-design.md); an error state has no book theme to tint against, so it keeps its
-             own fixed dark styling. -->
-        <SolidColorBrush x:Key="ReaderChromeBrush" Color="#15171C" />
-        <SolidColorBrush x:Key="ReaderBorderBrush" Color="#24272E" />
-        <SolidColorBrush x:Key="ReaderTextMutedBrush" Color="#8B8779" />
-    </UserControl.Resources>
-
     <!-- Full-bleed page + overlaid chrome (docs/superpowers/specs/2026-09-03-books-reader-hud-
          redesign-design.md), matching EPUB's reading pane now instead of the old fixed Auto/*/Auto
          row layout with permanently-docked toolbar/scrubber bars. No WebView-airspace problem here
@@ -41,10 +31,10 @@
             <views:CaptureOverlay x:Name="CaptureOverlayControl" IsCaptureMode="{Binding IsCaptureMode}"
                                    IsVisible="{Binding !HasError}" RegionCaptured="OnRegionCaptured" />
 
-            <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="8"
-                    Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
+            <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="{DynamicResource PbRadius}"
+                    Background="{DynamicResource PbReaderChromeBrush}" BorderBrush="{DynamicResource PbReaderBorderBrush}"
                     BorderThickness="1" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <TextBlock Text="{Binding ErrorMessage}" FontSize="13" Foreground="{StaticResource ReaderTextMutedBrush}"
+                <TextBlock Text="{Binding ErrorMessage}" FontSize="13" Foreground="{DynamicResource PbReaderTextMutedBrush}"
                            TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />
             </Border>
         </Grid>
@@ -72,7 +62,7 @@
                     <ItemsControl ItemsSource="{Binding AnnotationImages}" Margin="8,0,8,16">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:BookAnnotationImageSummary">
-                                <Border Margin="0,0,0,10" CornerRadius="6" ClipToBounds="True"
+                                <Border Margin="0,0,0,10" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
                                         BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
                                     <Grid RowDefinitions="Auto,Auto">
                                         <Image Grid.Row="0" Source="{Binding ImagePath, Converter={x:Static views:FilePathImageConverter.Instance}}"

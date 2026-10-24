@@ -26,6 +26,62 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Release preparation (2026-10-24, v0.8.0-beta; base `2c256dc`):** the accumulated source,
+> artwork, installer and documentation changes are being committed together on
+> `codex/release-v0.8.0`. This supersedes earlier "uncommitted" labels as a statement about Git
+> status only; their individual visual-review and verification caveats still apply. App version
+> is `0.8.0.0`; the release retains the existing `-beta` convention. Installer verification passed
+> all 16 PowerShell/build checks and the shared native Pascal checks, including compilation with
+> and without the thumbnail handler. Broader release validation and publication are pending;
+> no complete test-suite or manual accessibility sign-off is claimed here.
+
+> **Manual session note (2026-10-24, installer polish; implementation uncommitted,
+> design/plan `2c256dc`):** implemented restrained welcome/finish copy, accurate Library quick-start,
+> shortcut-only component descriptions, labelled Repair/Uninstall and Update/Change options,
+> a shorter upgrade flow with previous choices, numeric downgrade blocking in interactive/silent
+> setup, unreadable-version fallback/blocking, and default data preservation with separately
+> confirmed, bounded profile deletion. Version inputs now derive from the app project and reject
+> mismatches; thumbnails are offered only when the native DLL is bundled. Existing modified brand
+> assets were preserved. Native verification passed 39 helper checks; the PowerShell/build harness
+> passed 16 checks, including production-script compilation with/without thumbnails. Real Release
+> app publishing and installer compilation succeeded using the user's external Six Labors licence.
+> Corrected a missing Windows `OS` environment variable in automation; Native AOT then published,
+> with the handler verified as x64 native rather than managed. Repackaging with that DLL succeeded:
+> `installer/Output/PaperbunkrSetup-0.7.89-beta-2c256dc.exe`. Visual/DPI, keyboard/Narrator,
+> and real install/repair/update/uninstall/registry checks
+> in a disposable Windows environment remain outstanding. See
+> `docs/superpowers/specs/2026-10-24-installer-polish-{design,plan}.md`.
+
+> **Manual session note (2026-10-24, bulk story-event suggestions; implementation uncommitted,
+> design `1167a91`):** added checkboxes, selected count, Select all/Clear and Accept/Dismiss selected
+> to New story events in Suggestions & checks. Batches keep the page open, show progress and one
+> summary, refresh the event sidebar, retain failed rows selected with their error, and continue
+> processing other rows. Individual acceptance still opens the event. Shared verification and
+> transactional event creation preserve existing membership/role behavior. The App and compiled
+> XAML built; all 45 focused behavior, layout and shared UI lint checks passed, including three
+> theme layouts at 640/1000 px content widths. Headless render inspection supplements these checks;
+> real-window keyboard and screen-reader review remain outstanding. See
+> `docs/superpowers/specs/2026-10-24-story-event-suggestions-bulk-actions-design.md`.
+
+> **Manual session note (2026-10-18, Collector’s index cosmetics package; uncommitted):** implemented
+> the approved 14-item package (pitch #8 excluded) in
+> `docs/superpowers/specs/2026-10-18-cosmetics-package-design.md`: Library mats/hover/selection and
+> grouping treatments, explicit edition ribbons, detail issue covers and current-reader marker,
+> ordered reading-list progress, global comic page frames, bookmark accessibility, chapter openings,
+> existing source/tracker marks, truthful cover states, and live theme preview tabs. App build and
+> Avalonia XAML weave succeeded. Migration test passed; focused App selection was 146/147, with one
+> existing tag-chip assertion mismatch (`#User` included unexpectedly by the test's expected set).
+> Manual visual review across sizes/skins and assistive technology remains outstanding.
+
+> **Manual session note (2026-10-17, app-wide motion system; uncommitted):** implemented the
+> approved system-wide motion policy and staged migration in
+> `docs/superpowers/specs/2026-10-17-app-wide-motion-system-{design,plan}.md`. The app builds
+> successfully; focused motion policy, preferences, theme layout, home effects, Matrix rain, and
+> migration tests passed (376/378 in the focused app selection; the two failures are existing
+> detail-screen focus-ring checks reporting `MarkdownView` clipping a `SelectableTextBlock`). The
+> 40-minute `Speed!=Slow` run was interrupted at the user's request; no full-suite pass is claimed.
+> On-screen visual review remains outstanding.
+
 > **Manual session note (2026-09-26, status-line audit across the 2026-09-22 to -25 spec batch):**
 > the user confirmed directly that **Event Map is the only item from this batch not worked on** —
 > every other design doc in it had a stale "not yet implemented"/"draft" status line despite real,
@@ -354,6 +410,19 @@ this file itself already did once (see the note below).
 > Missing Issues cards and the Series tab; an on-screen pass. Merging note: this file and `Paperbunkr-Roadmap.md` also
 > have uncommitted edits from another session in the main working tree — expect a trivial merge.
 
+> **Cosmetics pitch COMPLETED (2026-10-12, uncommitted):** spec `docs/superpowers/specs/2026-10-12-cosmetics-pitch-completion-design.md`. **#24** taskbar/tray badge
+> (user-verified on screen): counts pending Activity Center alerts (the user rejected "wanted releases this week"), `ShowTaskbarBadge` + migration
+> `AddShowTaskbarBadge`, `TaskbarBadgeService` (ITaskbarList3 overlay, re-sent on every refresh because Windows drops it), redrawn on skin change.
+> **#23** page-dot hover preview gained a page number and a numbered placeholder (the thumbnail tooltip already existed). **#22** `ImageBackgroundMode.Ambient`:
+> a gradient from the current page's thumbnail edges (`PageEdgeColors`, `ReaderScreenViewModel.Ambient.cs`), cross-faded by a `BrushTransition`.
+> **#19** `LibraryViewMode.Bookshelf`: spines on shelf rows, built on the existing `VirtualizingVariableWrapPanel` (new `UseSpineWidths`) with one
+> custom-rendered `SpineTile` per item, `ShelfBoards` behind, colour from `SpineColorCache` (cover thumbnail via `CoverPalette`, two decodes at a time).
+> **#11** closed with no work (Slide/Crossfade already exist; paper-curl ruled out 2026-08-13). Deviations from the spec: the view-mode enum is stored as
+> a *string* (no migration either way); #19 reuses the existing wrap panel instead of a bespoke control, so selection, context menu and keyboard come
+> free; no continuous-mode throttle for Ambient (it samples an in-memory thumbnail, so it costs nothing); spreads use the current page only. **User-confirmed on screen 2026-10-12:** all of #19, #22, #23, #24 and the tray dot (#19 needed one fix: a Button centres its content, so `SpineTile` measures itself a full row height). **Known gap:**
+> the alphabet rail and pinned group header in bookshelf mode
+> are not wired (they only know the other grids). The fast App suite was not re-run after the Continuity-sources session merged.
+>
 > **Cosmetics pitch items 8–26 BUILT (2026-09-21, uncommitted; user reviewed it running and signed off the same day):** spec `…-cosmetics-pitch-2-design.md` + plan
 > `…-cosmetics-pitch-2-plan.md`. Slice A (series status chip, unread glyph, placeholder covers, A–Z rail for grouped views), slice B (hero backdrop
 > switch, per-series accent, arc-source brand mark), slice C (empty-state illustrations, menu icon audit, chart hover/contrast/donut sweep, Activity Center
@@ -571,6 +640,20 @@ this file itself already did once (see the note below).
 > visibly avoids duplicating Home's current picks are all unverified visually — outstanding for the user to
 > check. **This closes all 5 items of the 2026-09-22 decomposed Insights pitch queue** (slices 1-5, all built
 > 2026-09-22/23, all uncommitted, all with on-screen verification still outstanding).
+> **Insights pitch, remaining 5 items — BUILT 2026-10-12, uncommitted, user-verified on screen 2026-10-12** (design + plan:
+> `docs/superpowers/specs/2026-10-12-insights-pitch-completion-{design,plan}.md`; one spec for all three slices at the user's request). This closes the
+> whole 10-item Insights pitch. #3 reading rhythm (Trends › Activity: weekday × hour session heatmap, session-length buckets, typical session; counts sessions,
+> skips backfilled rows, length uses only sessions with `ActiveSeconds`), #5 "Where you stop" (Trends › Composition: stopped-vs-finished rate by publisher/genre/type
+> plus a stall-point histogram, same 21-day stalled rule and 95% read rule as the Today Drop-off watch, which is unchanged), #7 "You love these" (Trends › Top
+> Lists: avg rating × completion via the normalized `CreatorCredit` index, ≥3 series and ≥3 rated issues; the pitch's "unowned works → Wanted" half is **dropped** —
+> Wanted items carry no creator data and have no creator filter), #8 Storage (Composition: comics only, by file type and publisher, ten largest files, "duplicates
+> could free up to X" with a Review-duplicates button into Library Health › Duplicates; books have no size column, so they show as a count), #10 Milestones strip
+> (History tab: derived from the reading log, never stored, backfill excluded, earned + dimmed next-up badges, Hide remembered). **No migration**: the Hide switch
+> is `insights.json` next to the database (another session was mid-migration on `AppSettings`). Verified: 27 new Data resolver tests, 10 view-model/prefs tests,
+> 2 headless renders of the real screen with seeded data (PNGs in `.superpowers/pitch-render/`), plus the scoped Insights/Stats/History/Goal/Recap/ScreenInput/
+> MainViewModel suites. **Still to look at on screen:** the rhythm grid on the real library (and that backfilled history leaves it sparse), the 21-day boundary,
+> affinity ranking against real ratings, storage total vs Explorer, Review duplicates landing on Library Health › Duplicates, the milestone strip in light/dark,
+> and that an import-only history shows the explanatory note instead of fake milestones.
 > **Insights section redesign — built 2026-09-23** (design + plan:
 > `docs/superpowers/specs/2026-09-23-insights-redesign-{design,plan}.md`), uncommitted. IA rework, not just a
 > restyle: renamed the three tabs Overview/Stats/Recap -> **Today**/**Trends**/Recap to match what they'd
@@ -3386,6 +3469,110 @@ Pieces C, E, D and F of `docs/superpowers/specs/2026-10-04-ce-preset-audit-overv
   tested on release-name shapes I wrote, not on a real library's file names; expect group names it does not know and noise words it lacks (both can be added in Preferences).
 - **Follow-ups:** a pipeline model for a `SameXDifferentY` that is not the first rule; user-editable format rules; a Library Health entry for "has proposed values".
 
+## 2026-10-12 - Continuity sources: Metron-first universes, event order from CBRO + Metron lists + GCD dates
+
+`docs/superpowers/specs/2026-10-12-continuity-sources-design.md` (section 8 is the as-built list). Built, tested, **not seen on screen**, and the Metron reading-list and universe calls have **never run
+against the real Metron** (written from Metron's source). Migration `AddEventOrderEvidence`.
+
+- **Removed:** the daily Wikidata shared-universe task and Wikidata in the event connector (Wikidata-only relations are deleted on the next check); the shared-character suggestions; the weak date-order guesses and the typed "Looks like the sequel of..." suggestions.
+- **Added:** CBRO story-order ranks (5 s crawl delay), Metron EVENT reading-list previous/next links as Prequel relations, a median-fit of ranks to dates, the half-of-issues continuity placement rule, universe designations from Metron.
+- **Corrected in build:** characters and teams already had provider ids (`ComicMetadataExternalId`); the fix was cleaning a pruned row's ids, not new columns.
+- **Verified:** Data tests 2602 of 2603 (the one failure is another session's `MilestoneResolver.cs` allowlist); continuity-related App tests 324 passed; Debug build succeeded. The full fast App run was cut off by a session end after two failures that look unrelated
+  (`ReaderScreenPanelTests.DoubleClick_WithSmartZoomOff...`, `LiveFolderWatchServiceTests.RapidCreation...`) and was not re-run.
+- **Not built:** the universe-catalogue picker, a dedicated Unplaced lane, CBRO "occurs during the same time as X" notes.
+
+## 2026-10-12 - Connections and Appearance redesign (Preferences)
+
+`docs/superpowers/specs/2026-10-12-connections-appearance-redesign-design.md`. Built, tested, Debug build in `src/Paperbunkr.App/bin/Debug`. **User-confirmed on screen 2026-10-12** (Appearance Theme tab seen in the default dark skin; Connections confirmed too).
+
+- **Connections:** a service gallery (Metadata / Trackers / Downloads tiles with a status dot), an attention strip, a "4 of 12 connected" summary, and an inline pane per service instead of the modal. Metron is one tile with Account / Sync / Activity tabs; the GCD download and the tracker toggles are tiles too. Test connection and a two-step Disconnect (`TwoStepConfirm`) sit in the pane header.
+- **Appearance:** three sub-tabs (Theme, Covers & Detail, Home & Interface). Theme is a grouped gallery (Dark / Light / Accessibility) beside an inspector for the active theme (large preview, palette, computed text and accent contrast badges, true black, accent override, font); Auto switch is its own group. Live glow-tier and density samples.
+- **New:** `ConnectionStatus` + `ConnectionStatusResolver`, `ConnectionStatusStore` (`connection-status.json` next to the database, no migration), `PreferencesScreenViewModel.Connections.cs` / `.Appearance.cs`, `ThemeSummary` inspector fields and `ThemeService.GroupOf`. `maximum_contrast/theme.json` gained `"category": "accessibility"`.
+- **Scope cut, on purpose:** only Prowlarr and qBittorrent have a real Test connection. No tracker adapter, ComicVine or Metron has a read-only call that changes nothing, so their button says "saved, verified on first use" and records nothing. `Expired` exists in the model and UI but nothing produces it yet; a real tracker probe is the follow-up.
+- **Verified:** 28 new view-model tests plus 13 store/resolver tests, `PreferenceIndexTests` and `ThemeServiceTests` green (108 run, Release); `Paperbunkr.App` Debug build 0 errors. The full App suite was not run.
+- **Not verified:** light themes and Matrix on these two sections, narrow widths, keyboard walk of the tiles, search jumping into a pane and scrolling to it, Narrator, and a real Prowlarr / qBittorrent test (including the check that runs when the page first opens).
+
+## 2026-10-13 - Theme system v2 (phases 1-7)
+
+`docs/superpowers/specs/2026-10-12-theme-system-v2-gap-analysis-and-plan.md` (section 11 is the as-built record). Built and tested
+headless, Debug build in `src/Paperbunkr.App/bin/Debug`. **Uncommitted. Nothing here has been seen on a real screen.**
+
+- **Engine:** a theme is now a family with variants, resolved by a pure `ThemeResolver` (family base, variant, the user's all-themes /
+  this-theme / this-variant values, Boost contrast, True Black) and applied as one transaction that writes only what changed. Version 1
+  `theme.json` files are adapted in memory and never rewritten; all 10 built-in themes are byte-identical through the new path (golden
+  snapshots). Package install is staged and bounded (512 files, 64 MB, 16 MB per file, 8192 px); nothing in a package is run or fetched.
+- **What a v2 theme can add:** new status/selection/reader roles, metrics, typography roles, semantic icon replacements, materials
+  (gradients, images), component skins with hover/pressed/disabled states for five roles, named motion, and a layout for Home.
+- **Appearance > Theme:** variants of the active family, a Customize group (eleven values, three scopes, per-row and per-scope reset,
+  Boost contrast, Effect quality, Theme layouts, Reset layout), Export this theme, Export / Import my customizations, install notes.
+  Overrides live in `theme-overrides.json` beside the database; no migration.
+- **Home** is the layout pilot: `ThemeLayoutHost` shows a theme's layout when Theme layouts is on and the layout validates, otherwise the
+  built-in one. Home publishes five components, four values and five commands; a layout can use nothing else.
+- **Reader:** `Match app` follows the live theme (`reader.background.page` / `.text`); the PDF reader's error box uses reader roles.
+- **Authoring without an editor:** `docs/themes/README.md`, `theme.schema.json`, two sample packages (`harbor`, `gazette`).
+- **Behaviour change to call out:** `Match app` on the default theme is now the theme's own surface, not the old fixed `#14161B`.
+- **Cut or partial, on purpose:** packaged fonts are checked but not loaded; no per-element blur; only the nav rail uses semantic icons;
+  motion plays on appear only (no hover/focus/navigation triggers, no theme-change crossfade); extension providers are an attachment
+  point with a fake provider in tests and no plugin runtime; no timing baseline was taken, so no speed claim.
+- **Open:** the Home layout pilot go/no-go (D10) needs real use before other screens get contracts.
+- **Not verified:** every new visual on a real screen in any theme; keyboard, focus and screen-reader behaviour of Home inside a theme
+  layout in the real window; scrolling performance inside a layout; switching theme with a reader open; the real file pickers.
+
+## 2026-10-13 - CBL Manager Smart Match, part 1: the matching core (built, tested, not seen on screen)
+
+Design: `docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md`; plan beside it. Uncommitted. How the CBL manager works
+overall: `docs/cbl-manager-context.md`.
+
+Why: a read-only audit of the real library found 80 reading-list entries reading "missing", 67 of them comics already owned. 50 sat in
+the same series row with the same number and had simply never been re-matched after a scan; 17 sat in a second series row with an
+equivalent name, which the old first-match lookup never searched.
+
+Built:
+- `ReadingLists/Matching/`: `IssueNumberKey`, `SeriesKeys`, `LibraryIndex` (one library read per operation), `MatchEngine` (provider
+  ids first, then series + number across every equivalent series row; year/volume disagreement or several volumes = ask, never guess),
+  `ReadingListResolver` + `ImportReport`, `ReadingListHealer`, `ReadingListRepair`.
+- `ReadingListItemSource` table (migration `AddReadingListItemSource`, with a backfill for entries already waiting on a placeholder):
+  what the source asked for, kept apart from the linked issue.
+- ComicVine/Metron adapters pass issue ids through; ComicVine, Metron lists and Comic Book Reading Orders report entries they drop.
+- `.cbl` import reads `<Database Name="cv" Series= Issue= />` ids (format confirmed against the public CBL-ReadingLists collection).
+- Every scan path relinks waiting entries (`LibraryFolderScanner.HealReadingLists`); Activity Center alert when something was linked.
+- List page: "Recheck library" in ⋯, counts in import/refresh messages, "needs a choice" rows, a Suggested group in Find & link.
+- Library Health > Review > "Reading list repairs": Check (changes nothing), then Link.
+
+Verified: 696 data tests and 246 targeted app tests pass (new: `MatchEngineTests`, `ReadingListHealingTests`,
+`ReadingListSmartMatchTests`). Run against a **copy** of the real database: migration applies, backfill writes 80 records, the repair
+links 63, leaves 4 as "needs a choice" (the owned copy's year is the series' start year, 2-3 years off the issue's), 13 really missing.
+Not verified: anything on screen; the Metron row fields (`cv_id`, `series.id`) against a live response.
+
+Deliberately different from the design: the repair does not delete emptied series rows (Library Health's Empty Rows queue already does
+that safely), and its section is on demand like Publisher logos rather than appearing by itself.
+
+Next (own specs): the review UI (side panel, bulk review, import preview, undo), then the remaining healing triggers (scrape, metadata
+edit, rename) and a source refresh that keeps hand-added issues.
+
+## 2026-10-14 - Manga series-centric metadata (Edit Series, inheritance, durable file sync, Sources)
+
+Spec: [`2026-10-14-manga-series-metadata-design.md`](superpowers/specs/2026-10-14-manga-series-metadata-design.md), plan: [`...-plan.md`](superpowers/specs/2026-10-14-manga-series-metadata-plan.md). Built from a ChatGPT spec that was audited against the code first; the parts that did not match the repo (issue columns are the source of truth, the write queue is in memory, a provenance/identity stack already exists) changed the design (spec §2). **Uncommitted, on `master` in the shared tree. Not yet looked at on screen.**
+
+- **Edit Series replaces Edit** on the Manga Detail hero (rooted in the series, works with no chapters). A large overlay: Identity & titles, Creators, Publication, Classification, Description, Sources, Advanced. The chapter context menu has "Edit Chapter Details" and "Edit Series…".
+- **Inheritance by fan-out** (D2): Save writes publisher, imprint, the seven credit roles, genres, tags and age rating into every chapter without an override, in one transaction; chapter number, title, volume, translator, scan group, language, summary, files and reading state are never touched. Chapters that already differ get a Keep-as-exceptions (default) / Replace question. New chapters and re-read files take the series values. Manga to Comic restores each chapter from a one-time snapshot.
+- **Durable file sync** (Slice 2): `EmbeddedDirty` + fingerprint + file stamp + state on `Issue`; startup catch-up queues only dirty chapters; unchanged files are not rewritten; a file changed outside Paperbunkr is left alone until "Write anyway"; retry 5 s / 30 s / 5 min then Needs attention; live progress row for 20+ files; Verify embedded metadata reads and writes nothing. Comics are written exactly as before.
+- **Sources / locks** (Slice 3): hand-set fields are locked against providers (a provider's value becomes a pending candidate to accept or dismiss); provider genres/tags go onto the series and down to non-overridden chapters; a joined author/artist list is never applied without choosing a role; "Needs review" chip when chapters disagree.
+- **Migration** `AddMangaSeriesMetadata` (4 tables, 10 columns); all 157 earlier migration tests still pass.
+- **Verified:** the whole Data test project (2,693 tests; two failed: the remote opt-in allowlist, which I fixed for my files, leaving only `MilestoneResolver.cs`, untracked work from another session, and `SynopsisGenreInferrerTests.Infer_PicksTheGenreWithTheMostWords...`, which passes when run alone, so a flake under full-suite load) and a targeted App run of 945 + 164 tests over scanner, detail screens, editors, write-back, input and remote-library; the overlay is shown by a real `MainWindow` in a headless test. **Not verified:** on screen with the real app and library (the migration only runs on the first real launch), file write-back against a real CB7/CBR (never written, by design), the real-window Escape key (the existing Issue Properties overlay behaves the same in the headless harness).
+- **Deviations from the ChatGPT spec, deliberate:** no `MangaSeriesProfile` (dates, expected counts, platform and country deferred); chapter values are a fan-out cache rather than a read-time resolver; no job table (a column on the chapter instead); embedded write-back stays off until the user turns it on in Preferences; services use default contexts, so another library's series are invisible to them (read-only by construction).
+- **Known limits:** no "from series" marker on the chapter rows themselves (the Issue Properties editor shows the exceptions); the content type is still changed from the series header, not inside the overlay; a provider link from the Details tab queues its file writes through the same dirty flags.
+
+## 2026-10-14 (later) - Weighted tags, full MangaBaka scrape, reading mode picker
+
+Spec: section 14 of [`2026-10-14-manga-series-metadata-design.md`](superpowers/specs/2026-10-14-manga-series-metadata-design.md). Follow-up to the entry above; **uncommitted, on `master`, not yet looked at on screen.**
+
+- **Weighted tag editor** in Edit Series (Classification tab): rows with category and weight (none / Incidental / Recurrent / Defining / Core), add by pasted comma list, remove, lock marker. Found and fixed on the way: tag comparison looked at names only, so changing just a weight was never saved or passed down.
+- **MangaBaka full scrape:** the provider now reads tag weights (incl. genre tags), separate authors and artists, publishers by type, content rating, original language, the 0-100 rating, all alternate titles and `merged_with` (followed to the live entry). A refresh of a confirmed manga series follows three tiers: always applied (status, rating, titles, tags with weights, additive, unset weights only), filled only when blank otherwise offered as a candidate (summary, Writer, Penciller, original publisher, age rating), only ever suggested (reading mode). Spoiler tags are skipped unless the Sources switch is on. Sources gained "Accept all".
+- **Reading mode:** one `ReadingModeCatalog` for the reader, the Detail screen, the manga badge and Edit Series; the Detail card now has a picker for all seven modes (it flipped between two, and showed Webtoon and the RTL strip as "Left to Right"); Edit Series has the same field. A manga series' chapters are marked for a file write only when the right-to-left flag changes.
+- **Verified:** Data tests for the scrape (normalizer against a realistic payload; each tier, locks, dismissed candidates, merges, Comics unchanged) and App tests for the editor, the picker and the catalog; a real `MainWindow` shows the weight selectors and the reading-mode picker. **Not verified:** a live refresh against the real MangaBaka from inside the app (the payload shape was read with curl and mirrored in a test), and nothing on screen.
+- **Deliberately not done:** series start/end dates, `is_licensed`, the provider's links (nowhere to store free-form links), edition publishers.
+
 ## Explicitly not in scope here
 
 - **Content-type classification manual dropdown** — flagged as a known gap, but the real
@@ -3395,3 +3582,445 @@ Pieces C, E, D and F of `docs/superpowers/specs/2026-10-04-ce-preset-audit-overv
 ---
 
 *Beta backlog is tracked in [`Paperbunkr-Roadmap.md`](Paperbunkr-Roadmap.md) and not duplicated here.*
+
+### 2026-10-14 — detail-screen follow-ups (built, unit-tested, not yet seen on screen)
+- Edit Series: dropdown/smart suggestions (`SuggestBox`) on every credit/publisher/age-rating field and the genre/tag lists, filled from the library's own vocabulary.
+- MangaBaka refresh now populates **unconfirmed** manga series too (seeded from chapters; tags additive).
+- Descriptions (comic + manga `DetailBand`): `MarkdownLite.ParseDescription` renders bold/italic/underline, provider HTML, BBCode, `[text](url)` and bare URLs (clickable via `ExternalLinks.OpenWebCommand`); one paragraph per line.
+- Reading-mode description on the Details card left-aligned.
+- Comic Continuities card: "Look up on Wikidata" replaced by "Look up on Metron" (`ContinuityMetronSeriesLookup`; needs the Metron login; matches issues by Metron id, ComicVine id, then barcode). Hidden on the manga screen.
+- Details-tab Web field: several distinct addresses are now one clickable row each instead of a joined blob.
+
+### 2026-10-15 — remaining provider metadata and integration audit (uncommitted)
+
+- AniList now requests the score, adult flag, MAL id, synonyms and tag category that its normalizer already read, plus full partial publication start/end dates and popularity. The linked provider facts appear with attribution on both detail screens.
+- MangaBaka retains extra upstream source IDs; ComicVine volume descriptions fill blank series summaries through the existing search result. Repaired ComicVine's `field_list` URL regression.
+- Pull-list release requests fail on incomplete pagination before replacing the cache; missing series enrichment is retried after a day. Automatic tracker push skips an unverified remote read; Kitsu updates preserve privacy and report incomplete score/date saves.
+- Audited Wikidata, GCD, pull lists and all eight trackers in [provider-utilization-audit.md](provider-utilization-audit.md). Wikidata's active fetch was deliberately retired. The audit records remaining OAuth refresh, three-way tracker read, and durable GCD lookup work as separate integration tasks.
+- Verification: Data and App test builds succeeded; consolidated provider, manga, ComicVine, pull-list and Kitsu Data tests passed (173/173), and detail-screen/tracker App tests passed (142/142). No live authenticated API requests or real-library launch in this session.
+
+### 2026-10-15 — existing comic series summary backfill (uncommitted)
+
+- A successful scrape could fill a blank comic series summary, but already-scraped series remained blank. The new enabled weekly network maintenance task fetches descriptions using confirmed Metron/ComicVine series IDs, starting on the next launch. It fills blanks only and reports unlinked series, missing credentials, missing provider descriptions and lookup failures. It never substitutes an individual issue's plot or overwrites a user edit.
+- This cannot promise a real synopsis for **every** comic series: an unlinked series or a provider record without a description has no trustworthy source text. The detail screen continues to say “No summary available” for those cases.
+- Verification: focused Data backfill tests passed (3/3), the App test build succeeded, and the scheduler descriptor test passed (1/1). A read-only count of the current library found 773 local Comic/Unknown series with blank summaries; 484 have a confirmed comic-provider **series** ID eligible for this backfill, while 289 do not. No live provider run or library write was made in this session.
+
+### 2026-10-15 — Reading List tags, source marks, and Continuity event details (implemented, locally verified)
+
+- Reading List tags now reconcile generated metadata from source, list type, story event, continuity, and member issue Genre/Tags. Generated rows keep provenance separate from manual tags, update when list membership or metadata changes, and are safely non-editable as curated tags. Migration: `AddGeneratedReadingListTags`.
+- Reading List source marks reuse the bundled ComicVine and Metron artwork next to the existing source text. `Assets/Marks/SOURCES.md` records the active sources still needing marks: Comic Book Reading Orders, ComicArc, ReadingOrders.net, and ReadThingsRight.
+- Continuity event rows now expand to show descriptions, curated tags and member-comic tags, covers, and persisted related events. The existing event editor now accepts optional ISO dates, curated tags, and a manually selected cover. Compatible provider arc IDs are enriched in a throttled best-effort task; non-empty descriptions and manual covers are preserved. Migration: `AddContinuityEventDetails`.
+- Verification: App build succeeded (Avalonia XAML compilation included); focused Data tests passed (15/15, including migrations, tag reconciliation, event persistence, and source-mark mappings); focused Continuity overview tests passed (14/14). The checklist review covered theme tokens, accessible labels, and deferred row replacement. Real-window visual checks across themes and sizes remain unverified; no performance benchmark or live provider request was run.
+
+### 2026-10-16 — Bulk Metron series discovery for Continuities (implemented, uncommitted)
+
+Spec and plan: [`2026-10-16-bulk-metron-continuity-discovery-design.md`](superpowers/specs/2026-10-16-bulk-metron-continuity-discovery-design.md) and its plan. Current base HEAD: `1d714d48739ffd33f03cc4b5922a3745b0aefdf2` (shared `master`; feature changes are uncommitted).
+
+- Added a paginated Metron universe search and `/series/?universe_id=...` catalog query. The Continuity hero now offers **Find series on Metron**; a review panel stages exact matches by namespaced Metron/ComicVine IDs or GCD series ID, identifies conflicts and current members, and offers Select all exact / Clear / Apply. No title-only matching or placeholder creation. A chosen universe ID is saved only after a complete review is applied; Apply remains disabled after failure/cancellation.
+- Membership additions use the existing `ContinuityResolver` in a transaction, preserving the established append order and idempotence. No migration was needed.
+- Verified: app build succeeded with Avalonia XAML compilation; focused Data tests passed (4/4: paginated universe and series catalog queries plus identity matching/conflict cases); focused Continuity page/ViewModel and compiled-view tests passed (21/21). Existing unrelated build warnings remain. Not verified: live authenticated Metron responses or visual/keyboard inspection in the running desktop app. Cancellation/apply transaction behavior lacks direct ViewModel tests.
+
+### 2026-10-18 — Comic and Manga detail layouts (implemented in source, unverified)
+
+Spec and plan: [`2026-10-18-detail-screen-list-layouts-design.md`](superpowers/specs/2026-10-18-detail-screen-list-layouts-design.md) and its plan.
+
+- Comic Issues and Specials share one saved detail-type default and named layouts. Poster, List, and Card each expose their own configurable fields; Comic List fields have editable order and widths.
+- Manga Chapters have configurable ordered columns and saved sort field/direction. Volume grouping remains and the active chapter filter is unchanged by layout application.
+- Detail types use separate `WorkspaceScreen` keys and the existing `*` assignment; no migration or per-series layout assignment was added. Detail List Options and Edit Layouts reuse the existing layout service.
+- **Not verified:** no build/tests or live UI review were run in this session; compiled XAML, keyboard behavior, and theme/layout checks remain open.
+
+### 2026-10-19 — App-wide UI polish, sub-project 1: Foundation (implemented, tests pass, not seen on screen)
+
+Audit: [`2026-10-19-ui-polish-audit.md`](superpowers/specs/2026-10-19-ui-polish-audit.md). Spec and plan: [`2026-10-19-ui-polish-foundation-design.md`](superpowers/specs/2026-10-19-ui-polish-foundation-design.md) and its plan. Sub-projects 2–5 (shared controls; icons and a11y; screen passes for dialogs, Library and Reader first; leftovers) are designed in outline only.
+
+- **Type scale:** one whole-pixel scale, 10 · 11 · 12 · 13 · 15 · 18 · 22. 704 literal sizes were snapped; icons and sizes of 24+ were left alone. New `pbTextTitle`, `pbTextSection`, `pbTextMeta` and `pbTextOverline` roles.
+- **Radii:** 237 literal radii and 29 `StaticResource PbRadius*` now use `DynamicResource` tokens, so the theme's corner style applies everywhere. Radii of 2 or less and true circles stay literal.
+- **Text colour:** readable text no longer uses faint (3.1–3.8:1 in most themes). 460 text, button and tab uses moved to muted. Faint stays for disabled states, icons and dividers.
+- **Fields:** every TextBox, ComboBox, NumericUpDown, AutoCompleteBox and SuggestBox is an underlined field. It's drawn by the new `Styles/FluentBridge.axaml`, which maps FluentAvalonia's `TextControl*` / `ComboBox*` keys onto Pb tokens. Placeholders are muted and italic. Toolbar search boxes (`searchBox`) keep a rounded border; boxes embedded in a pill use the new `bare` class.
+- **Popups and tooltips:** `FlyoutPresenter` and `ToolTip` use the floating-panel look.
+- **Dialogs:** the `OverlayShell` ✕ now sits inside the card. One shared `fieldLabel` replaces 12 local copies. New `dialogCard` / `dialogTitle` / `dialogFooter` / `inlineError` styles are ready for the sub-project 4 dialog pass.
+- **Other:** the Detail band's stripe and Virtual Tags chip use the accent, not the badge colour. Page margin is 24 px (was 28/32) on standard screens and their sub-views.
+- **Verified:** the app builds with a fresh XAML weave. New `XamlConsistencyLintTests` (5) and `FoundationStyleTests` (6) pass, and so does the existing theme, focus-ring and view render set (74/74 in total). Headless renders in Default, Daylight and Matrix show the underlined fields, focus line and placeholders as designed.
+- **Not verified:** the running app on screen (dialogs, Edit Series, Preferences > Connections, a continuity popup, tooltips, the Detail band), and the red error underline under FluentAvalonia. Spacing inside screens and per-dialog anatomy are deliberately left for sub-project 4.
+
+### 2026-10-19 — UI polish, sub-project 2: Shared controls (implemented, tests pass, not seen on screen)
+
+Spec and plan: [`2026-10-19-ui-polish-shared-controls-design.md`](superpowers/specs/2026-10-19-ui-polish-shared-controls-design.md) and its plan.
+
+- **One file:** the new `Styles/Controls.axaml` owns eight families: buttons (28/22 px, danger, iconButton, toggle state), segmented switch (solid accent), underline tab, sidebar item (accent bar plus tint), chips (filterChip, pbChip, statusBadge), card, clickCard and menu row.
+- **Outlines:** the theme roles for secondary/ghost button and chip borders default to the faint colour (`ThemeComponentRegistry`).
+- **Migration:** 700 class renames, 175 local style blocks deleted and 46 trimmed to layout-only setters, 276 per-button size overrides stripped, 38 buttons switched to `.sm`.
+- **State styles restored after the migration:** `primary.destructive`, the Detail band tag weights, Connections tile states, gamepad key chips, and selected cards. Library lens tabs are now `segItem segToggle`, so the bumpers still step through them.
+- **Lint:** `XamlConsistencyLintTests` gained three rules: retired classes, local restyling of a family, and size overrides on family buttons.
+- **Verified:** build OK. Lint, `SharedControlsStyleTests` (7 plus a render sheet), `FoundationStyleTests`, the colour lint, Reading Lists and Library lens tests pass: 51/51. The earlier 164-test run also passed apart from 2 Reading Lists ring tests, which fail only late in a long run and pass alone.
+- **Not verified:** on screen.
+- **Caveat:** the migration deleted local style blocks in place. For other sessions' *uncommitted* work there's no backup. Every state class still bound in XAML was checked and has a style, but a purely decorative local look in uncommitted files may have been replaced by the shared family look.
+
+### 2026-10-19 — UI polish, sub-project 3: Icons and accessible names (implemented, tests pass, not seen on screen)
+
+Spec and plan: [`2026-10-19-ui-polish-icons-a11y-design.md`](superpowers/specs/2026-10-19-ui-polish-icons-a11y-design.md) and its plan.
+
+- **Icons:** text characters used as icons are now FluentIcons.
+  - 40 glyph buttons: 22 became `iconButton sm`, 18 became icon plus label.
+  - Also converted: the ▾ on dropdown chips, the ★ rating, ● (now an Ellipse), ✓, 🔖, ↻, ↔ and the ⠿ drag handle. The Reading List drag
+    check now accepts the icon.
+- **Names:** every icon-only button has an `AutomationProperties.Name`. 34 came from tooltips; the rest (ratings, goal delete, collection
+  create/cancel, zoom in, rail cards, reorder/rename/remove) were written by hand.
+- **Logos:** the Continuity sidebar keeps a fixed 34 px logo column, and Connections tile logos have a max width.
+- **Lint:** `IconButtonsHaveNames` and `NoTextGlyphIcons` added.
+- **Verified:** build; lint, shared controls, Library lens, Reading Lists, Smart templates, Insights focus and colour lint pass (59, then 25).
+- **Not verified:** on screen.
+
+### 2026-10-19 — UI polish, sub-project 4a: Dialogs (implemented, tests pass, not seen on screen)
+
+Spec and plan: [`2026-10-19-ui-polish-dialogs-design.md`](superpowers/specs/2026-10-19-ui-polish-dialogs-design.md) and its plan.
+
+- **`Controls/DialogCard`:**
+  - Sizes: Small 420, Medium 560, Large 760, XLarge 960.
+  - Header holds the title, subtitle and an ✕ inside the card (it takes over the enclosing `OverlayShell`'s close command and hides the
+    shell's ✕).
+  - Max height is the window height minus 48, tracking resizes; the body scrolls; the footer has a divider.
+- **Migrated onto it:** workspace name, confirm, quick rate, update available, merge, goal editor, new reading list, new event/continuity,
+  list options, detail list options, edit layouts, book / bulk book / book series properties, collection properties, paste data,
+  reading-list properties, migration, legal viewer, template gallery, manga series editor (XLarge), continuity compare (XLarge), and the
+  plugin modal host (scraper dialogs).
+- **Fixes:**
+  - Reading-list and collection titles: no double quotes; the name is the subtitle.
+  - Template gallery: `UniformGrid` with 12 px spacing.
+  - Goal title uses "N", not "?".
+  - Cover picker: no nested card; the tabs are an equal-width `segGroup`.
+  - MangaDex / credential fields have labels.
+  - Connection status errors use `errorText`.
+  - Tracker sync failures show a plain sentence with the raw reply behind Details.
+  - Disabled buttons have a visible neutral style.
+- **Lint:** `DialogsUseDialogCard`.
+- **Verified:** build; DialogCard (8), lint, style, and the dialog view-model and view tests pass (146 of 150). The 3
+  `ReadingListPropertiesScreenViewModelTests` tag tests fail on auto-generated tags from other uncommitted work, unrelated (only
+  `HeaderLabel` changed there). Renders checked in Default and Matrix.
+- **Not verified:** on screen.
+
+### 2026-10-20 — UI polish, sub-project 4b: Library (implemented, tests pass, not seen on screen)
+
+Spec: [`2026-10-20-ui-polish-library-design.md`](superpowers/specs/2026-10-20-ui-polish-library-design.md).
+
+- **Headings:** the sidebar title uses `pbTextHeading`, Library group headers and "Continue reading" use `pbTextSection`, and sidebar
+  group labels use the overline style.
+- **Hover card on a series tile:** shows series name, publisher, issues · unread and status, not the first issue's title, credits,
+  format and language. It also uses the floating-panel look and is capped at 320 px.
+- **Tile corner badges:** all inset 6 px with a minimum height of 20.
+- **Preview panel actions:** use primary / secondary / iconButton; the local `previewAction` look is gone.
+- **Continue Reading strip:** right edge fades.
+- **Narrow toolbar** (< 1000 px): the Workspace button shows only its icon, and the search box keeps a 140 px minimum. At 860 px nothing
+  overlaps. Scan and Resync exist only in this toolbar, so they stay.
+- **Spacing:** 34 odd margin/padding values in the Library files snapped to the 4 px scale; even values (6/10/14) left as they were.
+- **Verified:** build; Library lens, screen view, open keys, list layout, lint and style tests pass (55). Toolbar render checked at
+  860 px.
+- **Not done:** a dedicated test for the series hover card.
+- **Not verified:** on screen.
+
+### 2026-10-20 — UI polish, sub-project 4c: Reader (implemented, tests pass, not seen on screen)
+
+Spec: [`2026-10-20-ui-polish-reader-design.md`](superpowers/specs/2026-10-20-ui-polish-reader-design.md).
+
+- **Reader Tools drawer:** 280 wide, starts below the top row (no longer covers zoom / bookmark / more), and tools are one per row
+  (no truncated labels).
+- **Breadcrumb:** trims in a grid column instead of overflowing into the reading-order navigator. "←" is now an `ArrowLeft` icon.
+- **Reading-stats chip:** hidden while the drawer or Info panel is open.
+- **Chrome buttons:** `clusterPill` and `clusterIcon` are 28 tall (icons 28×28), and 10 per-button padding overrides were removed, so the
+  bottom bars match.
+- **Info panel:** "Show summary" is a link button. Previous / Next / Open details / Edit properties are `secondary sm`.
+- **Drawer actions:** Save note / Delete / clip Copy / Save… / Delete are `secondary sm`. "Export notes and clips…" is left-aligned.
+- **Verified:** build; ReaderChrome, ReaderChromeTint, ReaderInfoPanel, ReaderScreenKey, ReaderScreenPanel and lint (90) pass.
+- **Not verified:** on screen.
+
+### 2026-10-20 — UI polish, sub-project 4d: Remaining screens (implemented, tests pass, not seen on screen)
+
+Spec: [`2026-10-20-ui-polish-remaining-screens-design.md`](superpowers/specs/2026-10-20-ui-polish-remaining-screens-design.md).
+
+- **Screen titles:** Insights, Smart, Plugins, Issue properties, Bulk issue properties and Bulk series properties use `pbTextHeading` with no
+  local size / weight / colour.
+- **Manga detail:** the band no longer repeats the content-type picker's value as a special mark ("Manga" twice); the picker is
+  `PbControlHeight` tall.
+- **Series status chip:** icon only (the dot beside it is hidden).
+- **Home:** the spotlight sliver shade is a token, `PbCoverShadeColor`, instead of a hex in HomeStyles.
+- **Synopsis:** lines of only dashes / underscores / equals signs / en or em dashes are dropped (`MarkdownLite.ParseDescription`, new test).
+- **Spacing:** 138 odd margin/padding values in the remaining views snapped to the nearest multiple of 4. Kept: even values, 1, negative
+  overhang offsets, the toast text indent, the MainWindow sidebar offsets and the splash screen.
+- **Tests updated:** `DetailTabsFocusTests` finds the card-view tile by the shared `card` class (renamed in SP2); the hardcoded-colour
+  baseline moves one literal from HomeStyles to AppTokens.
+- **Verified:** build; lint, colour baseline, MarkdownLite, DetailTabs, Manga detail, Home, Insights, Smart, Wanted, focus ring, shared
+  controls, dialog card, Continuity, Books, Reading Lists, Activity, Event Map, Welcome, Connections and status bar tests pass. Seven
+  reading-list tag tests fail because of the separate, uncommitted auto-tags work (generated "List type" tags), not this pass.
+- **Not verified:** on screen.
+
+### 2026-10-20 — UI polish: fixes from the user's on-screen check (implemented, not yet re-checked on screen)
+
+Ten screenshots after SP4. Causes and fixes:
+
+- **Dialogs clipped on both sides** (Scrape complete, Delete reading list): `DialogCard` had a fixed `Width`, and the template frame's
+  `Border.dialogCard` style a 560 width. In a host narrower than the card it was centred and clipped. The card now measures at
+  `min(size width, available width)`; the frame has no width. The confirm dialog's message sat in a horizontal StackPanel and never wrapped;
+  it's a Grid now. New tests: `ANarrowHost_ShrinksTheCardInsteadOfClippingIt`, `ConfirmDialog_LongMessageWrapsInsideTheCard`.
+- **Edit Issue tabs ran together** ("SummaryDetailsPlot & Notes"): `Button.tab` has no side padding and that strip had no Spacing. Every tab
+  strip is now `Spacing="20"` (it was 4, 18, 20, 22 or none); Insights' local tab margin was removed.
+- **Edit Issue "Unknown" above Age Rating:** `BrandMark` prints a value with no mark as text. New `TextFallback="False"` on the editor's
+  Format / Age Rating / Language marks.
+- **"Comic824" in the content-type dropdown:** `menuRow` left-aligned its content, so a `*,Auto` row collapsed. It stretches now.
+- **Workspaces menu ran past the window:** fixed `MaxHeight="620"`. New `Controls/PopupFit` (`PopupFit.ToWindow="True"`) caps a dropdown
+  at the room left above/below its anchor; applied to all 14 `dropdown` popups, each now scrolling.
+- **Smart Lists sidebar badges over names:** `sideItemLabel` had no base style; it trims now with 8 px before the pill. Maintenance rows use
+  the same count pill, and the expand arrow is a chevron like the collapsed one.
+- **Smart rule rows out of line:** fixed field (160) and operator (150) widths, the remove button in its own right column, `iconButton`.
+- **Insights goal card glowed on hover** though it isn't clickable: `heroTile.inert` (no glow, arrow cursor).
+- **Test harness:** `FocusTestHarness.AppStyles()` now loads Controls.axaml too (card padding lives there since SP2).
+- **Not changed, asked the user:** the Library tile publisher mark (white, by design via `EnsureContrast`) and the cover-style popup's right
+  edge — the cause wasn't clear from the screenshots.
+- **Verified:** build; DialogCard (2 new tests), dialog service, lint, colour baseline, shared controls, BrandMark, Smart, Insights focus,
+  DetailTabs, issue properties, Library lens/open keys/toolbar, Wanted, list layouts, manga detail and all 30-odd `AppStyles()` focus classes
+  (296) pass. Four fail only in that 17-minute run and pass alone (2 theme skin/leak tests, 2 Reading Lists ring tests).
+
+### 2026-10-20 — UI polish, sub-project 5: Leftovers (implemented, tests pass, not seen on screen)
+
+Spec: [`2026-10-20-ui-polish-leftovers-design.md`](superpowers/specs/2026-10-20-ui-polish-leftovers-design.md).
+
+- **Width animations:** the nav rail, contextual sidebar and reader page dot keep their `Width` transitions; each now says why in the XAML.
+- **Easings:** 8 transitions gained `PbMotionEase`. New lint rule `TransitionsHaveEasing`.
+- **Matrix rain:** each glyph draws with Cascadia Code / Consolas when it has the glyph, else the system font Skia matches
+  (`MatrixRainVisualHandler.TypefaceFor`, cached per glyph, disposed with the paint). New test.
+- **Narrow Library toolbar:** below 900 px an empty, unfocused search pill becomes a search icon; a click, Ctrl+F or a query set elsewhere
+  opens it. New test `NarrowToolbar_CollapsesTheEmptySearch_AndFocusSearchOpensIt`.
+- **DPI sweep:** toolbar renders at 750 and 1066 px, ×1 / ×1.25 / ×1.5, and the dialog at ×1.25 / ×1.5 (`PB_RENDER_SCALE`): crisp and
+  aligned, nothing to fix. The sweep found a test-harness gap instead: `FoundationStyleTests.ApplyTheme` didn't write `surface0`/`surface1`,
+  so light-theme renders showed dark option cards. Fixed.
+- **1366×768 pass:** covered by the user's own ten screenshots at that size (fixed in the entry above) plus the toolbar renders; the
+  full-screen renders in the spec were not done.
+- **Verified:** build; lint, foundation/shared-controls styles, DialogCard, Matrix rain, Library lens, toolbar and reader/activity/books
+  tests pass (77 + 87).
+- **Not verified:** on screen.
+
+### 2026-10-20 — UI polish: second on-screen check (implemented, tests pass, not yet re-checked)
+
+- **Cropped icons in Preferences > Library folder rows:** icon-only `ghost` buttons squeezed to `Width="30"`; ghost padding is sized for a
+  label. 52 icon-only buttons across 16 views moved to `iconButton` (the hand-styled 20/24 px sidebar buttons — the white squares in the
+  Smart Lists header — to `iconButton sm`); names taken from tooltips where missing. Insights' Delete goal (was the `attnRow` row style) and
+  an EventMap button too. New lint rule `IconOnlyButtonsAreNotTextButtons` (ghost/primary/danger icon-only, or any sized text-family one).
+- **Virtual Tags row icon cropped:** a `pbChip` used as a 24 px icon tile (chip padding). Now a plain 26 px `vtIcon` tile like the folder rows.
+- **Verified:** build; lint, shared controls, Insights focus, Reading Lists view, sidebar keyboard, Wanted, EventMap, collection properties
+  tests (184) pass. **Not verified:** on screen.
+- **Detail screens' content-type picker: arrow over the label** ("Manhwa"). The SuggestBox chevron button overlaps the text box's right edge
+  (`Margin="-28,0,0,0"`) and nothing reserved that space, so any SuggestBox with a long enough value or a custom Padding ran under it. The
+  shared template now puts a 22 px `InnerRightContent` spacer in PART_TextBox. Tests: SuggestBox, detail screens, foundation, lint (117) pass.
+
+### 2026-10-20 — Motion system v2, sub-projects A + B: Foundation and Overlays (implemented, tests pass, user-verified on screen 2026-10-21)
+
+Spec `docs/superpowers/specs/2026-10-20-motion-system-v2-foundation-overlays-design.md`, plan alongside. Replaces the 10-17 motion
+vocabulary (one cubic curve, four durations, `BackEaseOut` as "spring") while keeping its policy layer.
+
+- **Roles and tokens:** `MotionRole` (Acknowledge/Hover/Reveal/Replace/Travel/Ambient) + `MotionPolicy.Resolve`; role tokens with separate
+  fade/move durations (Reduced keeps short fades, zeroes all travel); `PbMotionFast/Standard/Large/Slow` kept as aliases. Curves are
+  `SplineEasing`s plus a real damped spring (`DampedSpringEasing`, ~3 % once). `MotionClass` deleted; ~25 call sites moved to roles.
+- **Motion preference:** System / Full / Reduced / Off (was System/On/Off). Data migration `MotionPreferenceFourModes`: old "On" → Reduced,
+  old "Off" → **Full** (it meant "reduced motion off"). Performance quality now keeps dialogs/popups/hover, drops Travel and Ambient.
+- **Feel fixes:** no overshoot on every click (Button `BackEaseOut` removed); press `scale(0.97)` only on compact families (rows/tabs/menu
+  rows colour-only); Library cover lift −3 px/1.02 with the spring; reader bookmark glow animates opacity, not BoxShadow.
+- **Overlays:** every `OverlayShell` dialog fades and settles from 0.98, exits faster, never blocks the close (shared `Controls/Reveal.cs`
+  lifecycle); legacy discard/tour modals moved onto it; Activity + Reading Lists drawers 20 px with a spring and a real exit (fixes the
+  closed RL drawer being Tab-reachable); toasts rise 8 px; every popup/menu/flyout gets a 4 px entrance (`PopupMotion`), instant close.
+- **Guard rails:** 7 new lint rules (no overshoot easings, no BoxShadowsTransition, justified layout transitions, token-only transitions,
+  distance scale, scoped press scale, legacy-token baseline 45). `PB_MOTION_SCALE=5` slows everything ×5 for tuning.
+- **Verified:** build; Data migration tests (22); motion policy/spring/overlay lifecycle/theme tests; lint + shared controls + splash (31);
+  ~700 targeted view and real-window tests. Fixed one pre-existing order-dependent test (`ThemeSkinTests.InstantMotion`).
+- **Not verified:** on screen. Check per spec §7 at `PB_MOTION_SCALE=5`, then at 1.
+- **Next:** sub-project C (navigation: lateral settle, intent supersession, cover-flight hardening), then D (on-page), E (reader chrome).
+
+### 2026-10-20 — Motion system v2, sub-project C: Navigation (implemented, tests pass, user-verified on screen 2026-10-21)
+
+Spec `docs/superpowers/specs/2026-10-20-motion-system-v2-navigation-design.md`, plan alongside.
+
+- **One screen host, views kept:** `Controls/RouteHost` replaces the lateral + drill-down `TransitioningContentControl`s. One view per
+  screen view model, reused (readers rebuilt: `ITransientScreen`). Fixes: crossing lateral ↔ drill-down was a cut; Back to Library was a
+  full-width slide from blank in a stale direction; **every return rebuilt the screen's view, and `LibraryScreen`'s un-unsubscribed VM
+  handlers kept every old copy alive** (probe-verified rebuild; now built once + wire-once guard).
+- **Route transitions by intent** (`MainViewModel.RouteIntent`): rail switch fades + settles 12 px up (220 ms), drill-in grows from 0.985,
+  Back reverses, reader crossfades; rapid clicks retarget, never queue; Off swaps instantly (old screen hidden, removed a tick later —
+  never detached inside the navigating click). Drill-in into a kept view starts at the top; Back/rail keep scroll and focus.
+- **Cover flight hardened:** real covers hidden at both ends during the flight (restored in `finally`), destination resolved on a layout
+  pass instead of a 16 ms poll, a newer navigation / resize / window-state change cancels it.
+- **Breadcrumb:** segments enter 6 px on the Replace token; bar shows/hides instantly (layout row).
+- **Verified:** build; RouteHost, route intent, cover-flight + coordinator, MainViewModel (83), lint, ~120 real-window/keyboard/Library/
+  Compare/Wanted tests. **Not verified:** on screen — rail clicks, rapid clicks, Library → Detail → Back (scroll + focused card kept),
+  Detail → Reader → Back, Reduced/Off, at `PB_MOTION_SCALE=5`.
+- **Next:** D (on-page: cards, tab indicator, expanders, entrance stagger, Spotlight, charts), then E (reader chrome).
+
+### 2026-10-20 — Motion system v2, sub-project D: On-page (implemented, tests pass, user-verified on screen 2026-10-21)
+
+Spec `docs/superpowers/specs/2026-10-20-motion-system-v2-on-page-design.md`.
+
+- **Entrances:** one-shot everywhere (Books/Home/Smart/Reading list used to replay on every recycled container); owners pulse the flag on
+  real result changes; stagger 20 ms × 6 groups (≤ 320 ms total), tail on one shared timer; Reduced = 100 ms fade, no stagger/travel.
+- **Tabs:** app-wide sliding underline (`Controls/TabIndicator`, adorner, snaps on first placement/resize); tab panels fade in on show
+  (`Controls/Replace`, wired on Insights, Wanted, Reading list, Continuity, Detail, Manga).
+- **Spotlight:** accordion on the Ambient role + move curve, frame-synced (was a 450 ms hard-coded 16 ms UI timer ignoring Reduced).
+- **Charts:** donut sweep removed; data changes crossfade. **Cards:** Home shelf cards lift the artwork (+ ring) like Library instead of
+  scaling the hit-tested tile. **Expanders:** 9 icon-swap pairs → one rotating `chevronToggle`. Cover fade-in on Replace token + curve.
+- **Verified:** build; OnPageMotionTests (11), 346 targeted view/real-window/lint tests. Fixed an order-dependent Reading-list ring test pair
+  (view-test harnesses now pin motion durations to zero). **Not verified:** on screen.
+- **Next:** E (reader chrome).
+
+### 2026-10-21 — Motion system v2, sub-project E: Reader (implemented, tests pass, user-verified on screen 2026-10-21)
+
+Spec `docs/superpowers/specs/2026-10-20-motion-system-v2-reader-design.md`. Closes the Motion v2 programme (A–E).
+
+- **Panels & chrome:** Tools/Info drawers on the Reveal lifecycle (20 px, spring, focus returns to the opener); chapter cards fade/settle;
+  hidden chrome (4 s pointer idle, unchanged) leaves tab order and hands focus to the page.
+- **New page turns:** Vertical (CE TopDown), Book (CE Paging: sweep + spine shadow), Curl (new: corner fold, paper back, shadows);
+  RTL-mirrored, Reduced/Off force none; no migration (enum stored as string).
+- **Ambient:** real two-layer gradient crossfade (BrushTransition was cutting gradients halfway); new "Ambient motion" toggle (off by
+  default, migration `AddReaderAmbientMotion`) adds parallax against pan/scroll and a slow sway.
+- **Continuous mode:** wheel glide, near page jumps glide / far jumps fade, on-screen decode fades in once.
+- **Caught by tests:** drift crash (ScaleTransform keyframes), focus not returned under Motion Off, reader test hosts stubbing the spring
+  as a TimeSpan. Legacy-token lint baseline lowered 45 → 38.
+- **Stale test fixed in house cleaning (2026-10-21):** `RefreshDisplaySettings_TextureMode_SetsShowPageShadow…` became
+  `…_SoftShadowFrame_SetsShowPageShadow…` - the shadow follows `ReaderPageFrameStyle` since 10-18.
+- **Not verified:** on screen (spec §4 list).
+
+### 2026-10-21 — Motion system v2: sign-off and house cleaning
+
+- User confirmed the whole programme on screen. avalonia-pro-max review checklist run over the Motion v2 surface (details in the reader
+  spec §5): fixed a CS0108 in `RouteHost` (helper renamed `LayerTransitions`), added a Polite live region to toasts, dropped two unused
+  `xmlns:easings`, corrected three stale motion comments.
+- Main Debug build rebuilt with a forced CoreCompile (compiled-XAML markers verified in the fresh assembly); 199 Motion v2 / lint / reader
+  tests pass.
+
+### 2026-10-21 — Reader: spread curl, curl polish, book look for spreads (implemented, tests pass, not seen on screen)
+
+- Spread-aware curl: one leaf turns over the spine (reported on screen).
+- Curl polish: corner-first peel, lift-driven cast shadow, curvature band and edge highlight, a spine shadow on spreads, a 420 ms floor
+  for Curl and Book.
+- **Book look for spreads** (on by default, per profile, migration `AddReaderBookLook`): CE "Realistic pages" bows and outline, plus
+  page-stack edges showing progress. Spec: reader spec §6–§7.
+- **Verified:** build; reader / profile / lint tests (140, one known timing-flaky guided-view double-click test passes on its own); Data
+  tests 22. **Not verified:** on screen.
+
+### 2026-10-21 — Scraper & Organizer A/B/C: reliability, speed, automation (implemented, tests pass, not seen on screen)
+
+Specs: `docs/superpowers/specs/2026-10-21-scraper-organizer-{a-reliability,b-speed-core,c-automation-ux}-design.md` (each has an "As built" note).
+
+- **A — Metron API token:** new `CredentialKind.ApiToken` / `AuthScheme` (appended); one `MetronAuth` builder used by `MetronClient`,
+  `MetronSource`, the factories, the daemon's `AcquisitionCycle` and account sync. Connections > Metron shows an API token field, a
+  collapsed "Legacy login", and Test connection, which probes `Token` then `Bearer` and saves whichever Metron accepts (Metron's docs
+  could not be read, so the scheme is learned, not assumed). Old logins keep working.
+- **A — leftover swap files:** `SwapFileSweeper` (Data/Library) removes `*.crswap`, `*.pbwrite-*.tmp`, `~RF*.TMP` beside intact comics;
+  a copy whose comic is missing or damaged is kept and listed in Library Health > Files > Leftover files (Restore / Delete). Runs at start,
+  after each write-back batch, from that section, and in the new "Scrape health check" task. Write-back now always deletes its scratch
+  (`finally`) and the organizer waits for an in-flight metadata write on a file before moving it (`FileWriteBackCoordinator.WaitForSettledAsync`).
+  **Not found:** what writes the `.crswap` name — no source, DLL, install or log contains it; the settle-wait is the fix for the
+  likely cause (Scrape then Organize racing the write-back), not yet proven by a reproduction.
+- **B — speed:** Metron is the default source (stored settings switch once), ComicVine is tried for what Metron found nothing for;
+  provider answers cached on disk (`provider-cache/`, 24 h searches, 7 d lists/details, cover hashes forever, stale answers used while
+  rate-limited, Refresh in Preferences); a series is searched and confirmed once per run; the 2 s pause between comics is gone except at
+  Speed = Careful; candidate covers fetched together; 1–3 file writes at once by Speed; batches of 10+ are written to `scrape-jobs/` and can
+  be resumed; "Scrape all unmatched" in Preferences > Organize & Scrape > Automation.
+- **C — automation:** Strictness (Lenient/Balanced/Strict moves the cover thresholds around CE's 0.87/0.77); unattended runs put what
+  they can't confirm in a review list (`scrape-review.json`, a dialog grouped by series: Review / Skip / Never); undo of the last scrape
+  batch (`scrape-undo/`, 30 days, restores the comic's own fields); "Scrape and organize…" in the issue and series menus (scrape, flush
+  writes, organize); scrape on import after a library scan (on by default, needs Metron, skips manga); "Scrape health check" scheduled task.
+- **Not built (still in the C spec):** per-field dry-run preview, the per-field provider priority table, filename/folder hints, the
+  strictness live preview from history, a full keyboard-first review screen. B's per-book parallel matching was dropped: both sources are
+  rate-limited, so the gain comes from fewer requests, not more workers.
+- **Verified:** builds; Data tests (scraper, auth, sweeper, cache, undo, organizer: 360 + 94), Daemon pull-list 7, App targeted sets
+  (Spec A 82; scraper/settings/write-back/menus/scheduler/lint ~380). One theming test (`GhostOutline_IsTheFaintColour`) fails only when
+  run with other classes and passes alone. **Not verified:** anything on screen; a live Metron request with a real token; the full suite.
+
+### 2026-10-21 (later) — Scraper C, second pass + fixes from the user's check (implemented, tests pass, not seen on screen)
+
+- **Fixed (user-reported):** Metron wants `Authorization: Bearer <token>` (verified live: `Token` -> 401); Bearer is now the default. A refused
+  credential (HTTP 401 or a held login) now ends the scrape with a message instead of being read as "issue not found", which had written only
+  Publisher/Imprint/Volume/Count/series. Series-first now also applies with "Confirm the issue too" on and in the review pass. The match dialog's
+  title names its source; its selected row is a soft accent fill (not seen on screen).
+- **Built:** dry-run preview of every field change before applying; format and filename hints (Annual/TPB/HC/Omnibus/One-Shot/GN/Special/FCBD)
+  in matching and in series-first reuse; fill Metron's blanks from ComicVine via `cv_id` (off by default); keyboard review list.
+- **Verified:** Data tests 420, App targeted 108 (scraper, dialogs, settings, menus, lint). **Not verified:** the preview and review dialogs on
+  screen; formats against a real library.
+
+### 2026-10-21 (third pass) — Scraper C: which source wins, Strictness preview, .crswap origin (implemented, tests pass, not seen on screen)
+
+- Per-field "Which source wins" (Matched source / Metron / ComicVine) through the shared issue id; Strictness description shows what each level
+  would have applied to the last 500 automatic cover checks (20+ needed). Fixed: the runner-up limit moved the wrong way with Strictness.
+- `.crswap` files come from a Chromium browser or web app writing through the File System Access API, not from Paperbunkr (searched the real
+  AppData, plugins and install folder via PowerShell; the earlier Bash search saw a stale AppData copy).
+- **Verified:** Data tests 427; App targeted 51 (settings, scraper, lint). Full suite not run (user's call).
+
+
+### 2026-10-21 — Freeze watchdog redesign (implemented, tests pass, not seen on screen)
+
+- Spec/plan: `docs/superpowers/specs/2026-10-21-freeze-watchdog-redesign-{design,plan}.md`. Quiet **stall** log + `dotnet-stack` snapshot at
+  10 s (once per episode, max 3 per session); **"not responding" dialog at 30 s** (was 10 s) — a TaskDialog with Keep waiting / Close
+  Paperbunkr, a live counter, an "Open log folder" link and a lost-changes warning. It closes itself when the app answers again; Keep waiting
+  re-arms 30 s from the click (fixes the immediate re-pop after a long-open dialog). After a dialog-level freeze an Activity Center alert
+  ("stopped responding for 47 s", Open logs). Silent under a debugger and across machine sleep.
+- CE check: CE's `CrashWatchDog` is effectively off in shipped CE (`StartWatchDog` passes 0 s and the `now - d` guard resets every poll), so
+  the 30 s dialog is a deliberate addition, not a parity change.
+- `app.manifest` now declares Common Controls v6 (needed for `TaskDialogIndirect`); if it's ever missing the old `MessageBoxW` is the fallback.
+- **Verified:** `FreezeWatchdogServiceTests` 24/24. **Not seen on screen** — check with a Debug build and `PAPERBUNKR_SIMULATE_FREEZE=45`
+  (dialog at 30 s, closes at ~50 s, then the alert), `=75` + Keep waiting, and once with Close Paperbunkr.
+
+## 2026-10-22 - Brand kit logos adopted (built, not seen on screen)
+
+- New flat vector logo set (Brand Kit v1.0, 10 Oct 2026) replaced the old glowing raster everywhere the app and site show it: `Assets/paperbunkr.ico`
+  (16-256), `paperbunkr-logo-source/rail/splash.png`, installer `WizardImage`/`WizardSmallImage`, site `logo.png`, favicons, apple-touch icon,
+  `og-card.png` (top-left lockup repainted), new `site/src/assets/wordmark.png` in Nav/Footer, `docs/assets/paperbunkr-logo.png`. File names kept, so no XAML changed.
+- **Fonts and the app accent were deliberately left alone** (Bebas Neue / Source Serif 4; `#C9803F` accent vs the kit's `#F7931E`).
+- **Verified:** `Paperbunkr.App` builds 0 errors; `astro build` passes. **Not seen on screen:** splash, About, rail, tray, installer wizard, light taskbar.
+- **Open:** the guide asks for a dedicated simplified symbol at 16-24 px; the small `.ico` frames are plain downscales.
+
+### 2026-10-22 — ComicVine scraping "hangs" (fix implemented, tests pass, not yet confirmed by the user)
+
+- ComicVine's API answered fully from outside the app (search, issue list, details), and today's freeze reports were unrelated (navigation),
+  so the wait was inside the scrape. Most likely cause: the speed work fetched ComicVine cover images in bursts (no pause between comics, two
+  candidates at once) from comicvine.gamespot.com - the API's own site - outside the API limiter, drawing a 420 "slow down", after which the
+  limiter silently pauses every ComicVine call for 1/5/15/60 minutes. Not proven: the limiter doesn't log its pauses.
+- Fix: `ComicVineImagePacer` (one ComicVine image at a time, 1.1 s apart, none during a pause, not counted against the hourly API budget);
+  a scrape now reports a ComicVine pause in its Activity Center job ("continuing at HH:MM") instead of sitting silent.
+- **Real cause found (same day, later):** ComicVine's own `/search` endpoint degraded - it timed out (20 s + retry: the "hang") or answered every
+  volume with no publisher, 0 issues and the blank cover (so every candidate scored as impossible). Its `/volumes` endpoint answered the same
+  query fully. ComicVine series searches now go through `/volumes` by name first (two pages, most issues first) and fall back to `/search` only
+  when that finds nothing; degraded answers are never cached and older cached searches are ignored (cache key `v2|`). Verified live by probe;
+  Data tests 432, App scraper tests pass. The image pacer and pause reporting above stay.
+- **Follow-up:** `/volumes` matches only names containing the whole query ("The Punisher Showdowns: Black Widow" found nothing, then the degraded
+  `/search` answered). The adapter now tries name variants on `/volumes` first (full, without "The", before the colon, after it) and, only if
+  all are empty, `/search`, filling its first five degraded results from `/volume/4050-id`. Live check: the Punisher title resolves to
+  "Punisher Showdowns: Black Widow" (Marvel, 1 issue) in under 3 s; ComicVine's `/search` timed out both ways at the time (with and without
+  `description` in field_list, so that field is not the cause).
+- **"X-Men" never matched after 2007 (both sources):** Metron's name search stopped at 25 results, alphabetical, crowded out by "All-New/Astonishing
+  X-Men"; ComicVine ignores `sort` on /volumes and returns 1,559 X-Men volumes oldest first, so 200 never reached recent runs. Now: series are also
+  found through the comic's issue number (`IIssueFirstSeriesSearch`: Metron `issue/?series_name=&number=`, ComicVine `issues/?filter=issue_number:,
+  cover_date:<year>`), merged into the candidates; Metron's name search takes 100; ComicVine's takes both ends of the list (oldest 200 + newest
+  200). Live: X-Men #37 -> Metron X-Men (2024) id 7914 among 14 series with a #37; ComicVine (cover year 2026) X-Men (2024) id 158814, 39 issues.
+- **Specials named only in the file (2026-10-22):** "The_Amazing_Spider-Man_(2025-)_#Halloween_Special_2026.cbz" is filed under "The Amazing Spider-Man",
+  while Metron lists it as its own series "Amazing Spider-Man: Halloween Special" (id 16936; ComicVine has no 2026 one yet). A worded "#…" in the
+  file name (`ComicFormatHints.IssueDesignation`) is now searched too and added to the name candidates are scored against; Metron's issue-number
+  search drops a leading "The".
+- **"Skip this book" did nothing on click (both scraper dialogs):** the handler was a XAML `PointerPressed` on the Button, which an Avalonia 12 Button
+  swallows (CLAUDE.md); Enter/Space likewise. Now tunnelled from the button, and the close is posted a tick later (routed-event detach rule).
+
+### 2026-10-22 — Scrape no longer renames a shared series; series-level fields filled (implemented, Data tests pass, not seen on screen)
+
+Spec: `docs/superpowers/specs/2026-10-22-scrape-series-split-and-series-fields-design.md` (grilling Q1-Q7, recommendations taken).
+- A match to a different source series than the library series is linked to moves the comic out (`SeriesSplit.Resolve`: to the series linked to
+  that source series, else one of that name, else a new one copying content type, reading mode and reader settings) instead of renaming the
+  shared series. Only an agreeing match renames, fills series fields and links; the first rename keeps the old name as a `BeforeScrape` title
+  ("Restore name ..." in the series menu). A comic alone in its series is corrected in place.
+- A manual merge marks the series keep-together (`KeepTogether` in `LockedFields`; "Let scrapes split this series" clears it) and now carries the
+  removed series' provider links, alternate titles and tags.
+- Series-level Publisher, Imprint, Genre, Sort Name (Metron `sort_name`), Age Rating are written under the field toggles and "Overwrite existing",
+  never over a locked field. No new columns.
+- Existing mixed series (Secret Wars + 2099, "The Amazing Spider-Man" renamed to the Halloween Special): restore the name, then re-scrape.
+- **Verified:** Data tests (split to new/linked series, keep-together, rename + restore, series publisher); app built; App tests 86 (merge keeps
+  links/titles + keep-together, context menus, bulk bar, scraper, lint). **Not verified:** on screen.
+- **Follow-up, "doesn't work all the time":** three holes closed. (1) An unlinked series was owned by its first match, so "Secret Wars 2099" scraped
+  first renamed the whole series; now a match whose name doesn't share the series' title splits out when the series holds other comics
+  (`ComicFormatHints.SameTitle`). (2) Series-first reuse let "Secret Wars #1" follow the 2099 match; the reuse key now includes the comic's file
+  title. (3) A 2099 comic under "Secret Wars" searched "Secret Wars"; it now searches its file title when that extends the series name
+  (`SearchName`). A lone comic joins the series already linked to its match; a new series whose name is taken gets its start year. Tests cover
+  the 2099-first order.

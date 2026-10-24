@@ -15,25 +15,24 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public static class MetronAccountSyncRunner
 {
-    public const string NoLoginMessage = "No Metron login is saved. Add one under Preferences → Connections.";
+    public const string NoLoginMessage = "No Metron API token is saved. Add one under Preferences → Connections.";
     public const string SwitchedOffMessage = "Metron account sync is off. Turn it on under Preferences → Connections.";
 
     /// <summary>Null when no Metron login is saved.</summary>
     public static MetronAccountSync? Create(Func<PaperbunkrDbContext> createContext)
     {
-        string? username, password;
+        MetronAuth? auth;
         using (var context = createContext())
         {
-            username = CredentialStore.Get(context, "Metron", CredentialKind.Username);
-            password = CredentialStore.Get(context, "Metron", CredentialKind.Password);
+            auth = MetronAuth.Load(context);
         }
 
-        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
+        if (auth is null)
         {
             return null;
         }
 
-        var client = new MetronClient(username, password, ComicVineRequestPriority.Low);
+        var client = new MetronClient(auth, ComicVineRequestPriority.Low);
         return new MetronAccountSync(createContext, new MetronAccountClient(client), client);
     }
 

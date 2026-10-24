@@ -1,0 +1,147 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="500"
+             x:Class="Paperbunkr.App.Views.DetailListOptionsOverlay"
+             x:DataType="vm:DetailListOptionsViewModel">
+
+    <!-- Detail list options (docs/superpowers/specs/2026-10-19-detail-layouts-v2-design.md): the Library List Options' powers for the
+         comic and manga detail screens - any Library field, three caption lines, card elements, cover fit, sort and group. -->
+    <UserControl.Resources>
+        <!-- One checkable, width-editable column row - shared by the comic List and manga Chapters lists. -->
+        <DataTemplate x:Key="ColumnRowTemplate" x:DataType="vm:DetailListOptionField">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <CheckBox IsChecked="{Binding IsChecked}" VerticalAlignment="Center" AutomationProperties.Name="{Binding Name}" />
+                <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Margin="6,0" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBox Grid.Column="2" Text="{Binding Width}" Width="62" FontSize="12" ToolTip.Tip="Column width"
+                         AutomationProperties.Name="{Binding Name, StringFormat='Width of {0}'}" />
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <controls:DialogCard Title="Detail list options" Size="Large">
+        <StackPanel Spacing="14">
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20">
+                <Button Classes="tab" Classes.active="{Binding IsPosterTab}" Content="Poster" IsVisible="{Binding IsComic}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="poster" AutomationProperties.AutomationId="DetailOptionsTab_Poster" />
+                <Button Classes="tab" Classes.active="{Binding IsListTab}" Content="List" IsVisible="{Binding IsComic}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="list" AutomationProperties.AutomationId="DetailOptionsTab_List" />
+                <Button Classes="tab" Classes.active="{Binding IsCardTab}" Content="Card" IsVisible="{Binding IsComic}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="card" AutomationProperties.AutomationId="DetailOptionsTab_Card" />
+                <Button Classes="tab" Classes.active="{Binding IsChaptersTab}" Content="Columns" IsVisible="{Binding IsManga}"
+                        Command="{Binding SelectTabCommand}" CommandParameter="chapters" AutomationProperties.AutomationId="DetailOptionsTab_Chapters" />
+                <Button Classes="tab" Classes.active="{Binding IsSortTab}" Content="Sort &amp; group"
+                        Command="{Binding SelectTabCommand}" CommandParameter="sort" AutomationProperties.AutomationId="DetailOptionsTab_Sort" />
+            </StackPanel>
+
+            <Panel Grid.Row="2" Margin="18,14" MinHeight="320">
+                <!-- POSTER: caption lines, overlays, cover fit -->
+                <StackPanel IsVisible="{Binding IsPosterTab}" Spacing="10">
+                    <TextBlock Classes="hint" Text="Up to three lines of text under each cover, from any issue field." />
+                    <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+                        <TextBlock Classes="fieldLabel" Text="FIRST LINE" VerticalAlignment="Center" />
+                        <controls:SuggestBox Grid.Column="1" IsStrict="True" Text="{Binding Caption1}" Suggestions="{Binding CaptionChoices}"
+                                             AutomationProperties.Name="First caption line" />
+                        <TextBlock Grid.Row="1" Classes="fieldLabel" Text="SECOND LINE" VerticalAlignment="Center" />
+                        <controls:SuggestBox Grid.Row="1" Grid.Column="1" IsStrict="True" Text="{Binding Caption2}" Suggestions="{Binding CaptionChoices}"
+                                             AutomationProperties.Name="Second caption line" />
+                        <TextBlock Grid.Row="2" Classes="fieldLabel" Text="THIRD LINE" VerticalAlignment="Center" />
+                        <controls:SuggestBox Grid.Row="2" Grid.Column="1" IsStrict="True" Text="{Binding Caption3}" Suggestions="{Binding CaptionChoices}"
+                                             AutomationProperties.Name="Third caption line" />
+                    </Grid>
+                    <CheckBox Content="Hide captions" IsChecked="{Binding HideCaptions}" />
+                    <TextBlock Classes="fieldLabel" Text="ON THE COVER" Margin="0,4,0,0" />
+                    <CheckBox Content="Read / in-progress mark" IsChecked="{Binding ShowReadOverlay}" />
+                    <CheckBox Content="Edition ribbon (Annual, TPB, Omnibus…)" IsChecked="{Binding ShowEditionOverlay}" />
+                    <Grid ColumnDefinitions="110,180" Margin="0,4,0,0">
+                        <TextBlock Classes="fieldLabel" Text="COVER FIT" VerticalAlignment="Center" />
+                        <controls:SuggestBox Grid.Column="1" IsStrict="True" Text="{Binding CoverFit}" Suggestions="{Binding CoverFitChoices}"
+                                             AutomationProperties.Name="Cover fit" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- LIST: every Library field as a column -->
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,*" IsVisible="{Binding IsListTab}">
+                    <TextBlock Grid.ColumnSpan="2" Classes="hint" Margin="0,0,0,8"
+                               Text="Tick the columns to show; order and width also follow drags on the list's header." />
+                    <ListBox Grid.Row="1" Classes="optionList" Height="300" ItemsSource="{Binding ComicColumns}" SelectedItem="{Binding SelectedField}"
+                             ItemTemplate="{StaticResource ColumnRowTemplate}"
+                             AutomationProperties.Name="Comic List columns" AutomationProperties.AutomationId="DetailComicColumns" />
+                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="6" Margin="12,0,0,0" Width="100">
+                        <Button Classes="ghost" Content="Move up" Command="{Binding MoveFieldUpCommand}" AutomationProperties.AutomationId="DetailComicColumnUp" />
+                        <Button Classes="ghost" Content="Move down" Command="{Binding MoveFieldDownCommand}" AutomationProperties.AutomationId="DetailComicColumnDown" />
+                        <Button Classes="ghost" Content="Show all" Command="{Binding ShowAllColumnsCommand}" AutomationProperties.AutomationId="DetailComicColumnsShowAll" />
+                        <Button Classes="ghost" Content="Hide all" Command="{Binding HideAllColumnsCommand}" AutomationProperties.AutomationId="DetailComicColumnsHideAll" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- CARD: tile text elements, status, cover fit -->
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,*,Auto" IsVisible="{Binding IsCardTab}">
+                    <TextBlock Grid.ColumnSpan="2" Classes="hint" Margin="0,0,0,8"
+                               Text="The title is the card's headline; the other ticked items make its second line, in this order." />
+                    <ListBox Grid.Row="1" Classes="optionList" Height="250" ItemsSource="{Binding CardElements}" SelectedItem="{Binding SelectedElement}"
+                             AutomationProperties.Name="Card text" AutomationProperties.AutomationId="DetailCardElements">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:DetailListOptionField">
+                                <CheckBox Content="{Binding Name}" IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Name}" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="6" Margin="12,0,0,0" Width="100">
+                        <Button Classes="ghost" Content="Move up" Command="{Binding MoveElementUpCommand}" AutomationProperties.AutomationId="DetailCardElementUp" />
+                        <Button Classes="ghost" Content="Move down" Command="{Binding MoveElementDownCommand}" AutomationProperties.AutomationId="DetailCardElementDown" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="18" Margin="0,10,0,0">
+                        <CheckBox Content="Read status mark" IsChecked="{Binding ShowCardStatus}" VerticalAlignment="Center" />
+                        <TextBlock Classes="fieldLabel" Text="COVER FIT" VerticalAlignment="Center" />
+                        <controls:SuggestBox Width="160" IsStrict="True" Text="{Binding CoverFit}" Suggestions="{Binding CoverFitChoices}"
+                                             AutomationProperties.Name="Cover fit" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- MANGA COLUMNS -->
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,*" IsVisible="{Binding IsChaptersTab}">
+                    <TextBlock Grid.ColumnSpan="2" Classes="hint" Margin="0,0,0,8"
+                               Text="Chapter columns: the chapter marks plus any issue field. Order and width also follow header drags." />
+                    <ListBox Grid.Row="1" Classes="optionList" Height="300" ItemsSource="{Binding ChapterColumns}" SelectedItem="{Binding SelectedField}"
+                             ItemTemplate="{StaticResource ColumnRowTemplate}"
+                             AutomationProperties.Name="Manga chapter columns" AutomationProperties.AutomationId="DetailChapterColumns" />
+                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="6" Margin="12,0,0,0" Width="100">
+                        <Button Classes="ghost" Content="Move up" Command="{Binding MoveFieldUpCommand}" AutomationProperties.AutomationId="DetailChapterColumnUp" />
+                        <Button Classes="ghost" Content="Move down" Command="{Binding MoveFieldDownCommand}" AutomationProperties.AutomationId="DetailChapterColumnDown" />
+                        <Button Classes="ghost" Content="Show all" Command="{Binding ShowAllColumnsCommand}" AutomationProperties.AutomationId="DetailChapterColumnsShowAll" />
+                        <Button Classes="ghost" Content="Hide all" Command="{Binding HideAllColumnsCommand}" AutomationProperties.AutomationId="DetailChapterColumnsHideAll" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- SORT & GROUP (both detail types) -->
+                <StackPanel IsVisible="{Binding IsSortTab}" Spacing="10">
+                    <TextBlock Classes="hint" Text="How the issues are ordered and split into sections. Specials share the sort and are never grouped." IsVisible="{Binding IsComic}" />
+                    <TextBlock Classes="hint" Text="How the chapters are ordered and split into sections." IsVisible="{Binding IsManga}" />
+                    <Grid ColumnDefinitions="110,220,Auto" RowDefinitions="Auto,Auto" RowSpacing="8" ColumnSpacing="10">
+                        <TextBlock Classes="fieldLabel" Text="SORT BY" VerticalAlignment="Center" />
+                        <controls:SuggestBox Grid.Column="1" IsStrict="True" Text="{Binding SortBy}" Suggestions="{Binding SortChoices}"
+                                             AutomationProperties.Name="Sort by" />
+                        <CheckBox Grid.Column="2" Content="Descending" IsChecked="{Binding SortDescending}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Row="1" Classes="fieldLabel" Text="GROUP BY" VerticalAlignment="Center" />
+                        <controls:SuggestBox Grid.Row="1" Grid.Column="1" IsStrict="True" Text="{Binding GroupBy}" Suggestions="{Binding GroupChoices}"
+                                             AutomationProperties.Name="Group by" />
+                    </Grid>
+                </StackPanel>
+            </Panel>
+
+
+        </StackPanel>
+        <controls:DialogCard.Footer>
+            <StackPanel>
+                <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" AutomationProperties.AutomationId="DetailListOptionsCancel" />
+                <Button Classes="ghost" Content="Apply" Command="{Binding ApplyCommand}" AutomationProperties.AutomationId="DetailListOptionsApply" />
+                <Button Classes="primary" Content="OK" Command="{Binding OkCommand}" AutomationProperties.AutomationId="DetailListOptionsOk" />
+
+            </StackPanel>
+        </controls:DialogCard.Footer>
+    </controls:DialogCard>
+</UserControl>

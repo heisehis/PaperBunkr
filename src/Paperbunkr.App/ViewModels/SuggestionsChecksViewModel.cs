@@ -7,7 +7,10 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
+using Paperbunkr.Data;
+using Paperbunkr.Data.ComicVine;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.ReadingLists;
@@ -19,7 +22,7 @@ namespace Paperbunkr.App.ViewModels;
 /// three review queues that used to sit in the sidebar - new story-event suggestions (docs/superpowers/specs/
 /// 2026-09-17-storyevent-continuity-autopopulate-design.md Phase 1), possible duplicate events (docs/superpowers/specs/
 /// 2026-09-27-story-event-resolver-design.md §4) and shared-universe suggestions (the same design, Phase 2) - plus the Check story events
-/// and Check Wikidata buttons. Behaviour is ported unchanged; every row removal now waits one dispatcher tick, because the clicked
+/// button (the Check Wikidata button was removed 2026-10-12). Behaviour is ported unchanged; every row removal now waits one dispatcher tick, because the clicked
 /// button lives in the row being removed (CLAUDE.md, routed-event detach rule).
 /// </summary>
 public partial class SuggestionsChecksViewModel : ViewModelBase
@@ -30,6 +33,8 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
     private readonly Action<int> _openContinuity;
     private readonly Action<StoryEventIdentitySweepSummary> _afterIdentityWork;
     private readonly Action _changed;
+    private readonly Action _storyEventsChanged;
+    private CancellationTokenSource? _metronScanCancellation;
 
     /// <param name="openEvent">Opens a story event (after accepting a suggestion).</param>
     /// <param name="openContinuity">Opens a continuity (after accepting a shared-universe suggestion).</param>
@@ -41,7 +46,8 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
         Action<int> openEvent,
         Action<int> openContinuity,
         Action<StoryEventIdentitySweepSummary> afterIdentityWork,
-        Action changed)
+        Action changed,
+        Action? storyEventsChanged = null)
     {
         _notify = notify;
         _activity = activity;
@@ -49,13 +55,14 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
         _openContinuity = openContinuity;
         _afterIdentityWork = afterIdentityWork;
         _changed = changed;
+        _storyEventsChanged = storyEventsChanged ?? (() => { });
     }
 
     /// <summary>Test seam: how identity work leaves the UI thread. Null = a thread-pool task (tests pass a synchronous runner).</summary>
     internal Func<Func<Task>, Task>? IdentityRunner { get; set; }
 
-    /// <summary>Test seam: the smart connector's Wikidata lookup. Null = the live Wikidata client.</summary>
-    internal Func<IWikidataLookup>? IdentityWikidata { get; set; }
+    /// <summary>Test seam: the reading-order sources the smart connector asks (CBRO, Metron lists). Null = the live ones.</summary>
+    internal Func<StoryEventChecks.EventOrderInputs>? OrderInputs { get; set; }
 
     /// <summary>Test seam: the provider sources the sweep uses. Null = whatever credentials are saved.</summary>
     internal Func<IReadOnlyDictionary<ComicProvider, IArcIdentitySource>>? IdentitySources { get; set; }
@@ -72,18 +79,14 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
 
     public bool HasNoNewContinuitySuggestions => NewContinuitySuggestions.Count == 0;
 
-    /// <summary>
-    /// Series that share three or more characters with a continuity's member series and are not in it (docs/superpowers/specs/
-    /// 2026-10-06-smart-features-design.md §7.1). Local only - computed from the characters the library already knows.
-    /// </summary>
-    public ObservableCollection<CharacterSuggestionRowViewModel> CharacterSuggestions { get; } = new();
-
-    public bool HasCharacterSuggestions => CharacterSuggestions.Count > 0;
-
     public string PossibleDuplicatesSummary => PossibleDuplicates.Count.ToString(System.Globalization.CultureInfo.CurrentCulture);
 
+    public int SelectedContinuitySuggestionCount => NewContinuitySuggestions.Count(row => row.IsSelected);
+
+    public bool HasSelectedContinuitySuggestions => SelectedContinuitySuggestionCount > 0;
+
     /// <summary>Everything waiting here - the sidebar row's badge.</summary>
-    public int TotalCount => NewStoryEventCandidates.Count + PossibleDuplicates.Count + NewContinuitySuggestions.Count + CharacterSuggestions.Count;
+    public int TotalCount => NewStoryEventCandidates.Count + PossibleDuplicates.Count + NewContinuitySuggestions.Count;
 
     public bool IsEmpty => TotalCount == 0;
 
@@ -91,14 +94,13 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
     private bool _isFindingDuplicates;
 
     [ObservableProperty]
+    private bool _isCheckingMetron;
+
+    [ObservableProperty]
+    private string? _metronCheckResult;
+
+    [ObservableProperty]
     private string? _storyEventCheckResult;
-
-    [ObservableProperty]
-    private bool _isCheckingWikidataSuggestions;
-
-    /// <summary>Distinguishes "haven't checked yet" from "checked, found nothing" - without it the button read as doing nothing.</summary>
-    [ObservableProperty]
-    private string? _wikidataCheckResult;
 
     /// <summary>Set when the panel was opened at one pair ("Possible duplicate: X" on an event page), so the view can scroll to it.</summary>
     [ObservableProperty]
@@ -109,10 +111,12 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasNoNewStoryEventCandidates));
         OnPropertyChanged(nameof(HasPossibleDuplicates));
         OnPropertyChanged(nameof(HasNoNewContinuitySuggestions));
-        OnPropertyChanged(nameof(HasCharacterSuggestions));
         OnPropertyChanged(nameof(PossibleDuplicatesSummary));
+        OnPropertyChanged(nameof(SelectedContinuitySuggestionCount));
+        OnPropertyChanged(nameof(HasSelectedContinuitySuggestions));
         OnPropertyChanged(nameof(TotalCount));
         OnPropertyChanged(nameof(IsEmpty));
+        RaiseStoryEventSelectionState();
         _changed();
     }
 
@@ -128,29 +132,17 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
     /// </summary>
     public async Task RefreshStoryEventCandidatesAsync()
     {
+        if (!CanChangeStoryEvents) return;
         int generation = ++_candidatesGeneration;
         try
         {
-            var (candidates, suggestions) = await Task.Run(() =>
+            var candidates = await Task.Run(() =>
             {
                 using var context = PaperbunkrDb.CreateContext();
-                var found = StoryArcGroupingResolver.GetCandidates(context);
-                IReadOnlyList<ContinuityCharacterSuggestion> shared;
-                try
-                {
-                    shared = ContinuityCharacterSuggestionResolver.GetSuggestions(context);
-                }
-                catch (Exception ex)
-                {
-                    // A suggestion list is never worth losing the rest of the panel over.
-                    DiagnosticsService.LogMilestone($"Continuity: shared-character suggestions failed ({ex.GetType().Name}: {ex.Message}).");
-                    shared = Array.Empty<ContinuityCharacterSuggestion>();
-                }
-
-                return (found, shared);
+                return StoryArcGroupingResolver.GetCandidates(context);
             }).ConfigureAwait(true);
 
-            if (generation != _candidatesGeneration)
+            if (generation != _candidatesGeneration || !CanChangeStoryEvents)
             {
                 return;
             }
@@ -158,13 +150,7 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
             NewStoryEventCandidates.Clear();
             foreach (var candidate in candidates)
             {
-                NewStoryEventCandidates.Add(new StoryEventCandidateRowViewModel(candidate, AcceptStoryEventCandidateAsync, DismissStoryEventCandidate));
-            }
-
-            CharacterSuggestions.Clear();
-            foreach (var suggestion in suggestions)
-            {
-                CharacterSuggestions.Add(new CharacterSuggestionRowViewModel(suggestion, AcceptCharacterSuggestion, DismissCharacterSuggestion));
+                NewStoryEventCandidates.Add(new StoryEventCandidateRowViewModel(candidate, AcceptStoryEventCandidateAsync, DismissStoryEventCandidate, RaiseCounts));
             }
 
             RaiseCounts();
@@ -181,90 +167,21 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
 
     public void RefreshStoryEventCandidates()
     {
+        if (!CanChangeStoryEvents) return;
         _candidatesGeneration++;
         using var context = PaperbunkrDb.CreateContext();
         NewStoryEventCandidates.Clear();
         foreach (var candidate in StoryArcGroupingResolver.GetCandidates(context))
         {
-            NewStoryEventCandidates.Add(new StoryEventCandidateRowViewModel(candidate, AcceptStoryEventCandidateAsync, DismissStoryEventCandidate));
+            NewStoryEventCandidates.Add(new StoryEventCandidateRowViewModel(candidate, AcceptStoryEventCandidateAsync, DismissStoryEventCandidate, RaiseCounts));
         }
 
-        RefreshCharacterSuggestions(context);
         RaiseCounts();
-    }
-
-    // --- Shared-character suggestions: local-only, recomputed whenever the panel's local lists are (smart features §7.1). ---
-
-    private void RefreshCharacterSuggestions(Paperbunkr.Data.PaperbunkrDbContext context)
-    {
-        CharacterSuggestions.Clear();
-        try
-        {
-            foreach (var suggestion in ContinuityCharacterSuggestionResolver.GetSuggestions(context))
-            {
-                CharacterSuggestions.Add(new CharacterSuggestionRowViewModel(suggestion, AcceptCharacterSuggestion, DismissCharacterSuggestion));
-            }
-        }
-        catch (Exception ex)
-        {
-            // A suggestion list is never worth losing the rest of the panel over.
-            DiagnosticsService.LogMilestone($"Continuity: shared-character suggestions failed ({ex.GetType().Name}: {ex.Message}).");
-        }
-    }
-
-    private void AcceptCharacterSuggestion(CharacterSuggestionRowViewModel row)
-    {
-        using (var context = PaperbunkrDb.CreateContext())
-        {
-            ContinuityResolver.AddSeriesToContinuity(context, row.Suggestion.SeriesId, row.Suggestion.ContinuityId);
-        }
-
-        _notify("Series added to continuity", $"\"{row.Suggestion.SeriesName}\" added to \"{row.Suggestion.ContinuityName}\".");
-        Dispatcher.UIThread.Post(() =>
-        {
-            CharacterSuggestions.Remove(row);
-            RaiseCounts();
-        });
-    }
-
-    private void DismissCharacterSuggestion(CharacterSuggestionRowViewModel row)
-    {
-        using (var context = PaperbunkrDb.CreateContext())
-        {
-            HealthDismissals.Dismiss(
-                context, HealthDismissals.ContinuitySuggestion, row.Suggestion.DismissalKey, $"{row.Suggestion.SeriesName} → {row.Suggestion.ContinuityName}");
-        }
-
-        Dispatcher.UIThread.Post(() =>
-        {
-            CharacterSuggestions.Remove(row);
-            RaiseCounts();
-        });
     }
 
     private async Task AcceptStoryEventCandidateAsync(StoryEventCandidateRowViewModel row)
     {
-        int storyEventId;
-        string message;
-        using (var context = PaperbunkrDb.CreateContext())
-        {
-            // One last verification against ComicVine/Metron (if configured) - an explicit action, so a short wait is fine.
-            var verifiedList = await ArcExternalVerificationService.VerifyAsync(context, new[] { row.Candidate }, CancellationToken.None);
-            var verified = verifiedList.Single();
-
-            var storyEvent = StoryEventResolver.GetOrCreateForIssues(context, verified.ArcName, verified.Members.Select(m => m.Issue.Id));
-            storyEvent.ComicVineArcId ??= verified.ComicVineArcId;
-            storyEvent.MetronArcId ??= verified.MetronArcId;
-            context.SaveChanges();
-
-            // Position order lets AddMember's auto-incrementing Position reproduce the verified order; each member takes the role the
-            // detector is sure of, and weaker guesses are held as suggestions.
-            var detected = MemberRoleDetection.AddDetectedMembers(
-                context, storyEvent.Id,
-                verified.Members.OrderBy(m => m.Position ?? int.MaxValue).ThenBy(m => m.Issue.Year ?? int.MaxValue).Select(m => m.Issue.Id).ToList());
-            storyEventId = storyEvent.Id;
-            message = $"\"{verified.ArcName}\" added with {verified.Members.Count} issue(s). {detected}";
-        }
+        var (storyEventId, message) = await CreateStoryEventFromCandidateAsync(row.Candidate);
 
         _notify("Story event created", message);
         Dispatcher.UIThread.Post(() =>
@@ -276,6 +193,31 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
 
         // Fill the event's other provider id and merge it if it duplicates one already here - in the background, silent unless it merges.
         _ = CheckEventIdentityInBackground(storyEventId);
+    }
+
+    private async Task<(int Id, string Message)> CreateStoryEventFromCandidateAsync(StoryEventCandidate candidate)
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            // One last verification against ComicVine/Metron (if configured) - an explicit action, so a short wait is fine.
+            var verified = VerifyStoryEventCandidate is { } verify
+                ? await verify(context, candidate)
+                : (await ArcExternalVerificationService.VerifyAsync(context, new[] { candidate }, CancellationToken.None)).Single();
+
+            using var transaction = context.Database.BeginTransaction();
+            var storyEvent = StoryEventResolver.GetOrCreateForIssues(context, verified.ArcName, verified.Members.Select(m => m.Issue.Id));
+            storyEvent.ComicVineArcId ??= verified.ComicVineArcId;
+            storyEvent.MetronArcId ??= verified.MetronArcId;
+            context.SaveChanges();
+
+            // Position order lets AddMember's auto-incrementing Position reproduce the verified order; each member takes the role the
+            // detector is sure of, and weaker guesses are held as suggestions.
+            var detected = MemberRoleDetection.AddDetectedMembers(
+                context, storyEvent.Id,
+                verified.Members.OrderBy(m => m.Position ?? int.MaxValue).ThenBy(m => m.Issue.Year ?? int.MaxValue).Select(m => m.Issue.Id).ToList());
+            transaction.Commit();
+            return (storyEvent.Id, $"\"{verified.ArcName}\" added with {verified.Members.Count} issue(s). {detected}");
+        }
     }
 
     private void DismissStoryEventCandidate(StoryEventCandidateRowViewModel row)
@@ -329,7 +271,7 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
     [RelayCommand]
     private async Task CheckStoryEventsAsync()
     {
-        if (IsFindingDuplicates)
+        if (!CanChangeStoryEvents)
         {
             return;
         }
@@ -341,8 +283,8 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
         {
             var sources = CreateIdentitySources();
             var progress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, "Checking story events"));
-            var wikidata = IdentityWikidata?.Invoke();
-            var result = await RunIdentityWork(() => StoryEventChecks.RunDetailedAsync(sources, wikidata, progress, CancellationToken.None));
+            var orderInputs = OrderInputs?.Invoke();
+            var result = await RunIdentityWork(() => StoryEventChecks.RunDetailedAsync(sources, orderInputs, progress, CancellationToken.None));
             job.Succeed(result.Text, itemsProcessed: result.Identity.Checked, itemsFailed: result.Identity.Failed);
             StoryEventCheckResult = result.Text;
             _afterIdentityWork(result.Identity);
@@ -359,12 +301,137 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    private async Task CheckMetronAsync()
+    {
+        if (IsCheckingMetron) return;
+        _metronScanCancellation?.Dispose();
+        _metronScanCancellation = new CancellationTokenSource();
+        var token = _metronScanCancellation.Token;
+        IsCheckingMetron = true;
+        MetronCheckResult = null;
+        using var job = _activity.StartJob(ActivityJobKind.SyncMetadata, "Checking Metron universes");
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(token, job.CancellationToken);
+        token = linkedCancellation.Token;
+        try
+        {
+            var report = new Progress<(int Done, int Total, string Series)>(p =>
+                job.Report(p.Done, p.Total, string.IsNullOrWhiteSpace(p.Series) ? "Checking Metron universes" : p.Series));
+            var found = await Task.Run(async () =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                var provider = ComicProviderFactory.Create(context, ComicProvider.Metron, ComicVineRequestPriority.Low);
+                if (provider is null)
+                {
+                    throw new InvalidOperationException(ComicProviderFactory.MissingCredentialsMessage(ComicProvider.Metron));
+                }
+                try
+                {
+                    return await ContinuityMetronSuggestionResolver.GetSuggestionsAsync(context, provider, token, report).ConfigureAwait(false);
+                }
+                finally { (provider as IDisposable)?.Dispose(); }
+            }, token);
+
+            StageContinuitySuggestions(found);
+            MetronCheckResult = $"Checked the library; found {found.Count} Metron universe suggestion{(found.Count == 1 ? "" : "s")}.";
+            job.Succeed(MetronCheckResult, itemsProcessed: found.Count);
+            RaiseCounts();
+        }
+        catch (OperationCanceledException)
+        {
+            MetronCheckResult = "Metron check cancelled. Any findings already in the review queue were kept.";
+            // Disposing the activity handle marks this run cancelled.
+        }
+        catch (Exception ex)
+        {
+            MetronCheckResult = $"Metron check failed: {ex.Message}";
+            job.Fail(MetronCheckResult, ex: ex);
+        }
+        finally
+        {
+            IsCheckingMetron = false;
+        }
+    }
+
+    internal void StageContinuitySuggestions(IEnumerable<ContinuitySuggestion> suggestions)
+    {
+        foreach (var suggestion in suggestions)
+        {
+            if (NewContinuitySuggestions.Any(row => row.Suggestion.Series.Id == suggestion.Series.Id && row.Suggestion.MetronUniverseId == suggestion.MetronUniverseId)) continue;
+            NewContinuitySuggestions.Add(new ContinuitySuggestionRowViewModel(suggestion, AcceptContinuitySuggestion, DismissContinuitySuggestion, RaiseCounts));
+        }
+        RaiseCounts();
+    }
+
+    [RelayCommand]
+    private void CancelMetronCheck() => _metronScanCancellation?.Cancel();
+
+    [RelayCommand]
+    private void SelectAllContinuitySuggestions()
+    {
+        foreach (var row in NewContinuitySuggestions) row.IsSelected = true;
+        RaiseCounts();
+    }
+
+    [RelayCommand]
+    private void ClearContinuitySuggestionSelection()
+    {
+        foreach (var row in NewContinuitySuggestions) row.IsSelected = false;
+        RaiseCounts();
+    }
+
+    [RelayCommand]
+    private async Task AcceptSelectedContinuitySuggestionsAsync()
+    {
+        var rows = NewContinuitySuggestions.Where(row => row.IsSelected).ToList();
+        if (rows.Count == 0) return;
+        var opened = new HashSet<int>();
+        try
+        {
+            await Task.Run(() =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                using var transaction = context.Database.BeginTransaction();
+                foreach (var row in rows) opened.Add(AcceptContinuitySuggestionInContext(context, row.Suggestion));
+                transaction.Commit();
+            });
+            Dispatcher.UIThread.Post(() =>
+            {
+                foreach (var row in rows) NewContinuitySuggestions.Remove(row);
+                RaiseCounts();
+                if (opened.Count == 1) _openContinuity(opened.Single());
+                else _notify("Continuity suggestions applied", $"Added {rows.Count} series across {opened.Count} continuities.");
+            });
+        }
+        catch (Exception ex) { _notify("Couldn't apply continuity suggestions", ex.Message); }
+    }
+
+    [RelayCommand]
+    private void DismissSelectedContinuitySuggestions()
+    {
+        var rows = NewContinuitySuggestions.Where(row => row.IsSelected).ToList();
+        if (rows.Count == 0) return;
+        using (var context = PaperbunkrDb.CreateContext())
+        using (var transaction = context.Database.BeginTransaction())
+        {
+            foreach (var row in rows) DismissContinuitySuggestionInContext(context, row.Suggestion);
+            transaction.Commit();
+        }
+        Dispatcher.UIThread.Post(() =>
+        {
+            foreach (var row in rows) NewContinuitySuggestions.Remove(row);
+            RaiseCounts();
+        });
+    }
+
     /// <summary>After accepting a suggestion: id completion and matching for that one event, in the background. Silent unless it merges.</summary>
-    internal Task CheckEventIdentityInBackground(int storyEventId)
+    internal Task CheckEventIdentityInBackground(int storyEventId) => CheckEventIdentitiesInBackground(new[] { storyEventId });
+
+    private Task CheckEventIdentitiesInBackground(IReadOnlyCollection<int> storyEventIds)
     {
         var sources = CreateIdentitySources();
         return RunIdentityWork(() => StoryEventIdentitySweep.RunAsync(
-                () => PaperbunkrDb.CreateContext(), sources, new[] { storyEventId }, 1, null, CancellationToken.None))
+                () => PaperbunkrDb.CreateContext(), sources, storyEventIds, storyEventIds.Count, null, CancellationToken.None))
             .ContinueWith(t =>
             {
                 if (t.IsCompletedSuccessfully && t.Result.Merges.Count > 0)
@@ -452,68 +519,14 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
         });
     }
 
-    // --- Shared-universe suggestions: only on an explicit click, never on navigation (each needs Wikidata lookups). ---
-
-    [RelayCommand]
-    private async Task CheckForWikidataSuggestions()
-    {
-        IsCheckingWikidataSuggestions = true;
-        WikidataCheckResult = null;
-        NewContinuitySuggestions.Clear();
-        RaiseCounts();
-
-        using var job = _activity.StartJob(ActivityJobKind.SyncMetadata, "Checking Wikidata for shared universes");
-        try
-        {
-            using var context = PaperbunkrDb.CreateContext();
-            using var httpClient = WikidataClient.CreateClient();
-            var client = new WikidataClient(httpClient);
-            var progress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} series"));
-
-            // Each suggestion shows the moment it's found; the resolver runs with ConfigureAwait(false), so post to the UI thread.
-            void OnFound(ContinuitySuggestion suggestion) => Dispatcher.UIThread.Post(() =>
-            {
-                NewContinuitySuggestions.Add(new ContinuitySuggestionRowViewModel(suggestion, AcceptContinuitySuggestion, DismissContinuitySuggestion));
-                RaiseCounts();
-            });
-
-            // Uncapped: an explicit, watched click with Activity Center progress, not the unattended weekly scan.
-            var suggestions = await ContinuityWikidataMatchResolver.GetSuggestionsAsync(
-                context, client, CancellationToken.None, progress: progress, capToBoundedRun: false, onSuggestionFound: OnFound);
-
-            WikidataCheckResult = suggestions.Count == 0
-                ? "Checked - no shared-universe matches found this time."
-                : $"Checked - found {suggestions.Count} suggestion{(suggestions.Count == 1 ? "" : "s")}.";
-            job.Succeed(WikidataCheckResult);
-        }
-        catch (Exception ex)
-        {
-            job.Fail($"Checking Wikidata failed: {ex.Message}", ex: ex);
-            WikidataCheckResult = $"Checking failed: {ex.Message}";
-        }
-        finally
-        {
-            IsCheckingWikidataSuggestions = false;
-        }
-    }
-
     private void AcceptContinuitySuggestion(ContinuitySuggestionRowViewModel row)
     {
         int continuityId;
         string continuityName;
         using (var context = PaperbunkrDb.CreateContext())
         {
-            var continuity = ContinuityResolver.GetOrCreate(context, row.Suggestion.UniverseLabel);
-            continuity.WikidataId ??= row.Suggestion.WikidataQid;
-            continuity.FandomKey ??= row.Suggestion.FandomKey;
-            continuity.Description ??= row.Suggestion.UniverseDescription;
-            context.SaveChanges();
-
-            ContinuityResolver.AddSeriesToContinuity(context, row.Suggestion.Series.Id, continuity.Id);
-
-            // Wikidata has no publisher claim on shared-universe items, so the publisher comes from the member series' issues.
-            continuity.Publisher ??= ContinuityResolver.InferPublisher(context, continuity.Id);
-            context.SaveChanges();
+            continuityId = AcceptContinuitySuggestionInContext(context, row.Suggestion);
+            var continuity = context.Continuities.Single(c => c.Id == continuityId);
             continuityId = continuity.Id;
             continuityName = continuity.Name;
         }
@@ -531,14 +544,7 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
     {
         using (var context = PaperbunkrDb.CreateContext())
         {
-            if (row.Suggestion.WikidataQid is string wikidataQid)
-            {
-                ContinuityWikidataMatchResolver.Dismiss(context, row.Suggestion.Series.Id, wikidataQid);
-            }
-            else if (row.Suggestion.FandomKey is string fandomKey)
-            {
-                ContinuityWikidataMatchResolver.DismissFandom(context, row.Suggestion.Series.Id, fandomKey);
-            }
+            DismissContinuitySuggestionInContext(context, row.Suggestion);
         }
 
         Dispatcher.UIThread.Post(() =>
@@ -546,5 +552,42 @@ public partial class SuggestionsChecksViewModel : ViewModelBase
             NewContinuitySuggestions.Remove(row);
             RaiseCounts();
         });
+    }
+
+    private static int AcceptContinuitySuggestionInContext(PaperbunkrDbContext context, ContinuitySuggestion suggestion)
+    {
+        Continuity? continuity = suggestion.MetronUniverseId is int metronId
+            ? context.Continuities.FirstOrDefault(c => c.MetronId == metronId.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            : null;
+        continuity ??= context.Continuities.AsEnumerable()
+            .FirstOrDefault(c => string.Equals(c.Name, suggestion.UniverseLabel, StringComparison.OrdinalIgnoreCase));
+        if (continuity is null) continuity = ContinuityResolver.GetOrCreate(context, suggestion.UniverseLabel);
+        if (suggestion.MetronUniverseId is int id)
+        {
+            string providerId = id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (!string.IsNullOrWhiteSpace(continuity.MetronId) && continuity.MetronId != providerId)
+                throw new InvalidOperationException($"A continuity named '{continuity.Name}' is already linked to a different Metron universe.");
+            continuity.MetronId ??= providerId;
+            continuity.Designation ??= suggestion.MetronDesignation;
+            continuity.Publisher ??= suggestion.MetronPublisher;
+        }
+        else
+        {
+            continuity.WikidataId ??= suggestion.WikidataQid;
+            continuity.FandomKey ??= suggestion.FandomKey;
+            continuity.Description ??= suggestion.UniverseDescription;
+        }
+        context.SaveChanges();
+        ContinuityResolver.AddSeriesToContinuity(context, suggestion.Series.Id, continuity.Id);
+        if (suggestion.MetronUniverseId is null) continuity.Publisher ??= ContinuityResolver.InferPublisher(context, continuity.Id);
+        context.SaveChanges();
+        return continuity.Id;
+    }
+
+    private static void DismissContinuitySuggestionInContext(PaperbunkrDbContext context, ContinuitySuggestion suggestion)
+    {
+        if (suggestion.MetronUniverseId is int metronId) ContinuityMetronSuggestionResolver.Dismiss(context, suggestion.Series.Id, metronId);
+        else if (suggestion.WikidataQid is string qid) ContinuityWikidataMatchResolver.Dismiss(context, suggestion.Series.Id, qid);
+        else if (suggestion.FandomKey is string key) ContinuityWikidataMatchResolver.DismissFandom(context, suggestion.Series.Id, key);
     }
 }

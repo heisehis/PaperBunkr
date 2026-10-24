@@ -55,7 +55,7 @@
             <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="Border.cover">
-            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BoxShadow" Value="0 8 24 -12 #80000000" />
@@ -66,6 +66,7 @@
              here on the inner cover Border of a Button.card since the card root stays a Button. -->
         <Style Selector="Border.posterCover">
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbSurface3Brush}" />
             <!-- Real bug, found via manual testing 2026-09-02: even after fixing ClipToBounds (see
                  the note below), the glow was only ever visible as a tiny sliver at the card's
                  bottom edge - this Border shares its exact bounds with the Grid.RowDefinitions="*,Auto"
@@ -76,7 +77,7 @@
                  make the cover visibly resize/jump every time you hover or focus a card) reserves a
                  consistent gutter on all four sides so PbGlowRing's 4px spread always has room,
                  whether it's currently showing or not.-->
-            <Setter Property="Margin" Value="5,10,5,5" />
+            <Setter Property="Margin" Value="4,10,4,4" />
             <!-- Real bug found 2026-09-03 via a headless Skia render diagnostic (forced/withheld
                  render-timer ticks to isolate mid-animation frames): animating BoxShadow via
                  BoxShadowsTransition made the ring render incomplete (missing edges, most visibly
@@ -104,6 +105,36 @@
             <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
             <Setter Property="ClipToBounds" Value="False" />
         </Style>
+        <Style Selector="Button.card.selected Border.posterCover">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+        <!-- Skin-aware cover mount: a slim paper edge around art, contained inside the existing
+             cover bounds so pointer hit-testing and virtualized geometry stay stable. -->
+        <Style Selector="Border.posterCover">
+            <Setter Property="Padding" Value="2" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="RenderTransform" Value="none" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionHoverMove}" Easing="{StaticResource PbMotionSpring}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.card.selected">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        </Style>
+        <!-- Hover lift (Motion v2 §3.3): a damped spring that settles once, on the cover artwork, while the Button's full-size hit
+             target stays stationary (scaling the hit-tested card made hover flicker at its edges). -->
+        <Style Selector="Button.card:pointerover Border.posterCover">
+            <Setter Property="RenderTransform" Value="translateY(-3px) scale(1.02)" />
+        </Style>
+        <!-- Reduced / Off: no held lift (§4.3). Repeated here because this screen's own styles outrank the app-level override. -->
+        <Style Selector="Window.motionReduced Button.card:pointerover Border.posterCover">
+            <Setter Property="RenderTransform" Value="none" />
+        </Style>
         <Style Selector="Button.card:focus-within Border.posterCover">
             <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
             <Setter Property="ClipToBounds" Value="False" />
@@ -116,21 +147,8 @@
 
         <!-- modeOption list rows - also used by LibraryToolbar.axaml (its own copy); kept here for
              the Add-issue overlay's content-type / reading-mode pickers. -->
-        <Style Selector="Button.modeOption">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="6,5" />
-            <Setter Property="CornerRadius" Value="5" />
+        <Style Selector="Button.menuRow">
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.modeOption.active">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
-            <Setter Property="FontWeight" Value="Bold" />
         </Style>
 
         <!-- Row-mode hover (4b §7) - List/Tiles rows get a surface-tint on hover. -->
@@ -162,7 +180,7 @@
              the posterCover note above: a BoxShadowsTransition tears the ring mid-animation).
              Real bug (first cut of this): the ring rendered as a thin, shadow-like sliver because
              these Borders sat flush with their Button's edge and the 4px spread was clipped to the
-             Button's bounds - exactly why Border.posterCover carries Margin="5,10,5,5". So every
+             Button's bounds - exactly why Border.posterCover carries Margin="4,10,4,4". So every
              ringed Border here carries a permanent Margin INSIDE its Button (Panorama cover 5, row
              Borders 4) and the cell sizes/panel spacing are adjusted to compensate (see
              SeriesCardSample.PanoramaRingGutter / LibraryScreenViewModel.TilesRingGutterTotal).
@@ -187,7 +205,7 @@
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
         <!-- The resize grip in the gap after a Details header cell: a hairline, with the whole 10 px as its hit area.
@@ -198,7 +216,7 @@
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border Background="Transparent">
-                        <Border Width="1" HorizontalAlignment="Center" Margin="0,3" Background="{DynamicResource PbBorderBrush}" />
+                        <Border Width="1" HorizontalAlignment="Center" Margin="0,4" Background="{DynamicResource PbBorderBrush}" />
                     </Border>
                 </ControlTemplate>
             </Setter>
@@ -237,7 +255,7 @@
             <Setter Property="FontSize" Value="12" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Padding" Value="3,0,0,0" />
+            <Setter Property="Padding" Value="4,0,0,0" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
         <Style Selector="Button.continueReading Border.icon">
@@ -257,7 +275,7 @@
             <Setter Property="Opacity" Value="0" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
+                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
                 </Transitions>
             </Setter>
         </Style>
@@ -320,8 +338,8 @@
             <Setter Property="RenderTransform" Value="translateY(6px)" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15" />
+                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
                 </Transitions>
             </Setter>
         </Style>
@@ -371,7 +389,7 @@
              count + rule). Resolved by runtime type; only GridSectionHeader items ever hit it. -->
         <DataTemplate DataType="models:GridSectionHeader">
             <DockPanel Margin="0,16,0,10">
-                <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" />
+                <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextSection" VerticalAlignment="Center" />
                 <TextBlock DockPanel.Dock="Left" Text="{Binding Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
                 <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
             </DockPanel>
@@ -394,7 +412,7 @@
                     <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
                          transition-system-design.md) - "issue-cover:{Id}", same scheme as the Poster
                          grid template. -->
-                    <Border Classes="cover panoramaCover" Margin="5" Background="{Binding CoverBrush}"
+                    <Border Classes="cover panoramaCover" Margin="4" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}"
                             controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
                             controls:SharedElement.ImageSource="{Binding #PanoramaIssueCoverImage.Source}"
@@ -428,15 +446,15 @@
                             <views:TileCosmeticsOverlay />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Ellipse Classes="unreadDot" IsVisible="{Binding !IsRead}"
-                                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7" />
+                                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" />
                             </Border>
                             <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
                             <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="6,2"
-                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="8"
                                     ToolTip.Tip="{Binding RemoteSourceName, StringFormat='On {0}'}">
                                 <StackPanel Orientation="Horizontal" Spacing="3">
                                     <fi:SymbolIcon Symbol="Globe" FontSize="11" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
-                                    <TextBlock Text="Remote" FontSize="10.5" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Remote" FontSize="10" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
@@ -451,7 +469,7 @@
                                  + hover tooltip instead, docs/superpowers/specs/2026-09-14-library-
                                  visual-redesign-design.md §3/§5). No selection-exclusion needed here
                                  any more - nothing else competes for bottom-left. -->
-                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7">
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8">
                                 <Border.IsVisible>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).NumericRatingThumbnails" />
@@ -470,15 +488,35 @@
                             <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSelection}"
                                       IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
-                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7" />
+                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="8" />
                         </Grid>
                     </Border>
-                    <TextBlock Text="{Binding SeriesName}" FontSize="12.5" FontWeight="SemiBold"
+                    <TextBlock Text="{Binding SeriesName}" FontSize="13" FontWeight="SemiBold"
                                Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
-                               Margin="5,3,5,0" ToolTip.Tip="{Binding SeriesName}" />
-                    <TextBlock Text="{Binding Number, StringFormat='#{0}'}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
-                               Margin="5,1,5,0" />
+                               Margin="4,4,4,0" ToolTip.Tip="{Binding SeriesName}" />
+                    <TextBlock Text="{Binding Number, StringFormat='#{0}'}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}"
+                               Margin="4,1,4,0" />
                 </StackPanel>
+            </Button>
+        </DataTemplate>
+
+        <!-- Bookshelf spines (Cosmetics pitch #19): the whole look is one custom-rendered SpineTile; the Button only carries the same
+             keyboard, click and focus wiring every other card has. The cell is as wide as the spine, packed by VirtualizingVariableWrapPanel. -->
+        <DataTemplate x:Key="BookshelfIssueTemplate" x:DataType="models:IssueListRow">
+            <Button Classes="card" Margin="0" Width="{Binding SpineWidth}" VerticalContentAlignment="Stretch" VerticalAlignment="Stretch"
+                    KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
+                    GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped"
+                    ToolTip.Tip="{Binding Title}">
+                <views:SpineTile />
+            </Button>
+        </DataTemplate>
+
+        <DataTemplate x:Key="BookshelfSeriesTemplate" x:DataType="models:SeriesCardSample">
+            <Button Classes="card" Margin="0" Width="{Binding SpineWidth}" VerticalContentAlignment="Stretch" VerticalAlignment="Stretch"
+                    KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
+                    GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped"
+                    ToolTip.Tip="{Binding Name}">
+                <views:SpineTile />
             </Button>
         </DataTemplate>
 
@@ -504,17 +542,17 @@
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
                             <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
                                        Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Text="{Binding SeriesName}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0"
+                            <TextBlock Text="{Binding SeriesName}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,2,0,0"
                                        ToolTip.Tip="{Binding SeriesName}" />
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
                             <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="6,2"
-                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="8"
                                     ToolTip.Tip="{Binding RemoteSourceName, StringFormat='On {0}'}">
                                 <StackPanel Orientation="Horizontal" Spacing="3">
                                     <fi:SymbolIcon Symbol="Globe" FontSize="11" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
-                                    <TextBlock Text="Remote" FontSize="10.5" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Remote" FontSize="10" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
@@ -523,7 +561,7 @@
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
                                 <Panel IsVisible="{Binding HasLanguage}">
-                                    <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
+                                    <TextBlock Text="{Binding LanguageIso}" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
                                                IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
                                     <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="14"
                                                         IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
@@ -584,7 +622,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="TilesItemTemplate" x:DataType="models:IssueListRow">
-            <Button Classes="card" Margin="0"
+            <Button Classes="card" Classes.selected="{Binding IsSelected}" Margin="0"
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
                     KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
@@ -608,10 +646,10 @@
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
                             <!-- Tile text elements (docs/superpowers/specs/2026-10-04-list-layouts-design.md §7): Title is
                                  this line; the other checked elements share the second. -->
-                            <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold"
+                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
                                        IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TileShowsTitle}"
                                        Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                            <TextBlock FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
                                        Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SeriesName}">
                                 <TextBlock.Text>
                                     <MultiBinding Converter="{x:Static views:TileSecondLineConverter.Instance}">
@@ -646,7 +684,7 @@
                                 <controls:LazyPart.ContentTemplate>
                                     <DataTemplate x:DataType="models:IssueListRow">
                             <Panel>
-                                <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
+                                <TextBlock Text="{Binding LanguageIso}" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
                                            IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
                                 <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="14"
                                                     IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
@@ -664,7 +702,7 @@
                                 <controls:LazyPart.ContentTemplate>
                                     <DataTemplate x:DataType="models:IssueListRow">
                             <Border Classes="countPill">
-                                <TextBlock Text="●" FontFamily="Consolas,monospace" />
+                                <Ellipse Width="6" Height="6" Fill="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" HorizontalAlignment="Center" />
                             </Border>
                                     </DataTemplate>
                                 </controls:LazyPart.ContentTemplate>
@@ -689,8 +727,8 @@
                          transition-system-design.md) - "series-cover:{SeriesId}", same scheme as the
                          Poster grid series template. The Panel only exists so the stack peek can sit behind the cover. -->
                     <Panel>
-                    <Border Classes="stackPeek" Margin="9,1,9,5" IsVisible="{Binding HasMultipleIssues}" />
-                    <Border x:Name="SeriesPanoramaCoverBorder" Classes="cover panoramaCover" Margin="5" Background="{Binding CoverBrush}"
+                    <Border Classes="stackPeek" Margin="8,1,8,4" IsVisible="{Binding HasMultipleIssues}" />
+                    <Border x:Name="SeriesPanoramaCoverBorder" Classes="cover panoramaCover" Margin="4" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}"
                             controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
                             controls:SharedElement.ImageSource="{Binding #SeriesPanoramaCoverImage.Source}"
@@ -713,15 +751,18 @@
                                 </Image.Clip>
                             </Image>
                             <Border Classes="libScrim" />
+                            <Border IsVisible="{Binding IsSelected}" Background="{DynamicResource PbAccentSoftBrush}"
+                                    BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="2" CornerRadius="{DynamicResource PbRadiusSm}"
+                                    IsHitTestVisible="False" />
                             <views:TileCosmeticsOverlay />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Panel>
                                     <Border Classes="countPill" IsVisible="{Binding HasUnread}"
-                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
+                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8">
                                         <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" />
                                     </Border>
                                     <Border Classes="countPill done" IsVisible="{Binding IsAllRead}"
-                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8"
                                             ToolTip.Tip="All read" AutomationProperties.Name="All read">
                                         <fi:SymbolIcon Symbol="Checkmark" />
                                     </Border>
@@ -729,11 +770,11 @@
                             </Border>
                             <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
                             <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="6,2"
-                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="8"
                                     ToolTip.Tip="{Binding RemoteSourceName, StringFormat='On {0}'}">
                                 <StackPanel Orientation="Horizontal" Spacing="3">
                                     <fi:SymbolIcon Symbol="Globe" FontSize="11" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
-                                    <TextBlock Text="Remote" FontSize="10.5" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Remote" FontSize="10" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
@@ -762,7 +803,7 @@
                                  panel + hover tooltip instead, docs/superpowers/specs/2026-09-14-
                                  library-visual-redesign-design.md §3/§5); no selection-exclusion
                                  needed any more. -->
-                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="5">
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4">
                                 <Border.IsVisible>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).NumericRatingThumbnails" />
@@ -777,15 +818,15 @@
                             <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSeriesSelection}"
                                       IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
-                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="5" />
+                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="4" />
                         </Grid>
                     </Border>
                     </Panel>
-                    <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                    <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
                                Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
-                               Margin="5,3,5,0" />
-                    <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
-                               Margin="5,1,5,0" />
+                               Margin="4,4,4,0" />
+                    <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}"
+                               Margin="4,1,4,0" />
                 </StackPanel>
             </Button>
         </DataTemplate>
@@ -794,11 +835,11 @@
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0"
                     KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
-                <Border Classes="libRow" Margin="4" BorderThickness="1" CornerRadius="6" Padding="{DynamicResource PbListRowPadding}">
+                <Border Classes="libRow" Margin="4" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="{DynamicResource PbListRowPadding}">
                     <Grid ColumnDefinitions="44,*,Auto">
                         <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
                              navigation-transition-system-design.md) - "series-cover:{SeriesId}". -->
-                        <Border Grid.Column="0" CornerRadius="4" Width="44" Height="63"
+                        <Border Grid.Column="0" CornerRadius="{DynamicResource PbRadiusSm}" Width="44" Height="63"
                                 Background="{Binding CoverBrush}" ClipToBounds="True"
                                 controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
                                 controls:SharedElement.ImageSource="{Binding #SeriesListCoverImage.Source}">
@@ -816,18 +857,18 @@
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
                             <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
                                        Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
+                            <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,2,0,0" />
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <!-- Series status chip (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #10) - hidden for Unknown. -->
                             <controls:SeriesStatusChip Status="{Binding SeriesStatusLabel}" />
                             <!-- "Remote" pill: this book/series lives in another library (remote-library-sharing design 8). Bottom-right; hover names the library. -->
                             <Border IsVisible="{Binding IsRemote}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="6,2"
-                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="8"
                                     ToolTip.Tip="{Binding RemoteSourceName, StringFormat='On {0}'}">
                                 <StackPanel Orientation="Horizontal" Spacing="3">
                                     <fi:SymbolIcon Symbol="Globe" FontSize="11" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
-                                    <TextBlock Text="Remote" FontSize="10.5" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Remote" FontSize="10" Foreground="{DynamicResource PbBadgeTextBrush}" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
@@ -836,7 +877,7 @@
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
                                 <Panel IsVisible="{Binding HasLanguage}">
-                                    <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
+                                    <TextBlock Text="{Binding LanguageIso}" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
                                                IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
                                     <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="14"
                                                         IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
@@ -861,7 +902,7 @@
                 <Grid ColumnDefinitions="52,*,110,70,70,140">
                     <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
                          transition-system-design.md) - "series-cover:{SeriesId}". -->
-                    <Border Grid.Column="0" Width="36" Height="50" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True"
+                    <Border Grid.Column="0" Width="36" Height="50" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding CoverBrush}" ClipToBounds="True"
                             controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
                             controls:SharedElement.ImageSource="{Binding #SeriesDetailsCoverImage.Source}">
                         <Grid>
@@ -872,7 +913,7 @@
                                       CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="1" Padding="0" MinWidth="14" MinHeight="14" />
                         </Grid>
                     </Border>
-                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}"
+                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextBrush}"
                                VerticalAlignment="Center" Margin="10,0,0,0" TextTrimming="CharacterEllipsis" />
                     <TextBlock Grid.Column="2" Text="{Binding ContentTypeLabel}" FontSize="12"
                                Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
@@ -892,11 +933,11 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
                     KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
-                <Border Classes="libRow" Margin="4" BorderThickness="1" CornerRadius="6" Padding="8">
+                <Border Classes="libRow" Margin="4" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="8">
                     <Grid ColumnDefinitions="Auto,*,Auto">
                         <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
                              navigation-transition-system-design.md) - "series-cover:{SeriesId}". -->
-                        <Border Grid.Column="0" CornerRadius="4"
+                        <Border Grid.Column="0" CornerRadius="{DynamicResource PbRadiusSm}"
                                 Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}"
                                 Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbHeight}"
                                 Background="{Binding CoverBrush}" ClipToBounds="True"
@@ -911,10 +952,10 @@
                             </Grid>
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
-                            <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                            <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
                                        IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TileShowsTitle}"
                                        Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                            <TextBlock FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
                                        Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
                                 <TextBlock.Text>
                                     <MultiBinding Converter="{x:Static views:TileSecondLineConverter.Instance}">
@@ -949,7 +990,7 @@
                                 <controls:LazyPart.ContentTemplate>
                                     <DataTemplate x:DataType="models:SeriesCardSample">
                             <Panel>
-                                <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
+                                <TextBlock Text="{Binding LanguageIso}" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
                                            IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
                                 <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="14"
                                                     IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
@@ -1065,6 +1106,12 @@
                                 </controls:LazyPart.ContentTemplate>
                             </controls:LazyPart>
                             <Border Classes="libScrim" />
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8" Padding="4,2"
+                                    Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                    CornerRadius="{DynamicResource PbRadiusSm}" IsVisible="{Binding HasEditionRibbon}" IsHitTestVisible="False"
+                                    AutomationProperties.Name="{Binding EditionRibbonLabel, StringFormat='Edition: {0}'}">
+                                <TextBlock Text="{Binding EditionRibbonLabel}" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                            </Border>
                             <views:TileCosmeticsOverlay />
                             <controls:LazyPart>
                                 <controls:LazyPart.IsActive>
@@ -1089,7 +1136,7 @@
                                 </controls:LazyPart.IsActive>
                                 <controls:LazyPart.ContentTemplate>
                                     <DataTemplate x:DataType="models:IssueListRow">
-                                        <Ellipse Classes="unreadDot" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7" />
+                                        <Ellipse Classes="unreadDot" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" />
                                     </DataTemplate>
                                 </controls:LazyPart.ContentTemplate>
                             </controls:LazyPart>
@@ -1200,8 +1247,8 @@
                         <controls:LazyPart.ContentTemplate>
                             <DataTemplate x:DataType="models:SeriesCardSample">
                                 <Panel IsHitTestVisible="False">
-                                    <Border Classes="stackPeek" Margin="13,2,13,5" Opacity="0.55" />
-                                    <Border Classes="stackPeek" Margin="9,6,9,5" />
+                                    <Border Classes="stackPeek" Margin="12,2,12,4" Opacity="0.55" />
+                                    <Border Classes="stackPeek" Margin="8,6,8,4" />
                                 </Panel>
                             </DataTemplate>
                         </controls:LazyPart.ContentTemplate>
@@ -1493,7 +1540,11 @@
                             <DataTemplate x:DataType="models:IssueListRowGroup">
                                 <StackPanel Classes="posterGroup" Margin="0,0,0,22">
                                     <DockPanel>
-                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" />
+                                        <Border DockPanel.Dock="Left" Width="28" Height="40" Margin="0,0,8,0" CornerRadius="2" ClipToBounds="True"
+                                                Background="{DynamicResource PbSurface3Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+                                            <Image views:AsyncCoverImage.SourceId="{Binding Items[0].CoverKey}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextSection" VerticalAlignment="Center" />
                                         <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
                                         <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
                                     </DockPanel>
@@ -1524,7 +1575,11 @@
                             <DataTemplate x:DataType="models:SeriesCardGroup">
                                 <StackPanel Classes="posterGroup" Margin="0,0,0,22">
                                     <DockPanel>
-                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" />
+                                        <Border DockPanel.Dock="Left" Width="28" Height="40" Margin="0,0,8,0" CornerRadius="2" ClipToBounds="True"
+                                                Background="{DynamicResource PbSurface3Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+                                            <Image views:AsyncCoverImage.SourceId="{Binding Items[0].CoverKey}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextSection" VerticalAlignment="Center" />
                                         <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
                                         <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
                                     </DockPanel>
@@ -1568,7 +1623,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:IssueListRowGroup">
                                 <StackPanel Margin="0,0,0,18">
-                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
+                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextSection" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PanoramaGridItemTemplate}"
                                                   controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
@@ -1595,13 +1650,86 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SeriesCardGroup">
                                 <StackPanel Margin="0,0,0,18">
-                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
+                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextSection" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesPanoramaGridItemTemplate}"
                                                   controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="10" LineSpacing="10" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Panel>
+            </Grid>
+        </controls:SmoothScrollViewer>
+
+        <!-- ============ Bookshelf (Cosmetics pitch #19) ============ -->
+        <!-- Spines packed by their own width on shelf rows. ShelfBoards draws a board at the foot of every row behind the panel (same grid, same margin,
+             so it scrolls with the spines). Same 4-way inner split as the other grids (Issue/Series x grouped/ungrouped). -->
+        <controls:SmoothScrollViewer x:Name="BookshelfScrollViewer" Grid.Row="1" IsVisible="{Binding IsBookshelfView}">
+            <Grid RowDefinitions="Auto,*">
+                <views:LibraryContinueStrip Grid.Row="0" IsVisible="{Binding ShowContinueStrip}" />
+                <Panel Grid.Row="1" IsVisible="{Binding IsIssueGranularity}">
+                    <Grid IsVisible="{Binding !IssueList.IsGrouped}" Margin="24,22,24,40">
+                        <views:ShelfBoards />
+                        <ItemsControl ItemsSource="{Binding IssueList.Rows}" ItemTemplate="{StaticResource BookshelfIssueTemplate}"
+                                      controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel UseSpineWidths="True" ItemHeight="236" ItemSpacing="3" LineSpacing="0" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </Grid>
+                    <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,22,24,40">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:IssueListRowGroup">
+                                <StackPanel Margin="0,0,0,18">
+                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextSection" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
+                                    <Grid>
+                                        <views:ShelfBoards />
+                                        <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource BookshelfIssueTemplate}"
+                                                      controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel UseSpineWidths="True" ItemHeight="236" ItemSpacing="3" LineSpacing="0" /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
+                                    </Grid>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Panel>
+                <Panel Grid.Row="1" IsVisible="{Binding IsSeriesGranularity}">
+                    <Grid IsVisible="{Binding !IsGrouped}" Margin="24,22,24,40">
+                        <views:ShelfBoards />
+                        <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource BookshelfSeriesTemplate}"
+                                      controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel UseSpineWidths="True" ItemHeight="236" ItemSpacing="3" LineSpacing="0" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </Grid>
+                    <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:SeriesCardGroup">
+                                <StackPanel Margin="0,0,0,18">
+                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextSection" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
+                                    <Grid>
+                                        <views:ShelfBoards />
+                                        <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource BookshelfSeriesTemplate}"
+                                                      controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel UseSpineWidths="True" ItemHeight="236" ItemSpacing="3" LineSpacing="0" /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
+                                    </Grid>
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -1645,7 +1773,7 @@
                  column picker. -->
             <!-- Left margin 5 = the row Border's 4px ring-gutter Margin + its 1px border, so header cells
                  stay aligned with the row cells (rows are wrapped in Border.libRow for the focus ring). -->
-            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*" Margin="5,0,16,8" IsVisible="{Binding IsIssueGranularity}"
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*" Margin="4,0,16,8" IsVisible="{Binding IsIssueGranularity}"
                   controls:ContextMenuHost.Provider="{Binding DetailsColumnsMenuProvider}">
                 <!-- Drag a header to move its column, the grip after it to resize (LibraryScreen.DetailsHeader.cs,
                      docs/superpowers/specs/2026-10-04-list-layouts-design.md §8). -->
@@ -1681,12 +1809,12 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </Grid>
-            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*,110,70,70,140" Margin="5,0,16,8" IsVisible="{Binding IsSeriesGranularity}">
-                <TextBlock Grid.Column="1" Text="Name" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" Margin="10,0,0,0" />
-                <TextBlock Grid.Column="2" Text="Content Type" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
-                <TextBlock Grid.Column="3" Text="Issues" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
-                <TextBlock Grid.Column="4" Text="Unread" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
-                <TextBlock Grid.Column="5" Text="Publisher" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*,110,70,70,140" Margin="4,0,16,8" IsVisible="{Binding IsSeriesGranularity}">
+                <TextBlock Grid.Column="1" Text="Name" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" Margin="10,0,0,0" />
+                <TextBlock Grid.Column="2" Text="Content Type" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <TextBlock Grid.Column="3" Text="Issues" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <TextBlock Grid.Column="4" Text="Unread" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <TextBlock Grid.Column="5" Text="Publisher" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
             </Grid>
             <Panel>
                 <ListBox x:Name="DetailsModeIssueBox" Classes="virtualRows" IsVisible="{Binding IsIssueGranularity}"
@@ -1735,7 +1863,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:IssueListRowGroup">
                                 <StackPanel Margin="0,0,0,18">
-                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
+                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextSection" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource TilesItemTemplate}"
                                                   controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
@@ -1762,7 +1890,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SeriesCardGroup">
                                 <StackPanel Margin="0,0,0,18">
-                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
+                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextSection" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesTilesItemTemplate}"
                                                   controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
@@ -1798,7 +1926,7 @@
         <Border x:Name="PinnedGroupHeader" Grid.Row="1" IsVisible="False" IsHitTestVisible="False" VerticalAlignment="Top"
                 Background="{DynamicResource PbSurface1Brush}" Padding="24,10,24,8" Margin="0,0,18,0">
             <StackPanel Orientation="Horizontal">
-                <TextBlock x:Name="PinnedGroupHeaderText" Classes="pbTextHeading" VerticalAlignment="Center" />
+                <TextBlock x:Name="PinnedGroupHeaderText" Classes="pbTextSection" VerticalAlignment="Center" />
                 <TextBlock x:Name="PinnedGroupHeaderCount" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
             </StackPanel>
         </Border>
@@ -1810,7 +1938,7 @@
              alphabetically-sorted, ungrouped flat list (Phase C's ShowAlphabetIndex). -->
         <Border Grid.Row="1" IsVisible="{Binding ShowAlphabetIndex}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
                 Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="2,6">
+                BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="2,6">
             <ItemsControl x:Name="AlphabetRail" ItemsSource="{Binding AlphabetIndex}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><StackPanel Orientation="Vertical" /></ItemsPanelTemplate>
@@ -1820,8 +1948,8 @@
                         <!-- Letters with nothing in the current view dim (Classes.empty) and do nothing on click. -->
                         <Button Classes="alphaLetter" Classes.empty="{Binding !HasItems}"
                                 Content="{Binding Letter}" Click="OnAlphabetIndexLetterClick" Tag="{Binding Letter}"
-                                Background="Transparent" BorderThickness="0" Padding="4,1" FontSize="9.5"
-                                Foreground="{DynamicResource PbTextFaintBrush}" Cursor="Hand"
+                                Background="Transparent" BorderThickness="0" Padding="4,1" FontSize="10"
+                                Foreground="{DynamicResource PbTextMutedBrush}" Cursor="Hand"
                                 HorizontalContentAlignment="Center" HorizontalAlignment="Stretch" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
@@ -1866,21 +1994,21 @@
 
                 <TextBlock Text="Content type" Classes="pbTextCaption" />
                 <StackPanel Spacing="1">
-                    <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Comic}}"
+                    <Button Classes="menuRow" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Comic}}"
                             Content="Comic" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Comic}" />
-                    <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manga}}"
+                    <Button Classes="menuRow" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manga}}"
                             Content="Manga" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Manga}" />
-                    <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manhua}}"
+                    <Button Classes="menuRow" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manhua}}"
                             Content="Manhua" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Manhua}" />
-                    <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manhwa}}"
+                    <Button Classes="menuRow" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manhwa}}"
                             Content="Manhwa" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Manhwa}" />
                 </StackPanel>
 
                 <StackPanel Spacing="1" IsVisible="{Binding ShowAddReadingModePicker}">
                     <TextBlock Text="Reading direction" Classes="pbTextCaption" />
-                    <Button Classes="modeOption" Classes.active="{Binding NewIssueReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.LeftToRight}}"
+                    <Button Classes="menuRow" Classes.active="{Binding NewIssueReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.LeftToRight}}"
                             Content="Left to Right" Command="{Binding SetNewIssueReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.LeftToRight}" />
-                    <Button Classes="modeOption" Classes.active="{Binding NewIssueReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.RightToLeft}}"
+                    <Button Classes="menuRow" Classes.active="{Binding NewIssueReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.RightToLeft}}"
                             Content="Right to Left" Command="{Binding SetNewIssueReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.RightToLeft}" />
                 </StackPanel>
 
@@ -1916,37 +2044,58 @@
              (LibraryScreen.axaml.cs), rather than one Popup per realized tile. DataContext is set to
              the hovered IssueListRow in code-behind too. -->
         <Popup x:Name="ComicHoverTooltipPopup" Placement="Bottom" VerticalOffset="6" IsLightDismissEnabled="False">
-            <Border x:Name="ComicHoverTooltipCard" Classes="comicHoverTooltip" Width="280"
-                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                    BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" BoxShadow="0 8 30 0 #80000000"
+            <!-- Floating-panel look, capped height (2026-10-20 Library pass Q3). A series tile shows the series (Q2), not its first issue:
+                 two typed content blocks, the code-behind shows the one that matches the hovered tile. -->
+            <Border x:Name="ComicHoverTooltipCard" Classes="comicHoverTooltip" Width="280" MaxHeight="320" ClipToBounds="True"
+                    Background="{DynamicResource PbPanelFloatingBackground}" BorderBrush="{DynamicResource PbPanelFloatingBorder}"
+                    BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" BoxShadow="{DynamicResource PbElevationShadow}"
                     Padding="12">
-                <StackPanel Spacing="6" x:DataType="models:IssueListRow">
+                <Panel>
+                <StackPanel x:Name="IssueHoverContent" Spacing="6" x:DataType="models:IssueListRow">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <Border Width="40" Height="60" CornerRadius="{DynamicResource PbRadiusSm}"
                                 Background="{Binding CoverBrush}" ClipToBounds="True">
                             <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                         </Border>
                         <StackPanel VerticalAlignment="Center" Spacing="2">
-                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="12.5"
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13"
                                        Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" MaxLines="2" />
                             <TextBlock Text="{Binding WriterAndPenciller}" FontSize="11" IsVisible="{Binding HasWriterAndPenciller}"
-                                       Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                       Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
                         </StackPanel>
                     </StackPanel>
                     <TextBlock Text="{Binding SummaryExcerpt}" FontSize="11" IsVisible="{Binding HasSummaryExcerpt}"
                                Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Text="{Binding FileSizeDisplay}" FontSize="10.5" IsVisible="{Binding HasFileSizeDisplay}"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <TextBlock Text="{Binding Format}" FontSize="10.5" IsVisible="{Binding HasFormat}"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding FileSizeDisplay}" FontSize="10" IsVisible="{Binding HasFileSizeDisplay}"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <TextBlock Text="{Binding Format}" FontSize="10" IsVisible="{Binding HasFormat}"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" />
                         <!-- Language moved here from the tile corner (docs/superpowers/specs/
                              2026-09-14-library-visual-redesign-design.md §5) - already a field on
                              IssueListRow, no new model property needed. -->
-                        <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" IsVisible="{Binding HasLanguage}"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding LanguageIso}" FontSize="10" IsVisible="{Binding HasLanguage}"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" />
                     </StackPanel>
                 </StackPanel>
+                <StackPanel x:Name="SeriesHoverContent" Spacing="6" IsVisible="False" x:DataType="models:SeriesCardSample">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Border Width="40" Height="60" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
+                                Background="{Binding RepresentativeRow.CoverBrush}">
+                            <Image views:AsyncCoverImage.SourceId="{Binding RepresentativeRow.CoverKey}" Stretch="UniformToFill" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Classes="pbTextBody" Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" MaxLines="2" />
+                            <TextBlock Classes="pbTextMeta" Text="{Binding Publisher}" IsVisible="{Binding Publisher, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock Classes="pbTextMeta">
+                        <Run Text="{Binding IssueCountLabel, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding UnreadCount, Mode=OneWay}" /><Run Text=" unread" />
+                    </TextBlock>
+                    <TextBlock Classes="pbTextCaption" Text="{Binding SeriesStatusLabel}"
+                               IsVisible="{Binding SeriesStatusLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+                </Panel>
             </Border>
         </Popup>
 

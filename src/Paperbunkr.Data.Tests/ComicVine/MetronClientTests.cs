@@ -37,6 +37,31 @@ public class MetronClientTests
         SeriesRow.Replace("{0}", id.ToString()).Replace("{1}", display).Replace("{2}", year.ToString()).Replace("{3}", count.ToString());
 
     [Fact]
+    public async Task SearchUniverses_SearchesByNameAndReturnsSelectableIdentityDetails()
+    {
+        var (client, handler) = Make(_ => (HttpStatusCode.OK,
+            Page("[{\"id\":42,\"name\":\"Earth-616\",\"designation\":\"616\",\"publisher\":{\"id\":1,\"name\":\"Marvel\"},\"desc\":\"The main Marvel Universe.\"}]")));
+
+        var universes = await ((Paperbunkr.Data.Metadata.IMetronUniverses)client).SearchUniversesAsync("Earth-616", CancellationToken.None);
+
+        Assert.Equal(new Paperbunkr.Data.Metadata.MetronUniverseInfo(42, "Earth-616", "616", "Marvel", "The main Marvel Universe."), Assert.Single(universes));
+        Assert.Contains("/universe/?name=Earth-616", handler.Requests[0].RequestUri!.OriginalString);
+        Assert.Contains("/universe/?designation=Earth-616", handler.Requests[1].RequestUri!.OriginalString);
+    }
+
+    [Fact]
+    public async Task GetUniverse_ReadsNameDesignationPublisherAndDescription()
+    {
+        var (client, handler) = Make(_ => (HttpStatusCode.OK,
+            "{\"id\":42,\"name\":\"Earth-616\",\"designation\":\"616\",\"publisher\":{\"id\":1,\"name\":\"Marvel\"},\"desc\":\"The main Marvel Universe.\"}"));
+
+        var universe = await client.GetUniverseAsync(42, CancellationToken.None);
+
+        Assert.Equal(new Paperbunkr.Data.Metadata.MetronUniverseInfo(42, "Earth-616", "616", "Marvel", "The main Marvel Universe."), universe);
+        Assert.EndsWith("/universe/42/", handler.Requests[0].RequestUri!.OriginalString);
+    }
+
+    [Fact]
     public async Task SearchVolumes_MapsSeriesRows_StripsTheYearFromTheName_AndSendsBasicAuth()
     {
         var (client, handler) = Make(_ => (HttpStatusCode.OK, Page("[" + Series(10, "Captain America (2018)", 2018, 30) + "," + Series(11, "Captain America (1968)", 1968, 355) + "]")));
@@ -320,6 +345,66 @@ public class MetronClientTests
     private static string Issue(int id, int seriesId) => IssueRow.Replace("{0}", id.ToString()).Replace("{1}", seriesId.ToString());
 
     [Fact]
+    public async Task GetUniverseSeries_FallsBackToExactIssueUniverseFilter_WhenReverseSeriesFilterIsEmpty()
+    {
+        var (client, handler) = Make(request => request.RequestUri!.AbsolutePath.EndsWith("/series/")
+            ? (HttpStatusCode.OK, Page("[]"))
+            : (HttpStatusCode.OK, Page("[" + Issue(50, 15).Replace("\"name\":\"Asgardians of the Galaxy\"", "\"series\":\"Asgardians of the Galaxy\"") + "," + Issue(51, 15).Replace("\"name\":\"Asgardians of the Galaxy\"", "\"series\":\"Asgardians of the Galaxy\"") + "]")));
+
+        var series = await client.GetUniverseSeriesAsync(6160, CancellationToken.None);
+
+        var match = Assert.Single(series);
+        Assert.Equal(new MetronUniverseSeries(15, "Asgardians of the Galaxy", "2018"), match);
+        Assert.EndsWith("/series/?universe_id=6160", handler.Requests[0].RequestUri!.OriginalString);
+        Assert.EndsWith("/issue/?universe_id=6160", handler.Requests[1].RequestUri!.OriginalString);
+    }
+
+    [Fact]
+    public async Task GetUniverseSeries_ReadsMetronSeriesListTitleField()
+    {
+        var (client, handler) = Make(_ => (HttpStatusCode.OK, Page("""[{"id":15,"series":"Asgardians of the Galaxy","year_began":2018}]""")));
+
+        var result = Assert.Single(await client.GetUniverseSeriesAsync(6160, CancellationToken.None));
+
+        Assert.Equal(new MetronUniverseSeries(15, "Asgardians of the Galaxy", "2018"), result);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetUniverseSeries_PreservesComicVineAndGcdIdentityBridges()
+    {
+        var (client, _) = Make(_ => (HttpStatusCode.OK, Page("""[{"id":15,"series":"Asgardians of the Galaxy","year_began":2018,"cv_id":12345,"gcd_id":"6789"}]""")));
+
+        var result = Assert.Single(await client.GetUniverseSeriesAsync(6160, CancellationToken.None));
+
+        Assert.Equal(12345, result.ComicVineId);
+        Assert.Equal(6789, result.GcdId);
+    }
+
+    [Fact]
+    public async Task GetUniverseSeries_FallbackPreservesComicVineAndGcdIdentityBridges()
+    {
+        var (client, _) = Make(request => request.RequestUri!.AbsolutePath.EndsWith("/series/")
+            ? (HttpStatusCode.OK, Page("[]"))
+            : (HttpStatusCode.OK, Page("""[{"id":50,"series":{"id":15,"name":"Asgardians of the Galaxy","year_began":2018,"cv_id":12345,"gcd_id":6789}}]""")));
+
+        var result = Assert.Single(await client.GetUniverseSeriesAsync(6160, CancellationToken.None));
+
+        Assert.Equal(new MetronUniverseSeries(15, "Asgardians of the Galaxy", "2018", 12345, 6789), result);
+    }
+
+    [Fact]
+    public async Task FindSeriesByComicVineId_UsesExactMetronSeriesFilter()
+    {
+        var (client, handler) = Make(_ => (HttpStatusCode.OK, Page("""[{"id":15,"series":"Asgardians of the Galaxy","year_began":2018}]""")));
+
+        var match = Assert.Single(await client.FindSeriesByComicVineIdAsync(12345, CancellationToken.None));
+
+        Assert.Equal(new ComicSeriesHit(15), match);
+        Assert.EndsWith("/series/?cv_id=12345", handler.Requests[0].RequestUri!.OriginalString);
+    }
+
+    [Fact]
     public async Task FindIssuesByComicVineId_AndByUpc_UseTheExactFilters()
     {
         var (client, handler) = Make(_ => (HttpStatusCode.OK, Page("[" + Issue(50, 15) + "]")));
@@ -352,7 +437,7 @@ public class ComicProviderFactoryTests : Acquisition.AcquisitionTestBase
     {
         Assert.Null(ComicProviderFactory.Create(Context, ComicProvider.ComicVine));
         Assert.Null(ComicProviderFactory.Create(Context, ComicProvider.Metron));
-        Assert.Contains("Metron login", ComicProviderFactory.MissingCredentialsMessage(ComicProvider.Metron));
+        Assert.Contains("Metron API token", ComicProviderFactory.MissingCredentialsMessage(ComicProvider.Metron));
         Assert.Contains("ComicVine API key", ComicProviderFactory.MissingCredentialsMessage(ComicProvider.ComicVine));
 
         Paperbunkr.Data.Credentials.CredentialStore.Set(Context, "ComicVine", CredentialKind.ApiKey, "KEY");

@@ -81,7 +81,17 @@ public sealed partial class NativePluginModalHostViewModel : ViewModelBase
             }
 
             _disposed = true;
-            _owner.EndBatch();
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                _owner.EndBatch();
+            }
+            else
+            {
+                // ScrapeCoordinator awaits its ConfigureAwait(false) pipeline inside a using
+                // scope, so disposal can happen on a worker thread. EndBatch changes properties
+                // bound to Avalonia controls and must stay on the UI thread.
+                Dispatcher.UIThread.Post(_owner.EndBatch);
+            }
         }
     }
 

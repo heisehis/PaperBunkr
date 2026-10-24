@@ -15,6 +15,12 @@ public class StoryEvent
 
     public string? Description { get; set; }
 
+    public string? CoverImageUrl { get; set; }
+
+    public StoryEventCoverSource CoverSource { get; set; }
+
+    public DateTime? DetailsCheckedAt { get; set; }
+
     public DateTime? StartDate { get; set; }
 
     public DateTime? EndDate { get; set; }
@@ -73,4 +79,9 @@ public class StoryEvent
     public List<StoryEventAlias> Aliases { get; set; } = new();
 
     public List<EventMembership> Members { get; set; } = new();
+
+    public List<StoryEventTag> Tags { get; set; } = new();
+
+    /// <summary>Curated structured classifications. Empty means intentionally/unset unclassified.</summary>
+    public List<StoryEventTypeAssignment> TypeAssignments { get; set; } = new();
 }

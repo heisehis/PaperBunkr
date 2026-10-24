@@ -48,8 +48,8 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
     /// </summary>
     private static readonly BulkFieldDescriptor ReadingModeDescriptor = new(
         "Reading Direction", BulkFieldRegistry.Main, FieldKind.Enum, IsListField: false,
-        i => i.Series.ReadingMode.ToString(),
-        (i, v) => i.Series.ReadingMode = Enum.Parse<ReadingMode>(v ?? nameof(ReadingMode.LeftToRight)),
+        i => i.Series?.ReadingMode.ToString() ?? nameof(ReadingMode.LeftToRight),
+        (i, v) => { if (i.Series is { } series) series.ReadingMode = Enum.Parse<ReadingMode>(v ?? nameof(ReadingMode.LeftToRight)); },
         Options: [nameof(ReadingMode.LeftToRight), nameof(ReadingMode.RightToLeft)]);
 
     private readonly MetadataEditHistoryService _history;
@@ -295,7 +295,7 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
         // 2026-08-23-weighted-categorized-tags-design.md); without it every issue would look like it
         // has no existing tags at all, so MergeFrom would re-add every value as brand new instead of
         // diffing, duplicating rows and losing any Category/Weight already set.
-        var issues = context.Issues.Include(i => i.Series).Include(i => i.Tags).Where(i => _issueIds.Contains(i.Id)).ToList();
+        var issues = context.Issues.Include(i => i.Series).Include(i => i.Tags).Include(i => i.FieldOverrides).Where(i => _issueIds.Contains(i.Id)).ToList();
         var stagedFields = AllFields.Where(f => f.IsStaged).ToList();
 
         // File metadata write-back (docs/superpowers/specs/2026-09-03-file-metadata-write-back-
@@ -330,6 +330,22 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
                 {
                     field.Descriptor.Set(issue, TemplateTokenCatalog.Expand(field.Value, issue));
                 }
+            }
+        }
+
+        // A chapter of a confirmed manga series that now differs from its series becomes an exception, so the next series save leaves it alone
+        // (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md D13). No-op for Comics.
+        if (stagedFields.Count > 0)
+        {
+            var inheritanceBySeries = new Dictionary<int, Paperbunkr.Data.Metadata.Manga.MangaSeriesInheritance?>();
+            foreach (var issue in issues)
+            {
+                if (!inheritanceBySeries.TryGetValue(issue.SeriesId, out var inheritance))
+                {
+                    inheritanceBySeries[issue.SeriesId] = inheritance = Paperbunkr.Data.Metadata.Manga.MangaSeriesInheritance.Load(context, issue.SeriesId);
+                }
+
+                Paperbunkr.Data.Metadata.Manga.MangaChapterOverrides.SyncAfterEdit(issue, inheritance);
             }
         }
 

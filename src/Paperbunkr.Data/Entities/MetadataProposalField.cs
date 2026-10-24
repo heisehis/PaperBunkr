@@ -31,5 +31,23 @@ public enum MetadataProposalField
     Genre,
 
     /// <summary>Series-scoped - writes directly to <c>Series.Creator</c> (docs/superpowers/specs/2026-09-18-external-metadata-full-extraction-design.md §3).</summary>
-    Creator
+    Creator,
+
+    /// <summary>Series-scoped (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §11) - the canonical manga publisher, <c>Series.Publisher</c>. Appended, so stored values are unchanged.</summary>
+    Publisher,
+
+    /// <summary>Series-scoped - <c>Series.Imprint</c>.</summary>
+    Imprint,
+
+    /// <summary>Series-scoped - <c>Series.AgeRating</c>.</summary>
+    AgeRating,
+
+    /// <summary>Series-scoped - the authors a provider lists, offered as the series' Writer credits (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §14).</summary>
+    Writer,
+
+    /// <summary>Series-scoped - the artists a provider lists, offered as the series' Penciller credits.</summary>
+    Penciller,
+
+    /// <summary>Series-scoped - a reading mode a provider's data suggests (the value is a <c>ReadingMode</c> name). Only ever offered, never applied on its own.</summary>
+    ReadingMode
 }

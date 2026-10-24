@@ -40,6 +40,9 @@
                  that use it). NOT verified on screen - flag if the tables render unstyled. -->
             <ResourceInclude Source="avares://FluentAvalonia/Styling/ControlThemes/BasicControls/DataGrid/DataGridStyles.axaml" />
             <ResourceInclude Source="avares://Paperbunkr.App/Styles/AppTokens.axaml" />
+            <!-- FluentAvalonia's TextControl*/ComboBox* keys mapped onto Pb* tokens (2026-10-19 UI polish foundation §4). After AppTokens
+                 so its DynamicResource lookups find the tokens. -->
+            <ResourceInclude Source="avares://Paperbunkr.App/Styles/FluentBridge.axaml" />
         </ResourceDictionary.MergedDictionaries>
 
       </ResourceDictionary>
@@ -88,6 +91,8 @@
         <StyleInclude Source="avares://Paperbunkr.App/Styles/ScreenChrome.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Menu.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/ReaderChrome.axaml" />
+        <!-- Shared control families (2026-10-19 UI polish, sub-project 2). Last, so it wins over any screen-chrome file above. -->
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/Controls.axaml" />
 
         <!-- Preferences > Appearance > Font override (docs/superpowers/specs/
              2026-08-07-preferences-skin-system-design.md §3) - a genuine global override via

@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.canopy",
+  "name": "Canopy",
+  "base": {
+    "palette": {
+      "accent": "#7CC47F",
+      "success": "#7CC47F",
+      "badge": "#E0B84C"
+    },
+    "semantic": {
+      "status": {
+        "danger": "#E0705F",
+        "warning": "#E0B84C",
+        "info": "#6FB7C9"
+      },
+      "chart": {
+        "series": {
+          "1": "#6FB7C9",
+          "2": "#C49BD6"
+        }
+      }
+    },
+    "metrics": {
+      "radius": 9,
+      "radiusSm": 6,
+      "radiusLg": 16
+    }
+  },
+  "variants": {
+    "dark": {
+      "name": "Dark",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#111A14",
+        "ink": "#E2EDE3"
+      },
+      "materials": {
+        "understory": {
+          "type": "linearGradient",
+          "angle": 180,
+          "fallback": "#16231A",
+          "stops": [
+            {
+              "at": 0,
+              "color": "#1B2C20"
+            },
+            {
+              "at": 1,
+              "color": "#111A14"
+            }
+          ]
+        }
+      },
+      "surfaces": {
+        "navigation": "understory"
+      },
+      "semantic": {
+        "surface": {
+          "raised": "#182319",
+          "overlay": "#213024"
+        },
+        "border": {
+          "default": "#2D4031"
+        }
+      }
+    },
+    "light": {
+      "name": "Light",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#F1F6EF",
+        "ink": "#1B2A1E",
+        "accent": "#2F7A3A",
+        "success": "#2F7A3A",
+        "badge": "#A87C16"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#E6EEE3",
+          "raised": "#FAFCF9",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#C8D6C5"
+        },
+        "status": {
+          "danger": "#B4432F",
+          "warning": "#8A6410",
+          "info": "#27748A"
+        }
+      }
+    }
+  }
+}

@@ -33,7 +33,10 @@
             <WrapPanel>
                 <TextBlock Text="{Binding StatsLine}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
                            Margin="0,0,8,0" />
-                <Border Classes="heroChip" IsVisible="{Binding ShowGcdChip}"
+                <Border Classes="pbChip" IsVisible="{Binding HasDesignation}" ToolTip.Tip="This universe's designation, from Metron">
+                    <TextBlock Text="{Binding Designation}" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                </Border>
+                <Border Classes="pbChip" IsVisible="{Binding ShowGcdChip}"
                         ToolTip.Tip="Series continuity and on-sale dates from the Grand Comics Database™ (CC BY-SA 4.0)">
                     <TextBlock Text="GCD" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
                 </Border>
@@ -41,9 +44,9 @@
             </WrapPanel>
 
             <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasOverviewError}">
-                <TextBlock Text="{Binding OverviewError}" FontSize="11.5" Foreground="{DynamicResource PbDangerBrush}" VerticalAlignment="Center"
+                <TextBlock Text="{Binding OverviewError}" FontSize="12" Foreground="{DynamicResource PbDangerBrush}" VerticalAlignment="Center"
                            TextWrapping="Wrap" MaxWidth="560" />
-                <Button Classes="headerAction secondary" Content="Retry" Command="{Binding RetryOverviewCommand}" />
+                <Button Classes="secondary" Content="Retry" Command="{Binding RetryOverviewCommand}" />
             </StackPanel>
 
             <!-- Description: 3 lines, more/less -->
@@ -53,7 +56,7 @@
                            IsVisible="{Binding !IsDescriptionExpanded}" />
                 <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
                            MaxWidth="640" HorizontalAlignment="Left" IsVisible="{Binding IsDescriptionExpanded}" />
-                <Button Classes="headerAction ghost" Padding="0,2" FontSize="11" HorizontalAlignment="Left" Command="{Binding ToggleDescriptionCommand}">
+                <Button Classes="ghost sm" HorizontalAlignment="Left" Command="{Binding ToggleDescriptionCommand}">
                     <Panel>
                         <TextBlock Text="More" IsVisible="{Binding !IsDescriptionExpanded}" />
                         <TextBlock Text="Less" IsVisible="{Binding IsDescriptionExpanded}" />
@@ -62,19 +65,22 @@
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
-                <Button Classes="headerAction primary" Command="{Binding ContinueReadingCommand}" IsVisible="{Binding HasContinue}"
+                <Button Classes="primary" Command="{Binding ContinueReadingCommand}" IsVisible="{Binding HasContinue}"
                         ToolTip.Tip="Opens the first unread issue in the continuity map's order">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <fi:SymbolIcon Symbol="Play" IconVariant="Filled" FontSize="{StaticResource PbIconSizeXs}" />
                         <TextBlock Text="{Binding ContinueLabel}" MaxWidth="320" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                 </Button>
-                <Button Classes="headerAction secondary" Content="＋ Add series" Command="{Binding ToggleAddSeriesCommand}" />
-                <Button Classes="headerAction secondary" Content="⋯ Manage" AutomationProperties.Name="Manage continuity">
+                <Button Classes="secondary" Command="{Binding ToggleAddSeriesCommand}"><StackPanel Orientation="Horizontal" Spacing="6"><fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Add series" VerticalAlignment="Center" /></StackPanel></Button>
+                <Button Classes="secondary" Content="Find series on Metron" Command="{Binding ToggleMetronSeriesBrowserCommand}" />
+                <Button Classes="secondary" AutomationProperties.Name="Manage continuity"><StackPanel Orientation="Horizontal" Spacing="6"><fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Manage" VerticalAlignment="Center" /></StackPanel>
                     <Button.Flyout>
                         <MenuFlyout>
                             <MenuItem Header="Edit details…"
                                       Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenEditContinuityDialogCommand}" />
+                            <MenuItem Header="Continue setup…"
+                                      Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).ResumeContinuitySetupCommand}" />
                             <MenuItem Header="Compare &amp; merge…" Command="{Binding ToggleCompareCommand}"
                                       IsEnabled="{Binding !HasNoOverlappingContinuities}" />
                             <!-- Two orders (docs/superpowers/specs/2026-09-28-reading-lists-build-from-events-design.md §2, Q17/Q18); story order first. -->

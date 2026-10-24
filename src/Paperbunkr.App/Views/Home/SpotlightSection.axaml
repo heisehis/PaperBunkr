@@ -9,7 +9,8 @@
         Spotlight accordion (docs/superpowers/specs/2026-09-29-home-spotlight-accordion-design.md), modelled on the "Stripe Sessions
         style Flex Carousel": eight picks in a row, one open at 400px (the whole cover plus its details), the rest darkened slivers.
         AccordionPanel animates the widths itself; hover peeks a sliver, a click/Enter/keyboard focus opens it, clicking the open one
-        reads it. Over a blurred copy of the open pick's cover. Hovering the band pauses auto-advance.
+        reads it. The blurred copy of the open pick's cover behind it is Home's page-level atmosphere (HomeScreen.axaml), not part of this band.
+        Hovering the band pauses auto-advance.
     -->
     <DataTemplate x:Key="HomeSection.spotlight" DataType="home:SpotlightSectionViewModel">
         <StackPanel Spacing="12" controls:ScrollReveal.Enabled="True">
@@ -32,10 +33,6 @@
 
             <Border Classes="spotlightBand" IsVisible="{Binding Home.HasSpotlight}" homeviews:SpotlightHoverPause.Enabled="True">
                 <Panel>
-                    <!-- Blurred copy of the open pick's cover (pre-blurred by BackdropBlurRenderer) under a wash toward the page. -->
-                    <Image Source="{Binding Home.CurrentSpotlight.BackdropImage}" Stretch="UniformToFill" />
-                    <Border Classes="spotlightWash" />
-
                     <ItemsControl ItemsSource="{Binding Home.SpotlightPanels}" Margin="14" AutomationProperties.AutomationId="HomeSpotlightPanels">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>

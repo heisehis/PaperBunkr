@@ -144,6 +144,9 @@ public class Series
 
     public Issue? CoverIssue { get; set; }
 
+    /// <summary>Relative key for this series' copied, custom artwork under the app-data series-cover directory. Null uses <see cref="CoverIssueId"/> or the first issue.</summary>
+    public string? CustomCoverPath { get; set; }
+
     /// <summary>Alternate (native/romanized/localized) titles - see <see cref="SeriesTitle"/>'s own doc comment. <see cref="Name"/> above remains the primary/sort title.</summary>
     public List<SeriesTitle> Titles { get; set; } = new();
 
@@ -176,6 +179,27 @@ public class Series
 
     /// <summary>How <see cref="GcdSeriesId"/> was found: Metron's own <c>gcd_id</c>, or a unique name match. A Metron match is never replaced by a name match.</summary>
     public Gcd.GcdMatchSourceKind? GcdMatchSource { get; set; }
+
+    // --- Manga series-centric metadata (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md). Only meaningful for manga-family series. ---
+
+    /// <summary>Series-level imprint, inherited by chapters without an override.</summary>
+    public string? Imprint { get; set; }
+
+    /// <summary>Series-level age rating, inherited by chapters without an override.</summary>
+    public string? AgeRating { get; set; }
+
+    /// <summary>False turns off writing this series' chapters into their files; in-app inheritance is unaffected.</summary>
+    public bool EmbeddedSyncEnabled { get; set; } = true;
+
+    /// <summary>Comma-separated <c>MangaInheritedFields</c> keys (plus Summary/Status) the user set by hand; providers may not overwrite them.</summary>
+    public string? LockedFields { get; set; }
+
+    /// <summary>Set to 1 once the user has confirmed the canonical values in Edit Series, so the lazy reconciliation does not ask again.</summary>
+    public int CanonicalReviewVersion { get; set; }
+
+    public List<SeriesCredit> Credits { get; set; } = new();
+
+    public List<SeriesTag> SeriesTags { get; set; } = new();
 
     public List<TrackingLink> TrackingLinks { get; set; } = new();
 

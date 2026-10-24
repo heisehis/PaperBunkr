@@ -8,73 +8,85 @@ using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.Data.Metadata;
 
-public sealed record EventConnectorSummary(int Created, int Updated, int Removed, int WikidataChecked, int WikidataMatched)
+public sealed record EventConnectorSummary(int Created, int Updated, int Removed)
 {
-    public string Text => $"{Created} connection{(Created == 1 ? "" : "s")} found · {Removed} removed"
-                          + (WikidataChecked > 0 ? $" · {WikidataMatched} of {WikidataChecked} events matched on Wikidata" : string.Empty);
+    public string Text => $"{Created} connection{(Created == 1 ? "" : "s")} found · {Removed} removed";
 }
 
 /// <summary>
-/// Saves what the smart connector works out (docs/superpowers/specs/2026-09-27-continuity-map-design.md §2): strong local inferences
-/// become <see cref="RelationEvidenceProvider.Inferred"/> relations, Wikidata links <see cref="RelationEvidenceProvider.Wikidata"/>
-/// ones. Your own relations are never touched and block inference for their pair; dismissed pairs are skipped; an inferred relation
-/// whose evidence has gone is deleted. Runs after the identity step so two halves of a duplicate are never linked.
+/// Saves what the smart connector works out (docs/superpowers/specs/2026-10-12-continuity-sources-design.md §4): the Metron reading-list
+/// chain (<see cref="EventOrderEvidence"/> rows written by <see cref="EventOrderSweep"/>) becomes <see cref="RelationEvidenceProvider.Metron"/>
+/// relations, and strong local inferences <see cref="RelationEvidenceProvider.Inferred"/> ones. Wikidata is no longer asked: relations that only
+/// Wikidata ever supported are removed. Your own relations are never touched and block inference for their pair; dismissed pairs are skipped;
+/// an automatic relation whose evidence has gone is deleted. Runs after the identity step so two halves of a duplicate are never linked.
 /// </summary>
 public static class EventConnectorSweep
 {
-    public const decimal WikidataConfidence = 0.9m;
+    public const decimal MetronConfidence = 0.85m;
 
-    public static async Task<EventConnectorSummary> RunAsync(
-        Func<PaperbunkrDbContext> contextFactory, IWikidataLookup? wikidata, int wikidataBatchSize, CancellationToken cancellationToken,
-        Gcd.GcdDataStore? gcd = null)
+    public static Task<EventConnectorSummary> RunAsync(Func<PaperbunkrDbContext> contextFactory, CancellationToken cancellationToken, Gcd.GcdDataStore? gcd = null)
     {
-        WikidataLinksResult? wd = null;
-        if (wikidata is not null)
-        {
-            wd = await WikidataEventLinks.RunAsync(contextFactory, wikidata, wikidataBatchSize, DateTime.UtcNow, cancellationToken).ConfigureAwait(false);
-        }
-
+        cancellationToken.ThrowIfCancellationRequested();
         using var context = contextFactory();
         int created = 0, updated = 0, removed = 0;
         var blocked = BlockedPairs(context);
 
-        // Wikidata: A followed by B → A Prequel of B.
-        if (wd is not null)
+        // Wikidata is out of the picture (§3): what only it supported goes, once and for good.
+        foreach (var r in RelationsWith(context, RelationEvidenceProvider.Wikidata).ToList())
         {
-            var found = new HashSet<(int, int)>();
-            foreach (var link in wd.Links)
+            context.EventRelations.Remove(r);
+            removed++;
+        }
+
+        // Metron reading lists: "X's list comes before Y's list" → X Prequel of Y.
+        var metronPairs = new HashSet<(int, int)>();
+        var evidenceRows = context.EventOrderEvidence.AsNoTracking()
+            .Where(e => e.Provider == EventOrderProvider.MetronList && e.SourceId != null && (e.PreviousName != null || e.NextName != null))
+            .ToList();
+        if (evidenceRows.Count > 0)
+        {
+            var events = EventOrderSweep.LoadEvents(context);
+            foreach (var row in evidenceRows)
             {
-                var pair = Pair(link.EarlierEventId, link.LaterEventId);
-                found.Add(pair);
-                if (blocked.Contains(pair))
+                if (ResolveNeighbour(row.NextName, row.StoryEventId, events) is int later)
                 {
-                    continue;
+                    AddMetronLink(row.StoryEventId, later, row);
                 }
 
-                var (c, u) = Upsert(context, RelationEvidenceProvider.Wikidata, link.EarlierEventId, link.LaterEventId, RelationType.Prequel,
-                    WikidataConfidence, reason: "Wikidata: followed by", sourceId: link.EvidenceQid);
+                if (ResolveNeighbour(row.PreviousName, row.StoryEventId, events) is int earlier)
+                {
+                    AddMetronLink(earlier, row.StoryEventId, row);
+                }
+            }
+
+            void AddMetronLink(int earlierId, int laterId, EventOrderEvidence row)
+            {
+                var pair = Pair(earlierId, laterId);
+                if (!metronPairs.Add(pair) || blocked.Contains(pair))
+                {
+                    return;
+                }
+
+                var (c, u) = Upsert(context, RelationEvidenceProvider.Metron, earlierId, laterId, RelationType.Prequel,
+                    MetronConfidence, reason: $"Metron reading list “{row.SourceName}”: the next list in reading order", sourceId: row.SourceId);
                 created += c;
                 updated += u;
             }
-
-            // A Wikidata relation touching a re-checked event that Wikidata no longer supports goes.
-            var checkedIds = wd.CheckedEventIds.ToHashSet();
-            foreach (var r in RelationsWith(context, RelationEvidenceProvider.Wikidata)
-                         .Where(r => checkedIds.Contains(r.SourceEventId) || checkedIds.Contains(r.TargetEventId)).ToList())
-            {
-                if (!found.Contains(Pair(r.SourceEventId, r.TargetEventId)))
-                {
-                    context.EventRelations.Remove(r);
-                    removed++;
-                }
-            }
-
-            context.SaveChanges();
         }
 
-        // Local inference: strong ones only; a pair already carrying a Wikidata relation keeps it.
-        var wikidataPairs = RelationsWith(context, RelationEvidenceProvider.Wikidata).Select(r => Pair(r.SourceEventId, r.TargetEventId)).ToHashSet();
-        var strong = EventChronologyInference.Infer(context, gcd: gcd).Where(i => i.IsStrong && !wikidataPairs.Contains(i.Pair) && !blocked.Contains(i.Pair)).ToList();
+        foreach (var r in RelationsWith(context, RelationEvidenceProvider.Metron).ToList())
+        {
+            if (!metronPairs.Contains(Pair(r.SourceEventId, r.TargetEventId)))
+            {
+                context.EventRelations.Remove(r);
+                removed++;
+            }
+        }
+
+        context.SaveChanges();
+
+        // Local inference: strong ones only; a pair already carrying a Metron relation keeps it.
+        var strong = EventChronologyInference.Infer(context, gcd: gcd).Where(i => i.IsStrong && !metronPairs.Contains(i.Pair) && !blocked.Contains(i.Pair)).ToList();
         foreach (var inference in strong)
         {
             var (c, u) = Upsert(context, RelationEvidenceProvider.Inferred, inference.SourceEventId, inference.TargetEventId, inference.Type,
@@ -94,7 +106,20 @@ public static class EventConnectorSweep
         }
 
         context.SaveChanges();
-        return new EventConnectorSummary(created, updated, removed, wd?.Checked ?? 0, wd?.Matched ?? 0);
+        return Task.FromResult(new EventConnectorSummary(created, updated, removed));
+    }
+
+    /// <summary>The one library event a neighbouring reading list's name is, other than <paramref name="selfId"/>; null when none or several are.</summary>
+    private static int? ResolveNeighbour(string? listName, int selfId, IReadOnlyList<EventOrderSweep.EventInfo> events)
+    {
+        if (string.IsNullOrWhiteSpace(listName))
+        {
+            return null;
+        }
+
+        var keys = EventNameKeys.For(listName, Array.Empty<string>());
+        var matches = events.Where(e => e.Id != selfId && e.Keys.Overlaps(keys)).Select(e => e.Id).Distinct().ToList();
+        return matches.Count == 1 ? matches[0] : null;
     }
 
     /// <summary>
@@ -112,9 +137,10 @@ public static class EventConnectorSweep
         context.SaveChanges();
     }
 
-    /// <summary>True for a relation the smart connector made (inferred or Wikidata) rather than you.</summary>
+    /// <summary>True for a relation the smart connector made (inferred, Metron or - from before it was dropped - Wikidata) rather than you.</summary>
     public static bool IsAutomatic(EventRelation relation) =>
-        relation.Evidence.Count > 0 && relation.Evidence.All(e => e.Provider is RelationEvidenceProvider.Inferred or RelationEvidenceProvider.Wikidata);
+        relation.Evidence.Count > 0
+        && relation.Evidence.All(e => e.Provider is RelationEvidenceProvider.Inferred or RelationEvidenceProvider.Wikidata or RelationEvidenceProvider.Metron);
 
     /// <summary>Removes a relation; if the smart connector made it, the pair is dismissed so it's never re-created.</summary>
     public static void RemoveRelation(PaperbunkrDbContext context, int eventRelationId)

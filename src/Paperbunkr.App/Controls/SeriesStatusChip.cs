@@ -29,6 +29,8 @@ public sealed class SeriesStatusChip : Border
     public SeriesStatusChip()
     {
         Padding = new Thickness(7, 2);
+        // One indicator only - the icon; the dot beside it doubled the signal (2026-10-20 UI polish, remaining screens Q3).
+        _dot.IsVisible = false;
         Child = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, Children = { _dot, _icon, _text } };
         _bindings.Add(this.Bind(CornerRadiusProperty, this.GetResourceObservable("PbRadiusChip")));
         IsVisible = false;

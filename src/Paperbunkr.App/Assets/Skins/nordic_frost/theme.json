@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.nordic_frost",
+  "name": "Nordic Frost",
+  "base": {
+    "palette": {
+      "accent": "#88C0D0",
+      "success": "#A3BE8C",
+      "badge": "#EBCB8B"
+    },
+    "semantic": {
+      "status": {
+        "danger": "#D9737D",
+        "warning": "#EBCB8B",
+        "info": "#81A1C1"
+      },
+      "chart": {
+        "series": {
+          "1": "#81A1C1",
+          "2": "#B48EAD"
+        }
+      }
+    },
+    "metrics": {
+      "radius": 6,
+      "radiusSm": 4,
+      "radiusLg": 12
+    },
+    "components": {
+      "chip": {
+        "radius": 4
+      }
+    }
+  },
+  "variants": {
+    "dark": {
+      "name": "Dark",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#2E3440",
+        "ink": "#ECEFF4"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#3B4252",
+          "raised": "#3B4252",
+          "overlay": "#434C5E"
+        },
+        "border": {
+          "default": "#4C566A"
+        }
+      }
+    },
+    "light": {
+      "name": "Light",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#ECEFF4",
+        "ink": "#2E3440",
+        "accent": "#3B6E8F",
+        "success": "#4C7A3D",
+        "badge": "#B58B2A"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#E5E9F0",
+          "raised": "#F8F9FB",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#C9D1DE"
+        },
+        "status": {
+          "danger": "#B5414E",
+          "warning": "#8F6A12",
+          "info": "#3B6E8F"
+        }
+      }
+    }
+  }
+}

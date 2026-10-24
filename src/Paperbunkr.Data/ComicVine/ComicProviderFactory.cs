@@ -4,7 +4,7 @@ using Paperbunkr.Data.Entities;
 namespace Paperbunkr.Data.ComicVine;
 
 /// <summary>
-/// Builds a <see cref="IComicProvider"/> from the credentials saved under Preferences → Connections (the ComicVine key, or the Metron login), and says what is missing when there isn't
+/// Builds a <see cref="IComicProvider"/> from the credentials saved under Preferences → Connections (the ComicVine key, or the Metron API token / legacy login), and says what is missing when there isn't
 /// one. Every place that talks to a provider goes through here, so adding a credential in Connections is all a provider needs.
 /// </summary>
 public static class ComicProviderFactory
@@ -21,9 +21,8 @@ public static class ComicProviderFactory
     {
         if (provider == ComicProvider.Metron)
         {
-            var user = CredentialStore.Get(context, "Metron", CredentialKind.Username);
-            var password = CredentialStore.Get(context, "Metron", CredentialKind.Password);
-            return string.IsNullOrWhiteSpace(user) || string.IsNullOrEmpty(password) ? null : new MetronClient(user, password, priority);
+            var auth = MetronAuth.Load(context);
+            return auth is null ? null : new MetronClient(auth, priority);
         }
 
         var key = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey);
@@ -34,6 +33,6 @@ public static class ComicProviderFactory
 
     /// <summary>What to tell the user when <see cref="Create"/> returned null.</summary>
     public static string MissingCredentialsMessage(ComicProvider provider) => provider == ComicProvider.Metron
-        ? "Add your Metron login under Preferences → Connections first."
+        ? "Add your Metron API token under Preferences → Connections first."
         : "Add your ComicVine API key under Preferences → Connections first.";
 }

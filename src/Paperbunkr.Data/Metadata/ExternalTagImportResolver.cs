@@ -42,6 +42,29 @@ public static class ExternalTagImportResolver
             {
                 issue.MergeFromCategorized(IssueTagField.Tags, metadata.OtherTags!);
             }
+
+            FillUnsetWeights(issue, metadata);
+        }
+    }
+
+    /// <summary>
+    /// Gives a tag the weight the provider ranks it with, but only where the tag has none yet: a weight someone set is never replaced (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §14).
+    /// A provider that does not rank its tags changes nothing.
+    /// </summary>
+    private static void FillUnsetWeights(Issue issue, ExternalMediaMetadata metadata)
+    {
+        if (metadata.WeightedTags is not { Count: > 0 } weighted)
+        {
+            return;
+        }
+
+        foreach (var tag in issue.Tags.Where(t => t.Weight == IssueTagWeight.Unset))
+        {
+            var match = weighted.FirstOrDefault(w => w.Weight != IssueTagWeight.Unset && string.Equals(w.Name, tag.Value, System.StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+            {
+                tag.Weight = match.Weight;
+            }
         }
     }
 }

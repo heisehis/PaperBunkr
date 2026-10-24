@@ -121,8 +121,10 @@ public class DetailTabsFocusTests
                 vm.IssueViewMode = mode;
                 RunLayout(window);
                 // Only the tile elements themselves - a card also holds focusable controls of its own that share its DataContext.
+                // The card view's tile is the shared `card` family since the 2026-10-19 shared-controls pass.
                 var tiles = window.GetVisualDescendants().OfType<Control>()
-                    .Where(c => c.Focusable && c.IsEffectivelyVisible && (c.Classes.Contains("issueTile") || c.Classes.Contains("issueRow") || c.Classes.Contains("issueCard")))
+                    .Where(c => c.Focusable && c.IsEffectivelyVisible && (c.Classes.Contains("issueTile") || c.Classes.Contains("issueRow")
+                        || (c.Classes.Contains("card") && c.DataContext is IssueCardSample)))
                     .ToList();
                 tiles[0].Focus(NavigationMethod.Directional);
                 RunLayout(window);

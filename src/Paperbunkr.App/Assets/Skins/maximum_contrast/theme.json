@@ -1,6 +1,7 @@
 {
   "name": "Maximum Contrast",
   "mode": "Dark",
+  "category": "accessibility",
   "colors": {
     "bg": "#000000",
     "chrome": "#0D0D0D",

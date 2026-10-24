@@ -10,6 +10,7 @@ namespace Paperbunkr.Data.Tests.ComicVine;
 /// 2026-10-05-metron-api-efficiency-and-matching-design.md sections 2 and 3), through the real
 /// <see cref="ScrapeOrchestrator"/> with a scripted source.
 /// </summary>
+[Collection("ScrapeOrchestratorStatics")]
 public sealed class MetronExactMatchTests : IDisposable
 {
     private readonly string _testRoot = Directory.CreateTempSubdirectory("pb-metron-exact-").FullName;

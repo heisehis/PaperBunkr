@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media.Transformation;
+using Paperbunkr.App.Theming.Motion;
 
 namespace Paperbunkr.App.Controls;
 
@@ -34,7 +35,7 @@ public sealed class AnimatedStackPanel : StackPanel
         var result = base.ArrangeOverride(finalSize);
         var current = new Dictionary<Control, double>();
 
-        if (MotionTokens.IsReducedMotion())
+        if (!MotionPolicy.AllowsMotion(MotionRole.Replace))
         {
             foreach (var child in Children)
             {

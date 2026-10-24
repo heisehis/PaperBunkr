@@ -1,6 +1,6 @@
 # Series merge — preserve unnumbered issues
 
-Date: 2026-10-15. Status: design, pending user review. Not approved for `writing-plans`.
+Date: 2026-10-15. Status: implemented; focused verification passed on 2026-10-15. Source changes are uncommitted.
 
 ## Problem
 

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Paperbunkr.Data.ComicVine.Scraping;
+using Avalonia.Threading;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -63,11 +64,26 @@ public sealed partial class ScrapeBatchHeaderViewModel : ObservableObject
     /// null, same resilience as everywhere else this plugin touches ComicVine's own remote covers.</summary>
     public void ReportProgress(ScrapePhase phase, int total, int index, string bookLabel, byte[]? coverBytes)
     {
-        Phase = phase;
-        Total = total;
-        CurrentIndex = index;
-        CurrentBookLabel = bookLabel;
-        CurrentCover = DecodeOrNull(coverBytes);
+        void ApplyProgress()
+        {
+            Phase = phase;
+            Total = total;
+            CurrentIndex = index;
+            CurrentBookLabel = bookLabel;
+            CurrentCover = DecodeOrNull(coverBytes);
+        }
+
+        // ScrapeOrchestrator uses ConfigureAwait(false), so its progress callback can arrive on a
+        // worker thread. These properties are bound by the modal header, and Bitmap is an Avalonia
+        // object too; create and publish them on the UI thread.
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            ApplyProgress();
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(ApplyProgress);
+        }
     }
 
     private static Bitmap? DecodeOrNull(byte[]? bytes)

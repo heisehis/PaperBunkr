@@ -1,0 +1,61 @@
+{
+  // Harbor: a sample Theme v2 family with three variants, a few component skins, one material, one motion and its own Home layout.
+  // Comments and trailing commas are allowed in theme files.
+  "schemaVersion": 2,
+  "id": "org.paperbunkr.samples.harbor",
+  "name": "Harbor",
+
+  // Everything in "base" applies to every variant; a variant only states what differs.
+  "base": {
+    "palette": {
+      "accent": "#2F9E8F",
+      "success": "#4CAF7A"
+    },
+    "semantic": {
+      "status": { "danger": "#E5645A", "warning": "#E0A93B" },
+      "chart": { "series": { "1": "#4A9FD8", "2": "#8E7BD6" } }
+    },
+    "metrics": { "radius": 8, "radiusSm": 5, "radiusLg": 14, "scrollbarWidth": 10 },
+    "typography": {
+      "heading": { "family": "Segoe UI Semibold", "size": 24 },
+      "body": { "size": 14 }
+    },
+    "components": {
+      "button.primary": { "radius": 8, "states": { "hover": { "background": "#39B3A2" } } },
+      "chip": { "radius": 6 }
+    },
+    "motion": {
+      "settle": {
+        "trigger": "load", "duration": 320, "easing": "cubicOut",
+        "keyframes": [ { "at": 0, "opacity": 0, "translateY": 14 }, { "at": 1, "opacity": 1, "translateY": 0 } ]
+      }
+    },
+    "layouts": { "Home": "layouts/home.json" }
+  },
+
+  "variants": {
+    "dark": {
+      "name": "Dark",
+      "mode": "Dark",
+      "palette": { "canvas": "#0E1719", "ink": "#E3ECEA" },
+      "materials": {
+        "deepWater": { "type": "linearGradient", "angle": 180, "fallback": "#12201F", "stops": [ { "at": 0, "color": "#16292A" }, { "at": 1, "color": "#0E1719" } ] }
+      },
+      "surfaces": { "navigation": "deepWater" }
+    },
+    "light": {
+      "name": "Light",
+      "mode": "Light",
+      // A light background needs a darker accent and success than the dark variants use.
+      "palette": { "canvas": "#F4F8F7", "ink": "#16302D", "accent": "#1F7F72", "success": "#2A7D4F" },
+      "components": { "button.primary": { "states": { "hover": { "background": "#25917F" } } } }
+    },
+    "oled": {
+      "name": "OLED",
+      "mode": "Dark",
+      "kind": "oled",
+      "palette": { "canvas": "#000000", "ink": "#DDE7E5" },
+      "semantic": { "surface": { "navigation": "#000000", "raised": "#0A1112" } }
+    }
+  }
+}

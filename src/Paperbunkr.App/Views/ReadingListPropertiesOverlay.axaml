@@ -6,6 +6,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="700"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              x:Class="Paperbunkr.App.Views.ReadingListPropertiesOverlay"
              x:DataType="vm:ReadingListPropertiesScreenViewModel"
              x:Name="Root">
@@ -15,167 +16,130 @@
          docs/superpowers/specs/2026-08-24-design-language-foundation-design.md Component Primitives
          section. -->
     <UserControl.Styles>
-        <Style Selector="Border.groupBox">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="7" />
+        <Style Selector="Border.card">
             <Setter Property="ClipToBounds" Value="True" />
         </Style>
         <Style Selector="Border.groupHeader">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="Padding" Value="14,11" />
+            <Setter Property="Padding" Value="14,12" />
         </Style>
 
-        <Style Selector="TextBlock.fieldLabel">
-            <Setter Property="FontSize" Value="10.5" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-            <Setter Property="Margin" Value="0,0,0,4" />
-        </Style>
         <Style Selector="StackPanel.field">
             <Setter Property="Width" Value="260" />
             <Setter Property="Margin" Value="0,0,16,16" />
         </Style>
     </UserControl.Styles>
 
-    <Border Width="620" MaxHeight="720" Classes="floatingPanel">
-        <DockPanel LastChildFill="True">
+    <controls:DialogCard Title="Edit reading list" Subtitle="{Binding HeaderLabel}" Size="Large">
+        <StackPanel>
 
-            <!-- Header band (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md §10): the list's blurred-cover backdrop (when the
-                 list page has made one) under the skin's hero gradient, the cover, and the title. Fields below are unchanged. -->
-            <Panel DockPanel.Dock="Top" Height="120" ClipToBounds="True">
-                <Image Source="{Binding HeaderBackdrop}" Stretch="UniformToFill" IsVisible="{Binding HasHeaderBackdrop}" />
-                <Border>
-                    <Border.Background>
-                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-                            <GradientStop Offset="0.0" Color="{DynamicResource PbHeroGradientStartColor}" />
-                            <GradientStop Offset="1.0" Color="{DynamicResource PbSurface1Color}" />
-                        </LinearGradientBrush>
-                    </Border.Background>
-                </Border>
-                <StackPanel Orientation="Horizontal" Spacing="14" Margin="20,0,20,14" VerticalAlignment="Bottom">
-                    <Border Width="52" Height="78" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" Background="{DynamicResource PbSurface2Brush}"
-                            BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" BoxShadow="{StaticResource PbElevationShadow}">
-                        <Image Source="{Binding CoverPreview}" Stretch="UniformToFill" />
+            <WrapPanel>
+                <StackPanel Classes="field">
+                    <TextBlock Classes="fieldLabel" Text="NAME" />
+                    <TextBox Text="{Binding Name}" />
+                </StackPanel>
+                <StackPanel Classes="field" Width="536">
+                    <TextBlock Classes="fieldLabel" Text="DESCRIPTION" />
+                    <TextBox Text="{Binding Description}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" />
+                </StackPanel>
+                <StackPanel Classes="field">
+                    <TextBlock Classes="fieldLabel" Text="TYPE" />
+                    <pbc:SuggestBox IsStrict="True" Text="{Binding TypeText}" Suggestions="{Binding TypeOptions}" HorizontalAlignment="Stretch" />
+                </StackPanel>
+            </WrapPanel>
+
+            <Border Classes="card" Padding="0" Margin="0,0,0,16">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Cover" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                     </Border>
-                    <StackPanel VerticalAlignment="Bottom" Spacing="2">
-                        <TextBlock Text="LIST DETAILS" FontSize="10" FontWeight="Bold" LetterSpacing="0.8" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <TextBlock Classes="pbTextHeading" Text="{Binding HeaderLabel}" FontSize="22" TextTrimming="CharacterEllipsis" MaxWidth="500" />
+                    <Grid ColumnDefinitions="90,*" Margin="14">
+                        <Border Grid.Column="0" Width="70" Height="100" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
+                                Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+                            <Image Source="{Binding CoverPreview}" Stretch="UniformToFill" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Top">
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
+                                <Button Classes="ghost" Content="Change Cover…" Command="{Binding ChangeCoverCommand}" />
+                                <!-- Use an existing cover from one of this list's own issues (docs/superpowers/specs/
+                                     2026-09-17-reader-save-page-and-cover-picker-design.md extended to reading lists) -
+                                     Button.Flyout, never MenuFlyout/ContextMenu (see ReadingStatusPicker.axaml). -->
+                                <Button Classes="ghost" Content="Choose from List…" IsVisible="{Binding HasListCoverCandidates}">
+                                    <Button.Flyout>
+                                        <Flyout Placement="BottomEdgeAlignedLeft">
+                                            <Border Width="220" Padding="8">
+                                                <ScrollViewer MaxHeight="240">
+                                                    <ItemsControl ItemsSource="{Binding ListCoverCandidates}">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="vm:CoverPickerCandidate">
+                                                                <Button Width="64" Height="94" Margin="4" Padding="0" Background="Transparent"
+                                                                        BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}" CornerRadius="{DynamicResource PbRadiusSm}"
+                                                                        Command="{Binding #Root.((vm:ReadingListPropertiesScreenViewModel)DataContext).SelectListCoverCommand}"
+                                                                        CommandParameter="{Binding}" ToolTip.Tip="{Binding Label}">
+                                                                    <Image views:AsyncCoverImage.SourceId="{Binding SourceKey}" Stretch="UniformToFill" />
+                                                                </Button>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </ScrollViewer>
+                                            </Border>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </StackPanel>
+                            <TextBlock Classes="fieldLabel" Text="COVER IMAGE URL" />
+                            <TextBox Text="{Binding CoverImageUrl}" PlaceholderText="https://…" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card" Padding="0" Margin="0,0,0,16">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Arc Info" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <WrapPanel Margin="14,14,0,0">
+                        <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="SOURCE" /><TextBox Text="{Binding Source}" /></StackPanel>
+                        <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="ARC ID" /><TextBox Text="{Binding ArcId}" /></StackPanel>
+                        <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="ARC NAME" /><TextBox Text="{Binding ArcName}" /></StackPanel>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card" Padding="0">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Tags" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14">
+                        <TextBlock Classes="fieldLabel" Text="TAGS" />
+                        <TextBox Text="{Binding TagsText}" Margin="0,0,0,12" />
+
+                        <ItemsControl ItemsSource="{Binding TagRows}" IsVisible="{Binding TagRows.Count}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:TagEditRowViewModel">
+                                    <Grid ColumnDefinitions="140,*,140" Margin="0,0,0,8">
+                                        <TextBlock Grid.Column="0" Text="{Binding Value}" VerticalAlignment="Center" FontWeight="SemiBold" />
+                                        <TextBox Grid.Column="1" Text="{Binding Category}" PlaceholderText="Category" Margin="0,0,8,0" />
+                                        <pbc:SuggestBox Grid.Column="2" IsStrict="True" Text="{Binding WeightText}" Suggestions="{Binding WeightNames}" HorizontalAlignment="Stretch" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </StackPanel>
-            </Panel>
+            </Border>
 
-            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
-                        HorizontalAlignment="Right" Margin="20,0,20,18">
-                <Button Classes="ghost" FontSize="12.5" Content="Cancel" Command="{Binding CancelCommand}" />
-                <Button Classes="primary" FontSize="12.5" Content="Save" Command="{Binding SaveCommand}" />
+        </StackPanel>
+        <controls:DialogCard.Footer>
+            <StackPanel>
+                <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" />
+                <Button Classes="primary" Content="Save" Command="{Binding SaveCommand}" />
             </StackPanel>
-
-            <ScrollViewer Padding="20,16,20,16">
-                <StackPanel>
-
-                    <WrapPanel>
-                        <StackPanel Classes="field">
-                            <TextBlock Classes="fieldLabel" Text="NAME" />
-                            <TextBox Text="{Binding Name}" />
-                        </StackPanel>
-                        <StackPanel Classes="field" Width="536">
-                            <TextBlock Classes="fieldLabel" Text="DESCRIPTION" />
-                            <TextBox Text="{Binding Description}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" />
-                        </StackPanel>
-                        <StackPanel Classes="field">
-                            <TextBlock Classes="fieldLabel" Text="TYPE" />
-                            <pbc:SuggestBox IsStrict="True" Text="{Binding TypeText}" Suggestions="{Binding TypeOptions}" HorizontalAlignment="Stretch" />
-                        </StackPanel>
-                    </WrapPanel>
-
-                    <Border Classes="groupBox" Margin="0,0,0,16">
-                        <StackPanel>
-                            <Border Classes="groupHeader">
-                                <TextBlock Text="Cover" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                            </Border>
-                            <Grid ColumnDefinitions="90,*" Margin="14">
-                                <Border Grid.Column="0" Width="70" Height="100" CornerRadius="5" ClipToBounds="True"
-                                        Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
-                                    <Image Source="{Binding CoverPreview}" Stretch="UniformToFill" />
-                                </Border>
-                                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Top">
-                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
-                                        <Button Classes="ghost" FontSize="12.5" Content="Change Cover…" Command="{Binding ChangeCoverCommand}" />
-                                        <!-- Use an existing cover from one of this list's own issues (docs/superpowers/specs/
-                                             2026-09-17-reader-save-page-and-cover-picker-design.md extended to reading lists) -
-                                             Button.Flyout, never MenuFlyout/ContextMenu (see ReadingStatusPicker.axaml). -->
-                                        <Button Classes="ghost" FontSize="12.5" Content="Choose from List…" IsVisible="{Binding HasListCoverCandidates}">
-                                            <Button.Flyout>
-                                                <Flyout Placement="BottomEdgeAlignedLeft">
-                                                    <Border Width="220" Padding="8">
-                                                        <ScrollViewer MaxHeight="240">
-                                                            <ItemsControl ItemsSource="{Binding ListCoverCandidates}">
-                                                                <ItemsControl.ItemsPanel>
-                                                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                                                                </ItemsControl.ItemsPanel>
-                                                                <ItemsControl.ItemTemplate>
-                                                                    <DataTemplate x:DataType="vm:CoverPickerCandidate">
-                                                                        <Button Width="64" Height="94" Margin="3" Padding="0" Background="Transparent"
-                                                                                BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}" CornerRadius="6"
-                                                                                Command="{Binding #Root.((vm:ReadingListPropertiesScreenViewModel)DataContext).SelectListCoverCommand}"
-                                                                                CommandParameter="{Binding}" ToolTip.Tip="{Binding Label}">
-                                                                            <Image views:AsyncCoverImage.SourceId="{Binding SourceKey}" Stretch="UniformToFill" />
-                                                                        </Button>
-                                                                    </DataTemplate>
-                                                                </ItemsControl.ItemTemplate>
-                                                            </ItemsControl>
-                                                        </ScrollViewer>
-                                                    </Border>
-                                                </Flyout>
-                                            </Button.Flyout>
-                                        </Button>
-                                    </StackPanel>
-                                    <TextBlock Classes="fieldLabel" Text="COVER IMAGE URL" />
-                                    <TextBox Text="{Binding CoverImageUrl}" Watermark="https://…" />
-                                </StackPanel>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Classes="groupBox" Margin="0,0,0,16">
-                        <StackPanel>
-                            <Border Classes="groupHeader">
-                                <TextBlock Text="Arc Info" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                            </Border>
-                            <WrapPanel Margin="14,14,0,0">
-                                <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="SOURCE" /><TextBox Text="{Binding Source}" /></StackPanel>
-                                <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="ARC ID" /><TextBox Text="{Binding ArcId}" /></StackPanel>
-                                <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="ARC NAME" /><TextBox Text="{Binding ArcName}" /></StackPanel>
-                            </WrapPanel>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Classes="groupBox">
-                        <StackPanel>
-                            <Border Classes="groupHeader">
-                                <TextBlock Text="Tags" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                            </Border>
-                            <StackPanel Margin="14">
-                                <TextBlock Classes="fieldLabel" Text="TAGS" />
-                                <TextBox Text="{Binding TagsText}" Margin="0,0,0,12" />
-
-                                <ItemsControl ItemsSource="{Binding TagRows}" IsVisible="{Binding TagRows.Count}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:TagEditRowViewModel">
-                                            <Grid ColumnDefinitions="140,*,140" Margin="0,0,0,8">
-                                                <TextBlock Grid.Column="0" Text="{Binding Value}" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                                <TextBox Grid.Column="1" Text="{Binding Category}" Watermark="Category" Margin="0,0,8,0" />
-                                                <pbc:SuggestBox Grid.Column="2" IsStrict="True" Text="{Binding WeightText}" Suggestions="{Binding WeightNames}" HorizontalAlignment="Stretch" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-
-                </StackPanel>
-            </ScrollViewer>
-        </DockPanel>
-    </Border>
+        </controls:DialogCard.Footer>
+    </controls:DialogCard>
 </UserControl>

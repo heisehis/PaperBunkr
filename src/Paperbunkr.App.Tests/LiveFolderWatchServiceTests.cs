@@ -12,6 +12,7 @@ namespace Paperbunkr.App.Tests;
 /// the suite doesn't have to sleep for the production 2-second window per case - same "generate via
 /// the real code path" precedent <see cref="LibraryFolderScannerTests"/> already established.
 /// </summary>
+[Collection("FileWriteBackCoordinator")] // shares FileWriteBackCoordinator's static state with FileWriteBackSettleTests
 public class LiveFolderWatchServiceTests : IDisposable
 {
     private static readonly TimeSpan DebounceWindow = TimeSpan.FromMilliseconds(150);

@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:pbc="using:Paperbunkr.App.Controls"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
@@ -63,49 +64,21 @@
         <Style Selector="Grid.issueRow.read">
             <Setter Property="Opacity" Value="0.5" />
         </Style>
-        <Style Selector="Border.issueCard">
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="Padding" Value="9" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Border.issueCard.selected">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-        </Style>
 
         <!-- View-mode segmented control -->
-        <Style Selector="Button.segItem">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="0" />
-            <Setter Property="Padding" Value="9,3" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
         <!-- The pill around the segments clips (so the active fill follows its rounded corners), so an outside ring can't show: the
              focus ring is drawn inside the segment instead. -->
         <Style Selector="Button.segItem">
             <Setter Property="FocusAdorner" Value="{x:Null}" />
-        </Style>
-        <Style Selector="Button.segItem:focus-visible /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRingInset}" />
-        </Style>
-        <Style Selector="Button.segItem.active">
-            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
-            <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
 
         <Style Selector="Button.railAdd">
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Padding" Value="10,4" />
             <Setter Property="FontSize" Value="12" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
         </Style>
 
         <!-- Per-tracker chip (docs/superpowers/specs/2026-09-18-per-tracker-score-and-finish-date-
@@ -119,6 +92,16 @@
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
         </Style>
+        <!-- Poster caption lines (detail layouts v2): the first line keeps the bold issue-number look, the rest the faint arc look. -->
+        <Style Selector="TextBlock.posterCaption">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="ContentPresenter:nth-child(1) > TextBlock.posterCaption">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
     </UserControl.Styles>
 
     <UserControl.Resources>
@@ -126,44 +109,52 @@
              specials-tab-design.md) - the Issues tab's run groups and the flat Specials tab both
              render the same tiles, just from different source collections. -->
         <DataTemplate x:Key="IssuePosterTileTemplate" x:DataType="models:IssueCardSample">
-            <StackPanel Classes="posterItem" Classes.read="{Binding IsRead}" Width="92" Margin="0,0,12,14" Spacing="4">
-                <Border Classes="issueTile" Classes.selected="{Binding IsSelected}" Height="131"
+            <StackPanel Classes="posterItem" Classes.read="{Binding IsRead}" Width="{Binding PosterCoverWidth}" Margin="0,0,12,14" Spacing="4">
+                <Border Classes="issueTile" Classes.selected="{Binding IsSelected}" Height="{Binding PosterCoverHeight}"
                         Background="{Binding CoverBrush}" Focusable="True"
                         PointerPressed="OnIssueTilePointerPressed" DoubleTapped="OnIssueTileDoubleTapped"
                         KeyDown="OnIssueTileKeyDown">
                     <Grid>
                         <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                         <Border Classes="posterScrim" />
+                        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4" Padding="4,2"
+                                Background="{DynamicResource PbAccentBrush}" CornerRadius="{DynamicResource PbRadiusSm}" IsVisible="{Binding IsReadingNow}">
+                            <TextBlock Text="Reading now" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                        </Border>
                         <pbc:StatusBadge Variant="InProgress" IconSize="{StaticResource PbIconSizeSm}"
                                          HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
-                                         IsVisible="{Binding IsInProgress}" />
+                                         IsVisible="{Binding ShowPosterProgressStatus}" />
                         <pbc:StatusBadge Variant="Read" IconSize="{StaticResource PbIconSizeSm}"
                                          HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
-                                         IsVisible="{Binding IsRead}" />
+                                         IsVisible="{Binding ShowPosterReadStatus}" />
                         <!-- Format badge (docs/superpowers/specs/2026-09-13-detail-screens-redesign-
                              design.md §2) - "add more stuff to the cards like omnibus". Only shown for
                              a non-blank Issue.Format, so a plain numbered issue's tile stays quiet. -->
                         <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4"
                                 Background="#CC000000" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="1"
-                                CornerRadius="3" Padding="4,1" IsVisible="{Binding HasFormat}">
-                            <TextBlock Text="{Binding Format}" FontSize="7.5" FontWeight="Bold"
+                                CornerRadius="{DynamicResource PbRadiusSm}" Padding="4,1" IsVisible="{Binding ShowPosterEditionRibbon}">
+                            <TextBlock Text="{Binding EditionRibbonLabel}" FontSize="10" FontWeight="Bold"
                                        Foreground="{DynamicResource PbAccentTextBrush}" />
                         </Border>
                     </Grid>
                 </Border>
-                <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                <TextBlock Text="{Binding ArcTitle}" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}"
-                           TextTrimming="CharacterEllipsis"
-                           IsVisible="{Binding ArcTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                <!-- Caption lines from the detail layout (any issue field, up to three); the first reads as the tile's title. -->
+                <ItemsControl ItemsSource="{Binding CaptionLines}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <TextBlock Classes="posterCaption" Text="{Binding}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
         </DataTemplate>
 
         <DataTemplate x:Key="IssueListRowTemplate" x:DataType="models:IssueCardSample">
             <Grid Classes="issueRow" Classes.selected="{Binding IsSelected}" Classes.read="{Binding IsRead}"
-                  ColumnDefinitions="20,44,*,150,80,50" Height="30" Focusable="True"
+                  ColumnDefinitions="34,*" Height="40" Focusable="True"
                   PointerPressed="OnIssueTilePointerPressed" DoubleTapped="OnIssueTileDoubleTapped"
                   KeyDown="OnIssueTileKeyDown">
-                <Panel Grid.Column="0" VerticalAlignment="Center">
+                <Panel Grid.Column="0" VerticalAlignment="Center" IsVisible="False">
                     <pbc:StatusBadge Variant="Read" IconSize="{StaticResource PbIconSizeXs}"
                                      IsVisible="{Binding TileGlyph, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:IssueTileGlyph.Read}}" />
                     <pbc:StatusBadge Variant="InProgress" IconSize="{StaticResource PbIconSizeXs}"
@@ -171,41 +162,50 @@
                     <pbc:StatusBadge Variant="Unread"
                                      IsVisible="{Binding TileGlyph, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:IssueTileGlyph.Unread}}" />
                 </Panel>
-                <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="Bold" VerticalAlignment="Center"
-                           Foreground="{DynamicResource PbTextBrush}" />
-                <TextBlock Grid.Column="2" Text="{Binding FullTitle}" VerticalAlignment="Center" Margin="8,0"
-                           TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12" />
-                <TextBlock Grid.Column="3" Text="{Binding ArcTitle}" VerticalAlignment="Center"
-                           Foreground="{DynamicResource PbTextFaintBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="4" Text="{Binding CoverDateLabel}" VerticalAlignment="Center"
-                           Foreground="{DynamicResource PbTextFaintBrush}" FontSize="11" />
-                <TextBlock Grid.Column="5" Text="{Binding RatingLabel}" VerticalAlignment="Center"
-                           Foreground="{DynamicResource PbBadgeBrush}" FontSize="11" />
+                <Border Grid.Column="0" Width="27" Height="36" Margin="4,0" CornerRadius="2" ClipToBounds="True"
+                        Background="{DynamicResource PbSurface3Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                        VerticalAlignment="Center" ToolTip.Tip="{Binding Title, StringFormat='Cover for {0}'}">
+                    <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                </Border>
+                <ItemsControl Grid.Column="1" ItemsSource="{Binding ListCells}" VerticalAlignment="Stretch">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:DetailListCell">
+                            <TextBlock Width="{Binding Width}" Text="{Binding Text}" VerticalAlignment="Center" Margin="8,0"
+                                       TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12"
+                                       ToolTip.Tip="{Binding AccessibleLabel}" AutomationProperties.Name="{Binding AccessibleLabel}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </Grid>
         </DataTemplate>
 
         <DataTemplate x:Key="IssueCardTileTemplate" x:DataType="models:IssueCardSample">
-            <Border Classes="issueCard" Classes.selected="{Binding IsSelected}" Width="250" Margin="0,0,12,12"
+            <Border Classes="card" Padding="8" Classes.selected="{Binding IsSelected}" Width="250" Margin="0,0,12,12"
                     Focusable="True"
                     PointerPressed="OnIssueTilePointerPressed" DoubleTapped="OnIssueTileDoubleTapped"
                     KeyDown="OnIssueTileKeyDown">
-                <Grid ColumnDefinitions="54,*">
-                    <Border Grid.Column="0" Width="54" Height="80" CornerRadius="3" ClipToBounds="True"
+                <Grid ColumnDefinitions="Auto,*">
+                    <Border Grid.Column="0" Width="{Binding CardCoverWidth}" Height="{Binding CardCoverHeight}" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
                             Background="{Binding CoverBrush}" VerticalAlignment="Top">
                         <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                     </Border>
                     <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="4">
                         <Grid ColumnDefinitions="Auto,*">
-                            <pbc:StatusBadge Grid.Column="0" Variant="Read" IconSize="{StaticResource PbIconSizeXs}"
-                                             VerticalAlignment="Top" Margin="0,2,5,0"
-                                             IsVisible="{Binding IsRead}" />
-                            <TextBlock Grid.Column="1" Text="{Binding FullTitle}" FontSize="12.5" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                            <Panel Grid.Column="0" VerticalAlignment="Top" Margin="0,2,4,0">
+                                <pbc:StatusBadge Variant="Read" IconSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding ShowCardReadStatus}" />
+                                <pbc:StatusBadge Variant="InProgress" IconSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding ShowCardProgressStatus}" />
+                                <pbc:StatusBadge Variant="Unread" IsVisible="{Binding ShowCardUnreadStatus}" />
+                            </Panel>
+                            <TextBlock Grid.Column="1" Text="{Binding CardHeadline}" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding ShowCardTitle}" />
                         </Grid>
-                        <TextBlock Text="{Binding CardProgressLabel}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding CardSecondLine}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis"
+                                   IsVisible="{Binding ShowCardProgress}" />
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Button Content="{Binding CardActionLabel}" Padding="10,2" FontSize="11" FontWeight="SemiBold"
-                                    CornerRadius="4" Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}"
+                                    CornerRadius="{DynamicResource PbRadiusSm}" Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}"
                                     BorderThickness="0"
                                     Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).OpenIssueInReaderCommand}"
                                     CommandParameter="{Binding}" />
@@ -214,12 +214,12 @@
                                     CommandParameter="{Binding}" ToolTip.Tip="Mark read">
                                 <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeSm}" />
                             </Button>
-                            <Button Classes="creditName"
+                            <Button AutomationProperties.Name="Edit" Classes="creditName"
                                     Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).EditIssuePropertiesCommand}"
                                     CommandParameter="{Binding}" ToolTip.Tip="Edit">
                                 <fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeSm}" />
                             </Button>
-                            <Button Classes="creditName"
+                            <Button AutomationProperties.Name="Show in Explorer" Classes="creditName"
                                     Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RevealIssueCommand}"
                                     CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" ToolTip.Tip="Show in Explorer">
                                 <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeSm}" />
@@ -233,7 +233,7 @@
 
     <StackPanel>
         <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,24,0,0" IsVisible="{Binding ShowTabStrip}">
-            <StackPanel Orientation="Horizontal" Spacing="22">
+            <StackPanel Orientation="Horizontal" Spacing="20">
                 <Button Classes="tab" Classes.active="{Binding IsIssuesTab}" Command="{Binding GoIssuesCommand}" IsVisible="{Binding ShowIssuesTab}">
                     <StackPanel Orientation="Horizontal" Spacing="7">
                         <fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
@@ -280,11 +280,11 @@
         </Border>
 
         <!-- ================= ISSUES TAB ================= -->
-        <StackPanel IsVisible="{Binding IsIssuesTab}" Margin="0,16,0,0">
+        <StackPanel IsVisible="{Binding IsIssuesTab}" controls:Replace.On="{Binding IsIssuesTab}" Margin="0,16,0,0">
             <!-- chrome: view-mode segment -->
             <DockPanel Margin="0,0,0,14">
                 <Border DockPanel.Dock="Right" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                        CornerRadius="6" ClipToBounds="True" Height="24">
+                        CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" Height="24">
                     <StackPanel Orientation="Horizontal">
                         <Button Classes="segItem" Classes.active="{Binding IsPosterView}"
                                 Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.Poster}">
@@ -331,7 +331,9 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <!-- LIST -->
+            <!-- LIST: a draggable header (resize / reorder columns), then the rows -->
+            <views:DetailListHeader x:Name="IssueListHeader" IsVisible="{Binding IsListView}" Cells="{Binding IssueHeaderCells}"
+                                    LeadingInset="34,0,0,0" Margin="0,0,0,4" />
             <ItemsControl IsVisible="{Binding IsListView}" ItemsSource="{Binding IssueGroups}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="models:IssueRunGroup">
@@ -371,7 +373,21 @@
              separator), sharing the Issues tab's own view-mode toggle rather than growing a second
              one. Same tile templates as the Issues tab, bound to Specials instead of IssueGroups. -->
         <StackPanel IsVisible="{Binding IsSpecialsTab}" Margin="0,16,0,0">
-            <TextBlock Text="{Binding Specials.Count, StringFormat='{}{0} specials'}" Classes="pbTextCaption" Margin="0,0,0,14" />
+            <DockPanel Margin="0,0,0,14">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+                    <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" Height="24">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Classes="segItem" Classes.active="{Binding IsPosterView}" Content="Poster"
+                                    Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.Poster}" />
+                            <Button Classes="segItem" Classes.active="{Binding IsListView}" Content="List"
+                                    Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.List}" />
+                            <Button Classes="segItem" Classes.active="{Binding IsCardView}" Content="Card"
+                                    Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.Card}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+                <TextBlock Text="{Binding Specials.Count, StringFormat='{}{0} specials'}" Classes="pbTextCaption" VerticalAlignment="Center" />
+            </DockPanel>
 
             <ItemsControl IsVisible="{Binding IsPosterView}" ItemsSource="{Binding Specials}" ItemTemplate="{StaticResource IssuePosterTileTemplate}">
                 <ItemsControl.ItemsPanel>
@@ -397,7 +413,7 @@
             <Border Classes="card">
                 <StackPanel Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,6">
-                        <TextBlock Text="Continuities" FontSize="12.5" FontWeight="SemiBold"
+                        <TextBlock Text="Continuities" FontSize="13" FontWeight="SemiBold"
                                    Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                         <Button Classes="railAdd" Command="{Binding ToggleAddContinuityCommand}">
                             <StackPanel Orientation="Horizontal" Spacing="5">
@@ -406,25 +422,25 @@
                             </StackPanel>
                         </Button>
                         <!-- docs/superpowers/specs/2026-09-17-storyevent-continuity-autopopulate-design.md -
-                             per-series manual Wikidata trigger, no credentials needed. -->
-                        <Button Classes="railAdd" Command="{Binding LookUpContinuityCommand}" ToolTip.Tip="Check Wikidata for a shared-universe match via this series' recurring characters">
+                             per-series manual trigger, now Metron (needs the Metron login); hidden on the manga screen. -->
+                        <Button Classes="railAdd" Command="{Binding LookUpContinuityCommand}" IsVisible="{Binding !IsMangaDetailHost}" ToolTip.Tip="Read this series' universes from Metron and add it to them">
                             <StackPanel Orientation="Horizontal" Spacing="5">
                                 <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
-                                <TextBlock Text="Look up on Wikidata" VerticalAlignment="Center" />
+                                <TextBlock Text="Look up on Metron" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
-                    <TextBlock Text="{Binding ContinuityLookupResult}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                    <TextBlock Text="{Binding ContinuityLookupResult}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}"
                                Margin="0,0,0,6" IsVisible="{Binding ContinuityLookupResult, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                     <Border IsVisible="{Binding IsAddingContinuity}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                            CornerRadius="6" Padding="12" Margin="0,0,0,8">
+                            CornerRadius="{DynamicResource PbRadiusSm}" Padding="12" Margin="0,0,0,8">
                         <StackPanel Spacing="8">
-                            <TextBox Text="{Binding ContinuitySearchQuery}" Watermark="Search or create a continuity…" FontSize="12" />
+                            <TextBox Text="{Binding ContinuitySearchQuery}" PlaceholderText="Search or create a continuity…" FontSize="12" />
                             <ItemsControl ItemsSource="{Binding ContinuitySearchResults}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:ContinuitySearchResult">
                                         <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
-                                                Background="Transparent" BorderThickness="0" FontSize="12.5"
+                                                Background="Transparent" BorderThickness="0" FontSize="13"
                                                 Foreground="{DynamicResource PbTextMutedBrush}"
                                                 Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).AddContinuityCommand}"
                                                 CommandParameter="{Binding}">
@@ -443,11 +459,11 @@
                             <DataTemplate x:DataType="models:ContinuityChip">
                                 <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}" Padding="10,4" Margin="0,0,6,6">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <TextBlock Text="{Binding Name}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                                        <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
-                                                Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                        <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        <Button AutomationProperties.Name="Remove from this continuity" Classes="iconButton sm"
+                                                Foreground="{DynamicResource PbTextMutedBrush}"
                                                 Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RemoveContinuityCommand}"
-                                                CommandParameter="{Binding}" ToolTip.Tip="Remove from this continuity" />
+                                                CommandParameter="{Binding}" ToolTip.Tip="Remove from this continuity"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>
@@ -461,7 +477,7 @@
             <Border Classes="card">
                 <StackPanel Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,6">
-                        <TextBlock Text="Collections" FontSize="12.5" FontWeight="SemiBold"
+                        <TextBlock Text="Collections" FontSize="13" FontWeight="SemiBold"
                                    Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                         <Button Classes="railAdd" Command="{Binding ToggleAddCollectionCommand}">
                             <StackPanel Orientation="Horizontal" Spacing="5">
@@ -471,14 +487,14 @@
                         </Button>
                     </StackPanel>
                     <Border IsVisible="{Binding IsAddingCollection}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                            CornerRadius="6" Padding="12" Margin="0,0,0,8">
+                            CornerRadius="{DynamicResource PbRadiusSm}" Padding="12" Margin="0,0,0,8">
                         <StackPanel Spacing="8">
-                            <TextBox Text="{Binding CollectionSearchQuery}" Watermark="Search or create a collection…" FontSize="12" />
+                            <TextBox Text="{Binding CollectionSearchQuery}" PlaceholderText="Search or create a collection…" FontSize="12" />
                             <ItemsControl ItemsSource="{Binding CollectionSearchResults}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:CollectionSearchResult">
                                         <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
-                                                Background="Transparent" BorderThickness="0" FontSize="12.5"
+                                                Background="Transparent" BorderThickness="0" FontSize="13"
                                                 Foreground="{DynamicResource PbTextMutedBrush}"
                                                 Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).AddCollectionCommand}"
                                                 CommandParameter="{Binding}">
@@ -497,11 +513,11 @@
                             <DataTemplate x:DataType="models:CollectionChip">
                                 <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}" Padding="10,4" Margin="0,0,6,6">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <TextBlock Text="{Binding Name}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                                        <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
-                                                Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                        <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        <Button AutomationProperties.Name="Remove from this collection" Classes="iconButton sm"
+                                                Foreground="{DynamicResource PbTextMutedBrush}"
                                                 Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RemoveCollectionCommand}"
-                                                CommandParameter="{Binding}" ToolTip.Tip="Remove from this collection" />
+                                                CommandParameter="{Binding}" ToolTip.Tip="Remove from this collection"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>
@@ -512,25 +528,25 @@
 
             <!-- Add-related-series expander - transient UI, stays outside any card. -->
             <Border IsVisible="{Binding IsAddingRelation}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    CornerRadius="6" Padding="12">
+                    CornerRadius="{DynamicResource PbRadiusSm}" Padding="12">
                 <StackPanel Spacing="8">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="Relationship:" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
                         <pbc:SuggestBox IsStrict="True" Suggestions="{Binding RelationTypeNames}"
                                         Text="{Binding SelectedRelationTypeOptionText}" MinWidth="160" FontSize="12" />
                     </StackPanel>
-                    <TextBox Text="{Binding RelationSearchQuery}" Watermark="Search for a series or collection…" FontSize="12" />
+                    <TextBox Text="{Binding RelationSearchQuery}" PlaceholderText="Search for a series or collection…" FontSize="12" />
                     <ItemsControl ItemsSource="{Binding RelationSearchResults}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:RelationSearchResult">
                                 <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
-                                        Background="Transparent" BorderThickness="0" FontSize="12.5"
+                                        Background="Transparent" BorderThickness="0" FontSize="13"
                                         Foreground="{DynamicResource PbTextMutedBrush}"
                                         Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).AddRelationCommand}"
                                         CommandParameter="{Binding}">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <TextBlock Text="{Binding Name}" />
-                                        <TextBlock Text="{Binding Kind}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Kind}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </Button>
                             </DataTemplate>
@@ -539,8 +555,8 @@
                 </StackPanel>
             </Border>
 
-            <TextBlock IsVisible="{Binding !HasAnyRelatedRail}" Text="No related series yet." FontSize="12.5"
-                       Foreground="{DynamicResource PbTextFaintBrush}" />
+            <TextBlock IsVisible="{Binding !HasAnyRelatedRail}" Text="No related series yet." FontSize="13"
+                       Foreground="{DynamicResource PbTextMutedBrush}" />
 
             <Border Classes="card">
                 <views:PosterRail Title="Related" ContextLabel="{Binding Related.Count, StringFormat='{}{0} · manage'}"
@@ -554,7 +570,7 @@
                  external-metadata-full-extraction-design.md §5) - merged into this same Related tab,
                  dimmed/badged, no click-through since there's no local series to open yet. -->
             <StackPanel Spacing="6" IsVisible="{Binding HasExternalRelationPlaceholders}">
-                <TextBlock Text="Not in your library" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                <TextBlock Text="Not in your library" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
                 <ItemsControl ItemsSource="{Binding ExternalRelationPlaceholders}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -564,15 +580,15 @@
                             <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}"
                                     Padding="10,4" Margin="0,0,6,6">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="{Binding RelationTypeLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding RelationTypeLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding TargetTitle}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                                     <!-- Grand Comics Database bonds (docs/superpowers/specs/2026-09-27-gcd-data-design.md §4): the source mark and a
                                          link to the series' page, which is also the credit CC BY-SA asks for. -->
                                     <Border IsVisible="{Binding HasSourceLabel}" Background="{DynamicResource PbAccentSoftBrush}"
-                                            CornerRadius="{StaticResource PbRadiusChip}" Padding="5,1" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding SourceLabel}" FontSize="9.5" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentBrush}" />
+                                            CornerRadius="{StaticResource PbRadiusChip}" Padding="4,1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding SourceLabel}" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentBrush}" />
                                     </Border>
-                                    <Button Classes="headerAction ghost" IsVisible="{Binding HasUrl}" Padding="4,1" VerticalAlignment="Center"
+                                    <Button Classes="iconButton" IsVisible="{Binding HasUrl}" VerticalAlignment="Center"
                                             Command="{x:Static services:ExternalLinks.OpenWebCommand}" CommandParameter="{Binding TargetUrl}"
                                             ToolTip.Tip="{Binding LinkTip}" AutomationProperties.Name="{Binding LinkTip}">
                                         <fi:SymbolIcon Symbol="Open" FontSize="{StaticResource PbIconSizeXs}" />
@@ -609,10 +625,10 @@
         <!-- ================= DETAILS TAB (docs/superpowers/specs/2026-09-13-detail-screens-
              redesign-design.md §3) - split into Info/Linking inner sub-tabs, each section wrapped
              in a Border.card. ================= -->
-        <StackPanel IsVisible="{Binding IsDetailsTab}" Margin="0,20,0,0">
-            <StackPanel Orientation="Horizontal" Spacing="18" Margin="0,0,0,16">
-                <Button Classes="detailsSubTab" Classes.active="{Binding IsInfoSubTab}" Command="{Binding GoInfoSubTabCommand}" Content="Info" />
-                <Button Classes="detailsSubTab" Classes.active="{Binding IsLinkingSubTab}" Command="{Binding GoLinkingSubTabCommand}" Content="Linking" />
+        <StackPanel IsVisible="{Binding IsDetailsTab}" controls:Replace.On="{Binding IsDetailsTab}" Margin="0,20,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="20" Margin="0,0,0,16">
+                <Button Classes="tab" Classes.active="{Binding IsInfoSubTab}" Command="{Binding GoInfoSubTabCommand}" Content="Info" />
+                <Button Classes="tab" Classes.active="{Binding IsLinkingSubTab}" Command="{Binding GoLinkingSubTabCommand}" Content="Linking" />
             </StackPanel>
 
             <!-- Info -->
@@ -622,7 +638,7 @@
                         <StackPanel Grid.Column="0" Margin="0,0,28,0">
                             <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,4">
                                 <fi:SymbolIcon Symbol="Building" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                <TextBlock Text="PUBLISHER" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="PUBLISHER" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                             </StackPanel>
                             <pbc:BrandMark Family="Publisher" Value="{Binding Publisher}" Year="{Binding PublisherYear}" ShowText="True" MarkSize="18"
                                            HorizontalAlignment="Left" Foreground="{DynamicResource PbTextBrush}" />
@@ -630,16 +646,14 @@
                         <StackPanel Grid.Column="1">
                             <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,4">
                                 <fi:SymbolIcon Symbol="BookArrowClockwise" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                <TextBlock Text="READING MODE" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="READING MODE" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                             </StackPanel>
-                            <Button Command="{Binding ToggleReadingModeCommand}"
-                                    Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand"
-                                    HorizontalAlignment="Left" FontSize="13" Foreground="{DynamicResource PbTextBrush}">
-                                <StackPanel Orientation="Horizontal" Spacing="4">
-                                    <TextBlock Text="{Binding ReadingModeLabel}" VerticalAlignment="Center" />
-                                    <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
+                            <!-- All seven reading modes, by the reader's own names (ReadingModeCatalog): a strict picker like the content-type one. -->
+                            <pbc:SuggestBox Text="{Binding ReadingModeText}" Suggestions="{Binding ReadingModeOptions}" IsStrict="True"
+                                            HorizontalAlignment="Left" MinWidth="200" FontSize="13"
+                                            AutomationProperties.Name="Reading mode" ToolTip.Tip="{Binding ReadingModeDescription}" />
+                            <TextBlock Text="{Binding ReadingModeDescription}" FontSize="11" TextWrapping="Wrap" MaxWidth="320" HorizontalAlignment="Left" TextAlignment="Left" Margin="0,4,0,0"
+                                       Foreground="{DynamicResource PbTextMutedBrush}" />
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -651,7 +665,7 @@
                         <StackPanel Grid.Column="0" Margin="0,0,28,0">
                             <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,4">
                                 <fi:SymbolIcon Symbol="AutoFit" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                <TextBlock Text="SERIES FIT MODE" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="SERIES FIT MODE" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <TextBlock Text="{Binding SeriesFitDefaultLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
@@ -663,7 +677,7 @@
                         <StackPanel Grid.Column="1" Margin="0,0,28,0">
                             <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,4">
                                 <fi:SymbolIcon Symbol="ArrowRotateClockwise" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                <TextBlock Text="SERIES AUTO-ROTATE" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="SERIES AUTO-ROTATE" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <TextBlock Text="{Binding SeriesAutoRotateDefaultLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
@@ -675,7 +689,7 @@
                         <StackPanel Grid.Column="2">
                             <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,4">
                                 <fi:SymbolIcon Symbol="Color" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                <TextBlock Text="SERIES READER PROFILE" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Text="SERIES READER PROFILE" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <TextBlock Text="{Binding SeriesProfileLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
@@ -694,13 +708,13 @@
                     <StackPanel Spacing="12">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <fi:SymbolIcon Symbol="People" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                            <TextBlock Text="CREDITS" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="CREDITS" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                         </StackPanel>
                         <ItemsControl ItemsSource="{Binding CreditRoles}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:CreditRoleGroup">
                                     <Grid ColumnDefinitions="130,*" Margin="0,0,0,8">
-                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
+                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
                                         <ItemsControl Grid.Column="1" ItemsSource="{Binding Chips}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -725,13 +739,13 @@
                     <StackPanel Spacing="10">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <fi:SymbolIcon Symbol="TextAlignLeft" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                            <TextBlock Text="ADDITIONAL DETAILS" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="ADDITIONAL DETAILS" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                         </StackPanel>
                         <ItemsControl ItemsSource="{Binding AdditionalDetails}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:DetailFieldRow">
                                     <Grid ColumnDefinitions="130,*" Margin="0,0,0,6">
-                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Top" />
+                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Top" />
                                         <Button Grid.Column="1" Classes="creditName" Content="{Binding Value}" Command="{Binding OpenLinkCommand}"
                                                 IsVisible="{Binding IsLink}" Background="Transparent" BorderThickness="0" Padding="0"
                                                 HorizontalAlignment="Left" HorizontalContentAlignment="Left" Cursor="Hand" />
@@ -760,7 +774,7 @@
                     <StackPanel Spacing="8">
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <fi:SymbolIcon Symbol="Globe" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                            <TextBlock Text="External Metadata" FontSize="12.5" FontWeight="SemiBold"
+                            <TextBlock Text="External Metadata" FontSize="13" FontWeight="SemiBold"
                                        Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                             <Button Classes="railAdd" Command="{Binding ToggleSearchMetadataCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="5">
@@ -771,7 +785,7 @@
                         </StackPanel>
 
                         <Border IsVisible="{Binding IsSearchingMetadata}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                                CornerRadius="6" Padding="12">
+                                CornerRadius="{DynamicResource PbRadiusSm}" Padding="12">
                             <StackPanel Spacing="8">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <!-- Plugin API v2 NetSearch hook (docs/superpowers/specs/2026-09-05-plugin-
@@ -781,17 +795,17 @@
                                          bundled BrandMark asset. -->
                                     <pbc:SuggestBox IsStrict="True" Suggestions="{Binding MetadataProviderNames}"
                                                     Text="{Binding SelectedMetadataProviderText}" Width="150" FontSize="12" />
-                                    <TextBox Text="{Binding MetadataSearchQuery}" Watermark="Search…" FontSize="12" Width="220" />
-                                    <Button Content="Search" Command="{Binding SearchMetadataCommand}" Padding="10,5" FontSize="12" CornerRadius="5" />
+                                    <TextBox Text="{Binding MetadataSearchQuery}" PlaceholderText="Search…" FontSize="12" Width="220" />
+                                    <Button Content="Search" Command="{Binding SearchMetadataCommand}" Padding="10,4" FontSize="12" CornerRadius="{DynamicResource PbRadiusSm}" />
                                 </StackPanel>
-                                <TextBlock IsVisible="{Binding IsMetadataSearchInProgress}" Text="Searching…" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBlock IsVisible="{Binding IsMetadataSearchInProgress}" Text="Searching…" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <TextBlock IsVisible="{Binding MetadataSearchError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
-                                           Text="{Binding MetadataSearchError}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                           Text="{Binding MetadataSearchError}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <ItemsControl ItemsSource="{Binding MetadataSearchResults}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:AniListMatchSample">
-                                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
-                                                <Border Grid.Column="0" CornerRadius="4" Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center"
+                                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
+                                                <Border Grid.Column="0" CornerRadius="{DynamicResource PbRadiusSm}" Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center"
                                                         Classes.auto="{Binding TierClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=auto}"
                                                         Classes.review="{Binding TierClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=review}"
                                                         Classes.reject="{Binding TierClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=reject}">
@@ -803,10 +817,10 @@
                                                     <TextBlock Text="{Binding TierLabel}" FontSize="10" Foreground="White" />
                                                 </Border>
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                    <TextBlock Text="{Binding ConfidencePercent, StringFormat='{}{0}% match'}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                    <TextBlock Text="{Binding Title}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                    <TextBlock Text="{Binding ConfidencePercent, StringFormat='{}{0}% match'}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
                                                 </StackPanel>
-                                                <Button Grid.Column="2" Content="Link" Padding="10,4" FontSize="11.5" CornerRadius="5"
+                                                <Button Grid.Column="2" Content="Link" Padding="10,4" FontSize="12" CornerRadius="{DynamicResource PbRadiusSm}"
                                                         Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0"
                                                         Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).LinkMetadataCommand}"
                                                         CommandParameter="{Binding}" />
@@ -817,8 +831,8 @@
                             </StackPanel>
                         </Border>
 
-                        <TextBlock IsVisible="{Binding !HasExternalLinks}" Text="Not linked to any external metadata source yet." FontSize="12.5"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock IsVisible="{Binding !HasExternalLinks}" Text="Not linked to any external metadata source yet." FontSize="13"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" />
                         <ItemsControl ItemsSource="{Binding ExternalLinks}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -830,23 +844,23 @@
                                             <pbc:BrandMark Family="Service" Value="{Binding ProviderLabel}" ShowText="True"
                                                            MarkSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center"
                                                            Foreground="{DynamicResource PbTextMutedBrush}" />
-                                            <Button Padding="0" Width="16" Height="16" CornerRadius="8"
-                                                    Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                            <Button Padding="0" Width="16" Height="16" CornerRadius="{DynamicResource PbRadius}"
+                                                    Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextMutedBrush}"
                                                     Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).ApplyCoverCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Apply this provider's cover"
                                                     IsVisible="{Binding CanApplyCoverDirectly}">
                                                 <fi:SymbolIcon Symbol="Image" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
-                                            <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
-                                                    Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                            <Button AutomationProperties.Name="Remove this link" Classes="iconButton sm"
+                                                    Foreground="{DynamicResource PbTextMutedBrush}"
                                                     Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).UnlinkMetadataCommand}"
-                                                    CommandParameter="{Binding}" ToolTip.Tip="Remove this link" />
+                                                    CommandParameter="{Binding}" ToolTip.Tip="Remove this link"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
                                         </StackPanel>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <TextBlock Text="{Binding CoverApplyStatus}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                        <TextBlock Text="{Binding CoverApplyStatus}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}"
                                    IsVisible="{Binding CoverApplyStatus, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                     </StackPanel>
                 </Border>
@@ -855,7 +869,7 @@
                     <StackPanel Spacing="8">
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <fi:SymbolIcon Symbol="CloudSync" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                            <TextBlock Text="Trackers" FontSize="12.5" FontWeight="SemiBold"
+                            <TextBlock Text="Trackers" FontSize="13" FontWeight="SemiBold"
                                        Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                             <Button Classes="railAdd" Command="{Binding ToggleLinkTrackerCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="5">
@@ -864,7 +878,7 @@
                                 </StackPanel>
                             </Button>
                             <Button IsVisible="{Binding HasTrackerLinks}"
-                                    Command="{Binding SyncToTrackersCommand}" Padding="10,5" FontSize="12" CornerRadius="5"
+                                    Command="{Binding SyncToTrackersCommand}" Padding="10,4" FontSize="12" CornerRadius="{DynamicResource PbRadiusSm}"
                                     Background="{DynamicResource PbSurfaceAltBrush}" Foreground="{DynamicResource PbTextMutedBrush}" BorderThickness="0">
                                 <StackPanel Orientation="Horizontal" Spacing="5">
                                     <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
@@ -874,22 +888,22 @@
                         </StackPanel>
 
                         <Border IsVisible="{Binding IsLinkingTracker}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                                CornerRadius="6" Padding="12">
+                                CornerRadius="{DynamicResource PbRadiusSm}" Padding="12">
                             <StackPanel Spacing="8">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <pbc:SuggestBox IsStrict="True" Suggestions="{Binding TrackerServiceNames}"
                                                     Text="{Binding SelectedTrackerServiceText}" Width="160" FontSize="12" />
-                                    <TextBox Text="{Binding TrackerSearchQuery}" Watermark="Search title…" FontSize="12" Width="220" />
-                                    <Button Content="Search" Command="{Binding SearchTrackerCommand}" Padding="10,5" FontSize="12" CornerRadius="5" />
+                                    <TextBox Text="{Binding TrackerSearchQuery}" PlaceholderText="Search title…" FontSize="12" Width="220" />
+                                    <Button Content="Search" Command="{Binding SearchTrackerCommand}" Padding="10,4" FontSize="12" CornerRadius="{DynamicResource PbRadiusSm}" />
                                 </StackPanel>
-                                <TextBlock IsVisible="{Binding IsTrackerSearchInProgress}" Text="Searching…" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBlock IsVisible="{Binding IsTrackerSearchInProgress}" Text="Searching…" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <TextBlock IsVisible="{Binding TrackerSearchError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
-                                           Text="{Binding TrackerSearchError}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                           Text="{Binding TrackerSearchError}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <ItemsControl ItemsSource="{Binding TrackerSearchResults}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:TrackerMatchSample">
-                                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
-                                                <Border Grid.Column="0" CornerRadius="4" Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center"
+                                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
+                                                <Border Grid.Column="0" CornerRadius="{DynamicResource PbRadiusSm}" Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center"
                                                         Classes.auto="{Binding TierClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=auto}"
                                                         Classes.review="{Binding TierClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=review}"
                                                         Classes.reject="{Binding TierClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=reject}">
@@ -901,10 +915,10 @@
                                                     <TextBlock Text="{Binding TierLabel}" FontSize="10" Foreground="White" />
                                                 </Border>
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                    <TextBlock Text="{Binding ConfidencePercent, StringFormat='{}{0}% match'}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                    <TextBlock Text="{Binding Title}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                    <TextBlock Text="{Binding ConfidencePercent, StringFormat='{}{0}% match'}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
                                                 </StackPanel>
-                                                <Button Grid.Column="2" Content="{Binding LinkConfirm.Label}" Padding="10,4" FontSize="11.5" CornerRadius="5"
+                                                <Button Grid.Column="2" Content="{Binding LinkConfirm.Label}" Padding="10,4" FontSize="12" CornerRadius="{DynamicResource PbRadiusSm}"
                                                         Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0"
                                                         Command="{Binding LinkConfirm.TriggerCommand}" />
                                             </Grid>
@@ -915,9 +929,14 @@
                         </Border>
 
                         <TextBlock IsVisible="{Binding TrackerSyncStatus, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
-                                   Text="{Binding TrackerSyncStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <TextBlock IsVisible="{Binding !HasTrackerLinks}" Text="Not linked to any tracker yet." FontSize="12.5"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                                   Classes="pbTextMeta" Classes.errorText="{Binding HasTrackerSyncError}" TextWrapping="Wrap"
+                                   Text="{Binding TrackerSyncStatus}" />
+                        <!-- The tracker's own reply (often raw JSON) stays out of the sentence, behind Details. -->
+                        <Expander Classes="errorDetails" Header="Details" IsVisible="{Binding HasTrackerSyncError}">
+                            <SelectableTextBlock Text="{Binding TrackerSyncErrorDetail}" />
+                        </Expander>
+                        <TextBlock IsVisible="{Binding !HasTrackerLinks}" Text="Not linked to any tracker yet." FontSize="13"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" />
                         <ItemsControl ItemsSource="{Binding TrackerLinks}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -936,10 +955,10 @@
                                             <pbc:BrandMark Family="Service" Value="{Binding ServiceName}" ShowText="True"
                                                            MarkSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center"
                                                            Foreground="{DynamicResource PbTextMutedBrush}" />
-                                            <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
-                                                    Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                            <Button AutomationProperties.Name="Remove this tracker link" Classes="iconButton sm"
+                                                    Foreground="{DynamicResource PbTextMutedBrush}"
                                                     Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).UnlinkTrackerCommand}"
-                                                    CommandParameter="{Binding}" ToolTip.Tip="Remove this tracker link" />
+                                                    CommandParameter="{Binding}" ToolTip.Tip="Remove this tracker link"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
                                         </StackPanel>
                                     </Button>
                                 </DataTemplate>
@@ -950,14 +969,14 @@
                              shown read-only here (the whole-series ReadingStatusPicker already owns editing it) -
                              only Progress/Score/FinishDate are per-tracker editable, per the design's scope. -->
                         <Border IsVisible="{Binding SelectedTrackerLink, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
-                                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,4,0,0">
+                                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="12" Margin="0,4,0,0">
                             <StackPanel Spacing="8" DataContext="{Binding SelectedTrackerLink}" x:DataType="models:TrackerLinkSample">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <pbc:BrandMark Family="Service" Value="{Binding ServiceName}" ShowText="True"
                                                    MarkSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center"
                                                    Foreground="{DynamicResource PbTextMutedBrush}" />
-                                    <TextBlock Text="{Binding Status}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                    <TextBlock Text="Loading…" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center"
+                                    <TextBlock Text="{Binding Status}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Loading…" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
                                                IsVisible="{Binding IsBusy}" />
                                 </StackPanel>
 
@@ -972,29 +991,29 @@
                                     <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8" IsVisible="{Binding SupportsScore}">
                                         <TextBox Width="140" HorizontalAlignment="Left" Text="{Binding ScoreText}"
                                                  beh:TextSpinner.Enabled="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="5" beh:TextSpinner.Step="0.1" />
-                                        <Button Content="Use this score" Padding="8,3" FontSize="11" CornerRadius="5"
+                                        <Button Content="Use this score" Padding="8,4" FontSize="11" CornerRadius="{DynamicResource PbRadiusSm}"
                                                 Background="{DynamicResource PbSurfaceAltBrush}" Foreground="{DynamicResource PbTextMutedBrush}" BorderThickness="0"
                                                 Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).UseTrackerScoreCommand}"
                                                 CommandParameter="{Binding}" ToolTip.Tip="Overwrite this series' rating with this tracker's remote score" />
                                     </StackPanel>
                                     <TextBlock Grid.Row="1" Grid.Column="1" Text="Not supported by this tracker" FontSize="12"
-                                               Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !SupportsScore}" />
+                                               Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding !SupportsScore}" />
 
                                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Finish date" FontSize="12" VerticalAlignment="Center"
                                                Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding SupportsFinishDate}" />
                                     <DatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding FinishDateOffset}" HorizontalAlignment="Left"
                                                 IsVisible="{Binding SupportsFinishDate}" />
                                     <TextBlock Grid.Row="2" Grid.Column="1" Text="Not supported by this tracker" FontSize="12"
-                                               Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !SupportsFinishDate}" />
+                                               Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding !SupportsFinishDate}" />
                                 </Grid>
 
                                 <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <Button Content="Save to tracker" Padding="10,5" FontSize="12" CornerRadius="5"
+                                    <Button Content="Save to tracker" Padding="10,4" FontSize="12" CornerRadius="{DynamicResource PbRadiusSm}"
                                             Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0"
                                             IsEnabled="{Binding !IsBusy}"
                                             Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).PushTrackerFieldCommand}"
                                             CommandParameter="{Binding}" />
-                                    <TextBlock Text="{Binding PushStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center"
+                                    <TextBlock Text="{Binding PushStatus}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
                                                IsVisible="{Binding PushStatus, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                 </StackPanel>
                             </StackPanel>
@@ -1005,18 +1024,18 @@
         </StackPanel>
 
         <!-- ================= ACTIVITY TAB ================= -->
-        <StackPanel IsVisible="{Binding IsActivityTab}" Margin="0,20,0,0" Spacing="4">
-            <TextBlock IsVisible="{Binding !HasActivity}" Text="No recent activity." FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+        <StackPanel IsVisible="{Binding IsActivityTab}" controls:Replace.On="{Binding IsActivityTab}" Margin="0,20,0,0" Spacing="4">
+            <TextBlock IsVisible="{Binding !HasActivity}" Text="No recent activity." FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
             <ItemsControl ItemsSource="{Binding Activity}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="models:ActivitySample">
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
                             <fi:SymbolIcon Symbol="{Binding Icon}" FontSize="{StaticResource PbIconSizeSm}"
                                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                            <TextBlock Text="{Binding Label}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                            <TextBlock Text="·" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding Label}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="·" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                             <TextBlock Text="{Binding TimestampUtc, Converter={x:Static views:RelativeTimeConverter.Instance}}"
-                                       FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                       FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                         </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
@@ -1028,18 +1047,18 @@
              sidebar info panel on its Library explorer; this is the adapted Paperbunkr anchor,
              scoped to whichever single issue is currently focused. -->
         <StackPanel IsVisible="{Binding IsPluginsTab}" Margin="0,20,0,0" Spacing="12">
-            <TextBlock Text="Select a single issue to see plugin info for it." FontSize="12.5"
-                       Foreground="{DynamicResource PbTextFaintBrush}"
+            <TextBlock Text="Select a single issue to see plugin info for it." FontSize="13"
+                       Foreground="{DynamicResource PbTextMutedBrush}"
                        IsVisible="{Binding FocusedIssueId, Converter={x:Static conv:ObjectConverters.IsNull}}" />
-            <TextBlock Text="Loading…" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}"
+            <TextBlock Text="Loading…" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
                        IsVisible="{Binding IsLoadingComicInfoPanels}" />
             <ItemsControl ItemsSource="{Binding ComicInfoPanels}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="models:PluginInfoPanelSample">
-                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="12" Margin="0,0,0,8">
                             <StackPanel Spacing="4">
                                 <TextBlock Text="{Binding CommandName}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                                <TextBlock Text="{Binding Text}" FontSize="12.5" TextWrapping="Wrap" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <TextBlock Text="{Binding Text}" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource PbTextMutedBrush}" />
                             </StackPanel>
                         </Border>
                     </DataTemplate>

@@ -104,8 +104,12 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
     /// <summary>False when the caller gave no way to switch (the choice is then just a label).</summary>
     public bool CanSwitchProvider => _switchProvider is not null;
 
-    partial void OnProviderTextChanged(string oldValue, string newValue)
+    /// <summary>Names the source actually being searched ("Which Metron series is this?"), not always ComicVine.</summary>
+    public string Title => $"Which {ProviderText} series is this?";
+
+    partial void OnProviderTextChanged(string? oldValue, string newValue)
     {
+        OnPropertyChanged(nameof(Title));
         if (_revertingProvider || _switchProvider is null)
         {
             return;
@@ -115,7 +119,7 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
         if (!_switchProvider(provider))
         {
             _revertingProvider = true;
-            ProviderText = oldValue;
+            ProviderText = oldValue ?? ComicProviderFactory.DisplayName(ComicProvider.ComicVine);
             _revertingProvider = false;
             SearchStatus = ComicProviderFactory.MissingCredentialsMessage(provider);
             return;

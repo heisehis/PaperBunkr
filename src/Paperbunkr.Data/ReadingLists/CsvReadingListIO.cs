@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
+using Paperbunkr.Data.ReadingLists.Matching;
 
 namespace Paperbunkr.Data.ReadingLists;
 
@@ -13,6 +14,9 @@ namespace Paperbunkr.Data.ReadingLists;
 /// </summary>
 public static class CsvReadingListIO
 {
+    /// <summary>Stored on <see cref="ReadingListItemSource.SourceKey"/> for entries that came from a .csv file.</summary>
+    public const string SourceKey = "csv";
+
     public static CsvImportResult Import(PaperbunkrDbContext context, string filePath, string? listName = null)
     {
         var lines = File.ReadAllLines(filePath);
@@ -36,8 +40,7 @@ public static class CsvReadingListIO
         var now = DateTime.UtcNow;
         var list = new ReadingList { Name = listName ?? Path.GetFileNameWithoutExtension(filePath), CreatedAt = now, UpdatedAt = now };
         var skippedRows = new List<string>();
-        int sortOrder = 0;
-        int placeholderCount = 0;
+        var references = new List<ComicReference>();
 
         for (int lineIndex = 1; lineIndex < lines.Length; lineIndex++)
         {
@@ -60,13 +63,21 @@ public static class CsvReadingListIO
             int? year = int.TryParse(Field(fields, yearIndex), out var y) ? y : null;
             string? format = string.IsNullOrWhiteSpace(Field(fields, formatIndex)) ? null : Field(fields, formatIndex)!.Trim();
 
-            var issue = ReadingListMatcher.ResolveOrCreatePlaceholder(context, series, number, volume, year, format);
-            if (issue.IsPlaceholder)
+            references.Add(new ComicReference(series, number, volume, year, format, SourceKey: SourceKey));
+        }
+
+        // One read of the library for the whole file (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.6).
+        var resolution = ReadingListResolver.Resolve(context, references);
+        int sortOrder = 0;
+        int placeholderCount = 0;
+        foreach (var resolved in ReadingListResolver.Materialize(context, resolution))
+        {
+            if (resolved.Issue.IsPlaceholder)
             {
                 placeholderCount++;
             }
 
-            list.Items.Add(new ReadingListItem { IssueId = issue.Id, SortOrder = sortOrder++ });
+            list.Items.Add(new ReadingListItem { Issue = resolved.Issue, SortOrder = sortOrder++, Source = resolved.Source });
         }
 
         context.ReadingLists.Add(list);
@@ -74,7 +85,7 @@ public static class CsvReadingListIO
         ReadingListFolders.PlaceNewList(context, list, null);
         ReadingListManager.RecordCreatedWithItems(context, list);
         context.SaveChanges();
-        return new CsvImportResult(list, list.Items.Count - placeholderCount, placeholderCount, skippedRows);
+        return new CsvImportResult(list, list.Items.Count - placeholderCount, placeholderCount, skippedRows) { Report = resolution.Report(skippedRows) };
     }
 
     /// <summary>
@@ -166,4 +177,8 @@ public static class CsvReadingListIO
 }
 
 /// <summary>OwnedCount/PlaceholderCount reflect the resolved issues' current state (whether the placeholder was created just now or already existed from an earlier import), not strictly "created this run" — matching what CBLManager's own import summary reported.</summary>
-public record CsvImportResult(ReadingList List, int OwnedCount, int PlaceholderCount, List<string> SkippedRows);
+public record CsvImportResult(ReadingList List, int OwnedCount, int PlaceholderCount, List<string> SkippedRows)
+{
+    /// <summary>What became of every row (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.7).</summary>
+    public ImportReport? Report { get; init; }
+}

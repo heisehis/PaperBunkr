@@ -18,10 +18,10 @@ namespace cYo.Common.Windows.Forms
 
 		private int width = 80;
 
-		private readonly string name;
+		private readonly string name = null;
 
 		[NonSerialized]
-		private readonly object tag;
+		private readonly object tag = null;
 
 		private DateTime lastTimeVisible = DateTime.MinValue;
 

@@ -56,7 +56,7 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
 				{
 					IEnumerable<byte> enumerable = signature;
 					byte[] array = new byte[enumerable.Count()];
-					fileStream.Read(array, 0, array.Length);
+					fileStream.ReadExactly(array);
 					return enumerable.SequenceEqual(array);
 				}
 			}

@@ -70,6 +70,14 @@ public static class ComicMetadataExternalIdSync
         AttachEntityId(context, kind, provider, resolveEntityId(), externalId);
     }
 
+    /// <summary>False only for a character or team row that has been deleted; every other kind is taken as existing.</summary>
+    private static bool EntityExists(PaperbunkrDbContext context, ComicMetadataEntityKind kind, int entityId) => kind switch
+    {
+        ComicMetadataEntityKind.Character => context.Characters.Any(c => c.Id == entityId),
+        ComicMetadataEntityKind.Team => context.Teams.Any(t => t.Id == entityId),
+        _ => true,
+    };
+
     /// <summary>
     /// Upserts a <see cref="ComicMetadataExternalId"/> row directly, for a kind that already <i>is</i>
     /// the identified row rather than something resolved by name (<see cref="ComicMetadataEntityKind.Issue"/>/
@@ -91,11 +99,18 @@ public static class ComicMetadataExternalIdSync
             // vs "01" both numerically matching one ComicVine issue, two local series folding onto one
             // volume) used to hit that index and throw out of the whole scrape batch. The first row keeps
             // the link; the second just doesn't get one - its scraped fields were already saved.
-            bool ownedByAnotherEntity = context.ComicMetadataExternalIds
-                .Any(e => e.EntityKind == kind && e.Provider == provider && e.ExternalId == externalIdText);
-            if (ownedByAnotherEntity)
+            var owner = context.ComicMetadataExternalIds
+                .FirstOrDefault(e => e.EntityKind == kind && e.Provider == provider && e.ExternalId == externalIdText);
+            if (owner is not null)
             {
-                return;
+                // An id left behind by a character/team row that no longer exists (older versions did not clean up on prune) is taken over,
+                // not honoured: otherwise that character could never get its id back.
+                if (EntityExists(context, kind, owner.EntityId))
+                {
+                    return;
+                }
+
+                context.ComicMetadataExternalIds.Remove(owner);
             }
 
             context.ComicMetadataExternalIds.Add(new ComicMetadataExternalId

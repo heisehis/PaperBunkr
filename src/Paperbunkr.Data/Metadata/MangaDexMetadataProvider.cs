@@ -80,7 +80,17 @@ public sealed class MangaDexMetadataProvider : IMetadataProvider
 
         var response = await FetchAsync<MangaDexGetResponse>(
             $"manga/{Uri.EscapeDataString(externalId)}?includes[]=cover_art&includes[]=author&includes[]=artist", cancellationToken).ConfigureAwait(false);
-        return response?.Data is null ? null : MangaDexNormalizer.ToMediaMetadata(response.Data);
+        if (response?.Data is null)
+        {
+            return null;
+        }
+
+        var metadata = MangaDexNormalizer.ToMediaMetadata(response.Data);
+
+        // The community score is a separate endpoint; a failure there costs only the score.
+        var stats = await FetchAsync<MangaDexStatisticsResponse>($"statistics/manga/{Uri.EscapeDataString(externalId)}", cancellationToken).ConfigureAwait(false);
+        double? bayesian = stats?.Statistics is { } map && map.TryGetValue(response.Data.Id, out var entry) ? entry.Rating?.Bayesian : null;
+        return bayesian is > 0 ? metadata with { Rating = Math.Round(bayesian.Value * 10, 1) } : metadata;
     }
 
     private async Task<T?> FetchAsync<T>(string relativeUrl, CancellationToken cancellationToken) where T : class
@@ -168,6 +178,25 @@ internal sealed class MangaDexSearchResponse
     public List<MangaDexMangaDto>? Data { get; set; }
 }
 
+internal sealed class MangaDexStatisticsResponse
+{
+    [JsonPropertyName("statistics")]
+    public Dictionary<string, MangaDexStatisticsEntry>? Statistics { get; set; }
+}
+
+internal sealed class MangaDexStatisticsEntry
+{
+    [JsonPropertyName("rating")]
+    public MangaDexRatingDto? Rating { get; set; }
+}
+
+internal sealed class MangaDexRatingDto
+{
+    /// <summary>The bayesian average, 0-10.</summary>
+    [JsonPropertyName("bayesian")]
+    public double? Bayesian { get; set; }
+}
+
 internal sealed class MangaDexGetResponse
 {
     [JsonPropertyName("data")]
@@ -244,6 +273,16 @@ internal sealed class MangaDexAttributesDto
     [JsonPropertyName("originalLanguage")]
     public string? OriginalLanguage { get; set; }
 
+    /// <summary>safe / suggestive / erotica / pornographic - the same four labels MangaBaka uses.</summary>
+    [JsonPropertyName("contentRating")]
+    public string? ContentRating { get; set; }
+
+    [JsonPropertyName("lastChapter")]
+    public string? LastChapter { get; set; }
+
+    [JsonPropertyName("lastVolume")]
+    public string? LastVolume { get; set; }
+
     /// <summary>Cross-referenced external ids keyed by site code ("al"/"mal"/"mu"/"kt"/...) -
     /// only the four this codebase has an <see cref="ExternalMetadataProvider"/> value for are
     /// mapped; the rest (raw scanlator/publisher sites) are ignored.</summary>
@@ -290,7 +329,43 @@ internal static class MangaDexNormalizer
         CrossReferences: ResolveCrossReferences(dto),
         GenreTags: ResolveGenreTags(dto),
         OtherTags: ResolveOtherTags(dto),
-        OriginalLanguage: dto.Attributes?.OriginalLanguage);
+        OriginalLanguage: dto.Attributes?.OriginalLanguage,
+        WeightedTags: ResolveWeightedTags(dto),
+        Authors: RelatedNames(dto, "author"),
+        Artists: RelatedNames(dto, "artist"),
+        ContentRating: dto.Attributes?.ContentRating,
+        AlternateTitles: ResolveAlternateTitles(dto))
+    {
+        ChapterCount = ParseCount(dto.Attributes?.LastChapter),
+        VolumeCount = ParseCount(dto.Attributes?.LastVolume),
+    };
+
+    private static int? ParseCount(string? text) =>
+        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double n) && n >= 1 ? (int)Math.Floor(n) : null;
+
+    private static IReadOnlyList<ProviderTag>? ResolveWeightedTags(MangaDexMangaDto dto)
+    {
+        var tags = dto.Attributes?.Tags?
+            .Select(t => (Name: FindLocalized(t.Attributes?.Name, "en"), Group: t.Attributes?.Group))
+            .Where(t => !string.IsNullOrWhiteSpace(t.Name))
+            .Select(t => new ProviderTag(t.Name!, string.Equals(t.Group, "genre", StringComparison.OrdinalIgnoreCase) ? "Genre" : CultureInfo.InvariantCulture.TextInfo.ToTitleCase(t.Group ?? "uncategorized"), IssueTagWeight.Unset, string.Equals(t.Group, "genre", StringComparison.OrdinalIgnoreCase), false))
+            .ToList();
+        return tags is { Count: > 0 } ? tags : null;
+    }
+
+    private static IReadOnlyList<string>? RelatedNames(MangaDexMangaDto dto, string type)
+    {
+        var names = dto.Relationships?.Where(r => r.Type == type).Select(r => r.Attributes?.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n!).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return names is { Count: > 0 } ? names : null;
+    }
+
+    private static IReadOnlyList<string>? ResolveAlternateTitles(MangaDexMangaDto dto)
+    {
+        var titles = (dto.Attributes?.AltTitles ?? []).SelectMany(t => t.Values).Where(v => !string.IsNullOrWhiteSpace(v))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return titles.Count > 0 ? titles : null;
+    }
 
     /// <summary>English beats the first alt-title in any language beats "Untitled" - never throws
     /// even when every title field is somehow empty.</summary>

@@ -222,12 +222,15 @@ namespace cYo.Common.Win32
 				SVUIA_INPLACEACTIVATE
 			}
 
+			// COM fills these output fields through marshaling; they are not assigned in managed code.
+#pragma warning disable CS0649
 			public struct FOLDERSETTINGS
 			{
 				public FOLDERFLAGS ViewMode;
 
 				public FOLDERVIEWMODE fFlags;
 			}
+#pragma warning restore CS0649
 
 			[Flags]
 			public enum FOLDERFLAGS

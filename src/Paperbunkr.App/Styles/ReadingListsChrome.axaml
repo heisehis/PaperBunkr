@@ -4,65 +4,24 @@
     <!-- Shared chrome for the Reading Lists section (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md), included by each of
          its views the way ContinuityChrome.axaml is. Every colour is a Pb skin resource. -->
 
-    <Style Selector="Button.headerAction">
-        <Setter Property="Padding" Value="12,6" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-        <Setter Property="FontSize" Value="12" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Cursor" Value="Hand" />
-    </Style>
-    <Style Selector="Button.headerAction.ghost">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-    </Style>
-    <Style Selector="Button.headerAction.secondary">
-        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-    </Style>
-    <Style Selector="Button.headerAction.primary">
-        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
-    </Style>
-    <Style Selector="Button.headerAction.danger">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
-    </Style>
 
     <!-- Path | Covers segmented toggle and the drawer tabs -->
-    <Style Selector="Button.segToggle">
-        <Setter Property="Padding" Value="10,4" />
-        <Setter Property="FontSize" Value="11" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-    </Style>
-    <Style Selector="Button.segToggle.on">
-        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-    </Style>
 
     <!-- Captions -->
     <Style Selector="TextBlock.rlCaption">
         <Setter Property="FontSize" Value="10" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="LetterSpacing" Value="0.8" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
     </Style>
     <Style Selector="TextBlock.rlFaint">
         <Setter Property="FontSize" Value="11" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
     </Style>
 
     <!-- Gallery tiles and Continue cards -->
     <Style Selector="Button.rlTile">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
@@ -101,6 +60,33 @@
         <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
         <Setter Property="ClipToBounds" Value="False" />
     </Style>
+    <!-- A list is a wide card (docs/superpowers/specs/2026-10-20-reading-lists-visual-identity-design.md §1): rlTileCover (ring, border, 2px
+         margin) plus a surface, padding and the cover/caption pieces below. A folder is the same card, tighter. -->
+    <Style Selector="Border.rlListCard">
+        <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+        <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style Selector="Border.rlListCard:not(.folder)">
+        <Setter Property="MinHeight" Value="144" />
+    </Style>
+    <Style Selector="Border.rlListCard.folder">
+        <Setter Property="Padding" Value="12,8" />
+    </Style>
+    <Style Selector="Border.rlCardCover">
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="ClipToBounds" Value="True" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+    </Style>
+    <Style Selector="TextBlock.rlTypeCaption">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="LetterSpacing" Value="0.8" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.pbTextCaption.finished">
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
     <Style Selector="Border.rlTileHost.dropInto Border.rlTileCover">
         <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
@@ -114,7 +100,7 @@
     </Style>
     <Style Selector="Button.rlContinue">
         <Setter Property="Padding" Value="8" />
-        <Setter Property="Width" Value="236" />
+        <Setter Property="Width" Value="300" />
         <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
         <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
@@ -125,21 +111,6 @@
     <Style Selector="Button.rlContinue:pointerover /template/ ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-    </Style>
-    <Style Selector="Button.rlChip">
-        <Setter Property="Padding" Value="9,3" />
-        <Setter Property="FontSize" Value="11" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusChip}" />
-        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        <Setter Property="Cursor" Value="Hand" />
-    </Style>
-    <Style Selector="Button.rlChip.on">
-        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
     </Style>
 
     <!-- Cover rail -->
@@ -157,7 +128,7 @@
         <Setter Property="Background" Value="Transparent" />
     </Style>
     <Style Selector="Border.rlRailCover">
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
         <Setter Property="ClipToBounds" Value="True" />
         <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
         <Setter Property="BorderBrush" Value="Transparent" />
@@ -184,7 +155,7 @@
     <Style Selector="Border.rlDot">
         <Setter Property="Width" Value="13" />
         <Setter Property="Height" Value="13" />
-        <Setter Property="CornerRadius" Value="7" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
         <Setter Property="BorderThickness" Value="2.5" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbSurface3Brush}" />
         <Setter Property="Background" Value="{DynamicResource PbBgBrush}" />
@@ -202,7 +173,7 @@
     <Style Selector="Border.rlDot.current">
         <Setter Property="Width" Value="17" />
         <Setter Property="Height" Value="17" />
-        <Setter Property="CornerRadius" Value="9" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusChip}" />
         <Setter Property="BorderThickness" Value="3" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
     </Style>
@@ -265,7 +236,7 @@
         <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
     </Style>
     <Style Selector="Border.rlCoverArt">
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
     <Style Selector="Button.rlCard:pointerover Border.rlCoverArt, Button.rlCard:focus-within Border.rlCoverArt">
@@ -338,6 +309,9 @@
         <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
     </Style>
+    <!-- Add-issues drawer. controls:Reveal.IsOpen (ReadingListPageView.axaml) owns visibility, hit testing, tab order and .open/.closing
+         (Motion v2 §5.2) - before, a closed drawer was only transparent, so Tab could still land in it. It arrives 20 px from the right
+         edge with the damped spring and leaves on the faster exit. -->
     <Style Selector="Border.rlDrawer">
         <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
@@ -345,17 +319,23 @@
         <Setter Property="BoxShadow" Value="-12 0 28 0 #66000000" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
-                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionRevealMove}" Easing="{StaticResource PbMotionSpring}" />
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionRevealFade}" Easing="{StaticResource PbMotionEase}" />
             </Transitions>
         </Setter>
-        <Setter Property="RenderTransform" Value="translateX(380px)" />
+        <Setter Property="RenderTransform" Value="translateX(20px)" />
         <Setter Property="Opacity" Value="0" />
-        <Setter Property="IsHitTestVisible" Value="False" />
     </Style>
     <Style Selector="Border.rlDrawer.open">
-        <Setter Property="RenderTransform" Value="translateX(0px)" />
+        <Setter Property="RenderTransform" Value="none" />
         <Setter Property="Opacity" Value="1" />
-        <Setter Property="IsHitTestVisible" Value="True" />
+    </Style>
+    <Style Selector="Border.rlDrawer.closing">
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionRevealExit}" Easing="{StaticResource PbMotionExitEase}" />
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionRevealExit}" Easing="{StaticResource PbMotionExitEase}" />
+            </Transitions>
+        </Setter>
     </Style>
 </Styles>

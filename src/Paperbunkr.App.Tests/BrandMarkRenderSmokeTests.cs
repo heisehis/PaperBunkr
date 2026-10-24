@@ -17,6 +17,8 @@ public class BrandMarkRenderSmokeTests
 
     [Theory]
     [InlineData(MarkFamily.Service, "AniList", MarkKind.SvgAsset)]
+    [InlineData(MarkFamily.Service, "ComicVine", MarkKind.SvgAsset)]
+    [InlineData(MarkFamily.Service, "Metron", MarkKind.SvgAsset)]
     [InlineData(MarkFamily.Service, "ReadThingsRight", MarkKind.LetterMark)]
     [InlineData(MarkFamily.Publisher, "Marvel", MarkKind.SvgAsset)]
     [InlineData(MarkFamily.Publisher, "DSTLRY", MarkKind.LetterMark)]

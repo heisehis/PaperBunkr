@@ -35,6 +35,10 @@ public class VirtualizingVariableWrapPanel : VirtualizingPanel
     public static readonly StyledProperty<double> ItemHeightProperty =
         AvaloniaProperty.Register<VirtualizingVariableWrapPanel, double>(nameof(ItemHeight));
 
+    /// <summary>Pack by <see cref="ISpineSource.SpineWidth"/> instead of <see cref="IVariableWidthTile.PreferredWidth"/> (the Library bookshelf view, Cosmetics pitch #19).</summary>
+    public static readonly StyledProperty<bool> UseSpineWidthsProperty =
+        AvaloniaProperty.Register<VirtualizingVariableWrapPanel, bool>(nameof(UseSpineWidths));
+
     public static readonly StyledProperty<double> ItemSpacingProperty =
         AvaloniaProperty.Register<VirtualizingVariableWrapPanel, double>(nameof(ItemSpacing));
 
@@ -62,12 +66,18 @@ public class VirtualizingVariableWrapPanel : VirtualizingPanel
 
     static VirtualizingVariableWrapPanel()
     {
-        AffectsMeasure<VirtualizingVariableWrapPanel>(ItemHeightProperty, ItemSpacingProperty, LineSpacingProperty);
+        AffectsMeasure<VirtualizingVariableWrapPanel>(ItemHeightProperty, ItemSpacingProperty, LineSpacingProperty, UseSpineWidthsProperty);
     }
 
     public VirtualizingVariableWrapPanel()
     {
         EffectiveViewportChanged += OnEffectiveViewportChanged;
+    }
+
+    public bool UseSpineWidths
+    {
+        get => GetValue(UseSpineWidthsProperty);
+        set => SetValue(UseSpineWidthsProperty, value);
     }
 
     public double ItemHeight
@@ -290,9 +300,11 @@ public class VirtualizingVariableWrapPanel : VirtualizingPanel
         _itemWidths = new double[count];
         for (int i = 0; i < count; i++)
         {
-            _itemWidths[i] = Items[i] is IVariableWidthTile tile && tile.PreferredWidth > 0
-                ? tile.PreferredWidth
-                : itemHeight * (2.0 / 3.0);
+            _itemWidths[i] = UseSpineWidths && Items[i] is ISpineSource spine && spine.SpineWidth > 0
+                ? spine.SpineWidth
+                : Items[i] is IVariableWidthTile tile && tile.PreferredWidth > 0
+                    ? tile.PreferredWidth
+                    : itemHeight * (2.0 / 3.0);
         }
 
         _layout = VirtualizingVariableWrapMath.ComputeLayout(_itemWidths, availableWidth, itemHeight, itemSpacing, lineSpacing);

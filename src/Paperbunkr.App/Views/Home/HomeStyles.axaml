@@ -16,8 +16,8 @@
     </Style>
 
     <Style Selector="TextBlock.emptyState">
-        <Setter Property="FontSize" Value="12.5" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
     </Style>
 
     <!-- Section heading icon (C3). -->
@@ -33,7 +33,7 @@
         <Setter Property="Padding" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Transitions">
             <Transitions>
@@ -104,19 +104,23 @@
     </Style>
 
     <!-- Spotlight accordion (docs/superpowers/specs/2026-09-29-home-spotlight-accordion-design.md). -->
+    <!-- The band only lays the panels out. It has no fill, image or wash of its own: the blurred cover behind the carousel is Home's
+         page-level atmosphere, and an opaque band here is what used to show as a dark box around the carousel. Transparent (not unset)
+         so the whole band still takes the pointer for hover-to-pause. -->
     <Style Selector="Border.spotlightBand">
         <Setter Property="Height" Value="300" />
         <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusLg}" />
         <Setter Property="ClipToBounds" Value="True" />
-        <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+        <Setter Property="Background" Value="Transparent" />
     </Style>
-    <Style Selector="Border.spotlightWash">
-        <Setter Property="Background">
-            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-                <GradientStop Offset="0" Color="{DynamicResource PbHeroScrimColor}" />
-                <GradientStop Offset="1" Color="{DynamicResource PbHeroGradientEndColor}" />
-            </LinearGradientBrush>
-        </Setter>
+
+    <!-- Home's atmosphere. A dark blurred cover needs to be fainter over a light page than over a dark one. -->
+    <Style Selector="controls|AtmosphereBackdrop.homeAtmosphere">
+        <Setter Property="Strength" Value="0.6" />
+        <Setter Property="FadeStart" Value="0.3" />
+    </Style>
+    <Style Selector="controls|AtmosphereBackdrop.homeAtmosphere.light">
+        <Setter Property="Strength" Value="0.38" />
     </Style>
 
     <Style Selector="Button.spotlightPanel">
@@ -144,7 +148,9 @@
 
     <!-- Slivers: darkened, full colour. The shade lifts on hover and is gone once the panel opens. -->
     <Style Selector="Border.sliverShade">
-        <Setter Property="Background" Value="#8C000000" />
+        <Setter Property="Background">
+            <SolidColorBrush Color="{DynamicResource PbCoverShadeColor}" />
+        </Setter>
         <Setter Property="Transitions">
             <Transitions>
                 <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />

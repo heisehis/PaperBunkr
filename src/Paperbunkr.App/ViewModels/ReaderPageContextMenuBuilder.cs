@@ -36,6 +36,7 @@ public sealed class ReaderPageContextMenuBuilder
         var entries = new List<ContextMenuEntry>
         {
             ContextMenuEntry.Item("Copy Page", _vm.CopyPageCommand),
+            ContextMenuEntry.Item("Set as issue cover", _vm.SetCurrentPageAsIssueCoverCommand),
         };
 
         // Only while a double-page spread is showing: copying or saving it stitched (comfort design 2).

@@ -113,6 +113,21 @@ public sealed class ScrapeByIdService(Func<PaperbunkrDbContext> createContext, F
         PublisherResolver.SyncIssue(write, issue.Id);
         ComicMetadataExternalIdSync.SyncFromIssueDetails(write, issue.Id, provider, details);
         ContinuityMetronMatchResolver.SyncFromIssueDetails(write, issue.SeriesId, provider, details.Universes);
+        if (provider == ComicProvider.Metron && source is IMetronUniverses universes)
+        {
+            foreach (int universeId in details.Universes.Where(universe => universe.ExternalId is > 0)
+                         .Select(universe => universe.ExternalId!.Value).Distinct())
+            {
+                try
+                {
+                    await ContinuityMetronMatchResolver.RefreshUniverseDetailsAsync(write, universes, universeId, cancellationToken).ConfigureAwait(false);
+                }
+                catch (ComicVineException)
+                {
+                    // Best-effort continuity enrichment; issue metadata was already scraped successfully.
+                }
+            }
+        }
         IssueVariantCoverSync.SyncFromIssueDetails(write, issue.Id, details.Variants);
 
         return ScrapeOutcome.Success(issue.Id, changed);

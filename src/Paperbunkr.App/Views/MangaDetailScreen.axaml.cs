@@ -4,6 +4,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Paperbunkr.App.ViewModels;
 using System;
@@ -35,9 +36,11 @@ public partial class MangaDetailScreen : UserControl
             [InputActionIds.TabPrevious] = () => TabStrip.Step(this, -1),
             [InputActionIds.DetailBack] = () => _viewModel is { } vm && vm.GoBackCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.GoBackCommand.Execute(null)),
             [InputActionIds.DetailContinue] = () => _viewModel is { } vm && vm.ContinueCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.ContinueCommand.Execute(null)),
-            [InputActionIds.DetailEdit] = () => _viewModel is { } vm && vm.EditCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.EditCommand.Execute(null)),
+            [InputActionIds.DetailEdit] = () => _viewModel is { } vm && vm.EditSeriesCommand.CanExecute(null) && ScreenInput.Deferred(() => vm.EditSeriesCommand.Execute(null)),
         });
         DetailCosmetics.Attach(this);
+        ChapterListHeader.ColumnResized += (field, width) => _viewModel?.SetChapterColumnWidth(field, width);
+        ChapterListHeader.ColumnMoved += (field, target) => _viewModel?.MoveChapterColumn(field, target);
         _focus = new FocusReclaimer(this, () => _viewModel is not null, FocusDefault);
         KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
         DataContextChanged += (_, _) => Subscribe();

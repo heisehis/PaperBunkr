@@ -173,12 +173,31 @@ public class KitsuTrackerAdapterTests : IDisposable
 
             Assert.Contains("UpdateManga", body);
             Assert.Contains("777", body);
+            Assert.DoesNotContain("private:", body);
             return JsonResponse(HttpStatusCode.OK, """{ "data": { "libraryEntry": { "update": { "errors": null, "libraryEntry": { "id": "777" } } } } }""");
         })), accessToken: null);
 
         bool result = await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "42" }, new TrackerPushPayload(ReadingStatus.Completed, 100), CancellationToken.None);
 
         Assert.True(result);
+    }
+
+    [Fact]
+    public async Task CreatedEntryWithoutRefetchedId_DoesNotClaimScoreWasSaved()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken, "test-token");
+        var adapter = new KitsuTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            string body = req.Content!.ReadAsStringAsync().Result;
+            return JsonResponse(HttpStatusCode.OK, body.Contains("findMangaById")
+                ? """{"data":{"findMangaById":{"myLibraryEntry":null}}}"""
+                : """{"data":{"libraryEntry":{"create":{"errors":null,"libraryEntry":{"id":"999"}}}}}""");
+        })), accessToken: null);
+        var result = await adapter.PushEntryDetailedAsync(context, new TrackingLink { ExternalId = "42" },
+            new TrackerPushPayload(ReadingStatus.Reading, 5, Score: 4m, UpdateScore: true), CancellationToken.None);
+        Assert.False(result.Success);
+        Assert.Contains("score/finish date", result.ErrorDetail);
     }
 
     [Fact]

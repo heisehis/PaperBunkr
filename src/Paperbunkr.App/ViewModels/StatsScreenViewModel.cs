@@ -36,6 +36,7 @@ public partial class StatsScreenViewModel : ViewModelBase
             readingEventRecorder.ReadingEventRecorded += () =>
             {
                 _cache.Clear();
+                InvalidateReadingDerived();
                 if (IsActive)
                 {
                     Refresh();
@@ -146,6 +147,7 @@ public partial class StatsScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsActivityGroupSelected));
         OnPropertyChanged(nameof(IsCompositionGroupSelected));
         OnPropertyChanged(nameof(IsTopListsGroupSelected));
+        EnsureGroupLoaded();
     }
 
     public bool HasPaceData => Snapshot?.Pace.Any(b => b.Finished > 0 || b.Pages > 0) == true;
@@ -208,6 +210,8 @@ public partial class StatsScreenViewModel : ViewModelBase
         }
 
         Snapshot = snap;
+        LoadRhythm();
+        EnsureGroupLoaded();
         FinishedTrend = ToDisplay(snap.Trend?.FinishedItems);
         PaceTrend = ToDisplay(snap.Trend?.AvgIssuesPerDay);
         AvgToFinishTrend = ToDisplay(snap.Trend?.AvgDaysToComplete);

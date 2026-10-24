@@ -29,9 +29,10 @@ public static class ScheduledTaskCatalog
     public const string GenerateCovers = "generate-covers";
     public const string StoryEventAutodetect = "story-event-autodetect";
     public const string StoryEventIdentity = "story-event-identity";
-    public const string ContinuityWikidataAutodetect = "continuity-wikidata-autodetect";
     public const string FollowArcs = "follow-arcs";
     public const string ComicVineScrape = "comicvine-scrape";
+    public const string ComicSeriesSummaryBackfill = "comic-series-summary-backfill";
+    public const string ScrapeHealth = "scrape-health";
     public const string LibraryOrganize = "library-organize";
     public const string RemotePageCacheSweep = "remote-page-cache-sweep";
     public const string LibrarySnapshot = "library-snapshot";
@@ -189,7 +190,7 @@ public static class ScheduledTaskCatalog
             StoryEventIdentity, "Check story events",
             "Looks up each story event's ComicVine and Metron arc ids, merges events that turn out to be the same arc (the two sites " +
             "often spell one arc differently), then works out which events come before which (prequels, sequels, continuations) " +
-            "from your library and Wikidata. Unsure matches wait under Possible duplicates on the Story Events screen.",
+            "from your library, Comic Book Reading Orders and Metron's reading lists. Unsure matches wait under Possible duplicates on the Story Events screen.",
             ActivityJobKind.SyncMetadata, Priority: 17, SchedulerResourceClass.Network,
             TimeSpan.FromDays(7), DefaultEnabled: true, ScheduleMode.Interval,
             static async (handle, ct) =>
@@ -197,35 +198,6 @@ public static class ScheduledTaskCatalog
                 string summary = await StoryEventChecks.RunAsync(
                     new Progress<(int Done, int Total)>(p => handle.Report(p.Done, p.Total, "Checking story events")), ct);
                 handle.Succeed(summary, new ActivityLink(ActivityLinkKind.StoryEventsScreen));
-                return summary;
-            }),
-
-        new ScheduledTaskDescriptor(
-            ContinuityWikidataAutodetect, "Find shared-universe suggestions",
-            "Matches series against Wikidata via their most recurring characters to suggest " +
-            "shared-universe continuities (20 series/run). No credentials needed - Wikidata's " +
-            "search API is open.",
-            ActivityJobKind.SyncMetadata, Priority: 9, SchedulerResourceClass.Network,
-            // Daily, not weekly - at 20 series/run this is how a large library (400+ series) gets
-            // fully covered in a reasonable number of days without the user manually re-clicking
-            // "Check Wikidata" repeatedly (real complaint this was built to address). The manual
-            // button itself now runs uncapped instead of relying on this cadence at all.
-            TimeSpan.FromDays(1), DefaultEnabled: true, ScheduleMode.Interval,
-            static async (handle, ct) =>
-            {
-                handle.Report("Matching series against Wikidata…");
-                using var context = PaperbunkrDb.CreateContext();
-                using var httpClient = WikidataClient.CreateClient();
-                var client = new WikidataClient(httpClient);
-                var suggestions = await ContinuityWikidataMatchResolver.GetSuggestionsAsync(context, client, ct, progress: Adapt(handle, "series"));
-
-                string summary = suggestions.Count == 0
-                    ? "No new shared-universe suggestions found"
-                    : $"{suggestions.Count} new shared-universe suggestion{Plural(suggestions.Count)} found";
-
-                // Same idempotent-Succeed reasoning as StoryEventAutodetect above.
-                var link = suggestions.Count > 0 ? new ActivityLink(ActivityLinkKind.StoryEventsScreen) : null;
-                handle.Succeed(summary, link);
                 return summary;
             }),
 
@@ -272,9 +244,9 @@ public static class ScheduledTaskCatalog
         // "Scrape with ComicVine" on a schedule (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8): off by default, never opens a dialog.
         // Every comic with no ComicVine volume link is matched; with "choose the best match automatically" off it skips whatever would have needed a question.
         new ScheduledTaskDescriptor(
-            ComicVineScrape, "Scrape unscraped comics with ComicVine",
-            "Matches comics that have no details yet (from the source chosen under Organize & Scrape), without asking. Comics that need a choice are skipped unless \"Choose the best match automatically\" is on " +
-            "(Preferences → Organize & Scrape). Needs your ComicVine key.",
+            ComicVineScrape, "Scrape unscraped comics",
+            "Matches comics that have no details yet (from the source chosen under Organize & Scrape, Metron by default), without asking. Comics that need a choice wait in the review list " +
+            "(Preferences → Organize & Scrape). Needs a Metron token or a ComicVine key.",
             ActivityJobKind.Scrape, Priority: 11, SchedulerResourceClass.Network,
             TimeSpan.FromDays(1), DefaultEnabled: false, ScheduleMode.Interval,
             static async (handle, ct) =>
@@ -289,6 +261,47 @@ public static class ScheduledTaskCatalog
 
                 handle.Report("Scraping unscraped comics…");
                 string summary = await scraper.ScrapeUnscrapedAsync(ct, handle);
+                handle.Succeed(summary);
+                return summary;
+            }),
+
+        // Scrape health (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 10): tries the review list again with fresh
+        // provider data, and clears leftover swap files. Off by default, never asks.
+        new ScheduledTaskDescriptor(
+            ScrapeHealth, "Scrape health check",
+            "Tries the comics waiting for review again (sources add and fix records over time) and removes leftover copies an interrupted write or organize left beside comics. Never asks; what still can't be matched stays in the review list.",
+            ActivityJobKind.Scrape, Priority: 23, SchedulerResourceClass.Network,
+            TimeSpan.FromDays(1), DefaultEnabled: false, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                var scraper = Paperbunkr.App.Scraper.ScheduledCoordinators.Scraper;
+                if (scraper is null)
+                {
+                    const string notReady = "The scraper isn't ready yet.";
+                    handle.Succeed(notReady);
+                    return notReady;
+                }
+
+                handle.Report("Checking scraped comics…");
+                string summary = await scraper.RunHealthPassAsync(ct, handle);
+                handle.Succeed(summary);
+                return summary;
+            }),
+
+        new ScheduledTaskDescriptor(
+            ComicSeriesSummaryBackfill, "Fill missing comic series summaries",
+            "Fetches series descriptions for comics already linked to Metron or ComicVine. Fills blank summaries only; unlinked series and sources without a description are reported, not guessed.",
+            ActivityJobKind.SyncMetadata, Priority: 22, SchedulerResourceClass.Network,
+            TimeSpan.FromDays(7), DefaultEnabled: true, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                var result = await Paperbunkr.Data.ComicVine.ComicSeriesSummaryBackfill.RunAsync(
+                    PaperbunkrDb.CreateContext,
+                    provider => Paperbunkr.Data.ComicVine.ComicProviderFactory.Create(
+                        context, provider, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low),
+                    (done, total) => handle.Report(done, total, $"Checked {done} of {total} series"), ct);
+                string summary = result.Describe();
                 handle.Succeed(summary);
                 return summary;
             }),
@@ -406,7 +419,7 @@ public static class ScheduledTaskCatalog
         new ScheduledTaskDescriptor(
             GcdMatch, "Match series to GCD",
             "Links your series and issues to the Grand Comics Database data (downloaded under Preferences → Connections) so continued " +
-            "series are linked and story events are ordered by on-sale dates. Uses Metron's GCD ids when you have a Metron login.",
+            "series are linked and story events are ordered by on-sale dates. Uses Metron's GCD ids when Metron is connected.",
             ActivityJobKind.SyncMetadata, Priority: 18, SchedulerResourceClass.Network,
             TimeSpan.FromDays(7), DefaultEnabled: true, ScheduleMode.Interval,
             static (handle, ct) => Task.Run(() => Paperbunkr.App.Services.Gcd.GcdMatching.RunAsync(() => PaperbunkrDb.CreateContext(), handle, ct), ct)),

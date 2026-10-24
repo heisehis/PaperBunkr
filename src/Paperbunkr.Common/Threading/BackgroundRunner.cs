@@ -71,9 +71,10 @@ namespace cYo.Common.Threading
 				exitEvent.Set();
 				intervalEvent.Set();
 				Thread thread = this.thread;
-				if (thread != null && !thread.Join(5000))
+				if (thread != null)
 				{
-					thread.Abort();
+					// exitEvent is the cooperative stop signal; wait for an in-flight Tick before
+					// disposing the events the worker still uses.
 					thread.Join();
 				}
 				runEvent.Dispose();

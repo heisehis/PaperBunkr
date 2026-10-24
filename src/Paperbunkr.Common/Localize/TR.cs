@@ -165,7 +165,7 @@ namespace cYo.Common.Localize
 				using (Stream stream = folder.OpenRead(path))
 				{
 					byte[] array = new byte[stream.Length];
-					stream.Read(array, 0, (int)stream.Length);
+					stream.ReadExactly(array);
 					if (array.SequenceEqual(second))
 					{
 						return;

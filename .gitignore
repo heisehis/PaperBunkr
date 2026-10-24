@@ -8,6 +8,11 @@ _reference/
 installer/publish/
 installer/Output/
 
+# Local diagnostic build output and test transcript (source artwork in artifacts/ stays tracked).
+artifacts/metron-debug/
+provider-tests.log
+sixlabors.lic
+
 # Brainstorming visual-companion scratch files
 .superpowers/
 

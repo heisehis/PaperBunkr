@@ -257,7 +257,7 @@ public partial class ReaderScreenViewModel
         var existing = Thumbnails[page];
         Thumbnails[page] = new ReaderThumbnailSample
         {
-            CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = existing.IsSelected, IsBookmarked = existing.IsBookmarked,
+            CoverBrush = CoverBrush, PageNumber = page + 1, CoverImage = existing.CoverImage, IsSelected = existing.IsSelected, IsBookmarked = existing.IsBookmarked,
             PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint, HasNote = hasNote,
         };
     }

@@ -1,0 +1,32 @@
+{
+  // Home as a sidebar and a scrolling column of sections. The layout only arranges what Home publishes: the search box, the section
+  // list, a few values ({home.greeting}) and commands (home.customize). It cannot reach anything else.
+  "contract": 1,
+  "root": {
+    "id": "root", "type": "Dock", "children": [
+      {
+        "id": "side", "type": "Panel", "dock": "left", "width": 320, "background": "surface.raised", "children": [
+          {
+            "id": "sideStack", "type": "Stack", "spacing": 14, "padding": 20, "children": [
+              { "id": "hello", "type": "Text", "style": "heading", "text": "{home.greeting}", "wrap": true },
+              { "id": "search", "type": "Home.Search" },
+              { "id": "rule", "type": "Divider" },
+              { "id": "library", "type": "Button", "style": "secondary", "text": "Open the Library", "icon": "navigation.library", "command": "home.openLibrary" },
+              { "id": "insights", "type": "Button", "style": "ghost", "text": "Insights", "icon": "navigation.insights", "command": "home.openInsights" },
+              { "id": "customize", "type": "Button", "style": "ghost", "text": "Choose what to show", "icon": "navigation.preferences", "command": "home.customize" },
+              { "id": "empty", "type": "Text", "style": "caption", "wrap": true, "text": "Every section is switched off.", "visible": { "not": "home.hasSections" } }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "main", "type": "Scroll", "dock": "fill", "children": [
+          { "id": "sections", "type": "Home.Sections", "margin": "28,20,28,40", "motion": "settle" }
+        ]
+      }
+    ]
+  },
+  "breakpoints": {
+    "narrow": { "maxWidth": 900, "overrides": { "side": { "width": 240 }, "insights": { "visible": false } } }
+  }
+}

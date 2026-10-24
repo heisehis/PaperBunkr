@@ -71,6 +71,7 @@ public partial class HistoryTabViewModel : ViewModelBase, IContextMenuProvider
         _nowUtc = nowUtc ?? (() => DateTime.UtcNow);
         _timeZone = timeZone ?? TimeZoneInfo.Local;
         _runInBackground = runInBackground ?? (work => Task.Run(work));
+        _usesDefaultRunner = runInBackground is null;
         _post = post ?? (action => Dispatcher.UIThread.Post(action));
 
         // Handlers may fire on a background thread, and - for Remove / Clear all - synchronously inside the
@@ -167,6 +168,7 @@ public partial class HistoryTabViewModel : ViewModelBase, IContextMenuProvider
         _stale = false;
         IsLoaded = true;
         Rebuild();
+        _ = LoadMilestonesAsync();
     }
 
     private void Rebuild()

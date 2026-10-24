@@ -3,9 +3,9 @@
 # Two steps: publish the App project self-contained for win-x64, then hand that output to Inno
 # Setup 6. Modeled on _reference/ComicRackCE/BuildInstaller.ps1's shape (locate ISCC.exe, derive a
 # version string, invoke the compiler with /D params) but adapted - there's no CE-style
-# CurrentCommit.txt here, so the version defaults to the current short commit hash instead.
+# CurrentCommit.txt here; the project version plus a local build identity is used instead.
 #
-# Usage: pwsh installer\BuildInstaller.ps1 [-Version "1.2.3"]
+# Usage: pwsh installer\BuildInstaller.ps1 [-Version "1.2.3-beta"]
 # Requires Inno Setup 6 (https://jrsoftware.org/isdl.php) installed at one of the usual locations.
 
 param(
@@ -15,6 +15,14 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $installerDir = $PSScriptRoot
+. (Join-Path $installerDir 'InstallerBuild.ps1')
+$projectPath = Join-Path $repoRoot 'src\Paperbunkr.App\Paperbunkr.App.csproj'
+
+# Some automation hosts filter the normal Windows OS environment variable. Native AOT's
+# cross-OS guard reads that MSBuild property rather than detecting the actual host itself.
+if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT -and [string]::IsNullOrWhiteSpace($env:OS)) {
+    $env:OS = 'Windows_NT'
+}
 
 # Require the .NET SDK before doing anything else - the publish step below needs it, and a missing
 # 'dotnet' otherwise fails deep in the script with a less obvious message.
@@ -46,29 +54,22 @@ if (-not $Version) {
     } catch {
         # git not on PATH - keep the "dev" fallback.
     }
-    $Version = "0.3.0-beta-$shortCommit"
+    $buildIdentity = $shortCommit
 }
 
 # Inno's VersionInfoVersion (the setup exe's own VS_FIXEDFILEINFO resource) needs a pure
-# numeric x.y.z.w - the "-beta" / "-beta-<hash>" suffix in $Version is not valid there. Derive it
-# from $Version's leading numeric run rather than hand-maintaining a second version string in
-# Installer.iss (which CI never overrode, so it silently lagged the csproj on every bump).
-if ($Version -match '^(\d+(?:\.\d+){1,3})') {
-    $numericParts = $Matches[1].Split('.')
-} else {
-    $numericParts = @('0', '0', '0')
-}
-while ($numericParts.Count -lt 4) { $numericParts += '0' }
-$VersionNumeric = ($numericParts[0..3] -join '.')
+# numeric x.y.z.w. Both numeric and display identities come from the app project;
+# explicit release inputs must agree before any publish output is cleared.
+$installerVersion = Get-InstallerVersion -ProjectPath $projectPath -RequestedVersion $Version -BuildIdentity $buildIdentity
+$Version = $installerVersion.Display
+$VersionNumeric = $installerVersion.Numeric
 
 Write-Output "Building Paperbunkr installer version $Version (file-version resource $VersionNumeric)"
 
-# Publish self-contained win-x64 - bundles the .NET 8 runtime, so the installer needs no
+# Publish self-contained win-x64 - bundles the project's runtime, so the installer needs no
 # prerequisite-detection step the way CE's does for .NET Framework 4.8 (see Installer.iss header).
 $publishDir = Join-Path $installerDir "publish\win-x64"
-if (Test-Path $publishDir) {
-    Remove-Item -Recurse -Force $publishDir
-}
+Reset-InstallerOutput -InstallerRoot $installerDir -RelativePath 'publish\win-x64'
 
 # ReadyToRun is deliberately OFF. It was enabled for 0.3.0-beta (to skip ~1.6s of cold-start JIT
 # on the ~30 view-models + MainWindow visual tree), and that release shipped unlaunchable on at
@@ -94,6 +95,7 @@ if ($LASTEXITCODE -ne 0) {
 # linker: GitHub's windows-latest runner has it, so a failure there fails the release; on a PC without the
 # "Desktop development with C++" workload the installer is still built, just without Explorer thumbnails.
 $thumbnailsOut = Join-Path $installerDir "publish\shell-thumbnails"
+Reset-InstallerOutput -InstallerRoot $installerDir -RelativePath 'publish\shell-thumbnails'
 # The ILCompiler link step calls vswhere.exe by bare name; a normal Visual Studio install doesn't put it on PATH.
 $vsInstallerDir = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer"
 if ((Test-Path $vsInstallerDir) -and -not ($env:PATH -split ";" -contains $vsInstallerDir)) {
@@ -108,7 +110,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Error "Native AOT publish of the thumbnail handler failed."
     exit 1
 } else {
-    Write-Warning "Thumbnail handler not built (Native AOT needs the MSVC C++ build tools) - this installer will not offer File Explorer thumbnails."
+    Write-Warning "Thumbnail handler publish failed (Native AOT requires Windows and the MSVC C++ build tools) - this installer will not offer File Explorer thumbnails."
 }
 
 # Generate the combined license file (Installer.iss's LicenseFile, shown before the install-dir

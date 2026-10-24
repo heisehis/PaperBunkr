@@ -347,6 +347,10 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         {
             SetStatus(ex.Message, isError: true);
         }
+        catch (OperationCanceledException)
+        {
+            SetStatus("Connection test canceled.", isError: false);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             SetStatus($"Couldn't test the connection: {ex.Message}", isError: true);
@@ -376,6 +380,10 @@ public sealed partial class AcquisitionSettingsViewModel : ViewModelBase
         {
             var result = await _createDownloadClient(url, QBittorrentUsername.Trim(), password, category).TestConnectionAsync(cancellationToken);
             SetStatus(result.Message, isError: !result.Success);
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus("Connection test canceled.", isError: false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

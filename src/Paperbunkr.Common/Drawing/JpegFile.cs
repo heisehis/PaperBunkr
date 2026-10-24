@@ -93,25 +93,47 @@ namespace cYo.Common.Drawing
 		public static bool RemoveExif(Stream inStream, Stream outStream)
 		{
 			byte[] array = new byte[2];
-			inStream.Read(array, 0, array.Length);
+			if (!TryReadExactly(inStream, array))
+			{
+				return false;
+			}
 			if (array[0] != byte.MaxValue || array[1] != 216)
 			{
 				return false;
 			}
 			outStream.WriteByte(byte.MaxValue);
 			outStream.WriteByte(216);
-			inStream.Read(array, 0, array.Length);
+			if (!TryReadExactly(inStream, array))
+			{
+				return false;
+			}
 			while (array[0] == byte.MaxValue && array[1] >= 224 && array[1] <= 239)
 			{
 				int num = inStream.ReadByte();
 				num <<= 8;
 				num |= inStream.ReadByte();
 				inStream.Position += num - 2;
-				inStream.Read(array, 0, array.Length);
+				if (!TryReadExactly(inStream, array))
+				{
+					return false;
+				}
 			}
 			inStream.Position -= 2L;
 			inStream.CopyTo(outStream);
 			return true;
+		}
+
+		private static bool TryReadExactly(Stream stream, byte[] buffer)
+		{
+			try
+			{
+				stream.ReadExactly(buffer);
+				return true;
+			}
+			catch (EndOfStreamException)
+			{
+				return false;
+			}
 		}
 	}
 }

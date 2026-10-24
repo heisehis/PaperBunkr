@@ -40,7 +40,7 @@ public partial class PageCanvas
         goal = ZoomPanMath.ClampZoom(goal, ZoomPanMath.MaxZoom, MinZoomLevel);
         _zoomAnchor = anchor ?? new Point(Bounds.Width / 2, Bounds.Height / 2);
         _tween = null;
-        if (MotionTokens.IsReducedMotion() || Bounds.Width <= 0 || Bounds.Height <= 0 || TopLevel.GetTopLevel(this) is null)
+        if (!Paperbunkr.App.Theming.Motion.MotionPolicy.AllowsMotion(Paperbunkr.App.Theming.Motion.MotionRole.Travel) || Bounds.Width <= 0 || Bounds.Height <= 0 || TopLevel.GetTopLevel(this) is null)
         {
             _zoomGoal = null;
             ApplyZoomAt(goal, _zoomAnchor);

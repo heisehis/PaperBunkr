@@ -959,6 +959,7 @@ public partial class HomeScreenViewModel : ViewModelBase
     private void Refresh()
     {
         LoadFromDatabase();
+        PlayEntranceAnimation = false; // pulse: a one-shot entrance opens on a real false -> true change (Motion v2 D, Q19)
         PlayEntranceAnimation = true;
     }
 }

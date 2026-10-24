@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -179,6 +180,60 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private bool _activeCollectionHasNonSeriesMembers;
 
     private readonly LibraryFolderScanner _libraryScanner;
+
+    private PreferencesScreenViewModel? _preferencesForScan;
+
+    public bool IsComicFolderOperationRunning => _preferencesForScan?.IsAnyComicFolderOperationRunning ?? false;
+
+    /// <summary>Connects the Library toolbar to the shared Preferences scan workflow.</summary>
+    public void AttachManualScan(PreferencesScreenViewModel preferences)
+    {
+        if (_preferencesForScan is not null)
+        {
+            _preferencesForScan.PropertyChanged -= OnPreferencesScanStateChanged;
+        }
+
+        _preferencesForScan = preferences;
+        _preferencesForScan.PropertyChanged += OnPreferencesScanStateChanged;
+        OnPropertyChanged(nameof(IsComicFolderOperationRunning));
+    }
+
+    private void OnPreferencesScanStateChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(PreferencesScreenViewModel.IsAnyComicFolderOperationRunning)
+            or nameof(PreferencesScreenViewModel.IsScanning)
+            or nameof(PreferencesScreenViewModel.IsGeneratingCovers)
+            or nameof(PreferencesScreenViewModel.IsSyncingMetadata)
+            or nameof(PreferencesScreenViewModel.IsRepairingCovers)
+            or nameof(PreferencesScreenViewModel.IsVerifyingCovers)
+            or nameof(PreferencesScreenViewModel.IsClassifyingLibrary))
+        {
+            OnPropertyChanged(nameof(IsComicFolderOperationRunning));
+        }
+    }
+
+    [RelayCommand]
+    private async Task ScanLibrary()
+    {
+        if (_preferencesForScan is null || IsComicFolderOperationRunning)
+        {
+            return;
+        }
+
+        await _preferencesForScan.ScanComicFoldersFromToolbarAsync(ReloadFromScan);
+    }
+
+    private void ReloadFromScan()
+    {
+        if (ReloadInBackground)
+        {
+            _ = LoadFromDatabaseAsync();
+        }
+        else
+        {
+            LoadFromDatabase();
+        }
+    }
 
     private readonly ITrackerAutoSyncService _trackerAutoSync;
 
@@ -3337,6 +3392,43 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         RefreshAfterScrape();
     }
 
+    /// <summary>
+    /// Host hook for "Scrape and organize…" (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 7): scrape, let the
+    /// metadata writes into the files finish, then organize, as one action. Set by the shell.
+    /// </summary>
+    public Func<IReadOnlyList<int>, Task<string>>? ScrapeAndOrganizeIssues { get; set; }
+
+    [RelayCommand]
+    private async Task ScrapeAndOrganize(int issueId)
+    {
+        if (BlockIfRemote(Selection.UnionForAction(issueId)) || ScrapeAndOrganizeIssues is null)
+        {
+            return;
+        }
+
+        await ScrapeAndOrganizeIssues(Selection.UnionForAction(issueId).ToList());
+        RefreshAfterScrape();
+    }
+
+    [RelayCommand]
+    private async Task ScrapeAndOrganizeSeries(int seriesId)
+    {
+        if (BlockIfRemote(seriesIds: SeriesSelection.UnionForAction(seriesId)) || ScrapeAndOrganizeIssues is null)
+        {
+            return;
+        }
+
+        var seriesIds = SeriesSelection.UnionForAction(seriesId).ToList();
+        List<int> ids;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            ids = context.Issues.Where(i => seriesIds.Contains(i.SeriesId)).Select(i => i.Id).ToList();
+        }
+
+        await ScrapeAndOrganizeIssues(ids);
+        RefreshAfterScrape();
+    }
+
     /// <summary>Host hook for "Organize…": runs the organize flow over the given issue ids and returns a one-line result. Set by the shell.</summary>
     public Func<IReadOnlyList<int>, Task<string>>? OrganizeIssues { get; set; }
 
@@ -3384,6 +3476,61 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     }
 
     private void RefreshAfterScrape() => Avalonia.Threading.Dispatcher.UIThread.Post(() => LoadFromDatabase());
+
+    // ===== Series identity after scraping (docs/superpowers/specs/2026-10-22-scrape-series-split-and-series-fields-design.md) =====
+
+    /// <summary>The series' name before a scrape renamed it, or null (drives "Restore name ..." in the series menu).</summary>
+    public string? NameBeforeScrape(int seriesId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var title = context.SeriesTitles.Where(t => t.SeriesId == seriesId && t.Type == SeriesTitleType.BeforeScrape).Select(t => t.Value).FirstOrDefault();
+        string? current = context.Series.Where(s => s.Id == seriesId).Select(s => s.Name).FirstOrDefault();
+        return title is null || string.Equals(title, current, StringComparison.Ordinal) ? null : title;
+    }
+
+    /// <summary>True when a merge marked this series keep-together (scrapes never split it).</summary>
+    public bool IsKeptTogether(int seriesId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var locks = context.Series.Where(s => s.Id == seriesId).Select(s => s.LockedFields).FirstOrDefault();
+        return Paperbunkr.Data.Metadata.Manga.MangaFieldLocks.Parse(locks).Contains(Paperbunkr.Data.ComicVine.Scraping.SeriesSplit.KeepTogetherKey);
+    }
+
+    /// <summary>Puts back the name a scrape replaced, and forgets it; the series' comics are written back so their files agree.</summary>
+    [RelayCommand]
+    private void RestoreSeriesName(int seriesId)
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var series = context.Series.Include(s => s.Titles).FirstOrDefault(s => s.Id == seriesId);
+            var before = series?.Titles.FirstOrDefault(t => t.Type == SeriesTitleType.BeforeScrape);
+            if (series is null || before is null)
+            {
+                return;
+            }
+
+            series.Name = before.Value;
+            series.Titles.Remove(before);
+            context.SaveChanges();
+            foreach (var issueId in context.Issues.Where(i => i.SeriesId == seriesId).Select(i => i.Id).ToList())
+            {
+                _enqueueMetadataWriteBack(issueId, false);
+            }
+        }
+
+        RefreshAfterScrape();
+    }
+
+    [RelayCommand]
+    private void AllowSeriesSplit(int seriesId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        if (context.Series.Find(seriesId) is { } series)
+        {
+            Paperbunkr.Data.ComicVine.Scraping.SeriesSplit.SetKeepTogether(series, keep: false);
+            context.SaveChanges();
+        }
+    }
 
     /// <summary>Series-card equivalent - fans out to every member issue of the (selection-expanded) series.</summary>
     [RelayCommand]
@@ -4298,12 +4445,12 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         var issue = ReadingListMatcher.ResolveOrCreatePlaceholder(
             context, trimmedSeriesName, NewIssueNumber.Trim(), null, null, null, out bool wasCreated);
 
-        if (seriesIsNew)
+        if (seriesIsNew && issue.Series is { } newSeries)
         {
-            SeriesContentTypeEditor.SetManual(issue.Series, NewIssueContentType);
+            SeriesContentTypeEditor.SetManual(newSeries, NewIssueContentType);
             if (ShowAddReadingModePicker)
             {
-                issue.Series.ReadingMode = NewIssueReadingMode;
+                newSeries.ReadingMode = NewIssueReadingMode;
             }
 
             context.SaveChanges();
@@ -4350,6 +4497,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     public bool IsListView => ViewMode == LibraryViewMode.List && !IsCollectionView;
     public bool IsDetailsTableView => ViewMode == LibraryViewMode.DetailsTable && !IsCollectionView;
 
+    /// <summary>Cosmetics pitch #19: items drawn as book spines standing on shelf rows (docs/superpowers/specs/2026-10-12-cosmetics-pitch-completion-design.md C).</summary>
+    public bool IsBookshelfView => ViewMode == LibraryViewMode.Bookshelf && !IsCollectionView;
+
     /// <summary>Sub-mode aliases kept for the grid templates, which still need to pick a Poster vs
     /// Panorama vs Tiles template even though those are no longer separate <see cref="LibraryViewMode"/>
     /// values - see <see cref="GridCoverFit"/> (docs/superpowers/specs/2026-09-14-library-visual-
@@ -4370,7 +4520,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     public bool IsCoverOverlayScope => IsPosterGrid || IsPanoramaGrid;
 
     /// <summary>Unread/publisher badges exist in every template except the Details table (which has columns instead).</summary>
-    public bool IsOverlayBadgeScope => !IsDetailsTableView;
+    public bool IsOverlayBadgeScope => !IsDetailsTableView && !IsBookshelfView;
 
     /// <summary>The inline language badge/flag is in the List and Tiles templates only (spec 2026-09-14 §5 moved it off grid covers).</summary>
     public bool IsLanguageBadgeScope => IsListView || IsTilesView;
@@ -4446,6 +4596,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(IsTilesView));
         OnPropertyChanged(nameof(IsListView));
         OnPropertyChanged(nameof(IsDetailsTableView));
+        OnPropertyChanged(nameof(IsBookshelfView));
         OnPropertyChanged(nameof(ShowPreviewPanelColumn));
         RaiseToggleScopesChanged();
     }
@@ -4503,6 +4654,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         },
         LibraryViewMode.List => "List",
         LibraryViewMode.DetailsTable => "Details",
+        LibraryViewMode.Bookshelf => "Bookshelf",
         _ => "Display",
     };
 

@@ -35,14 +35,15 @@ public sealed partial class MergeSeriesCandidate : ObservableObject
 /// <summary>
 /// The Merge series dialog (docs/superpowers/specs/2026-09-29-library-bulk-actions-design.md §3) - the first merge flow where the user picks
 /// which series survives; the Needs Review and Find Similar Series flows pick it themselves. The default is the series with the most issues,
-/// as Find Similar Series does. The duplicate warning uses <c>SeriesMergeHelper</c>'s own <c>(EffectiveNumber, EffectiveVolume)</c> key.
+/// as Find Similar Series does. The duplicate warning uses <see cref="SeriesMergeHelper.TryGetDuplicateKey"/> so an unknown issue
+/// number is not treated as a shared duplicate identity.
 /// </summary>
 public sealed partial class MergeSeriesScreenViewModel : ViewModelBase
 {
     private readonly Action _close;
     private readonly Action<int, IReadOnlyList<int>> _merge;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
-    private Dictionary<int, HashSet<(string?, string?)>> _keysBySeries = new();
+    private Dictionary<int, List<Paperbunkr.Data.Entities.Issue>> _issuesBySeries = new();
 
     public MergeSeriesScreenViewModel(Action close, Action<int, IReadOnlyList<int>> merge)
         : this(close, merge, PaperbunkrDb.CreateContext)
@@ -97,10 +98,9 @@ public sealed partial class MergeSeriesScreenViewModel : ViewModelBase
             return cover is null ? null : CoverFingerprint.Stem(cover.Id, cover.FilePath, cover.FileSize);
         }
 
-        _keysBySeries = issues.GroupBy(i => i.SeriesId)
-            .ToDictionary(g => g.Key, g => g.Select(i => (i.EffectiveNumber(), i.EffectiveVolume())).ToHashSet());
+        _issuesBySeries = issues.GroupBy(i => i.SeriesId).ToDictionary(g => g.Key, g => g.ToList());
 
-        foreach (var s in series.OrderByDescending(s => _keysBySeries.GetValueOrDefault(s.Id)?.Count ?? 0).ThenBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase))
+        foreach (var s in series.OrderByDescending(s => _issuesBySeries.GetValueOrDefault(s.Id)?.Count ?? 0).ThenBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase))
         {
             int count = issues.Count(i => i.SeriesId == s.Id);
             string detail = string.Join(" · ", new[] { s.Publisher, count == 1 ? "1 issue" : $"{count} issues" }.Where(p => !string.IsNullOrWhiteSpace(p)));
@@ -154,12 +154,20 @@ public sealed partial class MergeSeriesScreenViewModel : ViewModelBase
         int duplicates = 0;
         if (Target is { } target)
         {
-            var seen = new HashSet<(string?, string?)>(_keysBySeries.GetValueOrDefault(target.SeriesId) ?? new());
+            var seen = new HashSet<(string? Number, string? Volume)>();
+            foreach (var issue in _issuesBySeries.GetValueOrDefault(target.SeriesId) ?? new())
+            {
+                if (SeriesMergeHelper.TryGetDuplicateKey(issue, out var key))
+                {
+                    seen.Add(key);
+                }
+            }
+
             foreach (var source in Candidates.Where(c => !ReferenceEquals(c, target)))
             {
-                foreach (var key in _keysBySeries.GetValueOrDefault(source.SeriesId) ?? new())
+                foreach (var issue in _issuesBySeries.GetValueOrDefault(source.SeriesId) ?? new())
                 {
-                    if (!seen.Add(key))
+                    if (SeriesMergeHelper.TryGetDuplicateKey(issue, out var key) && !seen.Add(key))
                     {
                         duplicates++;
                     }

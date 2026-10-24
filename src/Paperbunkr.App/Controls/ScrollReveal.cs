@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Transformation;
+using Paperbunkr.App.Theming.Motion;
 
 namespace Paperbunkr.App.Controls;
 
@@ -45,7 +46,7 @@ public static class ScrollReveal
                 return;
             }
 
-            if (MotionTokens.IsReducedMotion())
+            if (!Paperbunkr.App.Theming.Motion.MotionPolicy.AllowsMotion(Paperbunkr.App.Theming.Motion.MotionRole.Reveal))
             {
                 return;
             }
@@ -86,7 +87,7 @@ public static class ScrollReveal
         state.Revealed = true;
         control.EffectiveViewportChanged -= OnEffectiveViewportChanged;
 
-        if (animate && !MotionTokens.IsReducedMotion())
+        if (animate && MotionPolicy.AllowsMotion(MotionRole.Reveal))
         {
             var duration = TimeSpan.FromTicks(MotionTokens.GetStandard().Ticks * 2);
             var easing = new CubicEaseOut();

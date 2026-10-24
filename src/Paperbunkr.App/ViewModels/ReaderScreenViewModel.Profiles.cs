@@ -216,6 +216,7 @@ public partial class ReaderScreenViewModel
             PageMarginEnabled: e.PageMarginEnabled,
             PageMarginPercentWidth: e.PageMarginPercentWidth,
             ReaderAutoHideChrome: e.ReaderAutoHideChrome,
+            ReaderBookLook: e.ReaderBookLook,
             ReaderChromeHoverMode: e.ReaderChromeHoverMode,
             PagedTapZoneLayout: PagedTapZoneLayout,
             PagedTapZoneInvert: PagedTapZoneInvert,

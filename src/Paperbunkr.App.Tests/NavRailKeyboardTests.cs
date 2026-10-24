@@ -1,7 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Media.Transformation;
 using Avalonia.VisualTree;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
@@ -184,6 +186,41 @@ public class NavRailKeyboardTests : IDisposable
             var now = window.FocusManager!.GetFocusedElement() as Visual;
             Assert.NotNull(now);
             Assert.False(sidebar.IsVisualAncestorOf(now!) || ReferenceEquals(sidebar, now), "focus stayed in the sidebar after Enter opened the event");
+            window.Close();
+        });
+    }
+
+    [Fact]
+    public void ContinuitySidebarRows_KeepTheirContentStationaryOnHover()
+    {
+        WithThemeAndTokens(() =>
+        {
+            using var styles = AppStyles();
+            using var tokens = AppResources();
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                context.StoryEvents.Add(new Paperbunkr.Data.Entities.StoryEvent { Name = "Age of Revelation", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+                context.SaveChanges();
+            }
+
+            var vm = new MainViewModel();
+            var window = new MainWindow { DataContext = vm, Width = 1400, Height = 900 };
+            window.Show();
+            vm.GoEventsCommand.Execute(null);
+            RunLayout(window);
+
+            var sidebar = window.FindControl<Border>("ContextualSidebar")!;
+            var row = sidebar.GetVisualDescendants().OfType<Button>().First(button =>
+                button.Classes.Contains("sideItemButton") && button.IsEffectivelyVisible && button.DataContext is Paperbunkr.App.Models.StoryEventSummary);
+            var presenter = row.GetVisualDescendants().OfType<ContentPresenter>().Single(p => p.Name == "PART_ContentPresenter");
+
+            window.MouseMove(row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value);
+            RunLayout(window);
+
+            Assert.True(row.IsPointerOver);
+            Assert.IsType<TransformOperations>(presenter.RenderTransform);
+            Assert.True(((TransformOperations)presenter.RenderTransform!).IsIdentity,
+                "Hovering a compact app row must not move its hit-tested content.");
             window.Close();
         });
     }

@@ -124,11 +124,15 @@ public partial class ReadingListPageView : UserControl
     private static ReadingListItemRowViewModel? RowAt(object? source) =>
         (RowBorderAt(source)?.DataContext as PathEditRowItem)?.Row;
 
+    /// <summary>The drag handle is a SymbolIcon (class "rlHandle"); the press can land on it or on a visual inside its template.</summary>
+    private static bool IsOnHandle(object? source) =>
+        source is Visual visual && visual.GetSelfAndVisualAncestors().OfType<StyledElement>().Any(v => v.Classes.Contains("rlHandle"));
+
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         _pressRow = null;
         if (Vm is not { IsEditing: true } || !e.GetCurrentPoint(PathList).Properties.IsLeftButtonPressed
-            || e.Source is not TextBlock { Classes: var classes } || !classes.Contains("rlHandle") || RowAt(e.Source) is not { } row)
+            || !IsOnHandle(e.Source) || RowAt(e.Source) is not { } row)
         {
             return;
         }

@@ -81,15 +81,17 @@ public class InsightsChartPolishTests
         Assert.Equal(white, InsightsChartTheme.EnsureContrast(white, Colors.Black));
     }
 
+    /// <summary>Motion v2 D (Q23): no sweep - a data change crossfades the chart, and the ring is always drawn whole.</summary>
     [Fact]
-    public void Donut_WithNoMotionResource_IsAlwaysFullyDrawn()
+    public void Donut_IsAlwaysFullyDrawn_NeverSweeps()
     {
         var donut = new CategoryDonut();
 
         donut.Slices = new List<CompositionSlice> { new("A", 3), new("B", 1) };
+        Assert.Equal(1.0, donut.SweepProgress);
 
-        Assert.Equal(TimeSpan.Zero, donut.EntranceDuration());
-        Assert.Equal(1.0, donut.SweepProgress); // never left at 0 (an invisible donut) when motion is unavailable/off
+        donut.Slices = new List<CompositionSlice> { new("A", 1), new("C", 4) };
+        Assert.Equal(1.0, donut.SweepProgress);
     }
 
     [Fact]

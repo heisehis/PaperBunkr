@@ -19,7 +19,7 @@
             <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="Padding" Value="10,6" />
         </Style>
         <Style Selector="Border.ksSearch TextBox">
@@ -29,31 +29,14 @@
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
-        <Style Selector="Border.ksSeg">
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
-            <Setter Property="Padding" Value="3" />
-        </Style>
-        <Style Selector="Button.ksToggle.on">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-        </Style>
 
-        <Style Selector="Border.ksPanel">
-            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadius}" />
-        </Style>
 
         <!-- A list row is a Button so Enter/Space and a controller's A select it; its own hover and selection backgrounds sit on the template's presenter. -->
         <Style Selector="Button.ksRow">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Cursor" Value="Hand" />
@@ -65,20 +48,12 @@
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
         </Style>
 
-        <Style Selector="Border.ksChip">
-            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
-            <Setter Property="Padding" Value="8,3" />
-        </Style>
         <!-- Controller inputs take the badge tint, with a gamepad icon in front. -->
-        <Style Selector="Border.ksChip.pad">
-            <Setter Property="Background" Value="{DynamicResource PbBadgeSoftBrush}" />
-        </Style>
         <Style Selector="Border.ksNote">
             <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="Padding" Value="10,8" />
         </Style>
         <!-- The "press your combination" box (docs/superpowers/specs/2026-10-03-input-service-design.md §9). -->
@@ -86,7 +61,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="Padding" Value="10,6" />
             <Setter Property="HorizontalAlignment" Value="Left" />
         </Style>
@@ -101,14 +76,14 @@
                     <Ellipse Grid.Column="0" Width="6" Height="6" Fill="{DynamicResource PbAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
                              IsVisible="{Binding IsCustomised}" ToolTip.Tip="Changed from the default" />
                     <TextBlock Grid.Column="1" Text="{Binding Label}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                    <Border Grid.Column="2" Classes="ksChip" Classes.pad="{Binding SummaryIsPad}" Margin="8,0,0,0" Padding="6,1" VerticalAlignment="Center">
+                    <Border Grid.Column="2" Classes="pbChip" Classes.pad="{Binding SummaryIsPad}" Margin="8,0,0,0" Padding="6,1" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="4">
                             <fi:SymbolIcon Symbol="Games" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding SummaryIsPad}" />
-                            <TextBlock Text="{Binding SummaryLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SummaryLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                         </StackPanel>
                     </Border>
                     <TextBlock Grid.Column="3" Text="{Binding ExtraText}" IsVisible="{Binding HasExtra}" FontSize="11" Margin="6,0,0,0"
-                               Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                     <fi:SymbolIcon Grid.Column="4" Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Margin="8,0,0,0" IsVisible="{Binding IsConflicted}"
                                    Foreground="{DynamicResource PbTextMutedBrush}" ToolTip.Tip="Shares a shortcut with another action" />
                 </Grid>
@@ -120,7 +95,7 @@
             <StackPanel Spacing="2" Margin="0,0,0,12">
                 <Grid ColumnDefinitions="*,Auto" Tag="{Binding Tag}" Margin="10,6,10,4">
                     <TextBlock Text="{Binding Caption}" Classes="pbTextCaption" FontWeight="Bold" />
-                    <TextBlock Grid.Column="1" Text="{Binding CountText}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock Grid.Column="1" Text="{Binding CountText}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
                 </Grid>
                 <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource ShortcutListRowTemplate}" />
             </StackPanel>
@@ -128,7 +103,7 @@
 
         <!-- An editable chip in the editor pane: the input, a gamepad / lock / warning icon where it applies, and a remove button (not on a fixed stick or trigger). -->
         <DataTemplate x:Key="ShortcutEditChipTemplate" x:DataType="vm:ShortcutChip">
-            <Border Classes="ksChip" Classes.pad="{Binding IsPad}" Margin="0,0,6,6">
+            <Border Classes="pbChip" Classes.pad="{Binding IsPad}" Margin="0,0,6,6">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <fi:SymbolIcon Symbol="Games" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding IsPad}" />
                     <TextBlock Text="{Binding Label}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
@@ -136,7 +111,7 @@
                                    ToolTip.Tip="Fixed to this stick or trigger" />
                     <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding IsConflicted}"
                                    ToolTip.Tip="Also bound to another action" />
-                    <Button Classes="headerAction ghost" Padding="2" MinWidth="0" MinHeight="0" IsVisible="{Binding IsRemovable}"
+                    <Button Classes="iconButton sm" MinWidth="0" IsVisible="{Binding IsRemovable}"
                             Command="{Binding $parent[ItemsControl].((vm:ShortcutRowViewModel)DataContext).RemoveChipCommand}"
                             CommandParameter="{Binding}"
                             AutomationProperties.Name="Remove this shortcut" ToolTip.Tip="Remove this shortcut">
@@ -147,7 +122,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="ShortcutDefaultChipTemplate" x:DataType="vm:ShortcutChip">
-            <Border Classes="ksChip" Classes.pad="{Binding IsPad}" Margin="0,0,6,6">
+            <Border Classes="pbChip" Classes.pad="{Binding IsPad}" Margin="0,0,6,6">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <fi:SymbolIcon Symbol="Games" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding IsPad}" />
                     <TextBlock Text="{Binding Label}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
@@ -158,7 +133,7 @@
         <DataTemplate x:Key="ShortcutConflictTemplate" x:DataType="vm:ShortcutConflictInfo">
             <StackPanel Spacing="4" Margin="0,0,0,4">
                 <TextBlock Text="{Binding Message}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbTextMutedBrush}" />
-                <Button Classes="headerAction ghost" HorizontalAlignment="Left" Content="Show that action"
+                <Button Classes="ghost" HorizontalAlignment="Left" Content="Show that action"
                         Command="{Binding $parent[ItemsControl].((vm:ShortcutRowViewModel)DataContext).SelectConflictOtherCommand}"
                         CommandParameter="{Binding}" />
             </StackPanel>
@@ -168,8 +143,8 @@
         <DataTemplate x:Key="ShortcutEditorTemplate" x:DataType="vm:ShortcutRowViewModel">
             <StackPanel Spacing="16">
                 <StackPanel Spacing="2">
-                    <TextBlock Text="{Binding Label}" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding Subtitle}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Label}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Subtitle}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
                 </StackPanel>
 
                 <StackPanel Spacing="6">
@@ -181,17 +156,17 @@
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
-                    <TextBlock Text="Not set" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoBindings}" />
+                    <TextBlock Text="Not set" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding HasNoBindings}" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <StackPanel IsVisible="{Binding CanCapture}">
-                            <Button Classes="headerAction ghost" Content="Add shortcut…" HorizontalAlignment="Left"
+                            <Button Classes="ghost" Content="Add shortcut…" HorizontalAlignment="Left"
                                     Command="{Binding BeginCaptureCommand}" IsVisible="{Binding !IsCapturing}" />
                             <controls:BindingCaptureBox IsVisible="{Binding IsCapturing}"
                                                         CaptureCommand="{Binding AddBindingCommand}"
                                                         CancelCommand="{Binding CancelCaptureCommand}"
                                                         AutomationProperties.Name="Press the new shortcut" />
                         </StackPanel>
-                        <Button Classes="headerAction ghost" Content="Reset to default" IsVisible="{Binding IsCustomised}"
+                        <Button Classes="ghost" Content="Reset to default" IsVisible="{Binding IsCustomised}"
                                 Command="{Binding ResetRowCommand}" ToolTip.Tip="Put this action back to its default shortcuts" />
                     </StackPanel>
                 </StackPanel>
@@ -217,7 +192,7 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid RowDefinitions="Auto,*" Margin="28,20,28,20">
+    <Grid RowDefinitions="Auto,*" Margin="24,20,24,20">
         <StackPanel Grid.Row="0" Tag="shortcuts.io" Spacing="12" Margin="0,0,0,14">
             <TextBlock Classes="pbTextHeading" Text="Keyboard Shortcuts" />
 
@@ -225,54 +200,54 @@
                 <Border Classes="ksSearch" Width="280" Margin="0,0,10,8">
                     <Grid ColumnDefinitions="Auto,*">
                         <fi:SymbolIcon Grid.Column="0" Symbol="Search" Margin="0,0,8,0" />
-                        <TextBox x:Name="SearchBox" Grid.Column="1" Text="{Binding Shortcuts.SearchText}" Watermark="Search actions or keys…"
+                        <TextBox x:Name="SearchBox" Grid.Column="1" Classes="bare" Text="{Binding Shortcuts.SearchText}" PlaceholderText="Search actions or keys…"
                                  AutomationProperties.AutomationId="ShortcutSearchBox" AutomationProperties.Name="Search shortcuts" />
                     </Grid>
                 </Border>
 
-                <Border Classes="ksSeg" Margin="0,0,10,8">
+                <Border Classes="segGroup" Margin="0,0,10,8">
                     <StackPanel Orientation="Horizontal" Spacing="2">
-                        <Button Classes="segToggle" Classes.on="{Binding Shortcuts.IsFilterAll}" Content="All"
+                        <Button Classes="segItem segToggle" Classes.on="{Binding Shortcuts.IsFilterAll}" Content="All"
                                 Command="{Binding Shortcuts.SetDeviceFilterCommand}" CommandParameter="{x:Static vm:ShortcutDeviceFilter.All}" />
-                        <Button Classes="segToggle" Classes.on="{Binding Shortcuts.IsFilterKeyboardMouse}" Content="Keyboard &amp; mouse"
+                        <Button Classes="segItem segToggle" Classes.on="{Binding Shortcuts.IsFilterKeyboardMouse}" Content="Keyboard &amp; mouse"
                                 Command="{Binding Shortcuts.SetDeviceFilterCommand}" CommandParameter="{x:Static vm:ShortcutDeviceFilter.KeyboardMouse}" />
-                        <Button Classes="segToggle" Classes.on="{Binding Shortcuts.IsFilterController}" Content="Controller"
+                        <Button Classes="segItem segToggle" Classes.on="{Binding Shortcuts.IsFilterController}" Content="Controller"
                                 Command="{Binding Shortcuts.SetDeviceFilterCommand}" CommandParameter="{x:Static vm:ShortcutDeviceFilter.Controller}" />
                     </StackPanel>
                 </Border>
 
-                <Button Classes="headerAction ghost ksToggle" Classes.on="{Binding Shortcuts.CustomisedOnly}" Margin="0,0,18,8" Content="Customised only"
+                <Button Classes="ghost segItem" Classes.on="{Binding Shortcuts.CustomisedOnly}" Margin="0,0,18,8" Content="Customised only"
                         Command="{Binding Shortcuts.ToggleCustomisedOnlyCommand}" ToolTip.Tip="Show only the actions whose shortcuts you have changed" />
 
-                <Button Classes="headerAction ghost" Margin="0,0,8,8" Content="Import Layout…"
+                <Button Classes="ghost" Margin="0,0,8,8" Content="Import Layout…"
                         Command="{Binding Shortcuts.ImportLayoutCommand}"
                         AutomationProperties.AutomationId="ImportKeyBindingsButton" />
-                <Button Classes="headerAction ghost" Margin="0,0,8,8" Content="Export Layout…"
+                <Button Classes="ghost" Margin="0,0,8,8" Content="Export Layout…"
                         Command="{Binding Shortcuts.ExportLayoutCommand}"
                         AutomationProperties.AutomationId="ExportKeyBindingsButton" />
-                <Button Classes="headerAction ghost" Margin="0,0,0,8" Content="Reset to Defaults"
+                <Button Classes="ghost" Margin="0,0,0,8" Content="Reset to Defaults"
                         Command="{Binding Shortcuts.ResetAllCommand}"
                         AutomationProperties.AutomationId="ResetKeyBindingsButton" />
             </WrapPanel>
 
             <TextBlock Text="Every key, mouse button, wheel direction and controller button can be changed. Pick an action, choose Add shortcut…, then press the key, click the middle or a side mouse button, or turn the wheel (hold Ctrl, Shift or Alt for a combination)."
-                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                       FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
         </StackPanel>
 
         <!-- Wide: list and editor side by side, each scrolling on its own. Narrow (see the code-behind): the page scrolls and the editor sits under a list of fixed height. -->
         <ScrollViewer Grid.Row="1" x:Name="PageScroll" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Disabled">
             <Grid x:Name="Body" ColumnDefinitions="*,16,1.3*">
-                <Border x:Name="ListPanel" Grid.Column="0" Classes="ksPanel">
+                <Border x:Name="ListPanel" Grid.Column="0" Classes="card" Padding="0">
                     <ScrollViewer x:Name="ListScroll" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="6,8,6,8">
-                            <TextBlock Text="No actions match." FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" Margin="10,6"
+                            <TextBlock Text="No actions match." FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" Margin="10,6"
                                        IsVisible="{Binding Shortcuts.HasNoMatches}" />
                             <ItemsControl x:Name="GroupList" ItemsSource="{Binding Shortcuts.FilteredGroups}" ItemTemplate="{StaticResource ShortcutListGroupTemplate}" />
                         </StackPanel>
                     </ScrollViewer>
                 </Border>
 
-                <Border x:Name="PanePanel" Grid.Column="2" Classes="ksPanel">
+                <Border x:Name="PanePanel" Grid.Column="2" Classes="card" Padding="0">
                     <ScrollViewer x:Name="PaneScroll" HorizontalScrollBarVisibility="Disabled">
                         <ContentControl Margin="18" Content="{Binding Shortcuts.SelectedRow}" ContentTemplate="{StaticResource ShortcutEditorTemplate}" />
                     </ScrollViewer>

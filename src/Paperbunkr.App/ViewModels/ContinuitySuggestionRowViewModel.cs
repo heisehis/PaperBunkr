@@ -13,12 +13,14 @@ public partial class ContinuitySuggestionRowViewModel : ViewModelBase
 {
     private readonly Action<ContinuitySuggestionRowViewModel> _onAccept;
     private readonly Action<ContinuitySuggestionRowViewModel> _onDismiss;
+    private readonly Action? _onSelectionChanged;
 
-    public ContinuitySuggestionRowViewModel(ContinuitySuggestion suggestion, Action<ContinuitySuggestionRowViewModel> onAccept, Action<ContinuitySuggestionRowViewModel> onDismiss)
+    public ContinuitySuggestionRowViewModel(ContinuitySuggestion suggestion, Action<ContinuitySuggestionRowViewModel> onAccept, Action<ContinuitySuggestionRowViewModel> onDismiss, Action? onSelectionChanged = null)
     {
         Suggestion = suggestion;
         _onAccept = onAccept;
         _onDismiss = onDismiss;
+        _onSelectionChanged = onSelectionChanged;
     }
 
     public ContinuitySuggestion Suggestion { get; }
@@ -30,6 +32,11 @@ public partial class ContinuitySuggestionRowViewModel : ViewModelBase
     public string Reason => Suggestion.Reason;
 
     public bool IsStrong => Suggestion.Strength == FormatSignalStrength.Strong;
+
+    [ObservableProperty]
+    private bool _isSelected;
+
+    partial void OnIsSelectedChanged(bool value) => _onSelectionChanged?.Invoke();
 
     [RelayCommand]
     private void Accept() => _onAccept(this);

@@ -36,4 +36,7 @@ public class ReadingListItem
     public bool RoleSuggestionDismissed { get; set; }
 
     public string? Notes { get; set; }
+
+    /// <summary>What the source asked for, when the entry came from one - see <see cref="ReadingListItemSource"/>. Null for hand-added and legacy entries.</summary>
+    public ReadingListItemSource? Source { get; set; }
 }

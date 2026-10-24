@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.tokyo_midnight",
+  "name": "Tokyo Midnight",
+  "base": {
+    "palette": {
+      "accent": "#FF5FA2",
+      "success": "#3DDBA4",
+      "badge": "#7DF9FF"
+    },
+    "semantic": {
+      "status": {
+        "danger": "#FF5C6C",
+        "warning": "#FFC857",
+        "info": "#7DF9FF"
+      },
+      "chart": {
+        "series": {
+          "1": "#7DF9FF",
+          "2": "#B388FF"
+        }
+      },
+      "glow": {
+        "color": "#80FF5FA2"
+      },
+      "selection": {
+        "background": "#40FF5FA2"
+      }
+    },
+    "metrics": {
+      "radius": 10,
+      "radiusSm": 6,
+      "radiusLg": 18
+    },
+    "components": {
+      "button.primary": {
+        "radius": 10,
+        "foreground": "#1A0612",
+        "states": {
+          "hover": {
+            "background": "#FF7DB5"
+          }
+        }
+      },
+      "chip": {
+        "radius": 8
+      }
+    },
+    "motion": {
+      "neonIn": {
+        "trigger": "load",
+        "duration": 380,
+        "easing": "expoOut",
+        "keyframes": [
+          {
+            "at": 0,
+            "opacity": 0,
+            "scale": 0.97
+          },
+          {
+            "at": 1,
+            "opacity": 1,
+            "scale": 1
+          }
+        ]
+      }
+    }
+  },
+  "variants": {
+    "dark": {
+      "name": "Dark",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#13111C",
+        "ink": "#EDEAF7"
+      },
+      "materials": {
+        "skyline": {
+          "type": "linearGradient",
+          "angle": 180,
+          "fallback": "#1B1730",
+          "stops": [
+            {
+              "at": 0,
+              "color": "#241B3D"
+            },
+            {
+              "at": 1,
+              "color": "#13111C"
+            }
+          ]
+        }
+      },
+      "surfaces": {
+        "navigation": "skyline"
+      },
+      "semantic": {
+        "surface": {
+          "raised": "#1D1A2B",
+          "overlay": "#262238"
+        },
+        "border": {
+          "default": "#34304A"
+        }
+      }
+    },
+    "oled": {
+      "name": "OLED",
+      "mode": "Dark",
+      "kind": "oled",
+      "palette": {
+        "canvas": "#000000",
+        "ink": "#EDEAF7"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#000000",
+          "raised": "#0C0A14",
+          "overlay": "#141122"
+        },
+        "border": {
+          "default": "#2A2540"
+        }
+      }
+    }
+  }
+}

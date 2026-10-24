@@ -98,6 +98,16 @@ public partial class ReadingListPageViewModel : ViewModelBase
 
     public bool HasTags => Tags.Count > 0;
 
+    [ObservableProperty]
+    private bool _isTagWallExpanded;
+
+    public string TagWallToggleLabel => IsTagWallExpanded ? "Show fewer tags" : "Show all tags";
+
+    partial void OnIsTagWallExpandedChanged(bool value) => OnPropertyChanged(nameof(TagWallToggleLabel));
+
+    [RelayCommand]
+    private void ToggleTagWall() => IsTagWallExpanded = !IsTagWallExpanded;
+
     // --- Header state ---
 
     [ObservableProperty]
@@ -114,10 +124,10 @@ public partial class ReadingListPageViewModel : ViewModelBase
     /// <summary>The description as the hero shows it: section-heading lines ("Plot Summary", "Background") dropped, paragraphs kept.</summary>
     public string SynopsisText => CleanSynopsis(Subtitle);
 
-    /// <summary>Long enough that the collapsed three lines cut it off, so the hero offers "more".</summary>
-    public bool IsSynopsisLong => SynopsisText.Length > 240 || SynopsisText.Contains('\n');
+    /// <summary>Long enough that the collapsed two lines cut it off, so the hero offers "more".</summary>
+    public bool IsSynopsisLong => SynopsisText.Length > 160 || SynopsisText.Contains('\n');
 
-    public int SynopsisMaxLines => SynopsisExpanded ? 0 : 3;
+    public int SynopsisMaxLines => SynopsisExpanded ? 0 : 2;
 
     /// <summary>
     /// ComicVine-sourced descriptions arrive as flattened HTML whose first line is a section heading ("Plot Summary", "Background") - the
@@ -166,7 +176,15 @@ public partial class ReadingListPageViewModel : ViewModelBase
     /// <summary>The hero's caption names the list's type only when it says something (not for an ordinary user list).</summary>
     public bool ShowTypeLabel => _listType != ReadingListType.User && TypeLabel.Length > 0;
 
-    public bool ShowFolderSeparator => HasFolder && ShowTypeLabel;
+    public bool ShowFolderSeparator => HasFolder && HasTypeCaption;
+
+    /// <summary>The caps word above the title (ARC, EVENT, CONTINUITY...), empty for a plain user list - the same one the gallery card wears.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTypeCaption))]
+    [NotifyPropertyChangedFor(nameof(ShowFolderSeparator))]
+    private string _typeCaption = string.Empty;
+
+    public bool HasTypeCaption => TypeCaption.Length > 0;
 
     [ObservableProperty]
     private string? _linkedStoryEventName;
@@ -308,6 +326,13 @@ public partial class ReadingListPageViewModel : ViewModelBase
     private string? _arcSourceName;
 
     [ObservableProperty]
+    private string? _arcSourceMarkKey;
+
+    public bool HasArcSourceMark => !string.IsNullOrEmpty(ArcSourceMarkKey);
+
+    partial void OnArcSourceMarkKeyChanged(string? value) => OnPropertyChanged(nameof(HasArcSourceMark));
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowCoverMosaic))]
     [NotifyPropertyChangedFor(nameof(ShowCoverGlyph))]
     private Bitmap? _arcCoverImage;
@@ -350,6 +375,7 @@ public partial class ReadingListPageViewModel : ViewModelBase
         bool switched = _activeReadingListId != readingListId;
         if (triggerEntrance)
         {
+            PlayEntranceAnimation = false; // pulse: a one-shot entrance opens on a real false -> true change (Motion v2 D, Q19)
             PlayEntranceAnimation = true;
         }
 
@@ -370,6 +396,7 @@ public partial class ReadingListPageViewModel : ViewModelBase
         var list = context.ReadingLists
             .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.Series)
             .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.MetadataProposals)
+            .Include(r => r.Items).ThenInclude(i => i.Source)
             .Include(r => r.StoryEvent)
             .Include(r => r.Continuity)
             .Include(r => r.Folder)
@@ -387,6 +414,7 @@ public partial class ReadingListPageViewModel : ViewModelBase
         if (switched)
         {
             SynopsisExpanded = false;
+            IsTagWallExpanded = false;
             CancelAddTag();
         }
 
@@ -408,11 +436,13 @@ public partial class ReadingListPageViewModel : ViewModelBase
         RefreshGoalChip(readingListId);
 
         IsArcLinked =!string.IsNullOrEmpty(list.Source);
+        TypeCaption = ReadingListTypeCaption.For(list.Type, IsArcLinked, list.ContinuityId is not null) ?? string.Empty;
         _loadingFollowArc = true;
         FollowArc = IsArcLinked && list.FollowArc;
         _loadingFollowArc = false;
         ArcSourceLabel = IsArcLinked ? $"via {ReadingListSourceRegistry.GetDisplayName(list.Source!)}" : null;
         ArcSourceName = IsArcLinked ? ReadingListSourceRegistry.GetDisplayName(list.Source!) : null;
+        ArcSourceMarkKey = IsArcLinked ? ReadingListSourceRegistry.GetMarkKey(list.Source) : null;
         ArcCoverImage = ArcCoverImageCache.Get(list.Id);
         if (ArcCoverImage is null && !string.IsNullOrEmpty(list.CoverImageUrl))
         {
@@ -520,7 +550,9 @@ public partial class ReadingListPageViewModel : ViewModelBase
         Tags.Clear();
         foreach (var tag in tags.OrderBy(t => t.Value, StringComparer.OrdinalIgnoreCase))
         {
-            Tags.Add(new TagPillViewModel(tag.Value, tag.Category, tag.Weight, _filterByTag, w => ReweightListTag(readingListId, tag.Value, w)));
+            Tags.Add(new TagPillViewModel(tag.Value, tag.Category, tag.Weight, _filterByTag,
+                tag.Origin == ReadingListTagOrigin.User ? w => ReweightListTag(readingListId, tag.Value, w) : null,
+                tag.Origin == ReadingListTagOrigin.Generated));
         }
 
         OnPropertyChanged(nameof(HasTags));
@@ -559,8 +591,9 @@ public partial class ReadingListPageViewModel : ViewModelBase
         }
 
         using var context = PaperbunkrDb.CreateContext();
-        var existing = context.ReadingListTags.Where(t => t.ReadingListId == listId).Select(t => t.Value).ToList();
-        var fresh = values.Where(v => !existing.Contains(v, StringComparer.OrdinalIgnoreCase)).ToList();
+        var existing = context.ReadingListTags.Where(t => t.ReadingListId == listId)
+            .Select(t => new { t.Value, t.Category }).ToList();
+        var fresh = values.Where(v => !existing.Any(t => ReadingListTagReconciler.SameTag(t.Value, t.Category, v, null))).ToList();
         if (fresh.Count == 0)
         {
             return;
@@ -580,14 +613,15 @@ public partial class ReadingListPageViewModel : ViewModelBase
     [RelayCommand]
     private void RemoveTag(TagPillViewModel? pill)
     {
-        if (pill is null || _activeReadingListId is not int listId)
+        if (pill is not { CanRemove: true } || _activeReadingListId is not int listId)
         {
             return;
         }
 
         using (var context = PaperbunkrDb.CreateContext())
         {
-            context.ReadingListTags.RemoveRange(context.ReadingListTags.Where(t => t.ReadingListId == listId && t.Value == pill.Value));
+            context.ReadingListTags.RemoveRange(context.ReadingListTags.Where(t => t.ReadingListId == listId
+                && t.Origin == ReadingListTagOrigin.User && t.Value == pill.Value));
             context.SaveChanges();
         }
 

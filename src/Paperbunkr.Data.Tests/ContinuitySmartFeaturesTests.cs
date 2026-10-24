@@ -117,43 +117,7 @@ public class ContinuitySmartFeaturesTests : IDisposable
         return list;
     }
 
-    // ----- Shared-character suggestions -----
-
-    [Fact]
-    public void Suggestions_OfferASeriesSharingThreeCharactersWithAMember_AndSayWhichAndWithWhom()
-    {
-        var member = AddSeries("Amazing Spider-Man");
-        var candidate = AddSeries("Venom");
-        var cameo = AddSeries("Daredevil");
-        var continuity = AddContinuity("Earth-616", member);
-        Appear(member, "Spider-Man", "Venom", "Carnage", "Mary Jane");
-        Appear(candidate, "Spider-Man", "Venom", "Carnage");
-        Appear(cameo, "Spider-Man");
-
-        var suggestion = Assert.Single(ContinuityCharacterSuggestionResolver.GetSuggestions(_context));
-
-        Assert.Equal(continuity.Id, suggestion.ContinuityId);
-        Assert.Equal(candidate.Id, suggestion.SeriesId);
-        Assert.Equal(3, suggestion.SharedCount);
-        Assert.Equal("Shares Carnage, Spider-Man, Venom with Amazing Spider-Man", suggestion.Reason);
-    }
-
-    [Fact]
-    public void Suggestions_SkipMembers_AndDismissedPairs()
-    {
-        var member = AddSeries("Amazing Spider-Man");
-        var alsoMember = AddSeries("Venom");
-        var dismissed = AddSeries("Carnage");
-        var continuity = AddContinuity("Earth-616", member, alsoMember);
-        foreach (var series in new[] { member, alsoMember, dismissed })
-        {
-            Appear(series, "Spider-Man", "Venom", "Carnage");
-        }
-
-        HealthDismissals.Dismiss(_context, HealthDismissals.ContinuitySuggestion, $"{continuity.Id}:{dismissed.Id}");
-
-        Assert.Empty(ContinuityCharacterSuggestionResolver.GetSuggestions(_context));
-    }
+    // ----- Which other continuities a series is in (the shared-character suggestions that used to live beside this were dropped 2026-10-12) -----
 
     [Fact]
     public void OtherContinuityLines_NameTheOtherContinuitiesASeriesIsIn()
@@ -164,7 +128,7 @@ public class ContinuitySmartFeaturesTests : IDisposable
         AddContinuity("Elsewhere", saga);
         AddContinuity("Another", saga);
 
-        var lines = ContinuityCharacterSuggestionResolver.OtherContinuityLines(_context, [saga.Id, lone.Id], here.Id);
+        var lines = ContinuityMembershipLines.OtherContinuityLines(_context, [saga.Id, lone.Id], here.Id);
 
         Assert.Equal("Also in: Another, Elsewhere", lines[saga.Id]);
         Assert.False(lines.ContainsKey(lone.Id));

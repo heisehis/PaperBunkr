@@ -134,14 +134,16 @@ public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>Sets the derived special-mark labels from a focused issue (empty for series mode /
     /// book mode). Host screens call this alongside setting <see cref="FormatText"/> etc.</summary>
-    public void SetSpecialMarks(Data.Entities.Issue? issue)
+    /// <param name="skip">A label the screen already shows elsewhere (Manga detail's content-type picker), left out so the row doesn't repeat
+    /// it (2026-10-20 UI polish, remaining screens Q2).</param>
+    public void SetSpecialMarks(Data.Entities.Issue? issue, string? skip = null)
     {
         SpecialMarks.Clear();
         if (issue is not null)
         {
             foreach (var spec in Services.MarkResolver.Instance.ResolveSpecial(issue))
             {
-                if (!string.IsNullOrWhiteSpace(spec.Text))
+                if (!string.IsNullOrWhiteSpace(spec.Text) && !string.Equals(spec.Text, skip, StringComparison.OrdinalIgnoreCase))
                 {
                     SpecialMarks.Add(spec.Text!);
                 }
@@ -157,9 +159,17 @@ public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private bool _isSynopsisExpanded;
 
+    /// <summary>About three lines while collapsed; unbounded once expanded.</summary>
+    /// <summary>The synopsis with its bold, italic, underline and links rendered.</summary>
+    public System.Collections.Generic.IReadOnlyList<Paperbunkr.App.Services.MdBlock> SummaryBlocks => Paperbunkr.App.Services.MarkdownLite.ParseDescription(Summary);
+
+    partial void OnSummaryChanged(string value) => OnPropertyChanged(nameof(SummaryBlocks));
+
+    public double SynopsisMaxHeight => IsSynopsisExpanded ? double.PositiveInfinity : 66;
+
     public string SynopsisToggleLabel => IsSynopsisExpanded ? "less" : "more";
 
-    partial void OnIsSynopsisExpandedChanged(bool value) => OnPropertyChanged(nameof(SynopsisToggleLabel));
+    partial void OnIsSynopsisExpandedChanged(bool value) { OnPropertyChanged(nameof(SynopsisToggleLabel)); OnPropertyChanged(nameof(SynopsisMaxHeight)); }
 
     [RelayCommand]
     private void ToggleSynopsis() => IsSynopsisExpanded = !IsSynopsisExpanded;

@@ -182,7 +182,7 @@ public sealed class KitsuTrackerAdapter : ITrackerSearchProvider, ITrackerAdapte
             libraryEntryId = refetched?.Id;
             if (libraryEntryId is null)
             {
-                return (true, null); // created successfully but score/date can't be applied without its id - not a failure, just incomplete this round
+                return (false, "Entry created, but score/finish date could not be saved. Retry the update.");
             }
         }
 
@@ -265,7 +265,7 @@ public sealed class KitsuTrackerAdapter : ITrackerSearchProvider, ITrackerAdapte
         const string mutation = """
             mutation UpdateManga($library_id: ID!, $status: LibraryEntryStatusEnum!, $progress: Int!, $rating: Int, $finishedAt: ISO8601DateTime) {
               libraryEntry {
-                update(input: { id: $library_id, status: $status, progress: $progress, rating: $rating, finishedAt: $finishedAt, private: false }) {
+                update(input: { id: $library_id, status: $status, progress: $progress, rating: $rating, finishedAt: $finishedAt }) {
                   errors { message }
                   libraryEntry { id }
                 }

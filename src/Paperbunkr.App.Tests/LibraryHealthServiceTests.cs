@@ -184,6 +184,62 @@ public class LibraryHealthServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task VerifyMissing_UsesSnapshotForCoveredPaths_AndLeavesPresentContentHealthUntouched()
+    {
+        int presentId = AddIssue("present.cbz", missingVerificationCount: 4);
+        int missingId = AddIssue("gone.cbz", createFile: false, missingVerificationCount: 1);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var present = context.Issues.Include(i => i.Series).Single(i => i.Id == presentId);
+            present.FileIsMissing = true;
+            present.MissingAcknowledged = true;
+            present.IsContentEmpty = true;
+            present.Series.EmptyRowAcknowledged = true;
+            context.SaveChanges();
+        }
+
+        var snapshot = new LibraryScanPresenceSnapshot(
+            new[] { Path.GetFullPath(Path.Combine(_root, "present.cbz")) },
+            new[] { ".cbz" },
+            new[] { Path.GetFullPath(_root) });
+        var result = await CreateService().VerifyMissingAsync(snapshot, new Progress<(int, int)>());
+
+        Assert.Equal(2, result.Checked);
+        Assert.Equal(1, result.MissingNow);
+        Assert.Equal(0, result.ContentEmptyNow);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var presentAfter = verify.Issues.Include(i => i.Series).Single(i => i.Id == presentId);
+        Assert.False(presentAfter.FileIsMissing);
+        Assert.Equal(0, presentAfter.MissingVerificationCount);
+        Assert.False(presentAfter.MissingAcknowledged);
+        Assert.True(presentAfter.IsContentEmpty); // only full Verify probes present archives
+        Assert.True(presentAfter.Series!.EmptyRowAcknowledged);
+        var missingAfter = verify.Issues.Find(missingId)!;
+        Assert.True(missingAfter.FileIsMissing);
+        Assert.Equal(2, missingAfter.MissingVerificationCount);
+    }
+
+    [Fact]
+    public async Task VerifyMissing_FallsBackToFileExistsOutsideSnapshotCoverage()
+    {
+        int presentId = AddIssue("outside-present.cbz");
+        int missingId = AddIssue("outside-gone.cbz", createFile: false);
+        string coveredRoot = Path.Combine(_root, "covered");
+        Directory.CreateDirectory(coveredRoot);
+        var snapshot = new LibraryScanPresenceSnapshot(
+            Array.Empty<string>(),
+            new[] { ".cbz" },
+            new[] { Path.GetFullPath(coveredRoot) });
+
+        var result = await CreateService().VerifyMissingAsync(snapshot, new Progress<(int, int)>());
+
+        Assert.Equal(1, result.MissingNow);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(verify.Issues.Find(presentId)!.FileIsMissing);
+        Assert.True(verify.Issues.Find(missingId)!.FileIsMissing);
+    }
+
+    [Fact]
     public async Task ScopedVerifyAsync_OnlyChecksGivenIssueIds()
     {
         int scopedId = AddIssue("scoped-gone.cbz", createFile: false);

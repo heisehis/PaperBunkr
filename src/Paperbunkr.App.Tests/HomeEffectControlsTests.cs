@@ -4,33 +4,24 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Paperbunkr.App.Controls;
+using Paperbunkr.App.Theming.Motion;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Tests;
 
 /// <summary>
 /// The three effects the 2026-09-28 Home pitch added (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md C9, "Scroll-reveal",
 /// "Hero tilt"): each works normally and is fully at rest under Reduced Motion. Reduced Motion is simulated the way
-/// <c>ThemeService.ApplyReducedMotion</c> does it - a zero <c>PbMotionStandard</c> resource.
+/// <c>ThemeService</c> does it - through the shared motion policy.
 /// </summary>
 [Collection(nameof(AvaloniaTestCollection))]
 public class HomeEffectControlsTests
 {
     private static IDisposable ReducedMotion()
     {
-        var resources = Application.Current!.Resources;
-        bool had = resources.TryGetValue("PbMotionStandard", out var previous);
-        resources["PbMotionStandard"] = TimeSpan.Zero;
-        return new Restore(() =>
-        {
-            if (had)
-            {
-                resources["PbMotionStandard"] = previous;
-            }
-            else
-            {
-                resources.Remove("PbMotionStandard");
-            }
-        });
+        var previous = MotionPolicy.Preference;
+        MotionPolicy.SetPreference(MotionPreferenceMode.Reduced);
+        return new Restore(() => MotionPolicy.SetPreference(previous));
     }
 
     private sealed class Restore(Action undo) : IDisposable

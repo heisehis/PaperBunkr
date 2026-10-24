@@ -40,7 +40,7 @@
                                                 Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
                                                 CommandParameter="{Binding SeedSeries}" />
                                         </LayoutTransformControl>
-                                        <TextBlock Text="you read" FontSize="10.5" HorizontalAlignment="Center"
+                                        <TextBlock Text="you read" FontSize="10" HorizontalAlignment="Center"
                                                    Foreground="{DynamicResource PbAccentTextBrush}" />
                                     </StackPanel>
                                     <fi:SymbolIcon Symbol="ArrowRight" FontSize="18" VerticalAlignment="Center" Margin="0,0,0,40"

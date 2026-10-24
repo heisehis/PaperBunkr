@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.sunset_boulevard",
+  "name": "Sunset Boulevard",
+  "base": {
+    "palette": {
+      "accent": "#FF9E64",
+      "success": "#9ECE6A",
+      "badge": "#FFCB6B"
+    },
+    "semantic": {
+      "status": {
+        "danger": "#F7768E",
+        "warning": "#FFCB6B",
+        "info": "#7AA2F7"
+      },
+      "chart": {
+        "series": {
+          "1": "#7AA2F7",
+          "2": "#BB9AF7"
+        }
+      }
+    },
+    "metrics": {
+      "radius": 10,
+      "radiusSm": 7,
+      "radiusLg": 18
+    },
+    "components": {
+      "button.primary": {
+        "foreground": "#2A1206"
+      }
+    }
+  },
+  "variants": {
+    "dusk": {
+      "name": "Dusk",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#1F1422",
+        "ink": "#F5E9E2"
+      },
+      "materials": {
+        "horizon": {
+          "type": "linearGradient",
+          "angle": 180,
+          "fallback": "#2C1A2E",
+          "stops": [
+            {
+              "at": 0,
+              "color": "#40203A"
+            },
+            {
+              "at": 1,
+              "color": "#1F1422"
+            }
+          ]
+        }
+      },
+      "surfaces": {
+        "navigation": "horizon"
+      },
+      "semantic": {
+        "surface": {
+          "raised": "#291A2C",
+          "overlay": "#34213A"
+        },
+        "border": {
+          "default": "#4A3050"
+        }
+      }
+    },
+    "dawn": {
+      "name": "Dawn",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#FFF4EC",
+        "ink": "#3A2230",
+        "accent": "#B4501B",
+        "success": "#4A7A1E",
+        "badge": "#B57A10"
+      },
+      "materials": {
+        "morning": {
+          "type": "linearGradient",
+          "angle": 180,
+          "fallback": "#FFE9DA",
+          "stops": [
+            {
+              "at": 0,
+              "color": "#FFDCC8"
+            },
+            {
+              "at": 1,
+              "color": "#FFF4EC"
+            }
+          ]
+        }
+      },
+      "surfaces": {
+        "navigation": "morning"
+      },
+      "semantic": {
+        "surface": {
+          "raised": "#FFFAF6",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#EBD3C4"
+        },
+        "status": {
+          "danger": "#B93A55",
+          "warning": "#8F5F0C",
+          "info": "#3559B0"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#FFFFFF"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.newsprint",
+  "name": "Newsprint",
+  "mode": "Light",
+  "base": {
+    "palette": {
+      "canvas": "#F5F3EE",
+      "ink": "#151515",
+      "accent": "#151515",
+      "success": "#2E6B3E",
+      "badge": "#151515"
+    },
+    "semantic": {
+      "surface": {
+        "navigation": "#ECE9E1",
+        "raised": "#FBFAF7",
+        "overlay": "#FFFFFF"
+      },
+      "border": {
+        "default": "#BDB8AC",
+        "strong": "#151515"
+      },
+      "text": {
+        "accent": "#151515"
+      },
+      "badge": {
+        "text": "#F5F3EE"
+      },
+      "action": {
+        "primaryText": "#F5F3EE",
+        "soft": "#1F151515"
+      },
+      "glow": {
+        "color": "#40151515"
+      },
+      "status": {
+        "danger": "#A12622",
+        "warning": "#7A5A0A",
+        "info": "#1F4E79"
+      },
+      "chart": {
+        "series": {
+          "1": "#1F4E79",
+          "2": "#6B4C8A"
+        }
+      },
+      "reader": {
+        "background": {
+          "page": "#FAF8F3",
+          "text": "#151515"
+        }
+      }
+    },
+    "metrics": {
+      "radius": 0,
+      "radiusSm": 0,
+      "radiusLg": 2
+    },
+    "typography": {
+      "display": {
+        "family": "Georgia",
+        "size": 46,
+        "weight": "Bold"
+      },
+      "heading": {
+        "family": "Georgia",
+        "size": 26,
+        "weight": "Bold"
+      },
+      "monospace": {
+        "family": "Consolas"
+      }
+    },
+    "components": {
+      "button.primary": {
+        "radius": 0,
+        "foreground": "#F5F3EE",
+        "states": {
+          "hover": {
+            "background": "#333333"
+          }
+        }
+      },
+      "button.secondary": {
+        "radius": 0
+      },
+      "button.ghost": {
+        "radius": 0
+      },
+      "chip": {
+        "radius": 0
+      },
+      "panel.floating": {
+        "radius": 2
+      }
+    },
+    "layouts": {
+      "Home": {
+        "contract": 1,
+        "root": {
+          "id": "root",
+          "type": "Dock",
+          "children": [
+            {
+              "id": "masthead",
+              "type": "Home.Masthead",
+              "dock": "top"
+            },
+            {
+              "id": "tabs",
+              "type": "Tabs",
+              "dock": "fill",
+              "margin": "24,8,24,0",
+              "children": [
+                {
+                  "id": "reading",
+                  "type": "Scroll",
+                  "title": "Reading",
+                  "children": [
+                    {
+                      "id": "readingStack",
+                      "type": "Stack",
+                      "spacing": 20,
+                      "padding": "0,16,0,40",
+                      "children": [
+                        {
+                          "id": "continue",
+                          "type": "Home.Section",
+                          "section": "continueReading"
+                        },
+                        {
+                          "id": "upNext",
+                          "type": "Home.Section",
+                          "section": "upNext"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "everything",
+                  "type": "Scroll",
+                  "title": "Everything ({home.sectionCount})",
+                  "children": [
+                    {
+                      "id": "sections",
+                      "type": "Home.Sections",
+                      "margin": "0,16,0,40",
+                      "motion": "fadeIn"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

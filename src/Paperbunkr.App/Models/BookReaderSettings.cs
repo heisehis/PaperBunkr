@@ -76,10 +76,9 @@ public sealed partial class BookReaderSettings : ObservableObject
     /// <summary>Pixel line height for direct XAML binding (TextBlock.LineHeight takes pixels, not a multiplier).</summary>
     public double LineHeightPixels => FontSize * LineHeightMultiplier;
 
-    // Same #14161B/#ECE7DB pair App.axaml defines for PbBgColor/PbTextColor - MatchAppSkin uses a
-    // concrete value rather than a live DynamicResource lookup, since Background/Foreground need
-    // to be plain IBrush values usable identically across all four theme options, not a XAML-only
-    // binding path for one of them. Mapping itself lives in BookThemeBrushes (docs/superpowers/specs/
+    // MatchAppSkin is the active app theme's reading surface, read when asked for (the reader is entered after any theme change, so
+    // there is nothing to keep in sync while it is open). Background/Foreground stay plain IBrush values usable identically across every
+    // theme option, not a XAML-only binding path for one of them. Mapping itself lives in BookThemeBrushes (docs/superpowers/specs/
     // 2026-09-03-books-reader-hud-redesign-design.md) - the reader chrome's translucent tint needs
     // the identical per-theme table, so it's one shared switch rather than two that could drift apart.
     public IBrush Background => BookThemeBrushes.ContentBackground(Theme);

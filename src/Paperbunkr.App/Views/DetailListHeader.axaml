@@ -1,0 +1,57 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="using:Paperbunkr.App.Models"
+             x:Class="Paperbunkr.App.Views.DetailListHeader"
+             x:Name="Root">
+    <!-- Header row over a detail list (docs/superpowers/specs/2026-10-19-detail-layouts-v2-design.md, Q7): drag a column's right edge
+         to resize it, drag a header onto another to move it there. Each cell is its column's width plus the 8px either side the row
+         cells carry, so the headers line up with the rows. List Options' Move up / Move down and width boxes are the keyboard path. -->
+    <UserControl.Styles>
+        <Style Selector="Border.detailHeaderCell">
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="SizeAll" />
+        </Style>
+        <Style Selector="Border.detailHeaderCell.dropTarget">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        </Style>
+        <Style Selector="Thumb.detailHeaderGrip">
+            <Setter Property="Width" Value="6" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="SizeWestEast" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}">
+                        <Border Width="1" Margin="0,4" HorizontalAlignment="Right" Background="{DynamicResource PbBorderBrush}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Thumb.detailHeaderGrip:pointerover /template/ Border > Border">
+            <Setter Property="Background" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="{Binding #Root.LeadingInset}">
+        <ItemsControl x:Name="HeaderItems" ItemsSource="{Binding #Root.Cells}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="models:DetailListHeaderCell">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Border Grid.Column="0" Classes="detailHeaderCell" Tag="{Binding Field}"
+                                PointerPressed="OnHeaderPointerPressed" PointerMoved="OnHeaderPointerMoved" PointerReleased="OnHeaderPointerReleased"
+                                ToolTip.Tip="{Binding Header, StringFormat='{}{0} - drag to move, drag the edge to resize'}">
+                            <TextBlock Width="{Binding Width}" Text="{Binding Header}" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                        </Border>
+                        <Thumb Grid.Column="1" Classes="detailHeaderGrip" Tag="{Binding}" Margin="-3,0"
+                               DragDelta="OnGripDragDelta" DragCompleted="OnGripDragCompleted"
+                               AutomationProperties.Name="{Binding Header, StringFormat='Resize {0}'}" />
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Border>
+</UserControl>

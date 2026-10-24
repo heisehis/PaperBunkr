@@ -6,6 +6,7 @@
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:sys="using:System"
+             xmlns:svc="using:Paperbunkr.App.Services"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="320"
@@ -29,83 +30,37 @@
              capsule land in the real app (this briefly changed shape during the badge-unification
              pass; reverted). Everything else here (weight-class colors, hover/focus states,
              transitions, the Border variant's glow ring below) is untouched. -->
-        <Style Selector="Border.bandChip">
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-            <Setter Property="Padding" Value="10,4" />
+        <!-- The collapsed synopsis clips its MarkdownView to SynopsisMaxHeight, which would cut the outside focus ring off the
+             focusable text blocks and links it renders; draw their ring inside their own bounds instead. -->
+        <Style Selector="pbc|MarkdownView.synopsis SelectableTextBlock, pbc|MarkdownView.synopsis Button.mdLink">
+            <Setter Property="FocusAdorner" Value="{DynamicResource PbFocusAdornerInside}" />
+        </Style>
+
+        <Style Selector="Border.pbChip">
             <Setter Property="Margin" Value="0,0,6,6" />
         </Style>
-        <Style Selector="Button.bandChip">
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-            <Setter Property="Padding" Value="10,4" />
+        <Style Selector="Button.filterChip">
             <Setter Property="Margin" Value="0,0,6,6" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FontSize" Value="{StaticResource PbFontSizeMeta}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                    <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                    <BrushTransition Property="Foreground" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Button.bandChip:pointerover">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
-        </Style>
-        <Style Selector="Button.bandChip:focus-visible">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
 
         <!-- Weight-class visuals (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-
              design.md) - Core/Defining read as "this defines the series", Recurrent full-strength,
-             Incidental de-emphasised. Unset keeps the plain look. -->
-        <Style Selector="Button.bandChip.core">
-            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+             Incidental de-emphasised. Unset keeps the plain look.
+             Every colour here is one the theme guarantees to read on what it sits on: PbOnAccent on the accent fill, and
+             PbAccentText (contrast-adjusted against the background) for accent strokes and text. The raw accent and badge text
+             are not: badge text is tuned for the badge colour, so it vanished on accent fills like Vintage Paperback's dark red,
+             and a dark accent (a theme's, or the cover-derived one DetailAccentScope sets) disappeared as a dot or border. -->
+        <Style Selector="Button.filterChip.core Ellipse">
+            <Setter Property="Fill" Value="{DynamicResource PbOnAccentBrush}" />
         </Style>
-        <Style Selector="Button.bandChip.core:pointerover">
-            <Setter Property="Background" Value="{DynamicResource PbAccentTextBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
-        </Style>
-        <Style Selector="Button.bandChip.core Ellipse">
-            <Setter Property="Fill" Value="{DynamicResource PbBadgeTextBrush}" />
-        </Style>
-        <Style Selector="Button.bandChip.defining">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
-        </Style>
-        <Style Selector="Button.bandChip.recurrent">
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbTextFaintBrush}" />
-        </Style>
-        <Style Selector="Button.bandChip.incidental">
+        <Style Selector="Button.filterChip.incidental">
             <Setter Property="Opacity" Value="0.55" />
         </Style>
         <!-- Non-interactive Border chips (Virtual Tags) still get the glow-ring on hover. -->
-        <Style Selector="Border.bandChip">
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BoxShadowsTransition Property="BoxShadow" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Border.bandChip:pointerover">
-            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
-        </Style>
     </UserControl.Styles>
 
-    <Border Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBadgeBrush}"
-            BorderThickness="2,0,0,0" Padding="26,14,26,4">
+    <Border Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbAccentBrush}"
+            BorderThickness="2,0,0,0" Padding="22,14,24,4">
         <StackPanel Spacing="10">
 
             <!-- Inline meta row - the content-type picker + derived "special" chips only. Publisher /
@@ -122,7 +77,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="x:String">
                             <Border Classes="pbChip">
-                                <TextBlock Text="{Binding}" FontSize="{StaticResource PbFontSizeMicro}" FontWeight="Bold"
+                                <TextBlock Text="{Binding}" FontSize="{DynamicResource PbFontSizeMicro}" FontWeight="Bold"
                                            Foreground="{DynamicResource PbTextMutedBrush}" />
                             </Border>
                         </DataTemplate>
@@ -132,13 +87,11 @@
 
             <!-- Synopsis -->
             <StackPanel IsVisible="{Binding Summary, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
-                <TextBlock Text="{Binding Summary}" FontSize="{StaticResource PbFontSizeBody}" Foreground="{DynamicResource PbTextMutedBrush}"
-                           TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis"
-                           IsVisible="{Binding !IsSynopsisExpanded}" />
-                <TextBlock Text="{Binding Summary}" FontSize="{StaticResource PbFontSizeBody}" Foreground="{DynamicResource PbTextMutedBrush}"
-                           TextWrapping="Wrap" IsVisible="{Binding IsSynopsisExpanded}" />
+                <pbc:MarkdownView Classes="synopsis" Blocks="{Binding SummaryBlocks}" BaseFontSize="{DynamicResource PbFontSizeBody}" BodyBrushKey="PbTextMutedBrush"
+                                  LinkCommand="{x:Static svc:ExternalLinks.OpenWebCommand}"
+                                  MaxHeight="{Binding SynopsisMaxHeight}" ClipToBounds="True" />
                 <Button Classes="detailGroupMore" Content="{Binding SynopsisToggleLabel}"
-                        Command="{Binding ToggleSynopsisCommand}" Margin="0,3,0,0" HorizontalAlignment="Left" />
+                        Command="{Binding ToggleSynopsisCommand}" Margin="0,4,0,0" HorizontalAlignment="Left" />
             </StackPanel>
 
             <!-- Metadata groups -->
@@ -147,13 +100,13 @@
                     <DataTemplate x:DataType="vm:DetailBandGroupViewModel">
                         <StackPanel Margin="0,0,0,6">
                             <!-- header -->
-                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,5">
+                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,4">
                                 <TextBlock Classes="detailGroupLabel" Text="{Binding Label}" VerticalAlignment="Center" />
                                 <Button Classes="detailGroupMore" Content="{Binding MoreLabel}"
                                         Command="{Binding ToggleExpandCommand}" IsVisible="{Binding HasOverflow}" VerticalAlignment="Center" />
                                 <Button Classes="detailGroupMore" Content="{Binding RevealHint}"
                                         Command="{Binding ToggleHiddenCommand}" IsVisible="{Binding HasHidden}"
-                                        Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                        Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                             </StackPanel>
 
                             <!-- credits group -->
@@ -163,19 +116,19 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:TagPillViewModel">
                                             <Button Classes="creditName" Command="{Binding SearchCommand}" Background="Transparent" BorderThickness="0" Padding="0,0,6,0" Cursor="Hand">
-                                                <TextBlock Text="{Binding Value}" FontSize="{StaticResource PbFontSizeBody}" Foreground="{DynamicResource PbTextBrush}" />
+                                                <TextBlock Text="{Binding Value}" FontSize="{DynamicResource PbFontSizeBody}" Foreground="{DynamicResource PbTextBrush}" />
                                             </Button>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <TextBlock Text="  •  art by  " FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}"
+                                <TextBlock Text="  •  art by  " FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                            VerticalAlignment="Center" IsVisible="{Binding HasArtists}" />
                                 <ItemsControl ItemsSource="{Binding Artists}">
                                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:TagPillViewModel">
                                             <Button Classes="creditName" Command="{Binding SearchCommand}" Background="Transparent" BorderThickness="0" Padding="0,0,6,0" Cursor="Hand">
-                                                <TextBlock Text="{Binding Value}" FontSize="{StaticResource PbFontSizeBody}" Foreground="{DynamicResource PbTextBrush}" />
+                                                <TextBlock Text="{Binding Value}" FontSize="{DynamicResource PbFontSizeBody}" Foreground="{DynamicResource PbTextBrush}" />
                                             </Button>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -189,14 +142,14 @@
                                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:TagPillViewModel">
-                                        <Button Classes="bandChip" Command="{Binding SearchCommand}" ToolTip.Tip="{Binding Category}"
+                                        <Button Classes="filterChip" Command="{Binding SearchCommand}" ToolTip.Tip="{Binding Category}"
                                                 Classes.core="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=core}"
                                                 Classes.defining="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=defining}"
                                                 Classes.recurrent="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=recurrent}"
                                                 Classes.incidental="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=incidental}">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
                                                 <Ellipse Width="5" Height="5" VerticalAlignment="Center" IsVisible="{Binding IsWeighted}"
-                                                         Fill="{DynamicResource PbAccentBrush}" />
+                                                         Fill="{DynamicResource PbAccentTextBrush}" />
                                                 <TextBlock Text="{Binding Value}" FontWeight="{Binding TextWeight}" />
                                             </StackPanel>
                                         </Button>
@@ -210,16 +163,16 @@
 
             <!-- Virtual Tags -->
             <StackPanel IsVisible="{Binding HasVirtualTags}" Margin="0,0,0,6">
-                <TextBlock Classes="detailGroupLabel" Text="Virtual Tags" Margin="0,0,0,5" />
+                <TextBlock Classes="detailGroupLabel" Text="Virtual Tags" Margin="0,0,0,4" />
                 <ItemsControl ItemsSource="{Binding VirtualTags}">
                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="sys:String">
-                            <Border Classes="bandChip" BorderBrush="{DynamicResource PbBadgeBrush}">
+                            <Border Classes="pbChip" BorderBrush="{DynamicResource PbAccentBrush}">
                                 <Border.Background>
-                                    <SolidColorBrush Color="{DynamicResource PbBadgeColor}" Opacity="0.14" />
+                                    <SolidColorBrush Color="{DynamicResource PbAccentColor}" Opacity="0.14" />
                                 </Border.Background>
-                                <TextBlock Text="{Binding}" FontSize="{StaticResource PbFontSizeMeta}" FontWeight="SemiBold" Foreground="{DynamicResource PbBadgeBrush}" />
+                                <TextBlock Text="{Binding}" FontSize="{DynamicResource PbFontSizeMeta}" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentTextBrush}" />
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

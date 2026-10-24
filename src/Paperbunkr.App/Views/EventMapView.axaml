@@ -81,11 +81,11 @@
                         <Panel Name="PART_Content">
                             <Grid ColumnDefinitions="3,Auto,*">
                                 <Border Grid.Column="0" em:EventMapLaneBrush.ColorIndex="{Binding ColorIndex}" />
-                                <Border Grid.Column="1" Width="36" Height="54" Margin="5,0,0,0" CornerRadius="3" ClipToBounds="True"
+                                <Border Grid.Column="1" Width="36" Height="54" Margin="4,0,0,0" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
                                         Background="{DynamicResource PbSurface2Brush}" VerticalAlignment="Center">
                                     <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                                 </Border>
-                                <StackPanel Grid.Column="2" Margin="7,4,6,4" VerticalAlignment="Center" Spacing="1">
+                                <StackPanel Grid.Column="2" Margin="8,4,6,4" VerticalAlignment="Center" Spacing="1">
                                     <TextBlock Text="{Binding SeriesName}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
                                                TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{Binding Number, StringFormat='#{0}'}" FontSize="11" Foreground="{DynamicResource PbTextBrush}" />
@@ -95,12 +95,12 @@
                                             <Ellipse Width="8" Height="8" Fill="{DynamicResource PbAccentBrush}" IsVisible="{Binding IsInProgress}" />
                                             <fi:SymbolIcon Symbol="Checkmark" FontSize="12" Foreground="{DynamicResource PbSuccessBrush}" IsVisible="{Binding IsRead}" />
                                         </Panel>
-                                        <TextBlock Text="{Binding CoverDate}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding CoverDate}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </StackPanel>
                             </Grid>
                             <fi:SymbolIcon Symbol="Warning" FontSize="12" Foreground="{DynamicResource PbDangerBrush}" IsVisible="{Binding IsMissing}"
-                                           HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,3,4,0" />
+                                           HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0" />
                         </Panel>
                     </Border>
                 </ControlTemplate>
@@ -158,30 +158,30 @@
     <Grid RowDefinitions="Auto,*">
 
         <!-- ===== Toolbar ===== -->
-        <WrapPanel Grid.Row="0" Margin="28,0,28,10" Orientation="Horizontal" ItemSpacing="14" LineSpacing="8">
+        <WrapPanel Grid.Row="0" Margin="24,0,24,10" Orientation="Horizontal" ItemSpacing="14" LineSpacing="8">
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding IsSpinePickerVisible}">
-                <TextBlock Text="Spine" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="Spine" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                 <controls:SuggestBox MinWidth="220" FontSize="12" IsStrict="True" AutomationProperties.Name="Spine series"
                                      Suggestions="{Binding SpineOptions}" Text="{Binding SpineText}" />
             </StackPanel>
 
             <Border Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                    BorderThickness="1" CornerRadius="6" Padding="3" VerticalAlignment="Center">
+                    BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="4" VerticalAlignment="Center">
                 <StackPanel Orientation="Horizontal" Spacing="2">
-                    <Button Classes="segToggle" Classes.on="{Binding IsFilterAll}" Content="All"
+                    <Button Classes="segItem segToggle" Classes.on="{Binding IsFilterAll}" Content="All"
                             Command="{Binding SetFilterCommand}" CommandParameter="{x:Static eventMap:EventMapFilter.All}" />
-                    <Button Classes="segToggle" Classes.on="{Binding IsFilterSpineOnly}" Content="Spine only" IsVisible="{Binding CanFilterSpineOnly}"
+                    <Button Classes="segItem segToggle" Classes.on="{Binding IsFilterSpineOnly}" Content="Spine only" IsVisible="{Binding CanFilterSpineOnly}"
                             Command="{Binding SetFilterCommand}" CommandParameter="{x:Static eventMap:EventMapFilter.SpineOnly}" />
-                    <Button Classes="segToggle" Classes.on="{Binding IsFilterHideOptional}" Content="Hide optional"
+                    <Button Classes="segItem segToggle" Classes.on="{Binding IsFilterHideOptional}" Content="Hide optional"
                             Command="{Binding SetFilterCommand}" CommandParameter="{x:Static eventMap:EventMapFilter.HideOptional}" />
-                    <Button Classes="segToggle" Classes.on="{Binding IsFilterEventsOnly}" Content="Events only" IsVisible="{Binding CanFilterEventsOnly}"
+                    <Button Classes="segItem segToggle" Classes.on="{Binding IsFilterEventsOnly}" Content="Events only" IsVisible="{Binding CanFilterEventsOnly}"
                             ToolTip.Tip="Hide the issues that are in no event"
                             Command="{Binding SetFilterCommand}" CommandParameter="{x:Static eventMap:EventMapFilter.EventsOnly}" />
                 </StackPanel>
             </Border>
 
             <!-- Continuity map: hide whole events (docs/superpowers/specs/2026-09-27-continuity-map-design.md §4) -->
-            <Button Classes="headerAction secondary" VerticalAlignment="Center" IsVisible="{Binding HasEventChoices}"
+            <Button Classes="secondary" VerticalAlignment="Center" IsVisible="{Binding HasEventChoices}"
                     AutomationProperties.Name="Choose which events to show">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Events" VerticalAlignment="Center" />
@@ -203,20 +203,20 @@
             </Button>
 
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" ToolTip.Tip="Density (Ctrl + mouse wheel)">
-                <TextBlock Text="Density" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="Density" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                 <Slider Width="110" Minimum="0" Maximum="2" TickFrequency="1" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
                         AutomationProperties.Name="Map density: compact, standard or covers" Value="{Binding DensityIndex}" VerticalAlignment="Center" />
             </StackPanel>
 
-            <Button Classes="headerAction secondary" VerticalAlignment="Center" Command="{Binding JumpToFirstUnreadCommand}"
+            <Button Classes="iconButton" VerticalAlignment="Center" Command="{Binding JumpToFirstUnreadCommand}"
                     AutomationProperties.Name="Jump to first unread" ToolTip.Tip="Jump to first unread">
                 <fi:SymbolIcon Symbol="ArrowNext" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
 
-            <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center"
+            <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis" MaxWidth="520" />
 
-            <Button Classes="headerAction ghost" VerticalAlignment="Center" IsVisible="{Binding HasPendingDuplicates}"
+            <Button Classes="ghost" VerticalAlignment="Center" IsVisible="{Binding HasPendingDuplicates}"
                     Command="{Binding ShowDuplicatesCommand}" ToolTip.Tip="These pairs wait under Possible duplicates in the sidebar">
                 <StackPanel Orientation="Horizontal" Spacing="5">
                     <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" />
@@ -253,9 +253,9 @@
                                         <Grid Height="{Binding Height}" ColumnDefinitions="4,*" ToolTip.Tip="{Binding FullName}">
                                             <Border Grid.Column="0" Margin="0,8" CornerRadius="2" em:EventMapLaneBrush.ColorIndex="{Binding ColorIndex}" />
                                             <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center" Spacing="1">
-                                                <TextBlock Text="{Binding Label}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}"
+                                                <TextBlock Text="{Binding Label}" FontSize="12" Foreground="{DynamicResource PbTextBrush}"
                                                            FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Text="{Binding CountLabel}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                <TextBlock Text="{Binding CountLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
                                             </StackPanel>
                                         </Grid>
                                     </DataTemplate>
@@ -269,28 +269,28 @@
                                                 AutomationProperties.Name="{Binding SurfaceAutomationName}"
                                                 HorizontalAlignment="Left" VerticalAlignment="Top" />
                         </ScrollViewer>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="Nothing to show - change the filters" FontSize="12.5" Margin="28,40"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" VerticalAlignment="Top"
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="Nothing to show - change the filters" FontSize="13" Margin="24,40"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" VerticalAlignment="Top"
                                    IsVisible="{Binding IsFilteredEmpty}" />
                     </Grid>
 
                     <!-- No members -->
-                    <StackPanel Spacing="10" Margin="28,40" HorizontalAlignment="Center" VerticalAlignment="Top" IsVisible="{Binding IsEmpty}">
+                    <StackPanel Spacing="10" Margin="24,40" HorizontalAlignment="Center" VerticalAlignment="Top" IsVisible="{Binding IsEmpty}">
                         <controls:EmptyIllustration Kind="Stack" HorizontalAlignment="Center" />
-                        <TextBlock Text="{Binding EmptyText}" FontSize="12.5" HorizontalAlignment="Center"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <Button Classes="headerAction secondary" Content="＋ Add issues" HorizontalAlignment="Center" Command="{Binding AddIssuesCommand}"
-                                IsVisible="{Binding IsAddIssuesVisible}" />
+                        <TextBlock Text="{Binding EmptyText}" FontSize="13" HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <Button Classes="secondary" HorizontalAlignment="Center" Command="{Binding AddIssuesCommand}"
+                                IsVisible="{Binding IsAddIssuesVisible}"><StackPanel Orientation="Horizontal" Spacing="6"><fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Add issues" VerticalAlignment="Center" /></StackPanel></Button>
                     </StackPanel>
 
                     <!-- Load failure (also raised as an Activity Center alert) -->
-                    <StackPanel Spacing="8" Margin="28,40" HorizontalAlignment="Center" VerticalAlignment="Top" IsVisible="{Binding HasError}">
+                    <StackPanel Spacing="8" Margin="24,40" HorizontalAlignment="Center" VerticalAlignment="Top" IsVisible="{Binding HasError}">
                         <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbDangerBrush}" HorizontalAlignment="Center" />
-                        <TextBlock Text="{Binding ErrorText}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                        <TextBlock Text="{Binding ErrorText}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
                                    MaxWidth="520" HorizontalAlignment="Center" TextAlignment="Center" />
                     </StackPanel>
 
-                    <TextBlock Text="Loading map…" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" Margin="28,40"
+                    <TextBlock Text="Loading map…" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" Margin="24,40"
                                HorizontalAlignment="Center" VerticalAlignment="Top" IsVisible="{Binding IsLoading}" />
                 </Panel>
             </Border>
@@ -300,8 +300,8 @@
                     BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1,1,0,0">
                 <Grid RowDefinitions="Auto,*">
                     <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,10,8,0">
-                        <TextBlock Text="Issue" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                        <Button Grid.Column="1" Classes="headerAction ghost" Padding="5" Command="{Binding CloseInspectorCommand}"
+                        <TextBlock Text="Issue" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="iconButton" Command="{Binding CloseInspectorCommand}"
                                 AutomationProperties.Name="Close inspector" ToolTip.Tip="Close (Esc)">
                             <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                         </Button>
@@ -314,12 +314,12 @@
                             </Border>
                             <StackPanel Spacing="3">
                                 <TextBlock Text="{Binding SelectedCard.Title}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding SelectedCard.CoverDate}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                <TextBlock Text="{Binding SelectedCard.CoverDate}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                            IsVisible="{Binding SelectedCard.HasCoverDate}" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Border Classes="pbChip" Padding="8,3">
-                                    <TextBlock Text="{Binding SelectedCard.RoleLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <Border Classes="pbChip" Padding="8,4">
+                                    <TextBlock Text="{Binding SelectedCard.RoleLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 </Border>
                                 <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
                                     <Panel Width="12" Height="12" VerticalAlignment="Center">
@@ -327,38 +327,38 @@
                                         <Ellipse Width="8" Height="8" Fill="{DynamicResource PbAccentBrush}" IsVisible="{Binding SelectedCard.IsInProgress}" />
                                         <fi:SymbolIcon Symbol="Checkmark" FontSize="12" Foreground="{DynamicResource PbSuccessBrush}" IsVisible="{Binding SelectedCard.IsRead}" />
                                     </Panel>
-                                    <TextBlock Text="{Binding SelectedCard.ReadStateLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding SelectedCard.ReadStateLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" IsVisible="{Binding SelectedCard.IsMissing}">
                                     <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
-                                    <TextBlock Text="File missing" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    <TextBlock Text="File missing" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 </StackPanel>
                             </StackPanel>
-                            <TextBlock Text="Outside this continuity: its series isn't a member." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                            <TextBlock Text="Outside this continuity: its series isn't a member." FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                        TextWrapping="Wrap" IsVisible="{Binding SelectedCard.IsOutsideContinuity}" />
                             <TextBlock Text="{Binding SelectedCard.Summary}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
                                        MaxLines="6" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SelectedCard.Summary}"
                                        IsVisible="{Binding SelectedCard.HasSummary}" />
                             <WrapPanel ItemSpacing="8" LineSpacing="8">
-                                <Button Classes="headerAction primary" Command="{Binding OpenReaderCommand}" ToolTip.Tip="Read in event order (Ctrl+Enter)">
+                                <Button Classes="primary" Command="{Binding OpenReaderCommand}" ToolTip.Tip="Read in event order (Ctrl+Enter)">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeXs}" />
                                         <TextBlock Text="Open reader" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </Button>
-                                <Button Classes="headerAction secondary" Content="{Binding SelectedCard.MarkReadLabel}" Command="{Binding ToggleReadCommand}" />
-                                <Button Classes="headerAction ghost" Content="Series details" Command="{Binding OpenSeriesDetailCommand}" />
+                                <Button Classes="secondary" Content="{Binding SelectedCard.MarkReadLabel}" Command="{Binding ToggleReadCommand}" />
+                                <Button Classes="ghost" Content="Series details" Command="{Binding OpenSeriesDetailCommand}" />
                             </WrapPanel>
 
                             <StackPanel Spacing="4" IsVisible="{Binding HasConnections}">
-                                <TextBlock Text="Connections" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,0" />
+                                <TextBlock Text="Connections" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,6,0,0" />
                                 <ItemsControl ItemsSource="{Binding Connections}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:EventMapLinkViewModel">
                                             <Button Classes="mapLink" Command="{Binding $parent[UserControl].((vm:EventMapViewModel)DataContext).SelectLinkCommand}"
                                                     CommandParameter="{Binding}" AutomationProperties.Name="{Binding Title, StringFormat='Go to {0}'}">
                                                 <Grid ColumnDefinitions="110,*">
-                                                    <TextBlock Grid.Column="0" Text="{Binding Relation}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="0" Text="{Binding Relation}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                                                     <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                                 </Grid>
                                             </Button>
@@ -368,7 +368,7 @@
                             </StackPanel>
 
                             <StackPanel Spacing="4" IsVisible="{Binding HasSegmentOrder}">
-                                <TextBlock Text="Segment order" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,0" />
+                                <TextBlock Text="Segment order" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,6,0,0" />
                                 <ItemsControl ItemsSource="{Binding SegmentOrder}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:EventMapLinkViewModel">
@@ -377,7 +377,7 @@
                                                         CommandParameter="{Binding}" AutomationProperties.Name="{Binding Title, StringFormat='Go to {0}'}">
                                                     <Grid ColumnDefinitions="*,Auto">
                                                         <TextBlock Grid.Column="0" Text="{Binding Title}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
-                                                        <TextBlock Grid.Column="1" Text="{Binding RoleLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="8,0,0,0" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding RoleLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" Margin="8,0,0,0" />
                                                     </Grid>
                                                 </Button>
                                             </Border>

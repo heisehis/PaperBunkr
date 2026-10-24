@@ -26,10 +26,12 @@
          PART_IncreaseButton / PART_DecreaseButton. Type is RepeatButton, not Button (that was
          miss #1); two /template/ levels are required to cross both templated-control boundaries
          (miss #2 only had one). -->
+    <!-- 2026-10-19 foundation §4: every form input shares the underlined-field look (bottom line only, PbFieldRadius corners). -->
     <Style Selector="NumericUpDown">
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbFieldRadius}" />
         <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
     </Style>
     <Style Selector="NumericUpDown /template/ ButtonSpinner /template/ RepeatButton#PART_IncreaseButton, NumericUpDown /template/ ButtonSpinner /template/ RepeatButton#PART_DecreaseButton">
@@ -45,9 +47,10 @@
     <!-- AutoCompleteBox: the inner TextBox is themed by FluentAvalonia; the drop-down popup is a
          bare ListBox in a Popup - give it the same surface/border as our other flyouts. -->
     <Style Selector="AutoCompleteBox">
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbFieldRadius}" />
         <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
     </Style>
     <Style Selector="AutoCompleteBox /template/ Popup#PART_Popup Border">
@@ -60,9 +63,33 @@
          Only the radius + surface need pinning; FluentAvalonia handles the rest incl. the accent
          focus border from SystemAccentColor (seeded from our amber, see App.axaml). -->
     <Style Selector="ComboBox">
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbFieldRadius}" />
         <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+
+    <!-- TextBox: the underlined field (foundation design §4). Colours, the bottom-only border thickness and the accent focus line come from
+         Styles/FluentBridge.axaml (FluentAvalonia's own TextControl* keys); only what has no key lives here. -->
+    <Style Selector="TextBox">
+        <Setter Property="CornerRadius" Value="{DynamicResource PbFieldRadius}" />
+    </Style>
+    <!-- Placeholder reads as "not a value": muted (from the bridge) and italic (Q10). PART_Placeholder is FluentAvalonia's part name. -->
+    <Style Selector="TextBox /template/ TextBlock#PART_Placeholder">
+        <Setter Property="FontStyle" Value="Italic" />
+    </Style>
+    <!-- Data-validation failure: the underline turns danger red; the message itself uses Border.inlineError (Overlays.axaml). -->
+    <Style Selector="TextBox:error /template/ Border#PART_BorderElement">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
+    </Style>
+
+    <!-- Shared form label (foundation §6): the overline role. Replaces 12 local copies that disagreed on size (10 / 10.5) and weight. -->
+    <Style Selector="TextBlock.fieldLabel">
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMicro}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LetterSpacing" Value="0.6" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="Margin" Value="0,0,0,4" />
     </Style>
 
     <!-- ToggleSwitch (docs/superpowers/specs/2026-09-06-toggleswitch-adoption-design.md) - only the
@@ -94,21 +121,27 @@
                  the detail screens) can override any of these and the TemplateBindings below carry
                  the override down to PART_TextBox. -->
             <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbFieldRadius}" />
             <Setter Property="Template">
                 <ControlTemplate>
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBox Name="PART_TextBox" Grid.Column="0"
-                                 Watermark="{TemplateBinding Watermark}"
+                                 PlaceholderText="{TemplateBinding Watermark}"
                                  IsReadOnly="{TemplateBinding IsStrict}"
                                  CornerRadius="{TemplateBinding CornerRadius}"
                                  Background="{TemplateBinding Background}"
                                  BorderBrush="{TemplateBinding BorderBrush}"
-                                 Foreground="{TemplateBinding Foreground}" />
+                                 Foreground="{TemplateBinding Foreground}">
+                            <!-- Keeps the text clear of the chevron button laid over this box's right edge, whatever Padding a screen gives
+                                 the box (the Detail screens' content-type picker set 10,0 and its label ran under the arrow, 2026-10-20). -->
+                            <TextBox.InnerRightContent>
+                                <Border Width="22" IsHitTestVisible="False" />
+                            </TextBox.InnerRightContent>
+                        </TextBox>
 
-                        <Button Name="PART_DropDownButton" Grid.Column="1" Margin="-28,0,0,0" Focusable="False"
+                        <Button AutomationProperties.Name="Show suggestions" Name="PART_DropDownButton" Grid.Column="1" Margin="-28,0,0,0" Focusable="False"
                                 Width="26" Background="Transparent" BorderThickness="0"
                                 Padding="0" VerticalAlignment="Stretch"
                                 HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
@@ -149,7 +182,7 @@
                                         </ListBox.ItemsPanel>
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
-                                                <TextBlock Text="{Binding}" FontSize="12.5"
+                                                <TextBlock Text="{Binding}" FontSize="13"
                                                            Foreground="{DynamicResource PbTextBrush}"
                                                            TextTrimming="CharacterEllipsis" />
                                             </DataTemplate>
@@ -164,10 +197,11 @@
         </ControlTheme>
     </Styles.Resources>
 
+    <!-- The knob is Acknowledge feedback moving between two states (Motion v2): its move token and the move curve; Reduced snaps it. -->
     <Style Selector="ToggleSwitch">
         <Setter Property="KnobTransitions">
             <Transitions>
-                <DoubleTransition Property="Canvas.Left" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                <DoubleTransition Property="Canvas.Left" Duration="{DynamicResource PbMotionAcknowledgeMove}" Easing="{StaticResource PbMotionMoveEase}" />
             </Transitions>
         </Setter>
     </Style>
@@ -179,7 +213,7 @@
     <Style Selector="Border.textSpinnerContainer">
         <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
         <Setter Property="ClipToBounds" Value="True" />
         <Setter Property="Width" Value="18" />
         <Setter Property="Height" Value="20" />

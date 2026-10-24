@@ -71,9 +71,12 @@ public sealed class LibraryTile
             Subtitle = $"{series.ContentType} · {SeriesCardSample.FormatIssueCount(series.Issues.Count)}",
             CoverBrush = SeriesCardSample.CoverBrushFor(series.Name),
             CoverIssueId = CoverIssueFor(series)?.Id,
-            CoverKey = CoverIssueFor(series) is { } coverIssue
-                ? CoverFingerprint.Stem(coverIssue.Id, coverIssue.FilePath, coverIssue.FileSize)
-                : null,
+            CoverKey = series.CustomCoverPath is { Length: > 0 } seriesCoverPath
+                && System.IO.File.Exists(Paperbunkr.App.Services.Covers.CustomSeriesCoverPaths.GetPath(seriesCoverPath))
+                ? $"series:{series.Id}"
+                : CoverIssueFor(series) is { } coverIssue
+                    ? CoverFingerprint.Stem(coverIssue.Id, coverIssue.FilePath, coverIssue.FileSize)
+                    : null,
             SharedElementKey = $"series-cover:{series.Id}",
         },
         CollectionMemberKind.Issue when member.Issue is { } issue => new LibraryTile

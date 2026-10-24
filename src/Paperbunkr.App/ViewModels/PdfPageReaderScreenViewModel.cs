@@ -30,7 +30,7 @@ namespace Paperbunkr.App.ViewModels;
 /// straight port of that page/zoom/pan pattern onto a <see cref="Book"/> instead of an
 /// <see cref="Issue"/>, not a new gesture/rendering implementation.
 /// </summary>
-public partial class PdfPageReaderScreenViewModel : ViewModelBase
+public partial class PdfPageReaderScreenViewModel : ViewModelBase, ITransientScreen
 {
     private readonly Action _goBack;
     private IPageImageDecoder? _decoder;

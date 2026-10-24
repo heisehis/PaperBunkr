@@ -65,7 +65,12 @@ public sealed class ComicVineSource : IReadingListSource
         return list;
     }
 
-    public async Task<IReadOnlyList<ArcIssue>> GetArcIssuesInOrderAsync(string arcId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ArcIssue>> GetArcIssuesInOrderAsync(string arcId, CancellationToken cancellationToken) =>
+        (await GetArcEntriesAsync(arcId, cancellationToken).ConfigureAwait(false)).Issues;
+
+    /// <summary>The arc names its issues by id; the details come from a second, batched call that can return fewer. Whatever it leaves out
+    /// is reported by id instead of vanishing (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.7).</summary>
+    public async Task<ArcEntryList> GetArcEntriesAsync(string arcId, CancellationToken cancellationToken)
     {
         // Step 1: the story arc's own "issues" field gives id+name stubs already in the site's
         // curated reading order - this order is what we preserve.
@@ -81,7 +86,7 @@ public sealed class ComicVineSource : IReadingListSource
 
         if (orderedIds.Count == 0)
         {
-            return Array.Empty<ArcIssue>();
+            return new ArcEntryList(Array.Empty<ArcIssue>(), Array.Empty<string>(), 0);
         }
 
         // Step 2: batch-fetch the real issue_number/volume/date fields (chunked - very large arcs
@@ -109,10 +114,9 @@ public sealed class ComicVineSource : IReadingListSource
 
         // Step 3: reassemble in the arc's original curated order - the batch endpoint does not
         // preserve the requested id order.
-        return orderedIds
-            .Where(detailsById.ContainsKey)
-            .Select(id => detailsById[id])
-            .ToList();
+        var issues = orderedIds.Where(detailsById.ContainsKey).Select(id => detailsById[id]).ToList();
+        var missing = orderedIds.Where(id => !detailsById.ContainsKey(id)).Select(id => $"ComicVine issue {id} (no details returned)").ToList();
+        return new ArcEntryList(issues, missing, orderedIds.Count);
     }
 
     /// <summary>One ComicVine issue record as an <see cref="ArcIssue"/>. Besides series/number/year, ComicVine gives each issue a <c>name</c> (its
@@ -128,7 +132,9 @@ public sealed class ComicVineSource : IReadingListSource
             Year: ParseYearFromDate(coverDate) ?? ParseYearFromDate(storeDate) ?? 0,
             CoverImageUrl: node["image"]?["small_url"]?.GetValue<string>(),
             Title: NullIfBlank(node["name"]?.GetValue<string>()),
-            Summary: NullIfBlank(node["deck"]?.GetValue<string>()));
+            Summary: NullIfBlank(node["deck"]?.GetValue<string>()),
+            ComicVineIssueId: NullIfBlank(node["id"]?.ToString()),
+            ComicVineSeriesId: NullIfBlank(node["volume"]?["id"]?.ToString()));
     }
 
     private static string? NullIfBlank(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();

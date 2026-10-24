@@ -5,7 +5,14 @@ using System.Text.Json.Nodes;
 
 namespace Paperbunkr.Data.ComicVine;
 
-public sealed record ComicVineVolume(int Id, string Name, string? Publisher, int? StartYear, int CountOfIssues, string? ImageUrl);
+public sealed record ComicVineVolume(int Id, string Name, string? Publisher, int? StartYear, int CountOfIssues, string? ImageUrl)
+{
+    /// <summary>The series' own publication status as the source words it (Metron: Ongoing, Completed, Cancelled, Hiatus). ComicVine volumes carry none.</summary>
+    public string? Status { get; init; }
+
+    /// <summary>The series description (plain text), when the source has one.</summary>
+    public string? Description { get; init; }
+}
 
 /// <param name="CoverHash">Metron's perceptual hash of the cover (<see cref="Scraping.MetronCoverHash"/>); ComicVine has none.</param>
 public sealed record ComicVineIssue(int Id, string IssueNumber, string? Name, DateTime? StoreDate, DateTime? CoverDate, string? ImageUrl, int? VolumeId, string? CoverHash = null);
@@ -44,14 +51,14 @@ public interface IComicVineClient
 /// the UI; interactive lookups use <see cref="ComicVineRequestPriority.High"/>.
 /// </para>
 /// </summary>
-public sealed class ComicVineClient : IComicProvider, IPullListSource, Scraping.IStoryArcSource
+public sealed class ComicVineClient : IComicProvider, IIssueFirstSeriesSearch, IPullListSource, Scraping.IStoryArcSource
 {
     private const string BaseUrl = "https://comicvine.gamespot.com/api";
     private const int PageSize = 100;
     /// <summary>Safety valve against a runaway pagination loop (5,000 issues is far beyond any real volume).</summary>
     private const int MaxPages = 50;
 
-    private const string VolumeFields = "id,name,publisher,start_year,count_of_issues,image";
+    private const string VolumeFields = "id,name,publisher,start_year,count_of_issues,image,description";
     private const string IssueFields = "id,issue_number,name,store_date,cover_date,image,volume";
 
     private readonly string _apiKey;
@@ -89,6 +96,86 @@ public sealed class ComicVineClient : IComicProvider, IPullListSource, Scraping.
         var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
         return (root["results"] as JsonArray)?.Select(ParseVolume).OfType<ComicVineVolume>().ToList() ?? new List<ComicVineVolume>();
     }
+
+    /// <summary>
+    /// <c>issues/?filter=issue_number:N,cover_date:Y-01-01|Y-12-31</c>, keeping the volumes whose name contains every word of
+    /// <paramref name="seriesName"/>. Needs the year: without it every issue #N ever printed would have to be paged. Up to three pages.
+    /// </summary>
+    public async Task<IReadOnlyList<ComicVineVolume>> FindSeriesByIssueAsync(string seriesName, string issueNumber, int? year, CancellationToken cancellationToken)
+    {
+        if (year is not int y)
+        {
+            return Array.Empty<ComicVineVolume>();
+        }
+
+        var words = WordsOf(seriesName);
+        var volumes = new Dictionary<int, ComicVineVolume>();
+        int offset = 0;
+        for (int page = 0; page < 3; page++)
+        {
+            var url = Url("issues", $"filter=issue_number:{Uri.EscapeDataString(issueNumber)},cover_date:{y}-01-01|{y}-12-31&field_list=id,issue_number,volume&limit={PageSize}&offset={offset}");
+            var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+            var results = root["results"] as JsonArray;
+            if (results is null || results.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var node in results)
+            {
+                if (node?["volume"] is JsonObject v && v["id"] is { } idNode && int.TryParse(idNode.ToString(), out int id) && !volumes.ContainsKey(id)
+                    && v["name"]?.GetValue<string>() is { } name && words.All(w => WordsOf(name).Contains(w)))
+                {
+                    volumes[id] = new ComicVineVolume(id, name, null, null, 0, ImageUrl: null);
+                }
+            }
+
+            offset += results.Count;
+            if (offset >= (root["number_of_total_results"]?.GetValue<int>() ?? 0))
+            {
+                break;
+            }
+        }
+
+        return volumes.Values.ToList();
+    }
+
+    /// <summary>
+    /// Volumes by name from both ends of ComicVine's list (reported 2026-10-22). ComicVine ignores <c>sort</c> on /volumes and returns matches oldest
+    /// first, so a busy name ("X-Men": 1,559 volumes) never reached anything after the 1990s in the first pages. The first
+    /// <paramref name="perEnd"/> and the last <paramref name="perEnd"/> (the newest) are fetched: four requests at most.
+    /// </summary>
+    public async Task<IReadOnlyList<ComicVineVolume>> SearchVolumesBothEndsAsync(string query, int perEnd, CancellationToken cancellationToken)
+    {
+        var volumes = new Dictionary<int, ComicVineVolume>();
+        int total = 0;
+        async Task FetchAsync(int offset)
+        {
+            var url = Url("volumes", $"filter=name:{Uri.EscapeDataString(query)}&field_list={VolumeFields}&limit={PageSize}&offset={offset}");
+            var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+            total = root["number_of_total_results"]?.GetValue<int>() ?? total;
+            foreach (var volume in (root["results"] as JsonArray)?.Select(ParseVolume).OfType<ComicVineVolume>() ?? Enumerable.Empty<ComicVineVolume>())
+            {
+                volumes.TryAdd(volume.Id, volume);
+            }
+        }
+
+        await FetchAsync(0).ConfigureAwait(false);
+        for (int offset = PageSize; offset < Math.Min(perEnd, total); offset += PageSize)
+        {
+            await FetchAsync(offset).ConfigureAwait(false);
+        }
+
+        for (int offset = Math.Max(perEnd, total - perEnd); offset < total; offset += PageSize)
+        {
+            await FetchAsync(offset).ConfigureAwait(false);
+        }
+
+        return volumes.Values.ToList();
+    }
+
+    private static HashSet<string> WordsOf(string text) =>
+        System.Text.RegularExpressions.Regex.Split(text.ToLowerInvariant().Replace("'", string.Empty), @"[^\p{L}\p{N}]+").Where(w => w.Length > 0 && w != "the").ToHashSet();
 
     public async Task<IReadOnlyList<ComicVineVolume>> SearchVolumesAsync(string query, int maxResults, CancellationToken cancellationToken)
     {
@@ -171,15 +258,19 @@ public sealed class ComicVineClient : IComicProvider, IPullListSource, Scraping.
     {
         var entries = new List<PullListEntry>();
         int offset = 0;
+        bool hasMore = false;
 
         for (int page = 0; page < MaxPages; page++)
         {
             var url = Url("issues", $"filter=store_date:{from:yyyy-MM-dd}|{to:yyyy-MM-dd}&field_list={IssueFields}&limit={PageSize}&offset={offset}&sort=store_date:asc");
             var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
 
+            hasMore = offset < (root["number_of_total_results"]?.GetValue<int>() ?? 0);
             var results = root["results"] as JsonArray;
             if (results is null || results.Count == 0)
             {
+                if (hasMore)
+                    throw new ComicVineException("ComicVine returned an empty release page before the advertised total; the cached list was kept.");
                 break;
             }
 
@@ -202,12 +293,15 @@ public sealed class ComicVineClient : IComicProvider, IPullListSource, Scraping.
 
             offset += results.Count;
             int total = root["number_of_total_results"]?.GetValue<int>() ?? 0;
+            hasMore = offset < total;
             if (offset >= total)
             {
                 break;
             }
         }
 
+        if (hasMore)
+            throw new ComicVineException("ComicVine returned an incomplete release list; the cached list was kept.");
         return entries;
     }
 
@@ -496,7 +590,10 @@ public sealed class ComicVineClient : IComicProvider, IPullListSource, Scraping.
             (o["publisher"] as JsonObject)?["name"]?.GetValue<string>(),
             ParseYear(o["start_year"]),
             o["count_of_issues"]?.GetValue<int>() ?? 0,
-            ImageUrl(o["image"]));
+            ImageUrl(o["image"]))
+        {
+            Description = StripHtml(o["description"]?.GetValue<string>()),
+        };
     }
 
     private static ComicVineIssue? ParseIssue(JsonNode? node)

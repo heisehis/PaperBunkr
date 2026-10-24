@@ -67,7 +67,11 @@
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Padding" Value="10,6" />
+            <!-- Every reader chrome button is 28 tall, text or icon, so the bars match (2026-10-20 Reader pass Q5). -->
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="MinHeight" Value="{DynamicResource PbControlHeight}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
@@ -79,8 +83,13 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-            <Setter Property="FontSize" Value="14" />
-            <Setter Property="Padding" Value="6" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Width" Value="{DynamicResource PbControlHeight}" />
+            <Setter Property="Height" Value="{DynamicResource PbControlHeight}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
         <Style Selector="Button.drawerRow">
@@ -89,7 +98,7 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Padding" Value="12,7" />
-            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
@@ -119,7 +128,9 @@
                  currently sits every single PointerMoved tick, so it perpetually chases a moving
                  target instead of tracking the cursor. The real Dock has no separate transition layer
                  either - continuous per-frame position updates from real mouse movement (~60Hz+) ARE
-                 the smoothness, directly, with nothing layered on top. -->
+                 the smoothness, directly, with nothing layered on top.
+                 motion: reflow - the active dot's Width transition stays (2026-10-20 UI polish SP5 Q1): RenderTransform belongs to the
+                 magnify above, the neighbouring dots must make room, and only two dots change per page turn. -->
             <Setter Property="RenderTransformOrigin" Value="0.5,1" />
             <Setter Property="Transitions">
                 <Transitions>
@@ -179,27 +190,28 @@
             <Setter Property="IsHitTestVisible" Value="False" />
         </Style>
 
-        <!-- Actions cluster's bookmark-toggle glow pulse (docs/superpowers/specs/2026-08-25-reader-
-             chrome-design.md) - not a hover/focus state like PosterTile's PbGlowRing usage, so this
-             is driven by the transient BookmarkJustToggled flag instead of a pseudo-class. -->
+        <!-- Actions cluster's bookmark-toggle glow pulse (docs/superpowers/specs/2026-08-25-reader-chrome-design.md), driven by the
+             transient BookmarkJustToggled flag. The ring is a fixed BoxShadow on its own layer whose Opacity animates on the Acknowledge
+             token (Motion v2 §6): transitioning BoxShadow itself tears the ring mid-flight. PbGlowPulseRing, not PbGlowRing: the pulse is
+             feedback, not a hover affordance, so the user's glow tier (even Off) must not disable it. -->
         <Style Selector="Border.bookmarkGlow">
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowPulseRing}" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <BoxShadowsTransition Property="BoxShadow" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionAcknowledge}" Easing="{StaticResource PbMotionEase}" />
                 </Transitions>
             </Setter>
         </Style>
-        <!-- PbGlowPulseRing, not PbGlowRing: the pulse is feedback, not a hover affordance, so the
-             user's glow tier (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #3, even Off)
-             must not disable it. -->
-        <Style Selector="Border.bookmarkGlow.pulsing">
-            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowPulseRing}" />
+        <Style Selector="Panel.bookmarkGlowHost.pulsing Border.bookmarkGlow">
+            <Setter Property="Opacity" Value="1" />
         </Style>
 
         <Style Selector="TextBlock.drawerSectionHeader">
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="Margin" Value="0,14,0,6" />
         </Style>
 
@@ -210,22 +222,8 @@
              segItem shape (one bordered strip with dividers, built for a single non-wrapping row) -
              7 reading-mode options with labels as long as "Horizontal Long Strip (RTL)" need to wrap
              across lines, which that joined-strip shape doesn't support. -->
-        <Style Selector="Button.pillOption">
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="Padding" Value="9,5" />
+        <Style Selector="Button.secondary">
             <Setter Property="Margin" Value="0,0,4,4" />
-            <Setter Property="FontSize" Value="11.5" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.pillOption.active">
-            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
-            <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
 
         <!-- Translucent restyle (docs/superpowers/specs/2026-09-14-reader-chrome-redesign-design.md
@@ -236,7 +234,7 @@
              other floatingPanel consumers (e.g. Detail screens) are untouched. Alpha is a visual-tuning
              call, verify on-screen over varied page art in both skins per the design doc's own testing
              note. -->
-        <Style Selector="Border.floatingPanel.chromeCluster, Border.floatingPanel.readerDrawer">
+        <Style Selector="Border.floatingPanel.chromeCluster">
             <Setter Property="Opacity" Value="0.92" />
         </Style>
 
@@ -259,6 +257,61 @@
         <Style Selector="Border.chromeCluster.hidden">
             <Setter Property="Opacity" Value="0" />
             <Setter Property="IsHitTestVisible" Value="False" />
+            <!-- Hidden chrome is out of tab order (Motion v2 E, Q27): invisible controls never take the keyboard. -->
+            <Setter Property="KeyboardNavigation.TabNavigation" Value="None" />
+        </Style>
+
+        <!-- Reader panels (Motion v2 E, Q26): controls:Reveal.IsOpen owns visibility, hit testing, tab order and focus return; Tools arrives
+             20 px from the right, Info from the left, with the spring, and leaves faster. Open opacity keeps the frosted 0.92. -->
+        <Style Selector="Border.readerDrawer">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionRevealFade}" Easing="{StaticResource PbMotionEase}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionRevealMove}" Easing="{StaticResource PbMotionSpring}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.readerDrawer.fromRight">
+            <Setter Property="RenderTransform" Value="translateX(20px)" />
+        </Style>
+        <Style Selector="Border.readerDrawer.fromLeft">
+            <Setter Property="RenderTransform" Value="translateX(-20px)" />
+        </Style>
+        <Style Selector="Border.readerDrawer.open">
+            <Setter Property="Opacity" Value="0.92" />
+            <Setter Property="RenderTransform" Value="none" />
+        </Style>
+        <Style Selector="Border.readerDrawer.closing">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionRevealExit}" Easing="{StaticResource PbMotionExitEase}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionRevealExit}" Easing="{StaticResource PbMotionExitEase}" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <!-- Chapter cards (Loading / next chapter / end of issue; Motion v2 E, Q28): a Reveal - fade in settling from 0.98, faster exit. -->
+        <Style Selector="Border.chapterCard">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="RenderTransform" Value="scale(0.98)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionRevealFade}" Easing="{StaticResource PbMotionEase}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionRevealMove}" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.chapterCard.open">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="RenderTransform" Value="none" />
+        </Style>
+        <Style Selector="Border.chapterCard.closing">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionRevealExit}" Easing="{StaticResource PbMotionExitEase}" />
+                </Transitions>
+            </Setter>
         </Style>
     </UserControl.Styles>
 
@@ -266,7 +319,7 @@
         <!-- One name in the info panel's characters / teams / locations / genres / tags lists (squircle chip, never an oval pill). -->
         <DataTemplate x:Key="InfoChipTemplate">
             <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="8,3" Margin="0,0,4,4">
-                <TextBlock Text="{Binding}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Text="{Binding}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
             </Border>
         </DataTemplate>
     </UserControl.Resources>
@@ -276,13 +329,16 @@
         <!-- Perf overlay - top-left, above everything, click-through -->
         <Border ZIndex="1000" IsHitTestVisible="False" IsVisible="{Binding PerfOverlayVisible}"
                 HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12"
-                Background="#CC000000" CornerRadius="4" Padding="8,5">
+                Background="#CC000000" CornerRadius="{DynamicResource PbRadiusSm}" Padding="8,5">
             <TextBlock Text="{Binding PerfOverlayText}" Foreground="#E6FFFFFF"
                        FontFamily="Consolas,monospace" FontSize="11" />
         </Border>
 
         <!-- ============ Canvas + floating chrome ============ -->
-        <Grid Background="{Binding CanvasBackgroundBrush}">
+        <Grid Background="Transparent">
+            <!-- Canvas background (Motion v2 E, Q32-Q34): two layers so the ambient gradient really crossfades between pages (a
+                 BrushTransition only interpolates solid colours and cut gradients over halfway), plus opt-in parallax and slow drift. -->
+            <controls:AmbientBackdrop x:Name="Backdrop" Brush="{Binding CanvasBackgroundBrush}" MotionEnabled="{Binding AmbientMotionEnabled}" />
 
             <!-- Thumbnail rail: opt-in, opened via the Page-turn cluster's rail-toggle button
                  (docs/superpowers/specs/2026-09-14-reader-chrome-redesign-design.md §6) - no longer a
@@ -296,6 +352,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:ReaderThumbnailSample">
                                 <Border Classes="thumb" Classes.selected="{Binding IsSelected}" Background="{Binding CoverBrush}"
+                                        AutomationProperties.Name="{Binding AccessiblePageLabel}" ToolTip.Tip="{Binding AccessiblePageLabel}"
                                         Cursor="Hand" PointerPressed="OnThumbnailPointerPressed">
                                     <Grid>
                                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
@@ -306,9 +363,9 @@
                                         <!-- Page type badge (docs/ce-feature-inventory.md §A) - a fixed semantic blue, deliberately
                                              not a Pb* token: this is a small per-item marker distinct from the bookmark ribbon's
                                              badge color, not part of the app's core surface/text/accent identity. -->
-                                        <Border IsVisible="{Binding HasPageTypeBadge}" Background="#3A6EA5" CornerRadius="3"
+                                        <Border IsVisible="{Binding HasPageTypeBadge}" Background="#3A6EA5" CornerRadius="{DynamicResource PbRadiusSm}"
                                                 Width="14" Height="14" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="3,0,0,2">
-                                            <TextBlock Text="{Binding PageTypeBadgeText}" FontSize="9.5" FontWeight="Bold"
+                                            <TextBlock Text="{Binding PageTypeBadgeText}" FontSize="10" FontWeight="Bold"
                                                        Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
                                         <!-- Rotation indicator (docs/ce-feature-inventory.md §A). -->
@@ -347,6 +404,8 @@
                               RightCommand="{Binding GoRightCommand}"
                               HighQualityDisplay="{Binding HighQualityPageDisplay}"
                               ShowPageShadow="{Binding ShowPageShadow}"
+                              PageFrameStyle="{Binding PageFrameStyle}" PageFrameColor="{DynamicResource PbBorderColor}"
+                              BookLook="{Binding BookLook}" BookProgress="{Binding BookProgress}"
                               InputService="{Binding Input}"
                               ReadingOrderTurnsEnabled="True"
                               ToggleAutoScrollCommand="{Binding ToggleAutoScrollCommand}"
@@ -421,51 +480,28 @@
                  chapter-transition-design.md) - fixed sibling overlay over PageCanvas, restyled with
                  Pb* tokens/PbMotionFast/PbMotionEase in place of the old hardcoded local brushes and
                  duration; structurally unchanged otherwise, per this phase's own scope. ============ -->
-            <Border IsVisible="{Binding ChapterTransitionState, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterTransitionState.Loading}}"
+            <Border Classes="chapterCard" controls:Reveal.IsOpen="{Binding ChapterTransitionState, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterTransitionState.Loading}}"
                     Width="200" Height="200" CornerRadius="{DynamicResource PbRadiusLg}" Background="{DynamicResource PbSurface2Brush}"
                     BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Border.Transitions>
-                    <Transitions><DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" /></Transitions>
-                </Border.Transitions>
                 <TextBlock Text="Loading…" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
 
-            <Border IsVisible="{Binding ChapterTransitionState, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterTransitionState.Card}}"
+            <Border Classes="chapterCard" controls:Reveal.IsOpen="{Binding ChapterTransitionState, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterTransitionState.Card}}"
                     Width="240" CornerRadius="{DynamicResource PbRadiusLg}" Background="{DynamicResource PbSurface2Brush}"
                     BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" Padding="18"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Border.Transitions>
-                    <Transitions><DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" /></Transitions>
-                </Border.Transitions>
                 <StackPanel Spacing="12" HorizontalAlignment="Center">
                     <Border Width="120" Height="168" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" HorizontalAlignment="Center"
                             BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
                         <Image Source="{Binding ChapterTransitionCoverImage}" Stretch="UniformToFill" />
                     </Border>
                     <StackPanel Spacing="2" HorizontalAlignment="Center">
-                        <TextBlock Text="{Binding ChapterTransitionFromLabel, StringFormat='Previous: {0}'}" FontSize="11.5"
+                        <TextBlock Text="{Binding ChapterTransitionFromLabel, StringFormat='Previous: {0}'}" FontSize="12"
                                    Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" />
-                        <TextBlock Text="{Binding ChapterTransitionToLabel, StringFormat='Current: {0}'}" FontSize="14" FontWeight="Bold"
+                        <TextBlock Text="{Binding ChapterTransitionToLabel, StringFormat='Current: {0}'}" FontSize="15" FontWeight="Bold"
                                    Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Center" />
                     </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <!-- ============ Context strip (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-
-                 design.md 4) - top-centre, rides with the navigate cluster and flashes on open. ============ -->
-            <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !IsContextStripVisible}"
-                    IsVisible="{Binding HasContextStrip}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="16">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button Classes="clusterPill" Padding="8,5" MinWidth="32" AutomationProperties.Name="Previous in this order" Command="{Binding ContextStripPreviousCommand}"
-                            ToolTip.Tip="Previous in this order">
-                        <fi:SymbolIcon Symbol="ChevronLeft" FontSize="{StaticResource PbIconSizeXs}" />
-                    </Button>
-                    <TextBlock Text="{Binding ContextStripLabel}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                    <Button Classes="clusterPill" Padding="8,5" MinWidth="32" AutomationProperties.Name="Next in this order" Command="{Binding ContextStripNextCommand}"
-                            ToolTip.Tip="Next in this order">
-                        <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" />
-                    </Button>
                 </StackPanel>
             </Border>
 
@@ -476,16 +512,24 @@
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <fi:SymbolIcon Symbol="ArrowUndo" FontSize="{StaticResource PbIconSizeXs}" />
                         <TextBlock Text="{Binding JumpBackLabel}" VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding JumpBackHint}" VerticalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding JumpBackHint}" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
                     </StackPanel>
                 </Button>
             </Border>
 
             <!-- ============ Reading stats chip (comfort design 1) - session time, pages, pace and time left. A small non-interactive chip in
                  the bottom-right corner (the one corner no chrome cluster uses; bottom-left was covered by the View cluster) that stays visible when the chrome is hidden, at reduced opacity so it does not compete with the page. ============ -->
-            <Border IsVisible="{Binding IsSessionHudVisible}" IsHitTestVisible="False" Classes="floatingPanel" Padding="10,5" Opacity="0.75"
+            <Border IsHitTestVisible="False" Classes="floatingPanel" Padding="10,5" Opacity="0.75"
                     HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,16,16"
                     AutomationProperties.Name="Reading stats">
+                <!-- Hidden while the drawer or the Info panel is open: it sat under them in this corner (2026-10-20 Reader pass Q4). -->
+                <Border.IsVisible>
+                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding Path="IsSessionHudVisible" />
+                        <Binding Path="!IsDrawerOpen" />
+                        <Binding Path="!Info.IsOpen" />
+                    </MultiBinding>
+                </Border.IsVisible>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <fi:SymbolIcon Symbol="Gauge" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" />
                     <TextBlock Text="{Binding SessionHudText}" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
@@ -509,17 +553,17 @@
                     HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,72,0,0" Width="520"
                     AutomationProperties.Name="Reader command palette">
                 <StackPanel Spacing="8">
-                    <TextBox x:Name="PaletteQueryBox" Text="{Binding Palette.Query, Mode=TwoWay}" Watermark="{Binding Palette.Placeholder}"
+                    <TextBox x:Name="PaletteQueryBox" Text="{Binding Palette.Query, Mode=TwoWay}" PlaceholderText="{Binding Palette.Placeholder}"
                              AutomationProperties.Name="Command or page number" />
                     <ScrollViewer MaxHeight="360" IsVisible="{Binding Palette.HasResults}">
                         <ItemsControl ItemsSource="{Binding Palette.Results}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ReaderPaletteRow">
-                                    <Button Classes="pillOption" Classes.active="{Binding IsSelected}" HorizontalAlignment="Stretch"
+                                    <Button Classes="secondary" Classes.active="{Binding IsSelected}" HorizontalAlignment="Stretch"
                                             HorizontalContentAlignment="Stretch" Command="{Binding ExecuteCommand}">
                                         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
                                             <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
-                                            <TextBlock Grid.Column="1" Text="{Binding Group}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Group}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
                                             <TextBlock Grid.Column="2" Text="{Binding Shortcut}" IsVisible="{Binding HasShortcut}" MinWidth="48" TextAlignment="Right"
                                                        Foreground="{DynamicResource PbTextMutedBrush}" />
                                         </Grid>
@@ -528,7 +572,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    <TextBlock Text="No matching command" IsVisible="{Binding !Palette.HasResults}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock Text="No matching command" IsVisible="{Binding !Palette.HasResults}" Foreground="{DynamicResource PbTextMutedBrush}" />
                 </StackPanel>
             </Border>
 
@@ -542,22 +586,22 @@
                     <TextBlock Text="{Binding ReportPickerTitle}" FontWeight="SemiBold" />
                     <Button Classes="clusterPill" HorizontalAlignment="Stretch" Command="{Binding ReportPageReasonCommand}"
                             CommandParameter="{x:Static entities:PageReportReason.Corrupt}">
-                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Corrupt or unreadable" /><TextBlock Grid.Column="1" Text="1" Foreground="{DynamicResource PbTextFaintBrush}" /></Grid>
+                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Corrupt or unreadable" /><TextBlock Grid.Column="1" Text="1" Foreground="{DynamicResource PbTextMutedBrush}" /></Grid>
                     </Button>
                     <Button Classes="clusterPill" HorizontalAlignment="Stretch" Command="{Binding ReportPageReasonCommand}"
                             CommandParameter="{x:Static entities:PageReportReason.Blank}">
-                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Blank page" /><TextBlock Grid.Column="1" Text="2" Foreground="{DynamicResource PbTextFaintBrush}" /></Grid>
+                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Blank page" /><TextBlock Grid.Column="1" Text="2" Foreground="{DynamicResource PbTextMutedBrush}" /></Grid>
                     </Button>
                     <Button Classes="clusterPill" HorizontalAlignment="Stretch" Command="{Binding ReportPageReasonCommand}"
                             CommandParameter="{x:Static entities:PageReportReason.LowRes}">
-                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Low resolution" /><TextBlock Grid.Column="1" Text="3" Foreground="{DynamicResource PbTextFaintBrush}" /></Grid>
+                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Low resolution" /><TextBlock Grid.Column="1" Text="3" Foreground="{DynamicResource PbTextMutedBrush}" /></Grid>
                     </Button>
                     <Button Classes="clusterPill" HorizontalAlignment="Stretch" Command="{Binding ReportPageReasonCommand}"
                             CommandParameter="{x:Static entities:PageReportReason.Other}">
-                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Something else" /><TextBlock Grid.Column="1" Text="4" Foreground="{DynamicResource PbTextFaintBrush}" /></Grid>
+                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Something else" /><TextBlock Grid.Column="1" Text="4" Foreground="{DynamicResource PbTextMutedBrush}" /></Grid>
                     </Button>
                     <Button Classes="clusterPill" HorizontalAlignment="Stretch" Command="{Binding CancelReportPickerCommand}">
-                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Cancel" /><TextBlock Grid.Column="1" Text="Esc" Foreground="{DynamicResource PbTextFaintBrush}" /></Grid>
+                        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Cancel" /><TextBlock Grid.Column="1" Text="Esc" Foreground="{DynamicResource PbTextMutedBrush}" /></Grid>
                     </Button>
                 </StackPanel>
             </Border>
@@ -568,7 +612,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <fi:SymbolIcon Symbol="Flag" FontSize="{StaticResource PbIconSizeXs}" />
                         <TextBlock Text="{Binding PageReportChipLabel}" VerticalAlignment="Center" />
-                        <TextBlock Text="Undo" VerticalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="Undo" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
                     </StackPanel>
                 </Button>
             </Border>
@@ -586,33 +630,30 @@
             <!-- ============ End-of-issue card (docs/superpowers/specs/2026-09-21-comic-reader-flow-and-defaults-
                  design.md 3) - shown on paging forward past the last page. Up-next block (cover, source +
                  position, Continue with an optional auto-advance countdown) above the finish actions. ============ -->
-            <Border IsVisible="{Binding ChapterTransitionState, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterTransitionState.EndCard}}"
+            <Border Classes="chapterCard" controls:Reveal.IsOpen="{Binding ChapterTransitionState, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterTransitionState.EndCard}}"
                     Width="460" CornerRadius="{DynamicResource PbRadiusLg}" Background="{DynamicResource PbSurface2Brush}"
                     BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" Padding="20"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Border.Transitions>
-                    <Transitions><DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" /></Transitions>
-                </Border.Transitions>
                 <StackPanel Spacing="14">
-                    <TextBlock Text="{Binding EndCardFinishedLabel}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock Text="{Binding EndCardFinishedLabel}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
                     <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding EndCardHasNext}">
                         <Border Grid.Column="0" Width="78" Height="110" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
                                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" Margin="0,0,14,0">
                             <Image Source="{Binding EndCardCoverImage}" Stretch="UniformToFill" />
                         </Border>
                         <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
-                            <TextBlock Text="UP NEXT" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                            <TextBlock Text="{Binding EndCardNextLabel}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="UP NEXT" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <TextBlock Text="{Binding EndCardNextLabel}" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
                             <TextBlock Text="{Binding EndCardSourceLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
                             <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,6,0,0">
                                 <Button Classes="clusterPill" Command="{Binding EndCardContinueCommand}"
                                         Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0" Content="Continue" />
                                 <TextBlock Text="{Binding EndCardCountdownText}" IsVisible="{Binding EndCardCountdownText, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
-                                           FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                           FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                             </StackPanel>
                         </StackPanel>
                     </Grid>
-                    <TextBlock Text="{Binding EndCardNextLabel}" IsVisible="{Binding !EndCardHasNext}" FontSize="17" FontWeight="Bold"
+                    <TextBlock Text="{Binding EndCardNextLabel}" IsVisible="{Binding !EndCardHasNext}" FontSize="18" FontWeight="Bold"
                                Foreground="{DynamicResource PbTextBrush}" />
                     <Border Height="1" Background="{DynamicResource PbBorderBrush}" />
                     <WrapPanel Orientation="Horizontal">
@@ -625,62 +666,77 @@
                 </StackPanel>
             </Border>
 
-            <!-- ============ Navigate cluster (top-left) ============ -->
-            <!-- Visibility driven purely by position math in OnReaderPointerMoved (code-behind), not
-                 per-element PointerEntered/Exited - see that handler's own doc comment for why two
-                 separate Enter/Exit-based attempts (2026-09-16) both failed to ever hide the cluster
-                 again once shown. -->
-            <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !IsNavigateClusterVisible}"
-                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16">
-                <StackPanel Orientation="Horizontal" Spacing="10">
+            <!-- ============ Top navigation row ============
+                 Keep the reading-order navigator centered between the breadcrumb and actions. -->
+            <Grid HorizontalAlignment="Stretch" VerticalAlignment="Top" Margin="16"
+                  ColumnDefinitions="*,Auto,*" ColumnSpacing="12" ClipToBounds="True">
+                <!-- Navigate cluster (top-left). Visibility is driven by pointer-position math in
+                     OnReaderPointerMoved; keep this as the first measured column. -->
+                <Border Grid.Column="0" Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !IsNavigateClusterVisible}"
+                        HorizontalAlignment="Left" MaxWidth="560" ClipToBounds="True">
                     <Button Command="{Binding GoBackCommand}" Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="{Binding BreadcrumbSeries, StringFormat='← {0}'}" FontSize="12"
-                                       Foreground="{DynamicResource PbTextMutedBrush}" />
-                            <TextBlock Text="{Binding IssueTitle}" FontSize="12" FontWeight="Bold"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                        </StackPanel>
+                        <!-- A grid, not a StackPanel: the series name gets the space that is left and trims, so the pill never runs into
+                             the reading-order navigator (2026-10-20 Reader pass Q3). -->
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                            <fi:SymbolIcon Grid.Column="0" Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <TextBlock Grid.Column="1" Text="{Binding BreadcrumbSeries}" FontSize="12" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Text="{Binding IssueTitle}" FontSize="12" FontWeight="Bold" MaxWidth="220" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                        </Grid>
                     </Button>
-                    <Border Width="1" Height="14" Background="{DynamicResource PbBorderBrush}" />
-                    <TextBlock Text="{Binding PageLabel}" FontFamily="Consolas,monospace" FontSize="12"
-                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                    <!-- Split-page part navigation (docs/superpowers/specs/2026-09-05-reader-polish-
-                         backlog-finish-design.md §1) - only shown once the current page/spread is
-                         zoomed past the viewport and split into more than one part. -->
-                    <TextBlock Text="{Binding #PageCanvasControl.PartLabel}" FontFamily="Consolas,monospace" FontSize="12"
-                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
-                               IsVisible="{Binding #PageCanvasControl.PartLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                </StackPanel>
-            </Border>
+                </Border>
 
-            <!-- ============ Actions cluster (top-right) ============ -->
-            <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !IsActionsClusterVisible}"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="16">
-                <StackPanel Orientation="Horizontal" Spacing="2">
-                    <!-- Clock + battery (docs/superpowers/specs/2026-09-05-reader-polish-backlog-
-                         finish-design.md §2) - CE-parity port of NavigationOverlay's timeLabel/
-                         batteryStatus, rides this cluster's existing idle-fade/capsule chrome. -->
-                    <TextBlock Text="{Binding CurrentTimeLabel}" FontFamily="Consolas,monospace" FontSize="12"
-                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <TextBlock Text="{Binding BatteryStatusLabel}" FontFamily="Consolas,monospace" FontSize="12"
-                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0"
-                               IsVisible="{Binding BatteryStatusLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                    <Border Classes="bookmarkGlow" Classes.pulsing="{Binding BookmarkJustToggled}" CornerRadius="{DynamicResource PbRadiusSm}">
-                        <Button Classes="clusterIcon" Classes.active="{Binding IsCurrentPageBookmarked}"
-                                Command="{Binding ToggleBookmarkCommand}" ToolTip.Tip="Toggle bookmark">
-                            <fi:SymbolIcon Symbol="Bookmark" />
+                <!-- Reading-order navigator stays in its centered top-row position. -->
+                <Border Grid.Column="1" x:Name="ContextStrip" Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !IsContextStripVisible}"
+                        IsVisible="{Binding HasContextStrip}" HorizontalAlignment="Center" MaxWidth="360">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                        <Button Grid.Column="0" Classes="clusterPill"
+                                AutomationProperties.Name="Previous in this order" Command="{Binding ContextStripPreviousCommand}"
+                                ToolTip.Tip="Previous in this order">
+                            <fi:SymbolIcon Symbol="ChevronLeft" FontSize="{StaticResource PbIconSizeXs}" />
                         </Button>
-                    </Border>
-                    <Button Classes="clusterIcon" Classes.active="{Binding IsDrawerOpen}"
-                            Command="{Binding ToggleDrawerCommand}" ToolTip.Tip="More tools">
-                        <fi:SymbolIcon Symbol="MoreVertical" />
-                    </Button>
-                    <Button Classes="clusterIcon" Classes.active="{Binding IsFullscreen}"
-                            Command="{Binding ToggleFullscreenCommand}" ToolTip.Tip="Fullscreen (F)">
-                        <fi:SymbolIcon Symbol="FullScreenMaximize" />
-                    </Button>
-                </StackPanel>
-            </Border>
+                        <TextBlock Grid.Column="1" Text="{Binding ContextStripLabel}" FontSize="12"
+                                   Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center"
+                                   TextAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        <Button Grid.Column="2" Classes="clusterPill"
+                                AutomationProperties.Name="Next in this order" Command="{Binding ContextStripNextCommand}"
+                                ToolTip.Tip="Next in this order">
+                            <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" />
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- Actions cluster (top-right). -->
+                <Border Grid.Column="2" Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !IsActionsClusterVisible}"
+                        HorizontalAlignment="Right">
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                        <!-- Clock + battery (docs/superpowers/specs/2026-09-05-reader-polish-backlog-
+                             finish-design.md §2) - CE-parity port of NavigationOverlay's status. -->
+                        <TextBlock Text="{Binding CurrentTimeLabel}" FontFamily="Consolas,monospace" FontSize="12"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <TextBlock Text="{Binding BatteryStatusLabel}" FontFamily="Consolas,monospace" FontSize="12"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0"
+                                   IsVisible="{Binding BatteryStatusLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                        <Panel Classes="bookmarkGlowHost" Classes.pulsing="{Binding BookmarkJustToggled}">
+                            <Border Classes="bookmarkGlow" CornerRadius="{DynamicResource PbRadiusSm}" />
+                            <Button AutomationProperties.Name="Toggle bookmark" Classes="clusterIcon" Classes.active="{Binding IsCurrentPageBookmarked}"
+                                    Command="{Binding ToggleBookmarkCommand}" ToolTip.Tip="Toggle bookmark">
+                                <fi:SymbolIcon Symbol="Bookmark" />
+                            </Button>
+                        </Panel>
+                        <Button x:Name="MoreToolsButton" AutomationProperties.Name="More tools" Classes="clusterIcon" Classes.active="{Binding IsDrawerOpen}"
+                                Command="{Binding ToggleDrawerCommand}" ToolTip.Tip="More tools">
+                            <fi:SymbolIcon Symbol="MoreVertical" />
+                        </Button>
+                        <Button AutomationProperties.Name="Fullscreen (F)" Classes="clusterIcon" Classes.active="{Binding IsFullscreen}"
+                                Command="{Binding ToggleFullscreenCommand}" ToolTip.Tip="Fullscreen (F)">
+                            <fi:SymbolIcon Symbol="FullScreenMaximize" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
 
             <!-- ============ View cluster (bottom-left) - fit/zoom collapse into the drawer's Page
                  section below ~720px window width (IsViewClusterCollapsed, set from code-behind's
@@ -701,25 +757,25 @@
                                      icon, just literal per pill since each one's mode is fixed at
                                      authoring time (no converter needed for a static mapping). -->
                                 <WrapPanel Width="230" Orientation="Horizontal">
-                                    <Button Classes="pillOption" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.LeftToRight}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.LeftToRight}">
+                                    <Button Classes="secondary" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.LeftToRight}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.LeftToRight}">
                                         <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="ArrowRight" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Left to Right" VerticalAlignment="Center" /></StackPanel>
                                     </Button>
-                                    <Button Classes="pillOption" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.RightToLeft}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.RightToLeft}">
+                                    <Button Classes="secondary" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.RightToLeft}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.RightToLeft}">
                                         <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Right to Left" VerticalAlignment="Center" /></StackPanel>
                                     </Button>
-                                    <Button Classes="pillOption" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.TopToBottom}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.TopToBottom}">
+                                    <Button Classes="secondary" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.TopToBottom}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.TopToBottom}">
                                         <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="ArrowDown" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Top to Bottom" VerticalAlignment="Center" /></StackPanel>
                                     </Button>
-                                    <Button Classes="pillOption" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.VerticalContinuous}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.VerticalContinuous}">
+                                    <Button Classes="secondary" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.VerticalContinuous}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.VerticalContinuous}">
                                         <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="ArrowDown" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Longstrip (gapped)" VerticalAlignment="Center" /></StackPanel>
                                     </Button>
-                                    <Button Classes="pillOption" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.HorizontalContinuous}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.HorizontalContinuous}">
+                                    <Button Classes="secondary" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.HorizontalContinuous}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.HorizontalContinuous}">
                                         <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="ArrowRight" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Horizontal Long Strip" VerticalAlignment="Center" /></StackPanel>
                                     </Button>
-                                    <Button Classes="pillOption" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.HorizontalContinuousRightToLeft}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.HorizontalContinuousRightToLeft}">
+                                    <Button Classes="secondary" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.HorizontalContinuousRightToLeft}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.HorizontalContinuousRightToLeft}">
                                         <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Horizontal Long Strip (RTL)" VerticalAlignment="Center" /></StackPanel>
                                     </Button>
-                                    <Button Classes="pillOption" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.Webtoon}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.Webtoon}">
+                                    <Button Classes="secondary" Classes.active="{Binding EffectiveReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.Webtoon}}" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.Webtoon}">
                                         <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="ArrowDown" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Long Strip" VerticalAlignment="Center" /></StackPanel>
                                     </Button>
                                 </WrapPanel>
@@ -737,19 +793,19 @@
                             <Button.Flyout>
                                 <Flyout Placement="Top">
                                     <WrapPanel Width="170" Orientation="Horizontal">
-                                        <Button Classes="pillOption" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.Original}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.Original}">
+                                        <Button Classes="secondary" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.Original}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.Original}">
                                             <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Image" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Original" VerticalAlignment="Center" /></StackPanel>
                                         </Button>
-                                        <Button Classes="pillOption" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.Fit}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.Fit}">
+                                        <Button Classes="secondary" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.Fit}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.Fit}">
                                             <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="AutoFit" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Fit Page" VerticalAlignment="Center" /></StackPanel>
                                         </Button>
-                                        <Button Classes="pillOption" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.FitWidth}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.FitWidth}">
+                                        <Button Classes="secondary" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.FitWidth}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.FitWidth}">
                                             <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="ArrowAutofitWidth" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Fit Width" VerticalAlignment="Center" /></StackPanel>
                                         </Button>
-                                        <Button Classes="pillOption" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.FitHeight}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.FitHeight}">
+                                        <Button Classes="secondary" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.FitHeight}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.FitHeight}">
                                             <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="ArrowAutofitHeight" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Fit Height" VerticalAlignment="Center" /></StackPanel>
                                         </Button>
-                                        <Button Classes="pillOption" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.BestFit}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.BestFit}">
+                                        <Button Classes="secondary" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.BestFit}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.BestFit}">
                                             <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Star" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Best Fit" VerticalAlignment="Center" /></StackPanel>
                                         </Button>
                                     </WrapPanel>
@@ -763,7 +819,7 @@
                              inline Slider. ZoomLevel's own setter clamps to one smooth 25%-400% range for both
                              modes (panels-and-zoom design 1); the Slider is logarithmic (ZoomSlider = log2 of the zoom, -2..2) so 100% sits in the
                              middle, and there are no preset steps, only "Fit (100%)". -->
-                        <Button Classes="clusterPill" Padding="8,6" ToolTip.Tip="Zoom">
+                        <Button Classes="clusterPill" ToolTip.Tip="Zoom">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" />
                                 <TextBlock Text="{Binding ZoomLevel, StringFormat={}{0:P0}}" VerticalAlignment="Center" />
@@ -777,7 +833,7 @@
                                             </Button>
                                             <Slider Width="80" Minimum="-2" Maximum="2" SmallChange="0.01" LargeChange="0.25" Value="{Binding ZoomSlider}" VerticalAlignment="Center"
                                                     AutomationProperties.Name="Zoom" />
-                                            <Button Classes="clusterIcon" Command="{Binding ZoomInCommand}" ToolTip.Tip="{Binding ZoomInHint}">
+                                            <Button AutomationProperties.Name="{Binding ZoomInHint}" Classes="clusterIcon" Command="{Binding ZoomInCommand}" ToolTip.Tip="{Binding ZoomInHint}">
                                                 <fi:SymbolIcon Symbol="Add" />
                                             </Button>
                                         </StackPanel>
@@ -793,20 +849,20 @@
             <!-- ============ Page-turn cluster (bottom-center) ============ -->
             <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !IsPageTurnClusterVisible}"
                     HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="16" MinWidth="260">
-                <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+                <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto">
                     <!-- Rail toggle (docs/superpowers/specs/2026-09-14-reader-chrome-redesign-design.md
                          §6) - paired here with the dot-strip it complements, not the Actions cluster's
                          session-level actions. Paged mode only (on-screen feedback) - continuous/long-
                          strip modes scroll through pages directly, no rail concept there. -->
-                    <Button Grid.Column="0" Classes="clusterIcon" Classes.active="{Binding IsRailOpen}"
+                    <Button AutomationProperties.Name="Page thumbnails" Grid.Column="0" Classes="clusterIcon" Classes.active="{Binding IsRailOpen}"
                             Command="{Binding ToggleRailCommand}" Margin="0,0,6,0" ToolTip.Tip="Page thumbnails"
                             IsVisible="{Binding !IsContinuousMode}">
                         <fi:SymbolIcon Symbol="Grid" FontSize="{StaticResource PbIconSizeSm}" />
                     </Button>
-                    <Button Grid.Column="1" Classes="clusterIcon" Command="{Binding PreviousChapterCommand}" ToolTip.Tip="Previous chapter">
+                    <Button AutomationProperties.Name="Previous chapter" Grid.Column="1" Classes="clusterIcon" Command="{Binding PreviousChapterCommand}" ToolTip.Tip="Previous chapter">
                         <fi:SymbolIcon Symbol="ChevronDoubleLeft" />
                     </Button>
-                    <Button Grid.Column="2" Classes="clusterIcon" Command="{Binding GoLeftCommand}" Margin="0,0,10,0"
+                    <Button AutomationProperties.Name="{Binding PageTurnLeftHint}" Grid.Column="2" Classes="clusterIcon" Command="{Binding GoLeftCommand}" Margin="0,0,10,0"
                             ToolTip.Tip="{Binding PageTurnLeftHint}">
                         <fi:SymbolIcon Symbol="Previous" FontSize="{StaticResource PbIconSizeSm}" />
                     </Button>
@@ -839,67 +895,92 @@
                                          default unset Placement is Pointer-relative, which is why it
                                          was trailing the mouse instead of anchoring above the dot). -->
                                     <Button Classes="pageDot" Classes.active="{Binding IsSelected}" Classes.noted="{Binding HasNote}"
+                                            AutomationProperties.Name="{Binding AccessiblePageLabel}" ToolTip.Tip="{Binding AccessiblePageLabel}"
                                             Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SelectThumbnailCommand}"
                                             CommandParameter="{Binding}"
                                             ToolTip.Placement="Top" ToolTip.VerticalOffset="6">
                                         <ToolTip.Tip>
-                                            <Border Width="90" Height="126" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
-                                                    Background="{DynamicResource PbSurface3Brush}">
-                                                <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                                            </Border>
+                                            <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                                <Border Width="90" Height="126" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
+                                                        Background="{DynamicResource PbSurface3Brush}">
+                                                    <Grid>
+                                                        <!-- Shown until the thumbnail pass reaches this page, so a hover is never an empty box (Cosmetics pitch #23). -->
+                                                        <TextBlock Text="{Binding PageNumber}" FontSize="28" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                                    </Grid>
+                                                </Border>
+                                                <TextBlock Text="{Binding PageNumberText}" FontSize="11" HorizontalAlignment="Center"
+                                                           Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            </StackPanel>
                                         </ToolTip.Tip>
                                     </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    <Button Grid.Column="4" Classes="clusterIcon" Command="{Binding GoRightCommand}" Margin="10,0,0,0"
+                    <!-- Page readout, read like a player's time beside its scrubber: the current page bright, the total
+                         muted. The guided-view panel count (or the zoomed page's part count) sits under it in the accent
+                         colour, so it reads as belonging to the same page. Rides the cluster's fade with the rest of the chrome. -->
+                    <StackPanel Grid.Column="4" VerticalAlignment="Center" Margin="12,0,0,0" MinWidth="52" IsHitTestVisible="False"
+                                AutomationProperties.Name="{Binding PageLabel}">
+                        <TextBlock HorizontalAlignment="Center" FontFamily="Consolas,monospace" FontSize="12">
+                            <Run Text="{Binding CounterCurrentPage}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" /><Run
+                                 Text=" / " Foreground="{DynamicResource PbTextMutedBrush}" /><Run
+                                 Text="{Binding CounterTotalPages}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        </TextBlock>
+                        <TextBlock Text="{Binding #PageCanvasControl.PartLabel}" HorizontalAlignment="Center" FontSize="10" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PbAccentBrush}" Margin="0,1,0,0"
+                                   IsVisible="{Binding #PageCanvasControl.PartLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                    </StackPanel>
+                    <Button AutomationProperties.Name="{Binding PageTurnRightHint}" Grid.Column="5" Classes="clusterIcon" Command="{Binding GoRightCommand}" Margin="8,0,0,0"
                             ToolTip.Tip="{Binding PageTurnRightHint}">
                         <fi:SymbolIcon Symbol="Next" FontSize="{StaticResource PbIconSizeSm}" />
                     </Button>
-                    <Button Grid.Column="5" Classes="clusterIcon" Command="{Binding NextChapterCommand}" ToolTip.Tip="Next chapter">
+                    <Button AutomationProperties.Name="Next chapter" Grid.Column="6" Classes="clusterIcon" Command="{Binding NextChapterCommand}" ToolTip.Tip="Next chapter">
                         <fi:SymbolIcon Symbol="ChevronDoubleRight" />
                     </Button>
                 </Grid>
             </Border>
 
             <!-- ============ Info panel (docs/superpowers/specs/2026-09-26-comic-reader-inreader-reference-design.md #28): read-only, slides in from the left, overlays the page ============ -->
-            <Border Classes="floatingPanel readerDrawer" IsVisible="{Binding Info.IsOpen}" ZIndex="20"
+            <Border Classes="floatingPanel readerDrawer fromLeft" controls:Reveal.IsOpen="{Binding Info.IsOpen}"
+                    controls:Reveal.ReturnFocusTo="{Binding #InfoPanelButton}" ZIndex="20"
                     HorizontalAlignment="Left" VerticalAlignment="Stretch" Margin="16,64,16,90" Width="330" Padding="14"
                     AutomationProperties.Name="Issue information">
                 <Grid RowDefinitions="Auto,*,Auto">
                     <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
                         <TextBlock Grid.Column="0" Text="Info" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                        <Button Grid.Column="1" Classes="clusterIcon" Padding="4" Command="{Binding Info.CloseCommand}" ToolTip.Tip="Close (Esc)"
+                        <Button Grid.Column="1" Classes="clusterIcon" Command="{Binding Info.CloseCommand}" ToolTip.Tip="Close (Esc)"
                                 AutomationProperties.Name="Close info panel">
                             <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                         </Button>
                     </Grid>
                     <ScrollViewer Grid.Row="1">
                         <StackPanel Margin="0,0,10,0" Spacing="8">
-                            <TextBlock Text="{Binding Info.Model.SeriesLine}" FontSize="14" FontWeight="Bold" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="{Binding Info.Model.SeriesLine}" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}" />
                             <TextBlock Text="{Binding Info.Model.Title}" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}"
                                        IsVisible="{Binding Info.Model.Title, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                            <TextBlock Text="{Binding Info.Model.PublisherLine}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                            <TextBlock Text="{Binding Info.Model.PublisherLine}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
                                        IsVisible="{Binding Info.Model.PublisherLine, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                            <TextBlock Text="{Binding Info.Model.RatingLine}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                            <TextBlock Text="{Binding Info.Model.RatingLine}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                        IsVisible="{Binding Info.Model.RatingLine, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
 
                             <!-- Where the issue sits in its reading list or event, with previous/next in that order. -->
                             <StackPanel Spacing="4" IsVisible="{Binding Info.Model.ContextLine, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
-                                <TextBlock Text="{Binding Info.Model.ContextLine}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Info.Model.ContextLine}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Button Classes="clusterPill" Content="Previous" Command="{Binding ContextStripPreviousCommand}" />
-                                    <Button Classes="clusterPill" Content="Next" Command="{Binding ContextStripNextCommand}" />
+                                    <Button Classes="secondary sm" Content="Previous" Command="{Binding ContextStripPreviousCommand}" />
+                                    <Button Classes="secondary sm" Content="Next" Command="{Binding ContextStripNextCommand}" />
                                 </StackPanel>
                             </StackPanel>
-                            <TextBlock Text="{Binding Info.Model.StoryArc, StringFormat='Story arc: {0}'}" FontSize="11.5" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}"
+                            <TextBlock Text="{Binding Info.Model.StoryArc, StringFormat='Story arc: {0}'}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}"
                                        IsVisible="{Binding Info.Model.StoryArc, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
 
                             <!-- Collapsed by default: a summary can spoil. -->
                             <StackPanel Spacing="4" IsVisible="{Binding Info.Model.HasSummary}">
                                 <TextBlock Text="SUMMARY" Classes="drawerSectionHeader" />
-                                <Button Classes="drawerRow" Content="Show summary" HorizontalContentAlignment="Center"
+                                <Button Classes="linkText" Content="Show summary" HorizontalAlignment="Left"
                                         Command="{Binding Info.ShowSummaryCommand}" IsVisible="{Binding Info.IsSummaryCollapsed}" />
                                 <TextBlock Text="{Binding Info.Model.Summary}" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}"
                                            IsVisible="{Binding Info.IsSummaryExpanded}" />
@@ -951,8 +1032,8 @@
                         </StackPanel>
                     </ScrollViewer>
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
-                        <Button Classes="clusterPill" Content="Open details" Command="{Binding OpenInfoDetailsCommand}" />
-                        <Button Classes="clusterPill" Content="Edit properties" Command="{Binding EditInfoPropertiesCommand}" />
+                        <Button Classes="secondary sm" Content="Open details" Command="{Binding OpenInfoDetailsCommand}" />
+                        <Button Classes="secondary sm" Content="Edit properties" Command="{Binding EditInfoPropertiesCommand}" />
                     </StackPanel>
                 </Grid>
             </Border>
@@ -965,23 +1046,26 @@
                     <Grid>
                         <Image Source="{Binding PinnedImage}" Stretch="Uniform" />
                         <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2">
-                            <Button Classes="clusterIcon" Padding="3" Command="{Binding CyclePinSizeCommand}" ToolTip.Tip="Change size (or use the mouse wheel)"
+                            <Button Classes="clusterIcon" Command="{Binding CyclePinSizeCommand}" ToolTip.Tip="Change size (or use the mouse wheel)"
                                     AutomationProperties.Name="Change the pinned page size">
                                 <fi:SymbolIcon Symbol="ArrowMaximize" FontSize="{StaticResource PbIconSizeXs}" />
                             </Button>
-                            <Button Classes="clusterIcon" Padding="3" Command="{Binding UnpinPageCommand}" ToolTip.Tip="Unpin"
+                            <Button Classes="clusterIcon" Command="{Binding UnpinPageCommand}" ToolTip.Tip="Unpin"
                                     AutomationProperties.Name="Unpin the reference page">
                                 <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                             </Button>
                         </StackPanel>
                     </Grid>
-                    <TextBlock Text="{Binding PinnedCaption}" FontSize="10.5" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <TextBlock Text="{Binding PinnedCaption}" FontSize="10" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextMutedBrush}" />
                 </StackPanel>
             </Border>
 
             <!-- ============ Drawer - Page/Adjust/Transition/Bookmarks, does not idle-fade ============ -->
-            <Border Classes="floatingPanel readerDrawer" IsVisible="{Binding IsDrawerOpen}"
-                    HorizontalAlignment="Right" VerticalAlignment="Stretch" Margin="16" Width="230" Padding="14">
+            <!-- 280 wide and starting below the top row (2026-10-20 Reader pass Q1): it used to run full height at 230 and cover the
+                 top-right actions, and the narrow two-column tool grid cut labels off. -->
+            <Border Classes="floatingPanel readerDrawer fromRight" controls:Reveal.IsOpen="{Binding IsDrawerOpen}"
+                    controls:Reveal.ReturnFocusTo="{Binding #MoreToolsButton}"
+                    HorizontalAlignment="Right" VerticalAlignment="Stretch" Margin="16,72,16,16" Width="280" Padding="14">
                 <!-- Header is a fixed row outside the ScrollViewer (real bug found via on-screen check:
                      the close button used to live inside the scrollable content, where the vertical
                      scrollbar's own track rendered right on top of it). Only the sections below scroll. -->
@@ -992,7 +1076,7 @@
                 <Grid RowDefinitions="Auto,*,Auto">
                     <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
                         <TextBlock Grid.Column="0" Text="Reader Tools" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                        <Button Grid.Column="1" Classes="clusterIcon" Padding="4"
+                        <Button AutomationProperties.Name="Close" Grid.Column="1" Classes="clusterIcon"
                                 Command="{Binding ToggleDrawerCommand}" ToolTip.Tip="Close">
                             <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                         </Button>
@@ -1002,7 +1086,7 @@
                         <!-- Reader profile (profiles design 3): a named bundle of display settings, switched for this visit only; the
                              flyout also saves the current look and points the series or every series at a profile. -->
                         <TextBlock Classes="drawerSectionHeader" Text="PROFILE" />
-                        <Button Classes="clusterPill" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="8,5" Margin="0,0,0,6"
+                        <Button Classes="clusterPill" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,0,0,6"
                                 ToolTip.Tip="Switch reader profile" AutomationProperties.Name="Reader profile">
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                                 <TextBlock Text="{Binding ActiveProfileName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
@@ -1038,8 +1122,8 @@
                         <StackPanel IsVisible="{Binding IsViewClusterCollapsed}">
                             <TextBlock Classes="drawerSectionHeader" Text="VIEW" />
                             <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4" IsVisible="{Binding !IsContinuousMode}">
-                                <TextBlock Grid.Column="0" Text="Fit mode" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                                <Button Grid.Column="1" Classes="clusterPill" Padding="8,4">
+                                <TextBlock Grid.Column="0" Text="Fit mode" FontSize="13" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <Button Grid.Column="1" Classes="clusterPill">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <fi:SymbolIcon Symbol="AutoFit" FontSize="{StaticResource PbIconSizeXs}" />
                                         <TextBlock Text="{Binding FitModeLabel}" VerticalAlignment="Center" />
@@ -1048,13 +1132,13 @@
                                         <Flyout Placement="Left">
                                             <StackPanel Width="170" Spacing="6">
                                             <WrapPanel Orientation="Horizontal">
-                                                <Button Classes="pillOption" Content="Original" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.Original}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.Original}" />
-                                                <Button Classes="pillOption" Content="Fit Page" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.Fit}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.Fit}" />
-                                                <Button Classes="pillOption" Content="Fit Width" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.FitWidth}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.FitWidth}" />
-                                                <Button Classes="pillOption" Content="Fit Height" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.FitHeight}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.FitHeight}" />
-                                                <Button Classes="pillOption" Content="Best Fit" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.BestFit}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.BestFit}" />
+                                                <Button Classes="secondary" Content="Original" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.Original}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.Original}" />
+                                                <Button Classes="secondary" Content="Fit Page" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.Fit}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.Fit}" />
+                                                <Button Classes="secondary" Content="Fit Width" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.FitWidth}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.FitWidth}" />
+                                                <Button Classes="secondary" Content="Fit Height" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.FitHeight}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.FitHeight}" />
+                                                <Button Classes="secondary" Content="Best Fit" Classes.active="{Binding FitMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageFitMode.BestFit}}" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.BestFit}" />
                                             </WrapPanel>
-                                            <Button Classes="pillOption" HorizontalAlignment="Stretch" Content="Apply to series"
+                                            <Button Classes="secondary" HorizontalAlignment="Stretch" Content="Apply to series"
                                                     Command="{Binding ApplyFitModeToSeriesCommand}"
                                                     ToolTip.Tip="Use this fit mode for every issue in the series that has no fit mode of its own" />
                                             </StackPanel>
@@ -1065,7 +1149,7 @@
                             <!-- Zoom pill (docs/superpowers/specs/2026-09-14-reader-chrome-redesign-
                                  design.md §4) - same unified control as the primary View cluster, not
                                  a bare stepper - this fold-in location previously had no popover at all. -->
-                            <Button Classes="clusterPill" Padding="8,4" Margin="0,0,0,4" ToolTip.Tip="Zoom">
+                            <Button Classes="clusterPill" Margin="0,0,0,4" ToolTip.Tip="Zoom">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" />
                                     <TextBlock Text="{Binding ZoomLevel, StringFormat={}{0:P0}}" VerticalAlignment="Center" />
@@ -1079,7 +1163,7 @@
                                                 </Button>
                                                 <Slider Width="80" Minimum="-2" Maximum="2" SmallChange="0.01" LargeChange="0.25" Value="{Binding ZoomSlider}" VerticalAlignment="Center"
                                                         AutomationProperties.Name="Zoom" />
-                                                <Button Classes="clusterIcon" Command="{Binding ZoomInCommand}">
+                                                <Button AutomationProperties.Name="Zoom in" Classes="clusterIcon" Command="{Binding ZoomInCommand}">
                                                     <fi:SymbolIcon Symbol="Add" />
                                                 </Button>
                                             </StackPanel>
@@ -1096,30 +1180,30 @@
                              drawerRow toggles. Double-page cell keeps its existing paged-mode-only
                              visibility; UniformGrid still reserves its cell when hidden, which is fine
                              here (Auto-rotate simply sits alone in that row in continuous mode). -->
-                        <UniformGrid Columns="2" Margin="0,0,0,6">
+                        <StackPanel Margin="0,0,0,6" Spacing="2">
                             <Button Classes="drawerRow" Command="{Binding RotateClockwiseCommand}" ToolTip.Tip="{Binding RotateClockwiseHint}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="ArrowRotateClockwise" FontSize="{StaticResource PbIconSizeXs}" />
-                                    <TextBlock Text="Rotate CW" VerticalAlignment="Center" FontSize="11.5" />
+                                    <TextBlock Text="Rotate CW" VerticalAlignment="Center" FontSize="12" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="drawerRow" Command="{Binding RotateCounterClockwiseCommand}" ToolTip.Tip="{Binding RotateCounterClockwiseHint}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="ArrowRotateCounterclockwise" FontSize="{StaticResource PbIconSizeXs}" />
-                                    <TextBlock Text="Rotate CCW" VerticalAlignment="Center" FontSize="11.5" />
+                                    <TextBlock Text="Rotate CCW" VerticalAlignment="Center" FontSize="12" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="drawerRow" Classes.active="{Binding AutoRotate}" Command="{Binding ToggleAutoRotateCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="ArrowRotateClockwise" FontSize="{StaticResource PbIconSizeXs}" />
-                                    <TextBlock Text="Auto-rotate" VerticalAlignment="Center" FontSize="11.5" />
+                                    <TextBlock Text="Auto-rotate" VerticalAlignment="Center" FontSize="12" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="drawerRow" Command="{Binding ApplyAutoRotateToSeriesCommand}"
                                     ToolTip.Tip="Use the current auto-rotate setting for every issue in the series that has none of its own">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="Library" FontSize="{StaticResource PbIconSizeXs}" />
-                                    <TextBlock Text="Auto-rotate to series" VerticalAlignment="Center" FontSize="11.5" />
+                                    <TextBlock Text="Auto-rotate to series" VerticalAlignment="Center" FontSize="12" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="drawerRow" Classes.active="{Binding IsGuidedView}"
@@ -1127,31 +1211,31 @@
                                     ToolTip.Tip="Step through the page panel by panel (G)">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="Grid" FontSize="{StaticResource PbIconSizeXs}" />
-                                    <TextBlock Text="Guided view" VerticalAlignment="Center" FontSize="11.5" />
+                                    <TextBlock Text="Guided view" VerticalAlignment="Center" FontSize="12" />
                                 </StackPanel>
                             </Button>
-                            <Button Classes="drawerRow" Classes.active="{Binding Info.IsOpen}"
+                            <Button x:Name="InfoPanelButton" Classes="drawerRow" Classes.active="{Binding Info.IsOpen}"
                                     Command="{Binding ToggleInfoPanelCommand}" ToolTip.Tip="Summary, credits, characters and story arc (I)">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="Info" FontSize="{StaticResource PbIconSizeXs}" />
-                                    <TextBlock Text="Info" VerticalAlignment="Center" FontSize="11.5" />
+                                    <TextBlock Text="Info" VerticalAlignment="Center" FontSize="12" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="drawerRow" Classes.active="{Binding HasPin}"
                                     Command="{Binding PinCurrentPageCommand}" ToolTip.Tip="Keep this page as a small reference while you read on (Shift+P)">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="Pin" FontSize="{StaticResource PbIconSizeXs}" />
-                                    <TextBlock Text="Pin page" VerticalAlignment="Center" FontSize="11.5" />
+                                    <TextBlock Text="Pin page" VerticalAlignment="Center" FontSize="12" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="drawerRow" Classes.active="{Binding IsDoublePageMode}"
                                     Command="{Binding ToggleDoublePageModeCommand}" IsVisible="{Binding !IsContinuousMode}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeXs}" />
-                                    <TextBlock Text="Double-page" VerticalAlignment="Center" FontSize="11.5" />
+                                    <TextBlock Text="Double-page" VerticalAlignment="Center" FontSize="12" />
                                 </StackPanel>
                             </Button>
-                        </UniformGrid>
+                        </StackPanel>
                         <StackPanel IsVisible="{Binding IsContinuousMode}">
                             <Button Classes="drawerRow" Classes.active="{Binding IsAutoScrolling}"
                                     Command="{Binding ToggleAutoScrollCommand}" ToolTip.Tip="{Binding AutoScrollHint}">
@@ -1161,7 +1245,7 @@
                                 </StackPanel>
                             </Button>
                             <StackPanel Margin="12,4,12,0" Spacing="2" IsVisible="{Binding IsAutoScrolling}">
-                                <TextBlock Text="{Binding AutoScrollSpeed, StringFormat='Speed: {0:F0} px/s'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <TextBlock Text="{Binding AutoScrollSpeed, StringFormat='Speed: {0:F0} px/s'}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <Slider Minimum="20" Maximum="300" Value="{Binding AutoScrollSpeed}" />
                             </StackPanel>
                         </StackPanel>
@@ -1171,30 +1255,29 @@
                              permanent vertical space. Header itself is the toggle. -->
                         <Button Classes="drawerRow" Command="{Binding ToggleAdjustSectionCommand}" Padding="0" Margin="0,14,0,0">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsAdjustSectionExpanded}" />
-                                <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !IsAdjustSectionExpanded}" />
+                                <fi:SymbolIcon Symbol="ChevronRight" Classes="chevronToggle" Classes.open="{Binding IsAdjustSectionExpanded}" FontSize="{StaticResource PbIconSizeXs}" />
                                 <TextBlock Text="ADJUST" Classes="drawerSectionHeader" Margin="0" />
                             </StackPanel>
                         </Button>
                         <StackPanel Spacing="8" IsVisible="{Binding IsAdjustSectionExpanded}" Margin="0,6,0,0">
                             <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding Brightness, StringFormat='Brightness: {0:F0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <TextBlock Text="{Binding Brightness, StringFormat='Brightness: {0:F0}'}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <Slider Minimum="-100" Maximum="100" Value="{Binding Brightness}" />
                             </StackPanel>
                             <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding Contrast, StringFormat='Contrast: {0:F0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <TextBlock Text="{Binding Contrast, StringFormat='Contrast: {0:F0}'}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <Slider Minimum="-100" Maximum="100" Value="{Binding Contrast}" />
                             </StackPanel>
                             <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding Saturation, StringFormat='Saturation: {0:F0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <TextBlock Text="{Binding Saturation, StringFormat='Saturation: {0:F0}'}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <Slider Minimum="-100" Maximum="100" Value="{Binding Saturation}" />
                             </StackPanel>
                             <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding Gamma, StringFormat='Gamma: {0:F0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <TextBlock Text="{Binding Gamma, StringFormat='Gamma: {0:F0}'}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <Slider Minimum="-100" Maximum="100" Value="{Binding Gamma}" />
                             </StackPanel>
                             <StackPanel Spacing="2">
-                                <TextBlock Text="{Binding Sharpen, StringFormat='Sharpen: {0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <TextBlock Text="{Binding Sharpen, StringFormat='Sharpen: {0}'}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <Slider Minimum="0" Maximum="3" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding Sharpen}" AutomationProperties.Name="Sharpen" />
                             </StackPanel>
                             <Button Classes="drawerRow" Classes.active="{Binding AutoLevels}" Command="{Binding ToggleAutoLevelsCommand}"
@@ -1206,23 +1289,22 @@
                         <!-- Page notes and region clips (docs/superpowers/specs/2026-09-26-comic-reader-inreader-reference-design.md #7). -->
                         <Button Classes="drawerRow" Command="{Binding ToggleNotesSectionCommand}" Padding="0" Margin="0,14,0,0">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsNotesSectionExpanded}" />
-                                <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !IsNotesSectionExpanded}" />
+                                <fi:SymbolIcon Symbol="ChevronRight" Classes="chevronToggle" Classes.open="{Binding IsNotesSectionExpanded}" FontSize="{StaticResource PbIconSizeXs}" />
                                 <TextBlock Text="NOTES" Classes="drawerSectionHeader" Margin="0" />
                             </StackPanel>
                         </Button>
                         <StackPanel Spacing="8" IsVisible="{Binding IsNotesSectionExpanded}" Margin="0,6,0,0">
                             <TextBox x:Name="NoteBox" Text="{Binding NoteDraft}" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="2000" MinHeight="64" MaxHeight="140"
-                                     Watermark="A note for this page" AutomationProperties.Name="Note for this page" />
+                                     PlaceholderText="A note for this page" AutomationProperties.Name="Note for this page" />
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button Classes="clusterPill" Content="Save note" Command="{Binding SaveNoteCommand}" />
-                                <Button Classes="clusterPill" Content="Delete" Command="{Binding DeleteNoteCommand}" IsVisible="{Binding HasCurrentNote}" />
+                                <Button Classes="secondary sm" Content="Save note" Command="{Binding SaveNoteCommand}" />
+                                <Button Classes="secondary sm" Content="Delete" Command="{Binding DeleteNoteCommand}" IsVisible="{Binding HasCurrentNote}" />
                             </StackPanel>
                             <Button Classes="drawerRow" Classes.active="{Binding IsClipMode}" Command="{Binding ToggleClipModeCommand}"
                                     ToolTip.Tip="Drag a rectangle over the page to keep it as a picture (Ctrl+Shift+C)">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="Crop" FontSize="{StaticResource PbIconSizeXs}" />
-                                    <TextBlock Text="Clip a region" VerticalAlignment="Center" FontSize="11.5" />
+                                    <TextBlock Text="Clip a region" VerticalAlignment="Center" FontSize="12" />
                                 </StackPanel>
                             </Button>
                             <ItemsControl ItemsSource="{Binding NoteItems}">
@@ -1233,32 +1315,32 @@
                                                 <Button Classes="drawerRow" Padding="2" HorizontalContentAlignment="Left"
                                                         Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).GoToNoteItemCommand}" CommandParameter="{Binding}">
                                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                                        <TextBlock Text="{Binding PageLabel}" FontWeight="SemiBold" FontSize="11.5" />
+                                                        <TextBlock Text="{Binding PageLabel}" FontWeight="SemiBold" FontSize="12" />
                                                         <TextBlock Text="{Binding KindLabel}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
                                                     </StackPanel>
                                                 </Button>
                                                 <Image Source="{Binding Thumbnail}" IsVisible="{Binding IsClip}" MaxHeight="90" Stretch="Uniform" />
-                                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}"
+                                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource PbTextBrush}"
                                                            IsVisible="{Binding !IsClip}" />
-                                                <TextBox Text="{Binding Text}" IsVisible="{Binding IsClip}" Watermark="Caption" FontSize="11.5" MaxLength="200"
+                                                <TextBox Text="{Binding Text}" IsVisible="{Binding IsClip}" PlaceholderText="Caption" FontSize="12" MaxLength="200"
                                                          LostFocus="OnClipCaptionLostFocus" AutomationProperties.Name="Clip caption" />
                                                 <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsClip}">
-                                                    <Button Classes="clusterPill" Content="Copy" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).CopyClipCommand}" CommandParameter="{Binding}" />
-                                                    <Button Classes="clusterPill" Content="Save…" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SaveClipCommand}" CommandParameter="{Binding}" />
-                                                    <Button Classes="clusterPill" Content="Delete" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).DeleteClipCommand}" CommandParameter="{Binding}" />
+                                                    <Button Classes="secondary sm" Content="Copy" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).CopyClipCommand}" CommandParameter="{Binding}" />
+                                                    <Button Classes="secondary sm" Content="Save…" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SaveClipCommand}" CommandParameter="{Binding}" />
+                                                    <Button Classes="secondary sm" Content="Delete" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).DeleteClipCommand}" CommandParameter="{Binding}" />
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <Button Classes="drawerRow" Content="Export notes and clips…" Command="{Binding ExportNotesCommand}" IsVisible="{Binding HasNoteItems}" HorizontalContentAlignment="Center" />
+                            <Button Classes="drawerRow" Content="Export notes and clips…" Command="{Binding ExportNotesCommand}" IsVisible="{Binding HasNoteItems}" HorizontalContentAlignment="Left" />
                         </StackPanel>
 
                         <!-- Collapsed to one row (docs/superpowers/specs/2026-09-14-reader-chrome-
                              redesign-design.md §5) - one control doesn't need a full section header. -->
                         <Grid ColumnDefinitions="Auto,*" Margin="0,14,0,6">
-                            <TextBlock Grid.Column="0" Text="Transition" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Grid.Column="0" Text="Transition" FontSize="13" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                             <Button Grid.Column="1" Classes="drawerRow" Content="{Binding PageTransitionStyle}"
                                     HorizontalContentAlignment="Right" Padding="0">
                                 <Button.Flyout>
@@ -1267,6 +1349,9 @@
                                             <Button Classes="drawerRow" Content="None" Command="{Binding SetPageTransitionStyleCommand}" CommandParameter="{x:Static entities:PageTransitionStyle.None}" />
                                             <Button Classes="drawerRow" Content="Slide" Command="{Binding SetPageTransitionStyleCommand}" CommandParameter="{x:Static entities:PageTransitionStyle.Slide}" />
                                             <Button Classes="drawerRow" Content="Crossfade" Command="{Binding SetPageTransitionStyleCommand}" CommandParameter="{x:Static entities:PageTransitionStyle.Crossfade}" />
+                                            <Button Classes="drawerRow" Content="Vertical" Command="{Binding SetPageTransitionStyleCommand}" CommandParameter="{x:Static entities:PageTransitionStyle.Vertical}" />
+                                            <Button Classes="drawerRow" Content="Book" Command="{Binding SetPageTransitionStyleCommand}" CommandParameter="{x:Static entities:PageTransitionStyle.Book}" />
+                                            <Button Classes="drawerRow" Content="Curl" Command="{Binding SetPageTransitionStyleCommand}" CommandParameter="{x:Static entities:PageTransitionStyle.Curl}" />
                                         </StackPanel>
                                     </Flyout>
                                 </Button.Flyout>
@@ -1297,15 +1382,15 @@
                                                     CommandParameter="{Binding}" ToolTip.Tip="Rename bookmark">
                                                 <fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
-                                            <Button Grid.Column="2" Classes="clusterIcon"
+                                            <Button AutomationProperties.Name="Remove bookmark" Grid.Column="2" Classes="clusterIcon"
                                                     Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).DeleteBookmarkCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Remove bookmark">
                                                 <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
                                         </Grid>
                                         <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsEditing}">
-                                            <TextBox Grid.Column="0" Text="{Binding EditText}" FontSize="12.5" />
-                                            <Button Grid.Column="1" Classes="clusterIcon" Margin="4,0,0,0"
+                                            <TextBox Grid.Column="0" Text="{Binding EditText}" FontSize="13" />
+                                            <Button AutomationProperties.Name="Save name" Grid.Column="1" Classes="clusterIcon" Margin="4,0,0,0"
                                                     Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).CommitRenameBookmarkCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Save name">
                                                 <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" />
@@ -1315,7 +1400,7 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <TextBlock Text="No bookmarks yet" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                        <TextBlock Text="No bookmarks yet" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                    IsVisible="{Binding !Bookmarks.Count}" Margin="0,4,0,0" />
                         <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0" IsVisible="{Binding Bookmarks.Count}">
                             <Button Classes="drawerRow" Command="{Binding PreviousBookmarkCommand}" ToolTip.Tip="{Binding PreviousBookmarkHint}">

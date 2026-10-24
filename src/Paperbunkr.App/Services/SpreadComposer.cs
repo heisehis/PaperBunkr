@@ -68,7 +68,7 @@ public static class SpreadComposer
     private static SKBitmap ToSk(Bitmap bitmap)
     {
         using var stream = new MemoryStream();
-        bitmap.Save(stream);
+        bitmap.Save(stream, PngBitmapEncoderOptions.Default);
         stream.Position = 0;
         return SKBitmap.Decode(stream);
     }

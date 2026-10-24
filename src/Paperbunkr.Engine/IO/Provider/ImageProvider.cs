@@ -304,7 +304,8 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider
 					}
 					binaryWriter.Flush();
 					binaryWriter.Seek(0, SeekOrigin.Begin);
-					return Base32.ToBase32String(new SHA1Managed().ComputeHash(binaryWriter.BaseStream));
+					using var sha1 = SHA1.Create();
+					return Base32.ToBase32String(sha1.ComputeHash(binaryWriter.BaseStream));
 				}
 			}
 		}

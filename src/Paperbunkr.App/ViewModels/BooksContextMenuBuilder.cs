@@ -33,8 +33,8 @@ public sealed class BooksContextMenuBuilder
         var entries = new List<ContextMenuEntry>
         {
             ContextMenuEntry.Item("Edit…", _vm.EditBookCommand, card.BookId, Symbol.Edit),
-            ContextMenuEntry.SubMenu("Add to Collection", CollectionChildren(card.BookId), Symbol.CollectionsAdd),
         };
+        AddIfPresent(entries, ContextMenuEntry.SubMenu("Add to Collection", CollectionChildren(card.BookId), Symbol.CollectionsAdd));
 
         // Plugin API v2 Books hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-
         // plan.md §3/§4) - one entry per enabled command, same "no anchor if nothing's registered"
@@ -42,14 +42,14 @@ public sealed class BooksContextMenuBuilder
         var pluginCommands = _vm.HasPluginHost ? _vm.NovelBooksPluginCommands.ToList() : new List<Command>();
         if (pluginCommands.Count > 0)
         {
-            entries.Add(ContextMenuEntry.SubMenu(
+            AddIfPresent(entries, ContextMenuEntry.SubMenu(
                 "Plugins",
                 pluginCommands.Select(cmd => ContextMenuEntry.Item(cmd.Name, _vm.RunNovelBooksPluginCommand, (card.BookId, cmd))),
                 Symbol.Apps));
         }
 
         entries.Add(ContextMenuEntry.Separator);
-        entries.Add(ContextMenuEntry.SubMenu(
+        AddIfPresent(entries, ContextMenuEntry.SubMenu(
             "Delete Book…",
             new[] { ContextMenuEntry.Item("Yes, delete this book", _vm.DeleteBookCommand, card.BookId, Symbol.Delete, isDanger: true) },
             Symbol.Delete,
@@ -62,6 +62,14 @@ public sealed class BooksContextMenuBuilder
     {
         ContextMenuEntry.Item("Edit series…", _vm.EditSeriesCommand, bookSeriesId, Symbol.Edit),
     };
+
+    private static void AddIfPresent(List<ContextMenuEntry> entries, ContextMenuEntry? entry)
+    {
+        if (entry is not null)
+        {
+            entries.Add(entry);
+        }
+    }
 
     private IEnumerable<ContextMenuEntry?> CollectionChildren(int bookId)
     {

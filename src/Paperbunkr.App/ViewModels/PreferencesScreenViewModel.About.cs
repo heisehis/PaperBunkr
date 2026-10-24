@@ -190,7 +190,7 @@ public partial class PreferencesScreenViewModel
         VersionInfoCopied = false;
     }
 
-    /// <summary>Opens one of the <see cref="ProjectLinks"/> (the only URLs the rows pass) in the browser.</summary>
+    /// <summary>Opens one of the <see cref="ProjectLinks"/> passed by About buttons in the browser.</summary>
     [RelayCommand]
     private void OpenProjectLink(string? url)
     {

@@ -109,4 +109,25 @@ public sealed record ExternalMediaMetadata(
     IReadOnlyList<string>? GenreTags = null,
     IReadOnlyList<(string Value, string Category)>? OtherTags = null,
     string? CountryOfOrigin = null,
-    string? OriginalLanguage = null);
+    string? OriginalLanguage = null,
+    IReadOnlyList<ProviderTag>? WeightedTags = null,
+    IReadOnlyList<string>? Authors = null,
+    IReadOnlyList<string>? Artists = null,
+    IReadOnlyList<ProviderPublisher>? Publishers = null,
+    string? ContentRating = null,
+    double? Rating = null,
+    IReadOnlyList<string>? AlternateTitles = null,
+    string? MergedWithId = null,
+    ProviderPublicationDate? PublicationStart = null,
+    ProviderPublicationDate? PublicationEnd = null,
+    int? Popularity = null,
+    IReadOnlyDictionary<string, string>? AdditionalIdentifiers = null);
+
+/// <summary>A provider's partial publication date. Missing components stay unknown rather than becoming January 1.</summary>
+public sealed record ProviderPublicationDate(int? Year, int? Month = null, int? Day = null);
+
+/// <summary>One tag as a provider ranks it for a series: its name, category (the first part of its path), how central it is to the series, and whether it is a genre or a spoiler.</summary>
+public sealed record ProviderTag(string Name, string Category, IssueTagWeight Weight, bool IsGenre, bool IsSpoiler);
+
+/// <summary>A publisher a provider lists for a series; <c>Type</c> is the provider's own label (MangaBaka: "Original", "English", "Other").</summary>
+public sealed record ProviderPublisher(string Name, string? Language, string? Type);

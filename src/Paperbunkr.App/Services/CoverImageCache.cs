@@ -1,6 +1,9 @@
+using System;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using Avalonia.Media.Imaging;
+using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services.Covers;
 
 namespace Paperbunkr.App.Services;
@@ -88,6 +91,25 @@ public static class CoverImageCache
 
     private static string ResolveFile(string idKey)
     {
+        if (idKey.StartsWith("series:", StringComparison.Ordinal)
+            && int.TryParse(idKey.Substring("series:".Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out int seriesId))
+        {
+            try
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                string? relativePath = context.Series.Where(series => series.Id == seriesId)
+                    .Select(series => series.CustomCoverPath).FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(relativePath))
+                {
+                    string customSeries = CustomSeriesCoverPaths.GetPath(relativePath);
+                    if (File.Exists(customSeries)) return customSeries;
+                }
+            }
+            catch { }
+
+            return string.Empty;
+        }
+
         if (int.TryParse(idKey, NumberStyles.Integer, CultureInfo.InvariantCulture, out int id))
         {
             string custom = CustomCoverPaths.GetCachePath(id);

@@ -95,8 +95,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // Seed the read-only starter workspaces before the two screen VMs first list them
         // (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md). Idempotent.
         new WorkspaceService().EnsureBuiltInsSeeded();
-        new ListLayoutService().EnsureTemplatesSeeded(WorkspaceScreen.Library,
+        var listLayoutService = new ListLayoutService();
+        listLayoutService.EnsureTemplatesSeeded(WorkspaceScreen.Library,
             ListLayoutTemplates.Library.Select(t => (t.Name, ListLayoutStateJson.Serialize(t.State))).ToList());
+        listLayoutService.EnsureTemplatesSeeded(WorkspaceScreen.ComicDetail,
+            ListLayoutTemplates.ComicDetail.Select(t => (t.Name, DetailListLayoutStateJson.Serialize(t.State))).ToList());
+        listLayoutService.EnsureTemplatesSeeded(WorkspaceScreen.MangaDetail,
+            ListLayoutTemplates.MangaDetail.Select(t => (t.Name, DetailListLayoutStateJson.Serialize(t.State))).ToList());
         WorkspaceName = new WorkspaceNameViewModel(CloseWorkspaceNameOverlay);
         QuickOpen = new QuickOpenViewModel(ActivateQuickOpenEntry, CloseQuickOpenOverlay);
 
@@ -159,8 +164,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         AcquisitionBridge = new Services.AcquisitionActivityBridge(
             Activity, AcquisitionEvents.Reader,
             resultLink: () => new ActivityLink(ActivityLinkKind.WantedScreen),
-            onWantedChanged: () => { if (IsWanted) Wanted.Refresh(); },
-            onDownloadProgress: progress => { if (IsWanted) Wanted.ApplyDownloadProgress(progress); });
+            onWantedChanged: () => { if (IsWanted) Wanted?.Refresh(); },
+            onDownloadProgress: progress => { if (IsWanted) Wanted?.ApplyDownloadProgress(progress); });
         Scraper = new Scraper.ScrapeCoordinator(NativePluginModalHost, Services.PaperbunkrDb.CreateContext, Activity, issueId => MetadataWriteBack.Enqueue(issueId));
         Organizer = new Scraper.OrganizeCoordinator(NativePluginModalHost, Services.PaperbunkrDb.CreateContext, Activity, issueId => MetadataWriteBack.Enqueue(issueId));
         Wanted = new WantedScreenViewModel(
@@ -170,7 +175,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             () =>
             {
                 GoPreferencesCommand.Execute(null);
-                Preferences.GoAcquisitionCommand.Execute(null);
+                Preferences?.GoAcquisitionCommand.Execute(null);
             },
             Services.ClipboardHelper.CopyTextAsync,
             Grab,
@@ -225,10 +230,17 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         BookProperties = new BookPropertiesScreenViewModel(CloseBookPropertiesOverlay, ShowToast);
         BulkBookProperties = new BulkBookPropertiesScreenViewModel(CloseBulkBookPropertiesOverlay, ShowToast);
         BookSeriesProperties = new BookSeriesPropertiesScreenViewModel(CloseBookSeriesPropertiesOverlay, ShowToast);
+        MangaSeriesEditor = new MangaSeriesEditorViewModel(CloseMangaSeriesEditorOverlayAndReload, ShowToast, id => EnqueueMetadataWriteBack(id), () => EmbeddedSync);
         BookReader = new BookReaderScreenViewModel(NavigateBack, ReadingEvents);
         PdfReader = new PdfPageReaderScreenViewModel(NavigateBack, ReadingEvents);
         Detail = new DetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
-        MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
+        MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync, GoMangaSeriesEditorForSeries);
+        Detail.Tabs.InitializeListLayouts(listLayoutService);
+        MangaDetail.InitializeListLayouts(listLayoutService);
+        WireDetailListLayouts(Detail.Tabs.ListLayouts, Detail.Tabs.CreateDetailListOptions);
+        WireDetailListLayouts(MangaDetail.ListLayouts, MangaDetail.CreateDetailListOptions);
+        Library.ComicDetailLayouts = Detail.Tabs.ListLayouts;
+        Library.MangaDetailLayouts = MangaDetail.ListLayouts;
         MetadataEntityDetail = new MetadataEntityDetailScreenViewModel(NavigateBack, GoDetailForSeries, GoReaderForIssue);
         Detail.Tabs.ActivityCenter = Activity;
         MangaDetail.ActivityCenter = Activity;
@@ -238,6 +250,15 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         Paperbunkr.App.Scraper.ScheduledCoordinators.Organizer = Organizer;
         Library.ScrapeIssues = ids => Scraper.ScrapeIssuesAsync(ids);
         Library.OrganizeIssues = ids => Organizer.OrganizeIssuesAsync(ids);
+        Library.ScrapeAndOrganizeIssues = async ids =>
+        {
+            // docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 7: the files' new metadata is written first, so the organizer
+            // never moves a comic mid-write (Scrape then Organize left .crswap copies behind, 2026-10-20).
+            string scraped = await Scraper.ScrapeIssuesAsync(ids).ConfigureAwait(true);
+            await MetadataWriteBack.FlushNowAsync().ConfigureAwait(true);
+            string organized = await Organizer.OrganizeIssuesAsync(ids).ConfigureAwait(true);
+            return $"{scraped} {organized}";
+        };
         // Reloads the currently-loaded series afterward (same role as Library.RefreshAfterScrape),
         // deferred a dispatcher tick for the same reason LibraryScreenViewModel's own equivalent is -
         // ReloadCurrentSeries clears and repopulates the Issues/IssueGroups/Specials collections the
@@ -277,7 +298,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         Reading.OpenContinuity = id =>
         {
             GoEventsCommand.Execute(null);
-            Events.LoadContinuity(id);
+            Events?.LoadContinuity(id);
         };
         Events = new ContinuityScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast, activity: Activity, loadOnConstruction: false)
         {
@@ -285,7 +306,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             ReaderIssueId = () => Reader.LoadedIssue?.Id,
         };
         Insights = new InsightsScreenViewModel(GoReaderForIssue, GoDetailForSeries, GoLibraryWithSearch, OpenNewGoalDialog, Dialogs, ReadingEvents, activity: Activity,
-            goReaderForBook: GoBookReaderForBook, goBookDetailForBook: GoBookDetailForBook);
+            goReaderForBook: GoBookReaderForBook, goBookDetailForBook: GoBookDetailForBook,
+            preferences: new InsightsPreferences(InsightsPreferences.DefaultPath()), openDuplicateReview: OpenDuplicateReview);
         Plugin = new PluginScreenViewModel(new FilePickerService(), Dialogs);
         // The review queues (docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md) - owned here,
         // hosted by Preferences → Library → Library Health; the migration overlay only gets it to refresh after a run.
@@ -296,7 +318,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // constructed here like every other overlay VM; LiveFolderWatch.Reload/OpenMigrationOverlay
         // are the same callbacks Preferences already reuses for the identical folder-add/migration
         // actions, CloseWelcomeOverlay is this class's own close-and-persist method (defined below).
-        Welcome = new WelcomeOverlayViewModel(new FilePickerService(), () => LiveFolderWatch.Reload(), OpenMigrationOverlay, CloseWelcomeOverlay, OpenWhatsNewOverlayCurrentOnly);
+        Welcome = new WelcomeOverlayViewModel(new FilePickerService(), () => LiveFolderWatch?.Reload(), OpenMigrationOverlay, CloseWelcomeOverlay, OpenWhatsNewOverlayCurrentOnly);
         // Auto-update (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) - same
         // small-overlay-VM shape as Welcome above.
         Update = new UpdateAvailableOverlayViewModel(DownloadUpdateAsync, CloseUpdateAvailableOverlay);
@@ -427,6 +449,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             openIssueAtPage: GoReaderForIssueAtPage);
         Preferences.AttachScheduler(Scheduler);
         Preferences.AttachNavigation(GoDetailForSeries, GoIssuePropertiesForIssue);
+
+        // Scraper automation in Preferences > Organize & Scrape (docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-core-design.md section 8).
+        Preferences.OrganizeScrape.RunScrapeAllUnmatched = () => Scraper.ScrapeAllUnmatchedAsync();
+        Preferences.OrganizeScrape.ResumeScrape = job => Scraper.ResumeAsync(job);
+        Preferences.OrganizeScrape.OpenReviewQueue = () => _ = Scraper.OpenReviewQueueAsync();
+        Preferences.OrganizeScrape.UndoScrapeBatch = batch => Scraper.UndoBatch(batch);
+        Library.AttachManualScan(Preferences);
+        Books.AttachManualScan(Preferences);
 
         // Remote library sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md). Built here like the other
         // manually-composed services; App.axaml.cs starts serving (if the user turned it on) and syncs the saved remote libraries.
@@ -621,6 +651,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public BookPropertiesScreenViewModel BookProperties { get; }
     public BulkBookPropertiesScreenViewModel BulkBookProperties { get; }
     public BookSeriesPropertiesScreenViewModel BookSeriesProperties { get; }
+
+    /// <summary>The Edit Series overlay on the Manga Detail screen (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md D11).</summary>
+    public MangaSeriesEditorViewModel MangaSeriesEditor { get; }
     public BookReaderScreenViewModel BookReader { get; }
     public PdfPageReaderScreenViewModel PdfReader { get; }
     public DetailScreenViewModel Detail { get; }
@@ -741,6 +774,68 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     private void EnqueueMetadataWriteBack(int issueId, bool manual = false) => MetadataWriteBack.Enqueue(issueId, manual);
 
+    /// <summary>The sync actions behind Edit Series' Advanced section (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §10).</summary>
+    public Services.EmbeddedSyncActions EmbeddedSync => _embeddedSync ??= new Services.EmbeddedSyncActions(Services.PaperbunkrDb.CreateContext, MetadataWriteBack);
+
+    private Services.EmbeddedSyncActions? _embeddedSync;
+
+    /// <summary>
+    /// Startup catch-up for manga chapters that still owe a write to their file (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §10): after a short pause so
+    /// it never competes with the first screen, removes leftovers of an interrupted write and queues only the chapters marked dirty. Does nothing for a library nobody has edited.
+    /// </summary>
+    public async Task ResumeEmbeddedSyncAsync()
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+            EmbeddedSync.ResumeOwedWrites();
+
+            // Swap copies an interrupted write or organize left beside comics (docs/superpowers/specs/2026-10-21-scraper-organizer-a-reliability-design.md).
+            await Preferences.LeftoverFiles.SweepInBackgroundAsync().ConfigureAwait(false);
+
+            RaiseScrapeAutomationAlerts();
+        }
+        catch (Exception)
+        {
+            // Best effort: the chapters stay dirty and the next launch tries again.
+        }
+    }
+
+    /// <summary>
+    /// At start: a scrape that was cancelled or cut short, and comics waiting for review, each get one Activity Center line pointing at
+    /// Preferences > Organize &amp; Scrape (docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-core-design.md section 8).
+    /// </summary>
+    private void RaiseScrapeAutomationAlerts()
+    {
+        var unfinished = Paperbunkr.Data.ComicVine.Scraping.ScrapeJobStore.Shared?.LoadUnfinished().FirstOrDefault();
+        if (unfinished is not null)
+        {
+            Activity.RaiseAlert(new ActivityAlert
+            {
+                Severity = ActivityAlertSeverity.Info,
+                Title = "A scrape didn't finish",
+                Detail = $"{unfinished.Pending.Count:N0} of {unfinished.Total:N0} comics are left. Resume it from Preferences → Organize & Scrape.",
+                ActionLabel = "Resume…",
+                ActionLink = new ActivityLink(ActivityLinkKind.Preferences, "OrganizeScrape"),
+                DedupeKey = "scrape-unfinished",
+            });
+        }
+
+        int waiting = Paperbunkr.Data.ComicVine.Scraping.ScrapeReviewQueue.Shared?.Load().Count ?? 0;
+        if (waiting > 0)
+        {
+            Activity.RaiseAlert(new ActivityAlert
+            {
+                Severity = ActivityAlertSeverity.Info,
+                Title = $"{waiting:N0} comics need a match picked",
+                Detail = "An unattended scrape couldn't confirm their match. Review them a series at a time.",
+                ActionLabel = "Review…",
+                ActionLink = new ActivityLink(ActivityLinkKind.Preferences, "OrganizeScrape"),
+                DedupeKey = "scrape-review-queue",
+            });
+        }
+    }
+
     [ObservableProperty]
     private bool _isMigrationOverlayOpen;
 
@@ -808,6 +903,12 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private ListOptionsViewModel? _listOptions;
 
+    [ObservableProperty]
+    private bool _isDetailListOptionsOverlayOpen;
+
+    [ObservableProperty]
+    private DetailListOptionsViewModel? _detailListOptions;
+
     /// <summary>Edit Layouts: bound straight to the opening screen's <see cref="ListLayoutsViewModel"/>.</summary>
     [ObservableProperty]
     private bool _isEditLayoutsOverlayOpen;
@@ -829,6 +930,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private bool _isBookSeriesPropertiesOverlayOpen;
 
     partial void OnIsBookSeriesPropertiesOverlayOpenChanged(bool value) => OnPropertyChanged(nameof(IsBookSeriesProperties));
+
+    [ObservableProperty]
+    private bool _isMangaSeriesEditorOverlayOpen;
+
+    partial void OnIsMangaSeriesEditorOverlayOpenChanged(bool value) => OnPropertyChanged(nameof(IsMangaSeriesEditor));
 
     [ObservableProperty]
     private bool _isQuickRateOverlayOpen;
@@ -871,7 +977,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private bool _isTransitionReversed;
 
-    partial void OnCurrentScreenChanging(string oldValue, string newValue)
+    partial void OnCurrentScreenChanging(string? oldValue, string newValue)
     {
         if (oldValue == "reader" && newValue != "reader")
         {
@@ -880,13 +986,51 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             System.Threading.Tasks.Task.Run(Services.Reader.Panels.PanelDetectionService.Unload);
         }
 
-        if (RailOrder.TryGetValue(oldValue, out int oldIndex) && RailOrder.TryGetValue(newValue, out int newIndex))
+        if (RailOrder.TryGetValue(oldValue ?? string.Empty, out int oldIndex) && RailOrder.TryGetValue(newValue, out int newIndex))
         {
             IsTransitionReversed = newIndex < oldIndex;
         }
+
+        RouteIntent = ComputeRouteIntent(oldValue ?? string.Empty, newValue, _pendingDrillKind);
+        _pendingDrillKind = DrillTransitionKind.None;
     }
 
-    /// <summary>The lateral rail-ordered screen's own ViewModel, or null when a drill-down screen (Reader/Detail/etc.) is active - bound to the shell's single <c>TransitioningContentControl</c>.</summary>
+    /// <summary>The kind of navigation the route transition shows (docs/superpowers/specs/2026-10-20-motion-system-v2-navigation-design.md
+    /// §3.2). Set in <see cref="OnCurrentScreenChanging"/>, before the content notifications, so the route host reads it with the new
+    /// content.</summary>
+    [ObservableProperty]
+    private RouteIntent _routeIntent;
+
+    /// <summary>The drill kind <see cref="RunDrill"/> set for the screen change it is about to make; consumed by that change so a stale
+    /// kind never colours a later rail click (unlike <see cref="DrillTransitionKind"/>, which stays set).</summary>
+    private DrillTransitionKind _pendingDrillKind;
+
+    private static readonly HashSet<string> ReaderScreens = new(StringComparer.Ordinal) { "reader", "bookReader", "pdfReader" };
+
+    internal static RouteIntent ComputeRouteIntent(string oldScreen, string newScreen, DrillTransitionKind pendingDrill)
+    {
+        if (RailOrder.ContainsKey(oldScreen) && RailOrder.ContainsKey(newScreen))
+        {
+            return RouteIntent.Lateral;
+        }
+
+        var intent = pendingDrill switch
+        {
+            DrillTransitionKind.Push => RouteIntent.DrillIn,
+            DrillTransitionKind.Pop => RouteIntent.Back,
+            _ => RouteIntent.Neutral,
+        };
+
+        return intent != RouteIntent.Neutral && (ReaderScreens.Contains(oldScreen) || ReaderScreens.Contains(newScreen))
+            ? RouteIntent.Reader
+            : intent;
+    }
+
+    /// <summary>The active screen's view model, lateral or drill-down - bound to the shell's single <c>RouteHost</c>
+    /// (docs/superpowers/specs/2026-10-20-motion-system-v2-navigation-design.md §3.1).</summary>
+    public object? ActiveRouteContent => ActiveScreenContent ?? ActiveDrillDownContent;
+
+    /// <summary>The lateral rail-ordered screen's own ViewModel, or null when a drill-down screen (Reader/Detail/etc.) is active. Feeds <see cref="ActiveRouteContent"/>, which the shell's <c>RouteHost</c> shows.</summary>
     public object? ActiveScreenContent => CurrentScreen switch
     {
         "home" => Home,
@@ -904,9 +1048,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public bool IsLateralScreen => RailOrder.ContainsKey(CurrentScreen);
 
     /// <summary>The drill-down screen's own ViewModel, or null when a lateral screen (Home/Library/
-    /// etc.) is active - bound to the shell's drill-down <c>TransitioningContentControl</c> (docs/
-    /// superpowers/specs/2026-09-04-navigation-transition-system-design.md), the sibling of
-    /// <see cref="ActiveScreenContent"/>'s own lateral one.</summary>
+    /// etc.) is active. Feeds <see cref="ActiveRouteContent"/>, which the shell's <c>RouteHost</c>
+    /// shows (docs/superpowers/specs/2026-10-20-motion-system-v2-navigation-design.md).</summary>
     public object? ActiveDrillDownContent => CurrentScreen switch
     {
         "detail" => Detail,
@@ -975,6 +1118,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public bool IsBulkBookProperties => IsBulkBookPropertiesOverlayOpen;
 
     public bool IsBookSeriesProperties => IsBookSeriesPropertiesOverlayOpen;
+
+    public bool IsMangaSeriesEditor => IsMangaSeriesEditorOverlayOpen;
 
     // Reading Lists has no shared sidebar since its redesign: the gallery is the home and a list has its own cover rail
     // (docs/superpowers/specs/2026-09-28-reading-lists-redesign-design.md §1, decision Q20).
@@ -1094,6 +1239,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
         OnPropertyChanged(nameof(ActiveScreenContent));
         OnPropertyChanged(nameof(ActiveDrillDownContent));
+        OnPropertyChanged(nameof(ActiveRouteContent));
         OnPropertyChanged(nameof(IsLateralScreen));
         OnPropertyChanged(nameof(IsHome));
         OnPropertyChanged(nameof(IsInsights));
@@ -1425,6 +1571,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     private void OpenSeriesDetailFromReview(int seriesId) => GoDetailForSeries(seriesId);
 
+    /// <summary>Insights › Storage › Review duplicates: Library Health, Review tab, Duplicates section.</summary>
+    private void OpenDuplicateReview()
+    {
+        GoPreferencesCommand.Execute(null);
+        OpenLibraryHealthFromPayload("LibraryHealth/Review/Duplicates");
+    }
+
     /// <summary>The migration Results screen's "Review in Library Health" button and the legacy <see cref="ActivityLinkKind.MigrationReview"/> link - closes the overlay if it's open and lands on the Library Health card.</summary>
     private void ReviewInLibraryHealth()
     {
@@ -1571,9 +1724,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Any editor / dialog overlay that owns focus - Ctrl+P must not open the palette on top of one.</summary>
     private bool IsEditorOverlayOpen =>
         IsIssuePropertiesOverlayOpen || IsBulkIssuePropertiesOverlayOpen || IsBulkSeriesPropertiesOverlayOpen
-        || IsBookPropertiesOverlayOpen || IsBulkBookPropertiesOverlayOpen || IsBookSeriesPropertiesOverlayOpen
+        || IsBookPropertiesOverlayOpen || IsBulkBookPropertiesOverlayOpen || IsBookSeriesPropertiesOverlayOpen || IsMangaSeriesEditorOverlayOpen
         || IsReadingListPropertiesOverlayOpen || IsCollectionPropertiesOverlayOpen || IsWorkspaceNameOverlayOpen
-        || IsNewReadingListDialogOpen || IsNewEventDialogOpen || IsNewGoalDialogOpen || IsListOptionsOverlayOpen || IsEditLayoutsOverlayOpen || IsMigrationOverlayOpen || IsQuickRateOverlayOpen
+        || IsNewReadingListDialogOpen || IsNewEventDialogOpen || IsNewGoalDialogOpen || IsListOptionsOverlayOpen || IsDetailListOptionsOverlayOpen || IsEditLayoutsOverlayOpen || IsMigrationOverlayOpen || IsQuickRateOverlayOpen
         || IsPasteDataOverlayOpen || IsMergeSeriesOverlayOpen
         || IsWelcomeOverlayOpen || IsWelcomeTourOverlayOpen || IsWhatsNewOverlayOpen;
 
@@ -1724,6 +1877,22 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         IsNewEventDialogOpen = true;
     }
 
+    [RelayCommand]
+    private void ResumeEventSetup()
+    {
+        if (Events.ActiveEventId is not int id) return;
+        NewEventOrContinuity.LoadGuidedSetup(NewEventOrContinuityViewModel.Kind.Event, id);
+        IsNewEventDialogOpen = true;
+    }
+
+    [RelayCommand]
+    private void ResumeContinuitySetup()
+    {
+        if (Events.ActiveContinuityId is not int id) return;
+        NewEventOrContinuity.LoadGuidedSetup(NewEventOrContinuityViewModel.Kind.Continuity, id);
+        IsNewEventDialogOpen = true;
+    }
+
     /// <summary>"Edit details" from a sidebar row's right-click menu (docs/superpowers/specs/
     /// 2026-08-31-keyboard-operability-design.md) - composes the sidebar's own existing
     /// <see cref="ContinuityScreenViewModel.SelectEventCommand"/> with <see cref="OpenEditEventDialog"/>
@@ -1799,8 +1968,29 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         layouts.Confirm = (message, title, confirmLabel, destructive) => Dialogs.ConfirmAsync(message, title: title, confirmLabel: confirmLabel, isDestructive: destructive);
     }
 
+    /// <summary>Detail layouts are managed from the Library's Workspace popup, so their menu rows close that popup.</summary>
+    private void WireDetailListLayouts(ListLayoutsViewModel layouts, Func<Action, DetailListOptionsViewModel> createListOptions)
+    {
+        layouts.CloseMenu = () => Library.ActiveDropdown = null;
+        layouts.OpenListOptions = () =>
+        {
+            DetailListOptions = createListOptions(CloseDetailListOptionsOverlay);
+            IsDetailListOptionsOverlayOpen = true;
+        };
+        layouts.OpenEditLayouts = () =>
+        {
+            EditLayouts = layouts;
+            IsEditLayoutsOverlayOpen = true;
+        };
+        layouts.PromptForName = PromptLayoutName;
+        layouts.Confirm = (message, title, confirmLabel, destructive) => Dialogs.ConfirmAsync(message, title: title, confirmLabel: confirmLabel, isDestructive: destructive);
+    }
+
     [RelayCommand]
     private void CloseListOptionsOverlay() => IsListOptionsOverlayOpen = false;
+
+    [RelayCommand]
+    private void CloseDetailListOptionsOverlay() => IsDetailListOptionsOverlayOpen = false;
 
     [RelayCommand]
     private void CloseEditLayoutsOverlay() => IsEditLayoutsOverlayOpen = false;
@@ -1997,7 +2187,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             || (IsBulkSeriesProperties && BulkSeriesProperties.HasUnsavedChanges())
             || (IsBookProperties && BookProperties.HasUnsavedChanges())
             || (IsBulkBookProperties && BulkBookProperties.HasUnsavedChanges())
-            || (IsBookSeriesProperties && BookSeriesProperties.HasUnsavedChanges());
+            || (IsBookSeriesProperties && BookSeriesProperties.HasUnsavedChanges())
+            || (IsMangaSeriesEditor && MangaSeriesEditor.HasUnsavedChanges());
 
         // Rail-nav destinations only ever set CurrentScreen, which no longer has anything to do with
         // whether an editor overlay is open (docs/superpowers/specs/2026-08-23-issue-editor-
@@ -2013,6 +2204,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             IsBookPropertiesOverlayOpen = false;
             IsBulkBookPropertiesOverlayOpen = false;
             IsBookSeriesPropertiesOverlayOpen = false;
+            IsMangaSeriesEditorOverlayOpen = false;
             navigate();
         }
 
@@ -2188,6 +2380,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void NavigateToReaderCore(int issueId, int? readingListId, int? startPage = null, int? storyEventId = null)
     {
         _currentReaderIssueId = issueId;
+        Detail.SetReadingIssueId(issueId);
         if (readingListId is int listId)
         {
             Reader.LoadIssue(issueId, listId, startPage);
@@ -2390,7 +2583,12 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void RunDrill(DrillTransitionKind kind, string? sharedKey, Action swap)
     {
         DrillTransitionKind = kind;
+        _pendingDrillKind = kind;
         _ = _runDrillTransition(sharedKey, swap);
+
+        // swap ran synchronously above; if it did not change CurrentScreen (Detail -> Detail for another series) the kind was never
+        // consumed and must not colour the next, unrelated screen change.
+        _pendingDrillKind = DrillTransitionKind.None;
     }
 
     /// <summary>The shared-element key for whichever drill-down screen is on screen <em>right now</em>,
@@ -2488,7 +2686,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        if (info.Status != UpdateStatus.UpdateAvailable || info.Updates.Count == 0)
+        if (info.Status != UpdateStatus.UpdateAvailable
+            || info.Updates is not { Count: > 0 } updates
+            || updates[0] is not { Version: { } version } update)
         {
             return;
         }
@@ -2496,13 +2696,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // Activity Center alert alongside the overlay (on-screen feedback) - same alert the manual
         // Preferences "Check Now" path raises, so Activity Center reflects update state regardless
         // of which check found it. Not a replacement for the overlay below - additive.
-        PreferencesScreenViewModel.RaiseUpdateAvailableAlert(Activity, info.Updates[0].Version.ToString());
+        PreferencesScreenViewModel.RaiseUpdateAvailableAlert(Activity, version.ToString());
 
         // No changelog excerpt: the bundled CHANGELOG.md is the installed version's, and the appcast carries no release notes, so the
         // overlay links to the offered version's release page instead (docs/superpowers/specs/2026-09-26-about-polish-design.md §4).
         Dispatcher.UIThread.Post(() =>
         {
-            Update.Show(info.Updates[0]);
+            Update.Show(update);
             IsUpdateAvailableOverlayOpen = true;
         });
     }
@@ -3134,6 +3334,23 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void CloseBulkIssuePropertiesOverlay() => BulkIssueProperties.CancelCommand.Execute(null);
 
+    /// <summary>The Manga Detail screen's Edit Series button (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md D11): opens the series editor over the screen.</summary>
+    private void GoMangaSeriesEditorForSeries(int seriesId)
+    {
+        // Load says no for a series that is gone or belongs to another library; the editor then simply does not open.
+        IsMangaSeriesEditorOverlayOpen = MangaSeriesEditor.Load(seriesId);
+    }
+
+    private void CloseMangaSeriesEditorOverlayAndReload()
+    {
+        IsMangaSeriesEditorOverlayOpen = false;
+        ReloadDetailAfterIssueEdit();
+    }
+
+    /// <summary>The corner close button: the same Cancel the editor's own Cancel button runs.</summary>
+    [RelayCommand]
+    private void CloseMangaSeriesEditorOverlay() => MangaSeriesEditor.CancelCommand.Execute(null);
+
     [RelayCommand]
     private void CloseBulkSeriesPropertiesOverlay() => BulkSeriesProperties.CancelCommand.Execute(null);
 
@@ -3191,6 +3408,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         {
             CloseNewGoalDialog();
         }
+        else if (IsDetailListOptionsOverlayOpen)
+        {
+            CloseDetailListOptionsOverlay();
+        }
         else if (IsListOptionsOverlayOpen)
         {
             CloseListOptionsOverlay();
@@ -3218,6 +3439,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         else if (IsBookSeriesProperties)
         {
             BookSeriesProperties.CancelCommand.Execute(null);
+        }
+        else if (IsMangaSeriesEditor)
+        {
+            MangaSeriesEditor.CancelCommand.Execute(null);
         }
         else if (IsQuickRateOverlayOpen)
         {
@@ -3341,6 +3566,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 else if (link.Payload == "Advanced")
                 {
                     Preferences.GoAdvancedCommand.Execute(null);
+                }
+                else if (link.Payload == "OrganizeScrape")
+                {
+                    Preferences.GoOrganizeScrapeCommand.Execute(null);
+                }
+                else if (link.Payload == "Connections")
+                {
+                    Preferences.GoConnectionsCommand.Execute(null);
                 }
 
                 break;

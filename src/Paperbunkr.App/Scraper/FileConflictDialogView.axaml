@@ -16,8 +16,8 @@
     -->
     <!-- No card chrome here - the host's NativePluginModalHost Border (MainWindow.axaml) now owns it. -->
     <StackPanel Spacing="14" Width="420">
-        <TextBlock Text="A file already exists at the destination" FontSize="16" FontWeight="Bold"
-                   Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+        <TextBlock Classes="dialogTitle" Text="A file already exists at the destination"
+                   TextWrapping="Wrap" />
 
         <StackPanel Spacing="4">
             <TextBlock Text="Destination" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
@@ -40,7 +40,7 @@
         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
             <Button Content="Skip" Command="{Binding SkipCommand}" />
             <Button Content="Rename" Command="{Binding RenameCommand}" />
-            <Button Content="Replace" Classes="destructive" Command="{Binding ReplaceCommand}" />
+            <Button Content="Replace" Classes="danger" Command="{Binding ReplaceCommand}" />
         </StackPanel>
     </StackPanel>
 </UserControl>

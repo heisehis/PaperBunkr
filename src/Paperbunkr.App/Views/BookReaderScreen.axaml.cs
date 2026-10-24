@@ -241,6 +241,21 @@ public partial class BookReaderScreen : UserControl
               img { max-width: 100%; height: auto; }
             </style>
             <style id="pb-user-style">{{BuildTypographyCss(_viewModel.Settings)}}</style>
+            <style id="pb-chapter-ornament">
+              /* Reflowable EPUB chapter headings get a restrained opening treatment. This stays
+                 in document order and inherits the active reading theme's foreground color. */
+              #pb-content > h1:first-child, #pb-content > h2:first-child {
+                margin-top: 1.8em; padding-top: .8em; border-top: 1px solid currentColor;
+                letter-spacing: .035em;
+              }
+              #pb-content > h1:first-child::before, #pb-content > h2:first-child::before {
+                content: "✦"; display: block; font-size: .72em; opacity: .62;
+                margin-bottom: .6em; text-align: center;
+              }
+              #pb-content > h1:first-child::first-letter, #pb-content > h2:first-child::first-letter {
+                float: left; font-size: 2.2em; line-height: .9; padding-right: .12em;
+              }
+            </style>
             <style id="pb-highlight-style">
               .pb-highlight { cursor: pointer; }
               .pb-color-Yellow { background: rgba(255, 213, 79, 0.55); }

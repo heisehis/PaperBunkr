@@ -23,31 +23,13 @@
     <UserControl.Styles>
         <!-- Sidebar section nav -->
         <Style Selector="Button.prefNavItem">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="3,0,0,0" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="CornerRadius" Value="0" />
-            <Setter Property="Padding" Value="15,10" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="Cursor" Value="Hand" />
         </Style>
         <!-- Nav items fill the sidebar edge to edge, so an outside focus ring would be cut by the sidebar: draw it inside instead. It is an adorner
              rather than a BoxShadow on the button's presenter because Avalonia paints no inset shadow on a control that has a border, and these
              items have their active-section bar as one (the ring never showed at all). -->
         <Style Selector="Button.prefNavItem">
             <Setter Property="FocusAdorner" Value="{DynamicResource PbFocusAdornerInside}" />
-        </Style>
-        <Style Selector="Button.prefNavItem:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-        </Style>
-        <Style Selector="Button.prefNavItem.active">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
         </Style>
 
         <!-- Search box -->
@@ -69,15 +51,12 @@
         <!-- Settings group card (design-language restyle of the old groupBox/groupHeader) - still
              used by every group not yet converted to SettingsRow (docs/superpowers/specs/2026-09-07-
              preferences-tile-hub-redesign-design.md §4's deferred list). -->
-        <Style Selector="Border.groupBox">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Style Selector="Border.card">
             <Setter Property="ClipToBounds" Value="True" />
         </Style>
         <Style Selector="Border.groupHeader">
             <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="Padding" Value="14,11" />
+            <Setter Property="Padding" Value="14,12" />
         </Style>
 
         <!-- Light caption-style group label (design.md item 2) - replaces groupBox/groupHeader's
@@ -87,42 +66,14 @@
             <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMicro}" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="LetterSpacing" Value="0.6" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="Margin" Value="0,0,0,8" />
         </Style>
 
         <!-- Header-row action buttons (kept: already token-based) -->
-        <Style Selector="Button.headerAction">
-            <Setter Property="Padding" Value="14,8" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.headerAction.ghost">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        </Style>
-        <Style Selector="Button.headerAction.primary">
-            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
-        </Style>
 
         <Style Selector="Button.sideItemButton">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="0" />
-            <Setter Property="Padding" Value="14,10" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.sideItemButton:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
         </Style>
         <Style Selector="Border.skinRow">
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
@@ -130,33 +81,23 @@
         </Style>
 
         <!-- Search-result "pulse" target - the shell code-behind toggles the .searchPulse class. -->
-        <Style Selector="Border.groupBox">
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.45" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Border.groupBox.searchPulse">
-            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
-        </Style>
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*">
 
         <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="28,20,28,14" Spacing="12">
+        <StackPanel Grid.Row="0" Margin="24,20,24,14" Spacing="12">
             <TextBlock Classes="pbTextHeading" Text="PREFERENCES" />
             <Border Classes="prefSearchBox" MaxWidth="360" HorizontalAlignment="Left">
                 <Grid ColumnDefinitions="Auto,*,Auto">
                     <fi:SymbolIcon Grid.Column="0" Symbol="Search" Margin="0,0,8,0" />
-                    <TextBox Grid.Column="1" Text="{Binding SearchQuery}" Watermark="Search settings…"
+                    <TextBox Grid.Column="1" Classes="bare" Text="{Binding SearchQuery}" PlaceholderText="Search settings…"
                              AutomationProperties.AutomationId="PreferencesSearchBox">
                         <TextBox.KeyBindings>
                             <KeyBinding Gesture="Escape" Command="{Binding ClearSearchCommand}" />
                         </TextBox.KeyBindings>
                     </TextBox>
-                    <Button Grid.Column="2" Classes="headerAction ghost" Padding="7,3" FontSize="11"
+                    <Button Grid.Column="2" Classes="ghost sm"
                             IsVisible="{Binding IsSearching}" Content="Clear" Command="{Binding ClearSearchCommand}" />
                 </Grid>
             </Border>
@@ -191,7 +132,7 @@
                                     <fi:SymbolIcon Symbol="Folder" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
                                     <TextBlock Text="Library" VerticalAlignment="Center" />
                                     <!-- Something in Library Health needs a decision (docs/superpowers/specs/2026-09-25-needs-review-into-library-health-design.md). -->
-                                    <Border Width="8" Height="8" CornerRadius="4" Background="{DynamicResource PbAccentBrush}" VerticalAlignment="Center"
+                                    <Border Width="8" Height="8" CornerRadius="{DynamicResource PbRadiusSm}" Background="{DynamicResource PbAccentBrush}" VerticalAlignment="Center"
                                             IsVisible="{Binding NeedsReview.HasPendingItems}"
                                             ToolTip.Tip="Library Health has items to review"
                                             AutomationProperties.AutomationId="PreferencesLibraryNeedsReviewDot" />
@@ -276,8 +217,8 @@
 
                     <ScrollViewer IsVisible="{Binding IsSearching}">
                         <StackPanel Margin="0,10">
-                            <TextBlock Text="No matching settings" Margin="15,10" FontSize="12"
-                                       Foreground="{DynamicResource PbTextFaintBrush}"
+                            <TextBlock Text="No matching settings" Margin="16,10" FontSize="12"
+                                       Foreground="{DynamicResource PbTextMutedBrush}"
                                        IsVisible="{Binding NoSearchResults}" />
                             <ItemsControl x:Name="SearchResultsList" ItemsSource="{Binding SearchResults}">
                                 <ItemsControl.ItemTemplate>
@@ -286,8 +227,8 @@
                                                 Command="{Binding #SearchResultsList.((vm:PreferencesScreenViewModel)DataContext).OpenSearchResultCommand}"
                                                 CommandParameter="{Binding}">
                                             <StackPanel Spacing="1">
-                                                <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
-                                                <TextBlock Text="{Binding SectionLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                <TextBlock Text="{Binding Title}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                                <TextBlock Text="{Binding SectionLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
                                             </StackPanel>
                                         </Button>
                                     </DataTemplate>

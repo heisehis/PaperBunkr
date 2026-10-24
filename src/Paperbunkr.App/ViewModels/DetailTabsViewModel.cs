@@ -31,7 +31,7 @@ namespace Paperbunkr.App.ViewModels;
 /// project 43c40b25). Populated from the real <see cref="Series"/> passed to
 /// <see cref="LoadSeries"/> rather than the wireframe's static sample data.
 /// </summary>
-public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
+public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, IListLayoutHost
 {
     /// <summary>Right-click/Menu-key menu for the Issues-tab tiles (docs/superpowers/specs/
     /// 2026-08-31-keyboard-operability-design.md) - a new menu, this screen had none before.
@@ -49,18 +49,19 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     private readonly Action<int> _navigateToCollection;
     private readonly Action<int> _openInReader;
     private readonly Action<string> _goLibraryWithSearch;
+    private readonly Action? _onSeriesCoverChanged;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private readonly IMetadataProvider _metadataProvider;
     private int? _seriesId;
     private readonly TileSelectionController<IssueCardSample> _selection = new();
 
-    public DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null, Action<string>? goLibraryWithSearch = null, ITrackerAutoSyncService? trackerAutoSync = null)
-        : this(goToProperties, goToBulkProperties, onSelectionChanged, PaperbunkrDb.CreateContext, new AniListMetadataProvider(AniListHttpClient.Shared), onQuickRate, navigateToSeries, openInReader, navigateToCollection, goLibraryWithSearch, trackerAutoSync)
+    public DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null, Action<string>? goLibraryWithSearch = null, ITrackerAutoSyncService? trackerAutoSync = null, Action? onSeriesCoverChanged = null)
+        : this(goToProperties, goToBulkProperties, onSelectionChanged, PaperbunkrDb.CreateContext, new AniListMetadataProvider(AniListHttpClient.Shared), onQuickRate, navigateToSeries, openInReader, navigateToCollection, goLibraryWithSearch, trackerAutoSync, onSeriesCoverChanged)
     {
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database and a real <see cref="AniListMetadataProvider"/>).</summary>
-    internal DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged, Func<PaperbunkrDbContext> contextFactory, IMetadataProvider? metadataProvider = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null, Action<string>? goLibraryWithSearch = null, ITrackerAutoSyncService? trackerAutoSync = null)
+    internal DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged, Func<PaperbunkrDbContext> contextFactory, IMetadataProvider? metadataProvider = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null, Action<string>? goLibraryWithSearch = null, ITrackerAutoSyncService? trackerAutoSync = null, Action? onSeriesCoverChanged = null)
     {
         _trackerAutoSync = trackerAutoSync ?? NoOpTrackerAutoSyncService.Instance;
         _goToProperties = goToProperties;
@@ -71,6 +72,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         _navigateToCollection = navigateToCollection ?? (_ => { });
         _openInReader = openInReader ?? (_ => { });
         _goLibraryWithSearch = goLibraryWithSearch ?? (_ => { });
+        _onSeriesCoverChanged = onSeriesCoverChanged;
         _contextFactory = contextFactory;
         Missing = new SeriesMissingIssuesViewModel(contextFactory);
         _metadataProvider = metadataProvider ?? new AniListMetadataProvider(AniListHttpClient.Shared);
@@ -118,6 +120,179 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     /// settings-design.md §3.1); never comic or Unknown.</summary>
     public bool IsMangaDetailHost { get; set; }
 
+    // --- Detail layout (docs/superpowers/specs/2026-10-19-detail-layouts-v2-design.md). One default for every comic series, unless a
+    // series has its own layout (set from the Library's right-click menu); on-screen changes land wherever the series' layout lives. ---
+
+    public WorkspaceScreen LayoutScreen => WorkspaceScreen.ComicDetail;
+    public string LayoutSelectionKey => _seriesHasOwnLayout && _seriesId is int id ? ListLayoutsViewModel.SeriesKey(id) : ListLayoutAssignment.DefaultKey;
+    public bool UsesSingleDefault => true;
+    public string CaptureLayoutJson() => DetailListLayoutStateJson.Serialize(_detailLayoutState);
+    public string BuiltInDefaultLayoutJson => DetailListLayoutStateJson.Serialize(DetailListLayoutState.ComicDefault);
+    /// <summary>The comic detail layouts. Their menu lives in the Library's Workspace popup, beside the Library's own list layouts, not on this screen.</summary>
+    public ListLayoutsViewModel ListLayouts { get; private set; } = null!;
+    private DetailListLayoutState _detailLayoutState = DetailListLayoutState.ComicDefault;
+    private bool _seriesHasOwnLayout;
+
+    /// <summary>The issue entities behind the cards, kept so a re-sort or re-group can rebuild the run headers without a reload.</summary>
+    private Dictionary<int, Issue> _issueEntities = new();
+    private List<IssueCardSample> _issueCards = new();
+    private List<IssueCardSample> _specialCards = new();
+    private IReadOnlyList<VirtualTagDefinition> _virtualTags = Array.Empty<VirtualTagDefinition>();
+
+    /// <summary>The List view's header row, one cell per visible column - resize and reorder drags act on these.</summary>
+    public ObservableCollection<DetailListHeaderCell> IssueHeaderCells { get; } = new();
+
+    public void InitializeListLayouts(ListLayoutService? service)
+    {
+        ListLayouts = new ListLayoutsViewModel(this, service, post: action => Dispatcher.UIThread.Post(action));
+        ListLayouts.AssignmentsChanged += ReapplyLayoutForSeries;
+        if (ListLayouts.Initialize() is { } json)
+            ListLayouts.ApplyWithoutTracking(() => ApplyLayoutJson(json));
+        ListLayouts.MarkApplied();
+    }
+
+    /// <summary>Re-reads which layout the shown series uses (its own, else the default) and shows it.</summary>
+    private void ReapplyLayoutForSeries()
+    {
+        if (ListLayouts is null)
+        {
+            return;
+        }
+
+        _seriesHasOwnLayout = _seriesId is int id && ListLayouts.HasAssignment(ListLayoutsViewModel.SeriesKey(id));
+        if (ListLayouts.ResolveForSelection() is { } json)
+        {
+            ListLayouts.ApplyWithoutTracking(() => ApplyLayoutJson(json));
+        }
+    }
+
+    public DetailListOptionsViewModel CreateDetailListOptions(Action close) =>
+        DetailListOptionsViewModel.ForComic(_detailLayoutState, _virtualTags, state =>
+        {
+            _detailLayoutState = state;
+            IssueViewMode = state.ViewMode;
+            RenderIssueLayout();
+            ListLayouts.TrackChange();
+        }, close);
+
+    public void ApplyLayoutJson(string json)
+    {
+        _detailLayoutState = DetailListLayoutStateJson.Deserialize(json, manga: false);
+        IssueViewMode = _detailLayoutState.ViewMode;
+        RenderIssueLayout();
+    }
+
+    /// <summary>Header drag: a column's new width, committed on release.</summary>
+    public void SetIssueColumnWidth(string field, double width)
+    {
+        var columns = (_detailLayoutState.ComicColumns ?? DetailListLayoutState.ComicDefault.ComicColumns!)
+            .Select(c => c.Field == field ? c with { Width = width } : c).ToList();
+        _detailLayoutState = DetailListLayoutStateJson.Normalize(_detailLayoutState with { ComicColumns = columns });
+        RenderIssueLayout();
+        ListLayouts?.TrackChange();
+    }
+
+    /// <summary>Header drag: moves a column in front of (dragging left) or behind (dragging right) another one.</summary>
+    public void MoveIssueColumn(string field, string targetField)
+    {
+        _detailLayoutState = _detailLayoutState with
+        {
+            ComicColumns = DetailColumnMoves.Move(_detailLayoutState.ComicColumns ?? DetailListLayoutState.ComicDefault.ComicColumns!, field, targetField),
+        };
+        RenderIssueLayout();
+        ListLayouts?.TrackChange();
+    }
+
+    /// <summary>Re-sorts, re-groups and re-dresses every card for the current layout, without reloading the series.</summary>
+    private void RenderIssueLayout()
+    {
+        foreach (var card in _issueCards.Concat(_specialCards))
+        {
+            ConfigureIssueCard(card);
+        }
+
+        IssueHeaderCells.Clear();
+        foreach (var cell in DetailLayoutRendering.HeaderCells(_detailLayoutState.ComicColumns ?? DetailListLayoutState.ComicDefault.ComicColumns!, manga: false))
+        {
+            IssueHeaderCells.Add(cell);
+        }
+
+        var comparer = DetailLayoutRendering.Comparer(_detailLayoutState.SortField, _detailLayoutState.SortVirtualTagId,
+            _detailLayoutState.SortDirection, _virtualTags);
+
+        Specials.Clear();
+        foreach (var card in SortCards(_specialCards, comparer))
+        {
+            Specials.Add(card);
+        }
+
+        Issues.Clear();
+        IssueGroups.Clear();
+        foreach (var group in GroupCards(SortCards(_issueCards, comparer)))
+        {
+            IssueGroups.Add(group);
+            foreach (var card in group.Items)
+            {
+                Issues.Add(card);
+            }
+        }
+    }
+
+    private static List<IssueCardSample> SortCards(IEnumerable<IssueCardSample> cards, Comparison<IssueListRow> comparer)
+    {
+        var list = cards.ToList();
+        if (list.All(c => c.Row is not null))
+        {
+            list.Sort((a, b) => comparer(a.Row!, b.Row!));
+        }
+
+        return list;
+    }
+
+    /// <summary>Run (the default: one section per volume, "{writer} ({volume})" headers, runs in their own order), None, or a Library group field.</summary>
+    private IEnumerable<IssueRunGroup> GroupCards(List<IssueCardSample> sorted)
+    {
+        string groupBy = _detailLayoutState.GroupBy;
+        if (groupBy == DetailGrouping.None || sorted.Count == 0)
+        {
+            var single = new IssueRunGroup();
+            foreach (var card in sorted) single.Items.Add(card);
+            yield return single;
+            yield break;
+        }
+
+        if (DetailLayoutRendering.Grouping(groupBy, _virtualTags) is { } grouping && sorted.All(c => c.Row is not null))
+        {
+            foreach (var bucket in sorted.GroupBy(c => grouping.GroupKey(c.Row!)).OrderBy(g => g.Key, Comparer<string>.Create(grouping.GroupOrder)))
+            {
+                var group = new IssueRunGroup { Header = bucket.Key };
+                foreach (var card in bucket) group.Items.Add(card);
+                yield return group;
+            }
+
+            yield break;
+        }
+
+        // Run: the volume order OrderByRun gives, each run's own cards in the layout's sort.
+        var runOrder = _issueEntities.Values.Where(i => !i.IsSpecial()).OrderByRun()
+            .Select(i => i.EffectiveVolume()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        bool headed = runOrder.Count > 1;
+        foreach (string? volume in runOrder)
+        {
+            var runIssues = _issueEntities.Values.Where(i => !i.IsSpecial() && string.Equals(i.EffectiveVolume(), volume, StringComparison.OrdinalIgnoreCase));
+            var group = new IssueRunGroup
+            {
+                Header = headed && volume is not null ? RunHeaderFor(runIssues.GroupBy(i => i.EffectiveVolume(), StringComparer.OrdinalIgnoreCase).First()) : null,
+            };
+            foreach (var card in sorted.Where(c => _issueEntities.TryGetValue(c.Id, out var issue) && string.Equals(issue.EffectiveVolume(), volume, StringComparison.OrdinalIgnoreCase)))
+            {
+                group.Items.Add(card);
+            }
+
+            yield return group;
+        }
+    }
+
     /// <summary>The Issues tab's "Missing Issues (n)" section (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 7). Its own view model so this class doesn't grow further.</summary>
     public SeriesMissingIssuesViewModel Missing { get; }
 
@@ -133,6 +308,11 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     public bool ShowTabStrip { get; set; } = true;
 
     public ObservableCollection<IssueCardSample> Issues { get; }
+
+    public void SetReadingIssueId(int? issueId)
+    {
+        foreach (var issue in Issues.Concat(Specials)) issue.IsReadingNow = issueId == issue.Id;
+    }
 
     /// <summary>
     /// Same cards as <see cref="Issues"/>, partitioned into run groups by <see cref="Issue.Volume"/>
@@ -289,32 +469,31 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         Specials.Clear();
         _selection.Clear();
 
+        using (var tagContext = _contextFactory())
+        {
+            _virtualTags = tagContext.VirtualTagDefinitions.Where(t => t.IsEnabled).OrderBy(t => t.SortOrder).ToList();
+        }
+
         // Specials are pulled fully out of the numbered flow (docs/superpowers/specs/2026-08-28-
-        // series-detail-specials-tab-design.md) - not duplicated into Issues/IssueGroups, and not
-        // volume-grouped (a handful of one-shots/omnibuses doesn't need a run separator).
-        foreach (var issue in series.Issues.Where(i => i.IsSpecial()).OrderByNumber())
-        {
-            Specials.Add(BuildIssueCard(issue, series.Id, coverBrush));
-        }
-        OnPropertyChanged(nameof(HasSpecials));
+        // series-detail-specials-tab-design.md) - not duplicated into Issues/IssueGroups, and never
+        // grouped (a handful of one-shots/omnibuses doesn't need a separator); they share the layout's sort.
+        _issueEntities = series.Issues.ToDictionary(i => i.Id);
+        _specialCards = series.Issues.Where(i => i.IsSpecial()).OrderByNumber().Select(i => BuildIssueCard(i, series, coverBrush)).ToList();
+        _issueCards = series.Issues.Where(i => !i.IsSpecial()).OrderByRun().Select(i => BuildIssueCard(i, series, coverBrush)).ToList();
 
-        var orderedIssues = series.Issues.Where(i => !i.IsSpecial()).OrderByRun().ToList();
-        int distinctVolumes = orderedIssues.Select(i => i.EffectiveVolume()).Distinct(StringComparer.OrdinalIgnoreCase).Count();
-
-        foreach (var runOfIssues in orderedIssues.GroupBy(i => i.EffectiveVolume(), StringComparer.OrdinalIgnoreCase))
-        {
-            var group = new IssueRunGroup { Header = distinctVolumes > 1 && runOfIssues.Key is not null ? RunHeaderFor(runOfIssues) : null };
-            foreach (var issue in runOfIssues)
-            {
-                var card = BuildIssueCard(issue, series.Id, coverBrush);
-                Issues.Add(card);
-                group.Items.Add(card);
-            }
-
-            IssueGroups.Add(group);
-        }
-
+        // A series with its own detail layout shows it; every other series shows the comic default.
         _seriesId = series.Id;
+        bool ownLayout = ListLayouts is not null && ListLayouts.HasAssignment(ListLayoutsViewModel.SeriesKey(series.Id));
+        if (ListLayouts is not null && (ownLayout || _seriesHasOwnLayout))
+        {
+            ReapplyLayoutForSeries();
+        }
+        else
+        {
+            RenderIssueLayout();
+        }
+
+        OnPropertyChanged(nameof(HasSpecials));
         SeriesMetaFields seriesFields = SeriesMetaFields.FromSeries(series);
         Publisher = seriesFields.Publisher ?? "Unknown";
         PublisherYear = seriesFields.YearValue;
@@ -323,7 +502,15 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(Publisher));
         OnPropertyChanged(nameof(PublisherYear));
 
-        RefreshCreditRoles(series.Issues);
+        // A confirmed manga series shows its own credits (design D2/§6.4), not whoever happens to be credited on some chapter; everything else keeps the aggregate.
+        if (IsMangaDetailHost && series.CanonicalReviewVersion > 0)
+        {
+            RefreshCreditRolesFromSeries(series);
+        }
+        else
+        {
+            RefreshCreditRoles(series.Issues);
+        }
         RefreshAdditionalDetails(series.Issues);
 
         ComicScraperDetailView = ScraperPanelFactory?.Invoke(series) ?? _pluginHost?.GetSeriesDetailExtension(series);
@@ -357,6 +544,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         TrackerSearchQuery = string.Empty;
         TrackerSearchResults.Clear();
         TrackerSyncStatus = null;
+        TrackerSyncErrorDetail = null;
 
         ActiveTab = ShowIssuesTab ? "issues" : "related";
         ActiveDetailsSubTab = "info";
@@ -475,6 +663,32 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(ShowCreditRoles));
     }
 
+    /// <summary>The credit roles of a confirmed manga series, from its <see cref="SeriesCredit"/> rows (<see cref="Series.Credits"/> must be loaded). Translator is a chapter's own, so it stays an aggregate.</summary>
+    private void RefreshCreditRolesFromSeries(Series series)
+    {
+        CreditRoles.Clear();
+        foreach (var (label, role) in new[]
+        {
+            ("Writer", "Writer"), ("Penciller", "Penciller"), ("Inker", "Inker"), ("Colorist", "Colorist"),
+            ("Letterer", "Letterer"), ("Cover Artist", "CoverArtist"), ("Editor", "Editor"),
+        })
+        {
+            var names = series.Credits.Where(c => c.Role == role).OrderBy(c => c.SortOrder).Select(c => c.Name).ToList();
+            if (names.Count == 0)
+            {
+                continue;
+            }
+
+            var chips = new ObservableCollection<TagPillViewModel>(
+                names.Select(v => new TagPillViewModel(v, category: null, IssueTagWeight.Unset, _goLibraryWithSearch, reweight: null)));
+            CreditRoles.Add(new CreditRoleGroup(label, chips));
+        }
+
+        AddCreditRole("Translator", TranslatorField, series.Issues);
+        OnPropertyChanged(nameof(HasCreditRoles));
+        OnPropertyChanged(nameof(ShowCreditRoles));
+    }
+
     private void AddCreditRole(string label, BulkFieldDescriptor field, IReadOnlyList<Issue> issues)
     {
         var values = CsvFieldAggregator.Distinct(issues.Select(field.Get));
@@ -500,9 +714,24 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         // Not in BulkFieldRegistry - CE deliberately excludes StoryArcNumber from the bulk editor
         // (see BulkFieldDescriptor.cs), so this is a direct property read rather than Find(...).Get.
         AddDetailField("Story Arc Number", i => i.StoryArcNumber, issues);
+        if (_seriesId is int seriesId)
+        {
+            using var context = _contextFactory();
+            // Show only facts for the currently linked identity, never a previous match's snapshot.
+            var snapshots = (from snapshot in context.ExternalMetadataSnapshots.AsNoTracking()
+                             join link in context.ExternalMediaIds on
+                                 new { snapshot.SeriesId, snapshot.Provider, snapshot.ExternalId } equals
+                                 new { link.SeriesId, link.Provider, link.ExternalId }
+                             where snapshot.SeriesId == seriesId
+                             select snapshot).ToList();
+            foreach (var row in ProviderReportedDetails.Read(snapshots))
+                AdditionalDetails.Add(new DetailFieldRow(row.Label, row.Value, false));
+        }
         OnPropertyChanged(nameof(HasAdditionalDetails));
         OnPropertyChanged(nameof(ShowAdditionalDetails));
     }
+
+    private static readonly char[] WebSeparators = [' ', '\t', '\n', '\r', ';'];
 
     private void AddDetailField(string label, Func<Issue, string?> get, IReadOnlyList<Issue> issues, bool isLinkCandidate = false)
     {
@@ -512,17 +741,34 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
+        if (isLinkCandidate)
+        {
+            // A series whose chapters each carry their own address (or several, space-separated) is a row per distinct address, not one run-on blob.
+            var addresses = values.SelectMany(v => v.Split(WebSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (addresses.Count > 1 && addresses.All(a => a.StartsWith("http", StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (string address in addresses)
+                {
+                    AdditionalDetails.Add(new DetailFieldRow(label, address, true));
+                }
+
+                return;
+            }
+        }
+
         string joined = string.Join(", ", values);
         bool isLink = isLinkCandidate && values.Count == 1;
         AdditionalDetails.Add(new DetailFieldRow(label, joined, isLink));
     }
 
-    private static IssueCardSample BuildIssueCard(Issue issue, int seriesId, IBrush coverBrush)
+    private IssueCardSample BuildIssueCard(Issue issue, Series series, IBrush coverBrush)
     {
+        int seriesId = series.Id;
         double readFraction = issue.PageCount is int pc and > 0 && issue.LastPageRead is int lpr and > 0
             ? System.Math.Clamp((double)lpr / pc, 0, 1)
             : issue.HasBeenRead() ? 1 : 0;
-        return new IssueCardSample
+        var card = new IssueCardSample
         {
             Id = issue.Id,
             SeriesId = seriesId,
@@ -541,7 +787,35 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             IsRead = issue.HasBeenRead(),
             ReadFraction = readFraction,
             Format = issue.Format,
+            Row = IssueListRow.FromIssue(issue, series, isSelected: null, _virtualTags),
+            CoverAspect = issue.CoverAspectRatio ?? CoverAspectRatioStore.Get(issue.Id) ?? SeriesCardSample.DefaultCoverAspectRatio,
         };
+        ConfigureIssueCard(card);
+        return card;
+    }
+
+    /// <summary>Dresses one card for the current layout: captions and overlays, card text, cover size and List cells.</summary>
+    private void ConfigureIssueCard(IssueCardSample card)
+    {
+        var state = _detailLayoutState;
+        card.CaptionLines = DetailLayoutRendering.CaptionLines(state, card.Row);
+        card.ShowPosterStatus = state.ShowReadOverlay;
+        card.ShowPosterEdition = state.ShowEditionOverlay;
+        card.ShowCardStatus = state.ShowCardStatus;
+        (card.CardHeadline, card.CardSecondLine) = DetailLayoutRendering.CardText(state, card.Row, card.IsInProgress);
+        (card.PosterCoverWidth, card.PosterCoverHeight) = DetailLayoutRendering.CoverSize(state.CoverFit, 92, 131, card.CoverAspect);
+        (card.CardCoverWidth, card.CardCoverHeight) = DetailLayoutRendering.CoverSize(state.CoverFit, 54, 80, card.CoverAspect);
+
+        card.ListCells.Clear();
+        foreach (var column in state.ComicColumns ?? DetailListLayoutState.ComicDefault.ComicColumns!)
+        {
+            if (!column.Visible) continue;
+            card.ListCells.Add(DetailLayoutRendering.CatalogCell(column, card.Row, manga: false)
+                ?? new DetailListCell(column.Field, card.IsRead ? "Read" : card.IsInProgress ? "In progress" : "Unread", column.Width,
+                    DetailListFieldKind.Status, DetailColumnKeys.DisplayName(column.Field, manga: false)));
+        }
+
+        card.RefreshLayoutBindings();
     }
 
     /// <summary>
@@ -948,11 +1222,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     private string? _continuityLookupResult;
 
     /// <summary>
-    /// On-demand Phase 2 trigger (docs/superpowers/specs/2026-09-17-storyevent-continuity-
-    /// autopopulate-design.md) - scoped Wikidata check for just this series via
-    /// <see cref="ContinuityWikidataMatchResolver.GetSuggestionsAsync"/>'s <c>onlySeriesId</c>
-    /// parameter. Links immediately on a match rather than opening a review queue, since this is
-    /// already an explicit single-series action.
+    /// On-demand Metron trigger (comic detail only): reads the universes of a few of this series' issues on Metron and files the series under them (<see cref="Paperbunkr.Data.Metadata.ContinuityMetronSeriesLookup"/>).
+    /// Links immediately rather than opening a review queue, since this is already an explicit single-series action.
     /// </summary>
     [RelayCommand]
     private async Task LookUpContinuity()
@@ -962,29 +1233,26 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        ContinuityLookupResult = "Checking Wikidata…";
         using var context = _contextFactory();
-        using var httpClient = WikidataClient.CreateClient();
-        var client = new WikidataClient(httpClient);
-        var suggestions = await ContinuityWikidataMatchResolver.GetSuggestionsAsync(context, client, CancellationToken.None, onlySeriesId: currentSeriesId);
-
-        var suggestion = suggestions.FirstOrDefault();
-        if (suggestion is null)
+        var provider = Paperbunkr.Data.ComicVine.ComicProviderFactory.Create(context, Paperbunkr.Data.Entities.ComicProvider.Metron);
+        if (provider is null)
         {
-            ContinuityLookupResult = "No shared-universe match found on Wikidata for this series.";
+            ContinuityLookupResult = Paperbunkr.Data.ComicVine.ComicProviderFactory.MissingCredentialsMessage(Paperbunkr.Data.Entities.ComicProvider.Metron);
             return;
         }
 
-        var continuity = ContinuityResolver.GetOrCreate(context, suggestion.UniverseLabel);
-        continuity.WikidataId ??= suggestion.WikidataQid;
-        continuity.FandomKey ??= suggestion.FandomKey;
-        continuity.Description ??= suggestion.UniverseDescription;
-        context.SaveChanges();
-        ContinuityResolver.AddSeriesToContinuity(context, currentSeriesId, continuity.Id);
-        continuity.Publisher ??= ContinuityResolver.InferPublisher(context, continuity.Id);
-        context.SaveChanges();
+        ContinuityLookupResult = "Checking Metron…";
+        Paperbunkr.Data.Metadata.MetronUniverseLookupResult result;
+        try
+        {
+            result = await Paperbunkr.Data.Metadata.ContinuityMetronSeriesLookup.RunAsync(context, currentSeriesId, provider, CancellationToken.None);
+        }
+        finally
+        {
+            (provider as IDisposable)?.Dispose();
+        }
 
-        ContinuityLookupResult = $"Added to \"{continuity.Name}\".";
+        ContinuityLookupResult = result.Describe();
         RefreshContinuity(context, currentSeriesId);
     }
 
@@ -1149,6 +1417,9 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>Where Reveal in Explorer reports a file that's no longer on disk. Set by <see cref="MainViewModel"/> after construction; null (tests) = no alert.</summary>
     public IActivityService? ActivityCenter { get; set; }
+
+    /// <summary>Raised with the series id after a provider link wrote to the series. The manga screen uses it to queue the chapters the link changed for their files (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §10).</summary>
+    public Action<int>? SeriesMetadataLinked { get; set; }
 
     /// <summary>Backing collection for the Activity tab - see <see cref="RefreshActivity"/>.</summary>
     public ObservableCollection<ActivitySample> Activity { get; }
@@ -1490,6 +1761,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         RefreshExternalLinks(context, currentSeriesId);
         SeriesActivityLog.Record(context, currentSeriesId, SeriesActivityEventKind.MetadataLinked, SelectedMetadataProvider.Label);
         context.SaveChanges();
+        RefreshAdditionalDetails(context.Issues.AsNoTracking().Where(i => i.SeriesId == currentSeriesId).ToList());
+        SeriesMetadataLinked?.Invoke(currentSeriesId);
 
         // Deferred: this command is bound to the row's own "Link" Button, which lives inside
         // MetadataSearchResults - clearing that collection removes the very row still routing this
@@ -1525,6 +1798,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             context.SaveChanges();
         }
 
+        RefreshAdditionalDetails(context.Issues.AsNoTracking().Where(i => i.SeriesId == currentSeriesId).ToList());
         RefreshExternalLinks(context, currentSeriesId);
     }
 
@@ -1549,16 +1823,9 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         }
 
         using var context = _contextFactory();
-        // Same effective-cover fallback the tiles/hero use (SeriesCardSample.FromSeries) - a series
-        // never given an explicit CoverIssueId still displays its first issue's cover, so applying a
-        // provider cover must target that same issue instead of refusing.
-        var series = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == currentSeriesId);
-        int? effectiveCoverIssueId = series is null
-            ? null
-            : (series.Issues.FirstOrDefault(i => i.Id == series.CoverIssueId) ?? series.Issues.OrderByNumber().FirstOrDefault())?.Id;
-        if (effectiveCoverIssueId is not int coverIssueId)
+        if (!context.Series.Any(s => s.Id == currentSeriesId))
         {
-            CoverApplyStatus = "This series has no issues to apply a cover to.";
+            CoverApplyStatus = "This series is no longer available.";
             return;
         }
 
@@ -1571,8 +1838,9 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         }
 
         byte[]? bytes = await ProviderCoverCandidateCache.DownloadBytesAsync(coverImageUrl, CancellationToken.None);
-        bool applied = bytes is not null && new CoverThumbnailService().TrySetCustomCoverFromBytes(coverIssueId, bytes);
+        bool applied = bytes is not null && new SeriesCoverService().TrySetCustomCoverFromBytes(currentSeriesId, bytes);
         CoverApplyStatus = applied ? "Cover updated." : "Couldn't download that cover. Try again later.";
+        if (applied) _onSeriesCoverChanged?.Invoke();
     }
 
     // --- Details tab: tracker linking + sync (docs/superpowers/specs/2026-08-23-tracker-write-
@@ -1662,6 +1930,14 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
     [ObservableProperty]
     private string? _trackerSyncStatus;
+
+    /// <summary>The trackers' own error replies from the last sync, shown behind "Details" under a plain-language failure line
+    /// (2026-10-19 dialog/error pass: a raw JSON 404 used to be the message itself). Null when nothing failed.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTrackerSyncError))]
+    private string? _trackerSyncErrorDetail;
+
+    public bool HasTrackerSyncError => !string.IsNullOrEmpty(TrackerSyncErrorDetail);
 
     public ObservableCollection<TrackerMatchSample> TrackerSearchResults { get; } = new();
 
@@ -2059,6 +2335,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         var pulled = new List<string>();
         var pushed = new List<string>();
         var failed = new List<string>();
+        var failedDetail = new List<string>();
         foreach (var link in series.TrackingLinks)
         {
             bool isConnected = TrackerAdapterFactory.IsConnected(context, link.Service);
@@ -2099,7 +2376,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             }
             else
             {
-                failed.Add($"{link.Service} ({errorDetail})");
+                failed.Add(link.Service.ToString());
+                failedDetail.Add($"{link.Service}: {errorDetail}");
             }
         }
 
@@ -2121,8 +2399,9 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         {
             string pulledSummary = pulled.Count > 0 ? $"Pulled from {string.Join(", ", pulled)}. " : string.Empty;
             string pushedSummary = pushed.Count > 0 ? $"Synced to {string.Join(", ", pushed)}." : string.Empty;
-            string failureSummary = failed.Count > 0 ? $" {string.Join(", ", failed)} sync failed, try again later." : string.Empty;
+            string failureSummary = failed.Count > 0 ? $" {string.Join(", ", failed)} couldn't sync. Try again later." : string.Empty;
             TrackerSyncStatus = (pulledSummary + pushedSummary + failureSummary).Trim();
+            TrackerSyncErrorDetail = failedDetail.Count > 0 ? string.Join(Environment.NewLine, failedDetail) : null;
 
             // A failed-only sync changed nothing about the series worth recording in its history.
             if (pulled.Count > 0 || pushed.Count > 0)
@@ -2137,16 +2416,76 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     {
         // The disclosure caret is a real fi:SymbolIcon in the view now, not a text glyph
         // (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-design.md §5).
-        ReadingModeLabel = mode switch
-        {
-            ReadingMode.RightToLeft => "Right to Left",
-            ReadingMode.TopToBottom => "Vertical",
-            ReadingMode.VerticalContinuous => "Vertical (Continuous)",
-            ReadingMode.HorizontalContinuous => "Horizontal (Continuous)",
-            _ => "Left to Right",
-        };
+        // One list of names for the reader, this screen and Edit Series (ReadingModeCatalog); this used to miss Webtoon and the RTL strip and call them "Left to Right".
+        _readingMode = mode;
+        ReadingModeLabel = ReadingModeCatalog.LabelFor(mode);
         OnPropertyChanged(nameof(ReadingModeLabel));
+        OnPropertyChanged(nameof(ReadingModeText));
+        OnPropertyChanged(nameof(ReadingModeDescription));
     }
+
+    private ReadingMode _readingMode;
+
+    /// <summary>Every reading mode, by the name the reader uses, for the picker on the Info card.</summary>
+    public string[] ReadingModeOptions => ReadingModeCatalog.Labels;
+
+    /// <summary>One line saying what the chosen mode does.</summary>
+    public string ReadingModeDescription => ReadingModeCatalog.DescriptionFor(_readingMode);
+
+    /// <summary>The picker's text: reading it gives the current mode's name, setting it to one of the names changes the series' mode. Anything else is ignored.</summary>
+    public string ReadingModeText
+    {
+        get => ReadingModeLabel;
+        set
+        {
+            if (ReadingModeCatalog.FromLabel(value) is ReadingMode picked)
+            {
+                ApplyReadingMode(picked);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sets the series' reading mode to any of the seven modes (the reader supports them all; this screen used to flip only between left-to-right and right-to-left). A manga series' files
+    /// record only right-to-left or not, so its chapters are marked as owing a write when that part changes, and <see cref="SeriesMetadataLinked"/> lets the screen queue them.
+    /// </summary>
+    private void ApplyReadingMode(ReadingMode mode)
+    {
+        if (_seriesId is not int seriesId || mode == _readingMode)
+        {
+            return;
+        }
+
+        bool queueFiles = false;
+        using (var context = _contextFactory())
+        {
+            var series = context.Series.FirstOrDefault(s => s.Id == seriesId);
+            if (series is null)
+            {
+                return;
+            }
+
+            bool flagChanged = ReadingModeCatalog.IsRightToLeft(series.ReadingMode) != ReadingModeCatalog.IsRightToLeft(mode);
+            series.ReadingMode = mode;
+            if (flagChanged && series.EmbeddedSyncEnabled && Paperbunkr.Data.Metadata.Manga.MangaInheritedFields.IsMangaFamily(series.ContentType))
+            {
+                context.Issues.Where(i => i.SeriesId == seriesId).ExecuteUpdate(s => s.SetProperty(i => i.EmbeddedDirty, true));
+                queueFiles = true;
+            }
+
+            context.SaveChanges();
+        }
+
+        SetReadingModeLabel(mode);
+        ReadingModeChanged?.Invoke(mode);
+        if (queueFiles)
+        {
+            SeriesMetadataLinked?.Invoke(seriesId);
+        }
+    }
+
+    /// <summary>Raised after the picker changed the series' reading mode, so a host showing the mode elsewhere (the manga header badge) can follow.</summary>
+    public Action<ReadingMode>? ReadingModeChanged { get; set; }
 
     /// <summary>
     /// Binary flip only (docs/superpowers/specs/2026-08-07-reader-rtl-navigation-design.md §5) -
@@ -2641,7 +2980,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         }
     }
 
-    private static void SwapReadStateTile(ObservableCollection<IssueCardSample> tiles, Issue updated)
+    private void SwapReadStateTile(ObservableCollection<IssueCardSample> tiles, Issue updated)
     {
         int index = tiles.ToList().FindIndex(card => card.Id == updated.Id);
         if (index < 0)
@@ -2650,7 +2989,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         }
 
         var old = tiles[index];
-        tiles[index] = new IssueCardSample
+        var replacement = new IssueCardSample
         {
             Id = old.Id,
             SeriesId = old.SeriesId,
@@ -2665,10 +3004,13 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             ArcTitle = old.ArcTitle,
             CoverDate = old.CoverDate,
             Rating = old.Rating,
+            Format = old.Format,
             IsRead = updated.HasBeenRead(),
             ReadFraction = updated.HasBeenRead() ? 1 : updated.LastPageRead is null or 0 ? 0 : old.ReadFraction,
             IsSelected = old.IsSelected,
         };
+        ConfigureIssueCard(replacement);
+        tiles[index] = replacement;
     }
 
     // --- Cover art override (docs/superpowers/specs/2026-08-23-cover-art-override-design.md),
@@ -2726,7 +3068,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             .FirstOrDefault();
 
         var old = Issues[index];
-        Issues[index] = new IssueCardSample
+        var replacement = new IssueCardSample
         {
             Id = old.Id,
             SeriesId = old.SeriesId,
@@ -2741,10 +3083,13 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             ArcTitle = old.ArcTitle,
             CoverDate = old.CoverDate,
             Rating = old.Rating,
+            Format = old.Format,
             IsRead = old.IsRead,
             ReadFraction = old.ReadFraction,
             IsSelected = old.IsSelected,
         };
+        ConfigureIssueCard(replacement);
+        Issues[index] = replacement;
     }
 
     // ===================================================================================
@@ -2765,6 +3110,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(IsPosterView));
         OnPropertyChanged(nameof(IsListView));
         OnPropertyChanged(nameof(IsCardView));
+        _detailLayoutState = _detailLayoutState with { ViewMode = value };
+        ListLayouts?.TrackChange();
     }
 
     [RelayCommand]

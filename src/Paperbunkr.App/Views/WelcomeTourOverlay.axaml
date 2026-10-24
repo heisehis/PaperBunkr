@@ -20,13 +20,13 @@
             <Border x:Name="Callout" Width="280" Classes="floatingPanel" Padding="18,16">
                 <StackPanel Spacing="10">
                     <TextBlock Text="{Binding CurrentStep.Title}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                    <TextBlock Text="{Binding CurrentStep.Body}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding CurrentStep.Body}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
                     <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,4,0,0">
-                        <Button Grid.Column="0" Classes="discardConfirm ghost" Content="Skip" Command="{Binding SkipCommand}"
+                        <Button Grid.Column="0" Classes="danger ghost" Content="Skip" Command="{Binding SkipCommand}"
                                 AutomationProperties.AutomationId="WelcomeTourSkip" />
-                        <Button Grid.Column="2" Classes="discardConfirm ghost" Content="Back" Command="{Binding BackCommand}"
+                        <Button Grid.Column="2" Classes="danger ghost" Content="Back" Command="{Binding BackCommand}"
                                 IsVisible="{Binding !IsFirstStep}" Margin="0,0,8,0" />
-                        <Button Grid.Column="3" Classes="discardConfirm primary" Command="{Binding NextCommand}"
+                        <Button Grid.Column="3" Classes="danger primary" Command="{Binding NextCommand}"
                                 AutomationProperties.AutomationId="WelcomeTourNext">
                             <Panel>
                                 <TextBlock Text="Next" IsVisible="{Binding !IsLastStep}" />

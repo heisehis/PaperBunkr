@@ -16,7 +16,8 @@
         <Setter Property="MarkSize" Value="22" />
         <Setter Property="MaxMarkWidth" Value="54" />
         <Setter Property="EnsureContrast" Value="True" />
-        <Setter Property="Margin" Value="7" />
+        <!-- 6 px from the cover edge, the same inset as the count/rating/read pills in the other corners (2026-10-20 Library pass Q4). -->
+        <Setter Property="Margin" Value="6" />
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="VerticalAlignment" Value="Top" />
         <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
@@ -44,7 +45,7 @@
                              its own pixels (PlateBrush null = opaque image, no plate). Small squircle
                              radius, not an oval (feedback: no oval pills). -->
                         <Border IsVisible="{TemplateBinding IsPlatedImage}" VerticalAlignment="Center"
-                                CornerRadius="4" Padding="1.5" ClipToBounds="True"
+                                CornerRadius="{DynamicResource PbRadiusSm}" Padding="1.5" ClipToBounds="True"
                                 Background="{TemplateBinding PlateBrush}">
                             <Image Source="{TemplateBinding ImageSource}"
                                    Height="{TemplateBinding MarkHeight}" Stretch="Uniform"
@@ -58,15 +59,15 @@
                                        IsVisible="{TemplateBinding IsGlyph}" />
 
                         <Border IsVisible="{TemplateBinding IsChip}" VerticalAlignment="Center"
-                                CornerRadius="3" Padding="5,1"
+                                CornerRadius="{DynamicResource PbRadiusSm}" Padding="5,1"
                                 Background="{Binding ChipBackground, RelativeSource={RelativeSource TemplatedParent}, TargetNullValue={DynamicResource PbSurface3Brush}}"
                                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
-                            <TextBlock Text="{TemplateBinding Label}" FontSize="9.5" FontWeight="Bold"
+                            <TextBlock Text="{TemplateBinding Label}" FontSize="10" FontWeight="Bold"
                                        Foreground="{DynamicResource PbTextBrush}" />
                         </Border>
 
                         <TextBlock Text="{TemplateBinding Label}" VerticalAlignment="Center"
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                    IsVisible="{TemplateBinding ShowLabel}" />
 
                         <TextBlock Text="{TemplateBinding Label}" VerticalAlignment="Center"

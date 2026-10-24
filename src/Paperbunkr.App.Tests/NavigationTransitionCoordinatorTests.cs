@@ -35,14 +35,27 @@ public class NavigationTransitionCoordinatorTests
             LastCaptureKey = key;
         }
 
+        /// <summary>When set, a flight stays in the air until its token is cancelled (to test supersession).</summary>
+        public bool HoldFlights;
+        public int CancelCount;
+        public readonly List<CancellationToken> FlightTokens = new();
+
         public Task<bool> FlyToIncomingAsync(string key, TimeSpan duration, Easing easing, CancellationToken cancellationToken)
         {
             FlyCount++;
             LastFlyKey = key;
-            return Task.FromResult(FlyResult);
+            FlightTokens.Add(cancellationToken);
+            if (!HoldFlights)
+            {
+                return Task.FromResult(FlyResult);
+            }
+
+            var landed = new TaskCompletionSource<bool>();
+            cancellationToken.Register(() => landed.TrySetResult(false));
+            return landed.Task;
         }
 
-        public void Cancel() { }
+        public void Cancel() => CancelCount++;
     }
 
     private static NavigationTransitionCoordinator CreateCoordinator(FakeSharedElementService service, bool reducedMotion = false) =>
@@ -105,5 +118,36 @@ public class NavigationTransitionCoordinatorTests
         Assert.True(swapRan);
         Assert.Equal(1, service.CaptureCount);
         Assert.Equal(1, service.FlyCount);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-10-20-motion-system-v2-navigation-design.md §3.3: a newer navigation cancels the older flight
+    /// (its token, and the service's clone) before doing anything else.</summary>
+    [Fact]
+    public async Task RunAsync_ANewerNavigation_CancelsTheFlightStillInTheAir()
+    {
+        var previous = Paperbunkr.App.Theming.Motion.MotionPolicy.Preference;
+        Paperbunkr.App.Theming.Motion.MotionPolicy.SetPreference(Paperbunkr.Data.Entities.MotionPreferenceMode.Full);
+        try
+        {
+            var service = new FakeSharedElementService { HoldFlights = true };
+            var coordinator = CreateCoordinator(service);
+
+            var first = coordinator.RunAsync("cover:1", () => { });
+            Assert.False(first.IsCompleted);
+            int cancelsBefore = service.CancelCount;
+
+            var second = coordinator.RunAsync("cover:2", () => { });
+
+            Assert.True(service.FlightTokens[0].IsCancellationRequested);
+            Assert.True(service.CancelCount > cancelsBefore);
+            await first;                                                                  // the superseded flight ends quietly
+            Assert.False(second.IsCompleted);
+            await coordinator.RunAsync(null, () => { });                                  // and a plain navigation cancels the second
+            await second;
+        }
+        finally
+        {
+            Paperbunkr.App.Theming.Motion.MotionPolicy.SetPreference(previous);
+        }
     }
 }

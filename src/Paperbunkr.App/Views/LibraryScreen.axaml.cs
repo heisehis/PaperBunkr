@@ -281,14 +281,18 @@ public partial class LibraryScreen : UserControl
 
     /// <summary>Wires <see cref="LibraryScreenViewModel.ScrollToIndexRequested"/> (docs/superpowers/
     /// specs/2026-09-04-navigation-transition-system-design.md's back-trip realization) to the same
-    /// view-mode-aware scroll dispatch <see cref="OnAlphabetIndexLetterClick"/> already uses. No
-    /// unsubscribe guard needed - <c>Library</c> is a single stable instance for this control's whole
-    /// lifetime (owned once by <c>MainViewModel</c>), matching <c>MainWindow.axaml.cs</c>'s own
-    /// <c>OnDataContextChanged</c> precedent.</summary>
+    /// view-mode-aware scroll dispatch <see cref="OnAlphabetIndexLetterClick"/> already uses.
+    /// <para>The handlers below are never unsubscribed, so they must be wired once: the shell's RouteHost keeps one LibraryScreen for
+    /// the app's lifetime (docs/superpowers/specs/2026-10-20-motion-system-v2-navigation-design.md §3.1 - the old host rebuilt this view
+    /// on every return and each copy stayed subscribed, leaking its whole tree), and <see cref="_wiredViewModel"/> stops a DataContext
+    /// that goes away and comes back from wiring the same view model twice.</para></summary>
+    private LibraryScreenViewModel? _wiredViewModel;
+
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (DataContext is LibraryScreenViewModel vm)
+        if (DataContext is LibraryScreenViewModel vm && !ReferenceEquals(vm, _wiredViewModel))
         {
+            _wiredViewModel = vm;
             vm.ScrollToIndexRequested += index => ScrollToIndex(index, vm);
 
             // A new search result set starts at its first row (docs/superpowers/specs/2026-09-19-
@@ -930,6 +934,12 @@ public partial class LibraryScreen : UserControl
 
     private void ShowHoverTooltip(Border coverBorder, IssueListRow row)
     {
+        // A series tile describes the series, not its first issue (2026-10-20 Library pass, Q2).
+        var series = coverBorder.DataContext as SeriesCardSample;
+        IssueHoverContent.DataContext = row;
+        IssueHoverContent.IsVisible = series is null;
+        SeriesHoverContent.DataContext = series;
+        SeriesHoverContent.IsVisible = series is not null;
         ComicHoverTooltipCard.DataContext = row;
         ComicHoverTooltipPopup.PlacementTarget = coverBorder;
         ComicHoverTooltipPopup.IsOpen = true;

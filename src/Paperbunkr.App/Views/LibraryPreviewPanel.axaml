@@ -20,7 +20,7 @@
     -->
     <UserControl.Styles>
         <Style Selector="TextBlock.heroTitle">
-            <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
+            <Setter Property="FontFamily" Value="{DynamicResource PbDisplayFontFamily}" />
             <Setter Property="FontSize" Value="30" />
             <Setter Property="LineHeight" Value="30" />
             <Setter Property="TextWrapping" Value="Wrap" />
@@ -32,14 +32,14 @@
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="TextBlock.previewSynopsis">
-            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="LineHeight" Value="18" />
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
         </Style>
         <Style Selector="TextBlock.kvKey">
             <Setter Property="FontSize" Value="12" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="TextBlock.kvValue">
             <Setter Property="FontSize" Value="12" />
@@ -61,23 +61,14 @@
         <Style Selector="WrapPanel.previewChips">
             <Setter Property="Orientation" Value="Horizontal" />
         </Style>
-        <Style Selector="Border.previewChip">
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
-            <Setter Property="Padding" Value="7,1" />
+        <Style Selector="Border.pbChip">
             <Setter Property="Margin" Value="0,0,6,6" />
         </Style>
-        <Style Selector="Border.previewChip.accent">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-        </Style>
-        <Style Selector="Border.previewChip TextBlock">
-            <Setter Property="FontSize" Value="10.5" />
+        <Style Selector="Border.pbChip TextBlock">
+            <Setter Property="FontSize" Value="10" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
-        <Style Selector="Border.previewChip.accent TextBlock">
+        <Style Selector="Border.pbChip.accent TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
         </Style>
         <Style Selector="Border.progressTrack">
@@ -110,7 +101,7 @@
         <Style Selector="TextBlock.sectionTitle">
             <Setter Property="FontSize" Value="10" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style Selector="Border.sectionRule">
@@ -121,7 +112,7 @@
         </Style>
         <Style Selector="TextBlock.sectionChevron">
             <Setter Property="FontSize" Value="10" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Text" Value="▸" />
         </Style>
@@ -130,33 +121,15 @@
         </Style>
         <Style Selector="TextBlock.sectionHint">
             <Setter Property="FontSize" Value="11" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         </Style>
 
-        <Style Selector="Button.previewAction">
-            <Setter Property="Padding" Value="11,6" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
-        </Style>
-        <Style Selector="Button.previewAction.primary">
-            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbBgBrush}" />
-        </Style>
-        <Style Selector="Button.previewAction.ghost">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        </Style>
         <Style Selector="Button.backLink">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="16,10,16,0" />
-            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
             <Setter Property="HorizontalAlignment" Value="Left" />
         </Style>
@@ -177,13 +150,13 @@
             <Setter Property="MinWidth" Value="34" />
             <Setter Property="Height" Value="28" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Margin" Value="0,0,5,5" />
-            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Margin" Value="0,0,4,4" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Stretch" />
             <Setter Property="Cursor" Value="Hand" />
@@ -263,11 +236,11 @@
 
                         <StackPanel Margin="16,12,16,16" DataContext="{Binding PreviewSeries}" x:DataType="models:SeriesCardSample">
                             <WrapPanel Classes="previewChips">
-                                <Border Classes="previewChip accent"><TextBlock Text="{Binding ContentTypeLabel}" /></Border>
-                                <Border Classes="previewChip" IsVisible="{Binding HasPublisher}"><TextBlock Text="{Binding Publisher}" /></Border>
-                                <Border Classes="previewChip" IsVisible="{Binding HasLanguage}"><TextBlock Text="{Binding LanguageIso}" /></Border>
+                                <Border Classes="pbChip accent"><TextBlock Text="{Binding ContentTypeLabel}" /></Border>
+                                <Border Classes="pbChip" IsVisible="{Binding HasPublisher}"><TextBlock Text="{Binding Publisher}" /></Border>
+                                <Border Classes="pbChip" IsVisible="{Binding HasLanguage}"><TextBlock Text="{Binding LanguageIso}" /></Border>
                                 <controls:SeriesStatusChip Status="{Binding SeriesStatusLabel}" Margin="0,0,6,6" />
-                                <Border Classes="previewChip" IsVisible="{Binding IsRightToLeft}"><TextBlock Text="Right to left" /></Border>
+                                <Border Classes="pbChip" IsVisible="{Binding IsRightToLeft}"><TextBlock Text="Right to left" /></Border>
                             </WrapPanel>
                             <ProgressBar Classes="previewProgress" Value="{Binding ReadFraction}" />
                             <TextBlock Text="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PreviewSeriesReadLabel}"
@@ -285,7 +258,7 @@
 
                         <!-- Issue strip: number chips that wrap (no sideways scrolling, however long the series). A click
                              drills into the issue; hover or keyboard focus shows its cover and title in the one shared popup below. -->
-                        <StackPanel Margin="16,0,16,11" IsVisible="{Binding !!PreviewSeriesIssueChips.Count}">
+                        <StackPanel Margin="16,0,16,12" IsVisible="{Binding !!PreviewSeriesIssueChips.Count}">
                             <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,8">
                                 <TextBlock Text="ISSUES" Classes="sectionTitle" />
                                 <Border Grid.Column="1" Classes="sectionRule" />
@@ -319,11 +292,11 @@
                                         Background="{DynamicResource PbSurface3Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                                         CornerRadius="{DynamicResource PbRadius}">
                                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-                                        <Border Width="40" Height="60" CornerRadius="3" ClipToBounds="True" Background="{Binding Row.CoverBrush}">
+                                        <Border Width="40" Height="60" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" Background="{Binding Row.CoverBrush}">
                                             <Image views:AsyncCoverImage.SourceId="{Binding Row.CoverKey}" Stretch="UniformToFill" />
                                         </Border>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-                                            <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
+                                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
                                                        TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Text="{Binding StateLabel}" Classes="previewMeta" FontSize="11" />
                                         </StackPanel>
@@ -363,15 +336,15 @@
                 <!-- Pinned action bar (outside the scroller). Add to Collection / overflow open shared MenuFlyouts from code-behind. -->
                 <Border Grid.Row="1" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="16,10">
                     <StackPanel Orientation="Horizontal" Spacing="7">
-                        <Button Classes="previewAction primary" Content="{Binding PreviewSeriesPrimaryLabel}" Command="{Binding PreviewSeriesPrimaryCommand}" />
-                        <Button Classes="previewAction" Content="Mark all read" Command="{Binding MarkPreviewSeriesReadCommand}"
+                        <Button Classes="primary" Content="{Binding PreviewSeriesPrimaryLabel}" Command="{Binding PreviewSeriesPrimaryCommand}" />
+                        <Button Classes="secondary" Content="Mark all read" Command="{Binding MarkPreviewSeriesReadCommand}"
                                 IsVisible="{Binding !PreviewSeries.IsFinished}" />
-                        <Button Classes="previewAction" Content="Mark all unread" Command="{Binding MarkPreviewSeriesUnreadCommand}"
+                        <Button Classes="secondary" Content="Mark all unread" Command="{Binding MarkPreviewSeriesUnreadCommand}"
                                 IsVisible="{Binding PreviewSeries.IsFinished}" />
-                        <Button Classes="previewAction ghost" MinWidth="36" MinHeight="32" Click="OnAddToCollectionClick" AutomationProperties.Name="Add to collection">
+                        <Button Classes="iconButton" Click="OnAddToCollectionClick" AutomationProperties.Name="Add to collection">
                             <fi:SymbolIcon Symbol="CollectionsAdd" FontSize="15" />
                         </Button>
-                        <Button Classes="previewAction ghost" MinWidth="36" MinHeight="32" Content="⋯" Click="OnOverflowClick" AutomationProperties.Name="More actions" />
+                        <Button Classes="iconButton" Click="OnOverflowClick" AutomationProperties.Name="More actions"><fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeXs}" /></Button>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -415,12 +388,12 @@
 
                         <StackPanel Margin="16,12,16,20" DataContext="{Binding ActivePreviewIssue}" x:DataType="models:IssueListRow">
                             <WrapPanel Classes="previewChips">
-                                <Border Classes="previewChip accent" IsVisible="{Binding !IsRead}"><TextBlock Text="Unread" /></Border>
-                                <Border Classes="previewChip accent" IsVisible="{Binding IsRead}"><TextBlock Text="Read" /></Border>
-                                <Border Classes="previewChip" IsVisible="{Binding HasPublisher}"><TextBlock Text="{Binding Publisher}" /></Border>
-                                <Border Classes="previewChip" IsVisible="{Binding HasLanguage}"><TextBlock Text="{Binding LanguageIso}" /></Border>
-                                <Border Classes="previewChip" IsVisible="{Binding HasAgeRating}"><TextBlock Text="{Binding AgeRating}" /></Border>
-                                <Border Classes="previewChip" IsVisible="{Binding HasRating}"><TextBlock Text="{Binding Rating, StringFormat='★ {0:0.0}'}" /></Border>
+                                <Border Classes="pbChip accent" IsVisible="{Binding !IsRead}"><TextBlock Text="Unread" /></Border>
+                                <Border Classes="pbChip accent" IsVisible="{Binding IsRead}"><TextBlock Text="Read" /></Border>
+                                <Border Classes="pbChip" IsVisible="{Binding HasPublisher}"><TextBlock Text="{Binding Publisher}" /></Border>
+                                <Border Classes="pbChip" IsVisible="{Binding HasLanguage}"><TextBlock Text="{Binding LanguageIso}" /></Border>
+                                <Border Classes="pbChip" IsVisible="{Binding HasAgeRating}"><TextBlock Text="{Binding AgeRating}" /></Border>
+                                <Border Classes="pbChip" IsVisible="{Binding HasRating}"><StackPanel Orientation="Horizontal" Spacing="4"><fi:SymbolIcon Symbol="Star" IconVariant="Filled" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbBadgeBrush}" /><TextBlock Text="{Binding Rating, StringFormat='{}{0:0.0}'}" /></StackPanel></Border>
                             </WrapPanel>
                             <ProgressBar Classes="previewProgress" Value="{Binding ReadFraction}" />
 
@@ -510,15 +483,15 @@
 
                 <Border Grid.Row="1" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="16,10">
                     <StackPanel Orientation="Horizontal" Spacing="7">
-                        <Button Classes="previewAction primary" Content="▶ Read"
-                                Command="{Binding IssueList.OpenIssueCommand}" CommandParameter="{Binding ActivePreviewIssue}" />
-                        <Button Classes="previewAction" Content="Mark unread" IsVisible="{Binding ActivePreviewIssue.IsRead}"
+                        <Button Classes="primary"
+                                Command="{Binding IssueList.OpenIssueCommand}" CommandParameter="{Binding ActivePreviewIssue}"><StackPanel Orientation="Horizontal" Spacing="6"><fi:SymbolIcon Symbol="Play" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Read" VerticalAlignment="Center" /></StackPanel></Button>
+                        <Button Classes="secondary" Content="Mark unread" IsVisible="{Binding ActivePreviewIssue.IsRead}"
                                 Command="{Binding MarkPreviewIssueUnreadCommand}" CommandParameter="{Binding ActivePreviewIssue.Id}" />
-                        <Button Classes="previewAction" Content="Mark read" IsVisible="{Binding !ActivePreviewIssue.IsRead}"
+                        <Button Classes="secondary" Content="Mark read" IsVisible="{Binding !ActivePreviewIssue.IsRead}"
                                 Command="{Binding MarkPreviewIssueReadCommand}" CommandParameter="{Binding ActivePreviewIssue.Id}" />
-                        <Button Classes="previewAction ghost" Content="Edit"
+                        <Button Classes="ghost" Content="Edit"
                                 Command="{Binding EditIssuePropertiesCommand}" CommandParameter="{Binding ActivePreviewIssue.Id}" />
-                        <Button Classes="previewAction ghost" MinWidth="36" MinHeight="32" Content="⋯" Click="OnOverflowClick" AutomationProperties.Name="More actions" />
+                        <Button Classes="iconButton" Click="OnOverflowClick" AutomationProperties.Name="More actions"><fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeXs}" /></Button>
                     </StackPanel>
                 </Border>
             </Grid>

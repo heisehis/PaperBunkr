@@ -686,6 +686,7 @@ public partial class SmartScreenViewModel : ViewModelBase
 
     private void RecomputeMatchCount()
     {
+        PlayEntranceAnimation = false; // pulse: a one-shot entrance opens on a real false -> true change (Motion v2 D, Q19)
         PlayEntranceAnimation = true;
 
         if (_workingList is null)
@@ -739,6 +740,7 @@ public partial class SmartScreenViewModel : ViewModelBase
     /// </summary>
     private void RecomputeMatchCount(SmartListQueryBuilder.LibrarySnapshot snapshot)
     {
+        PlayEntranceAnimation = false; // pulse: a one-shot entrance opens on a real false -> true change (Motion v2 D, Q19)
         PlayEntranceAnimation = true;
 
         if (_workingList is null)

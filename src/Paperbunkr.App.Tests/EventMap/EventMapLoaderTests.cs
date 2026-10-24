@@ -155,4 +155,31 @@ public class EventMapLoaderTests : IDisposable
         Assert.Equal(new[] { single.Id, spanning.Id }, events.Select(e => e.StoryEventId));
         Assert.Equal(2, events.Single(e => e.StoryEventId == spanning.Id).MemberCount);
     }
+
+    [Fact]
+    public void EventsInContinuity_NeedsHalfOfTheIssuesThatHaveAContinuity_AndACrossoverAppearsInEachItCarriesHalfOf()
+    {
+        var a1 = new Issue { Number = "1" };
+        var a2 = new Issue { Number = "2" };
+        var a3 = new Issue { Number = "3" };
+        var b1 = new Issue { Number = "1" };
+        var c1 = new Issue { Number = "1" };
+        var seriesA = AddSeries("Adventure", a1, a2, a3);
+        var seriesB = AddSeries("Brave", b1);
+        AddSeries("Nowhere", c1);                                              // in no continuity: neither counts for nor against
+
+        var mostlyA = AddEvent("Mostly A", (a1, 1), (a2, 2), (a3, 3), (b1, 4));    // 3 of 4 in Earth-1, 1 of 4 in Earth-2
+        var even = AddEvent("Even Split", (a1, 1), (b1, 2));                       // 1 of 2 in each
+        var gap = AddEvent("Gap", (a1, 1), (c1, 2));                               // the other issue has no continuity at all
+
+        var earth1 = new Continuity { Name = "Earth-1", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        earth1.Memberships.Add(new ContinuityMembership { SeriesId = seriesA.Id, SortOrder = 0 });
+        var earth2 = new Continuity { Name = "Earth-2", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        earth2.Memberships.Add(new ContinuityMembership { SeriesId = seriesB.Id, SortOrder = 0 });
+        _context.Continuities.AddRange(earth1, earth2);
+        _context.SaveChanges();
+
+        Assert.Equal(new[] { even.Id, gap.Id, mostlyA.Id }, EventMapLoader.EventsInContinuity(_context, earth1.Id).Select(e => e.StoryEventId));
+        Assert.Equal(new[] { even.Id }, EventMapLoader.EventsInContinuity(_context, earth2.Id).Select(e => e.StoryEventId));
+    }
 }

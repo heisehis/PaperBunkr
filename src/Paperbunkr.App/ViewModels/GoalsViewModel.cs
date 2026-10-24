@@ -222,4 +222,10 @@ public partial class GoalsViewModel : ViewModelBase
 /// what <see cref="GoalsViewModel.HeroGoal"/> sorts by.</summary>
 public sealed record GoalCardViewModel(int GoalId, string Title, string StatusText, double Percent, bool IsComplete,
     long CurrentValue, long Target, DateOnly PeriodEnd, GoalOutcome Outcome = GoalOutcome.Active, bool IsBehind = false,
-    DateOnly? CompletedOn = null);
+    DateOnly? CompletedOn = null)
+{
+    /// <summary>The goal's state as the Today tiles tint it: missed (danger), completed (success), otherwise ongoing (accent).</summary>
+    public bool IsMissed => Outcome == GoalOutcome.Missed;
+
+    public bool IsCompleted => Outcome == GoalOutcome.Completed;
+}

@@ -15,25 +15,22 @@
         mid-card - 2026-09-07 fix). The body is the shared MarkdownView: paragraphs reflow, text is selectable, links to another
         bundled document swap this viewer's content, web links open the browser. LICENSE is shown verbatim in a monospaced font.
     -->
-    <Border Width="680" MaxHeight="640" Background="{DynamicResource PbChromeBrush}"
-            BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="24,20,16,20"
-            BoxShadow="{StaticResource PbElevationShadow}">
-        <DockPanel>
-            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,14">
-                <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding SelectedLegalDocumentTitle}" FontWeight="SemiBold" FontSize="16"
-                               Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding SelectedLegalDocumentUpdated, StringFormat='Last updated {0}'}" FontSize="12"
-                               Foreground="{DynamicResource PbTextFaintBrush}"
-                               IsVisible="{Binding SelectedLegalDocumentUpdated, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                </StackPanel>
-                <Button Grid.Column="1" Classes="headerAction ghost" VerticalAlignment="Top" Margin="12,0,6,0"
-                        Command="{Binding CopyLegalDocumentCommand}" ToolTip.Tip="Copy the whole document"
+    <!-- The document keeps its own named scroller (code-behind scrolls it to the top on a document swap), so the card body doesn't scroll. -->
+    <controls:DialogCard Title="{Binding SelectedLegalDocumentTitle}" Size="Large" IsBodyScrollable="False"
+                         Subtitle="{Binding SelectedLegalDocumentUpdated, StringFormat='Last updated {0}'}"
+                         CloseCommand="{Binding CloseLegalDocumentViewerCommand}">
+        <ScrollViewer Name="BodyScroller" HorizontalScrollBarVisibility="Disabled">
+            <controls:MarkdownView Blocks="{Binding SelectedLegalDocumentBlocks}" BaseFontSize="13"
+                                   LinkCommand="{Binding OpenLegalLinkCommand}" Margin="0,0,14,4" />
+        </ScrollViewer>
+        <controls:DialogCard.Footer>
+            <StackPanel>
+                <Button Classes="ghost" Command="{Binding CopyLegalDocumentCommand}" ToolTip.Tip="Copy the whole document"
                         AutomationProperties.AutomationId="LegalDocumentViewerCopyButton">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Panel>
-                            <fi:SymbolIcon Symbol="Copy" FontSize="{StaticResource PbIconSizeSm}" IsVisible="{Binding !LegalDocumentCopied}" />
-                            <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeSm}" IsVisible="{Binding LegalDocumentCopied}"
+                            <fi:SymbolIcon Symbol="Copy" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !LegalDocumentCopied}" />
+                            <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding LegalDocumentCopied}"
                                            Foreground="{DynamicResource PbSuccessBrush}" />
                         </Panel>
                         <Panel>
@@ -42,18 +39,7 @@
                         </Panel>
                     </StackPanel>
                 </Button>
-                <Button Grid.Column="2" Classes="overlayCloseButton" Width="30" Height="30" VerticalAlignment="Top"
-                        Command="{Binding CloseLegalDocumentViewerCommand}" ToolTip.Tip="Close"
-                        AutomationProperties.Name="Close"
-                        AutomationProperties.AutomationId="LegalDocumentViewerCloseButton">
-                    <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeSm}" />
-                </Button>
-            </Grid>
-            <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,0,8,12" />
-            <ScrollViewer Name="BodyScroller" HorizontalScrollBarVisibility="Disabled">
-                <controls:MarkdownView Blocks="{Binding SelectedLegalDocumentBlocks}" BaseFontSize="13.5"
-                                       LinkCommand="{Binding OpenLegalLinkCommand}" Margin="0,0,14,4" />
-            </ScrollViewer>
-        </DockPanel>
-    </Border>
+            </StackPanel>
+        </controls:DialogCard.Footer>
+    </controls:DialogCard>
 </UserControl>

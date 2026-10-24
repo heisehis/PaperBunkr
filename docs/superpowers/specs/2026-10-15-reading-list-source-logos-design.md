@@ -1,7 +1,7 @@
 # Reading List source marks
 
 **Date:** 2026-10-15
-**Status:** Draft for user review
+**Status:** Approved and implemented
 **Phase:** 2 of the ordered Reading Lists / Continuity improvements
 
 ## Goal
@@ -53,3 +53,4 @@ Place the mark next to the existing “via <source>” identity in the Reading L
 ## Out of scope
 
 Automatic Reading List tags; event metadata and artwork; logos for publishers or trackers; browsing or downloading logos at runtime; changing source names or source registry keys.
+

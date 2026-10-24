@@ -5,6 +5,8 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Serialization;
 
+#pragma warning disable CS8981 // Type names intentionally mirror the existing Atom XML schema.
+
 namespace cYo.Common.Net.News
 {
     public static class Atom
@@ -117,3 +119,4 @@ namespace cYo.Common.Net.News
         }
     }
 }
+#pragma warning restore CS8981

@@ -112,7 +112,9 @@ public class ReadingListPropertiesScreenViewModelTests : IDisposable
         Assert.Equal("arc-2", list.ArcId);
         Assert.Equal("New Arc", list.ArcName);
 
-        Assert.Equal(2, list.Tags.Count);
+        // Generated tags (List type, Source) are not the editor's to touch: two user tags, plus the generated ones left as they were.
+        Assert.Equal(2, list.Tags.Count(t => t.Origin == ReadingListTagOrigin.User));
+        Assert.All(list.Tags.Where(t => t.Origin == ReadingListTagOrigin.Generated), t => Assert.NotEqual("Mood", t.Category));
         var dark = list.Tags.Single(t => t.Value == "Dark");
         Assert.Equal("Mood", dark.Category);
         Assert.Equal(IssueTagWeight.Defining, dark.Weight);
@@ -141,7 +143,34 @@ public class ReadingListPropertiesScreenViewModelTests : IDisposable
         vm.TagsText = string.Empty;
         vm.SaveCommand.Execute(null);
 
-        Assert.Empty(GetList().Tags);
+        var tags = GetList().Tags;
+        Assert.DoesNotContain(tags, t => t.Origin == ReadingListTagOrigin.User);
+        Assert.Contains(tags, t => t.Origin == ReadingListTagOrigin.Generated);   // clearing the box never deletes a generated tag
+    }
+
+    [Fact]
+    public void Load_ListsOnlyTheUsersOwnTags_NotTheGeneratedOnes()
+    {
+        var vm = new ReadingListPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_listId);
+
+        Assert.DoesNotContain(vm.TagRows, r => r.Value is "User" or "comicvine");
+        Assert.Equal("Dark", vm.TagsText);
+    }
+
+    [Fact]
+    public void Save_AUserTagThatRepeatsAGeneratedValue_IsAddedAlongsideIt()
+    {
+        var vm = new ReadingListPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_listId);
+
+        vm.TagsText = "Dark, comicvine";
+        vm.SaveCommand.Execute(null);
+
+        var matching = GetList().Tags.Where(t => t.Value == "comicvine").ToList();
+        Assert.Equal(2, matching.Count);
+        Assert.Contains(matching, t => t.Origin == ReadingListTagOrigin.User);
+        Assert.Contains(matching, t => t.Origin == ReadingListTagOrigin.Generated);
     }
 
     // ChangeCoverCommand itself calls `new FilePickerService().PickImageFileAsync(...)` directly

@@ -39,13 +39,16 @@
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border Name="PART_Scrim" Background="#B0000000">
-                        <Grid HorizontalAlignment="{TemplateBinding ContentHorizontalAlignment}"
+                        <Grid Name="PART_Card" RenderTransformOrigin="0.5,0.5"
+                              HorizontalAlignment="{TemplateBinding ContentHorizontalAlignment}"
                               VerticalAlignment="{TemplateBinding ContentVerticalAlignment}">
                             <ContentPresenter Content="{TemplateBinding Content}"
                                                ContentTemplate="{TemplateBinding ContentTemplate}" />
+                            <!-- Inside the card's top-right corner (2026-10-19 UI polish foundation §6). It used to straddle the corner at
+                                 Margin 0,-14,-14,0, which read as falling off the card and got clipped by the window on tall dialogs. -->
                             <Button Classes="overlayCloseButton" Width="28" Height="28"
-                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                                    Command="{TemplateBinding CloseCommand}" ToolTip.Tip="Close"
+                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,12,12,0"
+                                    Command="{TemplateBinding CloseCommand}" ToolTip.Tip="Close" AutomationProperties.Name="Close"
                                     AutomationProperties.AutomationId="{TemplateBinding CloseButtonAutomationId}"
                                     IsVisible="{TemplateBinding ShowCloseButton}">
                                 <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeSm}" />
@@ -54,6 +57,169 @@
                     </Border>
                 </ControlTemplate>
             </Setter>
+
+            <!-- Reveal motion (docs/superpowers/specs/2026-10-20-motion-system-v2-foundation-overlays-design.md §5.1). The scrim carries the
+                 card, so its opacity fades both; the card settles from 0.98 on the Reveal move token, which Reduced zeroes (the scale then
+                 snaps while the surface is still transparent, so Reduced reads as a plain fade). Closing (.closing, set by OverlayShell)
+                 swaps in the faster exit and the accelerating curve; only the top shell of a stack animates - its own scrim does the
+                 dimming of the one below. -->
+            <Style Selector="^ /template/ Border#PART_Scrim">
+                <Setter Property="Opacity" Value="0" />
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionRevealFade}" Easing="{StaticResource PbMotionEase}" />
+                    </Transitions>
+                </Setter>
+            </Style>
+            <Style Selector="^ /template/ Grid#PART_Card">
+                <Setter Property="RenderTransform" Value="scale(0.98)" />
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionRevealMove}" Easing="{StaticResource PbMotionEase}" />
+                    </Transitions>
+                </Setter>
+            </Style>
+            <Style Selector="^.open /template/ Border#PART_Scrim">
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style Selector="^.open /template/ Grid#PART_Card">
+                <Setter Property="RenderTransform" Value="none" />
+            </Style>
+            <Style Selector="^.closing /template/ Border#PART_Scrim">
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionRevealExit}" Easing="{StaticResource PbMotionExitEase}" />
+                    </Transitions>
+                </Setter>
+            </Style>
+            <Style Selector="^.closing /template/ Grid#PART_Card">
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionRevealExit}" Easing="{StaticResource PbMotionExitEase}" />
+                    </Transitions>
+                </Setter>
+            </Style>
+        </ControlTheme>
+
+        <!-- DialogCard (Controls/DialogCard.cs; docs/superpowers/specs/2026-10-19-ui-polish-dialogs-design.md): header (title, subtitle, ✕),
+             scrolling body, footer with a divider. -->
+        <ControlTheme x:Key="{x:Type controls:DialogCard}" TargetType="controls:DialogCard">
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Classes="dialogCard" MaxHeight="{TemplateBinding MaxHeight}">
+                        <Grid RowDefinitions="Auto,*,Auto">
+                            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="20,16,12,10">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Classes="dialogTitle" Text="{TemplateBinding Title}" TextWrapping="Wrap" />
+                                    <TextBlock Classes="dialogSubtitle" Text="{TemplateBinding Subtitle}" TextWrapping="Wrap"
+                                               IsVisible="{TemplateBinding Subtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Classes="iconButton" VerticalAlignment="Top" Margin="8,0,0,0"
+                                        Command="{TemplateBinding EffectiveCloseCommand}"
+                                        IsVisible="{TemplateBinding EffectiveCloseCommand, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                        ToolTip.Tip="Close" AutomationProperties.Name="Close">
+                                    <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeSm}" />
+                                </Button>
+                            </Grid>
+                            <ScrollViewer Grid.Row="1" Name="PART_BodyScroller" HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="{TemplateBinding IsBodyScrollable, Converter={x:Static controls:DialogCardConverters.ScrollBar}}">
+                                <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                  Margin="20,2,20,14" />
+                            </ScrollViewer>
+                            <Border Grid.Row="2" Classes="dialogFooter" IsVisible="{TemplateBinding HasFooter}">
+                                <DockPanel LastChildFill="False">
+                                    <ContentPresenter DockPanel.Dock="Left" Content="{TemplateBinding FooterStart}" VerticalAlignment="Center" />
+                                    <ContentPresenter DockPanel.Dock="Right" Content="{TemplateBinding Footer}" VerticalAlignment="Center" />
+                                </DockPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
         </ControlTheme>
     </Styles.Resources>
+
+    <!-- ===================== 2026-10-19 UI polish foundation (docs/superpowers/specs/2026-10-19-ui-polish-foundation-design.md) ===================== -->
+
+    <!-- §5 Popups: every <Flyout> gets the floating-panel look (it was FluentAvalonia's neutral grey, which read as a foreign surface inside
+         tinted themes such as Vibrant & Pop). MenuFlyoutPresenter keeps Menu.axaml's own style. -->
+    <Style Selector="FlyoutPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbPanelFloatingBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbPanelFloatingBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbPanelFloatingRadius}" />
+        <Setter Property="Padding" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+
+    <!-- §5 Tooltips: a small version of the same panel. -->
+    <Style Selector="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMeta}" />
+        <Setter Property="MaxWidth" Value="320" />
+    </Style>
+    <Style Selector="ToolTip TextBlock">
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- §6 Dialog anatomy: the DialogCard template's frame. No Width here: DialogCard sizes itself (its size, or narrower in a narrow host), and a
+         Width on the frame overflowed the card (a long confirm message ran past a 420 card, 2026-10-20). -->
+    <Style Selector="Border.dialogCard">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusLg}" />
+        <Setter Property="BoxShadow" Value="{DynamicResource PbElevationShadow}" />
+    </Style>
+    <Style Selector="TextBlock.dialogTitle">
+        <Setter Property="FontFamily" Value="{DynamicResource PbHeadingFontFamily}" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeHeading}" />
+        <Setter Property="FontWeight" Value="{DynamicResource PbHeadingFontWeight}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.dialogSubtitle">
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMeta}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+    <Style Selector="Border.dialogFooter StackPanel">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="Spacing" Value="8" />
+    </Style>
+    <Style Selector="Border.dialogFooter">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="20,12,20,16" />
+    </Style>
+
+    <!-- §6 Error message (Q14): danger colour, an icon, a plain sentence; raw detail goes in an Expander.errorDetails underneath. -->
+    <Style Selector="Border.inlineError">
+        <Setter Property="Background" Value="{DynamicResource PbDangerSoftBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Padding" Value="8,6" />
+    </Style>
+    <Style Selector="Border.inlineError fi|SymbolIcon">
+        <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
+        <Setter Property="FontSize" Value="{StaticResource PbIconSizeXs}" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Margin" Value="0,1,8,0" />
+    </Style>
+    <Style Selector="TextBlock.errorText">
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMeta}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="Expander.errorDetails SelectableTextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource PbMonoFontFamily}" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
 </Styles>

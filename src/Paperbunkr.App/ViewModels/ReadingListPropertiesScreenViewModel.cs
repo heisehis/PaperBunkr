@@ -109,7 +109,7 @@ public partial class ReadingListPropertiesScreenViewModel : ViewModelBase
             return;
         }
 
-        HeaderLabel = $"Edit \"{list.Name}\"";
+        HeaderLabel = list.Name; // the dialog subtitle; the title says "Edit reading list" (a name with quotes no longer gets a second pair)
         HeaderBackdrop = ReadingListPageViewModel.CachedBackdrop(readingListId);
         Name = list.Name;
         Description = list.Description ?? string.Empty;
@@ -122,7 +122,7 @@ public partial class ReadingListPropertiesScreenViewModel : ViewModelBase
 
         TagsText = list.JoinedTags() ?? string.Empty;
         TagRows.Clear();
-        foreach (var tag in list.Tags.OrderBy(t => t.Value, StringComparer.OrdinalIgnoreCase))
+        foreach (var tag in list.Tags.Where(t => t.Origin == ReadingListTagOrigin.User).OrderBy(t => t.Value, StringComparer.OrdinalIgnoreCase))
         {
             TagRows.Add(new TagEditRowViewModel(tag.Value, tag.Category, tag.Weight));
         }
@@ -255,6 +255,7 @@ public partial class ReadingListPropertiesScreenViewModel : ViewModelBase
         // identical helper: ReadingListTag.Value has no DB uniqueness constraint either, so a
         // pre-existing case-insensitive duplicate must not crash Save().
         var byValue = list.Tags
+            .Where(t => t.Origin == ReadingListTagOrigin.User)   // a generated tag keeps its own category and weight
             .GroupBy(t => t.Value, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)

@@ -33,7 +33,7 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style Selector="controls|SuggestBox.contentTypePicker /template/ TextBox#PART_TextBox">
-            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="Padding" Value="10,4" />
             <Setter Property="MinHeight" Value="0" />
         </Style>
         <Style Selector="controls|SuggestBox.contentTypePicker:pointerover">
@@ -44,7 +44,7 @@
 
     <ScrollViewer>
         <StackPanel Margin="0,0,0,50">
-            <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="28,20,28,12">
+            <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="24,20,24,12">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
                     <TextBlock Text="Back to Library" VerticalAlignment="Center" />
@@ -60,7 +60,7 @@
                                              Text="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).SelectedContentTypeText}"
                                              Suggestions="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).ContentTypeNames}"
                                              ToolTip.Tip="Content Type" />
-                        <Button Classes="headerAction ghost" Content="Undo" VerticalAlignment="Center"
+                        <Button Classes="ghost" Content="Undo" VerticalAlignment="Center"
                                 IsVisible="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).CanUndoContentType}"
                                 Command="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).UndoContentTypeCommand}"
                                 ToolTip.Tip="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).UndoContentTypeLabel, StringFormat='{}{0}. Undo puts the old type back.'}"
@@ -69,7 +69,7 @@
                 </views:DetailBand.LeadingContent>
             </views:DetailBand>
 
-            <views:DetailTabs DataContext="{Binding Tabs}" Margin="28,0,28,0" />
+            <views:DetailTabs DataContext="{Binding Tabs}" Margin="24,0,24,0" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

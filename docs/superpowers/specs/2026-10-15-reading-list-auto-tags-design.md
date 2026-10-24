@@ -1,7 +1,7 @@
 # Reading List automatic tags
 
 **Date:** 2026-10-15
-**Status:** Draft for user review
+**Status:** Approved and implemented
 **Phase:** 1 of the ordered Reading Lists / Continuity improvements
 
 ## Goal
@@ -66,3 +66,4 @@ Add nullable/defaulted provenance fields to `ReadingListTag` with existing rows 
 ## Out of scope
 
 Source logos; Story Event tags and cover art; provider refresh of event descriptions; changes to member comic metadata; changes to Reading List ordering or the Reading Lists page layout.
+

@@ -47,6 +47,7 @@ public sealed class MarkResolver
     };
 
     private readonly AliasTable _publishers;
+    private readonly AliasTable _mangaBakaPublishers;
     private readonly AliasTable _formats;
     private readonly AliasTable _ageRatings;
     private readonly Dictionary<string, string> _languageRegions;
@@ -118,6 +119,7 @@ public sealed class MarkResolver
     public MarkResolver()
     {
         _publishers = AliasTable.Load(Root + "publisher-aliases.tsv");
+        _mangaBakaPublishers = AliasTable.Load(PublisherIconsRoot + "MangaBaka/mangabaka-aliases.tsv", NormalisePublisher);
         _formats = AliasTable.Load(Root + "format-aliases.tsv");
         _ageRatings = AliasTable.Load(Root + "age-rating-aliases.tsv", NormaliseRatingKey);
         _languageRegions = LoadLanguageRegions(Root + "language-regions.tsv");
@@ -223,6 +225,20 @@ public sealed class MarkResolver
             return raster;
         }
 
+        // The MangaBaka collection is the broad bundled fallback; keep curated SVG and the
+        // era-aware ComicRack/user marks ahead of it.
+        if (_mangaBakaPublishers.TryResolve(normalised, out AliasRow mangaBaka) &&
+            !string.IsNullOrWhiteSpace(mangaBaka.Col3))
+        {
+            string path = PublisherIconsRoot + "MangaBaka/" + Uri.EscapeDataString(mangaBaka.Col3);
+            if (Path.GetExtension(mangaBaka.Col3).Equals(".svg", StringComparison.OrdinalIgnoreCase))
+            {
+                return new MarkSpec(MarkKind.SvgAsset, AssetPath: path);
+            }
+
+            return new MarkSpec(MarkKind.Raster, AssetPath: path);
+        }
+
         if (inTable)
         {
             return new MarkSpec(MarkKind.LetterMark, Text: Initials(row.Canonical),
@@ -326,6 +342,11 @@ public sealed class MarkResolver
         if (!string.IsNullOrWhiteSpace(row.Col3) && _ageRatingAssets.Contains(row.Col3))
         {
             return new MarkSpec(MarkKind.SvgAsset, AssetPath: Root + "AgeRatings/" + row.Col3 + ".svg");
+        }
+
+        if (row.Col6.StartsWith("au:", StringComparison.OrdinalIgnoreCase))
+        {
+            return new MarkSpec(MarkKind.Raster, AssetPath: Root + "AgeRatingsAustralia/" + row.Col6[3..] + ".png");
         }
 
         string label = string.IsNullOrWhiteSpace(row.Col4) ? row.Canonical.ToUpperInvariant() : row.Col4;

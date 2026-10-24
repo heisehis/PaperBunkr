@@ -115,7 +115,7 @@ public sealed class PythonCommand : Command
         // gets as its implicit globals object) - Python has no equivalent to Roslyn's globals-object
         // trick, so the calling convention is explicit here instead.
         dynamic function = _scope.GetVariable(Method);
-        object? result = function(globals);
+        object? result = (object?)function(globals);
         return Task.FromResult(result);
     }
 }

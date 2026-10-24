@@ -5,6 +5,7 @@
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:home="using:Paperbunkr.App.Views.Home"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="900"
@@ -18,120 +19,34 @@
         greeting, search, and either the blurred cover wall (dark themes, drifting with scroll) or the time-of-day sky (light
         themes) - then the user's ordered, hideable sections. Each section's template is its own file under Views/Home/, picked by
         key in HomeScreen.axaml.cs; all data/pick logic lives in HomeScreenViewModel / HomeFeedResolver.
+
+        Theme layouts (docs/superpowers/specs/2026-10-12-theme-system-v2-gap-analysis-and-plan.md, phase 4): the masthead and the section list are
+        their own controls (Views/Home/HomeMasthead, HomeSections) so a theme's layout can place them. What is written below is the built-in
+        layout; ThemeLayoutHost shows it unless the active theme ships a valid "Home" layout and theme layouts are switched on, and falls
+        back to it if that layout is refused or fails. Keyboard shortcuts are registered on this control, so they work in any layout.
     -->
 
     <UserControl.Styles>
         <StyleInclude Source="avares://Paperbunkr.App/Views/Home/HomeStyles.axaml" />
     </UserControl.Styles>
 
-    <UserControl.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/SpotlightSection.axaml" />
-                <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/NeedsAttentionSection.axaml" />
-                <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/ContinueReadingSection.axaml" />
-                <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/UpNextSection.axaml" />
-                <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/RecentlyAddedSection.axaml" />
-                <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/CollectionsSection.axaml" />
-                <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/BecauseYouReadSection.axaml" />
-                <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/ReadingListSection.axaml" />
-            </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
-    </UserControl.Resources>
+    <controls:ThemeLayoutHost x:Name="LayoutHost" Screen="Home">
+        <ScrollViewer x:Name="PageScroller">
+            <Panel>
+                <!-- The one atmosphere for the whole upper page: the open spotlight pick's blurred cover, full width, from the very top
+                     (behind the greeting) down past the spotlight, fading to nothing so the theme's own background takes over. It used to
+                     be an image inside the spotlight band, which made it a dark rounded box behind the carousel. It scrolls with the page
+                     and has no fill of its own. -->
+                <controls:AtmosphereBackdrop x:Name="Atmosphere" Classes="homeAtmosphere" Classes.light="{Binding IsLightTheme}"
+                                             VerticalAlignment="Top" Height="760"
+                                             Source="{Binding CurrentSpotlight.BackdropImage}" />
 
-    <ScrollViewer x:Name="PageScroller">
-        <StackPanel Margin="0,0,0,48">
+                <StackPanel Margin="0,0,0,48">
+                    <home:HomeMasthead />
 
-            <!-- ============ Masthead (full-bleed) ============ -->
-            <Panel Height="210">
-                <!-- Dark themes: the cover wall, drifting slower than the page (C9). -->
-                <Panel IsVisible="{Binding !IsLightTheme}" ClipToBounds="True">
-                    <controls:ParallaxBackdrop Source="{Binding MastheadBackdrop}"
-                                               IsVisible="{Binding MastheadBackdrop, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
-                    <!-- Skin-aware fallback for a coverless library: the same PbHeroGradient pair DetailHero relies on. -->
-                    <Border IsVisible="{Binding MastheadBackdrop, Converter={x:Static conv:ObjectConverters.IsNull}}">
-                        <Border.Background>
-                            <RadialGradientBrush GradientOrigin="18%,0%" Center="18%,0%" RadiusX="1.1" RadiusY="0.9">
-                                <GradientStop Offset="0" Color="{DynamicResource PbHeroGradientEndColor}" />
-                                <GradientStop Offset="1" Color="{DynamicResource PbHeroGradientStartColor}" />
-                            </RadialGradientBrush>
-                        </Border.Background>
-                    </Border>
-                    <!-- Ambient wash toward the spotlight cover's vibrant colour (C1). -->
-                    <Border Background="{Binding SpotlightAccentColor, Converter={x:Static views:SpotlightAccentToBrushConverter.Instance}}" />
-                </Panel>
-
-                <!-- Light themes: the time-of-day sky replaces the cover wall and the tint (C2) - one colour source only. -->
-                <Border IsVisible="{Binding IsLightTheme}" AutomationProperties.AutomationId="HomeMastheadSky">
-                    <Border.Background>
-                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-                            <GradientStop Offset="0" Color="{Binding SkyTopColor}" />
-                            <GradientStop Offset="0.75" Color="{Binding SkyBottomColor}" />
-                            <GradientStop Offset="1" Color="{DynamicResource PbSurface0Color}" />
-                        </LinearGradientBrush>
-                    </Border.Background>
-                </Border>
-
-                <Border IsVisible="{Binding !IsLightTheme}">
-                    <Border.Background>
-                        <LinearGradientBrush StartPoint="0%,55%" EndPoint="0%,100%">
-                            <GradientStop Offset="0" Color="#00000000" />
-                            <GradientStop Offset="1" Color="{DynamicResource PbSurface0Color}" />
-                        </LinearGradientBrush>
-                    </Border.Background>
-                </Border>
-
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="22,18,0,0">
-                    <controls:SplitText Classes="wordmark" Classes.nightSky="{Binding UseLightMastheadText}" Text="PAPERBUNKR" FontSize="15" />
-                    <!-- Seasonal flourish (C10) - opt-in, a few calendar dates only. -->
-                    <fi:SymbolIcon Symbol="{Binding SeasonIcon}" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center"
-                                   Foreground="{Binding GreetingBrush}" IsVisible="{Binding HasSeason}"
-                                   ToolTip.Tip="{Binding SeasonLabel}" AutomationProperties.AutomationId="HomeSeasonIcon" />
-                </StackPanel>
-
-                <Button Classes="headerLink" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,14,18,0"
-                        Command="{Binding RefreshCommand}" AutomationProperties.AutomationId="HomeRefreshButton"
-                        ToolTip.Tip="Refresh">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <fi:SymbolIcon Symbol="ArrowClockwise" FontSize="{StaticResource PbIconSizeSm}" Foreground="{Binding MastheadSubtitleBrush}" />
-                        <TextBlock Text="Refresh library" FontSize="11.5" Foreground="{Binding MastheadSubtitleBrush}" />
-                    </StackPanel>
-                </Button>
-
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="620">
-                    <controls:SplitText Text="{Binding Greeting}" FontSize="40" HorizontalAlignment="Center"
-                                        Foreground="{Binding GreetingBrush}" AutomationProperties.AutomationId="HomeGreeting" />
-                    <TextBlock Text="Search for a specific series, or discover something new below."
-                               FontSize="12.5" HorizontalAlignment="Center" Foreground="{Binding MastheadSubtitleBrush}" />
-                    <Grid ColumnDefinitions="*,Auto" Width="470">
-                        <TextBox Grid.Column="0" Classes="searchBox" Text="{Binding SearchQuery}" Watermark="Search for a comic series..."
-                                 FontSize="12.5" AutomationProperties.AutomationId="HomeSearchBox">
-                            <TextBox.KeyBindings>
-                                <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
-                            </TextBox.KeyBindings>
-                        </TextBox>
-                        <Button Grid.Column="1" Classes="primary" Content="Search" Margin="8,0,0,0"
-                                Command="{Binding SearchCommand}" AutomationProperties.AutomationId="HomeSearchButton" />
-                    </Grid>
+                    <home:HomeSections HorizontalAlignment="Center" MaxWidth="1180" Margin="24,20,24,0" />
                 </StackPanel>
             </Panel>
-
-            <Border Height="1" Background="{DynamicResource PbBorderBrush}" />
-
-            <StackPanel HorizontalAlignment="Center" MaxWidth="1180" Margin="24,20,24,0" Spacing="28">
-                <!-- Every section switched off (I1): one line pointing at where to turn them back on. -->
-                <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding AllSectionsHidden}"
-                            AutomationProperties.AutomationId="HomeAllHidden">
-                    <TextBlock Text="All Home sections are hidden." Classes="emptyState" VerticalAlignment="Center" />
-                    <Button Classes="viewAllLink" Content="Choose what to show →" Command="{Binding OpenHomePreferencesCommand}" />
-                </StackPanel>
-
-                <ItemsControl x:Name="SectionsHost" ItemsSource="{Binding Sections}" AutomationProperties.AutomationId="HomeSections" ClipToBounds="False">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate><StackPanel Spacing="28" /></ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
-            </StackPanel>
-        </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+    </controls:ThemeLayoutHost>
 </UserControl>

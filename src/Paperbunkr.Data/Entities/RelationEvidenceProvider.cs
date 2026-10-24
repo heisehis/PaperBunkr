@@ -19,4 +19,7 @@ public enum RelationEvidenceProvider
 
     /// <summary>A Grand Comics Database series bond (docs/superpowers/specs/2026-09-27-gcd-data-design.md §4); the bond type is in <c>ProviderRelationType</c>, the origin GCD series id in <c>ProviderSourceId</c>.</summary>
     Gcd,
+
+    /// <summary>A Metron EVENT reading list's previous/next link (docs/superpowers/specs/2026-10-12-continuity-sources-design.md §4); the list id is in <c>ProviderSourceId</c>.</summary>
+    Metron,
 }

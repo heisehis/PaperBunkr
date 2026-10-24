@@ -59,6 +59,13 @@
                                                      Suggestions="{Binding PageLayoutModeNames}" Width="150" />
                             </pref:SettingsRow.SettingsContent>
                         </pref:SettingsRow>
+                        <pref:SettingsRow Icon="BorderAll" Title="Comic page frame"
+                                           Description="Choose a subtle theme-aware edge or soft shadow around each comic page.">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding ReaderPageFrameStyleText}"
+                                                     Suggestions="{Binding ReaderPageFrameStyleNames}" Width="150" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
                     </StackPanel>
 
                     <StackPanel Tag="reader.turning">
@@ -109,7 +116,7 @@
                     <StackPanel Tag="reader.tapZones">
                         <TextBlock Classes="settingsGroupCaption" Text="TAP ZONES" />
                         <TextBlock Text="Which parts of the page a tap or click turns the page from. Default keeps the classic behaviour (touch: left/middle/right thirds; mouse: two halves). The other layouts follow Mihon's and apply to touch, pen and the mouse."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
                         <pref:SettingsRow Icon="CursorClick" Title="Paged reading: tap zone layout">
                             <pref:SettingsRow.SettingsContent>
                                 <controls:SuggestBox IsStrict="True" Text="{Binding PagedTapZoneLayoutText}"
@@ -144,13 +151,13 @@
                         </pref:SettingsRow>
                         <StackPanel Orientation="Horizontal" Spacing="20" Margin="0,4,0,10">
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Paged" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBlock Text="Paged" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <controls:TapZoneOverlay Width="150" Height="200" ShowFrame="True"
                                                          Layout="{Binding PagedTapZoneLayout}" Invert="{Binding PagedTapZoneInvert}"
                                                          AutomationProperties.Name="Paged reading tap zone preview" />
                             </StackPanel>
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Continuous" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBlock Text="Continuous" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <controls:TapZoneOverlay Width="150" Height="200" ShowFrame="True" IsContinuous="True"
                                                          Layout="{Binding ContinuousTapZoneLayout}" Invert="{Binding ContinuousTapZoneInvert}"
                                                          AutomationProperties.Name="Continuous reading tap zone preview" />
@@ -215,7 +222,7 @@
                     <StackPanel Tag="reader.imageAdjust">
                         <TextBlock Classes="settingsGroupCaption" Text="IMAGE ADJUSTMENT" />
                         <TextBlock Text="Default brightness/contrast/saturation/gamma for every book - a book's own reader toolbar can adjust further from here."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
                         <pref:SettingsRow Icon="BrightnessHigh" Title="{Binding DefaultBrightness, StringFormat='Brightness: {0:F0}'}">
                             <pref:SettingsRow.SettingsContent>
                                 <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultBrightness}" Width="220" />
@@ -263,7 +270,7 @@
                     <StackPanel Tag="reader.background">
                         <TextBlock Classes="settingsGroupCaption" Text="BACKGROUND &amp; MARGIN" />
                         <pref:SettingsRow Icon="ColorBackground" Title="Canvas background"
-                                           Description="Auto keeps the app's own background; Color fills the canvas with the color below; Texture tiles one of the swatches below that.">
+                                           Description="Auto keeps the app's own background; Color fills the canvas with the color below; Texture tiles one of the swatches below that; Ambient fills it with a soft gradient taken from the edges of the current page.">
                             <pref:SettingsRow.SettingsContent>
                                 <controls:SuggestBox IsStrict="True" Text="{Binding ImageBackgroundModeText}"
                                                      Suggestions="{Binding BackgroundModeNames}" Width="150" />
@@ -334,6 +341,18 @@
                                            Description="Fades the floating toolbar/clusters after a few seconds of no pointer movement while reading. Off keeps them always visible.">
                             <pref:SettingsRow.SettingsContent>
                                 <ToggleSwitch IsChecked="{Binding ReaderAutoHideChrome}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Sparkle" Title="Ambient motion"
+                                           Description="With the Ambient background, the backdrop drifts against the page as you pan or scroll and sways very slowly while you read. Follows the Motion setting and the effect quality.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding ReaderAmbientMotion}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Book" Title="Book look for spreads"
+                                           Description="On a double-page spread, soft shading at the spine and outer edges, a thin page outline, and page edges that show how far through the book you are.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding ReaderBookLook}" OnContent="{x:Null}" OffContent="{x:Null}" />
                             </pref:SettingsRow.SettingsContent>
                         </pref:SettingsRow>
                         <pref:SettingsRow Icon="CursorHover" Title="Chrome reveal style"
@@ -412,7 +431,7 @@
                     <StackPanel Tag="reader.profiles">
                         <TextBlock Classes="settingsGroupCaption" Text="PROFILES" />
                         <TextBlock Text="A profile is a named set of display settings (fit, adjustments, background, margin, toolbar behaviour, tap zones) you can switch to while reading. Save one from the reader's drawer; the built-in ones can be switched to but not edited."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
                         <pref:SettingsRow Icon="Color" Title="Default profile"
                                           Description="Used for every series that has no profile of its own. A series can be pointed at a profile from the reader's drawer.">
                             <pref:SettingsRow.SettingsContent>
@@ -427,20 +446,20 @@
                                         <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}"
                                                    AutomationProperties.AutomationId="{Binding Name, StringFormat='ReaderProfileRow_{0}'}" />
                                         <TextBlock Grid.Column="1" Text="Built-in" FontSize="11" Margin="0,0,10,0" VerticalAlignment="Center"
-                                                   IsVisible="{Binding IsBuiltIn}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                   IsVisible="{Binding IsBuiltIn}" Foreground="{DynamicResource PbTextMutedBrush}" />
                                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding !IsBuiltIn}">
-                                            <Button Content="▲" FontSize="10" Padding="4,2" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip.Tip="Move up"
+                                            <Button Classes="iconButton sm" ToolTip.Tip="Move up"
                                                     AutomationProperties.Name="Move profile up"
-                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).MoveReaderProfileUpCommand}" CommandParameter="{Binding Id}" />
-                                            <Button Content="▼" FontSize="10" Padding="4,2" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip.Tip="Move down"
+                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).MoveReaderProfileUpCommand}" CommandParameter="{Binding Id}"><fi:SymbolIcon Symbol="ChevronUp" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                                            <Button Classes="iconButton sm" ToolTip.Tip="Move down"
                                                     AutomationProperties.Name="Move profile down"
-                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).MoveReaderProfileDownCommand}" CommandParameter="{Binding Id}" />
-                                            <Button Content="✎" Padding="4,2" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip.Tip="Rename"
+                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).MoveReaderProfileDownCommand}" CommandParameter="{Binding Id}"><fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                                            <Button Classes="iconButton sm" ToolTip.Tip="Rename"
                                                     AutomationProperties.Name="Rename profile"
-                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).RenameReaderProfileCommand}" CommandParameter="{Binding Id}" />
-                                            <Button Content="✕" Padding="4,2" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip.Tip="Delete"
+                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).RenameReaderProfileCommand}" CommandParameter="{Binding Id}"><fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                                            <Button Classes="iconButton sm" ToolTip.Tip="Delete"
                                                     AutomationProperties.Name="Delete profile"
-                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).DeleteReaderProfileCommand}" CommandParameter="{Binding Id}" />
+                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).DeleteReaderProfileCommand}" CommandParameter="{Binding Id}"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
                                         </StackPanel>
                                     </Grid>
                                 </DataTemplate>

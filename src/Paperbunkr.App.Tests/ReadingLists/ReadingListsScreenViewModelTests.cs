@@ -290,7 +290,9 @@ public class ReadingListsScreenViewModelTests : IDisposable
 
         vm.LoadReadingList(listId);
 
-        var pill = Assert.Single(vm.List.Tags);
+        // The list also carries the generated "List type" tag (docs/superpowers/specs/2026-10-15-reading-list-auto-tags-design.md); the chip row is the user's tag plus it.
+        Assert.Contains(vm.List.Tags, t => t.IsGenerated && t.Category == "List type");
+        var pill = Assert.Single(vm.List.Tags, t => !t.IsGenerated);
         Assert.Equal("Dark", pill.Value);
         Assert.Equal(IssueTagWeight.Core, pill.Weight);
         Assert.True(pill.CanReweight); // always true here - a Reading List is always one concrete list
@@ -306,7 +308,7 @@ public class ReadingListsScreenViewModelTests : IDisposable
         vm.CreateNewCommand.Execute(null); // second, untagged list
         vm.LoadReadingList(taggedId);
 
-        vm.List.Tags.Single().SearchCommand.Execute(null);
+        vm.List.Tags.Single(t => !t.IsGenerated).SearchCommand.Execute(null);
 
         Assert.True(vm.IsGalleryMode);
         Assert.Equal("Dark", vm.Gallery.ActiveTag);
@@ -323,7 +325,7 @@ public class ReadingListsScreenViewModelTests : IDisposable
         AddTag(taggedId, "Dark");
         vm.CreateNewCommand.Execute(null);
         vm.LoadReadingList(taggedId);
-        vm.List.Tags.Single().SearchCommand.Execute(null);
+        vm.List.Tags.Single(t => !t.IsGenerated).SearchCommand.Execute(null);
 
         vm.Gallery.SelectTagCommand.Execute(vm.Gallery.TagChips.First(c => c.Value is null));
 
@@ -339,13 +341,13 @@ public class ReadingListsScreenViewModelTests : IDisposable
         int listId = vm.List.ActiveListId!.Value;
         AddTag(listId, "Dark", IssueTagWeight.Incidental);
         vm.LoadReadingList(listId);
-        var pill = vm.List.Tags.Single();
+        var pill = vm.List.Tags.Single(t => !t.IsGenerated);
 
         pill.SetWeightCommand.Execute(IssueTagWeight.Core);
 
         Assert.Equal(IssueTagWeight.Core, pill.Weight);
         using var verify = PaperbunkrDb.CreateContext();
-        var tag = verify.ReadingListTags.Single(t => t.ReadingListId == listId);
+        var tag = verify.ReadingListTags.Single(t => t.ReadingListId == listId && t.Value == "Dark");
         Assert.Equal(IssueTagWeight.Core, tag.Weight);
     }
 

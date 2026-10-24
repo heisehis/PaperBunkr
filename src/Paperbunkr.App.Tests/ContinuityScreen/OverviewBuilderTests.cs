@@ -121,6 +121,23 @@ public class OverviewBuilderTests
     }
 
     [Fact]
+    public void EventRows_PreserveDetailsAndProjectStoredRelationsWithoutChangingChronology()
+    {
+        var first = new ContinuityEventData(10, "First", 200601, 200612, new[] { Row(1, "Hulk", "1", 2006) },
+            Description: "A user summary", CoverImageUrl: "https://example.test/cover.jpg", CoverSource: StoryEventCoverSource.Metron,
+            Tags: new[] { new ContinuityEventTagData("Cosmic", "Theme", false), new ContinuityEventTagData("Drama", "Genre", true) });
+        var second = new ContinuityEventData(20, "Second", 200701, 200712, new[] { Row(1, "Hulk", "2", 2007) });
+        var rows = Build(Map(new[] { new ContinuityLane(1, "Hulk", false) }, Array.Empty<EventMapRow>(),
+            new[] { second, first }, new[] { new ContinuityRelationData(10, 20, RelationType.Prequel, true, "yours") })).Events;
+
+        Assert.Equal(new[] { 10, 20 }, rows.Select(r => r.EventId));
+        Assert.Equal("A user summary", rows[0].Description);
+        Assert.Equal(StoryEventCoverSource.Metron, rows[0].CoverSource);
+        Assert.Equal(new[] { "Cosmic", "Drama" }, rows[0].Tags!.Select(t => t.Value));
+        Assert.Equal("Sequel", Assert.Single(rows[1].RelatedEvents!).Relation);
+    }
+
+    [Fact]
     public void Attention_ShowsOnlyWhatIsThere()
     {
         var lanes = new[] { new ContinuityLane(1, "Hulk", false) };

@@ -12,5 +12,16 @@ public enum PageTransitionStyle
 {
     None,
     Slide,
-    Crossfade
+    Crossfade,
+
+    /// <summary>CE's <c>TopDown</c>: the pages slide vertically whatever the reading direction (Motion v2 E, Q30).</summary>
+    Vertical,
+
+    /// <summary>CE's <c>Paging</c>: the new page sweeps in over the old one from the outer edge, casting a spine shadow; turning back slides
+    /// the old page off to reveal the previous one underneath (Motion v2 E, Q30).</summary>
+    Book,
+
+    /// <summary>An animated corner curl: the old page folds away from its outer bottom corner, its paper back showing, revealing the new page
+    /// beneath (Motion v2 E, Q30). Not in CE - a deliberate addition. Mirrored for right-to-left reading.</summary>
+    Curl,
 }

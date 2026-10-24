@@ -11,14 +11,10 @@
     <!-- List Options (docs/superpowers/specs/2026-10-04-list-layouts-design.md §8) - CE's ListLayoutDialog: Details,
          Thumbnails and Tiles tabs on the Library; Books has only sort and group. -->
     <UserControl.Styles>
-        <Style Selector="TextBlock.fieldLabel">
-            <Setter Property="FontSize" Value="10" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        </Style>
         <Style Selector="TextBlock.hint">
             <Setter Property="FontSize" Value="11" />
             <Setter Property="TextWrapping" Value="Wrap" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="ListBox.optionList">
             <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
@@ -27,18 +23,14 @@
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
         </Style>
         <Style Selector="ListBox.optionList ListBoxItem">
-            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="Padding" Value="8,4" />
             <Setter Property="MinHeight" Value="30" />
         </Style>
     </UserControl.Styles>
 
-    <Border Classes="floatingPanel" Width="520">
-        <Grid RowDefinitions="Auto,Auto,*,Auto">
-            <Border Grid.Row="0" Padding="18,15" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
-                <TextBlock Classes="pbTextHeading" Text="LIST OPTIONS" />
-            </Border>
-
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="18,12,18,0" IsVisible="{Binding IsLibrary}">
+    <controls:DialogCard Title="List options" Size="Medium">
+        <StackPanel Spacing="14">
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="20" IsVisible="{Binding IsLibrary}">
                 <Button Classes="tab" Classes.active="{Binding IsDetailsTab}" Content="Details"
                         Command="{Binding SelectTabCommand}" CommandParameter="details"
                         AutomationProperties.AutomationId="ListOptionsTab_Details" />
@@ -63,9 +55,9 @@
                                 <Grid ColumnDefinitions="Auto,*,Auto">
                                     <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}" VerticalAlignment="Center"
                                               AutomationProperties.Name="{Binding Name, StringFormat='Show {0}'}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5" VerticalAlignment="Center" Margin="6,0"
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" VerticalAlignment="Center" Margin="6,0"
                                                Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
-                                    <TextBox Grid.Column="2" Text="{Binding Width}" Width="62" FontSize="11.5" VerticalAlignment="Center"
+                                    <TextBox Grid.Column="2" Text="{Binding Width}" Width="62" FontSize="12" VerticalAlignment="Center"
                                              ToolTip.Tip="Column width"
                                              AutomationProperties.Name="{Binding Name, StringFormat='Width of {0}'}" />
                                 </Grid>
@@ -136,13 +128,15 @@
                 </StackPanel>
             </Panel>
 
-            <Border Grid.Row="3" Padding="18,13" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0">
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                    <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" AutomationProperties.AutomationId="ListOptionsCancel" />
-                    <Button Classes="ghost" Content="Apply" Command="{Binding ApplyCommand}" AutomationProperties.AutomationId="ListOptionsApply" />
-                    <Button Classes="primary" Content="OK" Command="{Binding OkCommand}" AutomationProperties.AutomationId="ListOptionsOk" />
-                </StackPanel>
-            </Border>
-        </Grid>
-    </Border>
+
+        </StackPanel>
+        <controls:DialogCard.Footer>
+            <StackPanel>
+                <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" AutomationProperties.AutomationId="ListOptionsCancel" />
+                <Button Classes="ghost" Content="Apply" Command="{Binding ApplyCommand}" AutomationProperties.AutomationId="ListOptionsApply" />
+                <Button Classes="primary" Content="OK" Command="{Binding OkCommand}" AutomationProperties.AutomationId="ListOptionsOk" />
+
+            </StackPanel>
+        </controls:DialogCard.Footer>
+    </controls:DialogCard>
 </UserControl>

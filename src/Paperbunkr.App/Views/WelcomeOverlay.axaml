@@ -17,40 +17,24 @@
         not - most non-CE users never need it.
     -->
     <UserControl.Styles>
-        <Style Selector="Button.setupCard">
-            <Setter Property="Padding" Value="16,15" />
-            <Setter Property="CornerRadius" Value="9" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Style Selector="Button.clickCard">
             <Setter Property="Margin" Value="0,0,0,10" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                </Transitions>
-            </Setter>
         </Style>
-        <Style Selector="Button.setupCard:pointerover">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-        </Style>
-        <Style Selector="Button.setupCard.muted">
+        <Style Selector="Button.clickCard.muted">
             <Setter Property="Opacity" Value="0.55" />
         </Style>
-        <Style Selector="Button.setupCard.muted:pointerover">
+        <Style Selector="Button.clickCard.muted:pointerover">
             <Setter Property="Opacity" Value="1" />
         </Style>
         <Style Selector="TextBlock.setupCardTitle">
-            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
         </Style>
         <Style Selector="TextBlock.setupCardDescription">
             <Setter Property="FontSize" Value="12" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="Margin" Value="0,3,0,0" />
+            <Setter Property="Margin" Value="0,4,0,0" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
     </UserControl.Styles>
@@ -59,7 +43,7 @@
                              Subtitle="Let's point it at your library — you can add more any time.">
 
         <StackPanel>
-            <Button Classes="setupCard" Command="{Binding AddComicFolderCommand}"
+            <Button Classes="clickCard" Padding="16,16" Command="{Binding AddComicFolderCommand}"
                     AutomationProperties.AutomationId="WelcomeAddComicFolder">
                 <Grid ColumnDefinitions="Auto,*">
                     <fi:SymbolIcon Grid.Column="0" Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" Margin="0,2,14,0" />
@@ -70,7 +54,7 @@
                 </Grid>
             </Button>
 
-            <Button Classes="setupCard" Command="{Binding AddBookFolderCommand}"
+            <Button Classes="clickCard" Padding="16,16" Command="{Binding AddBookFolderCommand}"
                     AutomationProperties.AutomationId="WelcomeAddBookFolder">
                 <Grid ColumnDefinitions="Auto,*">
                     <fi:SymbolIcon Grid.Column="0" Symbol="Book" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" Margin="0,2,14,0" />
@@ -81,7 +65,7 @@
                 </Grid>
             </Button>
 
-            <Button Classes="setupCard" Classes.muted="{Binding !CeInstallDetected}"
+            <Button Classes="clickCard" Padding="16,16" Classes.muted="{Binding !CeInstallDetected}"
                     Command="{Binding ImportFromCeCommand}"
                     AutomationProperties.AutomationId="WelcomeImportFromCe">
                 <Grid ColumnDefinitions="Auto,*">
@@ -91,7 +75,7 @@
                         <TextBlock Classes="setupCardDescription" Text="Bring over your CE library — series, issues, and reading progress." />
                         <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,6,0,0" IsVisible="{Binding CeInstallDetected}">
                             <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentTextBrush}" />
-                            <TextBlock Text="Found your CE install" Foreground="{DynamicResource PbAccentTextBrush}" FontSize="11.5" />
+                            <TextBlock Text="Found your CE install" Foreground="{DynamicResource PbAccentTextBrush}" FontSize="12" />
                         </StackPanel>
                     </StackPanel>
                 </Grid>

@@ -22,4 +22,10 @@ public class ReadingListTag
     public string? Category { get; set; }
 
     public IssueTagWeight Weight { get; set; } = IssueTagWeight.Unset;
+
+    /// <summary>Whether the tag is maintained from list/comic metadata or was added by the user.</summary>
+    public ReadingListTagOrigin Origin { get; set; } = ReadingListTagOrigin.User;
+
+    /// <summary>Stable rule identity for generated rows; null for user-created tags.</summary>
+    public string? GeneratedKey { get; set; }
 }

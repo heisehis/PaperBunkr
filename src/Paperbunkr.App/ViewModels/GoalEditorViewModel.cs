@@ -456,7 +456,7 @@ public partial class GoalEditorViewModel : ViewModelBase
         else
         {
             string unit = Metric == GoalMetric.Items ? "issues" : "pages";
-            string target = long.TryParse(TargetText, out long t) ? t.ToString("N0") : "?";
+            string target = long.TryParse(TargetText, out long t) ? t.ToString("N0") : "N"; // "Read N issues this year" until a target is typed (not a stray "?")
             text = $"Read {target} {unit}{(scope is null ? string.Empty : $" from {scope}")}{period}";
         }
 

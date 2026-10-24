@@ -8,8 +8,8 @@ namespace Paperbunkr.App.Controls;
 /// <summary>
 /// App-owned toast host logic (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-
 /// design.md item 5), replacing Avalonia's stock <c>WindowNotificationManager</c> so entrance/exit
-/// is <c>PbMotion*</c>-token-wired and Reduced-Motion-respecting - the stock control's own animation
-/// was confirmed entirely outside app control and untouched by <c>ThemeService.ApplyReducedMotion</c>.
+/// is <c>PbMotion*</c>-token-wired and follows the Motion setting - the stock control's own animation
+/// was confirmed entirely outside app control and untouched by the app's motion policy.
 ///
 /// Deliberately a plain class operating on an existing <see cref="AnimatedStackPanel"/> (declared
 /// in <c>MainWindow.axaml</c> as <c>ToastStack</c>), not a custom <see cref="Control"/> subclass of
@@ -17,11 +17,9 @@ namespace Paperbunkr.App.Controls;
 /// <c>PbToastView</c> per call site, same as the old <c>_notificationManager.Show(view, ...)</c>
 /// shape), so there's no templating/data-binding layer this needs to own.
 ///
-/// Reuses the same "entranceReady"/"entered" class pair Library's staggered entrance uses
-/// (Styles/Primitives.axaml) for each toast's own show/hide - entrance and exit share one duration
-/// (PbMotionStandard) rather than the motion skill's "exit ~70%" convention, an accepted v1
-/// simplification since building a second timed state purely for a faster exit wasn't worth a third
-/// style variant.
+/// Motion v2 (docs/superpowers/specs/2026-10-20-motion-system-v2-foundation-overlays-design.md §5.3): a toast is a Reveal - it rises
+/// 8 px and fades in on the Reveal tokens (class "toast" then "entered"), and leaves by fading only, on the shorter Reveal exit (class
+/// "leaving"), after which it is removed. Styles in Styles/Primitives.axaml.
 /// </summary>
 public sealed class ToastPresenter
 {
@@ -50,7 +48,9 @@ public sealed class ToastPresenter
             Close(_visible[0]);
         }
 
-        view.Classes.Add("entranceReady");
+        view.Classes.Add("toast");
+        // Screen readers announce a toast without it taking focus (review checklist: live regions on toasts).
+        Avalonia.Automation.AutomationProperties.SetLiveSetting(view, Avalonia.Automation.AutomationLiveSetting.Polite);
         _stack.Children.Add(view);
         _visible.Add(view);
 
@@ -84,15 +84,11 @@ public sealed class ToastPresenter
             autoCloseTimer.Stop();
         }
 
+        view.Classes.Add("leaving");
         view.Classes.Remove("entered");
         Closed?.Invoke(view);
 
-        var removeTimer = new DispatcherTimer { Interval = MotionTokens.GetStandard() };
-        removeTimer.Tick += (_, _) =>
-        {
-            removeTimer.Stop();
-            _stack.Children.Remove(view);
-        };
-        removeTimer.Start();
+        // Removed after the exit, from a timer - never inside the routed event that may have closed it (CLAUDE.md).
+        DispatcherTimer.RunOnce(() => _stack.Children.Remove(view), MotionTokens.GetRevealExit() > TimeSpan.Zero ? MotionTokens.GetRevealExit() : TimeSpan.FromMilliseconds(1));
     }
 }

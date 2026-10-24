@@ -115,13 +115,48 @@ public class LibraryFolderScannerTests : IDisposable
         CbzFixture.Create(Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz"), pageCount: 1);
         AddWatchedFolder(_scanRoot);
         var scanner = CreateScanner();
-        await scanner.ScanAllAsync(new Progress<(int, int)>());
+        var first = await scanner.ScanAllAsync(new Progress<(int, int)>());
 
         var second = await scanner.ScanAllAsync(new Progress<(int, int)>());
 
+        var firstDiagnostics = Assert.IsType<LibraryFolderScanDiagnostics>(first.Diagnostics);
+        Assert.Equal(1, firstDiagnostics.AvailableWatchedFolders);
+        Assert.Equal(1, firstDiagnostics.FilePathsEnumerated);
+        Assert.Equal(1, firstDiagnostics.SupportedComicFiles);
+        Assert.Equal(0, firstDiagnostics.AlreadyTrackedPaths);
+        Assert.Equal(1, firstDiagnostics.CandidateFiles);
+        Assert.Equal(1, firstDiagnostics.IssuesImported);
+        Assert.True(firstDiagnostics.EnumerationAndFiltering >= TimeSpan.Zero);
+        Assert.True(firstDiagnostics.ImportProcessing >= TimeSpan.Zero);
+        Assert.True(firstDiagnostics.TotalScan >= firstDiagnostics.EnumerationAndFiltering + firstDiagnostics.ImportProcessing);
+
         Assert.Equal(0, second.IssuesAdded);
+        var secondDiagnostics = Assert.IsType<LibraryFolderScanDiagnostics>(second.Diagnostics);
+        Assert.Equal(1, secondDiagnostics.FilePathsEnumerated);
+        Assert.Equal(1, secondDiagnostics.SupportedComicFiles);
+        Assert.Equal(1, secondDiagnostics.AlreadyTrackedPaths);
+        Assert.Equal(0, secondDiagnostics.CandidateFiles);
+        Assert.Equal(0, secondDiagnostics.IssuesImported);
+        var snapshot = Assert.IsType<LibraryScanPresenceSnapshot>(first.PresenceSnapshot);
+        Assert.True(snapshot.TryGetExists(Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz"), out bool present));
+        Assert.True(present); // includes comics imported by this same scan
+        Assert.True(snapshot.TryGetExists(Path.Combine(_scanRoot, "gone.cbz"), out bool missing));
+        Assert.False(missing);
+        Assert.False(snapshot.TryGetExists(Path.Combine(Path.GetTempPath(), "outside.cbz"), out _));
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.Single(context.Issues);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_PresenceSnapshot_ExcludesUnavailableWatchedFolders()
+    {
+        string unavailable = Path.Combine(_scanRoot, "not-mounted");
+        AddWatchedFolder(unavailable);
+
+        var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        var snapshot = Assert.IsType<LibraryScanPresenceSnapshot>(result.PresenceSnapshot);
+        Assert.False(snapshot.TryGetExists(Path.Combine(unavailable, "gone.cbz"), out _));
     }
 
     // ===================== Scanning: missing-file handling (docs/superpowers/specs/2026-09-06-
@@ -144,6 +179,11 @@ public class LibraryFolderScannerTests : IDisposable
         var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
 
         Assert.Equal(0, result.IssuesAdded);
+        var diagnostics = Assert.IsType<LibraryFolderScanDiagnostics>(result.Diagnostics);
+        Assert.Equal(1, diagnostics.FilePathsEnumerated);
+        Assert.Equal(1, diagnostics.SupportedComicFiles);
+        Assert.Equal(1, diagnostics.CandidateFiles); // Removed-file filtering happens in shared import processing.
+        Assert.Equal(0, diagnostics.IssuesImported);
         using var verifyContext = new PaperbunkrDbContext(_dbOptions);
         Assert.Empty(verifyContext.Issues);
     }

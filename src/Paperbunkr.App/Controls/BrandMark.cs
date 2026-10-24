@@ -79,6 +79,11 @@ public class BrandMark : TemplatedControl
     public static readonly StyledProperty<bool> ShowTextProperty =
         AvaloniaProperty.Register<BrandMark, bool>(nameof(ShowText), defaultValue: true);
 
+    /// <summary>False: a value with no mark draws nothing, instead of its name as plain text. For a mark beside a field that already shows the
+    /// value (the issue editor's Age Rating printed "Unknown" twice).</summary>
+    public static readonly StyledProperty<bool> TextFallbackProperty =
+        AvaloniaProperty.Register<BrandMark, bool>(nameof(TextFallback), defaultValue: true);
+
     public static readonly StyledProperty<double> MarkSizeProperty =
         AvaloniaProperty.Register<BrandMark, double>(nameof(MarkSize), defaultValue: 16d);
 
@@ -163,6 +168,7 @@ public class BrandMark : TemplatedControl
     public double MaxMarkWidth { get => GetValue(MaxMarkWidthProperty); set => SetValue(MaxMarkWidthProperty, value); }
     public double MarkHeight => _markHeight;
     public bool ShowText { get => GetValue(ShowTextProperty); set => SetValue(ShowTextProperty, value); }
+    public bool TextFallback { get => GetValue(TextFallbackProperty); set => SetValue(TextFallbackProperty, value); }
     public double MarkSize { get => GetValue(MarkSizeProperty); set => SetValue(MarkSizeProperty, value); }
 
     public IImage? ImageSource => _imageSource;
@@ -191,7 +197,7 @@ public class BrandMark : TemplatedControl
         base.OnPropertyChanged(change);
 
         if (change.Property == FamilyProperty || change.Property == ValueProperty || change.Property == EnsureContrastProperty || change.Property == MaxMarkWidthProperty || change.Property == YearProperty || change.Property == MonthProperty ||
-            change.Property == MarkSizeProperty || change.Property == ShowTextProperty ||
+            change.Property == MarkSizeProperty || change.Property == ShowTextProperty || change.Property == TextFallbackProperty ||
             change.Property == ForegroundProperty)
         {
             Rebuild();
@@ -221,7 +227,7 @@ public class BrandMark : TemplatedControl
         SetAndRaise(IsRasterProperty, ref _isRaster, spec.Kind is MarkKind.Raster);
         SetAndRaise(IsChipProperty, ref _isChip, spec.Kind is MarkKind.LetterMark);
         SetAndRaise(IsPlainTextProperty, ref _isPlainText,
-            spec.Kind is MarkKind.Text or MarkKind.None && !string.IsNullOrWhiteSpace(spec.Text ?? Value));
+            TextFallback && spec.Kind is MarkKind.Text or MarkKind.None && !string.IsNullOrWhiteSpace(spec.Text ?? Value));
 
         string? label = spec.Kind switch
         {

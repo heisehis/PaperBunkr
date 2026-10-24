@@ -1,7 +1,7 @@
 # Bulk actions for story-event suggestions
 
 Date: 2026-10-24
-Status: Design choices approved in chat; written specification awaiting review.
+Status: Implemented after written-spec approval in chat; implementation uncommitted.
 
 ## Scope and reference
 
@@ -85,3 +85,15 @@ and fake provider work, with no live requests. Run focused tests and the existin
 XAML/shared-control lint checks. Review wrapping, checkbox labels, status text and
 theme tokens using the Avalonia MVVM, layout and review-checklist subskills.
 Record any manual rendering or keyboard checks that remain outstanding.
+
+## Verification
+
+The App and its compiled XAML built successfully. The focused selection of
+StoryEventSuggestionBulkTests, SuggestionsChecksViewModelTests,
+XamlConsistencyLintTests, ThemeHardcodedColorLintTests and SharedControlsStyleTests
+passed all 45 tests. This includes selected-only acceptance/dismissal, remembered
+dismissals, failure continuation and retry, progress and busy guards, sidebar
+refresh, existing individual acceptance/navigation, and view construction/layout
+in default, Daylight and Matrix themes at content widths of 640 and 1000 pixels.
+Headless render samples were generated for visual inspection. Real-window
+keyboard navigation and screen-reader checks remain manual follow-up work.

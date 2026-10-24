@@ -20,16 +20,15 @@ public sealed record InferredEventRelation(int SourceEventId, int TargetEventId,
 /// <summary>
 /// The smart connector's local half (docs/superpowers/specs/2026-09-27-continuity-map-design.md §2): which event comes before which,
 /// read from the library itself. Strong: direct continuation (a shared series picks up at the next issue number), a name pattern
-/// naming another event ("Prelude to X", "X: Aftermath"), shared-series order. Weak: date order plus a shared name word, the same
-/// base name years apart, shared issues with overlapping dates (Crossover). Pairs you related yourself, dismissed pairs and pairs
-/// still waiting in the duplicate review are left alone.
+/// naming another event ("Prelude to X", "X: Aftermath"), shared-series order. The weak guesses (date order plus a shared name word, the
+/// same name years apart, overlapping-date Crossover) were dropped on 2026-10-12: date order alone is placement, not a link
+/// (docs/superpowers/specs/2026-10-12-continuity-sources-design.md §4.2). Pairs you related yourself and dismissed pairs are left alone.
 /// </summary>
 public static class EventChronologyInference
 {
     public const decimal ContinuationConfidence = 0.9m;
     public const decimal NamePatternConfidence = 0.85m;
     public const decimal SharedOrderConfidence = 0.75m;
-    public const decimal WeakConfidence = 0.5m;
 
     private static readonly Regex[] PrequelPatterns =
     {
@@ -43,16 +42,9 @@ public static class EventChronologyInference
         new(@"^\s*(?:aftermath|fallout)\s+of\s+(?<x>.+?)\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled),
     };
 
-    private static readonly Regex YearSuffix = new(@"\s*\((?<y>(?:19|20)\d{2})\)\s*$", RegexOptions.Compiled);
-
-    private static readonly HashSet<string> CommonWords = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "the", "and", "of", "from", "with", "into", "part", "saga", "event", "comics", "marvel", "dc",
-    };
-
     private sealed record Member(int IssueId, int SeriesId, string SeriesName, float? Number, string NumberLabel, int? Date);
 
-    private sealed record Snapshot(int Id, string Name, HashSet<string> Keys, int? Start, int? End, List<Member> Members, HashSet<string> Words)
+    private sealed record Snapshot(int Id, string Name, HashSet<string> Keys, int? Start, int? End, List<Member> Members)
     {
         public HashSet<int> IssueIds { get; } = Members.Select(m => m.IssueId).ToHashSet();
     }
@@ -68,9 +60,6 @@ public static class EventChronologyInference
 
         var byId = events.ToDictionary(e => e.Id);
         var excluded = ExcludedPairs(context);
-        var pendingDuplicates = StoryEventIdentityResolver.FindPairs(context)
-            .Select(p => p.EventAId < p.EventBId ? (p.EventAId, p.EventBId) : (p.EventBId, p.EventAId))
-            .ToHashSet();
 
         var results = new List<InferredEventRelation>();
         void Add(InferredEventRelation? r)
@@ -99,7 +88,6 @@ public static class EventChronologyInference
             var a = byId[low];
             var b = byId[high];
             Add(FromSharedSeries(a, b) ?? FromSharedSeries(b, a));
-            Add(FromWeakSignals(a, b, pendingDuplicate: pendingDuplicates.Contains((low, high))));
         }
 
         // One relation per pair: strong beats weak, then the higher confidence.
@@ -143,8 +131,6 @@ public static class EventChronologyInference
         }
 
         foreach (var g in events.SelectMany(e => e.Members.Select(m => (m.SeriesId, e.Id))).GroupBy(x => x.SeriesId)) AddGroup(g.Select(x => x.Id));
-        foreach (var g in events.SelectMany(e => e.Words.Select(w => (Word: w.ToLowerInvariant(), e.Id))).GroupBy(x => x.Word)) AddGroup(g.Select(x => x.Id));
-        foreach (var g in events.GroupBy(e => BaseKey(e.Name))) AddGroup(g.Select(e => e.Id));
         return pairs;
     }
 
@@ -228,45 +214,6 @@ public static class EventChronologyInference
             : new InferredEventRelation(later.Id, earlier.Id, RelationType.Sequel, true, SharedOrderConfidence, string.Join("; ", spans));
     }
 
-    /// <param name="pendingDuplicate">The pair waits in the duplicate review: never call it a same-name sequel as well.</param>
-    private static InferredEventRelation? FromWeakSignals(Snapshot a, Snapshot b, bool pendingDuplicate)
-    {
-        int shared = a.IssueIds.Count(b.IssueIds.Contains);
-        bool overlap = a.Start is int aS && a.End is int aE && b.Start is int bS && b.End is int bE && aS <= bE && bS <= aE;
-        if (shared > 0)
-        {
-            return overlap
-                ? new InferredEventRelation(a.Id, b.Id, RelationType.Crossover, false, WeakConfidence,
-                    $"{shared} shared issue{(shared == 1 ? "" : "s")}, overlapping dates")
-                : null;
-        }
-
-        var (earlier, later) = (a.Start ?? int.MaxValue) <= (b.Start ?? int.MaxValue) ? (a, b) : (b, a);
-        if (earlier.Start is null || later.Start is null)
-        {
-            return null;
-        }
-
-        // The same base name years apart: "Secret Wars (1984)" / "Secret Wars (2015)".
-        if (!pendingDuplicate && BaseKey(a.Name) == BaseKey(b.Name) && later.Start / 100 - earlier.Start / 100 >= 3)
-        {
-            return new InferredEventRelation(later.Id, earlier.Id, RelationType.Sequel, false, WeakConfidence,
-                $"Same name, {earlier.Start / 100} and {later.Start / 100}");
-        }
-
-        // Date order plus a shared significant word in the name.
-        string? word = earlier.Words.FirstOrDefault(w => later.Words.Contains(w));
-        if (word is not null && (earlier.End ?? earlier.Start) < later.Start)
-        {
-            return new InferredEventRelation(later.Id, earlier.Id, RelationType.Sequel, false, WeakConfidence,
-                $"{earlier.Name} ends {(earlier.End ?? earlier.Start) / 100}, {later.Name} starts {later.Start / 100}; both named “{word}”");
-        }
-
-        return null;
-    }
-
-    private static string BaseKey(string name) => EventNameKeys.Key(YearSuffix.Replace(name, string.Empty));
-
     /// <param name="gcd">When given, matched issues are dated by GCD's on-sale dates (docs/superpowers/specs/2026-09-27-gcd-data-design.md §4).</param>
     private static List<Snapshot> LoadSnapshots(PaperbunkrDbContext context, Gcd.GcdDataStore? gcd)
     {
@@ -301,16 +248,10 @@ public static class EventChronologyInference
             int? start = EventChronology.DateKey(r.StartDate) ?? (dates.Count > 0 ? dates.Min() : null);
             int? end = EventChronology.DateKey(r.EndDate) ?? (dates.Count > 0 ? dates.Max() : null);
             var series = members.Select(m => m.SeriesName).Where(n => n.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            return new Snapshot(r.Id, r.Name, EventNameKeys.For(r.Name, series, r.AliasKeys), start, end, members, SignificantWords(r.Name));
+            return new Snapshot(r.Id, r.Name, EventNameKeys.For(r.Name, series, r.AliasKeys), start, end, members);
         }).ToList();
     }
 
     private static float? ParseNumber(string? number) =>
         float.TryParse((number ?? string.Empty).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float n) ? n : null;
-
-    private static HashSet<string> SignificantWords(string name) =>
-        YearSuffix.Replace(name, string.Empty)
-            .Split(new[] { ' ', '-', ':', '(', ')', '/', ',', '.', '–', '—' }, StringSplitOptions.RemoveEmptyEntries)
-            .Where(w => w.Length > 3 && !CommonWords.Contains(w))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 }

@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:fi="using:FluentIcons.Avalonia" xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
@@ -21,16 +21,16 @@
     <Grid RowDefinitions="Auto,*">
 
         <!-- Nothing yet -->
-        <StackPanel Grid.RowSpan="2" Margin="28,40" Spacing="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+        <StackPanel Grid.RowSpan="2" Margin="24,40" Spacing="14" HorizontalAlignment="Center" VerticalAlignment="Center"
                     IsVisible="{Binding ShowEmptyPrompt}">
             <controls:EmptyIllustration Kind="Timeline" HorizontalAlignment="Center" />
             <TextBlock Text="Create a continuity or an event to get started" FontSize="13"
                        Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" />
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                <Button Classes="headerAction primary" Content="＋ New continuity"
-                        Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenNewEventDialogCommand}" CommandParameter="Continuity" />
-                <Button Classes="headerAction secondary" Content="＋ New event"
-                        Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenNewEventDialogCommand}" CommandParameter="Event" />
+                <Button Classes="primary"
+                        Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenNewEventDialogCommand}" CommandParameter="Continuity"><StackPanel Orientation="Horizontal" Spacing="6"><fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="New continuity" VerticalAlignment="Center" /></StackPanel></Button>
+                <Button Classes="secondary"
+                        Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenNewEventDialogCommand}" CommandParameter="Event"><StackPanel Orientation="Horizontal" Spacing="6"><fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="New event" VerticalAlignment="Center" /></StackPanel></Button>
             </StackPanel>
         </StackPanel>
 
@@ -39,20 +39,20 @@
             <views:ContinuityHero DataContext="{Binding ContinuityPage}" IsVisible="{Binding #Screen.((vm:ContinuityScreenViewModel)DataContext).IsContinuitySelected}" />
             <views:EventHero DataContext="{Binding EventPage}" IsVisible="{Binding #Screen.((vm:ContinuityScreenViewModel)DataContext).IsEventSelected}" />
             <Border Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    CornerRadius="6" Padding="3" Margin="28,20" HorizontalAlignment="Right" VerticalAlignment="Top">
+                    CornerRadius="{DynamicResource PbRadiusSm}" Padding="4" Margin="24,20" HorizontalAlignment="Right" VerticalAlignment="Top">
                 <StackPanel Orientation="Horizontal" Spacing="2">
-                    <Button Classes="segToggle" Classes.on="{Binding IsOverviewView}" Content="Overview"
+                    <Button Classes="segItem segToggle" Classes.on="{Binding IsOverviewView}" Content="Overview"
                             Command="{Binding SetDetailViewCommand}" CommandParameter="{x:Static models:EventsDetailView.Primary}" />
-                    <Button Classes="segToggle" Classes.on="{Binding IsMapView}" Content="Map" AutomationProperties.Name="Map view"
+                    <Button Classes="segItem segToggle" Classes.on="{Binding IsMapView}" Content="Map" AutomationProperties.Name="Map view"
                             Command="{Binding SetDetailViewCommand}" CommandParameter="{x:Static models:EventsDetailView.Map}" />
-                    <Button Classes="segToggle" Classes.on="{Binding IsTimelineView}" Content="Timeline"
+                    <Button Classes="segItem segToggle" Classes.on="{Binding IsTimelineView}" Content="Timeline"
                             Command="{Binding SetDetailViewCommand}" CommandParameter="{x:Static models:EventsDetailView.Timeline}" />
                 </StackPanel>
             </Border>
         </Panel>
 
         <!-- Body: Overview -->
-        <ScrollViewer Grid.Row="1" x:Name="OverviewScroller" IsVisible="{Binding ShowOverview}" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer Grid.Row="1" x:Name="OverviewScroller" IsVisible="{Binding ShowOverview}" controls:Replace.On="{Binding ShowOverview}" HorizontalScrollBarVisibility="Disabled">
             <Panel Margin="0,0,0,40">
                 <views:ContinuityOverviewView DataContext="{Binding ContinuityPage}"
                                               IsVisible="{Binding #Screen.((vm:ContinuityScreenViewModel)DataContext).IsContinuitySelected}" />
@@ -62,13 +62,14 @@
         </ScrollViewer>
 
         <!-- Body: Timeline -->
-        <ScrollViewer Grid.Row="1" IsVisible="{Binding ShowTimeline}" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding ShowTimeline}" controls:Replace.On="{Binding ShowTimeline}" HorizontalScrollBarVisibility="Disabled">
             <views:ContinuityTimelineView DataContext="{Binding Timeline}" Margin="0,0,0,40" />
         </ScrollViewer>
 
         <!-- Body: the Event Map, beside (not inside) a ScrollViewer - it needs its own two-axis viewport -->
         <views:EventMapView Grid.Row="1" DataContext="{Binding ActiveMap}"
-                            IsVisible="{Binding #Screen.((vm:ContinuityScreenViewModel)DataContext).ShowEventMap}" />
+                            IsVisible="{Binding #Screen.((vm:ContinuityScreenViewModel)DataContext).ShowEventMap}"
+                            controls:Replace.On="{Binding #Screen.((vm:ContinuityScreenViewModel)DataContext).ShowEventMap}" />
 
         <!-- Suggestions & checks -->
         <ScrollViewer Grid.RowSpan="2" IsVisible="{Binding IsSuggestionsOpen}" HorizontalScrollBarVisibility="Disabled">

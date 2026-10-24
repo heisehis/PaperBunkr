@@ -82,6 +82,7 @@ Multiple values may be selected, including overlapping cases such as an event th
 ### Provider identity and data safety
 
 - Event lookup supports Metron and ComicVine arc sources; Continuity lookup supports Metron universes.
+- Continuity setup searches Metron by the continuity name and universe designation, then lets the user choose a result; users are not expected to know or enter a Metron ID before searching.
 - Provider IDs remain namespaced. Equal numeric values from different providers are never considered equal by themselves.
 - An exact provider-ID match identifies an existing local Event or Continuity for reuse. A similar name alone does not merge or reuse a record.
 - A contradictory provider identity is surfaced as a conflict and blocks silent association.

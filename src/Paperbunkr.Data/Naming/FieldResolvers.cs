@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Paperbunkr.Data.Entities;
@@ -488,7 +489,7 @@ public static class FieldResolvers
     };
 
     /// <summary>A token name as this engine spells it, or as the plugin's editor does ("Series", "ShadowSeries"), in any case.</summary>
-    private static bool TryFindFieldResolver(string name, out TokenFieldResolver? resolver)
+    private static bool TryFindFieldResolver(string name, [NotNullWhen(true)] out TokenFieldResolver? resolver)
     {
         if (ByName.TryGetValue(name, out resolver))
         {

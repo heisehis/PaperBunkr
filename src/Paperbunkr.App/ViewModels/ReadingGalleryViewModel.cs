@@ -14,6 +14,7 @@ using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.ReadingLists;
+using Paperbunkr.Data.ReadingLists.Sources;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -39,7 +40,14 @@ public partial class ReadingGalleryViewModel : ViewModelBase
     /// <summary>What the gallery knows about each list after <see cref="Refresh"/>.</summary>
     private sealed record ListStats(
         int Id, string Name, int? FolderId, int SortOrder, int Total, int Read, int OwnedUnread, IReadOnlyList<string> CoverKeys,
-        string? CoverImageUrl, IReadOnlyList<string> Tags, string? NextLabel, string? FirstCoverKey);
+        string? CoverImageUrl, IReadOnlyList<string> Tags, string? NextLabel, string? FirstCoverKey,
+        IReadOnlyList<ReadingProgressSegment> ProgressSegments,
+        ReadingListType Type, string? Source, bool HasContinuity, string? Description);
+
+    /// <summary>Test seam for the forecast's clock.</summary>
+    internal Func<DateTime> UtcNow { get; set; } = () => DateTime.UtcNow;
+
+    private IReadOnlyList<DateTime> _finishedComicUtc = Array.Empty<DateTime>();
 
     public ReadingGalleryViewModel(IFilePickerService filePicker, IActivityService activity, IDialogService? dialogs, Action<int> openList,
         Func<ReadingListExportRequest, Task> exportList)
@@ -101,6 +109,7 @@ public partial class ReadingGalleryViewModel : ViewModelBase
             .Include(r => r.Tags)
             .ToList();
 
+        _finishedComicUtc = ReadingListForecast.LoadFinishedComicTimestamps(context, UtcNow());
         _lists = lists.Select(list =>
         {
             var items = list.Items.OrderBy(i => i.SortOrder).ThenBy(i => i.Id).ToList();
@@ -115,7 +124,8 @@ public partial class ReadingGalleryViewModel : ViewModelBase
                 list.CoverImageUrl,
                 list.Tags.Select(t => t.Value).ToList(),
                 next is null ? null : $"{next.Series?.Name ?? "Unknown"} #{next.EffectiveNumber()}",
-                coverKeys.FirstOrDefault());
+                coverKeys.FirstOrDefault(), BuildProgressSegments(items),
+                list.Type, list.Source, list.ContinuityId is not null, list.Description);
         }).ToList();
 
         if (CurrentFolderId is int current && _folders.All(f => f.Id != current))
@@ -164,6 +174,7 @@ public partial class ReadingGalleryViewModel : ViewModelBase
                     Name = l.Name,
                     CoverKey = l.FirstCoverKey,
                     NextLine = $"next: {l.NextLabel} · {l.Read}/{l.Total}",
+                    Progress = l.Total == 0 ? 0 : (double)l.Read / l.Total,
                 });
             }
         }
@@ -238,6 +249,13 @@ public partial class ReadingGalleryViewModel : ViewModelBase
 
     private ReadingGalleryTile ListTile(ListStats list)
     {
+        int unread = list.Total - list.Read;
+        bool finished = list.Total > 0 && unread == 0;
+        var now = UtcNow();
+        var forecast = finished ? null : ReadingListForecast.Compute(_finishedComicUtc, unread, Math.Max(0, unread - list.OwnedUnread), now);
+        string issues = list.Total == 1 ? "1 ISSUE" : $"{list.Total} ISSUES";
+        string caption = ReadingListTypeCaption.For(list.Type, !string.IsNullOrEmpty(list.Source), list.HasContinuity) ?? string.Empty;
+        string source = string.IsNullOrEmpty(list.Source) ? string.Empty : ReadingListSourceRegistry.GetDisplayName(list.Source).ToUpperInvariant() + " · ";
         var tile = new ReadingGalleryTile
         {
             Id = list.Id,
@@ -246,8 +264,15 @@ public partial class ReadingGalleryViewModel : ViewModelBase
             SortOrder = list.SortOrder,
             SubLine = $"{list.Read} / {list.Total} read",
             Progress = list.Total == 0 ? 0 : (double)list.Read / list.Total,
+            ProgressSegments = list.ProgressSegments,
             CoverKeys = list.CoverKeys,
             Tags = list.Tags,
+            TypeCaption = caption.Length == 0 ? null : caption,
+            CaptionLine = (caption.Length == 0 ? string.Empty : "· ") + source + issues,
+            Synopsis = ReadingListPageViewModel.CleanSynopsis(list.Description),
+            IsFinished = finished,
+            FooterLeft = finished ? "✓ Finished" : list.Read == 0 ? "Not started" : $"{list.Read} / {list.Total} read",
+            FooterRight = forecast is null ? string.Empty : ReadingListForecast.FormatFinishBy(forecast.FinishByUtc, now),
             ArcCover = ArcCoverImageCache.Get(list.Id),
         };
         if (tile.ArcCover is null && !string.IsNullOrEmpty(list.CoverImageUrl))
@@ -256,6 +281,18 @@ public partial class ReadingGalleryViewModel : ViewModelBase
         }
 
         return tile;
+    }
+
+    private static IReadOnlyList<ReadingProgressSegment> BuildProgressSegments(IReadOnlyList<ReadingListItem> items)
+    {
+        const int maximumSegments = 24;
+        if (items.Count <= maximumSegments) return items.Select(i => new ReadingProgressSegment(i.Issue?.HasBeenRead() == true)).ToList();
+        return Enumerable.Range(0, maximumSegments).Select(bucket =>
+        {
+            int start = bucket * items.Count / maximumSegments;
+            int end = (bucket + 1) * items.Count / maximumSegments;
+            return new ReadingProgressSegment(end > start && items.Skip(start).Take(end - start).All(i => i.Issue?.HasBeenRead() == true));
+        }).ToList();
     }
 
     private static async Task LoadArcCoverAsync(ReadingGalleryTile tile, string url)

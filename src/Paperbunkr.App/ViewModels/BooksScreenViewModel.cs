@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -44,6 +45,43 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
     private readonly Action<int> _goEditSeries;
     private readonly Action _goLibrarySettings;
     private readonly Action<string, string> _showToast;
+    private PreferencesScreenViewModel? _preferencesForScan;
+
+    public bool IsBookFolderOperationRunning => _preferencesForScan?.IsAnyBookFolderOperationRunning ?? false;
+
+    /// <summary>Connects the Books toolbar to the shared Preferences book-scan workflow.</summary>
+    public void AttachManualScan(PreferencesScreenViewModel preferences)
+    {
+        if (_preferencesForScan is not null)
+        {
+            _preferencesForScan.PropertyChanged -= OnPreferencesScanStateChanged;
+        }
+
+        _preferencesForScan = preferences;
+        _preferencesForScan.PropertyChanged += OnPreferencesScanStateChanged;
+        OnPropertyChanged(nameof(IsBookFolderOperationRunning));
+    }
+
+    private void OnPreferencesScanStateChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(PreferencesScreenViewModel.IsAnyBookFolderOperationRunning)
+            or nameof(PreferencesScreenViewModel.IsScanningBooks)
+            or nameof(PreferencesScreenViewModel.IsClearingBookCoverCache))
+        {
+            OnPropertyChanged(nameof(IsBookFolderOperationRunning));
+        }
+    }
+
+    [RelayCommand]
+    private async Task ScanBooks()
+    {
+        if (_preferencesForScan is null || IsBookFolderOperationRunning)
+        {
+            return;
+        }
+
+        await _preferencesForScan.ScanBookFoldersFromToolbarAsync(LoadFromDatabase);
+    }
 
     /// <summary>Every book, unfiltered/ungrouped - <see cref="Rebuild"/> derives <see cref="Books"/>
     /// / <see cref="Groups"/> from this on every search/sort/group change without re-querying.</summary>
@@ -591,6 +629,7 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
 
     private void Rebuild()
     {
+        PlayEntranceAnimation = false; // pulse: a one-shot entrance opens on a real false -> true change (Motion v2 D, Q19)
         PlayEntranceAnimation = true;
 
         IEnumerable<BookCardSample> cards = _allCards;

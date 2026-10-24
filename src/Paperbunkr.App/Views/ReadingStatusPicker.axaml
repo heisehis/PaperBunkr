@@ -30,8 +30,8 @@
         <Style Selector="Button.statusOption">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="5" />
-            <Setter Property="Padding" Value="9,6" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Padding" Value="8,6" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Cursor" Value="Hand" />
@@ -56,8 +56,8 @@
                         IsVisible="{Binding !HasStatus}">
                 <fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeXs}"
                                Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                <TextBlock Text="Set status" FontSize="{StaticResource PbFontSizeMeta}"
-                           Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="Set status" FontSize="{DynamicResource PbFontSizeMeta}"
+                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
             </StackPanel>
         </Panel>
 
@@ -72,8 +72,8 @@
                                 <Grid ColumnDefinitions="18,*,16">
                                     <fi:SymbolIcon Grid.Column="0" Symbol="{Binding Glyph}"
                                                    FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Label}" Margin="7,0,0,0"
-                                               FontSize="{StaticResource PbFontSizeControl}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Label}" Margin="8,0,0,0"
+                                               FontSize="{DynamicResource PbFontSizeControl}" VerticalAlignment="Center" />
                                     <fi:SymbolIcon Grid.Column="2" Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}"
                                                    Foreground="{DynamicResource PbAccentBrush}" VerticalAlignment="Center"
                                                    IsVisible="{Binding IsChecked}" />

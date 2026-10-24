@@ -25,14 +25,10 @@
 
     <!-- The app's shared overlay (scrim, Esc / click-outside to close, close button) around the compare card -->
     <controls:OverlayShell IsOpen="{Binding IsComparing}" CloseCommand="{Binding ToggleCompareCommand}">
-        <Border Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                CornerRadius="{DynamicResource PbRadius}" Padding="20" Margin="40" MaxWidth="980" MaxHeight="680"
-                HorizontalAlignment="Center" VerticalAlignment="Center">
-            <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
-                <TextBlock Classes="pbTextHeading" FontSize="18" Text="Compare &amp; merge" />
-
+        <controls:DialogCard Title="Compare &amp; merge" Subtitle="{Binding Name}" Size="XLarge" Margin="40">
+            <Grid RowDefinitions="Auto,*" RowSpacing="12">
                 <!-- The other continuities sharing series with this one -->
-                <ItemsControl Grid.Row="1" ItemsSource="{Binding OverlappingContinuities}">
+                <ItemsControl Grid.Row="0" ItemsSource="{Binding OverlappingContinuities}">
                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:ContinuityOverlapCard">
@@ -47,7 +43,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <Grid Grid.Row="2" ColumnDefinitions="*,*,*" ColumnSpacing="16" IsVisible="{Binding HasComparison}">
+                <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="16" IsVisible="{Binding HasComparison}">
                     <StackPanel Grid.Column="0" Spacing="6">
                         <TextBlock Classes="csSection" Text="{Binding Name, StringFormat='Only in {0}'}" TextTrimming="CharacterEllipsis" />
                         <ScrollViewer MaxHeight="420"><ItemsControl ItemsSource="{Binding OnlyHereSeries}" ItemTemplate="{StaticResource NameRow}" /></ScrollViewer>
@@ -63,12 +59,13 @@
                         <ScrollViewer MaxHeight="420"><ItemsControl ItemsSource="{Binding OnlyThereSeries}" ItemTemplate="{StaticResource NameRow}" /></ScrollViewer>
                     </StackPanel>
                 </Grid>
-
-                <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" IsVisible="{Binding HasComparison}">
-                    <TextBlock Text="Merging moves this continuity's series into the other and deletes this one." Classes="csFaint" VerticalAlignment="Center" />
-                    <Button Classes="headerAction primary" Content="{Binding MergeConfirm.Label}" Command="{Binding MergeConfirm.TriggerCommand}" />
-                </StackPanel>
             </Grid>
-        </Border>
+            <controls:DialogCard.Footer>
+                <StackPanel IsVisible="{Binding HasComparison}">
+                    <TextBlock Text="Merging moves this continuity's series into the other and deletes this one." Classes="csFaint" VerticalAlignment="Center" />
+                    <Button Classes="primary" Content="{Binding MergeConfirm.Label}" Command="{Binding MergeConfirm.TriggerCommand}" />
+                </StackPanel>
+            </controls:DialogCard.Footer>
+        </controls:DialogCard>
     </controls:OverlayShell>
 </UserControl>

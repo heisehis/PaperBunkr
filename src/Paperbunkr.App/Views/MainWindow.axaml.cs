@@ -37,6 +37,8 @@ public partial class MainWindow : Window
     /// "first minimize after enabling the setting" special case to get wrong.
     /// </summary>
     private readonly TrayIconService _trayIconService = new();
+    private TaskbarBadgeService? _taskbarBadge;
+    private readonly DispatcherTimer _taskbarBadgeTimer = new() { Interval = TimeSpan.FromSeconds(30) };
 
     /// <summary>
     /// Set only by <see cref="ExitFromTray"/> - a second guard alongside
@@ -101,6 +103,10 @@ public partial class MainWindow : Window
         DataContextChanged += OnDataContextChanged;
         _railCollapseTimer.Tick += OnRailCollapseTimerTick;
 
+        _taskbarBadgeTimer.Tick += (_, _) => RefreshTaskbarBadge();
+        _taskbarBadgeTimer.Start();
+        Opened += (_, _) => RefreshTaskbarBadge();
+        Activated += (_, _) => RefreshTaskbarBadge();
         _trayIconService.RestoreRequested += RestoreFromTray;
         _trayIconService.ExitRequested += ExitFromTray;
         PropertyChanged += OnWindowPropertyChanged;
@@ -231,6 +237,12 @@ public partial class MainWindow : Window
 
     private void OnWindowPropertyChanged(object? sender, Avalonia.AvaloniaPropertyChangedEventArgs e)
     {
+        // Minimise / maximise / restore moves both ends of a cover flight: stop it (Motion v2 navigation §3.3).
+        if (e.Property == WindowStateProperty)
+        {
+            SharedElementTransitionService.Shared.Cancel();
+        }
+
         if (e.Property == WindowStateProperty && WindowState == WindowState.Minimized && IsMinimizeToTrayEnabled())
         {
             MinimizeToTray();
@@ -645,6 +657,24 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Cosmetics pitch #24: taskbar overlay count and tray accent dot for wanted issues released in the last seven days.</summary>
+    public void RefreshTaskbarBadge(bool rerender = false)
+    {
+        try
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            bool enabled = context.GetOrCreateAppSettings().ShowTaskbarBadge;
+            int count = enabled && DataContext is MainViewModel viewModel ? viewModel.ActivityCenter.Alerts.Count : 0;
+            _taskbarBadge ??= new TaskbarBadgeService(this);
+            _taskbarBadge.Show(count, rerender);
+            _trayIconService.SetAccentDot(count > 0, rerender);
+        }
+        catch
+        {
+            // Cosmetic; a locked database just leaves the previous badge in place.
+        }
+    }
+
     private static bool IsMinimizeToTrayEnabled()
     {
         using var context = PaperbunkrDb.CreateContext();
@@ -692,6 +722,9 @@ public partial class MainWindow : Window
         {
             return;
         }
+
+        // The taskbar badge counts the Activity Center's pending alerts: recount whenever one arrives or is dismissed.
+        viewModel.ActivityCenter.Alerts.CollectionChanged += (_, _) => Dispatcher.UIThread.Post(() => RefreshTaskbarBadge(), DispatcherPriority.Background);
 
         // Shared toast template (docs/superpowers/specs/2026-09-06-feedback-notification-system-
         // design.md §5) - PbToastView renders its own severity icon/accent color, so NotificationType

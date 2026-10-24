@@ -194,6 +194,79 @@ public class SharedElementTransitionServiceTests
         window.Close();
     });
 
+    /// <summary>Motion v2 navigation §3.3: only one cover is ever on screen - the real source is hidden from capture, and whatever
+    /// happens (here a cancel) it comes back.</summary>
+    [Fact]
+    public void Capture_HidesTheRealSourceCover_AndCancelBringsItBack() => RunSync(() =>
+    {
+        var (window, overlay, screenHost) = CreateHarness();
+        var service = new SharedElementTransitionService();
+        service.RegisterOverlayHost(overlay);
+        var source = AddCover(window, screenHost, 0, 0, 100, 100, CreateStubImage());
+        service.Register("cover:hold", source, () => ((Image)source.Child!).Source);
+
+        service.CaptureOutgoing("cover:hold");
+        Assert.Equal(0, source.Opacity);
+
+        service.Cancel();
+        Assert.Equal(1, source.Opacity);
+        window.Close();
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public void DuringAFlight_TheDestinationCoverIsHidden_AndBothComeBackAfterwards() => RunSync(async () =>
+    {
+        var (window, overlay, screenHost) = CreateHarness();
+        var service = new SharedElementTransitionService();
+        service.RegisterOverlayHost(overlay);
+        var source = AddCover(window, screenHost, 0, 0, 100, 100, CreateStubImage());
+        service.Register("cover:pair", source, () => ((Image)source.Child!).Source);
+        service.CaptureOutgoing("cover:pair");
+        var destination = AddCover(window, screenHost, 300, 300, 200, 200, CreateStubImage());
+        service.Register("cover:pair", destination, () => ((Image)destination.Child!).Source);
+
+        var flight = service.FlyToIncomingAsync("cover:pair", TimeSpan.FromSeconds(5), Easing, CancellationToken.None);
+        Assert.Single(overlay.Children);                                                 // the clone is flying
+        Assert.Equal(0, destination.Opacity);
+        Assert.Equal(0, source.Opacity);
+
+        service.Cancel();
+        await flight;
+        Assert.Empty(overlay.Children);
+        Assert.Equal(1, destination.Opacity);
+        Assert.Equal(1, source.Opacity);
+        window.Close();
+    });
+
+    [Fact]
+    public void TheDestination_IsResolvedOnTheLayoutPassThatGivesItBounds() => RunSync(async () =>
+    {
+        var (window, overlay, screenHost) = CreateHarness();
+        var service = new SharedElementTransitionService();
+        service.RegisterOverlayHost(overlay);
+        var source = AddCover(window, screenHost, 0, 0, 100, 100, CreateStubImage());
+        service.Register("cover:late", source, () => ((Image)source.Child!).Source);
+        service.CaptureOutgoing("cover:late");
+        Remove(window, screenHost, source);
+
+        var flight = service.FlyToIncomingAsync("cover:late", ShortDuration, Easing, CancellationToken.None);
+        Assert.Empty(overlay.Children);                                                  // nothing to fly to yet
+
+        var destination = new Border
+        {
+            Width = 200, Height = 120, Margin = new Thickness(250, 80, 0, 0),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            Child = new Image { Source = CreateStubImage() },
+        };
+        service.Register("cover:late", destination, () => ((Image)destination.Child!).Source);
+        screenHost.Children.Add(destination);
+        Layout(window);                                                                  // the layout pass that resolves it
+
+        Assert.True(await flight);
+        window.Close();
+    });
+
     [Fact]
     public void Unregister_AfterANewerRegistrationForTheSameKey_DoesNotEvictTheNewerOne() => RunSync(async () =>
     {

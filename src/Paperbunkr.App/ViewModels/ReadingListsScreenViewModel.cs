@@ -185,7 +185,7 @@ public partial class ReadingListsScreenViewModel : ViewModelBase, IContextMenuPr
         PathIssueItem path => new ReadingListMemberContextMenuBuilder().Build(path.Row),
         UpNextItem next => new ReadingListMemberContextMenuBuilder().Build(next.Row),
         CoverTileItem tile => new ReadingListMemberContextMenuBuilder().Build(tile.Row),
-        TagPillViewModel pill when List.Tags.Contains(pill) =>
+        TagPillViewModel { CanRemove: true } pill when List.Tags.Contains(pill) =>
             [.. new TagPillContextMenuBuilder().Build(pill) ?? [], ContextMenuEntry.Separator, ContextMenuEntry.Item("Remove tag", List.RemoveTagCommand, pill, Symbol.Dismiss, isDanger: true)],
         _ => new ReadingListMemberContextMenuBuilder().Build(target) ?? new TagPillContextMenuBuilder().Build(target),
     };

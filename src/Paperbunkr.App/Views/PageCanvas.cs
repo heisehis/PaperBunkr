@@ -11,6 +11,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Rendering.Composition;
 using Avalonia.Threading;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Theming.Motion;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Views;
@@ -110,6 +111,38 @@ public partial class PageCanvas : Control
     /// <summary>Item 1 §1.5 of docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md - a soft drop-shadow behind the paged-mode page/spread, set by the VM only when the background is a Texture and the mode is paged.</summary>
     public static readonly StyledProperty<bool> ShowPageShadowProperty =
         AvaloniaProperty.Register<PageCanvas, bool>(nameof(ShowPageShadow), defaultValue: false);
+
+    /// <summary>Book look on spreads (Motion v2 reader §7): spine/edge bows, outline and page-stack edges.</summary>
+    public static readonly StyledProperty<bool> BookLookProperty =
+        AvaloniaProperty.Register<PageCanvas, bool>(nameof(BookLook));
+
+    /// <summary>0..1 through the issue - sizes the page-stack edges.</summary>
+    public static readonly StyledProperty<double> BookProgressProperty =
+        AvaloniaProperty.Register<PageCanvas, double>(nameof(BookProgress));
+
+    public bool BookLook
+    {
+        get => GetValue(BookLookProperty);
+        set => SetValue(BookLookProperty, value);
+    }
+
+    public double BookProgress
+    {
+        get => GetValue(BookProgressProperty);
+        set => SetValue(BookProgressProperty, value);
+    }
+
+    /// <summary>Curl and Book need time to read as a page turning: they never run shorter than this, however quick the saved speed.</summary>
+    internal const int PhysicalTurnMinimumMs = 420;
+
+    internal static TimeSpan EffectiveTurnDuration(PageTransitionStyle style, int savedMs) =>
+        TimeSpan.FromMilliseconds(style is PageTransitionStyle.Curl or PageTransitionStyle.Book ? Math.Max(savedMs, PhysicalTurnMinimumMs) : savedMs);
+
+    public static readonly StyledProperty<ReaderPageFrameStyle> PageFrameStyleProperty =
+        AvaloniaProperty.Register<PageCanvas, ReaderPageFrameStyle>(nameof(PageFrameStyle), defaultValue: ReaderPageFrameStyle.None);
+
+    public static readonly StyledProperty<Color> PageFrameColorProperty =
+        AvaloniaProperty.Register<PageCanvas, Color>(nameof(PageFrameColor), defaultValue: Colors.Gray);
 
     public static readonly StyledProperty<ICommand?> ToggleAutoScrollCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ToggleAutoScrollCommand));
@@ -496,7 +529,7 @@ public partial class PageCanvas : Control
     /// </summary>
     private static readonly AvaloniaProperty[] RenderAffectingProperties =
     [
-        PageProperty, SecondaryPageProperty, HighQualityDisplayProperty, ShowPageShadowProperty, ZoomLevelProperty, PanOffsetXProperty, PanOffsetYProperty, ProcessingVersionProperty,
+        PageProperty, SecondaryPageProperty, HighQualityDisplayProperty, ShowPageShadowProperty, BookLookProperty, BookProgressProperty, PageFrameStyleProperty, PageFrameColorProperty, ZoomLevelProperty, PanOffsetXProperty, PanOffsetYProperty, ProcessingVersionProperty,
         FitModeProperty, FitOnlyIfOversizedProperty, ManualRotationDegreesProperty, AutoRotateProperty, PageRotationOverrideDegreesProperty,
         ReadingModeProperty, DecoderProperty, PageCountProperty, ScrollOffsetProperty, PageMarginMultiplierProperty
     ];
@@ -640,6 +673,18 @@ public partial class PageCanvas : Control
     {
         get => GetValue(ShowPageShadowProperty);
         set => SetValue(ShowPageShadowProperty, value);
+    }
+
+    public ReaderPageFrameStyle PageFrameStyle
+    {
+        get => GetValue(PageFrameStyleProperty);
+        set => SetValue(PageFrameStyleProperty, value);
+    }
+
+    public Color PageFrameColor
+    {
+        get => GetValue(PageFrameColorProperty);
+        set => SetValue(PageFrameColorProperty, value);
     }
 
     public bool HighQualityDisplay
@@ -1189,8 +1234,19 @@ public partial class PageCanvas : Control
         }
 
         double target = ReaderLayoutModel.ComputeStackOffsetOfPage(EstimatedPageSizes(), pageIndex, Bounds.Size, ContinuousAxis, ZoomLevel, ContinuousMainAxisGap);
-        ScrollOffset = ClampScrollOffset(target);
+
+        // A jump the reader asked for glides or fades (Motion v2 E, Q36); the position restore when an issue opens lands at once.
+        if (System.Diagnostics.Stopwatch.GetElapsedTime(_documentShownTimestamp).TotalSeconds > 0.5)
+        {
+            GlideOrJumpTo(target);
+        }
+        else
+        {
+            ScrollOffset = ClampScrollOffset(target);
+        }
     }
+
+    private long _documentShownTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
 
     /// <summary>
     /// Applies a continuous-mode wheel-scroll delta, tracking chapter-boundary overscroll pull
@@ -1202,11 +1258,24 @@ public partial class PageCanvas : Control
     /// </summary>
     private void HandleContinuousWheelScroll(double wheelDeltaY)
     {
-        double proposed = ScrollOffset - (wheelDeltaY * WheelPanStep * WheelScrollStepPixels);
+        // Notches accumulate on the glide's goal, so a run of them is one glide (Motion v2 E, Q35).
+        double from = ScrollGoal ?? ScrollOffset;
+        double proposed = from - (wheelDeltaY * WheelPanStep * WheelScrollStepPixels);
         double clamped = ClampScrollOffset(proposed);
 
-        if (clamped != ScrollOffset)
+        if (clamped != from)
         {
+            if (TryGlideWheel(proposed))
+            {
+                if (_overscrollPull != 0)
+                {
+                    _overscrollPull = 0;
+                    PushContinuousVisualData();
+                }
+
+                return;
+            }
+
             ScrollOffset = clamped;
             if (_overscrollPull != 0)
             {
@@ -1492,6 +1561,18 @@ public partial class PageCanvas : Control
         // matches the explicit-return shape <see cref="BoundsProperty"/>'s block already uses just
         // below, and leaves the common (already-clamped) case falling through unchanged, exactly as
         // it did before this block existed.
+        if (change.Property == ScrollOffsetProperty)
+        {
+            CancelScrollGlideUnlessOwn();
+        }
+
+        if (change.Property == PageCountProperty)
+        {
+            _documentShownTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+            _scrollGoal = null;
+            _scrollTween = null;
+        }
+
         if (change.Property == ScrollOffsetProperty && IsContinuous)
         {
             double clamped = ClampScrollOffset(ScrollOffset);
@@ -1642,6 +1723,7 @@ public partial class PageCanvas : Control
         if (turn is { } direction
             && !burst
             && PageTransitionStyle != PageTransitionStyle.None
+            && MotionPolicy.AllowsMotion(MotionRole.Travel)
             && throttleCleared
             && _lastRenderedPage is { } oldBitmap
             && !ReferenceEquals(oldBitmap, Page)
@@ -1650,8 +1732,8 @@ public partial class PageCanvas : Control
             bool isRightToLeft = ReadingMode == ReadingMode.RightToLeft;
             var transition = new ReaderPageTransitionData(
                 new Rect(Bounds.Size), oldBitmap, Page, HighQualityDisplay, ZoomLevel * PageMarginMultiplier, PanOffsetX, PanOffsetY,
-                FitMode, FitOnlyIfOversized, EffectiveRotationDegrees(), PageTransitionStyle, TimeSpan.FromMilliseconds(PageTransitionDurationMs), direction,
-                _lastRenderedSecondaryPage, SecondaryPage, isRightToLeft, OldIsRightToLeft: isRightToLeft);
+                FitMode, FitOnlyIfOversized, EffectiveRotationDegrees(), PageTransitionStyle, EffectiveTurnDuration(PageTransitionStyle, PageTransitionDurationMs), direction,
+                _lastRenderedSecondaryPage, SecondaryPage, isRightToLeft, OldIsRightToLeft: isRightToLeft, BookLook: BookLook, BookProgress: BookProgress);
 
             _lastTransitionStartUtc = DateTime.UtcNow;
             _lastRenderedPage = Page;
@@ -1693,7 +1775,7 @@ public partial class PageCanvas : Control
     /// </summary>
     public void PlayReflowTransition(Bitmap? oldPrimary, Bitmap? oldSecondary, bool oldIsRightToLeft)
     {
-        if (PageTransitionStyle == PageTransitionStyle.None || oldPrimary is null || Page is null)
+        if (PageTransitionStyle == PageTransitionStyle.None || !MotionPolicy.AllowsMotion(MotionRole.Travel) || oldPrimary is null || Page is null)
         {
             return;
         }
@@ -1724,7 +1806,7 @@ public partial class PageCanvas : Control
         _visual?.SendHandlerMessage(new ReaderPageVisualData(
             new Rect(Bounds.Size), primary, HighQualityDisplay, ZoomLevel * PageMarginMultiplier, PanOffsetX, PanOffsetY,
             FitMode, FitOnlyIfOversized, EffectiveRotationDegrees(), SecondaryPage, ReadingMode == ReadingMode.RightToLeft,
-            ShowShadow: ShowPageShadow));
+            ShowShadow: ShowPageShadow, FrameStyle: PageFrameStyle, FrameColor: PageFrameColor, BookLook: BookLook, BookProgress: BookProgress));
 
         _lastRenderedPage = Page;
         _lastRenderedSecondaryPage = SecondaryPage;
@@ -1852,7 +1934,7 @@ public partial class PageCanvas : Control
     {
         if (_visual is null || Decoder is null || PageCount <= 0 || Bounds.Width <= 0 || Bounds.Height <= 0)
         {
-            _visual?.SendHandlerMessage(new ReaderContinuousVisualData(Bounds.Size, Array.Empty<ContinuousPageEntry>(), HighQualityDisplay));
+            _visual?.SendHandlerMessage(new ReaderContinuousVisualData(Bounds.Size, Array.Empty<ContinuousPageEntry>(), HighQualityDisplay, PageFrameStyle, PageFrameColor));
             return;
         }
 
@@ -1872,7 +1954,7 @@ public partial class PageCanvas : Control
 
         if (layout.Count == 0)
         {
-            _visual.SendHandlerMessage(new ReaderContinuousVisualData(Bounds.Size, Array.Empty<ContinuousPageEntry>(), HighQualityDisplay));
+            _visual.SendHandlerMessage(new ReaderContinuousVisualData(Bounds.Size, Array.Empty<ContinuousPageEntry>(), HighQualityDisplay, PageFrameStyle, PageFrameColor));
             return;
         }
 
@@ -1952,7 +2034,7 @@ public partial class PageCanvas : Control
         }
 
         RecordBlankVisiblePages(entries);
-        _visual.SendHandlerMessage(new ReaderContinuousVisualData(Bounds.Size, entries, HighQualityDisplay));
+        _visual.SendHandlerMessage(new ReaderContinuousVisualData(Bounds.Size, entries, HighQualityDisplay, PageFrameStyle, PageFrameColor));
     }
 
     // ---- Scroll anchoring and scroll-direction hint (docs/superpowers/specs/2026-09-25-comic-reader-performance-design.md B3/B4) ----

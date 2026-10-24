@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
@@ -10,150 +11,297 @@
              xmlns:homeviews="using:Paperbunkr.App.Views.Home"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="720"
+             mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="720"
              x:Class="Paperbunkr.App.Views.Preferences.AppearanceSection"
              x:DataType="vm:PreferencesScreenViewModel">
 
     <UserControl.Styles>
-        <!-- Appearance redesign (docs/superpowers/specs/2026-09-07-appearance-redesign-design.md) -
-             the active skin's mini-mockup card gets an accent border ring; the app's own current
-             accent (not the previewed skin's own accent), so the selection affordance always reads
-             consistently regardless of which skin's colors a given card is displaying. -->
+        <!-- Appearance redesign (docs/superpowers/specs/2026-10-12-connections-appearance-redesign-design.md). The active theme's mini-mockup
+             card gets an accent border ring: the app's own current accent (not the previewed theme's), so the selection affordance always reads
+             consistently whichever theme a card is showing. -->
         <Style Selector="Border.skinActive">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+
+        <!-- Contrast badges in the inspector: green when the pair meets 4.5:1, amber when it does not. -->
+        <Style Selector="Border.statusBadge > StackPanel > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbSuccessBrush}" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style Selector="Border.statusBadge.contrastLow > StackPanel > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeBrush}" />
+        </Style>
+
+        <!-- A customize box holding something that is not a value yet (a half-typed colour). Nothing is applied until it is valid. -->
+        <Style Selector="TextBox.invalid">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
+        </Style>
+
+        <!-- Live samples (glow tiers, density): the active one is outlined in the app accent. -->
+        <Style Selector="Border.sampleBox">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+        </Style>
+        <Style Selector="Border.sampleBox.sampleActive">
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
             <Setter Property="BorderThickness" Value="2" />
         </Style>
     </UserControl.Styles>
 
-    <ScrollViewer>
-        <StackPanel Margin="28,20,28,40" Spacing="20">
-            <TextBlock Classes="pbTextHeading" Text="Appearance" />
+    <!-- Three sub-tabs, same shape as Reader (docs/superpowers/specs/2026-09-26-preferences-reader-organize-tabs-design.md): title and tab strip
+         stay put; each tab's panel scrolls on its own. A new setting goes in the matching captioned group; a new group gets a Tag + a PreferenceIndex
+         entry naming its tab. -->
+    <Grid RowDefinitions="Auto,Auto,*" Margin="28,20,0,0">
+        <TextBlock Grid.Row="0" Classes="pbTextHeading" Text="Appearance" Margin="0,0,0,14" />
+        <pref:SettingsTabStrip Grid.Row="1" Tabs="{Binding AppearanceTabs}" AutomationProperties.Name="Appearance tabs" />
 
-        <!-- Themes - grid of mini UI-mockup preview cards, real theme.json colors per theme
-             (docs/superpowers/specs/2026-09-07-appearance-redesign-design.md, renamed from "Skins"
-             by docs/superpowers/specs/2026-09-16-theme-system-design.md). Install Skin folded
-             in here (header actions) rather than its own separate group - the .crpck install
-             mechanism itself keeps its "Skin" naming deliberately, per that design doc's own
-             decision to leave it untouched. -->
-        <StackPanel Tag="appearance.skin" Spacing="10">
-            <Grid ColumnDefinitions="*,Auto,Auto">
-                <TextBlock Grid.Column="0" Classes="settingsGroupCaption" Text="THEMES" VerticalAlignment="Center" Margin="0" />
-                <Button Grid.Column="1" Classes="headerAction ghost" Content="Install…" Margin="0,0,8,0"
-                        Command="{Binding BrowseForSkinCommand}" AutomationProperties.AutomationId="InstallSkinButton" />
-                <Button Grid.Column="2" Classes="headerAction ghost" Command="{Binding OpenSkinsFolderCommand}"
-                        AutomationProperties.Name="Open Skins Folder" ToolTip.Tip="Open Skins Folder"
-                        AutomationProperties.AutomationId="OpenSkinsFolderButton">
-                    <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeXs}" />
-                </Button>
-            </Grid>
+        <Panel Grid.Row="2">
 
-            <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasInstallSkinError}">
-                <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
-                <TextBlock Text="{Binding InstallSkinError}" Foreground="{DynamicResource PbDangerBrush}" FontSize="12" TextWrapping="Wrap" />
-            </StackPanel>
+            <!-- THEME: grouped gallery on the left, inspector for the active theme on the right. The WrapPanel stacks the inspector under the
+                 gallery when the window is too narrow for both (about 700 px), with no code. -->
+            <ScrollViewer IsVisible="{Binding AppearanceTabs.SelectedKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=theme}">
+                <StackPanel Margin="0,16,28,40" Spacing="22">
+                    <WrapPanel Orientation="Horizontal">
 
-            <ItemsControl x:Name="ThemesList" ItemsSource="{Binding Themes}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel Orientation="Horizontal" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="models:ThemeSummary">
-                        <Button Background="Transparent" BorderThickness="0" Padding="0" Margin="0,0,10,10" Cursor="Hand"
-                                Command="{Binding #ThemesList.((vm:PreferencesScreenViewModel)DataContext).SelectThemeCommand}"
-                                CommandParameter="{Binding}">
-                            <StackPanel Width="140">
-                                <Grid>
-                                    <Border Classes.skinActive="{Binding IsActive}" CornerRadius="{StaticResource PbRadiusSm}"
-                                            Background="{Binding BackgroundBrush}" Width="140" Height="90" ClipToBounds="True">
-                                        <StackPanel>
-                                            <Border Height="18" Background="{Binding ChromeBrush}">
-                                                <Ellipse Width="6" Height="6" Fill="{Binding AccentBrush}" HorizontalAlignment="Left" Margin="8,0,0,0" />
-                                            </Border>
-                                            <Grid ColumnDefinitions="10,*" Margin="8">
-                                                <Border Grid.Column="0" Background="{Binding SurfaceBrush}" CornerRadius="2" Height="56" />
-                                                <StackPanel Grid.Column="1" Margin="8,4,0,0" Spacing="6">
-                                                    <Border Height="4" Width="70" Background="{Binding TextMutedBrush}" CornerRadius="2" HorizontalAlignment="Left" />
-                                                    <Border Height="4" Width="90" Background="{Binding TextMutedBrush}" CornerRadius="2" HorizontalAlignment="Left" />
-                                                    <!-- A mini poster tile + an accent chip, so the preview shows the skin's tile and chip colours too
-                                                         (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #15). Same theme.json colours as above. -->
-                                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                                        <Border Width="20" Height="28" CornerRadius="2" Background="{Binding AccentBrush}" Opacity="0.85" />
-                                                        <Border Width="30" Height="10" CornerRadius="5" Background="{Binding AccentBrush}" VerticalAlignment="Bottom" />
+                        <!-- Gallery -->
+                        <StackPanel Tag="appearance.skin" Width="330" Margin="0,0,20,16" Spacing="8">
+                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                <TextBlock Grid.Column="0" Classes="settingsGroupCaption" Text="THEMES" VerticalAlignment="Center" Margin="0" />
+                                <Button Grid.Column="1" Classes="ghost" Content="Install…" Margin="0,0,8,0"
+                                        Command="{Binding BrowseForSkinCommand}" AutomationProperties.AutomationId="InstallSkinButton" />
+                                <Button Grid.Column="2" Classes="iconButton" Command="{Binding OpenSkinsFolderCommand}"
+                                        AutomationProperties.Name="Open themes folder" ToolTip.Tip="Open themes folder"
+                                        AutomationProperties.AutomationId="OpenSkinsFolderButton">
+                                    <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeXs}" />
+                                </Button>
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasInstallSkinError}">
+                                <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                <TextBlock Text="{Binding InstallSkinError}" Foreground="{DynamicResource PbDangerBrush}" FontSize="12" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <!-- What the installer found in the last package: each line names the place in the theme's files it is about. -->
+                            <StackPanel IsVisible="{Binding HasInstallNotes}" Spacing="2">
+                                <TextBlock Text="Notes about the installed theme" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <ItemsControl ItemsSource="{Binding InstallNotes}" AutomationProperties.AutomationId="ThemeInstallNotes">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap" Margin="0,1" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <ItemsControl ItemsSource="{Binding ThemeGroups}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:ThemeGroup">
+                                        <StackPanel Spacing="6" Margin="0,4,0,6">
+                                            <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            <ItemsControl ItemsSource="{Binding Themes}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel Orientation="Horizontal" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="models:ThemeSummary">
+                                                        <Button Background="Transparent" BorderThickness="0" Padding="0" Margin="0,0,10,10" Cursor="Hand"
+                                                                Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).SelectThemeCommand}"
+                                                                CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}">
+                                                            <StackPanel Width="100">
+                                                                <Grid>
+                                                                    <Border Classes.skinActive="{Binding IsActive}" CornerRadius="{DynamicResource PbRadiusSm}"
+                                                                            Background="{Binding BackgroundBrush}" Width="100" Height="64" ClipToBounds="True">
+                                                                        <StackPanel>
+                                                                            <Border Height="13" Background="{Binding ChromeBrush}">
+                                                                                <Ellipse Width="5" Height="5" Fill="{Binding AccentBrush}" HorizontalAlignment="Left" Margin="6,0,0,0" />
+                                                                            </Border>
+                                                                            <Grid ColumnDefinitions="8,*" Margin="6,6,6,0">
+                                                                                <Border Grid.Column="0" Background="{Binding SurfaceBrush}" CornerRadius="2" Height="38" />
+                                                                                <StackPanel Grid.Column="1" Margin="6,2,0,0" Spacing="4">
+                                                                                    <Border Height="3" Width="44" Background="{Binding TextMutedBrush}" CornerRadius="2" HorizontalAlignment="Left" />
+                                                                                    <Border Height="3" Width="58" Background="{Binding TextMutedBrush}" CornerRadius="2" HorizontalAlignment="Left" />
+                                                                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                                                                        <Border Width="14" Height="19" CornerRadius="2" Background="{Binding AccentBrush}" Opacity="0.85" />
+                                                                                        <Border Width="22" Height="7" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding AccentBrush}" VerticalAlignment="Bottom" />
+                                                                                    </StackPanel>
+                                                                                </StackPanel>
+                                                                            </Grid>
+                                                                        </StackPanel>
+                                                                    </Border>
+                                                                    <Border Width="16" Height="16" CornerRadius="{DynamicResource PbRadius}" Background="{DynamicResource PbSuccessBrush}"
+                                                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0"
+                                                                            IsVisible="{Binding IsActive}">
+                                                                        <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="White"
+                                                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                    </Border>
+                                                                </Grid>
+                                                                <TextBlock Text="{Binding Name}" FontSize="12" Margin="2,6,0,0" TextTrimming="CharacterEllipsis"
+                                                                           Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Left" />
+                                                            </StackPanel>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <!-- Inspector: always the active theme -->
+                        <StackPanel Width="370" Margin="0,0,0,16" Spacing="14">
+                            <Border Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                    CornerRadius="{DynamicResource PbRadius}" Padding="14"
+                                    DataContext="{Binding ActiveThemeSummary}" x:DataType="models:ThemeSummary" IsVisible="{Binding ., Converter={x:Static ObjectConverters.IsNotNull}}"
+                                    AutomationProperties.Name="Active theme inspector">
+                                <StackPanel Spacing="10">
+                                    <StackPanel Spacing="1">
+                                        <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                        <TextBlock Text="{Binding Subtitle}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    </StackPanel>
+
+                                    <!-- One large active-theme folio at a time. Samples use the selected theme's real brushes. -->
+                                    <WrapPanel Orientation="Horizontal">
+                                        <Button Classes="" Content="Library" Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).SelectThemePreviewTabCommand}"
+                                                CommandParameter="Library" AutomationProperties.Name="Preview Library theme" />
+                                        <Button Classes="" Content="Reader" Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).SelectThemePreviewTabCommand}"
+                                                CommandParameter="Reader" AutomationProperties.Name="Preview Reader theme" />
+                                        <Button Classes="" Content="Bookshelf" Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).SelectThemePreviewTabCommand}"
+                                                CommandParameter="Bookshelf" AutomationProperties.Name="Preview Bookshelf theme" />
+                                    </WrapPanel>
+                                    <Border Height="174" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding BackgroundBrush}"
+                                            BorderBrush="{Binding BorderBrush}" BorderThickness="1" ClipToBounds="True">
+                                        <Panel>
+                                            <Grid IsVisible="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).ShowLibraryThemePreview}" Margin="14" RowDefinitions="Auto,*">
+                                                <StackPanel Orientation="Horizontal" Spacing="7" Margin="0,0,0,12">
+                                                    <Ellipse Width="7" Height="7" Fill="{Binding AccentBrush}" VerticalAlignment="Center" />
+                                                    <TextBlock Text="MY LIBRARY" FontSize="11" FontWeight="Bold" Foreground="{Binding TextBrush}" />
+                                                    <TextBlock Text="· 128 books" FontSize="10" Foreground="{Binding TextMutedBrush}" />
+                                                </StackPanel>
+                                                <WrapPanel Grid.Row="1" Orientation="Horizontal">
+                                                    <Border Width="60" Height="94" Margin="0,0,10,0" Padding="4" Background="{Binding SurfaceBrush}" BorderBrush="{Binding AccentBrush}" BorderThickness="2" CornerRadius="{DynamicResource PbRadiusSm}">
+                                                        <Border Background="{Binding AccentBrush}" CornerRadius="2" />
+                                                    </Border>
+                                                    <Border Width="60" Height="94" Margin="0,0,10,0" Padding="4" Background="{Binding SurfaceBrush}" BorderBrush="{Binding BorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}">
+                                                        <Border Background="{Binding ChartBlueBrush}" CornerRadius="2" />
+                                                    </Border>
+                                                    <StackPanel Spacing="8" VerticalAlignment="Center">
+                                                        <TextBlock Text="Collector’s index" FontSize="12" FontWeight="SemiBold" Foreground="{Binding TextBrush}" />
+                                                        <Border Height="5" Width="120" HorizontalAlignment="Left" Background="{Binding SurfaceBrush}" CornerRadius="{DynamicResource PbRadiusSm}">
+                                                            <Border Width="76" HorizontalAlignment="Left" Background="{Binding AccentBrush}" CornerRadius="{DynamicResource PbRadiusSm}" />
+                                                        </Border>
                                                     </StackPanel>
+                                                </WrapPanel>
+                                            </Grid>
+                                            <Grid IsVisible="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).ShowReaderThemePreview}" Margin="14" ColumnDefinitions="*,Auto">
+                                                <StackPanel VerticalAlignment="Center" Spacing="8">
+                                                    <TextBlock Text="READER" FontSize="11" FontWeight="Bold" Foreground="{Binding TextMutedBrush}" />
+                                                    <TextBlock Text="A chapter waits\nbetween the covers." FontFamily="Georgia" FontSize="15" TextWrapping="Wrap" Foreground="{Binding TextBrush}" />
+                                                    <Border Height="2" Width="72" HorizontalAlignment="Left" Background="{Binding AccentBrush}" />
+                                                </StackPanel>
+                                                <Border Grid.Column="1" Width="92" Height="132" Margin="10,0,14,0" Background="{Binding SurfaceBrush}" BorderBrush="{Binding AccentBrush}" BorderThickness="2" CornerRadius="{DynamicResource PbRadiusSm}" BoxShadow="{DynamicResource PbElevationShadow}">
+                                                    <Border Margin="8" BorderBrush="{Binding BorderBrush}" BorderThickness="1" />
+                                                </Border>
+                                            </Grid>
+                                            <Grid IsVisible="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).ShowBookshelfThemePreview}" Margin="14" RowDefinitions="Auto,*">
+                                                <TextBlock Text="BOOKSHELF" FontSize="11" FontWeight="Bold" Foreground="{Binding TextBrush}" />
+                                                <StackPanel Grid.Row="1" VerticalAlignment="Center" Spacing="8">
+                                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                                        <Border Width="42" Height="48" Background="{Binding AccentBrush}" CornerRadius="{DynamicResource PbRadiusSm}" />
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                                            <TextBlock Text="Favorites" FontSize="12" FontWeight="SemiBold" Foreground="{Binding TextBrush}" />
+                                                            <TextBlock Text="24 books · 68% read" FontSize="10" Foreground="{Binding TextMutedBrush}" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                    <Border Height="1" Background="{Binding BorderBrush}" />
+                                                    <ProgressBar Minimum="0" Maximum="100" Value="68" Height="5" />
                                                 </StackPanel>
                                             </Grid>
-                                        </StackPanel>
+                                        </Panel>
                                     </Border>
-                                    <Border Width="16" Height="16" CornerRadius="8" Background="{DynamicResource PbSuccessBrush}"
-                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0"
-                                            IsVisible="{Binding IsActive}">
-                                        <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="White"
-                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    </Border>
-                                </Grid>
-                                <TextBlock Text="{Binding Name}" FontSize="12" Margin="2,6,0,0"
-                                           Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Left" />
-                            </StackPanel>
-                        </Button>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </StackPanel>
 
-        <!-- Theme options (docs/superpowers/specs/2026-09-16-theme-system-design.md § Extended
-             scope) - true black/Auto mode/accent override, all layered on top of the THEMES grid
-             above rather than being separate theme entries. -->
-        <StackPanel Tag="appearance.themeOptions">
-            <TextBlock Classes="settingsGroupCaption" Text="THEME OPTIONS" />
-            <pref:SettingsRow Icon="DarkTheme" Title="True black"
-                               Description="Forces pure black backgrounds on dark themes - saves battery on OLED screens. Automatically suspended while reading."
-                               IsVisible="{Binding IsActiveThemeDarkMode}">
-                <pref:SettingsRow.SettingsContent>
-                    <ToggleSwitch IsChecked="{Binding TrueBlackDark}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="Sparkle" Title="Matrix rain"
-                               Description="The falling-glyph background animation. Turn off for a static Matrix look (also saves GPU/battery)."
-                               IsVisible="{Binding IsActiveThemeMatrix}">
-                <pref:SettingsRow.SettingsContent>
-                    <ToggleSwitch IsChecked="{Binding MatrixRainEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="Clock" Title="Auto switch"
-                               Description="Follow the system Light/Dark preference, or switch on a schedule.">
-                <pref:SettingsRow.SettingsContent>
-                    <controls:SuggestBox IsStrict="True" Text="{Binding ThemeAutoModeText}" Suggestions="{Binding ThemeAutoModeOptionsList}" Width="160" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="Clock" Title="Switch to dark at" IsVisible="{Binding IsThemeScheduledMode}">
-                <pref:SettingsRow.SettingsContent>
-                    <TextBox Text="{Binding ThemeScheduledDarkHour}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="23" Width="120" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="Clock" Title="Switch to light at" IsVisible="{Binding IsThemeScheduledMode}">
-                <pref:SettingsRow.SettingsContent>
-                    <TextBox Text="{Binding ThemeScheduledLightHour}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="23" Width="120" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="Clock" Title="Auto-enable true black at"
-                               Description="Local hour (0-23), blank = manual toggle only.">
-                <pref:SettingsRow.SettingsContent>
-                    <TextBox Text="{Binding TrueBlackAutoHourText}" Width="80" Watermark="e.g. 22" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="Color" Title="Accent color override"
-                               Description="Hex color, blank = use the active theme's own accent.">
-                <pref:SettingsRow.SettingsContent>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Border Width="24" Height="24" CornerRadius="{StaticResource PbRadiusSm}"
-                                Background="{DynamicResource PbAccentBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" />
-                        <TextBox Text="{Binding AccentOverrideHexText}" Width="120" Watermark="#RRGGBB" />
-                    </StackPanel>
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-        </StackPanel>
+                                    <!-- Palette -->
+                                    <StackPanel Orientation="Horizontal" Spacing="6" AutomationProperties.Name="Palette">
+                                        <Border Width="24" Height="24" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding BackgroundBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" ToolTip.Tip="Background" />
+                                        <Border Width="24" Height="24" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding ChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" ToolTip.Tip="Chrome" />
+                                        <Border Width="24" Height="24" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding TextBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" ToolTip.Tip="Text" />
+                                        <Border Width="24" Height="24" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding AccentBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" ToolTip.Tip="Accent" />
+                                        <Border Width="24" Height="24" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding BadgeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" ToolTip.Tip="Badge" />
+                                        <Border Width="24" Height="24" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding SuccessBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" ToolTip.Tip="Success" />
+                                    </StackPanel>
+
+                                    <!-- Computed WCAG contrast -->
+                                    <WrapPanel Orientation="Horizontal">
+                                        <Border Classes="statusBadge success" Classes.warning="{Binding !TextContrastOk}" Margin="0,0,6,4"
+                                                AutomationProperties.Name="{Binding TextContrastAutomationName}">
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <TextBlock Text="Text" />
+                                                <TextBlock Text="{Binding TextContrastText}" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Classes="statusBadge success" Classes.warning="{Binding !AccentContrastOk}" Margin="0,0,6,4"
+                                                AutomationProperties.Name="{Binding AccentContrastAutomationName}">
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <TextBlock Text="Accent" />
+                                                <TextBlock Text="{Binding AccentContrastText}" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                        </Border>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- The active family's other variants (Light / Dark / OLED ...). Hidden for a single-variant theme, which is every legacy one. -->
+                            <StackPanel IsVisible="{Binding HasActiveFamilyVariants}" Spacing="6" Tag="appearance.variants">
+                                <TextBlock Classes="settingsGroupCaption" Text="VARIANTS" Margin="0" />
+                                <ItemsControl ItemsSource="{Binding ActiveFamilyVariants}" AutomationProperties.AutomationId="ThemeVariants">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:ThemeSummary">
+                                            <Button Classes="" Classes.primary="{Binding IsActive}" Content="{Binding VariantName}" Margin="0,0,6,6"
+                                                    Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).SelectThemeCommand}"
+                                                    CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <!-- Per-theme options (docs/superpowers/specs/2026-09-16-theme-system-design.md § Extended scope) -->
+                            <StackPanel Tag="appearance.themeOptions">
+                                <TextBlock Classes="settingsGroupCaption" Text="THEME OPTIONS" />
+                                <pref:SettingsRow Icon="DarkTheme" Title="True black"
+                                                   Description="Forces pure black backgrounds on dark themes - saves battery on OLED screens. Automatically suspended while reading."
+                                                   IsVisible="{Binding IsActiveThemeDarkMode}">
+                                    <pref:SettingsRow.SettingsContent>
+                                        <ToggleSwitch IsChecked="{Binding TrueBlackDark}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                                    </pref:SettingsRow.SettingsContent>
+                                </pref:SettingsRow>
+                                <pref:SettingsRow Icon="Sparkle" Title="Matrix rain"
+                                                   Description="The falling-glyph background animation. Turn off for a static Matrix look (also saves GPU/battery)."
+                                                   IsVisible="{Binding IsActiveThemeMatrix}">
+                                    <pref:SettingsRow.SettingsContent>
+                                        <ToggleSwitch IsChecked="{Binding MatrixRainEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                                    </pref:SettingsRow.SettingsContent>
+                                </pref:SettingsRow>
+                                <pref:SettingsRow Icon="Color" Title="Accent color override"
+                                                   Description="Hex color, blank = use the active theme's own accent.">
+                                    <pref:SettingsRow.SettingsContent>
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Border Width="24" Height="24" CornerRadius="{DynamicResource PbRadiusSm}"
+                                                    Background="{DynamicResource PbAccentBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" />
+                                            <TextBox Text="{Binding AccentOverrideHexText}" Width="110" PlaceholderText="#RRGGBB" />
+                                        </StackPanel>
+                                    </pref:SettingsRow.SettingsContent>
+                                </pref:SettingsRow>
+                            </StackPanel>
 
         <StackPanel Tag="appearance.font">
             <TextBlock Classes="settingsGroupCaption" Text="FONT" />
@@ -163,9 +311,138 @@
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <TextBlock Text="The quick brown fox jumps over the lazy dog" FontFamily="{Binding SelectedFontFamily}"
-                       FontSize="14" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,8,0,0" />
+                       FontSize="15" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,8,0,0" />
         </StackPanel>
+                        </StackPanel>
+                    </WrapPanel>
 
+                    <!-- Auto switch: a global behaviour, so it sits apart from the per-theme options above. -->
+                    <StackPanel Tag="appearance.autoSwitch">
+                        <TextBlock Classes="settingsGroupCaption" Text="AUTO SWITCH" />
+                        <pref:SettingsRow Icon="Clock" Title="Auto switch"
+                                           Description="Follow the system Light/Dark preference, or switch on a schedule.">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding ThemeAutoModeText}" Suggestions="{Binding ThemeAutoModeOptionsList}" Width="160" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Clock" Title="Switch to dark at" IsVisible="{Binding IsThemeScheduledMode}">
+                            <pref:SettingsRow.SettingsContent>
+                                <TextBox Text="{Binding ThemeScheduledDarkHour}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="23" Width="120" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Clock" Title="Switch to light at" IsVisible="{Binding IsThemeScheduledMode}">
+                            <pref:SettingsRow.SettingsContent>
+                                <TextBox Text="{Binding ThemeScheduledLightHour}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="0" beh:TextSpinner.Maximum="23" Width="120" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Clock" Title="Auto-enable true black at"
+                                           Description="Local hour (0-23), blank = manual toggle only.">
+                            <pref:SettingsRow.SettingsContent>
+                                <TextBox Text="{Binding TrueBlackAutoHourText}" Width="80" PlaceholderText="e.g. 22" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                    <!-- Customize (docs/superpowers/specs/2026-10-12-theme-system-v2-gap-analysis-and-plan.md, phase 2): the user's own values for all
+                         themes, this theme family or this variant. These are overrides kept beside the database; the installed theme is never edited. -->
+                    <StackPanel Tag="appearance.customize" Spacing="6">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Classes="settingsGroupCaption" Text="CUSTOMIZE" Margin="0" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Classes="ghost" Content="Reset these" Command="{Binding ThemeCustomization.ResetScopeCommand}"
+                                    IsVisible="{Binding ThemeCustomization.HasOverridesInScope}" ToolTip.Tip="Remove every change in the scope chosen below"
+                                    AutomationProperties.AutomationId="ThemeCustomizeReset" />
+                        </Grid>
+                        <pref:SettingsRow Icon="Options" Title="Apply my changes to"
+                                           Description="All themes, only this theme (every variant of it), or only this variant. A narrower choice wins over a wider one.">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding ThemeCustomization.ScopeText}" Suggestions="{Binding ThemeCustomization.ScopeOptions}" Width="160"
+                                                     AutomationProperties.AutomationId="ThemeCustomizeScope" AutomationProperties.Name="Apply my changes to" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <TextBlock Text="{Binding ThemeCustomization.ScopeSummary}" FontSize="12" Margin="12,0,0,2" Foreground="{DynamicResource PbTextMutedBrush}"
+                                   AutomationProperties.LiveSetting="Polite" />
+
+                        <ItemsControl ItemsSource="{Binding ThemeCustomization.Rows}" AutomationProperties.AutomationId="ThemeCustomizeRows">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ThemeOverrideRowViewModel">
+                                    <Grid ColumnDefinitions="22,*,Auto,34" ColumnSpacing="10" Margin="12,4,0,4" ToolTip.Tip="{Binding Description}">
+                                        <Border Grid.Column="0" Width="22" Height="22" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding Swatch}"
+                                                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" IsVisible="{Binding IsColor}" VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource PbTextBrush}" />
+                                            <TextBlock Text="{Binding SourceText}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        </StackPanel>
+                                        <TextBox Grid.Column="2" Width="128" Text="{Binding ValueText}" PlaceholderText="{Binding ResolvedText}" Classes.invalid="{Binding IsInvalid}"
+                                                 VerticalAlignment="Center" AutomationProperties.Name="{Binding AutomationName}" />
+                                        <Button Grid.Column="3" Classes="iconButton" Command="{Binding ResetCommand}" IsVisible="{Binding IsOverridden}"
+                                                ToolTip.Tip="Reset to the theme value" AutomationProperties.Name="Reset" VerticalAlignment="Center">
+                                            <fi:SymbolIcon Symbol="ArrowUndo" FontSize="{StaticResource PbIconSizeXs}" />
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <pref:SettingsRow Icon="Accessibility" Title="Boost contrast"
+                                           Description="Raises text colours until they read clearly on the background. A theme is never changed unless this is on.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding ThemeCustomization.BoostContrast}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                              AutomationProperties.AutomationId="ThemeBoostContrast" AutomationProperties.Name="Boost contrast" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+
+                        <pref:SettingsRow Icon="Sparkle" Title="Effect quality"
+                                           Description="High draws everything a theme asks for. Balanced stops continuous motion. Performance uses plain fills and no theme motion.">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Text="{Binding ThemeCustomization.EffectQualityText}" Suggestions="{Binding ThemeCustomization.EffectQualityOptions}" Width="160"
+                                                     AutomationProperties.AutomationId="ThemeEffectQuality" AutomationProperties.Name="Effect quality" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+
+                        <pref:SettingsRow Icon="Grid" Title="Theme layouts (experimental)"
+                                           Description="Let a theme rearrange a screen. Colours, type and control styles always apply; layouts only when this is on. A layout that cannot be used falls back to the built-in one.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding ThemeCustomization.AllowThemeLayouts}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                              AutomationProperties.AutomationId="ThemeAllowLayouts" AutomationProperties.Name="Theme layouts" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <Grid ColumnDefinitions="*,Auto" Margin="12,0,0,2">
+                            <TextBlock Grid.Column="0" Text="{Binding ThemeCustomization.LayoutSummary}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource PbTextMutedBrush}" AutomationProperties.AutomationId="ThemeLayoutSummary" />
+                            <Button Grid.Column="1" Classes="ghost" Content="Reset layout" Command="{Binding ThemeCustomization.ResetLayoutCommand}"
+                                    IsVisible="{Binding ThemeCustomization.HasLayoutAdjustments}" ToolTip.Tip="Remove your own adjustments to this theme's layouts"
+                                    AutomationProperties.AutomationId="ThemeResetLayout" />
+                        </Grid>
+
+                        <!-- Files: a theme exported as it is installed, and the customizations above as their own small file. -->
+                        <WrapPanel Orientation="Horizontal" Margin="12,6,0,0">
+                            <Button Classes="ghost" Content="Export this theme…" Margin="0,0,8,6" Command="{Binding ExportActiveThemeCommand}"
+                                    ToolTip.Tip="Save this theme as a .crpck, exactly as installed" AutomationProperties.AutomationId="ThemeExport" />
+                            <Button Classes="ghost" Content="Export my customizations…" Margin="0,0,8,6" Command="{Binding ExportThemeCustomizationsCommand}"
+                                    AutomationProperties.AutomationId="ThemeExportCustomizations" />
+                            <Button Classes="ghost" Content="Import customizations…" Margin="0,0,8,6" Command="{Binding ImportThemeCustomizationsCommand}"
+                                    ToolTip.Tip="Replace your customizations with an exported file" AutomationProperties.AutomationId="ThemeImportCustomizations" />
+                        </WrapPanel>
+                        <TextBlock Text="{Binding ThemeFileMessage}" IsVisible="{Binding HasThemeFileMessage}" FontSize="12" TextWrapping="Wrap" Margin="12,0,0,0"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" AutomationProperties.LiveSetting="Polite" AutomationProperties.AutomationId="ThemeFileMessage" />
+
+                        <StackPanel IsVisible="{Binding ThemeCustomization.HasNotes}" Margin="12,4,0,0" Spacing="3">
+                            <TextBlock Text="Notes about this theme as shown" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <ItemsControl ItemsSource="{Binding ThemeCustomization.Notes}" AutomationProperties.AutomationId="ThemeNotes">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Text="{Binding}" FontSize="12" TextWrapping="Wrap" Margin="0,1" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- COVERS & DETAIL -->
+            <ScrollViewer IsVisible="{Binding AppearanceTabs.SelectedKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=covers}">
+                <StackPanel Margin="0,16,28,40" Spacing="20">
         <!-- Cosmetics (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md) - Paperbunkr
              additions with no ComicRack equivalent; all applied live. -->
         <StackPanel Tag="appearance.cosmetics">
@@ -218,6 +495,23 @@
                     <controls:SuggestBox IsStrict="True" Text="{Binding GlowTierText}" Suggestions="{Binding GlowTierOptionsList}" Width="160" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
+            <ItemsControl ItemsSource="{Binding GlowTierSamples}" Margin="12,6,0,0" AutomationProperties.AutomationId="GlowTierSamples">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="14" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:GlowTierSample">
+                        <StackPanel Spacing="4" Width="64" AutomationProperties.Name="{Binding Label}">
+                            <Border Width="46" Height="60" Margin="8,6" CornerRadius="{DynamicResource PbRadiusSm}"
+                                    Background="{DynamicResource PbSurface2Brush}" BoxShadow="{Binding Shadow}" />
+                            <TextBlock Text="{Binding Label}" FontSize="12" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <Border Height="2" Width="24" CornerRadius="1" Background="{DynamicResource PbAccentBrush}" IsVisible="{Binding IsActive}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </StackPanel>
 
         <!-- Detail screens (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #8/#9). -->
@@ -236,7 +530,12 @@
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
         </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
 
+            <!-- HOME & INTERFACE -->
+            <ScrollViewer IsVisible="{Binding AppearanceTabs.SelectedKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=interface}">
+                <StackPanel Margin="0,16,28,40" Spacing="20">
         <!-- Home (docs/superpowers/specs/2026-09-28-home-improvements-design.md I1/I5, 2026-09-28-home-cosmetics-design.md C10):
              section order and visibility, the seasonal flourish, and the "Not interested" list. -->
         <StackPanel Tag="appearance.home" Spacing="8">
@@ -263,12 +562,12 @@
                                           AutomationProperties.Name="{Binding Name}" />
                                 <TextBlock Grid.Column="2" Text="{Binding Name}" VerticalAlignment="Center"
                                            Foreground="{DynamicResource PbTextBrush}" />
-                                <Button Grid.Column="3" Classes="ghost" Padding="6,2" ToolTip.Tip="Move up" AutomationProperties.Name="Move up"
+                                <Button Grid.Column="3" Classes="iconButton" ToolTip.Tip="Move up" AutomationProperties.Name="Move up"
                                         Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).HomePrefs.MoveUpCommand}"
                                         CommandParameter="{Binding}">
                                     <fi:SymbolIcon Symbol="ArrowUp" FontSize="{StaticResource PbIconSizeXs}" />
                                 </Button>
-                                <Button Grid.Column="4" Classes="ghost" Padding="6,2" ToolTip.Tip="Move down" AutomationProperties.Name="Move down"
+                                <Button Grid.Column="4" Classes="iconButton" ToolTip.Tip="Move down" AutomationProperties.Name="Move down"
                                         Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).HomePrefs.MoveDownCommand}"
                                         CommandParameter="{Binding}">
                                     <fi:SymbolIcon Symbol="ArrowDown" FontSize="{StaticResource PbIconSizeXs}" />
@@ -286,7 +585,7 @@
             </pref:SettingsRow>
             <pref:SettingsRow Icon="EyeOff" Title="Hidden recommendations"
                                Description="Series you marked &quot;Not interested&quot; on Home. Unhide one to see it recommended again." />
-            <TextBlock Text="Nothing hidden" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" Margin="12,0,0,0" IsVisible="{Binding !HomePrefs.HasHiddenRecommendations}" />
+            <TextBlock Text="Nothing hidden" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" Margin="12,0,0,0" IsVisible="{Binding !HomePrefs.HasHiddenRecommendations}" />
             <ItemsControl ItemsSource="{Binding HomePrefs.HiddenRecommendations}" Margin="12,0,0,0"
                           AutomationProperties.AutomationId="HomeHiddenRecommendationsList">
                 <ItemsControl.ItemTemplate>
@@ -295,7 +594,7 @@
                             <TextBlock Grid.Column="0" Text="{Binding SeriesName}" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}"
                                        TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="1" Text="{Binding DismissedText}" VerticalAlignment="Center" Margin="12,0"
-                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                       FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                             <Button Grid.Column="2" Content="Unhide"
                                     Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).HomePrefs.UnhideCommand}"
                                     CommandParameter="{Binding}" />
@@ -316,10 +615,32 @@
                     <controls:SuggestBox IsStrict="True" Text="{Binding DensityText}" Suggestions="{Binding DensityOptionsList}" Width="160" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
-            <pref:SettingsRow Icon="Pulse" Title="Reduce motion"
-                               Description="Shortens UI transitions to effectively instant.">
+            <ItemsControl ItemsSource="{Binding DensitySamples}" Margin="12,6,0,8" AutomationProperties.AutomationId="DensitySamples">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="12" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:DensitySample">
+                        <StackPanel Spacing="4" Width="116" AutomationProperties.Name="{Binding Label}">
+                            <Border Classes="sampleBox" Classes.sampleActive="{Binding IsActive}" Padding="8">
+                                <StackPanel Spacing="3">
+                                    <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="{Binding RowPadding}"><Border Height="4" Width="64" HorizontalAlignment="Left" CornerRadius="2" Background="{DynamicResource PbTextMutedBrush}" /></Border>
+                                    <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="{Binding RowPadding}"><Border Height="4" Width="48" HorizontalAlignment="Left" CornerRadius="2" Background="{DynamicResource PbTextMutedBrush}" /></Border>
+                                    <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="{Binding RowPadding}"><Border Height="4" Width="58" HorizontalAlignment="Left" CornerRadius="2" Background="{DynamicResource PbTextMutedBrush}" /></Border>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Text="{Binding Label}" FontSize="12" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <pref:SettingsRow Icon="Pulse" Title="Motion"
+                               Description="{Binding MotionPreferenceDescription}">
                 <pref:SettingsRow.SettingsContent>
-                    <ToggleSwitch IsChecked="{Binding ReducedMotion}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    <controls:SuggestBox IsStrict="True" Text="{Binding MotionPreferenceText}"
+                                         Suggestions="{Binding MotionPreferenceModeNames}" Width="150" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="ArrowSort" Title="Smooth scrolling"
@@ -340,6 +661,8 @@
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
         </StackPanel>
-    </StackPanel>
-    </ScrollViewer>
+                </StackPanel>
+            </ScrollViewer>
+        </Panel>
+    </Grid>
 </UserControl>

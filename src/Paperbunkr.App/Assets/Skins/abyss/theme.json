@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.abyss",
+  "name": "Abyss",
+  "base": {
+    "palette": {
+      "accent": "#4FC3F7",
+      "success": "#4DD0A8",
+      "badge": "#FFD166"
+    },
+    "semantic": {
+      "status": {
+        "danger": "#FF6B81",
+        "warning": "#FFD166",
+        "info": "#4FC3F7"
+      },
+      "chart": {
+        "series": {
+          "1": "#4FC3F7",
+          "2": "#9D8CFF"
+        }
+      }
+    },
+    "metrics": {
+      "radius": 12,
+      "radiusSm": 8,
+      "radiusLg": 20
+    },
+    "components": {
+      "button.primary": {
+        "radius": 12,
+        "foreground": "#041622"
+      },
+      "chip": {
+        "radius": 10
+      }
+    }
+  },
+  "variants": {
+    "dark": {
+      "name": "Dark",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#071521",
+        "ink": "#DCEBF5"
+      },
+      "materials": {
+        "trench": {
+          "type": "linearGradient",
+          "angle": 180,
+          "fallback": "#0B2033",
+          "stops": [
+            {
+              "at": 0,
+              "color": "#0E2A44"
+            },
+            {
+              "at": 1,
+              "color": "#071521"
+            }
+          ]
+        },
+        "shelf": {
+          "type": "linearGradient",
+          "angle": 135,
+          "fallback": "#0D2236",
+          "stops": [
+            {
+              "at": 0,
+              "color": "#102B45"
+            },
+            {
+              "at": 1,
+              "color": "#0B1D2E"
+            }
+          ]
+        }
+      },
+      "surfaces": {
+        "navigation": "trench",
+        "raised": "shelf"
+      },
+      "semantic": {
+        "surface": {
+          "raised": "#0D2236",
+          "overlay": "#13304A"
+        },
+        "border": {
+          "default": "#1D3E5C"
+        }
+      }
+    },
+    "oled": {
+      "name": "OLED",
+      "mode": "Dark",
+      "kind": "oled",
+      "palette": {
+        "canvas": "#000000",
+        "ink": "#DCEBF5"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#000000",
+          "raised": "#06101A",
+          "overlay": "#0B1B2B"
+        },
+        "border": {
+          "default": "#173048"
+        }
+      }
+    }
+  }
+}

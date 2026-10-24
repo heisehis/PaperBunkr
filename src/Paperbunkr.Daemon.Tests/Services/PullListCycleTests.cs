@@ -43,7 +43,7 @@ public class PullListCycleTests : CycleTestBase
     }
 
     private AcquisitionCycle CycleWith(FakeSource source) =>
-        new(NewContext, (_, _) => Indexer, _ => ComicVine, Events, () => Now, createPullListSource: (_, _) => source);
+        new(NewContext, (_, _) => Indexer, _ => ComicVine, Events, () => Now, createPullListSource: _ => source);
 
     [Fact]
     public async Task TheCycleFetchesTheWeeklyList_AndMakesUpcomingWantsForFollowedSeries()
@@ -146,7 +146,7 @@ public class PullListCycleTests : CycleTestBase
         var comicVineSource = new FakeSource { Kind = ComicProvider.ComicVine };
         var metronSource = new FakeSource { Kind = ComicProvider.Metron };
         var cycle = new AcquisitionCycle(NewContext, (_, _) => Indexer, _ => ComicVine, Events, () => Now,
-            createPullListSource: (_, _) => metronSource, createComicVinePullList: _ => comicVineSource);
+            createPullListSource: _ => metronSource, createComicVinePullList: _ => comicVineSource);
 
         await cycle.RunAsync(manual: true, CancellationToken.None);
         Assert.Equal((1, 0), (comicVineSource.Fetches, metronSource.Fetches));       // a key alone: ComicVine

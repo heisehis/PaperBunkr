@@ -38,6 +38,29 @@ public sealed partial class ScrapeFieldToggle(ScrapeField field) : ObservableObj
     };
 }
 
+/// <summary>One row of "Which source wins": a field and the source it is taken from when both know it.</summary>
+public sealed partial class FieldSourceChoice(ScrapeField field, string name) : ObservableObject
+{
+    public const string MatchedSource = "Matched source";
+
+    public static System.Collections.Generic.IReadOnlyList<string> Choices { get; } = new[] { MatchedSource, "Metron", "ComicVine" };
+
+    public ScrapeField Field { get; } = field;
+
+    public string Name { get; } = name;
+
+    [ObservableProperty]
+    private string _choiceText = MatchedSource;
+
+    /// <summary>The preferred source, or null for "whichever source the match came from".</summary>
+    public ComicProvider? Preferred => ChoiceText switch
+    {
+        "Metron" => ComicProvider.Metron,
+        "ComicVine" => ComicProvider.ComicVine,
+        _ => null,
+    };
+}
+
 /// <summary>
 /// Preferences → Organize &amp; Scrape (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 8): how a ComicVine scrape behaves. No secrets live here; the
 /// ComicVine key is under Connections. One Save writes the whole <see cref="ScrapeSettings"/> row.
@@ -55,6 +78,11 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
         foreach (var field in Enum.GetValues<ScrapeField>())
         {
             FieldToggles.Add(new ScrapeFieldToggle(field));
+        }
+
+        foreach (var field in ScrapeSettings.SourcePreferableFields)
+        {
+            FieldSources.Add(new FieldSourceChoice(field, FieldToggles.First(t => t.Field == field).Name));
         }
 
         Tabs.PropertyChanged += (_, e) =>
@@ -86,6 +114,18 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
     public bool IsSaveFooterVisible => Tabs.SelectedKey != TabKeys.Organize;
 
     public ObservableCollection<ScrapeFieldToggle> FieldToggles { get; } = new();
+
+    /// <summary>"Which source wins" (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 4).</summary>
+    public ObservableCollection<FieldSourceChoice> FieldSources { get; } = new();
+
+    [RelayCommand]
+    private void ResetFieldSources()
+    {
+        foreach (var row in FieldSources)
+        {
+            row.ChoiceText = FieldSourceChoice.MatchedSource;
+        }
+    }
 
     /// <summary>Organizer profiles (create, edit, undo); null in tests that only exercise the scrape settings.</summary>
     public Scraper.ProfileManagerViewModel? Profiles { get; }
@@ -137,6 +177,89 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
     /// <summary>The source scrapes start on ("ComicVine" or "Metron"); the match dialog can switch one run.</summary>
     [ObservableProperty] private string _defaultProviderText = "ComicVine";
 
+    public static System.Collections.Generic.IReadOnlyList<string> SpeedNames { get; } = new[] { "Careful", "Balanced", "Fast" };
+
+    public static System.Collections.Generic.IReadOnlyList<string> StrictnessNames { get; } = new[] { "Lenient", "Balanced", "Strict" };
+
+    /// <summary>docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-core-design.md section 5.</summary>
+    [ObservableProperty] private string _speedText = "Balanced";
+
+    /// <summary>docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 1.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StrictnessDescription))]
+    private string _strictnessText = "Balanced";
+
+    public string StrictnessDescription
+    {
+        get
+        {
+            string describe = ConfidencePolicy.Describe(ParseStrictness(StrictnessText));
+            var checks = ScrapeDecisionHistory.Shared?.Checks() ?? Array.Empty<CoverCheck>();
+            if (checks.Count < MinimumChecksForPreview)
+            {
+                return describe;
+            }
+
+            // What each level would have done with the user's own recent automatic matches (spec C section 1).
+            var would = ScrapeDecisionHistory.WouldApply(checks);
+            return $"{describe} On your last {checks.Count} automatic cover checks: Lenient would apply {would[ScrapeStrictness.Lenient]}, " +
+                   $"Balanced {would[ScrapeStrictness.Balanced]}, Strict {would[ScrapeStrictness.Strict]}; the rest wait for review.";
+        }
+    }
+
+    /// <summary>Below this the counts say more about chance than about the setting.</summary>
+    public const int MinimumChecksForPreview = 20;
+
+    /// <summary>Metron first, ComicVine last (spec B section 1).</summary>
+    [ObservableProperty] private bool _fallBackToComicVine = true;
+
+    /// <summary>Scrape on import (spec C section 9).</summary>
+    [ObservableProperty] private bool _scrapeNewFiles = true;
+
+    /// <summary>Show the changes before applying a multi-comic scrape (spec C section 3).</summary>
+    [ObservableProperty] private bool _previewChanges = true;
+
+    /// <summary>Fill Metron's blank fields from ComicVine (spec C section 4).</summary>
+    [ObservableProperty] private bool _fillBlanksFromComicVine;
+
+    /// <summary>"N saved answers, X MB" for the provider cache.</summary>
+    [ObservableProperty] private string _providerCacheSummary = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasUnfinishedScrape))]
+    private string _unfinishedScrapeText = string.Empty;
+
+    public bool HasUnfinishedScrape => UnfinishedScrapeText.Length > 0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasReviewItems))]
+    private int _reviewQueueCount;
+
+    public bool HasReviewItems => ReviewQueueCount > 0;
+
+    /// <summary>Wired by the shell: runs "Scrape all unmatched" as a background job and returns its summary.</summary>
+    public Func<System.Threading.Tasks.Task<string>>? RunScrapeAllUnmatched { get; set; }
+
+    /// <summary>Wired by the shell: resumes an unfinished batch.</summary>
+    public Func<ScrapeJobRecord, System.Threading.Tasks.Task<string>>? ResumeScrape { get; set; }
+
+    /// <summary>Wired by the shell: opens the review queue.</summary>
+    public Action? OpenReviewQueue { get; set; }
+
+    /// <summary>Wired by the shell: undoes a scrape batch and returns what it did.</summary>
+    public Func<ScrapeUndoBatch, string>? UndoScrapeBatch { get; set; }
+
+    private ScrapeUndoBatch? _lastBatch;
+
+    /// <summary>"The last scrape (12 comics, 21/10 14:02)" when one can be undone.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanUndoLastScrape))]
+    private string _lastScrapeText = string.Empty;
+
+    public bool CanUndoLastScrape => LastScrapeText.Length > 0;
+
+    private ScrapeJobRecord? _unfinished;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasErrorStatus), nameof(HasInfoStatus))]
     private string _statusMessage = string.Empty;
@@ -175,9 +298,23 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
             toggle.IsEnabled = settings.EnabledScrapeFields.Contains(toggle.Field);
         }
 
+        foreach (var row in FieldSources)
+        {
+            row.ChoiceText = settings.FieldSourcePreference.TryGetValue(row.Field, out var preferred)
+                ? Paperbunkr.Data.ComicVine.ComicProviderFactory.DisplayName(preferred)
+                : FieldSourceChoice.MatchedSource;
+        }
+
         HasComicVineKey = !string.IsNullOrEmpty(CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey));
         HasMetronLogin = Paperbunkr.Data.ComicVine.ComicProviderFactory.IsAvailable(context, ComicProvider.Metron);
         DefaultProviderText = Paperbunkr.Data.ComicVine.ComicProviderFactory.DisplayName(settings.DefaultProvider);
+        SpeedText = settings.Speed.ToString();
+        StrictnessText = settings.Strictness.ToString();
+        FallBackToComicVine = settings.FallBackToComicVine;
+        ScrapeNewFiles = settings.ScrapeNewFiles;
+        PreviewChanges = settings.PreviewChanges;
+        FillBlanksFromComicVine = settings.FillBlanksFromComicVine;
+        RefreshAutomationState();
         var scanCredits = Paperbunkr.Data.Metadata.ScanCredits.ScanCreditSettings.Load();
         ScannerNames = string.Join(Environment.NewLine, scanCredits.Scanners);
         ScanIgnoredWords = string.Join(Environment.NewLine, scanCredits.Ignored);
@@ -229,6 +366,13 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
             ScrapeDelayMs = delayMs ?? 1000,
             PublisherAliases = aliases,
             EnabledScrapeFields = new(FieldToggles.Where(t => t.IsEnabled).Select(t => t.Field)),
+            Speed = Enum.TryParse<ScrapeSpeed>(SpeedText, ignoreCase: true, out var speed) ? speed : ScrapeSpeed.Balanced,
+            Strictness = ParseStrictness(StrictnessText),
+            FallBackToComicVine = FallBackToComicVine,
+            ScrapeNewFiles = ScrapeNewFiles,
+            PreviewChanges = PreviewChanges,
+            FillBlanksFromComicVine = FillBlanksFromComicVine,
+            FieldSourcePreference = FieldSources.Where(r => r.Preferred is not null).ToDictionary(r => r.Field, r => r.Preferred!.Value),
         };
 
         using var context = _createContext();
@@ -248,6 +392,97 @@ public sealed partial class OrganizeScrapeSettingsViewModel : ViewModelBase
 
     [RelayCommand]
     private void OpenConnections() => _openConnections();
+
+    private static ScrapeStrictness ParseStrictness(string text) =>
+        Enum.TryParse<ScrapeStrictness>(text, ignoreCase: true, out var value) ? value : ScrapeStrictness.Balanced;
+
+    /// <summary>Re-reads the provider cache size, an unfinished batch and the review queue (also after each of the actions below).</summary>
+    public void RefreshAutomationState()
+    {
+        var cache = Paperbunkr.Data.ComicVine.Caching.ProviderCache.Shared;
+        if (cache is null)
+        {
+            ProviderCacheSummary = "Not in use.";
+        }
+        else
+        {
+            var (count, bytes) = cache.Size();
+            ProviderCacheSummary = count == 0 ? "Nothing saved yet." : $"{count:N0} saved answers, {bytes / (1024.0 * 1024.0):0.0} MB.";
+        }
+
+        _unfinished = ScrapeJobStore.Shared?.LoadUnfinished().FirstOrDefault();
+        UnfinishedScrapeText = _unfinished is null ? string.Empty : $"{_unfinished.Pending.Count:N0} of {_unfinished.Total:N0} comics left, started {_unfinished.CreatedUtc.ToLocalTime():g}.";
+        ReviewQueueCount = ScrapeReviewQueue.Shared?.Load().Count ?? 0;
+        OnPropertyChanged(nameof(StrictnessDescription)); // picks up checks recorded since the page was last shown
+        _lastBatch = ScrapeUndoStore.Shared?.List().FirstOrDefault();
+        LastScrapeText = _lastBatch is null ? string.Empty
+            : $"{_lastBatch.Label}, {_lastBatch.CreatedUtc.ToLocalTime():g} - {_lastBatch.Before.Count} changed. Kept for 30 days.";
+    }
+
+    [RelayCommand]
+    private void UndoLastScrape()
+    {
+        if (_lastBatch is null || UndoScrapeBatch is null)
+        {
+            return;
+        }
+
+        SetStatus(UndoScrapeBatch(_lastBatch), isError: false);
+        RefreshAutomationState();
+    }
+
+    /// <summary>"Refresh provider data": the next scrape asks the sources again (spec B section 3).</summary>
+    [RelayCommand]
+    private void RefreshProviderData()
+    {
+        int removed = Paperbunkr.Data.ComicVine.Caching.ProviderCache.Shared?.Clear() ?? 0;
+        SetStatus($"Forgot {removed:N0} saved answers; the next scrape asks the sources again.", isError: false);
+        RefreshAutomationState();
+    }
+
+    [RelayCommand]
+    private async System.Threading.Tasks.Task ScrapeAllUnmatchedAsync()
+    {
+        if (RunScrapeAllUnmatched is null)
+        {
+            return;
+        }
+
+        SetStatus("Scraping every unmatched comic in the background - follow it in the Activity Center.", isError: false);
+        string summary = await RunScrapeAllUnmatched();
+        SetStatus(summary, isError: false);
+        RefreshAutomationState();
+    }
+
+    [RelayCommand]
+    private async System.Threading.Tasks.Task ResumeUnfinishedScrapeAsync()
+    {
+        if (_unfinished is null || ResumeScrape is null)
+        {
+            return;
+        }
+
+        var job = _unfinished;
+        UnfinishedScrapeText = string.Empty;
+        SetStatus("Resuming in the background - follow it in the Activity Center.", isError: false);
+        string summary = await ResumeScrape(job);
+        SetStatus(summary, isError: false);
+        RefreshAutomationState();
+    }
+
+    [RelayCommand]
+    private void DiscardUnfinishedScrape()
+    {
+        if (_unfinished is not null)
+        {
+            ScrapeJobStore.Shared?.Delete(_unfinished.Id);
+        }
+
+        RefreshAutomationState();
+    }
+
+    [RelayCommand]
+    private void ShowReviewQueue() => OpenReviewQueue?.Invoke();
 
     [RelayCommand]
     private void EnableAllFields()

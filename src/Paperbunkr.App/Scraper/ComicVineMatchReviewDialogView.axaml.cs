@@ -1,11 +1,21 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
 
 namespace Paperbunkr.App.Scraper;
 
 public partial class ComicVineMatchReviewDialogView : UserControl
 {
-    public ComicVineMatchReviewDialogView() => InitializeComponent();
+    public ComicVineMatchReviewDialogView()
+    {
+        InitializeComponent();
+
+        // Tunnelled (reported 2026-10-22: "Skip this book doesn't work"): an Avalonia 12 Button swallows the left press, and Enter/Space, before a
+        // handler declared on it in XAML runs (CLAUDE.md "Input handling"), so neither the click nor the keys ever reached these.
+        SkipButton.AddHandler(PointerPressedEvent, OnSkipPointerPressed, RoutingStrategies.Tunnel);
+        SkipButton.AddHandler(KeyDownEvent, OnSkipKeyDown, RoutingStrategies.Tunnel);
+    }
 
     /// <summary>Ctrl-held Skip (docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-plan.md
     /// Step 16) - PointerPressed instead of a bound Command, same pattern as LibraryScreen's own
@@ -18,16 +28,26 @@ public partial class ComicVineMatchReviewDialogView : UserControl
             return;
         }
 
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        if (!e.GetCurrentPoint(SkipButton).Properties.IsLeftButtonPressed)
         {
-            vm.SkipPermanentlyCommand.Execute(null);
-        }
-        else
-        {
-            vm.SkipCommand.Execute(null);
+            return;
         }
 
+        bool permanently = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         e.Handled = true;
+
+        // Skipping closes this dialog: not while the press is still routing through the button inside it (CLAUDE.md, routed-event detach).
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (permanently)
+            {
+                vm.SkipPermanentlyCommand.Execute(null);
+            }
+            else
+            {
+                vm.SkipCommand.Execute(null);
+            }
+        });
     }
 
     /// <summary>Keyboard fallback (Tab, then Space/Enter) - CE's own Ctrl-click affordance is mouse-
@@ -36,8 +56,8 @@ public partial class ComicVineMatchReviewDialogView : UserControl
     {
         if ((e.Key is Key.Space or Key.Enter) && DataContext is ComicVineMatchReviewDialogViewModel vm)
         {
-            vm.SkipCommand.Execute(null);
             e.Handled = true;
+            Dispatcher.UIThread.Post(() => vm.SkipCommand.Execute(null));
         }
     }
 

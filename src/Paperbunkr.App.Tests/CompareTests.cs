@@ -608,6 +608,7 @@ public class CompareTests : IDisposable
                 string key = match.Groups[1].Value;
                 resources[key] = key switch
                 {
+                    _ when key.Contains("Spring") => new Paperbunkr.App.Theming.Motion.DampedSpringEasing(),
                     _ when key.Contains("Ease") => new Avalonia.Animation.Easings.CubicEaseOut(),
                     _ when key.Contains("Motion") || key.Contains("Duration") => TimeSpan.FromMilliseconds(150),
                     _ when key.Contains("Radius") => new Avalonia.CornerRadius(4),

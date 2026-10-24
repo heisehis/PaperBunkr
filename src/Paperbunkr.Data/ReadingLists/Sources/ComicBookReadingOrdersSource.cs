@@ -12,7 +12,7 @@ namespace Paperbunkr.Data.ReadingLists.Sources;
 /// only (e.g. "Absolute Power", "Sinestro Corps War") - single-character arcs like "Hush" live
 /// inside giant, unstructured "Master Reading Order" pages this adapter doesn't parse.
 /// </summary>
-public sealed class ComicBookReadingOrdersSource : IReadingListSource
+public sealed class ComicBookReadingOrdersSource : IReadingListSource, Paperbunkr.Data.Metadata.ICbroTimeline
 {
     private const string BaseUrl = "https://comicbookreadingorders.com";
 
@@ -23,7 +23,9 @@ public sealed class ComicBookReadingOrdersSource : IReadingListSource
     };
 
     private static readonly HttpClient Http = CreateClient();
-    private static readonly TimeSpan MinRequestInterval = TimeSpan.FromMilliseconds(500);
+
+    // The site's robots.txt asks for "crawl-delay: 5" (checked 2026-10-12); a 500 ms pace was well under that.
+    private static readonly TimeSpan MinRequestInterval = TimeSpan.FromSeconds(5);
 
     private readonly object _throttleLock = new();
     private DateTime _lastRequestUtc = DateTime.MinValue;
@@ -45,6 +47,55 @@ public sealed class ComicBookReadingOrdersSource : IReadingListSource
             .ToList();
     }
 
+    /// <summary>The Marvel and DC "Event Order" lists in page order. That order is the site's story order (the same order as its Master Reading Order), not strict publication order.</summary>
+    public async Task<IReadOnlyList<Paperbunkr.Data.Metadata.CbroTimelineEntry>> GetEntriesAsync(CancellationToken cancellationToken)
+    {
+        var entries = new List<Paperbunkr.Data.Metadata.CbroTimelineEntry>();
+        foreach (string indexUrl in EventTimelineUrls)
+        {
+            string html = await GetHtmlAsync(indexUrl, cancellationToken).ConfigureAwait(false);
+            entries.AddRange(ParseTimeline(html, indexUrl.Contains("/dc/", StringComparison.Ordinal) ? "dc" : "marvel"));
+        }
+
+        return entries;
+    }
+
+    /// <summary>
+    /// Pure parsing of one event-timeline page. Entries are the <c>&lt;p&gt;</c> paragraphs after the "Event Order" heading that read
+    /// "Name (Year)" - linked ones carry the event's own page, older ones are plain text with the issues in a blue span. Era markers
+    /// ("Marvel NOW! starts here.") have no year and are skipped.
+    /// </summary>
+    public static List<Paperbunkr.Data.Metadata.CbroTimelineEntry> ParseTimeline(string html, string listKey)
+    {
+        int heading = html.IndexOf("Event Order", StringComparison.OrdinalIgnoreCase);
+        string body = heading >= 0 ? html[heading..] : html;
+
+        var entries = new List<Paperbunkr.Data.Metadata.CbroTimelineEntry>();
+        foreach (Match paragraph in Regex.Matches(body, @"<p[^>]*>(.*?)</p>", RegexOptions.Singleline | RegexOptions.IgnoreCase))
+        {
+            string inner = paragraph.Groups[1].Value;
+            string text = WebUtility.HtmlDecode(Regex.Replace(inner, "<[^>]+>", string.Empty)).Replace(' ', ' ').Trim();
+            var match = Regex.Match(text, @"^(?<name>.+?)\s*\((?<year>(?:19|20)\d{2})\)");
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            string name = match.Groups["name"].Value.Trim().TrimEnd('-', '–', '—').Trim();
+            if (name.Length == 0)
+            {
+                continue;
+            }
+
+            var href = Regex.Match(inner, @"href=""(?<url>https://comicbookreadingorders\.com/[^""]*/events/[^""]+)""", RegexOptions.IgnoreCase);
+            entries.Add(new Paperbunkr.Data.Metadata.CbroTimelineEntry(
+                listKey, entries.Count + 1, name, int.Parse(match.Groups["year"].Value, System.Globalization.CultureInfo.InvariantCulture),
+                href.Success ? WebUtility.HtmlDecode(href.Groups["url"].Value) : null));
+        }
+
+        return entries;
+    }
+
     public async Task<IReadOnlyList<ArcIssue>> GetArcIssuesInOrderAsync(string arcId, CancellationToken cancellationToken)
     {
         // arcId is the arc's own page URL - simplest stable identifier this site offers, since it
@@ -53,8 +104,21 @@ public sealed class ComicBookReadingOrdersSource : IReadingListSource
         return ParseIssuesFromHtml(html);
     }
 
+    /// <summary>The same page, keeping the lines that look like an entry but could not be read as "Series #number" (a one-shot, a Free Comic
+    /// Book Day issue), so they are reported instead of silently left out (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md
+    /// §5.7, decision Q13).</summary>
+    public async Task<ArcEntryList> GetArcEntriesAsync(string arcId, CancellationToken cancellationToken)
+    {
+        string html = await GetHtmlAsync(arcId, cancellationToken).ConfigureAwait(false);
+        return ParseEntriesFromHtml(html);
+    }
+
     /// <summary>Pure parsing, split out from the network fetch so it's unit-testable against a literal HTML fixture (docs/superpowers/specs/2026-08-22-cbl-manager-arc-lookup-design.md §6). Handles both real markup styles this site uses (per-issue &lt;p&gt; wrapping, and bare &lt;span&gt; runs with no wrapper).</summary>
-    public static List<ArcIssue> ParseIssuesFromHtml(string html)
+    public static List<ArcIssue> ParseIssuesFromHtml(string html) => ParseEntriesFromHtml(html).Issues.ToList();
+
+    /// <summary><see cref="ParseIssuesFromHtml"/> plus the skipped lines: a line between the first and the last issue that ends in a "(year)"
+    /// like every entry does, yet has no "#number". No number is guessed for it.</summary>
+    public static ArcEntryList ParseEntriesFromHtml(string html)
     {
         // The site's markup for the issue list is NOT consistent across arcs - some pages wrap
         // every issue in its own <p>issue</p>, others just run <span style="color:...">issue</span>
@@ -77,6 +141,7 @@ public sealed class ComicBookReadingOrdersSource : IReadingListSource
         html = Regex.Replace(html, "<[^>]+>", string.Empty);
 
         var result = new List<ArcIssue>();
+        var unread = new List<(int After, string Text)>();
         string? section = null;
         string? pendingNote = null;
         foreach (string line in html.Split('\n'))
@@ -97,6 +162,11 @@ public sealed class ComicBookReadingOrdersSource : IReadingListSource
             var issueMatch = Regex.Match(text, @"^(?<series>.+?)\s+#(?<number>\d+[A-Za-z]?)\b(?<rest>.*)$");
             if (!issueMatch.Success)
             {
+                if (text.Length is > 0 and <= 120 && Regex.IsMatch(text, @"\(\d{4}\)\s*$"))
+                {
+                    unread.Add((result.Count, text));
+                }
+
                 continue;
             }
 
@@ -113,7 +183,9 @@ public sealed class ComicBookReadingOrdersSource : IReadingListSource
                 Annotation: annotation.Length == 0 ? null : annotation));
         }
 
-        return result;
+        // Only lines inside the issue list count: the page around it has headings and credits that also end in a year.
+        var skipped = unread.Where(u => u.After > 0 && u.After < result.Count).Select(u => u.Text).ToList();
+        return new ArcEntryList(result, skipped);
     }
 
     private const string NoteMarker = "@@NOTE@@";

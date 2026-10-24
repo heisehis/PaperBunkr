@@ -12,24 +12,6 @@
              x:DataType="vm:SmartScreenViewModel">
 
     <UserControl.Styles>
-        <Style Selector="Button.headerAction">
-            <Setter Property="Padding" Value="10,5" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="FontSize" Value="11.5" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.headerAction.ghost">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        </Style>
-        <Style Selector="Button.headerAction.primary">
-            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
-        </Style>
 
         <!-- conditionPicker: rule-builder SuggestBox. Brush/radius setters ride the ControlTheme's
              TemplateBindings to PART_TextBox; the inner padding needs the /template/ selector. -->
@@ -37,19 +19,16 @@
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="MinWidth" Value="120" />
         </Style>
         <Style Selector="controls|SuggestBox.conditionPicker /template/ TextBox#PART_TextBox">
-            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Padding" Value="10,4" />
         </Style>
+        <!-- Surface, border and shape come from the shared underlined-field style (2026-10-19 UI polish foundation §4). -->
         <Style Selector="TextBox.conditionValue">
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Padding" Value="10,4" />
             <Setter Property="MinWidth" Value="120" />
         </Style>
 
@@ -61,10 +40,10 @@
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Padding" Value="7,5" />
+            <Setter Property="Padding" Value="8,4" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="ToggleButton.conditionFlag:checked">
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
@@ -73,24 +52,7 @@
         </Style>
 
         <!-- And/Or toggle at the top of a group card -->
-        <Style Selector="Button.modeToggle">
-            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Padding" Value="9,4" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
 
-        <Style Selector="Border.groupCard">
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-            <Setter Property="Padding" Value="16" />
-        </Style>
 
         <!-- Matches Button.card in LibraryScreen.axaml - transparent hit-target wrapper. -->
         <Style Selector="Button.resultCard">
@@ -118,29 +80,32 @@
              engine-v2-design.md §2). A single non-nested group renders as a flat pill list,
              exactly like the pre-v2 UI. -->
         <DataTemplate x:Key="GroupCardTemplate" x:DataType="vm:SmartListGroupViewModel">
-            <Border Classes="groupCard" Margin="0,0,0,10">
+            <Border Classes="card" Margin="0,0,0,10">
                 <StackPanel Spacing="10">
 
                     <Grid ColumnDefinitions="Auto,*,Auto">
-                        <Button Grid.Column="0" Classes="modeToggle" Command="{Binding ToggleModeCommand}"
+                        <Button Grid.Column="0" Classes="segItem" Command="{Binding ToggleModeCommand}"
                                 Content="{Binding ModeLabel}" IsEnabled="{Binding !IsReadOnly}"
                                 ToolTip.Tip="Switch between matching ALL and ANY of the rows below" />
-                        <TextBlock Grid.Column="1" Text="{Binding MatchSummary}" FontSize="11.5" FontWeight="Bold"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" Margin="10,0,0,0" />
-                        <Button Grid.Column="2" Classes="headerAction ghost" Command="{Binding RemoveCommand}"
-                                IsVisible="{Binding CanRemove}" ToolTip.Tip="Remove this group" Content="✕" />
+                        <TextBlock Grid.Column="1" Text="{Binding MatchSummary}" FontSize="12" FontWeight="Bold"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                        <Button AutomationProperties.Name="Remove this group" Grid.Column="2" Classes="iconButton" Command="{Binding RemoveCommand}"
+                                IsVisible="{Binding CanRemove}" ToolTip.Tip="Remove this group"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
                     </Grid>
 
                     <ItemsControl ItemsSource="{Binding Conditions}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:SmartListConditionViewModel">
-                                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,9">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,8">
+                                    <!-- Fixed field/operator widths and the remove button in its own column, so every row's controls and ✕
+                                         line up (they followed each row's own text widths, 2026-10-20 UI polish). -->
+                                    <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
                                         <ToggleButton Classes="conditionFlag" Content="NOT" IsChecked="{Binding Not}"
                                                       ToolTip.Tip="Negate this condition"
                                                       IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
-                                        <controls:SuggestBox Classes="conditionPicker" IsStrict="True" Suggestions="{Binding FieldNames}"
+                                        <controls:SuggestBox Classes="conditionPicker" IsStrict="True" Width="160" Suggestions="{Binding FieldNames}"
                                                   Text="{Binding SelectedFieldText}"
                                                   IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
@@ -149,7 +114,7 @@
                                                   IsVisible="{Binding IsAllPropertiesField}"
                                                   IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
-                                        <TextBox Classes="conditionValue" Width="150" Watermark="value name"
+                                        <TextBox Classes="conditionValue" Width="150" PlaceholderText="value name"
                                                  Text="{Binding CustomValueName}" IsVisible="{Binding IsCustomValueField}"
                                                  IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
@@ -158,7 +123,7 @@
                                                   IsVisible="{Binding IsVirtualTagField}"
                                                   IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
-                                        <controls:SuggestBox Classes="conditionPicker" IsStrict="True" Suggestions="{Binding OperatorNames}"
+                                        <controls:SuggestBox Classes="conditionPicker" IsStrict="True" Width="150" Suggestions="{Binding OperatorNames}"
                                                   Text="{Binding SelectedOperatorText}" IsVisible="{Binding ShowOperator}"
                                                   IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
@@ -167,19 +132,21 @@
                                                       ToolTip.Tip="Ignore case (on) / match case exactly (off)"
                                                       IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
-                                        <TextBox Classes="conditionValue" Text="{Binding Value}" Watermark="{Binding ValueWatermark}" IsVisible="{Binding !IsDuplicateField}"
+                                        <TextBox Classes="conditionValue" Text="{Binding Value}" PlaceholderText="{Binding ValueWatermark}" IsVisible="{Binding !IsDuplicateField}"
                                                   IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
-                                        <TextBlock Text="and" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                        <TextBlock Text="and" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
                                                    VerticalAlignment="Center" IsVisible="{Binding ShowValue2}" />
-                                        <TextBox Classes="conditionValue" Width="90" Text="{Binding Value2}" Watermark="{Binding Value2Watermark}" IsVisible="{Binding ShowValue2}"
+                                        <TextBox Classes="conditionValue" Width="90" Text="{Binding Value2}" PlaceholderText="{Binding Value2Watermark}" IsVisible="{Binding ShowValue2}"
                                                   IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
+                                    </StackPanel>
 
-                                        <Button Classes="headerAction ghost" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove condition"
+                                        <Button Grid.Column="1" AutomationProperties.Name="Remove condition" Classes="iconButton" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                Command="{Binding RemoveCommand}" ToolTip.Tip="Remove condition"
                                                 IsVisible="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}">
                                             <fi:SymbolIcon Symbol="SubtractCircle" FontSize="{StaticResource PbIconSizeSm}" />
                                         </Button>
-                                    </StackPanel>
+                                    </Grid>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -191,7 +158,7 @@
 
                     <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0"
                                 IsVisible="{Binding !IsReadOnly}">
-                        <Button Classes="headerAction ghost" Command="{Binding AddConditionCommand}" Padding="0"
+                        <Button Classes="ghost" Command="{Binding AddConditionCommand}"
                                 Foreground="{DynamicResource PbAccentTextBrush}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Grid Width="10" Height="10" VerticalAlignment="Center">
@@ -201,7 +168,7 @@
                                 <TextBlock Text="Add condition" />
                             </StackPanel>
                         </Button>
-                        <Button Classes="headerAction ghost" Command="{Binding AddGroupCommand}" Padding="0"
+                        <Button Classes="ghost" Command="{Binding AddGroupCommand}"
                                 Foreground="{DynamicResource PbTextMutedBrush}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Grid Width="10" Height="10" VerticalAlignment="Center">
@@ -221,19 +188,19 @@
 
         <!-- Row 0: pinned top band - title/subtitle + Duplicate/Save. -->
         <StackPanel Grid.Row="0">
-            <Grid ColumnDefinitions="*,Auto" Margin="28,20,28,16">
+            <Grid ColumnDefinitions="*,Auto" Margin="24,20,24,16">
                 <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
-                    <TextBlock Text="{Binding ListName}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                    <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                    <TextBlock Classes="pbTextHeading" Text="{Binding ListName}" />
+                    <TextBlock Text="{Binding Subtitle}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
-                    <Button Classes="headerAction ghost" Command="{Binding DuplicateCommand}">
+                    <Button Classes="ghost" Command="{Binding DuplicateCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <fi:SymbolIcon Symbol="Copy" FontSize="{StaticResource PbIconSizeXs}" />
                             <TextBlock Text="Duplicate" />
                         </StackPanel>
                     </Button>
-                    <Button Classes="headerAction primary" Command="{Binding SaveCommand}" IsVisible="{Binding !IsReadOnly}">
+                    <Button Classes="primary" Command="{Binding SaveCommand}" IsVisible="{Binding !IsReadOnly}">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <fi:SymbolIcon Symbol="Save" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeTextBrush}" />
                             <TextBlock Text="Save" />
@@ -247,7 +214,7 @@
         <!-- Row 1: pinned stat row - stays visible while row 2 scrolls. -->
         <StackPanel Grid.Row="1">
             <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                    BorderThickness="1" CornerRadius="{StaticResource PbRadiusChip}" Padding="12,6" HorizontalAlignment="Left" Margin="28,16,28,16">
+                    BorderThickness="1" CornerRadius="{StaticResource PbRadiusChip}" Padding="12,6" HorizontalAlignment="Left" Margin="24,16,24,16">
                 <StackPanel Orientation="Horizontal" Spacing="7">
                     <Ellipse Width="7" Height="7" Fill="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" />
                     <TextBlock FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}">
@@ -262,18 +229,18 @@
 
         <!-- Row 2: scrolling content - condition builder, Cancel/Apply, results. -->
         <ScrollViewer Grid.Row="2">
-        <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,24,28,40">
+        <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="24,24,24,40">
 
                 <ContentControl Content="{Binding RootGroup}" ContentTemplate="{StaticResource GroupCardTemplate}" />
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="9" Margin="0,20,0,0" IsVisible="{Binding !IsReadOnly}">
-                    <Button Classes="headerAction ghost" Padding="14,8" Command="{Binding CancelCommand}">
+                    <Button Classes="ghost" Command="{Binding CancelCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeXs}" />
                             <TextBlock Text="Cancel" />
                         </StackPanel>
                     </Button>
-                    <Button Classes="headerAction primary" Padding="14,8" Command="{Binding SaveCommand}">
+                    <Button Classes="primary" Command="{Binding SaveCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <fi:SymbolIcon Symbol="Save" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeTextBrush}" />
                             <TextBlock Text="Apply" />
@@ -283,8 +250,8 @@
 
                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,32,0,0" IsVisible="{Binding !HasResults}">
                     <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" />
-                    <TextBlock Text="{Binding NoResultsMessage}" FontSize="12.5"
-                               Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock Text="{Binding NoResultsMessage}" FontSize="13"
+                               Foreground="{DynamicResource PbTextMutedBrush}" />
                 </StackPanel>
 
                 <ItemsControl x:Name="ResultsList" ItemsSource="{Binding Results}" Margin="0,32,0,0"
@@ -304,7 +271,7 @@
                                     <Grid>
                                         <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                                         <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
-                                                   VerticalAlignment="Bottom" Margin="9" />
+                                                   VerticalAlignment="Bottom" Margin="8" />
                                     </Grid>
                                 </Border>
                             </Button>
@@ -332,7 +299,7 @@
                                     <Grid>
                                         <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                                         <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
-                                                   VerticalAlignment="Bottom" Margin="9" TextTrimming="CharacterEllipsis" />
+                                                   VerticalAlignment="Bottom" Margin="8" TextTrimming="CharacterEllipsis" />
                                     </Grid>
                                 </Border>
                             </Button>
@@ -357,7 +324,7 @@
                                     <Grid>
                                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
                                         <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
-                                                   VerticalAlignment="Bottom" Margin="9" TextTrimming="CharacterEllipsis" />
+                                                   VerticalAlignment="Bottom" Margin="8" TextTrimming="CharacterEllipsis" />
                                     </Grid>
                                 </Border>
                             </Button>

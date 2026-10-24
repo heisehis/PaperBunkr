@@ -1,10 +1,12 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using Paperbunkr.App.Controls;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
@@ -65,6 +67,27 @@ public class ReadingListsScreenViewTests : IDisposable
         var tokens = new Dictionary<string, object>
         {
             ["PbMotionEase"] = new Avalonia.Animation.Easings.CubicEaseOut(),
+            ["PbMotionExitEase"] = new Avalonia.Animation.Easings.CubicEaseIn(),
+            ["PbMotionMoveEase"] = new Avalonia.Animation.Easings.CubicEaseInOut(),
+            ["PbMotionSpring"] = new Paperbunkr.App.Theming.Motion.DampedSpringEasing(),
+            // Motion is pinned instant: these tests check states, and a real-window test earlier in the run leaves real durations in the
+            // shared app resources (a transition caught mid-flight then reads as the wrong colour).
+            ["PbMotionFast"] = TimeSpan.Zero,
+            ["PbMotionStandard"] = TimeSpan.Zero,
+            ["PbMotionLarge"] = TimeSpan.Zero,
+            ["PbMotionSlow"] = TimeSpan.Zero,
+            ["PbMotionAcknowledge"] = TimeSpan.Zero,
+            ["PbMotionAcknowledgeMove"] = TimeSpan.Zero,
+            ["PbMotionHoverFade"] = TimeSpan.Zero,
+            ["PbMotionHoverMove"] = TimeSpan.Zero,
+            ["PbMotionRevealFade"] = TimeSpan.Zero,
+            ["PbMotionRevealMove"] = TimeSpan.Zero,
+            ["PbMotionRevealExit"] = TimeSpan.Zero,
+            ["PbMotionReplace"] = TimeSpan.Zero,
+            ["PbMotionTravelFade"] = TimeSpan.Zero,
+            ["PbMotionTravelMove"] = TimeSpan.Zero,
+            ["PbMotionFlight"] = TimeSpan.Zero,
+            ["PbMotionAmbient"] = TimeSpan.Zero,
             ["PbIconSizeXs"] = 14d,
             ["PbIconSizeSm"] = 16d,
             ["PbIconSizeLg"] = 24d,
@@ -278,7 +301,7 @@ public class ReadingListsScreenViewTests : IDisposable
             vm.List.BeginEditCommand.Execute(null);
             texts = VisibleTexts(window);
             Assert.Contains("Editing Crisis", texts);
-            Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "⠿" && t.IsEffectivelyVisible);
+            Assert.Contains(window.GetVisualDescendants().OfType<Control>(), c => c.Classes.Contains("rlHandle") && c.IsEffectivelyVisible); // the drag handle (a SymbolIcon)
 
             vm.List.EndEditCommand.Execute(null);
             vm.List.ToggleAddIssuesCommand.Execute(null);
@@ -456,16 +479,16 @@ public class ReadingListsScreenViewTests : IDisposable
             vm.List.BeginAddTagCommand.Execute(null);
             vm.List.NewTagText = "Cosmic, Gladiators, cosmic";
             vm.List.CommitAddTagCommand.Execute(null);
-            Assert.Equal(new[] { "Cosmic", "Gladiators" }, vm.List.Tags.Select(t => t.Value));
+            Assert.Equal(new[] { "Cosmic", "Gladiators" }, vm.List.Tags.Where(t => !t.IsGenerated).Select(t => t.Value));
             texts = VisibleTexts(window);
             Assert.Contains("Gladiators", texts);
 
             vm.List.RemoveTagCommand.Execute(vm.List.Tags[0]);
             TestDispatcher.Drain();
-            Assert.Equal(new[] { "Gladiators" }, vm.List.Tags.Select(t => t.Value));
+            Assert.Equal(new[] { "Gladiators" }, vm.List.Tags.Where(t => !t.IsGenerated).Select(t => t.Value));
             using (var context = PaperbunkrDb.CreateContext())
             {
-                Assert.Equal(new[] { "Gladiators" }, context.ReadingListTags.Where(t => t.ReadingListId == list).Select(t => t.Value).ToArray());
+                Assert.Equal(new[] { "Gladiators" }, context.ReadingListTags.Where(t => t.ReadingListId == list && t.Origin == ReadingListTagOrigin.User).Select(t => t.Value).ToArray());
             }
 
             window.Close();
@@ -492,11 +515,64 @@ public class ReadingListsScreenViewTests : IDisposable
             VisibleTexts(window);
 
             var path = window.GetVisualDescendants().OfType<ItemsControl>().First(i => i.Name == "PathList");
+            var pageScroller = window.GetVisualDescendants().OfType<SmoothScrollViewer>().Single(v => v.Name == "PageScroller");
             int realized = path.GetRealizedContainers().Count();
-            var scroller = path.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
             var panel = path.GetVisualDescendants().OfType<VirtualizingStackPanel>().FirstOrDefault();
             Assert.True(realized is >= 1 and <= 60,
-                $"realized={realized} pathBounds={path.Bounds} viewport={scroller?.Viewport} extent={scroller?.Extent} panel={panel?.GetType().Name} panelBounds={panel?.Bounds}");
+                $"realized={realized} pathBounds={path.Bounds} pageViewport={pageScroller.Viewport} pageExtent={pageScroller.Extent} panel={panel?.GetType().Name} panelBounds={panel?.Bounds}");
+            Assert.Empty(path.GetVisualDescendants().OfType<ScrollViewer>());
+            Assert.True(pageScroller.Extent.Height > pageScroller.Viewport.Height,
+                $"pageViewport={pageScroller.Viewport} pageExtent={pageScroller.Extent}");
+
+            vm.List.SetViewModeCommand.Execute(ReadingListPageViewModel.CoversMode);
+            VisibleTexts(window);
+            var coverWall = window.GetVisualDescendants().OfType<ItemsControl>().Single(i => i.Name == "CoverWall");
+            Assert.IsType<VirtualizingWrapPanel>(coverWall.GetVisualDescendants().OfType<VirtualizingWrapPanel>().Single());
+            Assert.Empty(coverWall.GetVisualDescendants().OfType<ScrollViewer>());
+            window.Close();
+        });
+    }
+
+    [Fact]
+    public void TagWall_ShowsOnlyOneRowUntilExpanded_AndKeepsAddAvailable()
+    {
+        WithThemeAndTokens(() =>
+        {
+            int listId = SeedList("Tagged", 4, 0);
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                var list = context.ReadingLists.Find(listId)!;
+                for (int i = 0; i < 48; i++)
+                {
+                    list.Tags.Add(new ReadingListTag { Value = $"Long generated tag label {i:00}" });
+                }
+
+                context.SaveChanges();
+            }
+
+            var (vm, window) = Show();
+            vm.LoadReadingList(listId);
+            VisibleTexts(window);
+
+            var wall = window.GetVisualDescendants().OfType<CollapsibleTagWall>().Single();
+            var chips = wall.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("filterChip") && !b.Classes.Contains("rlAddTag")).ToList();
+            Assert.True(wall.HasOverflow);
+            Assert.True(wall.HiddenItemCount > 0);
+            Assert.Equal(1, chips.Where(b => b.IsEffectivelyVisible)
+                .Select(b => Math.Round(b.TranslatePoint(new Point(0, 0), wall)!.Value.Y, 1)).Distinct().Count());
+            Assert.All(chips.Where(b => !b.IsEffectivelyVisible), b => Assert.False(b.IsEffectivelyVisible));
+            Assert.Contains(window.GetVisualDescendants().OfType<Button>(), b => b.Classes.Contains("rlAddTag") && b.IsEffectivelyVisible);
+            Assert.Contains(window.GetVisualDescendants().OfType<Button>(), b => AutomationProperties.GetAutomationId(b) == "ReadingListTagWallToggle" && b.IsEffectivelyVisible);
+
+            vm.List.ToggleTagWallCommand.Execute(null);
+            VisibleTexts(window);
+            Assert.True(vm.List.IsTagWallExpanded);
+            Assert.Equal(0, wall.HiddenItemCount);
+            Assert.All(chips, b => Assert.True(b.IsEffectivelyVisible));
+
+            vm.LoadReadingList(SeedList("Second", 2, 0));
+            VisibleTexts(window);
+            Assert.False(vm.List.IsTagWallExpanded);
             window.Close();
         });
     }

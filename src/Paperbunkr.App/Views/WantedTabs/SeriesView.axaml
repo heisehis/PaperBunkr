@@ -27,7 +27,7 @@
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="LetterSpacing" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
     </UserControl.Styles>
 
@@ -36,7 +36,7 @@
 
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="24,16,24,10" MaxWidth="1100" HorizontalAlignment="Stretch">
             <TextBlock Grid.Column="0" Classes="wantedCaption" Text="TRACKED SERIES" VerticalAlignment="Center" />
-            <Button Grid.Column="1" Classes="headerAction primary" AutomationProperties.AutomationId="WantedTrackSeriesButton" AutomationProperties.Name="Track a series">
+            <Button Grid.Column="1" Classes="primary" AutomationProperties.AutomationId="WantedTrackSeriesButton" AutomationProperties.Name="Track a series">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" />
                     <TextBlock Text="Track a series" />
@@ -48,11 +48,11 @@
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                                 <controls:SuggestBox Grid.Column="0" IsStrict="True" Width="120" Text="{Binding SeriesProviderText}" Suggestions="{x:Static vm:WantedScreenViewModel.ProviderNames}"
                                                      AutomationProperties.Name="Search source" AutomationProperties.AutomationId="WantedSeriesProviderSelect" />
-                                <TextBox Grid.Column="1" Text="{Binding SeriesSearchText}" Watermark="{Binding SeriesSearchWatermark}"
+                                <TextBox Grid.Column="1" Classes="searchBox" Text="{Binding SeriesSearchText}" PlaceholderText="{Binding SeriesSearchWatermark}"
                                          AutomationProperties.Name="Search for a series" AutomationProperties.AutomationId="WantedSeriesSearchBox" />
-                                <Button Grid.Column="2" Classes="headerAction primary" Content="Search" Command="{Binding SearchSeriesCommand}" />
+                                <Button Grid.Column="2" Classes="primary" Content="Search" Command="{Binding SearchSeriesCommand}" />
                             </Grid>
-                            <TextBlock IsVisible="{Binding !HasSeriesProviderCredentials}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
+                            <TextBlock IsVisible="{Binding !HasSeriesProviderCredentials}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
                                        Text="This source needs its login saved under Preferences → Connections." />
                             <TextBlock IsVisible="{Binding HasSeriesSearchMessage}" Text="{Binding SeriesSearchMessage}" FontSize="12" TextWrapping="Wrap"
                                        Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
@@ -62,19 +62,19 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:VolumeResultViewModel">
                                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="0,0,0,8">
-                                                <Border Grid.Column="0" Width="30" Height="44" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" VerticalAlignment="Center"
+                                                <Border Grid.Column="0" Width="30" Height="44" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" VerticalAlignment="Center"
                                                         Background="{DynamicResource PbSurface2Brush}">
                                                     <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
                                                 </Border>
                                                 <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                    <TextBlock Text="{Binding Title}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
                                                 </StackPanel>
-                                                <Button Grid.Column="2" Classes="headerAction ghost" Content="Track" IsVisible="{Binding !IsTracked}" VerticalAlignment="Center"
+                                                <Button Grid.Column="2" Classes="ghost" Content="Track" IsVisible="{Binding !IsTracked}" VerticalAlignment="Center"
                                                         AutomationProperties.Name="{Binding Title, StringFormat='Track {0}'}"
                                                         Command="{Binding $parent[ItemsControl].((vm:WantedScreenViewModel)DataContext).TrackVolumeCommand}" CommandParameter="{Binding}" />
                                                 <TextBlock Grid.Column="2" Text="Tracked" IsVisible="{Binding IsTracked}" VerticalAlignment="Center"
-                                                           FontSize="11.5" Foreground="{DynamicResource PbSuccessBrush}" />
+                                                           FontSize="12" Foreground="{DynamicResource PbSuccessBrush}" />
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -92,18 +92,18 @@
                     <DataTemplate x:DataType="vm:WatchedSeriesRowViewModel">
                         <Border Classes="card" Margin="0,0,0,8" Padding="12,8" MaxWidth="1100" HorizontalAlignment="Stretch">
                             <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="12">
-                                <Border Grid.Column="0" Width="34" Height="50" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" VerticalAlignment="Center"
+                                <Border Grid.Column="0" Width="34" Height="50" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" VerticalAlignment="Center"
                                         Background="{DynamicResource PbSurface2Brush}">
                                     <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
                                 </Border>
                                 <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
-                                        <Border Classes="pbChip" Padding="7,1" IsVisible="{Binding IsMetron}" VerticalAlignment="Center">
-                                            <TextBlock Text="Metron" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        <Border Classes="pbChip" Padding="8,1" IsVisible="{Binding IsMetron}" VerticalAlignment="Center">
+                                            <TextBlock Text="Metron" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}">
+                                    <TextBlock FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}">
                                         <Run Text="{Binding Subtitle}" /><Run Text="  ·  " /><Run Text="{Binding CountsText}" />
                                     </TextBlock>
                                 </StackPanel>
@@ -112,10 +112,10 @@
                                     <ToggleSwitch IsChecked="{Binding WatchFutureReleases}" OnContent="{x:Null}" OffContent="{x:Null}"
                                                   AutomationProperties.Name="Follow this series and request its new issues automatically" />
                                 </StackPanel>
-                                <Button Grid.Column="3" Classes="headerAction ghost" Content="Open" IsVisible="{Binding CanOpen}" VerticalAlignment="Center"
+                                <Button Grid.Column="3" Classes="ghost" Content="Open" IsVisible="{Binding CanOpen}" VerticalAlignment="Center"
                                         AutomationProperties.Name="{Binding Name, StringFormat='Open {0}'}"
                                         Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).OpenSeriesCommand}" CommandParameter="{Binding}" />
-                                <Button Grid.Column="4" Classes="headerAction ghost" VerticalAlignment="Center" Click="OnMoreClick"
+                                <Button Grid.Column="4" Classes="iconButton" VerticalAlignment="Center" Click="OnMoreClick"
                                         AutomationProperties.Name="{Binding Name, StringFormat='More actions for {0}'}">
                                     <fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeSm}" />
                                 </Button>

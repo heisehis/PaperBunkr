@@ -1,7 +1,7 @@
 # Installer polish
 
 Date: 2026-10-24
-Status: Design approved in chat; user instructed implementation after the written spec was created.
+Status: Implemented, source changes uncommitted. Focused verification passed; full wizard/runtime review remains outstanding.
 
 ## Purpose and decisions
 
@@ -165,3 +165,28 @@ checks as outstanding; a successful compile alone does not prove installer UX.
 
 After implementation, update `docs/paperbunkr-todo.md` with actual verification and commit status.
 Do not mark the installer polish implemented or validated on the basis of this spec commit.
+
+## Implementation and verification record
+
+Implemented in `Installer.iss`, shared native helpers in `InstallerLogic.iss`, and build validation
+in `InstallerBuild.ps1`/`BuildInstaller.ps1`. Existing modified brand artwork was preserved.
+Design and plan commit: `2c256dc` (the repository hook also bumped the app version to `0.7.89.0`).
+
+- `installer/Tests/VerifyInstaller.ps1`: 39 native helper checks and 16 PowerShell/build checks
+  passed, including compilation with/without thumbnails and initialization's nonzero failure
+  exit. No installation or application registry changes occur in this harness.
+- A real self-contained Release app publish completed. The user-provided Six Labors licence
+  was supplied through the build process's `SixLaborsLicenseFile` environment property; the
+  licence contents and machine-specific path were not added to source control.
+- `BuildInstaller.ps1` produced a real installer. This automation host lacked the normal `OS`
+  environment variable, which initially prevented Native AOT publishing; the builder now restores
+  `Windows_NT` only when it detects a real Windows host and that variable is absent.
+- The Native AOT handler then published successfully. The packaged DLL was checked as an x64
+  native PE with no managed CLR header. Repackaging with this DLL included succeeded:
+  `installer/Output/PaperbunkrSetup-0.7.89-beta-2c256dc.exe`.
+- PowerShell parsing and `git diff --check` passed. No app test sweep was run for native installer
+  script changes.
+
+Outstanding: visual review in light/dark at 100/150/200% scale; actual fresh install, maintenance,
+updater mutex, registry/shortcut preservation and uninstall flows in a disposable Windows
+environment; Narrator/keyboard review. Compilation and helper tests do not establish those results.

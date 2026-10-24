@@ -128,7 +128,7 @@ public partial class PreferencesScreen : UserControl
 
         target.BringIntoView();
 
-        if (target is Border border && _vm?.ReducedMotion != true)
+        if (target is Border border && Paperbunkr.App.Theming.Motion.MotionPolicy.AllowsMotion(Paperbunkr.App.Theming.Motion.MotionRole.Reveal))
         {
             Pulse(border);
         }

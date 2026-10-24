@@ -254,6 +254,13 @@ public sealed class TrackerAutoSyncService : ITrackerAutoSyncService
 
                     await PaceAsync(link.Service).ConfigureAwait(false);
                     var remote = await adapter.GetEntryAsync(context, link, CancellationToken.None).ConfigureAwait(false);
+                    if (remote is null)
+                    {
+                        // The legacy adapter contract cannot distinguish absent from unavailable.
+                        // An unattended write cannot safely assume that the remote entry is empty.
+                        failures.Add((series.Id, series.Name, link.Service, "Could not verify remote progress. Open the tracker panel to retry or create the entry manually."));
+                        continue;
+                    }
                     if (remote is not null && TrackerSyncResolver.RemoteWins(chapter, series.ReadingStatus, remote))
                     {
                         continue; // remote already ahead: forward-only, and pulling is a separate setting

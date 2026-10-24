@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.graphite",
+  "name": "Graphite",
+  "base": {
+    "palette": {
+      "accent": "#8AB4F8",
+      "success": "#81C995",
+      "badge": "#FDD663"
+    },
+    "metrics": {
+      "radius": 5,
+      "radiusSm": 3,
+      "radiusLg": 9,
+      "scrollbarWidth": 9
+    },
+    "components": {
+      "chip": {
+        "radius": 3
+      }
+    }
+  },
+  "variants": {
+    "dark": {
+      "name": "Dark",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#1B1C1E",
+        "ink": "#E6E7E9"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#222326",
+          "raised": "#26272A",
+          "overlay": "#2F3033"
+        },
+        "border": {
+          "default": "#3C3D41"
+        }
+      }
+    },
+    "light": {
+      "name": "Light",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#F4F4F5",
+        "ink": "#1E1F21",
+        "accent": "#1A5FC4",
+        "success": "#1E7A3C",
+        "badge": "#8A5F00"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#EAEAEC",
+          "raised": "#FCFCFC",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#D0D1D4"
+        }
+      }
+    },
+    "oled": {
+      "name": "OLED",
+      "mode": "Dark",
+      "kind": "oled",
+      "palette": {
+        "canvas": "#000000",
+        "ink": "#E6E7E9"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#000000",
+          "raised": "#0D0D0E",
+          "overlay": "#17181A"
+        },
+        "border": {
+          "default": "#2A2B2E"
+        }
+      }
+    }
+  }
+}

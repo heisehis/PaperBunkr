@@ -131,21 +131,21 @@ public static class BulkFieldRegistry
         // staged field, so a selection spanning multiple series naturally converges to "every
         // touched series ends up at the new value" with no special batching needed.
         new(ContentTypeLabel, Main, FieldKind.Enum, IsListField: false,
-            i => i.Series.ContentType.ToString(),
-            (i, v) => i.Series.ContentType = Enum.Parse<ContentType>(v ?? nameof(ContentType.Unknown)),
+            i => i.Series?.ContentType.ToString() ?? nameof(ContentType.Unknown),
+            (i, v) => { if (i.Series is { } series) series.ContentType = Enum.Parse<ContentType>(v ?? nameof(ContentType.Unknown)); },
             Options: Enum.GetNames<ContentType>()),
         // Series-owned, same shape as ContentType above (docs/superpowers/specs/2026-08-18-
         // metadata-model-ui-gaps-status-and-bookmarks-design.md).
         new("Status", Main, FieldKind.Enum, IsListField: false,
-            i => i.Series.Status.ToString(),
-            (i, v) => i.Series.Status = Enum.Parse<SeriesStatus>(v ?? nameof(SeriesStatus.Unknown)),
+            i => i.Series?.Status.ToString() ?? nameof(SeriesStatus.Unknown),
+            (i, v) => { if (i.Series is { } series) series.Status = Enum.Parse<SeriesStatus>(v ?? nameof(SeriesStatus.Unknown)); },
             Options: Enum.GetNames<SeriesStatus>()),
         // Series-owned, same shape as Status above (docs/superpowers/specs/2026-08-19-metadata-
         // model-reading-status-design.md) - the user's own reading-progress relationship with the
         // series, not the publisher's release status.
         new("Reading Status", Main, FieldKind.Enum, IsListField: false,
-            i => i.Series.ReadingStatus.ToString(),
-            (i, v) => i.Series.ReadingStatus = Enum.Parse<ReadingStatus>(v ?? nameof(ReadingStatus.Unknown)),
+            i => i.Series?.ReadingStatus.ToString() ?? nameof(ReadingStatus.Unknown),
+            (i, v) => { if (i.Series is { } series) series.ReadingStatus = Enum.Parse<ReadingStatus>(v ?? nameof(ReadingStatus.Unknown)); },
             Options: Enum.GetNames<ReadingStatus>()),
         Text("Publisher", Main, i => i.Publisher, (i, v) => i.Publisher = v, vocab: VocabField.Publisher),
         Text("Imprint", Main, i => i.Imprint, (i, v) => i.Imprint = v, vocab: VocabField.Imprint),

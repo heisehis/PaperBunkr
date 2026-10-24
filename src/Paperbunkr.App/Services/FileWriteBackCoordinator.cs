@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Paperbunkr.App.Services;
 
@@ -65,6 +67,99 @@ public static class FileWriteBackCoordinator
         return true;
     }
 
+    // Files a write-back is rewriting right now, with what to complete when it is done. A count, because two writes of the
+    // same file can overlap (a manual write while an automatic one runs).
+    private static readonly ConcurrentDictionary<string, (int Count, TaskCompletionSource Done)> Writing =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly object WritingGate = new();
+
+    /// <summary>How long the organizer waits for a write to finish before moving the file anyway.</summary>
+    public static TimeSpan SettleTimeout { get; set; } = TimeSpan.FromSeconds(90);
+
+    /// <summary>Marks <paramref name="path"/> as being rewritten until the returned handle is disposed.</summary>
+    public static IDisposable BeginWrite(string path)
+    {
+        string key = Normalize(path);
+        lock (WritingGate)
+        {
+            Writing.AddOrUpdate(key,
+                _ => (1, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)),
+                (_, existing) => (existing.Count + 1, existing.Done));
+        }
+
+        return new WriteHandle(key);
+    }
+
+    public static bool IsWriting(string path) => Writing.ContainsKey(Normalize(path));
+
+    /// <summary>
+    /// Completes when no metadata write is rewriting <paramref name="path"/> (at once when none is), or after <see cref="SettleTimeout"/>.
+    /// The organizer awaits this before each move (docs/superpowers/specs/2026-10-21-scraper-organizer-a-reliability-design.md).
+    /// </summary>
+    public static async Task WaitForSettledAsync(string path, CancellationToken cancellationToken)
+    {
+        if (!Writing.TryGetValue(Normalize(path), out var entry))
+        {
+            return;
+        }
+
+        try
+        {
+            await entry.Done.Task.WaitAsync(SettleTimeout, cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // A stuck write must not stall an organize forever; the write itself fails cleanly if the file moves under it.
+        }
+    }
+
+    private static string Normalize(string path)
+    {
+        try
+        {
+            return System.IO.Path.GetFullPath(path);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or System.IO.PathTooLongException)
+        {
+            return path;
+        }
+    }
+
+    private sealed class WriteHandle(string key) : IDisposable
+    {
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
+            lock (WritingGate)
+            {
+                if (!Writing.TryGetValue(key, out var entry))
+                {
+                    return;
+                }
+
+                if (entry.Count > 1)
+                {
+                    Writing[key] = (entry.Count - 1, entry.Done);
+                    return;
+                }
+
+                Writing.TryRemove(key, out _);
+                entry.Done.TrySetResult();
+            }
+        }
+    }
+
     /// <summary>Test hook - drop all suppression windows.</summary>
-    internal static void Reset() => SuppressedUntilUtc.Clear();
+    internal static void Reset()
+    {
+        SuppressedUntilUtc.Clear();
+        Writing.Clear();
+    }
 }

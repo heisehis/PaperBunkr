@@ -1,6 +1,6 @@
 # Library scan diagnostics — design
 
-Date: 2026-10-15. Status: design, pending user review. Not approved for `writing-plans`.
+Date: 2026-10-15. Status: implemented; focused verification passed on 2026-10-15. Source changes are uncommitted.
 
 ## Problem
 
@@ -80,11 +80,17 @@ measurement. No file path, comic title, or other identifying data is included in
 
 ### Follow-up optimization
 
-This spec deliberately stops after collecting comparable measurements. After the user has run Scan
+This implementation deliberately stops after collecting comparable measurements. After the user has run Scan
 Now on the real library and reviewed the stage breakdown, a separate decision will select an
 optimization and define its correctness and performance target. Candidate areas include directory
 enumeration, file metadata/archive access, database lookups, and cover generation. No performance
 claim is made until before/after timings are available.
+
+The user identified automatic post-scan verification as the dominant stage for their 5,500+ comic
+library. Its selected follow-up is to reuse the completed scan's transient path snapshot for
+missing-only cleanup, while leaving the explicit full Library Health verification unchanged (see
+`2026-10-15-scan-auto-verification-design.md`). A real-library before/after timing is still needed
+before claiming a measured speedup.
 
 ## Testing
 

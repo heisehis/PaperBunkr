@@ -58,19 +58,19 @@
                         <Border.RenderTransform>
                             <RotateTransform Angle="-45" />
                         </Border.RenderTransform>
-                        <TextBlock Text="NEW" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" LetterSpacing="0.6"
+                        <TextBlock Text="NEW" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" LetterSpacing="0.6"
                                    Foreground="{DynamicResource PbBadgeTextBrush}" />
                     </Border>
 
-                    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7" Padding="7,2"
+                    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" Padding="8,2"
                             CornerRadius="{StaticResource PbRadiusChip}" Background="{DynamicResource PbBadgeBrush}"
                             IsVisible="{Binding #ThisControl.BadgeText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
-                        <TextBlock Text="{Binding #ThisControl.BadgeText}" FontSize="9.5" FontWeight="Bold"
+                        <TextBlock Text="{Binding #ThisControl.BadgeText}" FontSize="10" FontWeight="Bold"
                                    Foreground="{DynamicResource PbBadgeTextBrush}" />
                     </Border>
 
                     <!-- Book marker in the merged Continue Reading row (I2). -->
-                    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7" Padding="4,3"
+                    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" Padding="4,4"
                             CornerRadius="{StaticResource PbRadiusChip}" Background="#99000000"
                             IsVisible="{Binding #ThisControl.ShowBookGlyph}" ToolTip.Tip="Book">
                         <fi:SymbolIcon Symbol="Book" FontSize="12" Foreground="#F0ECE7DB" />
@@ -88,7 +88,7 @@
 
                     <!-- Inset progress (C4): squircle track, and a fill that grows in once when the tile first appears
                          (PosterTile.axaml.cs) - a ScaleX render transform, never an animated Width. -->
-                    <Border x:Name="ProgressTrack" VerticalAlignment="Bottom" Margin="7,0,7,7" Height="3"
+                    <Border x:Name="ProgressTrack" VerticalAlignment="Bottom" Margin="8,0,8,8" Height="3"
                             CornerRadius="{StaticResource PbRadiusChip}" ClipToBounds="True" Background="#59000000"
                             IsVisible="{Binding #ThisControl.ShowProgress}">
                         <Border x:Name="ProgressFill" CornerRadius="{StaticResource PbRadiusChip}"
@@ -102,10 +102,10 @@
             <Border Grid.Row="0" Classes="tileRing" Height="196" IsHitTestVisible="False"
                     CornerRadius="{DynamicResource PbRadiusSm}" />
 
-            <StackPanel Grid.Row="1" Margin="0,9,0,0" Spacing="1">
+            <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1">
                 <TextBlock Text="{Binding #ThisControl.TitleText}" FontWeight="SemiBold" FontSize="12"
                            Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Text="{Binding #ThisControl.MetaText}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}"
+                <TextBlock Text="{Binding #ThisControl.MetaText}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
                            TextTrimming="CharacterEllipsis"
                            IsVisible="{Binding #ThisControl.MetaText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
             </StackPanel>

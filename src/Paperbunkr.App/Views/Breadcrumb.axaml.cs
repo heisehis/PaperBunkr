@@ -51,10 +51,8 @@ public partial class Breadcrumb : UserControl
             return;
         }
 
-        // Fade+slide (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-design.md
-        // item 4) - drop "entered" now, re-add on the next dispatcher tick (post-rebuild) so the
-        // Transitions on Styles/Primitives.axaml's shared entranceReady/entered pair actually
-        // observe a real false->true flip instead of coalescing within one synchronous call.
+        // Trail entrance (Motion v2 navigation, Q18; styles in Breadcrumb.axaml) - drop "entered" now, re-add on the next dispatcher
+        // tick (post-rebuild) so the transitions observe a real false->true flip instead of coalescing within one synchronous call.
         segments.Classes.Remove("entered");
 
         segments.Children.Clear();

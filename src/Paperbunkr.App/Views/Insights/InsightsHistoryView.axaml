@@ -92,7 +92,7 @@
             <!-- 36x36: the review checklist's desktop minimum for an icon-only hit target. -->
             <Setter Property="MinWidth" Value="36" />
             <Setter Property="Height" Value="36" />
-            <Setter Property="Padding" Value="9,0" />
+            <Setter Property="Padding" Value="8,0" />
             <Setter Property="Margin" Value="8,0,4,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -102,52 +102,95 @@
             <Setter Property="Cursor" Value="Hand" />
         </Style>
 
-        <Style Selector="Border.historyTag">
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
-            <Setter Property="Padding" Value="7,1" />
+        <Style Selector="Border.statusBadge">
             <Setter Property="Margin" Value="8,0,0,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
-        <Style Selector="Border.historyTag > TextBlock">
+        <Style Selector="Border.statusBadge > TextBlock">
             <Setter Property="FontSize" Value="10" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="LetterSpacing" Value="0.4" />
         </Style>
-        <Style Selector="Border.historyTag.success">
-            <Setter Property="Background" Value="{DynamicResource PbSuccessSoftBrush}" />
-        </Style>
-        <Style Selector="Border.historyTag.success > TextBlock">
+        <Style Selector="Border.statusBadge.success > TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource PbSuccessBrush}" />
         </Style>
-        <Style Selector="Border.historyTag.warning">
-            <Setter Property="Background" Value="{DynamicResource PbBadgeSoftBrush}" />
-        </Style>
-        <Style Selector="Border.historyTag.warning > TextBlock">
+        <Style Selector="Border.statusBadge.warning > TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource PbBadgeBrush}" />
         </Style>
 
-        <Style Selector="Button.pbChip.filterChip">
+        <Style Selector="Button.filterChip.filterChip">
             <Setter Property="Margin" Value="6,0,0,0" />
-            <Setter Property="Padding" Value="11,4" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
-        <Style Selector="Button.pbChip.filterChip.active">
+
+        <Style Selector="Border.milestone.locked">
+            <Setter Property="Opacity" Value="0.6" />
+        </Style>
+        <Style Selector="Border.milestoneIcon">
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <!-- Text on an accent fill: the app's dark on-accent token (as FormControls' spinner hover), not
-                 PbAccentTextBrush, which is accent-coloured text meant for dark surfaces. -->
+        </Style>
+        <Style Selector="Border.milestoneIcon > fi|SymbolIcon">
+            <!-- Icon on an accent fill: the dark on-accent token, not PbAccentTextBrush (accent-coloured text for dark surfaces). -->
             <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        </Style>
+        <Style Selector="Border.milestoneIcon.locked">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        </Style>
+        <Style Selector="Border.milestoneIcon.locked > fi|SymbolIcon">
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,*">
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <!-- Milestones strip (docs/superpowers/specs/2026-10-12-insights-pitch-completion-design.md §5): earned badges newest first,
+             then dimmed "next up" badges with progress. Derived from the reading log; Hide is remembered in insights.json. -->
+        <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,12" IsVisible="{Binding ShowMilestonesHeader}">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Classes="dayHeader" Margin="4,0,0,0" Text="MILESTONES" VerticalAlignment="Center" />
+                    <TextBlock Classes="rowSub" Text="{Binding MilestonesSummary}" VerticalAlignment="Center" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="filterChip" Content="{Binding MilestonesToggleText}"
+                        Command="{Binding ToggleMilestonesCommand}" AutomationProperties.Name="Show or hide milestones" />
+            </Grid>
+            <TextBlock Classes="rowSub" TextWrapping="Wrap" IsVisible="{Binding ShowBackfillNote}"
+                       Text="Milestones count from the day you started reading in Paperbunkr. History carried over from an import doesn't count toward them." />
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding ShowMilestones}">
+                <ItemsControl ItemsSource="{Binding Milestones}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:MilestoneBadge">
+                            <Border Classes="milestone" Classes.locked="{Binding IsLocked}" Width="190" MinHeight="64" Padding="10"
+                                    Margin="0,0,8,6" CornerRadius="{DynamicResource PbRadiusChip}"
+                                    Background="{DynamicResource PbSurface2Brush}" ToolTip.Tip="{Binding Detail}">
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <Border Grid.Column="0" Width="34" Height="34" VerticalAlignment="Top" CornerRadius="{DynamicResource PbRadiusChip}"
+                                            Classes="milestoneIcon" Classes.locked="{Binding IsLocked}">
+                                        <fi:SymbolIcon Symbol="{Binding Icon}" FontSize="{StaticResource PbIconSizeSm}"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Classes="rowTitle" TextWrapping="Wrap" TextTrimming="None" MaxLines="2" Text="{Binding Title}" />
+                                        <TextBlock Classes="rowSub" Text="{Binding DateText}" IsVisible="{Binding IsEarned}" />
+                                        <TextBlock Classes="rowSub" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" />
+                                        <TextBlock Classes="rowSub" Text="{Binding ProgressText}" IsVisible="{Binding IsLocked}" />
+                                        <ProgressBar Height="3" MinWidth="0" Minimum="0" Maximum="1" Value="{Binding ProgressFraction}" IsVisible="{Binding IsLocked}"
+                                                     Foreground="{DynamicResource PbAccentBrush}" Background="{DynamicResource PbSurface3Brush}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
 
         <!-- Toolbar: search, type chips, clear all -->
         <!-- Search takes up to 420px on the left (3* weight so it keeps most of the room when narrow), the chips and
              Clear all sit on the right. -->
-        <Grid Grid.Row="0" Margin="0,0,0,6">
+        <Grid Grid.Row="1" Margin="0,0,0,6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="3*" MaxWidth="420" />
                 <ColumnDefinition Width="*" />
@@ -158,22 +201,22 @@
                      Text="{Binding SearchText}" PlaceholderText="Search history…"
                      AutomationProperties.Name="Search history" />
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center">
-                <Button Classes="pbChip filterChip" Classes.active="{Binding IsAllFilter}" Content="All"
+                <Button Classes="filterChip" Classes.active="{Binding IsAllFilter}" Content="All"
                         Command="{Binding SetTypeFilterCommand}" CommandParameter="{x:Static models:HistoryTypeFilter.All}" />
-                <Button Classes="pbChip filterChip" Classes.active="{Binding IsComicsFilter}" Content="Comics"
+                <Button Classes="filterChip" Classes.active="{Binding IsComicsFilter}" Content="Comics"
                         Command="{Binding SetTypeFilterCommand}" CommandParameter="{x:Static models:HistoryTypeFilter.Comics}" />
-                <Button Classes="pbChip filterChip" Classes.active="{Binding IsMangaFilter}" Content="Manga"
+                <Button Classes="filterChip" Classes.active="{Binding IsMangaFilter}" Content="Manga"
                         Command="{Binding SetTypeFilterCommand}" CommandParameter="{x:Static models:HistoryTypeFilter.Manga}" />
-                <Button Classes="pbChip filterChip" Classes.active="{Binding IsBooksFilter}" Content="Books"
+                <Button Classes="filterChip" Classes.active="{Binding IsBooksFilter}" Content="Books"
                         Command="{Binding SetTypeFilterCommand}" CommandParameter="{x:Static models:HistoryTypeFilter.Books}" />
             </StackPanel>
-            <Button Grid.Column="3" Classes="pbChip filterChip" MinWidth="36" Command="{Binding ClearAllCommand}"
+            <Button Grid.Column="3" Classes="filterChip" MinWidth="36" Command="{Binding ClearAllCommand}"
                     ToolTip.Tip="Clear all history" AutomationProperties.Name="Clear all history">
                 <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
 
-        <Panel Grid.Row="1">
+        <Panel Grid.Row="2">
             <ListBox Classes="historyList" ItemsSource="{Binding Items}" IsVisible="{Binding !IsEmpty}">
                 <ListBox.DataTemplates>
                     <DataTemplate DataType="models:HistoryDayHeader">
@@ -209,7 +252,7 @@
                                     <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Spacing="3">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBlock Grid.Column="0" Classes="rowTitle" Text="{Binding Title}" ToolTip.Tip="{Binding Title}" />
-                                            <Border Grid.Column="1" Classes="historyTag"
+                                            <Border Grid.Column="1" Classes="statusBadge"
                                                     Classes.success="{Binding IsSuccessTag}" Classes.warning="{Binding IsWarningTag}"
                                                     IsVisible="{Binding HasTag}">
                                                 <TextBlock Text="{Binding TagText}" />

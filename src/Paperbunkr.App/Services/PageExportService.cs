@@ -30,7 +30,7 @@ public static class PageExportService
             }
             else
             {
-                page.Save(destPath);
+                page.Save(destPath, PngBitmapEncoderOptions.Default);
             }
 
             return true;

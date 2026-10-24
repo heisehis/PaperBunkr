@@ -22,6 +22,24 @@ namespace Paperbunkr.App.Tests;
 public class MatrixRainVisualHandlerTests
 {
     [Fact]
+    public void TypefaceFor_KeepsThePrimaryForDigits_AndFindsAFontThatHasKatakana()
+    {
+        var primary = SKTypeface.FromFamilyName("Cascadia Code") ?? SKTypeface.FromFamilyName("Consolas") ?? SKTypeface.Default;
+
+        Assert.Same(primary, MatrixRainVisualHandler.TypefaceFor(primary, "1"));
+
+        var katakana = MatrixRainVisualHandler.TypefaceFor(primary, "ア");
+        if (primary.ContainsGlyph(char.ConvertToUtf32("ア", 0)))
+        {
+            return;
+        }
+
+        // Windows ships a Japanese font (Yu Gothic, MS Gothic), so the match is a different typeface that has the glyph - not tofu.
+        Assert.NotSame(primary, katakana);
+        Assert.True(katakana.ContainsGlyph(char.ConvertToUtf32("ア", 0)), $"{katakana.FamilyName} has no Katakana");
+    }
+
+    [Fact]
     public void OnAnimationFrameUpdate_StopsReRegistering_OnceRunStateGoesFalse()
     {
         var handler = new MatrixRainVisualHandler();

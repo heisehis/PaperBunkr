@@ -60,6 +60,11 @@ internal sealed class MatrixRainVisualHandler : CompositionCustomVisualHandler
     internal bool _running;
     internal SKPaint? _paint;
     internal SKTypeface? _typeface;
+    internal SKFont? _font;
+
+    /// <summary>The typeface each glyph draws with: the primary one when it has the glyph, else a system font that does. Cascadia Code and
+    /// Consolas have no Katakana, which drew as tofu boxes (2026-10-20 UI polish SP5 Q3).</summary>
+    private readonly Dictionary<string, SKTypeface> _glyphTypefaces = new(StringComparer.Ordinal);
 
     private TimeSpan? _lastFrameTime;
     private Column[] _columns = Array.Empty<Column>();
@@ -108,11 +113,40 @@ internal sealed class MatrixRainVisualHandler : CompositionCustomVisualHandler
 
             case MatrixRainDispose:
                 _paint?.Dispose();
+                _font?.Dispose();
+                foreach (var fallback in _glyphTypefaces.Values)
+                {
+                    if (!ReferenceEquals(fallback, _typeface))
+                    {
+                        fallback.Dispose();
+                    }
+                }
+
+                _glyphTypefaces.Clear();
                 _typeface?.Dispose();
                 _paint = null;
+                _font = null;
                 _typeface = null;
                 break;
         }
+    }
+
+    /// <summary><paramref name="primary"/> when it has <paramref name="glyph"/>'s first character, else the system font Skia matches for it
+    /// (Yu Gothic / MS Gothic for Katakana on Windows), else <paramref name="primary"/>.</summary>
+    internal static SKTypeface TypefaceFor(SKTypeface primary, string glyph)
+    {
+        if (string.IsNullOrEmpty(glyph))
+        {
+            return primary;
+        }
+
+        int codepoint = char.ConvertToUtf32(glyph, 0);
+        if (primary.ContainsGlyph(codepoint))
+        {
+            return primary;
+        }
+
+        return SKFontManager.Default.MatchCharacter(codepoint) ?? primary;
     }
 
     private void RebuildColumns()
@@ -194,8 +228,8 @@ internal sealed class MatrixRainVisualHandler : CompositionCustomVisualHandler
 
         _paint ??= new SKPaint { IsAntialias = true, Color = _color };
         _typeface ??= SKTypeface.FromFamilyName("Cascadia Code") ?? SKTypeface.FromFamilyName("Consolas") ?? SKTypeface.Default;
-        _paint.Typeface = _typeface;
-        _paint.TextSize = CellSize;
+        _font ??= new SKFont(_typeface, CellSize);
+        _font.Size = CellSize;
 
         int saveCount = canvas.Save();
         try
@@ -234,7 +268,15 @@ internal sealed class MatrixRainVisualHandler : CompositionCustomVisualHandler
                     float fade = row == 0 ? 1f : 0.7f * (1f - (row / (float)TrailLength));
                     byte alpha = (byte)(fade * MaxAlpha);
                     _paint.Color = _color.WithAlpha(alpha);
-                    canvas.DrawText(_glyphs[glyphIndex], column.X, y, _paint);
+                    string glyph = _glyphs[glyphIndex];
+                    if (!_glyphTypefaces.TryGetValue(glyph, out var glyphTypeface))
+                    {
+                        glyphTypeface = TypefaceFor(_typeface, glyph);
+                        _glyphTypefaces[glyph] = glyphTypeface;
+                    }
+
+                    _font.Typeface = glyphTypeface;
+                    canvas.DrawText(glyph, column.X, y, _font, _paint);
                 }
             }
         }

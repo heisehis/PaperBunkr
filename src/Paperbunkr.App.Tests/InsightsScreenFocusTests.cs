@@ -105,7 +105,7 @@ public class InsightsScreenFocusTests : IDisposable
             var (window, screen, vm, _) = Show();
             vm.SelectTrendsTabCommand.Execute(null);
             RunLayout(window);
-            var chip = screen.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("rangeChip") && b.IsEffectivelyVisible);
+            var chip = screen.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("filterChip") && b.IsEffectivelyVisible);
             chip.Focus();
             RunLayout(window);
             Assert.Same(chip, Focused(window));

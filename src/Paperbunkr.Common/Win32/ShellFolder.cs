@@ -136,6 +136,8 @@ namespace cYo.Common.Win32
 				SHGDN_FORPARSING = 0x8000
 			}
 
+			// COM fills these output structures; the C# compiler cannot see the native writes.
+#pragma warning disable CS0649
 			public struct RECT
 			{
 				public int Left;
@@ -153,6 +155,7 @@ namespace cYo.Common.Win32
 
 				public FOLDERVIEWMODE fFlags;
 			}
+#pragma warning restore CS0649
 
 			public enum SVUIA_STATUS
 			{

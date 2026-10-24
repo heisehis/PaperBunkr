@@ -11,6 +11,14 @@ namespace Paperbunkr.Data.Tests;
 /// </summary>
 public class ContinuityMetronMatchResolverTests : IDisposable
 {
+    private sealed class FakeUniverses(MetronUniverseInfo? info) : IMetronUniverses
+    {
+        public Task<IReadOnlyList<MetronUniverseInfo>> SearchUniversesAsync(string query, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<MetronUniverseInfo>>(info is null ? Array.Empty<MetronUniverseInfo>() : new[] { info! });
+
+        public Task<MetronUniverseInfo?> GetUniverseAsync(int universeId, CancellationToken cancellationToken) => Task.FromResult(info);
+    }
+
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
 
@@ -85,5 +93,41 @@ public class ContinuityMetronMatchResolverTests : IDisposable
         var continuity = context.Continuities.Single();
         Assert.Equal("Q2246088", continuity.WikidataId);   // not clobbered
         Assert.Equal("21", continuity.MetronId);            // Metron's own id added alongside it
+    }
+
+    [Fact]
+    public void SyncFromIssueDetails_ReusesExistingContinuityByMetronIdWhenItsNameChanged()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "Captain America");
+        context.Continuities.Add(new Continuity { Name = "Old universe label", MetronId = "21", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+        context.SaveChanges();
+
+        ContinuityMetronMatchResolver.SyncFromIssueDetails(context, seriesId, ComicProvider.Metron,
+            new[] { new ComicVineIdName(21, "Earth-616") });
+
+        Assert.Single(context.Continuities);
+        Assert.True(context.ContinuityMemberships.Any(membership => membership.SeriesId == seriesId && membership.Continuity.MetronId == "21"));
+    }
+
+    [Fact]
+    public async Task RefreshUniverseDetailsAsync_RefreshesNameDesignationPublisherAndDescriptionByMetronId()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var continuity = new Continuity
+        {
+            Name = "Old label", MetronId = "21", Designation = "Old designation",
+            Publisher = "Old publisher", Description = "Old description",
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        };
+        context.Continuities.Add(continuity);
+        context.SaveChanges();
+        var source = new FakeUniverses(new MetronUniverseInfo(21, "Earth-616", "616", "Marvel", "The main universe."));
+
+        bool changed = await ContinuityMetronMatchResolver.RefreshUniverseDetailsAsync(context, source, 21, CancellationToken.None);
+
+        Assert.True(changed);
+        Assert.Equal(("Earth-616", "616", "Marvel", "The main universe."),
+            (continuity.Name, continuity.Designation, continuity.Publisher, continuity.Description));
     }
 }

@@ -20,25 +20,20 @@
         tab strip. Series mode: hero + poster grid of member books.
     -->
     <UserControl.Styles>
-        <Style Selector="Border.sectionCard">
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="16,14" />
+        <Style Selector="Border.card">
             <Setter Property="Margin" Value="0,16,0,0" />
         </Style>
         <Style Selector="TextBlock.sectionTitle">
             <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="Margin" Value="0,0,0,10" />
         </Style>
         <Style Selector="Button.listRow">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="8,7" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Padding" Value="8,8" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Cursor" Value="Hand" />
@@ -61,7 +56,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="ClipToBounds" Value="True" />
             <!-- Gutter for the ring, and no clipping while it shows: see BooksScreen.axaml's Border.bookCover. -->
-            <Setter Property="Margin" Value="5,10,5,5" />
+            <Setter Property="Margin" Value="4,10,4,4" />
         </Style>
         <Style Selector="Button.card:pointerover Border.bookCover, Button.card:focus-visible Border.bookCover">
             <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
@@ -74,7 +69,7 @@
 
             <!-- ================= BOOK MODE ================= -->
             <StackPanel Margin="0,0,0,50" IsVisible="{Binding IsBookMode}">
-                <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="28,20,28,12">
+                <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="24,20,24,12">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
                         <TextBlock Text="{Binding BackLabel}" VerticalAlignment="Center" />
@@ -84,9 +79,9 @@
                 <views:DetailHero DataContext="{Binding}" />
                 <views:DetailBand DataContext="{Binding Band}" />
 
-                <StackPanel Margin="28,0,28,0">
+                <StackPanel Margin="24,0,24,0">
                     <!-- Reading progress -->
-                    <Border Classes="sectionCard" Margin="0,18,0,0">
+                    <Border Classes="card" Padding="16,14" Margin="0,18,0,0">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,10">
                                 <fi:SymbolIcon Symbol="BookClock" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
@@ -106,7 +101,7 @@
                     </Border>
 
                     <!-- Chapters -->
-                    <Border Classes="sectionCard" IsVisible="{Binding HasChapters}">
+                    <Border Classes="card" Padding="16,14" IsVisible="{Binding HasChapters}">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,10">
                                 <fi:SymbolIcon Symbol="TextBulletList" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
@@ -122,7 +117,7 @@
                                                 <TextBlock DockPanel.Dock="Left" Text="{Binding Index, StringFormat='{}{0}.'}"
                                                            Classes="pbTextCaption" Width="34" VerticalAlignment="Center" />
                                                 <TextBlock Text="{Binding Title}" Foreground="{DynamicResource PbTextBrush}"
-                                                           FontSize="12.5" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                           FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                             </DockPanel>
                                         </Button>
                                     </DataTemplate>
@@ -131,13 +126,13 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Classes="sectionCard" IsVisible="{Binding ChaptersUnavailable}">
+                    <Border Classes="card" Padding="16,14" IsVisible="{Binding ChaptersUnavailable}">
                         <TextBlock Classes="pbTextCaption" TextWrapping="Wrap"
                                    Text="Chapter list unavailable — the file may be missing or damaged." />
                     </Border>
 
                     <!-- Bookmarks -->
-                    <Border Classes="sectionCard" IsVisible="{Binding HasBookmarks}">
+                    <Border Classes="card" Padding="16,14" IsVisible="{Binding HasBookmarks}">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,10">
                                 <fi:SymbolIcon Symbol="Bookmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
@@ -151,10 +146,10 @@
                                                 CommandParameter="{Binding}">
                                             <Grid ColumnDefinitions="Auto,*">
                                                 <fi:SymbolIcon Grid.Column="0" Symbol="Bookmark" FontSize="{StaticResource PbIconSizeXs}"
-                                                               Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Top" Margin="0,2,9,0" />
+                                                               Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Top" Margin="0,2,8,0" />
                                                 <StackPanel Grid.Column="1" Spacing="3">
                                                     <TextBlock Text="{Binding Excerpt}" Foreground="{DynamicResource PbTextBrush}"
-                                                               FontSize="12.5" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                                               FontSize="13" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
                                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                                         <TextBlock Text="{Binding ChapterTitle}" Classes="pbTextCaption" />
                                                         <TextBlock Text="{Binding CreatedTime, StringFormat='{}{0:MMM d, yyyy}'}" Classes="pbTextCaption" />
@@ -191,7 +186,7 @@
 
             <!-- ================= SERIES MODE ================= -->
             <StackPanel Margin="0,0,0,50" IsVisible="{Binding IsSeriesMode}">
-                <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="28,20,28,12">
+                <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="24,20,24,12">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
                         <TextBlock Text="{Binding BackLabel}" VerticalAlignment="Center" />
@@ -200,13 +195,13 @@
 
                 <views:DetailHero DataContext="{Binding}" />
 
-                <ItemsControl ItemsSource="{Binding SeriesBooks}" Margin="28,22,28,0">
+                <ItemsControl ItemsSource="{Binding SeriesBooks}" Margin="24,22,24,0">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:BookCardSample">
-                            <Button Classes="card" Width="160" Margin="0,0,15,15"
+                            <Button Classes="card" Width="160" Margin="0,0,16,16"
                                     Command="{Binding $parent[ItemsControl].((vm:BookDetailScreenViewModel)DataContext).OpenBookFromSeriesCommand}"
                                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
                                 <StackPanel Spacing="8">
@@ -216,7 +211,7 @@
                                             <Border Classes="posterScrim" />
                                         </Grid>
                                     </Border>
-                                    <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold"
+                                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
                                                Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap"
                                                MaxLines="2" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{Binding Author}" Classes="pbTextCaption" TextTrimming="CharacterEllipsis"

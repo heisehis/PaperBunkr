@@ -94,7 +94,8 @@ namespace cYo.Projects.ComicRack.Engine.Sync
 			DeviceHash = GetProperty(values, "Hash");
 			Version = int.Parse(values["Version"]);
 			string property = GetProperty(values, "Edition");
-			string a = new SHA1Managed().ComputeHash(Encoding.UTF8.GetBytes(Model + Manufacturer + SerialNumber + property + Version)).ToHexString(trimZeros: true);
+			using var sha1 = SHA1.Create();
+			string a = sha1.ComputeHash(Encoding.UTF8.GetBytes(Model + Manufacturer + SerialNumber + property + Version)).ToHexString(trimZeros: true);
 			switch (property)
 			{
 			case "Android Free":

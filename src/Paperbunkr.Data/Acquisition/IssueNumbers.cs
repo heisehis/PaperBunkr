@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Paperbunkr.Data.Acquisition;
@@ -6,25 +5,8 @@ namespace Paperbunkr.Data.Acquisition;
 /// <summary>Issue numbers are text ("5", "05", "#5", "1.5", "Annual 1"); this is the one place that decides when two are the same issue.</summary>
 public static class IssueNumbers
 {
-    public static bool Equal(string? a, string? b)
-    {
-        var x = Clean(a);
-        var y = Clean(b);
-        if (x.Length == 0 || y.Length == 0)
-        {
-            return false;
-        }
-
-        if (int.TryParse(x, NumberStyles.None, CultureInfo.InvariantCulture, out int nx) &&
-            int.TryParse(y, NumberStyles.None, CultureInfo.InvariantCulture, out int ny))
-        {
-            return nx == ny; // "5" == "05" == "005"
-        }
-
-        return string.Equals(x, y, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string Clean(string? number) => (number ?? string.Empty).Trim().TrimStart('#').Trim();
+    /// <summary>Forwards to <see cref="ReadingLists.Matching.IssueNumberKey"/>, which owns the rules.</summary>
+    public static bool Equal(string? a, string? b) => ReadingLists.Matching.IssueNumberKey.Same(a, b);
 }
 
 /// <summary>Series-name comparison for matching a placeholder's series to a ComicVine volume: letters and digits only, no leading "the".</summary>

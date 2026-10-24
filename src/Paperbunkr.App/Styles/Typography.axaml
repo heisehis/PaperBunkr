@@ -15,8 +15,8 @@
     -->
     <Styles.Resources>
         <ControlTheme x:Key="{x:Type controls:SplitText}" TargetType="controls:SplitText">
-            <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
-            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontFamily" Value="{DynamicResource PbDisplayFontFamily}" />
+            <Setter Property="FontSize" Value="{DynamicResource PbFontSizeHeading}" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
             <Setter Property="Template">
                 <ControlTemplate>
@@ -28,7 +28,7 @@
                                    Foreground="#FFFF2E3A" Opacity="0.5" RenderTransform="translateX(-1px)">
                             <TextBlock.Transitions>
                                 <Transitions>
-                                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionFast}" />
+                                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
                                 </Transitions>
                             </TextBlock.Transitions>
                         </TextBlock>
@@ -39,7 +39,7 @@
                                    Foreground="#FF25C8FF" Opacity="0.5" RenderTransform="translateX(1px)">
                             <TextBlock.Transitions>
                                 <Transitions>
-                                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionFast}" />
+                                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
                                 </Transitions>
                             </TextBlock.Transitions>
                         </TextBlock>
@@ -61,34 +61,66 @@
         </ControlTheme>
     </Styles.Resources>
 
+    <!-- Theme typography roles (docs/superpowers/specs/2026-10-12-theme-system-v2-gap-analysis-and-plan.md, phase 3): the display and heading
+         families, sizes and weights are written by ThemeService from the theme (defaults: Bebas Neue, 42 / 22, Normal), so they are
+         DynamicResource. Line height follows the size, as it always did. -->
     <Style Selector="TextBlock.pbTextHero">
-        <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
-        <Setter Property="FontSize" Value="42" />
-        <Setter Property="LineHeight" Value="42" />
+        <Setter Property="FontFamily" Value="{DynamicResource PbDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeHero}" />
+        <Setter Property="LineHeight" Value="{DynamicResource PbFontSizeHero}" />
+        <Setter Property="FontWeight" Value="{DynamicResource PbDisplayFontWeight}" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
     </Style>
 
     <Style Selector="TextBlock.pbTextHeading">
-        <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
-        <Setter Property="FontSize" Value="22" />
-        <Setter Property="LineHeight" Value="22" />
+        <Setter Property="FontFamily" Value="{DynamicResource PbHeadingFontFamily}" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeHeading}" />
+        <Setter Property="LineHeight" Value="{DynamicResource PbFontSizeHeading}" />
+        <Setter Property="FontWeight" Value="{DynamicResource PbHeadingFontWeight}" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
     </Style>
 
     <Style Selector="TextBlock.pbTextBody">
-        <Setter Property="FontSize" Value="{StaticResource PbFontSizeBody}" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeBody}" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
     </Style>
 
     <Style Selector="TextBlock.pbTextCaption">
-        <Setter Property="FontSize" Value="{StaticResource PbFontSizeCaption}" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+    </Style>
+
+    <!-- 2026-10-19 foundation roles (docs/superpowers/specs/2026-10-19-ui-polish-foundation-design.md §1). Secondary text is muted, never
+         faint: faint measures 3.1-3.8:1 on surface2 in most themes, too dim to read (§3). -->
+    <Style Selector="TextBlock.pbTextTitle">
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeTitle}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.pbTextSection">
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeSection}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.pbTextMeta">
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMeta}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+    </Style>
+
+    <!-- Overline: small caps label above a group or field. The text itself is written in capitals (Avalonia has no text-transform). -->
+    <Style Selector="TextBlock.pbTextOverline">
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMicro}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LetterSpacing" Value="0.6" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
     </Style>
 
     <Style Selector="controls|SplitText.hero">
-        <Setter Property="FontSize" Value="42" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeHero}" />
     </Style>
     <Style Selector="controls|SplitText.heading">
-        <Setter Property="FontSize" Value="22" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeHeading}" />
     </Style>
 </Styles>

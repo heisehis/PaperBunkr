@@ -1,0 +1,69 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- FluentAvalonia -> Pb* bridge (docs/superpowers/specs/2026-10-19-ui-polish-foundation-design.md §4).
+
+         FluentAvaloniaTheme draws every TextBox, editable ComboBox, NumericUpDown and AutoCompleteBox from these resource keys, one per
+         state (key names read from FluentAvalonia.dll 3.1.0). Defining them here, in Application.Resources, wins over FluentAvalonia's
+         own theme dictionaries while its templates - caret, selection, clear/reveal buttons, keyboard and a11y behaviour - stay untouched.
+
+         The look is the "underlined field" the user picked (Q8 option C): a tinted surface2 field, a single bottom line in the muted text
+         colour (opaque: 5.1-11.1:1 on surface2 in every v1 theme, clearing the 3:1 a field boundary needs), thickening to a 2 px accent
+         line on focus. Placeholders use the muted colour too (Q10); FormControls.axaml makes them italic.
+
+         Every brush takes its colour through DynamicResource from a Pb*Color that ThemeRuntimeApplier.SetColor rewrites, so a live theme
+         switch flows through. No hex here: ThemeHardcodedColorLintTests would (rightly) count it. FoundationStyleTests guards the key
+         names - if a FluentAvalonia upgrade renames one, that test fails instead of the app quietly going back to stock Fluent. -->
+
+    <!-- TextBox (and every control that hosts one: NumericUpDown, AutoCompleteBox, SuggestBox's PART_TextBox) -->
+    <SolidColorBrush x:Key="TextControlBackground" Color="{DynamicResource PbSurface2Color}" />
+    <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="{DynamicResource PbSurface3Color}" />
+    <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="{DynamicResource PbSurface2Color}" />
+    <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="Transparent" />
+
+    <SolidColorBrush x:Key="TextControlForeground" Color="{DynamicResource PbTextColor}" />
+    <SolidColorBrush x:Key="TextControlForegroundPointerOver" Color="{DynamicResource PbTextColor}" />
+    <SolidColorBrush x:Key="TextControlForegroundFocused" Color="{DynamicResource PbTextColor}" />
+    <SolidColorBrush x:Key="TextControlForegroundDisabled" Color="{DynamicResource PbTextFaintColor}" />
+
+    <SolidColorBrush x:Key="TextControlBorderBrush" Color="{DynamicResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="{DynamicResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="{DynamicResource PbAccentColor}" />
+    <SolidColorBrush x:Key="TextControlBorderBrushDisabled" Color="{DynamicResource PbTextFaintColor}" />
+    <!-- Fluent's "elevation" brushes are the gradient that draws its own bottom-heavy underline; flatten both to the same line. -->
+    <SolidColorBrush x:Key="TextControlElevationBorderBrush" Color="{DynamicResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="TextControlElevationBorderFocusedBrush" Color="{DynamicResource PbAccentColor}" />
+    <Thickness x:Key="TextControlBorderThemeThickness">0,0,0,1</Thickness>
+    <Thickness x:Key="TextControlBorderThemeThicknessFocused">0,0,0,2</Thickness>
+
+    <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="{DynamicResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="{DynamicResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="{DynamicResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="TextControlPlaceholderForegroundDisabled" Color="{DynamicResource PbTextFaintColor}" />
+
+    <SolidColorBrush x:Key="TextControlSelectionHighlightColor" Color="{DynamicResource PbAccentColor}" Opacity="0.45" />
+
+    <!-- Editable/plain ComboBox: same field look, so a form never mixes a boxed dropdown with an underlined text field (Q12). -->
+    <SolidColorBrush x:Key="ComboBoxBackground" Color="{DynamicResource PbSurface2Color}" />
+    <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="{DynamicResource PbSurface3Color}" />
+    <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="{DynamicResource PbSurface3Color}" />
+    <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="{DynamicResource PbSurface2Color}" />
+    <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="{DynamicResource PbSurface2Color}" />
+    <SolidColorBrush x:Key="ComboBoxBackgroundDisabled" Color="Transparent" />
+    <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="{DynamicResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="{DynamicResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="{DynamicResource PbAccentColor}" />
+    <SolidColorBrush x:Key="ComboBoxBorderBrushDisabled" Color="{DynamicResource PbTextFaintColor}" />
+    <SolidColorBrush x:Key="ComboBoxBackgroundBorderBrushFocused" Color="{DynamicResource PbAccentColor}" />
+    <SolidColorBrush x:Key="ComboBoxBackgroundBorderBrushUnfocused" Color="{DynamicResource PbTextMutedColor}" />
+    <Thickness x:Key="ComboBoxBorderThemeThickness">0,0,0,1</Thickness>
+    <Thickness x:Key="ComboBoxBackgroundBorderThicknessFocused">0,0,0,2</Thickness>
+    <SolidColorBrush x:Key="ComboBoxForeground" Color="{DynamicResource PbTextColor}" />
+    <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="{DynamicResource PbTextFaintColor}" />
+    <SolidColorBrush x:Key="ComboBoxPlaceHolderForeground" Color="{DynamicResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="ComboBoxPlaceHolderForegroundPointerOver" Color="{DynamicResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="ComboBoxPlaceHolderForegroundFocused" Color="{DynamicResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="ComboBoxPlaceHolderForegroundDisabled" Color="{DynamicResource PbTextFaintColor}" />
+    <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="{DynamicResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="{DynamicResource PbSurface3Color}" />
+    <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="{DynamicResource PbBorderColor}" />
+</ResourceDictionary>

@@ -6,6 +6,7 @@ using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Paperbunkr.App.Theming.Motion;
 using Avalonia.VisualTree;
 
 namespace Paperbunkr.App.Controls;
@@ -19,8 +20,12 @@ namespace Paperbunkr.App.Controls;
 /// </summary>
 public sealed class AccordionPanel : Panel
 {
-    private static readonly TimeSpan Duration = TimeSpan.FromMilliseconds(450);
-    private static readonly IEasing Ease = new CubicEaseInOut();
+    // Motion v2 D (Q22): the Ambient role's move time and the shared move curve, so Reduced/Performance jump, the quality tier and
+    // PB_MOTION_SCALE apply. Read per animation, not cached.
+    private static TimeSpan Duration => MotionPolicy.Resolve(MotionRole.Ambient).Move;
+
+    private static IEasing Ease =>
+        Application.Current is { } app && app.TryGetResource("PbMotionMoveEase", null, out var value) && value is IEasing easing ? easing : new CubicEaseInOut();
 
     public static readonly StyledProperty<int> OpenIndexProperty =
         AvaloniaProperty.Register<AccordionPanel, int>(nameof(OpenIndex));
@@ -44,7 +49,7 @@ public sealed class AccordionPanel : Panel
     private double[] _to = Array.Empty<double>();
     private double[] _current = Array.Empty<double>();
     private DateTime _animationStart;
-    private DispatcherTimer? _timer;
+    private int _animationGeneration;
     private int _peekIndex = -1;
     private double _lastWidth = -1;
 
@@ -127,38 +132,46 @@ public sealed class AccordionPanel : Panel
         }
 
         var target = Target(_lastWidth);
-        if (!animate || MotionTokens.IsReducedMotion() || _current.Length != target.Length)
+        if (!animate || !MotionPolicy.AllowsMotion(MotionRole.Ambient) || Duration <= TimeSpan.Zero || _current.Length != target.Length
+            || TopLevel.GetTopLevel(this) is not { } topLevel)
         {
-            _timer?.Stop();
+            _animationGeneration++;
             _from = _to = _current = target;
             InvalidateMeasure();
             return;
         }
 
+        // Retarget from wherever the widths are now; a newer change supersedes the running frames.
         _from = (double[])_current.Clone();
         _to = target;
         _animationStart = DateTime.UtcNow;
-        _timer ??= CreateTimer();
-        _timer.Start();
-    }
+        int generation = ++_animationGeneration;
+        var duration = Duration;
+        var ease = Ease;
 
-    private DispatcherTimer CreateTimer()
-    {
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-        timer.Tick += (_, _) =>
+        void Frame(TimeSpan _)
         {
-            double t = Math.Clamp((DateTime.UtcNow - _animationStart).TotalMilliseconds / Duration.TotalMilliseconds, 0, 1);
-            double eased = Ease.Ease(t);
+            if (generation != _animationGeneration)
+            {
+                return;
+            }
+
+            double t = Math.Clamp((DateTime.UtcNow - _animationStart).TotalMilliseconds / duration.TotalMilliseconds, 0, 1);
+            double eased = ease.Ease(t);
             _current = _from.Zip(_to, (a, b) => a + ((b - a) * eased)).ToArray();
             if (t >= 1)
             {
-                timer.Stop();
                 _current = _to;
+            }
+            else
+            {
+                topLevel.RequestAnimationFrame(Frame);
             }
 
             InvalidateMeasure();
-        };
-        return timer;
+        }
+
+        topLevel.RequestAnimationFrame(Frame);
     }
 
     protected override Size MeasureOverride(Size availableSize)

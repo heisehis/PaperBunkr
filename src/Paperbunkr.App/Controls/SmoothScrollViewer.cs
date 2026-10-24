@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Theming.Motion;
 
 namespace Paperbunkr.App.Controls;
 
@@ -52,7 +53,7 @@ public class SmoothScrollViewer : ScrollViewer
     {
         if (e.Handled
             || !SmoothScrollSettings.Enabled
-            || MotionTokens.IsReducedMotion()
+            || !MotionPolicy.AllowsMotion(MotionRole.Travel)
             || e.KeyModifiers != KeyModifiers.None
             || !WheelEasingMath.IsMouseWheelNotch(e.Delta.X, e.Delta.Y))
         {

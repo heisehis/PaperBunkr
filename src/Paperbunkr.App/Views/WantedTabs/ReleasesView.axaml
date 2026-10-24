@@ -15,7 +15,7 @@
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="LetterSpacing" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="Button.calDay">
             <Setter Property="Width" Value="32" />
@@ -24,7 +24,7 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
@@ -37,10 +37,6 @@
         <Style Selector="Button.calDay.today">
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
-        <Style Selector="Button.pbChip.active">
-            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-        </Style>
     </UserControl.Styles>
 
     <!-- The Releases tab: the weekly pull list as a cover shelf, one week per page, with a month calendar to jump to any date
@@ -50,24 +46,24 @@
         <!-- Week navigator and filters -->
         <Grid Grid.Row="0" RowDefinitions="Auto,Auto" Margin="24,16,24,8" MaxWidth="1100" HorizontalAlignment="Stretch">
             <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8">
-                <Button Classes="headerAction ghost" Command="{Binding PreviousWeekCommand}" AutomationProperties.Name="Previous week">
+                <Button Classes="iconButton" Command="{Binding PreviousWeekCommand}" AutomationProperties.Name="Previous week">
                     <fi:SymbolIcon Symbol="ChevronLeft" FontSize="{StaticResource PbIconSizeSm}" />
                 </Button>
-                <Button x:Name="DateButton" Classes="headerAction ghost" Command="{Binding ToggleCalendarCommand}" MinWidth="170"
+                <Button x:Name="DateButton" Classes="ghost" Command="{Binding ToggleCalendarCommand}" MinWidth="170"
                         AutomationProperties.Name="Pick a date" AutomationProperties.AutomationId="WantedReleasesDate">
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
                         <fi:SymbolIcon Symbol="Calendar" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
                         <TextBlock Text="{Binding ReleaseWeekLabel}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding ReleaseWeekCaption}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center"
+                        <TextBlock Text="{Binding ReleaseWeekCaption}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
                                    IsVisible="{Binding ReleaseWeekCaption, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                     </StackPanel>
                 </Button>
-                <Button Classes="headerAction ghost" Command="{Binding NextWeekCommand}" AutomationProperties.Name="Next week">
+                <Button Classes="iconButton" Command="{Binding NextWeekCommand}" AutomationProperties.Name="Next week">
                     <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeSm}" />
                 </Button>
-                <Button Classes="headerAction ghost" Content="Today" Command="{Binding ThisWeekCommand}" IsEnabled="{Binding !IsViewingThisWeek}"
+                <Button Classes="ghost" Content="Today" Command="{Binding ThisWeekCommand}" IsEnabled="{Binding !IsViewingThisWeek}"
                         AutomationProperties.Name="Back to this week" />
-                <TextBlock Text="{Binding ReleaseCount, StringFormat='{}{0} in view'}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                <TextBlock Text="{Binding ReleaseCount, StringFormat='{}{0} in view'}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" Margin="8,0,0,0" />
             </StackPanel>
 
             <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="18" Margin="0,10,0,0">
@@ -83,32 +79,32 @@
                     <ToggleSwitch IsChecked="{Binding ReleasesShowHidden}" OnContent="{x:Null}" OffContent="{x:Null}"
                                   AutomationProperties.Name="Also show hidden releases" />
                 </StackPanel>
-                <TextBlock Grid.Column="3" Text="{Binding ReleaseFreshnessText}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                <TextBlock Grid.Column="3" Text="{Binding ReleaseFreshnessText}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                            HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>
 
             <!-- Month calendar: dots mark days with releases (red) and days with releases from followed series (green) -->
             <Popup Grid.Row="0" IsOpen="{Binding IsCalendarOpen, Mode=TwoWay}" PlacementTarget="{Binding #DateButton}" Placement="BottomEdgeAlignedLeft" IsLightDismissEnabled="True">
-                <Border Background="{DynamicResource PbSurface3Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,6,0,0">
+                <Border Background="{DynamicResource PbSurface3Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="12" Margin="0,6,0,0">
                     <StackPanel Spacing="8" Width="252">
                         <Grid ColumnDefinitions="Auto,*,Auto">
-                            <Button Grid.Column="0" Classes="headerAction ghost" Command="{Binding PreviousMonthCommand}" AutomationProperties.Name="Previous month">
+                            <Button Grid.Column="0" Classes="iconButton" Command="{Binding PreviousMonthCommand}" AutomationProperties.Name="Previous month">
                                 <fi:SymbolIcon Symbol="ChevronLeft" FontSize="{StaticResource PbIconSizeXs}" />
                             </Button>
                             <TextBlock Grid.Column="1" Text="{Binding CalendarTitle}" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Foreground="{DynamicResource PbTextBrush}" AutomationProperties.LiveSetting="Polite" />
-                            <Button Grid.Column="2" Classes="headerAction ghost" Command="{Binding NextMonthCommand}" AutomationProperties.Name="Next month">
+                            <Button Grid.Column="2" Classes="iconButton" Command="{Binding NextMonthCommand}" AutomationProperties.Name="Next month">
                                 <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" />
                             </Button>
                         </Grid>
                         <UniformGrid Columns="7">
-                            <TextBlock Text="M" HorizontalAlignment="Center" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                            <TextBlock Text="T" HorizontalAlignment="Center" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                            <TextBlock Text="W" HorizontalAlignment="Center" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                            <TextBlock Text="T" HorizontalAlignment="Center" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                            <TextBlock Text="F" HorizontalAlignment="Center" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                            <TextBlock Text="S" HorizontalAlignment="Center" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                            <TextBlock Text="S" HorizontalAlignment="Center" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <TextBlock Text="M" HorizontalAlignment="Center" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <TextBlock Text="T" HorizontalAlignment="Center" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <TextBlock Text="W" HorizontalAlignment="Center" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <TextBlock Text="T" HorizontalAlignment="Center" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <TextBlock Text="F" HorizontalAlignment="Center" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <TextBlock Text="S" HorizontalAlignment="Center" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <TextBlock Text="S" HorizontalAlignment="Center" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
                         </UniformGrid>
                         <ItemsControl ItemsSource="{Binding CalendarDays}">
                             <ItemsControl.ItemsPanel>
@@ -130,7 +126,7 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <TextBlock Text="Red: releases. Green: from a series you follow." FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="Red: releases. Green: from a series you follow." FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
                     </StackPanel>
                 </Border>
             </Popup>
@@ -147,7 +143,7 @@
                             <StackPanel Spacing="8" Margin="0,8,0,6">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <TextBlock Classes="wantedCaption" Text="{Binding Title}" />
-                                    <TextBlock Text="{Binding CountText}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                    <TextBlock Text="{Binding CountText}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 </StackPanel>
                                 <ItemsControl ItemsSource="{Binding Rows}">
                                     <ItemsControl.ItemsPanel>
@@ -157,35 +153,35 @@
                                         <DataTemplate x:DataType="vm:ReleaseRowViewModel">
                                             <StackPanel Width="124" Spacing="4" Margin="0,0,14,14">
                                                 <Panel>
-                                                    <Border Width="124" Height="186" CornerRadius="{StaticResource PbRadiusSm}" ClipToBounds="True" Background="{DynamicResource PbSurface2Brush}">
+                                                    <Border Width="124" Height="186" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" Background="{DynamicResource PbSurface2Brush}">
                                                         <Image Source="{Binding Cover.Image}" Stretch="UniformToFill" />
                                                     </Border>
-                                                    <Border Classes="pbChip" Padding="7,1" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5" IsVisible="{Binding HasStatus}"
+                                                    <Border Classes="pbChip" Padding="8,1" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4" IsVisible="{Binding HasStatus}"
                                                             Background="{DynamicResource PbChromeBrush}">
-                                                        <TextBlock Text="{Binding StatusText}" FontSize="10.5" Foreground="{DynamicResource PbAccentBrush}" />
+                                                        <TextBlock Text="{Binding StatusText}" FontSize="10" Foreground="{DynamicResource PbAccentBrush}" />
                                                     </Border>
                                                 </Panel>
                                                 <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" MaxHeight="34"
                                                            TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
-                                                <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis"
+                                                <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis"
                                                            IsVisible="{Binding Subtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                                                 <!-- Final order cutoff (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md) - Metron-only, no existing slot to reuse -->
-                                                <TextBlock Text="{Binding FocDateText}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                <TextBlock Text="{Binding FocDateText}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
                                                            IsVisible="{Binding HasFocDate}" />
                                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,2,0,0">
-                                                    <Button Grid.Column="0" Classes="headerAction primary" Content="Request" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="4,6"
+                                                    <Button Grid.Column="0" Classes="primary" Content="Request" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                                             IsVisible="{Binding PrimaryIsRequest}"
                                                             AutomationProperties.Name="{Binding Title, StringFormat='Request {0}'}"
                                                             Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RequestReleaseCommand}" CommandParameter="{Binding}" />
-                                                    <Button Grid.Column="0" Classes="headerAction ghost" Content="Follow" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="4,6"
+                                                    <Button Grid.Column="0" Classes="ghost" Content="Follow" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                                             IsVisible="{Binding PrimaryIsFollow}"
                                                             AutomationProperties.Name="{Binding Title, StringFormat='Follow the series of {0}'}"
                                                             Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).FollowReleaseSeriesCommand}" CommandParameter="{Binding}" />
-                                                    <Button Grid.Column="0" Classes="headerAction ghost" Content="Restore" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="4,6"
+                                                    <Button Grid.Column="0" Classes="ghost" Content="Restore" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                                             IsVisible="{Binding IsHidden}"
                                                             AutomationProperties.Name="{Binding Title, StringFormat='Restore {0} to the release list'}"
                                                             Command="{Binding #Root.((vm:WantedScreenViewModel)DataContext).RestoreReleaseCommand}" CommandParameter="{Binding}" />
-                                                    <Button Grid.Column="1" Classes="headerAction ghost" Click="OnMoreClick" Padding="8,6"
+                                                    <Button Grid.Column="1" Classes="iconButton" Click="OnMoreClick"
                                                             AutomationProperties.Name="{Binding Title, StringFormat='More actions for {0}'}">
                                                         <fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeSm}" />
                                                     </Button>

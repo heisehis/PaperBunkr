@@ -6,7 +6,7 @@ namespace cYo.Common.Cryptography
 {
 	public static class Password
 	{
-		private static readonly HashAlgorithm algorithm = new SHA1Managed();
+		private static readonly HashAlgorithm algorithm = SHA1.Create();
 
 		public static string CreateHash(string text)
 		{

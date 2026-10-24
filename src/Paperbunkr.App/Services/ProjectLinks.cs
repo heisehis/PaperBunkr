@@ -7,6 +7,9 @@ public static class ProjectLinks
     public const string Wiki = Repository + "/wiki";
     public const string NewIssue = Repository + "/issues/new/choose";
     public const string Releases = Repository + "/releases";
+    public const string Telegram = "https://t.me/Paperbunkr";
+    public const string TwitterX = "https://x.com/Ehis_II";
+    public const string Discussions = Repository + "/discussions";
 
     /// <summary>The Grand Comics Database extract's own public repo: its manifest and one release per GCD dump (docs/superpowers/specs/2026-09-27-gcd-data-design.md §2).</summary>
     public const string GcdDataRepository = "https://github.com/heisehis/paperbunkr-gcd-data";

@@ -1,0 +1,218 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.arcade",
+  "name": "Arcade",
+  "mode": "Dark",
+  "base": {
+    "palette": {
+      "canvas": "#1A1033",
+      "ink": "#F3E9FF",
+      "accent": "#FF71CE",
+      "success": "#05FFA1",
+      "badge": "#FFFB96"
+    },
+    "materials": {
+      "grid": {
+        "type": "linearGradient",
+        "angle": 180,
+        "fallback": "#24154A",
+        "stops": [
+          {
+            "at": 0,
+            "color": "#3A1C6E"
+          },
+          {
+            "at": 1,
+            "color": "#1A1033"
+          }
+        ]
+      },
+      "cabinet": {
+        "type": "linearGradient",
+        "angle": 135,
+        "fallback": "#22143F",
+        "stops": [
+          {
+            "at": 0,
+            "color": "#2B1857"
+          },
+          {
+            "at": 1,
+            "color": "#1F1240"
+          }
+        ]
+      }
+    },
+    "surfaces": {
+      "navigation": "grid",
+      "raised": "cabinet"
+    },
+    "semantic": {
+      "surface": {
+        "raised": "#22143F",
+        "overlay": "#2E1C55"
+      },
+      "border": {
+        "default": "#46307A",
+        "focus": "#01CDFE"
+      },
+      "status": {
+        "danger": "#FF5C8A",
+        "warning": "#FFFB96",
+        "info": "#01CDFE"
+      },
+      "chart": {
+        "series": {
+          "1": "#01CDFE",
+          "2": "#B967FF"
+        }
+      },
+      "glow": {
+        "color": "#99FF71CE"
+      }
+    },
+    "metrics": {
+      "radius": 14,
+      "radiusSm": 9,
+      "radiusLg": 22
+    },
+    "components": {
+      "button.primary": {
+        "radius": 14,
+        "foreground": "#2A0A22",
+        "states": {
+          "hover": {
+            "background": "#FF8FD8"
+          }
+        }
+      },
+      "chip": {
+        "radius": 12
+      }
+    },
+    "motion": {
+      "powerOn": {
+        "trigger": "load",
+        "duration": 420,
+        "easing": "backOut",
+        "keyframes": [
+          {
+            "at": 0,
+            "opacity": 0,
+            "translateY": 18,
+            "scale": 0.98
+          },
+          {
+            "at": 1,
+            "opacity": 1,
+            "translateY": 0,
+            "scale": 1
+          }
+        ]
+      }
+    },
+    "layouts": {
+      "Home": {
+        "contract": 1,
+        "root": {
+          "id": "root",
+          "type": "Dock",
+          "children": [
+            {
+              "id": "side",
+              "type": "Panel",
+              "dock": "left",
+              "width": 320,
+              "background": "surface.raised",
+              "children": [
+                {
+                  "id": "sideStack",
+                  "type": "Stack",
+                  "spacing": 14,
+                  "padding": 20,
+                  "children": [
+                    {
+                      "id": "hello",
+                      "type": "Text",
+                      "style": "heading",
+                      "text": "{home.greeting}",
+                      "wrap": true
+                    },
+                    {
+                      "id": "search",
+                      "type": "Home.Search"
+                    },
+                    {
+                      "id": "rule",
+                      "type": "Divider"
+                    },
+                    {
+                      "id": "library",
+                      "type": "Button",
+                      "style": "secondary",
+                      "text": "Open the Library",
+                      "icon": "navigation.library",
+                      "command": "home.openLibrary"
+                    },
+                    {
+                      "id": "insights",
+                      "type": "Button",
+                      "style": "ghost",
+                      "text": "Insights",
+                      "icon": "navigation.insights",
+                      "command": "home.openInsights"
+                    },
+                    {
+                      "id": "customize",
+                      "type": "Button",
+                      "style": "ghost",
+                      "text": "Choose what to show",
+                      "icon": "navigation.preferences",
+                      "command": "home.customize"
+                    },
+                    {
+                      "id": "empty",
+                      "type": "Text",
+                      "style": "caption",
+                      "wrap": true,
+                      "text": "Every section is switched off.",
+                      "visible": {
+                        "not": "home.hasSections"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "main",
+              "type": "Scroll",
+              "dock": "fill",
+              "children": [
+                {
+                  "id": "sections",
+                  "type": "Home.Sections",
+                  "margin": "28,20,28,40",
+                  "motion": "powerOn"
+                }
+              ]
+            }
+          ]
+        },
+        "breakpoints": {
+          "narrow": {
+            "maxWidth": 900,
+            "overrides": {
+              "side": {
+                "width": 240
+              },
+              "insights": {
+                "visible": false
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

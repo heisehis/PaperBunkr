@@ -31,7 +31,7 @@
                 </Button>
 
                 <TextBlock Grid.Column="1" Text="{Binding #Root.Title}" HorizontalAlignment="Center" VerticalAlignment="Center"
-                           FontSize="12.5" Foreground="{Binding #Root.ChromeForeground}" TextTrimming="CharacterEllipsis" />
+                           FontSize="13" Foreground="{Binding #Root.ChromeForeground}" TextTrimming="CharacterEllipsis" />
 
                 <Button Grid.Column="2" Classes="chromeIcon" Command="{Binding #Root.SearchCommand}" Margin="0,0,4,0"
                         IsVisible="{Binding #Root.SearchCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"

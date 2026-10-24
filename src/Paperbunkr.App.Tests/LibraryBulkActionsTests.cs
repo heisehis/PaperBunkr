@@ -545,6 +545,19 @@ public class LibraryBulkActionsTests : IDisposable
     }
 
     [Fact]
+    public void MergeDialog_DoesNotCountUnnumberedIssuesAsDuplicates()
+    {
+        int target = SeedSeries("Target", ContentType.Comic, (null!, null), ("", null), ("  ", null), ("1", null));
+        int source = SeedSeries("Source", ContentType.Comic, (null!, null), ("", null), ("\t", null), ("1", null));
+        var dialog = new MergeSeriesScreenViewModel(() => { }, (_, _) => { });
+
+        dialog.Load(new[] { target, source });
+
+        Assert.Equal(1, dialog.DuplicateCount);
+        Assert.Contains("1 issue exists in both", dialog.DuplicateWarning);
+    }
+
+    [Fact]
     public void ApplySeriesMerge_MovesIssues_RemovesDuplicates_KeepsTarget()
     {
         int target = SeedSeries("Alpha", ContentType.Comic, ("1", null), ("2", null));
@@ -557,6 +570,77 @@ public class LibraryBulkActionsTests : IDisposable
         Assert.Null(context.Series.Find(source));
         Assert.Equal(new[] { "1", "2", "3" }, context.Issues.Where(i => i.SeriesId == target).Select(i => i.Number!).OrderBy(n => n));
         Assert.Equal(3, context.Issues.Count());
+    }
+
+    [Fact]
+    public void ApplySeriesMerge_PreservesEveryUnnumberedIssue_AndNumberedDuplicateRule()
+    {
+        int target = SeedSeries("Target", ContentType.Comic, (null!, null), ("", null), ("  ", null), ("1", null));
+        int source = SeedSeries("Source", ContentType.Comic, (null!, null), ("", null), ("\t", null), ("1", null), ("2", null));
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Issues.Single(i => i.SeriesId == target && i.Number == null).Volume = "1";
+            context.Issues.Single(i => i.SeriesId == source && i.Number == null).Volume = "1";
+            context.SaveChanges();
+        }
+        var vm = NewVm();
+
+        vm.ApplySeriesMerge(target, new[] { source });
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.Null(verifyContext.Series.Find(source));
+        Assert.Equal(8, verifyContext.Issues.Count()); // 4 target rows + 4 source rows moved; only numbered #1 was removed.
+        Assert.Equal(8, verifyContext.Issues.Count(i => i.SeriesId == target));
+        Assert.Equal(1, verifyContext.Issues.Count(i => i.SeriesId == target && i.Number == "1"));
+    }
+
+    [Fact]
+    public void ApplySeriesMerge_DifferentVolumesWithTheSameNumber_AreBothKept()
+    {
+        int target = SeedSeries("Target", ContentType.Comic, ("3", null));
+        int source = SeedSeries("Source", ContentType.Comic, ("3", null));
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Issues.Single(i => i.SeriesId == target).Volume = "2";
+            context.Issues.Single(i => i.SeriesId == source).Volume = "1";
+            context.SaveChanges();
+        }
+
+        NewVm().ApplySeriesMerge(target, new[] { source });
+
+        using var verify = PaperbunkrDb.CreateContext();
+        Assert.Equal(new[] { "1", "2" }, verify.Issues.Where(i => i.SeriesId == target).Select(i => i.Volume!).OrderBy(v => v));
+    }
+
+    [Fact]
+    public async Task ApplySeriesMerge_UnnumberedFilesStayTrackedOnRescan()
+    {
+        string targetPath = CbzFixture.Create(Path.Combine(_tempDir, "Target Book.cbz"), pageCount: 1);
+        string sourcePath = CbzFixture.Create(Path.Combine(_tempDir, "Source Book.cbz"), pageCount: 1);
+        int target;
+        int source;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var targetSeries = new Series { Name = "Target" };
+            var sourceSeries = new Series { Name = "Source" };
+            context.Series.AddRange(targetSeries, sourceSeries);
+            context.SaveChanges();
+            target = targetSeries.Id;
+            source = sourceSeries.Id;
+            context.Issues.AddRange(
+                new Issue { SeriesId = target, FilePath = targetPath },
+                new Issue { SeriesId = source, FilePath = sourcePath });
+            context.WatchedFolders.Add(new WatchedFolder { Path = _tempDir });
+            context.SaveChanges();
+        }
+
+        NewVm().ApplySeriesMerge(target, new[] { source });
+        var scan = await new LibraryFolderScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var verify = PaperbunkrDb.CreateContext();
+        Assert.Equal(0, scan.IssuesAdded);
+        Assert.Equal(2, verify.Issues.Count(i => i.SeriesId == target));
+        Assert.Equal(new[] { targetPath, sourcePath }.OrderBy(p => p), verify.Issues.Select(i => i.FilePath!).OrderBy(p => p));
     }
 
     // ===================== Show in List =====================

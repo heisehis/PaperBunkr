@@ -62,6 +62,12 @@ public sealed record ComicVineIssueDetails(
 
     /// <summary>ComicVine's concept_credits (names): thematic tags such as "Time Travel". Empty for Metron.</summary>
     public IReadOnlyList<string> Concepts { get; init; } = Array.Empty<string>();
+
+    /// <summary>The same issue's ComicVine id, when a Metron issue names it (<c>cv_id</c>); null otherwise. Lets blank fields be filled from ComicVine.</summary>
+    public int? ComicVineId { get; init; }
+
+    /// <summary>The series' sort name as the source gives it (Metron's nested series <c>sort_name</c>); null for ComicVine.</summary>
+    public string? SeriesSortName { get; init; }
 }
 
 /// <summary>Fetches one issue's full details by its ComicVine id. Kept apart from <see cref="IComicVineClient"/> so the catalog/search fakes needn't implement it.</summary>

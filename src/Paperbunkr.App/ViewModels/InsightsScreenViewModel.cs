@@ -46,7 +46,9 @@ public partial class InsightsScreenViewModel : ViewModelBase
         IActivityService? activity = null,
         Action<int, BookFormat>? goReaderForBook = null,
         Action<int>? goBookDetailForBook = null,
-        HistoryTabViewModel? history = null)
+        HistoryTabViewModel? history = null,
+        InsightsPreferences? preferences = null,
+        Action? openDuplicateReview = null)
     {
         _goReaderForIssue = goReaderForIssue;
         _goDetailForSeries = goDetailForSeries;
@@ -59,6 +61,9 @@ public partial class InsightsScreenViewModel : ViewModelBase
         History = history ?? new HistoryTabViewModel(
             goReaderForIssue, goDetailForSeries, goReaderForBook ?? ((_, _) => { }), goBookDetailForBook ?? (_ => { }),
             dialogs, readingEventRecorder, activity, nowUtc: nowUtc);
+        History.Preferences = preferences;
+        Stats.OpenDuplicateReview = openDuplicateReview;
+        Stats.GoDetailForSeries = goDetailForSeries;
 
         if (readingEventRecorder is not null)
         {
@@ -252,6 +257,38 @@ public partial class InsightsScreenViewModel : ViewModelBase
     /// <summary>The Today hero row's continue-reading pick.</summary>
     public AttentionRow? PrimaryContinueRow => ContinueRows.Count > 0 ? ContinueRows[0] : null;
 
+    // --- The Today spotlight (docs/superpowers/specs/2026-10-20-insights-today-redesign-design.md): the series being continued, or - only when there
+    // is nothing to continue - the top recommendation. ---
+
+    public bool HasSpotlight => PrimaryContinueRow is not null || PrimaryRecommendation is not null;
+
+    public bool SpotlightIsContinue => PrimaryContinueRow is not null;
+
+    public string SpotlightHeading => PrimaryContinueRow is not null
+        ? "CONTINUE READING"
+        : string.IsNullOrWhiteSpace(RecommendationsSeedName) ? "RECOMMENDED FOR YOU" : $"BECAUSE YOU FINISHED {RecommendationsSeedName}".ToUpperInvariant();
+
+    public string SpotlightTitle => PrimaryContinueRow?.Title ?? PrimaryRecommendation?.Card.Name ?? string.Empty;
+
+    public string SpotlightSubtitle => PrimaryContinueRow?.Subtitle ?? PrimaryRecommendation?.Explanation ?? string.Empty;
+
+    public string? SpotlightCoverKey => PrimaryContinueRow?.CoverKey ?? PrimaryRecommendation?.Card.CoverKey;
+
+    public string SpotlightActionLabel => PrimaryContinueRow is not null ? "Continue reading" : "View series";
+
+    [RelayCommand]
+    private void OpenSpotlight()
+    {
+        if (PrimaryContinueRow is { } row)
+        {
+            OpenContinue(row);
+        }
+        else if (PrimaryRecommendation is { } recommendation)
+        {
+            OpenSeries(recommendation.Card.SeriesId);
+        }
+    }
+
     /// <summary>True once the hero row has nothing left to show in any of its three tiles - the row
     /// itself collapses rather than showing an empty placeholder (docs/superpowers/specs/2026-09-23-
     /// insights-redesign-design.md's Today tab section).</summary>
@@ -429,6 +466,8 @@ public partial class InsightsScreenViewModel : ViewModelBase
             nameof(ContinueCount), nameof(AlmostDoneCount), nameof(DiveInCount), nameof(GapCount),
             nameof(ContinueEmpty), nameof(AlmostDoneEmpty), nameof(DiveInEmpty), nameof(GapEmpty),
             nameof(ReadingAllClear), nameof(ReadingSectionEmpty), nameof(GapLine), nameof(PrimaryContinueRow), nameof(HeroRowEmpty),
+            nameof(HasSpotlight), nameof(SpotlightIsContinue), nameof(SpotlightHeading), nameof(SpotlightTitle), nameof(SpotlightSubtitle),
+            nameof(SpotlightCoverKey), nameof(SpotlightActionLabel),
         })
         {
             OnPropertyChanged(name);
@@ -504,7 +543,18 @@ public partial class InsightsScreenViewModel : ViewModelBase
     private void OpenSeries(int seriesId) => _goDetailForSeries(seriesId);
 }
 
-public sealed record AttentionRow(string Title, string Subtitle, int? ResumeIssueId, int SeriesId, string? CoverKey);
+public sealed record AttentionRow(string Title, string Subtitle, int? ResumeIssueId, int SeriesId, string? CoverKey)
+{
+    /// <summary>The part of <see cref="Subtitle"/> before its first " · " ("own 100 issues · #1-100, never opened" -> "own 100 issues"): what fits under a cover on a shelf.</summary>
+    public string ShortSubtitle
+    {
+        get
+        {
+            int cut = Subtitle.IndexOf(" · ", StringComparison.Ordinal);
+            return cut > 0 ? Subtitle[..cut] : Subtitle;
+        }
+    }
+}
 
 public sealed record GapRow(string Title, string Missing, int SeriesId, string? CoverKey);
 

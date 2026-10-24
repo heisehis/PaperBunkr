@@ -23,6 +23,36 @@ public sealed partial class ReadingGalleryTile : ObservableObject
     /// <summary>0..1 read fraction.</summary>
     public double Progress { get; init; }
 
+    /// <summary>Ordered read-state path. Long lists are compressed into contiguous buckets.</summary>
+    public IReadOnlyList<ReadingProgressSegment> ProgressSegments { get; init; } = Array.Empty<ReadingProgressSegment>();
+
+    public string ProgressLabel => $"{SubLine}";
+
+    /// <summary>The caps type word (ARC, EVENT, CONTINUITY...) a list card wears, or null for a plain user list and for folders.</summary>
+    public string? TypeCaption { get; init; }
+
+    /// <summary>The muted part after the caption: "METRON · 29 ISSUES".</summary>
+    public string CaptionLine { get; init; } = string.Empty;
+
+    /// <summary>The cleaned description; the card shows two lines of it, or none when empty.</summary>
+    public string Synopsis { get; init; } = string.Empty;
+
+    public bool ShowSynopsis => Synopsis.Length > 0;
+
+    public bool ShowCaption => !IsFolder;
+
+    public bool HasTypeCaption => !string.IsNullOrEmpty(TypeCaption);
+
+    public bool IsList => !IsFolder;
+
+    /// <summary>"Not started", "13 / 38 read" or "✓ Finished" (a list card's footer, left).</summary>
+    public string FooterLeft { get; init; } = string.Empty;
+
+    /// <summary>The forecast ("~ Nov 2026"), empty when there is no pace to project from or nothing left to read.</summary>
+    public string FooterRight { get; init; } = string.Empty;
+
+    public bool IsFinished { get; init; }
+
     /// <summary>The containing folder (the gallery level this tile sits on).</summary>
     public int? ParentFolderId { get; init; }
 
@@ -32,6 +62,13 @@ public sealed partial class ReadingGalleryTile : ObservableObject
     public IReadOnlyList<string> CoverKeys { get; init; } = Array.Empty<string>();
 
     public int CoverColumns => CoverKeys.Count > 1 ? 2 : 1;
+
+    /// <summary>The fanned stack on a card: the front cover, the one behind it and the one behind that (null when the list has fewer).</summary>
+    public string? FrontCoverKey => CoverKeys.Count > 0 ? CoverKeys[0] : null;
+
+    public string? MidCoverKey => CoverKeys.Count > 1 ? CoverKeys[1] : null;
+
+    public string? BackCoverKey => CoverKeys.Count > 2 ? CoverKeys[2] : null;
 
     /// <summary>A downloaded arc cover - wins over the mosaic for a list tile.</summary>
     [ObservableProperty]
@@ -55,6 +92,8 @@ public sealed partial class ReadingGalleryTile : ObservableObject
     private string _renameText = string.Empty;
 }
 
+public sealed record ReadingProgressSegment(bool IsRead);
+
 /// <summary>A card in the gallery's "Continue reading" strip.</summary>
 public sealed class ReadingContinueCard
 {
@@ -66,6 +105,9 @@ public sealed class ReadingContinueCard
 
     /// <summary>"next: Infinite Crisis #4 · 12/31".</summary>
     public string NextLine { get; init; } = string.Empty;
+
+    /// <summary>0..1 read fraction, for the card's thin progress line.</summary>
+    public double Progress { get; init; }
 }
 
 /// <summary>One segment of the gallery breadcrumb ("Reading Lists › Crisis Events › Tie-ins").</summary>

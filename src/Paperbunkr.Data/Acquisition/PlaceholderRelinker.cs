@@ -30,7 +30,8 @@ public static class PlaceholderRelinker
             bool alreadyInList = context.ReadingListItems.Any(i => i.ReadingListId == item.ReadingListId && i.IssueId == newIssueId);
             if (!alreadyInList)
             {
-                ReadingListItemLinker.Relink(context, item.Id, newIssueId);
+                // Not the user's pick: recorded as an automatic match so a later recheck may still look at the entry.
+                ReadingListItemLinker.Relink(context, item.Id, newIssueId, Entities.MatchMethod.Metadata);
             }
         }
 

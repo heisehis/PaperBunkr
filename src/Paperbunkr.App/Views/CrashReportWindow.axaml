@@ -23,8 +23,8 @@
 
         <Border Grid.Row="1" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}">
             <ScrollViewer>
-                <TextBox x:Name="ReportTextBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
-                         FontFamily="Consolas,monospace" FontSize="11.5" Background="Transparent" BorderThickness="0"
+                <TextBox Classes="bare" x:Name="ReportTextBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                         FontFamily="Consolas,monospace" FontSize="12" Background="Transparent" BorderThickness="0"
                          Foreground="{DynamicResource PbTextMutedBrush}" Padding="10" />
             </ScrollViewer>
         </Border>

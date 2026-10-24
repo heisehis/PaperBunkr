@@ -6,6 +6,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="460" d:DesignHeight="420"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              x:Class="Paperbunkr.App.Views.MergeSeriesOverlay"
              x:DataType="vm:MergeSeriesScreenViewModel">
 
@@ -24,54 +25,50 @@
         </Style>
     </UserControl.Styles>
 
-    <Border Width="460" Classes="floatingPanel">
-        <StackPanel Margin="20,18,20,16" Spacing="12">
-            <StackPanel>
-                <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                <TextBlock Text="Choose the series to keep. The issues of the other series move into it." FontSize="12.5"
-                           Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
-                <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,14,0,0" />
-            </StackPanel>
-
-            <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Disabled">
-                <ItemsControl ItemsSource="{Binding Candidates}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:MergeSeriesCandidate">
-                            <Border Classes="candidateRow" Classes.target="{Binding IsTarget}">
-                                <RadioButton GroupName="MergeTarget" IsChecked="{Binding IsTarget}" Padding="10,8"
-                                             HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding Name}">
-                                    <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <Border Width="28" Height="40" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True">
-                                            <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
-                                        </Border>
-                                        <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                                            <TextBlock Text="{Binding Detail}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                        </StackPanel>
+    <!-- The candidate list has its own scroller, so the dialog body doesn't scroll as well. -->
+    <controls:DialogCard Title="{Binding Title}" Subtitle="Choose the series to keep. The issues of the other series move into it."
+                         Size="Small" IsBodyScrollable="False" CloseCommand="{Binding CancelCommand}">
+        <StackPanel Spacing="12">
+        <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Candidates}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:MergeSeriesCandidate">
+                        <Border Classes="candidateRow" Classes.target="{Binding IsTarget}">
+                            <RadioButton GroupName="MergeTarget" IsChecked="{Binding IsTarget}" Padding="10,8"
+                                         HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding Name}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Border Width="28" Height="40" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding CoverBrush}" ClipToBounds="True">
+                                        <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                                    </Border>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                        <TextBlock Text="{Binding Detail}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                     </StackPanel>
-                                </RadioButton>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+                                </StackPanel>
+                            </RadioButton>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
 
-            <Border Background="{DynamicResource PbAccentSoftBrush}" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="1"
-                    CornerRadius="{DynamicResource PbRadius}" Padding="10,8">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <fi:SymbolIcon Symbol="Warning" FontSize="16" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" />
-                    <TextBlock Text="{Binding DuplicateWarning}" IsVisible="{Binding HasDuplicates}" FontSize="12" TextWrapping="Wrap" MaxWidth="370"
-                               Foreground="{DynamicResource PbTextBrush}" />
-                    <TextBlock Text="{Binding NoDuplicateNote}" IsVisible="{Binding !HasDuplicates}" FontSize="12" TextWrapping="Wrap" MaxWidth="370"
-                               Foreground="{DynamicResource PbTextBrush}" />
-                </StackPanel>
-            </Border>
-
-            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                <Button Classes="ghost" FontSize="12.5" Content="Cancel" Command="{Binding CancelCommand}" />
-                <Button Classes="primary" FontSize="12.5" Content="{Binding MergeLabel}" Command="{Binding MergeCommand}"
+        <Border Background="{DynamicResource PbAccentSoftBrush}" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="1"
+                CornerRadius="{DynamicResource PbRadius}" Padding="10,8">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <fi:SymbolIcon Symbol="Warning" FontSize="16" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" />
+                <TextBlock Text="{Binding DuplicateWarning}" IsVisible="{Binding HasDuplicates}" FontSize="12" TextWrapping="Wrap" MaxWidth="330"
+                           Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Text="{Binding NoDuplicateNote}" IsVisible="{Binding !HasDuplicates}" FontSize="12" TextWrapping="Wrap" MaxWidth="330"
+                           Foreground="{DynamicResource PbTextBrush}" />
+            </StackPanel>
+        </Border>
+        </StackPanel>
+        <controls:DialogCard.Footer>
+            <StackPanel>
+                <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" />
+                <Button Classes="primary" Content="{Binding MergeLabel}" Command="{Binding MergeCommand}"
                         AutomationProperties.AutomationId="MergeSeriesConfirm" />
             </StackPanel>
-        </StackPanel>
-    </Border>
+        </controls:DialogCard.Footer>
+    </controls:DialogCard>
 </UserControl>

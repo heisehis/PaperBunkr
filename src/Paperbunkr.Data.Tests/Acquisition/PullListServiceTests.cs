@@ -8,6 +8,23 @@ public class PullListServiceTests : AcquisitionTestBase
 {
     private static readonly DateTime Today = new(2026, 9, 23);   // a Wednesday
 
+    [Fact]
+    public async Task IncompleteSeriesInfo_IsRetriedAfterBackoff_WithoutDuplicateRows()
+    {
+        var source = new FakeSource();
+        source.Entries.Add(Entry(1, 10, "Spawn", "1", Today));
+        await PullListService.RefreshAsync(Context, source, Today, CancellationToken.None);
+        var row = Context.ReleaseSeries.Single();
+        Assert.Null(row.Publisher);
+        row.FetchedAt = DateTime.UtcNow.AddDays(-2);
+        Context.SaveChanges();
+        source.Series[10] = new PullListSeriesInfo(10, "Spawn", "Image", 1992, 4321);
+        await PullListService.RefreshAsync(Context, source, Today, CancellationToken.None);
+        Assert.Equal("Image", Context.ReleaseSeries.Single().Publisher);
+        Assert.Equal(4321, Context.ReleaseSeries.Single().ComicVineId);
+        Assert.Equal(2, source.SeriesLookups.Count);
+    }
+
     private sealed class FakeSource : IPullListSource
     {
         public ComicProvider Kind { get; set; } = ComicProvider.Metron;

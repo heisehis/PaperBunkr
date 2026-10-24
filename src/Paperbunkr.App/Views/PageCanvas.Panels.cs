@@ -181,7 +181,7 @@ public partial class PageCanvas
     private void TweenTo(double zoom, double panX, double panY)
     {
         _zoomGoal = null;
-        if (MotionTokens.IsReducedMotion() || Bounds.Width <= 0 || Bounds.Height <= 0 || TopLevel.GetTopLevel(this) is null)
+        if (!Paperbunkr.App.Theming.Motion.MotionPolicy.AllowsMotion(Paperbunkr.App.Theming.Motion.MotionRole.Travel) || Bounds.Width <= 0 || Bounds.Height <= 0 || TopLevel.GetTopLevel(this) is null)
         {
             _tween = null;
             ApplyView(zoom, panX, panY);

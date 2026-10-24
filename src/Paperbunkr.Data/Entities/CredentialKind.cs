@@ -18,4 +18,10 @@ public enum CredentialKind
     /// reinterpret already-stored rows. New values must always go at the end.</summary>
     OAuthClientId,
     OAuthClientSecret,
+
+    /// <summary>A provider-issued API token (Metron, docs/superpowers/specs/2026-10-21-scraper-organizer-a-reliability-design.md).</summary>
+    ApiToken,
+
+    /// <summary>The Authorization scheme that token is sent with ("Token" or "Bearer"), learned by Test connection. Not secret.</summary>
+    AuthScheme,
 }

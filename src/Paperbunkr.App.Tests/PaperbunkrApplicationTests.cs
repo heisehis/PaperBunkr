@@ -197,14 +197,17 @@ public sealed class PaperbunkrApplicationTests : IDisposable
     }
 
     [Fact]
-    public void GetComicAgeRatingIcon_ResolvesToALetterMarkOnly_ReturnsNull()
+    public void GetComicAgeRatingIcon_AustralianRating_ReturnsPng()
     {
         int seriesId = AddSeries("MA15 Series");
         int issueId = AddIssue(seriesId, "1", ageRating: "MA15+");
         var app = new PaperbunkrApplication(new MainViewModel());
         var issue = app.GetBook(issueId)!;
 
-        Assert.Null(app.GetComicAgeRatingIcon(issue));
+        byte[]? bytes = app.GetComicAgeRatingIcon(issue);
+        Assert.NotNull(bytes);
+        using var bitmap = new Bitmap(new MemoryStream(bytes!));
+        Assert.True(bitmap.PixelSize.Width > 0);
     }
 
     [Fact]

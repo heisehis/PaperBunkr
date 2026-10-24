@@ -7,82 +7,305 @@
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
+             mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="900"
              x:Class="Paperbunkr.App.Views.Preferences.ConnectionsSection"
              x:DataType="vm:PreferencesScreenViewModel">
 
     <UserControl.Styles>
-        <!-- Connections redesign (docs/superpowers/specs/2026-09-07-connections-redesign-design.md)
-             §1 - a connected row gets a soft accent tint; the checkmark stays as the primary signal,
-             this is additional weight, not a replacement. Unconnected rows stay neutral - "not
-             connected yet" isn't a negative state worth dimming. -->
-        <Style Selector="Button.sideItemButton.connConnected">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
-            <Setter Property="Margin" Value="6,1" />
+        <!-- Connections service gallery (docs/superpowers/specs/2026-10-12-connections-appearance-redesign-design.md). A tile is a real Button:
+             brand mark + name, then a status dot + text. A connected tile keeps the soft accent tint the 2026-09-07 redesign introduced; the
+             tile whose pane is open gets an accent border. Pb* tokens only, so every theme applies. -->
+        <Style Selector="Button.clickCard">
+            <Setter Property="Width" Value="156" />
+            <Setter Property="Margin" Value="0,0,8,8" />
         </Style>
+
+        <Style Selector="Border.statusDot">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Height" Value="8" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+        <Style Selector="Border.statusDot.good"><Setter Property="Background" Value="{DynamicResource PbSuccessBrush}" /></Style>
+        <Style Selector="Border.statusDot.warn"><Setter Property="Background" Value="{DynamicResource PbBadgeBrush}" /></Style>
+        <Style Selector="Border.statusDot.err"><Setter Property="Background" Value="{DynamicResource PbDangerBrush}" /></Style>
     </UserControl.Styles>
 
     <UserControl.Resources>
-        <!-- One row template shared by both provider lists (docs/superpowers/specs/2026-09-06-
-             connections-tracker-dialog-redesign-design.md) - BrandMark, name, a checkmark when
-             connected (nothing when not), whole row opens that provider's dialog. -->
-        <DataTemplate x:Key="ProviderRowTemplate" x:DataType="models:ConnectionProviderRow">
-            <Button Classes="sideItemButton" Classes.connConnected="{Binding IsConnected}" HorizontalAlignment="Stretch"
+        <!-- One tile template for all three groups (and the two non-account tiles): brand mark + name, then status. The whole tile opens that
+             service's inline pane; there is no modal any more. -->
+        <DataTemplate x:Key="ConnectionTileTemplate" x:DataType="models:ConnectionProviderRow">
+            <Button Classes="clickCard" Padding="12,8" Classes.connConnected="{Binding StatusIsGood}" Classes.active="{Binding IsSelected}"
                     Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).OpenConnectionDialogCommand}"
-                    CommandParameter="{Binding}">
-                <Grid ColumnDefinitions="Auto,*,Auto" Margin="4,8">
-                    <pbc:BrandMark Grid.Column="0" Family="Service" Value="{Binding DisplayName}" MarkSize="15" ShowText="True" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="2" Text="✓" FontSize="14" FontWeight="Bold" Foreground="#4CAF50"
-                               VerticalAlignment="Center" IsVisible="{Binding IsConnected}"
-                               ToolTip.Tip="Connected" />
-                </Grid>
+                    CommandParameter="{Binding}" AutomationProperties.Name="{Binding DisplayName}">
+                <StackPanel Spacing="7">
+                    <Panel>
+                        <pbc:BrandMark Family="Service" Value="{Binding DisplayName}" MarkSize="15" MaxMarkWidth="40" ShowText="True" IsVisible="{Binding IsBrandTile}" HorizontalAlignment="Left" />
+                        <StackPanel Orientation="Horizontal" Spacing="7" IsVisible="{Binding !IsBrandTile}">
+                            <fi:SymbolIcon Symbol="Options" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                        </StackPanel>
+                    </Panel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Border Classes="statusDot" Classes.good="{Binding StatusIsGood}" Classes.warn="{Binding StatusIsWarn}" Classes.err="{Binding StatusIsError}" />
+                        <TextBlock Text="{Binding StatusText}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
+                </StackPanel>
             </Button>
         </DataTemplate>
     </UserControl.Resources>
 
     <Grid x:Name="Root">
         <ScrollViewer>
-            <StackPanel Margin="28,20,28,40" Spacing="20">
-                <TextBlock Classes="pbTextHeading" Text="Connections" />
+            <StackPanel Margin="24,20,24,40" Spacing="20">
+                <StackPanel Spacing="2">
+                    <TextBlock Classes="pbTextHeading" Text="Connections" />
+                    <TextBlock Text="{Binding ConnectionSummaryText}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
+                               AutomationProperties.LiveSetting="Polite" />
+                </StackPanel>
 
-                <!-- Reading List Sources -->
-                <Border Classes="groupBox" Tag="connections.metadataSources">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Reading List Sources" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <ItemsControl ItemsSource="{Binding SourceProviderRows}" ItemTemplate="{StaticResource ProviderRowTemplate}" Margin="6" />
-                    </StackPanel>
+                <!-- Attention strip: only when a saved account failed its last check. -->
+                <Border IsVisible="{Binding HasAttention}" Background="{DynamicResource PbBadgeSoftBrush}" BorderBrush="{DynamicResource PbBadgeBrush}"
+                        BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="12,8">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <fi:SymbolIcon Grid.Column="0" Symbol="Warning" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbBadgeBrush}" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding AttentionTitle}" FontWeight="SemiBold" Foreground="{DynamicResource PbBadgeBrush}" />
+                            <TextBlock Text="{Binding AttentionText}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbTextMutedBrush}"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+                        <Button Grid.Column="2" Classes="ghost" Content="Open" Command="{Binding OpenAttentionRowCommand}" VerticalAlignment="Center" />
+                    </Grid>
                 </Border>
 
-                <!-- Grand Comics Database data (docs/superpowers/specs/2026-09-27-gcd-data-design.md §2): an optional download. Nothing
-                     goes online until Download / Check for update is clicked; the credit and licence are always visible (CC BY-SA 4.0). -->
-                <Border Classes="groupBox" Tag="connections.gcdData">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Grand Comics Database data" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="6" Spacing="6" DataContext="{Binding GcdData}" x:DataType="vm:GcdDataSettingsViewModel">
+                <StackPanel Tag="connections.metadataSources" Spacing="8">
+                    <TextBlock Classes="settingsGroupCaption" Text="METADATA" Margin="0" />
+                    <ItemsControl ItemsSource="{Binding MetadataTiles}" ItemTemplate="{StaticResource ConnectionTileTemplate}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+
+                <StackPanel Tag="connections.trackers" Spacing="8">
+                    <TextBlock Classes="settingsGroupCaption" Text="TRACKERS" Margin="0" />
+                    <ItemsControl ItemsSource="{Binding TrackerTiles}" ItemTemplate="{StaticResource ConnectionTileTemplate}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- Download automation (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 7) -->
+                <StackPanel Tag="connections.downloadAutomation" Spacing="8">
+                    <TextBlock Classes="settingsGroupCaption" Text="DOWNLOADS" Margin="0" />
+                    <ItemsControl ItemsSource="{Binding DownloadTiles}" ItemTemplate="{StaticResource ConnectionTileTemplate}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- The inline pane for whichever tile is selected (replaces the old modal; IsConnectionDialogOpen is true while a tile is selected). -->
+                <Border IsVisible="{Binding IsConnectionDialogOpen}" Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                        BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="18" AutomationProperties.Name="Connection settings">
+                    <StackPanel Spacing="14">
+
+                        <!-- Header, help and the per-kind forms: bound to the selected row. -->
+                        <StackPanel Spacing="12" DataContext="{Binding SelectedConnectionProvider}" x:DataType="models:ConnectionProviderRow">
+                            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                    <Panel>
+                                        <pbc:BrandMark Family="Service" Value="{Binding DisplayName}" MarkSize="18" MaxMarkWidth="48" ShowText="True" IsVisible="{Binding IsBrandTile}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !IsBrandTile}">
+                                            <fi:SymbolIcon Symbol="Options" FontSize="{StaticResource PbIconSizeMd}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                        </StackPanel>
+                                    </Panel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" IsVisible="{Binding IsAccount}">
+                                        <Border Classes="statusDot" Classes.good="{Binding StatusIsGood}" Classes.warn="{Binding StatusIsWarn}" Classes.err="{Binding StatusIsError}" />
+                                        <TextBlock Classes="pbTextMeta" Classes.errorText="{Binding StatusIsError}" Text="{Binding StatusText}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <Button Grid.Column="1" Classes="ghost" IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ShowTestButton}"
+                                        Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).TestConnectionCommand}" CommandParameter="{Binding}"
+                                        AutomationProperties.AutomationId="ConnectionTest" AutomationProperties.Name="Test connection">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <fi:SymbolIcon Symbol="PlugConnected" FontSize="{StaticResource PbIconSizeXs}" />
+                                        <TextBlock Text="Test connection" />
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Two-step inline Disconnect (TwoStepConfirm): the first press arms "Confirm disconnect?" for 3 seconds. -->
+                                <Button Grid.Column="2" Classes="ghost" Foreground="{DynamicResource PbDangerBrush}"
+                                        IsVisible="{Binding CanDisconnect}" Command="{Binding DisconnectConfirm.TriggerCommand}"
+                                        AutomationProperties.AutomationId="ConnectionDisconnect">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <fi:SymbolIcon Symbol="PlugDisconnected" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                        <TextBlock Text="{Binding DisconnectConfirm.Label}" />
+                                    </StackPanel>
+                                </Button>
+
+                                <Button Grid.Column="3" Classes="iconButton"
+                                        Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).CloseConnectionDialogCommand}"
+                                        ToolTip.Tip="Close" AutomationProperties.Name="Close" AutomationProperties.AutomationId="ConnectionDialogCloseButton">
+                                    <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                                </Button>
+                            </Grid>
+
+                            <TextBlock Text="{Binding HelpText}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+
+                            <!-- OAuth shape: AniList, MyAnimeList, Shikimori -->
+                            <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.OAuth}}">
+                                <TextBlock Classes="fieldLabel" Text="CLIENT ID" Margin="0,4,0,0" />
+                                <TextBox AutomationProperties.Name="Client ID" Text="{Binding ClientId}" PlaceholderText="Client ID" />
+                                <TextBlock Classes="fieldLabel" Text="CLIENT SECRET" Margin="0,4,0,0" />
+                                <TextBox AutomationProperties.Name="Client Secret" Text="{Binding ClientSecret}" PlaceholderText="Client Secret" PasswordChar="•" IsVisible="{Binding RequiresClientSecret}" />
+                                <Button Classes="primary" Content="Open Authorization Page"
+                                        Command="{Binding ConnectCommand}" HorizontalAlignment="Left" />
+                                <TextBox Text="{Binding PastedValue}" PlaceholderText="{Binding PasteWatermark}" />
+                                <Button Classes="" Content="Complete Connection"
+                                        Command="{Binding CompleteCommand}" HorizontalAlignment="Left" />
+                            </StackPanel>
+
+                            <!-- Token shape: Bangumi, MangaBaka, ComicVine -->
+                            <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.Token}}">
+                                <TextBlock Classes="fieldLabel" Text="ACCESS TOKEN OR API KEY" Margin="0,4,0,0" />
+                                <TextBox AutomationProperties.Name="Personal Access Token or API Key" Text="{Binding SecretValue}" PlaceholderText="Personal Access Token / API Key" PasswordChar="•" />
+                                <Button Classes="primary" Content="{Binding PrimaryActionLabel}"
+                                        Command="{Binding SaveCommand}" HorizontalAlignment="Left" />
+                            </StackPanel>
+
+                    <!-- Prowlarr: address + API key. Fields live on the acquisition view-model (one source of truth), reached through the section's DataContext. -->
+                    <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.Prowlarr}}">
+                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.ProwlarrUrl}" PlaceholderText="http://localhost:9696"
+                                 AutomationProperties.Name="Prowlarr address" AutomationProperties.AutomationId="ConnectionProwlarrUrl" />
+                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.ProwlarrApiKey}" PasswordChar="•"
+                                 PlaceholderText="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.ApiKeyWatermark}"
+                                 AutomationProperties.Name="Prowlarr API key" AutomationProperties.AutomationId="ConnectionProwlarrKey" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Classes="primary" Content="Save"
+                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.SaveConnectionsCommand}"
+                                    AutomationProperties.AutomationId="ConnectionProwlarrSave" />
+                            <Button Classes="ghost" Content="Test connection"
+                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.TestProwlarrCommand}"
+                                    AutomationProperties.AutomationId="ConnectionProwlarrTest" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.StatusMessage}"
+                                   IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.HasErrorStatus}"
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
+                        <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.StatusMessage}"
+                                   IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.HasInfoStatus}"
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
+
+                    <!-- qBittorrent: web UI address, username, password, category. -->
+                    <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.QBittorrent}}">
+                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentUrl}" PlaceholderText="http://localhost:8080"
+                                 AutomationProperties.Name="qBittorrent web UI address" AutomationProperties.AutomationId="ConnectionQBittorrentUrl" />
+                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentUsername}" PlaceholderText="Username"
+                                 AutomationProperties.Name="qBittorrent username" />
+                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentPassword}" PasswordChar="•"
+                                 PlaceholderText="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentPasswordWatermark}"
+                                 AutomationProperties.Name="qBittorrent password" />
+                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentCategory}" PlaceholderText="paperbunkr-comics"
+                                 AutomationProperties.Name="qBittorrent category" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Classes="primary" Content="Save"
+                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.SaveConnectionsCommand}"
+                                    AutomationProperties.AutomationId="ConnectionQBittorrentSave" />
+                            <Button Classes="ghost" Content="Test connection"
+                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.TestQBittorrentCommand}"
+                                    AutomationProperties.AutomationId="ConnectionQBittorrentTest" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.StatusMessage}"
+                                   IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.HasErrorStatus}"
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
+                        <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.StatusMessage}"
+                                   IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.HasInfoStatus}"
+                                   FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
+
+                            <!-- Credential shape: Metron (under its Account tab), MangaUpdates, Kitsu -->
+                            <StackPanel Spacing="10" IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ShowCredentialBody}">
+                                <!-- Metron's API token (docs/superpowers/specs/2026-10-21-scraper-organizer-a-reliability-design.md); its old login is the collapsed section below. -->
+                                <StackPanel Spacing="10" IsVisible="{Binding IsMetron}">
+                                    <TextBlock Classes="fieldLabel" Text="API TOKEN" Margin="0,4,0,0" />
+                                    <TextBox AutomationProperties.Name="Metron API token" AutomationProperties.AutomationId="ConnectionMetronToken"
+                                             Text="{Binding SecretValue}" PlaceholderText="API token" PasswordChar="•" />
+                                </StackPanel>
+                                <Button Classes="ghost" Command="{Binding ToggleLegacyLoginCommand}" IsVisible="{Binding IsMetron}"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                        AutomationProperties.Name="Legacy login (username and password)">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0" Classes="pbTextMeta" Text="Legacy login (username and password)" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        <fi:SymbolIcon Grid.Column="1" Symbol="ChevronRight" Classes="chevronToggle" Classes.open="{Binding IsLegacyLoginExpanded}" FontSize="{StaticResource PbIconSizeXs}" />
+                                    </Grid>
+                                </Button>
+                                <StackPanel Spacing="10" IsVisible="{Binding ShowLoginFields}">
+                                    <TextBlock Classes="fieldLabel" Text="USERNAME" Margin="0,4,0,0" />
+                                    <TextBox AutomationProperties.Name="Username" Text="{Binding Username}" PlaceholderText="Username" />
+                                    <TextBlock Classes="fieldLabel" Text="PASSWORD" Margin="0,4,0,0" />
+                                    <TextBox AutomationProperties.Name="Password" Text="{Binding Password}" PlaceholderText="Password" PasswordChar="•" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Classes="primary" Content="{Binding PrimaryActionLabel}"
+                                            Command="{Binding PrimaryCommand}" />
+                                    <Button Classes="ghost" Content="Test connection" Command="{Binding TestCommand}" IsVisible="{Binding IsMetron}"
+                                            AutomationProperties.AutomationId="ConnectionMetronTest" />
+                                </StackPanel>
+                                <Grid ColumnDefinitions="*" IsVisible="{Binding IsMetron}">
+                                    <TextBlock Classes="pbTextMeta" Text="{Binding TestStatus}" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" AutomationProperties.LiveSetting="Polite" />
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Credential + own app registration shape: MangaDex only - Client ID/Secret (its own Personal Client, no shared public client) plus username/password. -->
+                            <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.CredentialWithClient}}">
+                                <TextBlock Classes="fieldLabel" Text="CLIENT ID" Margin="0,4,0,0" />
+                                <TextBox AutomationProperties.Name="Client ID" Text="{Binding ClientId}" PlaceholderText="Client ID" />
+                                <TextBlock Classes="fieldLabel" Text="CLIENT SECRET" Margin="0,4,0,0" />
+                                <TextBox AutomationProperties.Name="Client Secret" Text="{Binding ClientSecret}" PlaceholderText="Client Secret" PasswordChar="•" />
+                                <TextBlock Classes="fieldLabel" Text="USERNAME" Margin="0,4,0,0" />
+                                <TextBox AutomationProperties.Name="Username" Text="{Binding Username}" PlaceholderText="Username" />
+                                <TextBlock Classes="fieldLabel" Text="PASSWORD" Margin="0,4,0,0" />
+                                <TextBox AutomationProperties.Name="Password" Text="{Binding Password}" PlaceholderText="Password" PasswordChar="•" />
+                                <Button Classes="primary" Content="{Binding PrimaryActionLabel}"
+                                        Command="{Binding PrimaryCommand}" HorizontalAlignment="Left" />
+                            </StackPanel>
+
+                            <!-- Metron's Activity tab -->
+                            <StackPanel Spacing="6" IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ShowMetronActivityBody}">
+                                <TextBlock Text="{Binding ActivityText}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).MetronSync.StatusText}"
+                                           IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).MetronSync.HasStatus}"
+                                           FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbTextBrush}" AutomationProperties.LiveSetting="Polite" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Metron's tabs (Account is the credential form above) -->
+                        <pref:SettingsTabStrip Tabs="{Binding MetronTabs}" IsVisible="{Binding IsMetronSelected}" AutomationProperties.Name="Metron tabs" />
+
+                        <!-- Grand Comics Database data (docs/superpowers/specs/2026-09-27-gcd-data-design.md §2): an optional download. Nothing goes online
+                             until Download / Check for update is clicked; the credit and licence are always visible (CC BY-SA 4.0). -->
+                        <StackPanel Tag="connections.gcdData" IsVisible="{Binding ShowGcdBody}">
+                            <StackPanel Margin="0" Spacing="6" DataContext="{Binding GcdData}" x:DataType="vm:GcdDataSettingsViewModel">
                             <pref:SettingsRow Icon="DatabaseLink" Title="Series continuity and on-sale dates"
                                               Description="Links series that continue each other (renumberings, renames, reboots) and orders story events by when issues went on sale. The data stays on this computer.">
                                 <pref:SettingsRow.SettingsContent>
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <Button Classes="headerAction primary" Command="{Binding DownloadCommand}" IsVisible="{Binding ShowDownload}"
+                                        <Button Classes="primary" Command="{Binding DownloadCommand}" IsVisible="{Binding ShowDownload}"
                                                 AutomationProperties.AutomationId="GcdDataDownload" AutomationProperties.Name="{Binding DownloadLabel}">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                 <fi:SymbolIcon Symbol="ArrowDownload" FontSize="{StaticResource PbIconSizeXs}" />
                                                 <TextBlock Text="{Binding DownloadLabel}" />
                                             </StackPanel>
                                         </Button>
-                                        <Button Classes="headerAction ghost" Command="{Binding CheckForUpdateCommand}" IsVisible="{Binding CanCheck}"
+                                        <Button Classes="ghost" Command="{Binding CheckForUpdateCommand}" IsVisible="{Binding CanCheck}"
                                                 AutomationProperties.AutomationId="GcdDataCheck">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                 <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" />
                                                 <TextBlock Text="Check for update" />
                                             </StackPanel>
                                         </Button>
-                                        <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" BorderBrush="{DynamicResource PbDangerSoftBrush}"
+                                        <Button Classes="ghost" Foreground="{DynamicResource PbDangerBrush}"
                                                 Command="{Binding RemoveCommand}" IsVisible="{Binding CanRemove}"
                                                 AutomationProperties.AutomationId="GcdDataRemove" AutomationProperties.Name="Remove Grand Comics Database data">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -93,46 +316,41 @@
                                     </StackPanel>
                                 </pref:SettingsRow.SettingsContent>
                             </pref:SettingsRow>
-                            <TextBlock Text="{Binding StateText}" FontSize="12" Margin="10,0" Foreground="{DynamicResource PbTextFaintBrush}"
+                            <TextBlock Text="{Binding StateText}" FontSize="12" Margin="10,0" Foreground="{DynamicResource PbTextMutedBrush}"
                                        AutomationProperties.LiveSetting="Polite" />
                             <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasStatus}" FontSize="12" Margin="10,0" TextWrapping="Wrap"
                                        Foreground="{DynamicResource PbTextBrush}" AutomationProperties.LiveSetting="Polite" />
                             <WrapPanel Margin="10,2,10,4" Orientation="Horizontal">
-                                <TextBlock Text="{Binding Credit}" FontSize="11.5" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,8,0"
-                                           Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <Button Classes="headerAction ghost" Command="{Binding OpenGcdCommand}" ToolTip.Tip="https://www.comics.org">
+                                <TextBlock Text="{Binding Credit}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,8,0"
+                                           Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <Button Classes="ghost" Command="{Binding OpenGcdCommand}" ToolTip.Tip="https://www.comics.org">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <TextBlock Text="comics.org" />
                                         <fi:SymbolIcon Symbol="Open" FontSize="{StaticResource PbIconSizeXs}" />
                                     </StackPanel>
                                 </Button>
-                                <Button Classes="headerAction ghost" Command="{Binding OpenLicenceCommand}" ToolTip.Tip="https://creativecommons.org/licenses/by-sa/4.0/">
+                                <Button Classes="ghost" Command="{Binding OpenLicenceCommand}" ToolTip.Tip="https://creativecommons.org/licenses/by-sa/4.0/">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <TextBlock Text="Licence" />
                                         <fi:SymbolIcon Symbol="Open" FontSize="{StaticResource PbIconSizeXs}" />
                                     </StackPanel>
                                 </Button>
-                                <Button Classes="headerAction ghost" Command="{Binding OpenDataRepositoryCommand}" ToolTip.Tip="https://github.com/heisehis/paperbunkr-gcd-data">
+                                <Button Classes="ghost" Command="{Binding OpenDataRepositoryCommand}" ToolTip.Tip="https://github.com/heisehis/paperbunkr-gcd-data">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <TextBlock Text="Data source" />
                                         <fi:SymbolIcon Symbol="Open" FontSize="{StaticResource PbIconSizeXs}" />
                                     </StackPanel>
                                 </Button>
                             </WrapPanel>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-                </Border>
 
-                <!-- Metron account sync (docs/superpowers/specs/2026-10-05-metron-account-sync-design.md): the only place the app sends
-                     reading data anywhere, so everything is off until the master switch is on and each row says what it sends. -->
-                <Border Classes="groupBox" Tag="connections.metronSync">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Metron account" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="6" DataContext="{Binding MetronSync}" x:DataType="vm:MetronSyncSettingsViewModel">
+                        <!-- Metron account sync (docs/superpowers/specs/2026-10-05-metron-account-sync-design.md): the only place the app sends reading
+                             data anywhere, so everything is off until the master switch is on and each row says what it sends. -->
+                        <StackPanel Tag="connections.metronSync" IsVisible="{Binding ShowMetronSyncBody}">
+                            <StackPanel DataContext="{Binding MetronSync}" x:DataType="vm:MetronSyncSettingsViewModel">
                             <pref:SettingsRow Icon="ArrowSync" Title="Sync with my Metron account"
-                                              Description="Sends the things switched on below to your account on metron.cloud, about once an hour, using the Metron login saved above. Nothing is sent while this is off.">
+                                              Description="Sends the things switched on below to your account on metron.cloud, about once an hour, using the Metron API token saved above. Nothing is sent while this is off.">
                                 <pref:SettingsRow.SettingsContent>
                                     <ToggleSwitch IsChecked="{Binding IsEnabled}" OnContent="{x:Null}" OffContent="{x:Null}"
                                                   AutomationProperties.AutomationId="MetronSyncEnabled" AutomationProperties.Name="Sync with my Metron account" />
@@ -174,18 +392,18 @@
                                               Description="Sync now sends whatever is waiting. Send my reading history queues every issue you have finished, not just new ones. Import from Metron fills in ratings and read issues you have on Metron but not here, and never overwrites.">
                                 <pref:SettingsRow.SettingsContent>
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <Button Classes="headerAction primary" Command="{Binding SyncNowCommand}" IsEnabled="{Binding CanRun}"
+                                        <Button Classes="primary" Command="{Binding SyncNowCommand}" IsEnabled="{Binding CanRun}"
                                                 AutomationProperties.AutomationId="MetronSyncNow">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                 <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" />
                                                 <TextBlock Text="Sync now" />
                                             </StackPanel>
                                         </Button>
-                                        <Button Classes="headerAction ghost" Command="{Binding SendReadingHistoryCommand}" IsEnabled="{Binding CanRun}"
+                                        <Button Classes="ghost" Command="{Binding SendReadingHistoryCommand}" IsEnabled="{Binding CanRun}"
                                                 AutomationProperties.AutomationId="MetronSendReadingHistory">
                                             <TextBlock Text="Send my reading history" />
                                         </Button>
-                                        <Button Classes="headerAction ghost" Command="{Binding ImportFromMetronCommand}" IsEnabled="{Binding CanRun}"
+                                        <Button Classes="ghost" Command="{Binding ImportFromMetronCommand}" IsEnabled="{Binding CanRun}"
                                                 AutomationProperties.AutomationId="MetronImport">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                 <fi:SymbolIcon Symbol="ArrowDownload" FontSize="{StaticResource PbIconSizeXs}" />
@@ -197,39 +415,12 @@
                             </pref:SettingsRow>
                             <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasStatus}" FontSize="12" Margin="10,4,10,4" TextWrapping="Wrap"
                                        Foreground="{DynamicResource PbTextBrush}" AutomationProperties.LiveSetting="Polite" />
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-                </Border>
 
-                <!-- Download automation (docs/superpowers/specs/2026-09-20-cluster-library-manager-into-core-design.md 7) -->
-                <Border Classes="groupBox" Tag="connections.downloadAutomation">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Download automation" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <ItemsControl ItemsSource="{Binding DownloadProviderRows}" ItemTemplate="{StaticResource ProviderRowTemplate}" Margin="6" />
-                    </StackPanel>
-                </Border>
-
-                <!-- Trackers -->
-                <Border Classes="groupBox" Tag="connections.trackers">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Trackers" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <ItemsControl ItemsSource="{Binding TrackerProviderRows}" ItemTemplate="{StaticResource ProviderRowTemplate}" Margin="6" />
-                    </StackPanel>
-                </Border>
-
-                <!-- Tracking behavior (docs/superpowers/specs/2026-09-18-tracker-behavior-settings-design.md)
-                     - global toggles modeled on Komikku's Settings -> Tracking. Each is read fresh at the
-                     moment it applies, so a change takes effect without a restart. -->
-                <Border Classes="groupBox" Tag="connections.trackingBehavior">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Tracking behavior" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="6">
+                        <!-- Tracking behavior (docs/superpowers/specs/2026-09-18-tracker-behavior-settings-design.md) - global toggles modeled on Komikku's
+                             Settings -> Tracking. Each is read fresh at the moment it applies, so a change takes effect without a restart. -->
+                        <StackPanel Tag="connections.trackingBehavior" IsVisible="{Binding ShowBehaviorBody}">
                             <pref:SettingsRow Icon="Link" Title="Open the tracker link panel automatically"
                                                Description="The first time you open a manga that has a metadata source link and a connected tracker account, jump to its tracker link panel. Once per series.">
                                 <pref:SettingsRow.SettingsContent>
@@ -282,163 +473,16 @@
                                 </pref:SettingsRow.SettingsContent>
                             </pref:SettingsRow>
                         </StackPanel>
+
+                        <!-- One-line activity for every account except Metron (which has its Activity tab). -->
+                        <TextBlock Text="{Binding SelectedConnectionProvider.ActivityText}" IsVisible="{Binding ShowAccountActivity}" FontSize="12"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" />
+
+                        <TextBlock Text="{Binding ConnectionDialogStatus}" FontSize="12"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                     </StackPanel>
                 </Border>
             </StackPanel>
         </ScrollViewer>
-
-        <!-- Connection dialog overlay - local to this section (PreferencesScreenViewModel already owns
-             every field/command involved), matching MainWindow's IsIssuePropertiesOverlayOpen scrim
-             weight without hoisting state to MainViewModel. Three IsVisible-gated panels keyed on
-             SelectedConnectionProvider.Kind, per docs/superpowers/specs/2026-09-06-connections-
-             tracker-dialog-redesign-design.md. Each panel is now one generic block bound to the
-             row's own fields/command references instead of 3 DisplayName-gated copies (docs/
-             superpowers/specs/2026-09-07-connections-redesign-design.md §2). -->
-        <Border IsVisible="{Binding IsConnectionDialogOpen}" Background="#B0000000">
-            <Border Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                    BorderThickness="1" CornerRadius="10" Padding="24" Width="420" MaxHeight="560"
-                    HorizontalAlignment="Center" VerticalAlignment="Center">
-                <StackPanel Spacing="14" DataContext="{Binding SelectedConnectionProvider}" x:DataType="models:ConnectionProviderRow">
-                    <Grid ColumnDefinitions="*,Auto,Auto">
-                        <pbc:BrandMark Grid.Column="0" Family="Service" Value="{Binding DisplayName}" MarkSize="18" ShowText="True" VerticalAlignment="Center" />
-
-                        <!-- Status dot (docs/superpowers/specs/2026-09-07-connections-redesign-
-                             design.md §2) - a live, always-current connected signal, independent of
-                             whatever the shared status line last said. Nothing renders when not
-                             connected - the row-level checkmark already covers that state. -->
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
-                                    Margin="0,0,10,0" IsVisible="{Binding IsConnected}">
-                            <Border Width="8" Height="8" CornerRadius="4" Background="{DynamicResource PbSuccessBrush}" />
-                            <TextBlock Text="Connected" FontSize="11.5" Foreground="{DynamicResource PbSuccessBrush}" />
-                        </StackPanel>
-
-                        <Button Grid.Column="2" Classes="headerAction ghost"
-                                Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).CloseConnectionDialogCommand}"
-                                ToolTip.Tip="Close" AutomationProperties.AutomationId="ConnectionDialogCloseButton">
-                        </Button>
-                    </Grid>
-
-                    <TextBlock Text="{Binding HelpText}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-
-                    <!-- OAuth shape: AniList, MyAnimeList, Shikimori -->
-                    <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.OAuth}}">
-                        <TextBox Text="{Binding ClientId}" Watermark="Client ID" />
-                        <TextBox Text="{Binding ClientSecret}" Watermark="Client Secret" PasswordChar="•" IsVisible="{Binding RequiresClientSecret}" />
-                        <Button Classes="headerAction primary" Content="Open Authorization Page"
-                                Command="{Binding ConnectCommand}" HorizontalAlignment="Left" />
-                        <TextBox Text="{Binding PastedValue}" Watermark="{Binding PasteWatermark}" />
-                        <Button Classes="headerAction" Content="Complete Connection"
-                                Command="{Binding CompleteCommand}" HorizontalAlignment="Left" />
-                        <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" BorderBrush="{DynamicResource PbDangerSoftBrush}"
-                                HorizontalAlignment="Left" IsVisible="{Binding IsConnected}" Command="{Binding DisconnectCommand}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="PlugDisconnected" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
-                                <TextBlock Text="Disconnect" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-
-                    <!-- Token shape: Bangumi, MangaBaka, ComicVine -->
-                    <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.Token}}">
-                        <TextBox Text="{Binding SecretValue}" Watermark="Personal Access Token / API Key" PasswordChar="•" />
-                        <Button Classes="headerAction primary" Content="{Binding PrimaryActionLabel}"
-                                Command="{Binding SaveCommand}" HorizontalAlignment="Left" />
-                        <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" BorderBrush="{DynamicResource PbDangerSoftBrush}"
-                                HorizontalAlignment="Left" IsVisible="{Binding IsConnected}" Command="{Binding DisconnectCommand}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="PlugDisconnected" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
-                                <TextBlock Text="Disconnect" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-
-                    <!-- Prowlarr: address + API key. Fields live on the acquisition view-model (one source of truth), reached through the section's DataContext. -->
-                    <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.Prowlarr}}">
-                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.ProwlarrUrl}" Watermark="http://localhost:9696"
-                                 AutomationProperties.Name="Prowlarr address" AutomationProperties.AutomationId="ConnectionProwlarrUrl" />
-                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.ProwlarrApiKey}" PasswordChar="•"
-                                 Watermark="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.ApiKeyWatermark}"
-                                 AutomationProperties.Name="Prowlarr API key" AutomationProperties.AutomationId="ConnectionProwlarrKey" />
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <Button Classes="headerAction primary" Content="Save"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.SaveConnectionsCommand}"
-                                    AutomationProperties.AutomationId="ConnectionProwlarrSave" />
-                            <Button Classes="headerAction ghost" Content="Test connection"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.TestProwlarrCommand}"
-                                    AutomationProperties.AutomationId="ConnectionProwlarrTest" />
-                        </StackPanel>
-                        <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.StatusMessage}"
-                                   IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.HasErrorStatus}"
-                                   FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
-                        <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.StatusMessage}"
-                                   IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.HasInfoStatus}"
-                                   FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
-                    </StackPanel>
-
-                    <!-- qBittorrent: web UI address, username, password, category. -->
-                    <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.QBittorrent}}">
-                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentUrl}" Watermark="http://localhost:8080"
-                                 AutomationProperties.Name="qBittorrent web UI address" AutomationProperties.AutomationId="ConnectionQBittorrentUrl" />
-                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentUsername}" Watermark="Username"
-                                 AutomationProperties.Name="qBittorrent username" />
-                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentPassword}" PasswordChar="•"
-                                 Watermark="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentPasswordWatermark}"
-                                 AutomationProperties.Name="qBittorrent password" />
-                        <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.QBittorrentCategory}" Watermark="paperbunkr-comics"
-                                 AutomationProperties.Name="qBittorrent category" />
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <Button Classes="headerAction primary" Content="Save"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.SaveConnectionsCommand}"
-                                    AutomationProperties.AutomationId="ConnectionQBittorrentSave" />
-                            <Button Classes="headerAction ghost" Content="Test connection"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.TestQBittorrentCommand}"
-                                    AutomationProperties.AutomationId="ConnectionQBittorrentTest" />
-                        </StackPanel>
-                        <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.StatusMessage}"
-                                   IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.HasErrorStatus}"
-                                   FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
-                        <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.StatusMessage}"
-                                   IsVisible="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).Acquisition.HasInfoStatus}"
-                                   FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
-                    </StackPanel>
-
-                    <!-- Credential shape: Metron, MangaUpdates, Kitsu -->
-                    <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.Credential}}">
-                        <TextBox Text="{Binding Username}" Watermark="Username" />
-                        <TextBox Text="{Binding Password}" Watermark="Password" PasswordChar="•" />
-                        <Button Classes="headerAction primary" Content="{Binding PrimaryActionLabel}"
-                                Command="{Binding PrimaryCommand}" HorizontalAlignment="Left" />
-                        <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" BorderBrush="{DynamicResource PbDangerSoftBrush}"
-                                HorizontalAlignment="Left" IsVisible="{Binding IsConnected}" Command="{Binding DisconnectCommand}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="PlugDisconnected" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
-                                <TextBlock Text="Disconnect" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-
-                    <!-- Credential + own app registration shape: MangaDex only - Client ID/Secret
-                         (its own Personal Client, no shared public client) plus username/password. -->
-                    <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.CredentialWithClient}}">
-                        <TextBox Text="{Binding ClientId}" Watermark="Client ID" />
-                        <TextBox Text="{Binding ClientSecret}" Watermark="Client Secret" PasswordChar="•" />
-                        <TextBox Text="{Binding Username}" Watermark="Username" />
-                        <TextBox Text="{Binding Password}" Watermark="Password" PasswordChar="•" />
-                        <Button Classes="headerAction primary" Content="{Binding PrimaryActionLabel}"
-                                Command="{Binding PrimaryCommand}" HorizontalAlignment="Left" />
-                        <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" BorderBrush="{DynamicResource PbDangerSoftBrush}"
-                                HorizontalAlignment="Left" IsVisible="{Binding IsConnected}" Command="{Binding DisconnectCommand}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="PlugDisconnected" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
-                                <TextBlock Text="Disconnect" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-
-                    <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ConnectionDialogStatus}" FontSize="12"
-                               Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-        </Border>
     </Grid>
 </UserControl>

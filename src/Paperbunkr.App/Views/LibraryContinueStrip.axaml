@@ -14,19 +14,8 @@
         series menu (the screen's ContextMenuHost reads the card's DataContext like any tile's).
     -->
     <UserControl.Styles>
-        <Style Selector="Button.continueCard">
+        <Style Selector="Button.clickCard">
             <Setter Property="Width" Value="262" />
-            <Setter Property="Padding" Value="10" />
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusLg}" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.continueCard:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
         <Style Selector="Border.continuePlay">
             <Setter Property="Width" Value="30" />
@@ -39,25 +28,33 @@
 
     <StackPanel Margin="24,18,24,8" Spacing="10">
         <DockPanel>
-            <TextBlock DockPanel.Dock="Left" Text="Continue reading" Classes="pbTextHeading" VerticalAlignment="Center" />
+            <TextBlock DockPanel.Dock="Left" Text="Continue reading" Classes="pbTextSection" VerticalAlignment="Center" />
             <TextBlock DockPanel.Dock="Left" Text="{Binding ContinueStrip.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
             <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
         </DockPanel>
         <!-- The row never wraps; with more cards than fit it scrolls sideways. The scroller's viewport clips a focus ring,
              so the cards sit 6px inside it (and it reaches 6px out to keep them aligned). -->
         <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="-6">
+            <!-- A card that doesn't fit fades out at the right edge (reads as "scroll for more"), like the Library chip row. -->
+            <ScrollViewer.OpacityMask>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                    <GradientStop Offset="0" Color="Black" />
+                    <GradientStop Offset="0.95" Color="Black" />
+                    <GradientStop Offset="1" Color="Transparent" />
+                </LinearGradientBrush>
+            </ScrollViewer.OpacityMask>
             <ItemsControl x:Name="Cards" ItemsSource="{Binding ContinueStrip}" Margin="6">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="12" /></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="models:SeriesCardSample">
-                        <Button Classes="continueCard"
+                        <Button Classes="clickCard" Padding="10"
                                 Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
                                 CommandParameter="{Binding}" GotFocus="OnCardGotFocus"
                                 AutomationProperties.Name="{Binding ContinueAccessibleName}">
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                                <Border Grid.Column="0" Width="44" Height="66" CornerRadius="4" ClipToBounds="True" Background="{Binding CoverBrush}">
+                                <Border Grid.Column="0" Width="44" Height="66" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" Background="{Binding CoverBrush}">
                                     <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">

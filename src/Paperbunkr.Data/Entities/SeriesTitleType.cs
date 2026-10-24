@@ -16,4 +16,10 @@ public enum SeriesTitleType
 
     /// <summary>An official localized/translated title in another language (e.g. AniList's <c>english</c>).</summary>
     Localized,
+
+    /// <summary>
+    /// The series' own name before a comic scrape first renamed it (docs/superpowers/specs/2026-10-22-scrape-series-split-and-series-fields-design.md),
+    /// kept so "Restore name from before scraping" can put it back, and so the old name still finds the series. Stored by name (HasConversion<string>).
+    /// </summary>
+    BeforeScrape,
 }

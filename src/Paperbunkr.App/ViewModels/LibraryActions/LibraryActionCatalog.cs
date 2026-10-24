@@ -66,7 +66,7 @@ public sealed class LibraryActionCatalog
         "open", Sep,
         "edit", "rating", "mark", "add-list", "add-collection", "show-in-list", Sep,
         "go-series", "series-setters", Sep,
-        "scrape", "organize", Sep,
+        "scrape", "scrape-organize", "organize", Sep,
         "copy-data", "paste-data", "clear-data", "tidy", "write-files", "refresh", Sep,
         "reveal", "copy-paths", "compare", Sep,
         "plugins", Sep,
@@ -82,8 +82,8 @@ public sealed class LibraryActionCatalog
     private static readonly string[] SeriesMenuOrder =
     {
         "open", "edit", "mark", "add-list", "add-collection", Sep,
-        "content-type", "reading-direction", "publication-status", "reading-status", "classify", Sep,
-        "scrape", "organize", "tidy", "write-files", "refresh", "merge", Sep,
+        "content-type", "reading-direction", "publication-status", "reading-status", "classify", "detail-layout", Sep,
+        "scrape", "scrape-organize", "organize", "tidy", "write-files", "refresh", "merge", "restore-series-name", "allow-series-split", Sep,
         "reveal", "copy-paths", Sep,
         "plugins", Sep,
         "select-all", "invert", "clear-selection", Sep,
@@ -382,6 +382,8 @@ public sealed class LibraryActionCatalog
 
         yield return new("rating", issue, BuildRating);
 
+        yield return new("detail-layout", series, BuildDetailLayout);
+
         yield return new("mark", local | LibraryActionTargets.RemoteIssue, c =>
         {
             var children = new List<ContextMenuEntry?>
@@ -449,6 +451,19 @@ public sealed class LibraryActionCatalog
         yield return new("scrape", local, c => c.IsSeries
             ? ContextMenuEntry.Item(c.IsMulti ? $"Scrape {c.Count} series…" : "Scrape…", _vm.ScrapeSeriesWithComicVineCommand, c.AnchorId, Symbol.ArrowDownload)
             : ContextMenuEntry.Item(c.IsMulti ? $"Scrape {c.Count}…" : "Scrape…", _vm.ScrapeWithComicVineCommand, c.AnchorId, Symbol.ArrowDownload));
+
+        yield return new("scrape-organize", local, c => c.IsSeries
+            ? ContextMenuEntry.Item(c.IsMulti ? $"Scrape and organize {c.Count} series…" : "Scrape and organize…", _vm.ScrapeAndOrganizeSeriesCommand, c.AnchorId, Symbol.ArrowSync)
+            : ContextMenuEntry.Item(c.IsMulti ? $"Scrape and organize {c.Count}…" : "Scrape and organize…", _vm.ScrapeAndOrganizeCommand, c.AnchorId, Symbol.ArrowSync));
+
+        // Series identity after scraping (docs/superpowers/specs/2026-10-22-scrape-series-split-and-series-fields-design.md Q4/Q5): shown only
+        // on a single series that has something to undo or clear.
+        yield return new("restore-series-name", series, c => !c.IsMulti && _vm.NameBeforeScrape(c.AnchorId) is { } before
+            ? ContextMenuEntry.Item($"Restore name “{before}”", _vm.RestoreSeriesNameCommand, c.AnchorId, Symbol.History)
+            : null);
+        yield return new("allow-series-split", series, c => !c.IsMulti && _vm.IsKeptTogether(c.AnchorId)
+            ? ContextMenuEntry.Item("Let scrapes split this series", _vm.AllowSeriesSplitCommand, c.AnchorId, Symbol.ArrowSplit)
+            : null);
 
         yield return new("organize", local, c => c.IsSeries
             ? ContextMenuEntry.Item(c.IsMulti ? $"Organize {c.Count} series…" : "Organize…", _vm.OrganizeSeriesWithProfileCommand, c.AnchorId, Symbol.FolderArrowRight)
@@ -564,6 +579,40 @@ public sealed class LibraryActionCatalog
                     Symbol.Delete,
                     isDanger: true);
         });
+    }
+
+    /// <summary>
+    /// "Detail layout ▸" on one series (docs/superpowers/specs/2026-10-19-detail-layouts-v2-design.md, Q8/Q11): Follow the default, or one
+    /// of the named comic / manga detail layouts used only for this series. ✓ on what the series uses now. Null outside the app shell.
+    /// </summary>
+    private ContextMenuEntry? BuildDetailLayout(LibraryActionContext c)
+    {
+        if (c is not { IsMenu: true, Count: 1, Card: { } card })
+        {
+            return null;
+        }
+
+        bool manga = card.IsMangaFamily;
+        if ((manga ? _vm.MangaDetailLayouts : _vm.ComicDetailLayouts) is not { } layouts)
+        {
+            return null;
+        }
+
+        bool followsDefault = !layouts.HasAssignment(ListLayoutsViewModel.SeriesKey(card.SeriesId));
+        int? current = followsDefault ? null : layouts.SeriesLayoutId(card.SeriesId);
+        var children = new List<ContextMenuEntry?>
+        {
+            ContextMenuEntry.Item("Follow the default", _vm.SetSeriesDetailLayoutCommand,
+                new LibraryScreenViewModel.DetailLayoutChoice(card.SeriesId, null, manga), isChecked: followsDefault),
+        };
+        if (layouts.Layouts.Count > 0)
+        {
+            children.Add(ContextMenuEntry.Separator);
+            children.AddRange(layouts.Layouts.Select(row => ContextMenuEntry.Item(row.Name, _vm.SetSeriesDetailLayoutCommand,
+                new LibraryScreenViewModel.DetailLayoutChoice(card.SeriesId, row.Id, manga), isChecked: current == row.Id)));
+        }
+
+        return ContextMenuEntry.SubMenu("Detail layout", children, Symbol.Grid);
     }
 
     /// <summary>"My Rating ▸" - None and 1-5 stars (✓ only when every targeted book shares the rating, CE's <c>GetRating()</c> -1 rule), then

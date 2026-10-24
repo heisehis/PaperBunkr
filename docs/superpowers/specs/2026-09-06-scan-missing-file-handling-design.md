@@ -150,8 +150,11 @@ either way, it's just unconsulted here.
 
 After `ScanNowCommand`'s `ScanAllAsync` completes, if `AutoRemoveMissingOnScan` is on:
 
-1. Run the existing unscoped `LibraryHealthService.VerifyAsync()` (full-library sweep — Scan Now
-   already covers every library folder, so this is the right granularity without a new overload).
+1. Run the missing-only `LibraryHealthService.VerifyMissingAsync()` with the transient presence
+   snapshot from the completed `ScanAllAsync` pass. It uses the snapshot for supported comic paths
+   under successfully enumerated watched roots and falls back to `File.Exists` outside that
+   coverage. It does not open present archives to refresh Empty Rows; explicit **Verify Now** keeps
+   that full check. (Performance follow-up: `2026-10-15-scan-auto-verification-design.md`.)
 2. For every issue now eligible (`FileIsMissing && MissingVerificationCount >= 2 &&
    !MissingAcknowledged` — same predicate Library Health's manual bulk-remove already uses):
    additionally check the file's drive/root is reachable right now (new

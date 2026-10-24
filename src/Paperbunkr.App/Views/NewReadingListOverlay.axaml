@@ -8,6 +8,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="460" d:DesignHeight="560"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              x:Class="Paperbunkr.App.Views.NewReadingListOverlay"
              x:DataType="vm:NewReadingListViewModel">
 
@@ -50,110 +51,94 @@
         <Style Selector="Button.method.active Border.methodIcon">
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
         </Style>
-        <Style Selector="TextBlock.fieldLabel">
-            <Setter Property="FontSize" Value="10" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="Margin" Value="0,0,0,6" />
-        </Style>
     </UserControl.Styles>
 
-    <Border Classes="floatingPanel" Width="540" MaxHeight="680">
-        <Grid RowDefinitions="Auto,*,Auto">
+    <controls:DialogCard Title="New reading list" Size="Medium">
+        <StackPanel Spacing="16">
+            <StackPanel>
+                <TextBlock Classes="fieldLabel" Text="NAME" />
+                <TextBox Text="{Binding Name}" />
+            </StackPanel>
 
-            <Border Grid.Row="0" Padding="18,15" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <fi:SymbolIcon Symbol="TextBulletListSquare" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbAccentBrush}" VerticalAlignment="Center" />
-                    <TextBlock Classes="pbTextHeading" Text="NEW READING LIST" VerticalAlignment="Center" />
-                </StackPanel>
-            </Border>
+            <StackPanel>
+                <TextBlock Classes="fieldLabel" Text="BUILD IT FROM…" />
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
+                    <Button Grid.Row="0" Grid.Column="0" Classes="method" Classes.active="{Binding IsBlankMethod}"
+                            Command="{Binding SelectMethodCommand}" CommandParameter="Blank">
+                        <StackPanel>
+                            <Border Classes="methodIcon"><fi:SymbolIcon Symbol="DocumentAdd" FontSize="{StaticResource PbIconSizeSm}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                            <TextBlock Text="Start blank" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="Add issues yourself, one at a time." FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Row="0" Grid.Column="1" Classes="method" Classes.active="{Binding IsImportMethod}"
+                            Command="{Binding SelectMethodCommand}" CommandParameter="Import">
+                        <StackPanel>
+                            <Border Classes="methodIcon"><fi:SymbolIcon Symbol="ArrowImport" FontSize="{StaticResource PbIconSizeSm}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                            <TextBlock Text="Import a file" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="A .CBL or .CSV reading list." FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Row="1" Grid.Column="0" Classes="method" Classes.active="{Binding IsArcMethod}"
+                            Command="{Binding SelectMethodCommand}" CommandParameter="Arc">
+                        <StackPanel>
+                            <Border Classes="methodIcon"><fi:SymbolIcon Symbol="Globe" FontSize="{StaticResource PbIconSizeSm}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                            <TextBlock Text="A published story arc" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="Search ComicVine, Metron &amp; reading-order sites; matched to your library." FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Row="1" Grid.Column="1" Classes="method" Classes.active="{Binding IsEventMethod}"
+                            Command="{Binding SelectMethodCommand}" CommandParameter="Event">
+                        <StackPanel>
+                            <Border Classes="methodIcon"><fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeSm}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+                            <TextBlock Text="An existing story event" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="Pull in every issue tied to one of your Story Events." FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </StackPanel>
 
-            <ScrollViewer Grid.Row="1" Padding="18,16">
-                <StackPanel Spacing="16">
-                    <StackPanel>
-                        <TextBlock Classes="fieldLabel" Text="NAME" />
-                        <TextBox Text="{Binding Name}" />
-                    </StackPanel>
+            <!-- Arc sub-panel -->
+            <StackPanel Spacing="8" IsVisible="{Binding IsArcMethod}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <pbc:SuggestBox Grid.Column="0" IsStrict="True" Suggestions="{Binding ArcSourceNames}"
+                                    Text="{Binding SelectedArcSourceText}" Width="160" />
+                    <TextBox Grid.Column="1" Text="{Binding ArcSearchQuery}" PlaceholderText="Arc or event name…" />
+                    <Button Grid.Column="2" Classes="primary" Content="Search" Command="{Binding SearchArcCommand}" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding ArcSearchResults}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:ArcSearchResultRow">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,4">
+                                <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <Button Grid.Column="1" Classes="primary" Content="Use"
+                                        Command="{Binding $parent[ItemsControl].((vm:NewReadingListViewModel)DataContext).UseArcCommand}"
+                                        CommandParameter="{Binding}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
 
-                    <StackPanel>
-                        <TextBlock Classes="fieldLabel" Text="BUILD IT FROM…" />
-                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
-                            <Button Grid.Row="0" Grid.Column="0" Classes="method" Classes.active="{Binding IsBlankMethod}"
-                                    Command="{Binding SelectMethodCommand}" CommandParameter="Blank">
-                                <StackPanel>
-                                    <Border Classes="methodIcon"><fi:SymbolIcon Symbol="DocumentAdd" FontSize="{StaticResource PbIconSizeSm}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
-                                    <TextBlock Text="Start blank" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                                    <TextBlock Text="Add issues yourself, one at a time." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Button>
-                            <Button Grid.Row="0" Grid.Column="1" Classes="method" Classes.active="{Binding IsImportMethod}"
-                                    Command="{Binding SelectMethodCommand}" CommandParameter="Import">
-                                <StackPanel>
-                                    <Border Classes="methodIcon"><fi:SymbolIcon Symbol="ArrowImport" FontSize="{StaticResource PbIconSizeSm}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
-                                    <TextBlock Text="Import a file" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                                    <TextBlock Text="A .CBL or .CSV reading list." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Button>
-                            <Button Grid.Row="1" Grid.Column="0" Classes="method" Classes.active="{Binding IsArcMethod}"
-                                    Command="{Binding SelectMethodCommand}" CommandParameter="Arc">
-                                <StackPanel>
-                                    <Border Classes="methodIcon"><fi:SymbolIcon Symbol="Globe" FontSize="{StaticResource PbIconSizeSm}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
-                                    <TextBlock Text="A published story arc" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                                    <TextBlock Text="Search ComicVine, Metron &amp; reading-order sites; matched to your library." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Button>
-                            <Button Grid.Row="1" Grid.Column="1" Classes="method" Classes.active="{Binding IsEventMethod}"
-                                    Command="{Binding SelectMethodCommand}" CommandParameter="Event">
-                                <StackPanel>
-                                    <Border Classes="methodIcon"><fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeSm}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
-                                    <TextBlock Text="An existing story event" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                                    <TextBlock Text="Pull in every issue tied to one of your Story Events." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Button>
-                        </Grid>
-                    </StackPanel>
+            <!-- Event sub-panel -->
+            <StackPanel Spacing="6" IsVisible="{Binding IsEventMethod}">
+                <TextBlock Classes="fieldLabel" Text="STORY EVENT" />
+                <pbc:SuggestBox IsStrict="True" Suggestions="{Binding StoryEventNames}" Text="{Binding SelectedStoryEventText}"
+                                HorizontalAlignment="Stretch" Watermark="Pick an event…" />
+                <TextBlock Text="No story events yet." FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
+                           IsVisible="{Binding !StoryEventOptions.Count}" />
+            </StackPanel>
 
-                    <!-- Arc sub-panel -->
-                    <StackPanel Spacing="8" IsVisible="{Binding IsArcMethod}">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                            <pbc:SuggestBox Grid.Column="0" IsStrict="True" Suggestions="{Binding ArcSourceNames}"
-                                            Text="{Binding SelectedArcSourceText}" Width="160" />
-                            <TextBox Grid.Column="1" Text="{Binding ArcSearchQuery}" Watermark="Arc or event name…" />
-                            <Button Grid.Column="2" Classes="primary" Content="Search" Command="{Binding SearchArcCommand}" />
-                        </Grid>
-                        <ItemsControl ItemsSource="{Binding ArcSearchResults}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:ArcSearchResultRow">
-                                    <Grid ColumnDefinitions="*,Auto" Margin="0,3">
-                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                        <Button Grid.Column="1" Classes="primary" Content="Use"
-                                                Command="{Binding $parent[ItemsControl].((vm:NewReadingListViewModel)DataContext).UseArcCommand}"
-                                                CommandParameter="{Binding}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
+            <TextBlock Text="{Binding StatusMessage}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}"
+                       TextWrapping="Wrap" IsVisible="{Binding StatusMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+        </StackPanel>
 
-                    <!-- Event sub-panel -->
-                    <StackPanel Spacing="6" IsVisible="{Binding IsEventMethod}">
-                        <TextBlock Classes="fieldLabel" Text="STORY EVENT" />
-                        <pbc:SuggestBox IsStrict="True" Suggestions="{Binding StoryEventNames}" Text="{Binding SelectedStoryEventText}"
-                                        HorizontalAlignment="Stretch" Watermark="Pick an event…" />
-                        <TextBlock Text="No story events yet." FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
-                                   IsVisible="{Binding !StoryEventOptions.Count}" />
-                    </StackPanel>
+        <controls:DialogCard.Footer>
+            <StackPanel>
+                <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" />
+                <Button Classes="primary" Content="Create" Command="{Binding CreateCommand}" IsEnabled="{Binding CanCreate}" />
 
-                    <TextBlock Text="{Binding StatusMessage}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
-                               TextWrapping="Wrap" IsVisible="{Binding StatusMessage, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                </StackPanel>
-            </ScrollViewer>
-
-            <Border Grid.Row="2" Padding="18,13" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0">
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                    <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" />
-                    <Button Classes="primary" Content="Create" Command="{Binding CreateCommand}" IsEnabled="{Binding CanCreate}" />
-                </StackPanel>
-            </Border>
-        </Grid>
-    </Border>
+            </StackPanel>
+        </controls:DialogCard.Footer>
+    </controls:DialogCard>
 </UserControl>

@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Paperbunkr.App.Theming;
 
 namespace Paperbunkr.App.Services;
 
@@ -18,7 +19,12 @@ public static class DetailAccentScope
     private static readonly string[] Keys =
     {
         "PbAccentColor", "PbAccentBrush", "PbAccentTextColor", "PbAccentTextBrush", "PbAccentSoftColor", "PbAccentSoftBrush",
+        "PbOnAccentColor", "PbOnAccentBrush", "PbAccentHoverColor", "PbAccentHoverBrush",
     };
+
+    // The same two inks ThemeVocabulary derives "text on an accent fill" from, so a re-tinted Core tag chip still reads.
+    private static readonly Color InkDark = Color.Parse("#241505");
+    private static readonly Color InkLight = Color.Parse("#FFF8EC");
 
     /// <summary>Applies (or clears) the scoped accent for <paramref name="cover"/>. Returns the colour used, or null when cleared.</summary>
     public static Color? Apply(Control scopeRoot, Bitmap? cover, bool enabled)
@@ -47,6 +53,13 @@ public static class DetailAccentScope
         scopeRoot.Resources["PbAccentTextBrush"] = new SolidColorBrush(text).ToImmutable();
         scopeRoot.Resources["PbAccentSoftColor"] = soft;
         scopeRoot.Resources["PbAccentSoftBrush"] = new SolidColorBrush(soft).ToImmutable();
+
+        Color onAccent = ThemeColorMath.ReadableOn(accent, InkDark, InkLight);
+        Color hover = ThemeColorMath.IsLight(bg) ? ThemeColorMath.Darken(accent, 0.10) : ThemeColorMath.Lighten(accent, 0.10);
+        scopeRoot.Resources["PbOnAccentColor"] = onAccent;
+        scopeRoot.Resources["PbOnAccentBrush"] = new SolidColorBrush(onAccent).ToImmutable();
+        scopeRoot.Resources["PbAccentHoverColor"] = hover;
+        scopeRoot.Resources["PbAccentHoverBrush"] = new SolidColorBrush(hover).ToImmutable();
         return accent;
     }
 }

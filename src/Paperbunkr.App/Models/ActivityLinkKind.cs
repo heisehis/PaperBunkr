@@ -29,9 +29,10 @@ public enum ActivityLinkKind
     /// <summary>Open the Story Events screen (docs/superpowers/specs/2026-09-17-storyevent-continuity-autopopulate-design.md) - the sidebar shows both Events and Continuities suggestions together, so no payload/mode is needed.</summary>
     StoryEventsScreen,
 
-    /// <summary>Opens payload (a URL) in the OS default browser, not an in-app navigation like every
+    /// <summary>Shell-opens payload (a URL or a local path), not an in-app navigation like every
     /// other entry here - e.g. the update-available alert's "View release" link to the GitHub
-    /// releases page.</summary>
+    /// releases page (opens the default browser), or the freeze watchdog's "Open logs" (a folder,
+    /// opens Explorer).</summary>
     ExternalUrl,
 
     /// <summary>Not a navigation destination like every other entry here - relaunches the app

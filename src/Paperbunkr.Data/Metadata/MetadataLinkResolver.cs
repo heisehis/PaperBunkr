@@ -57,9 +57,9 @@ public static class MetadataLinkResolver
     /// unmodified either way rather than partially linking.
     /// </summary>
     public static async Task<bool> LinkAsync(
-        IMetadataProvider provider, PaperbunkrDbContext context, int seriesId, string externalId, CancellationToken cancellationToken)
+        IMetadataProvider provider, PaperbunkrDbContext context, int seriesId, string externalId, CancellationToken cancellationToken, Manga.MangaApplyOptions? options = null, Action<Manga.MangaApplyResult>? onApplied = null)
     {
-        var series = context.Series.Include(s => s.Titles).FirstOrDefault(s => s.Id == seriesId);
+        var series = context.Series.Include(s => s.Titles).Include(s => s.Credits).Include(s => s.SeriesTags).AsSplitQuery().FirstOrDefault(s => s.Id == seriesId);
         if (series is null)
         {
             return false;
@@ -69,6 +69,18 @@ public static class MetadataLinkResolver
         if (metadata is null)
         {
             return false;
+        }
+
+        // A series the provider merged into another is followed to where it lives now (a few hops at most), so the link and the details are the live entry's.
+        for (int hop = 0; hop < 3 && !string.IsNullOrWhiteSpace(metadata.MergedWithId) && metadata.MergedWithId != metadata.ExternalId; hop++)
+        {
+            var merged = await provider.GetAsync(metadata.MergedWithId!, cancellationToken).ConfigureAwait(false);
+            if (merged is null)
+            {
+                break;
+            }
+
+            metadata = merged;
         }
 
         var existingLink = context.ExternalMediaIds
@@ -108,13 +120,28 @@ public static class MetadataLinkResolver
         AddTitleIfNew(series, metadata.TitleRomaji, SeriesTitleType.Romanized);
         AddTitleIfNew(series, metadata.TitleEnglish, SeriesTitleType.Localized);
 
-        ProposeAndApply(context, series, MetadataProposalField.Summary, series.Summary, metadata.Description, provider.ProviderKey);
-        ProposeAndApply(context, series, MetadataProposalField.Status, series.Status.ToString(), NormalizedStatusOrNull(metadata.Status), provider.ProviderKey);
-        ProposeAndApply(context, series, MetadataProposalField.Genre, series.Genre, metadata.Genre, provider.ProviderKey);
-        ProposeAndApply(context, series, MetadataProposalField.Creator, series.Creator, metadata.Creator, provider.ProviderKey);
-        ExternalTagImportResolver.ApplyToSeries(context, series, metadata);
+        if (Manga.MangaProviderApply.IsLocalManga(series))
+        {
+            // A local manga series, confirmed in Edit Series or not, takes the tiered policy (always / blank-only / suggest-only) and hands the result down to its chapters.
+            var applied = Manga.MangaProviderApply.Apply(context, series, metadata, provider.ProviderKey, options);
+            context.SaveChanges();
+            foreach (int issueId in applied.CreditChangedIssueIds)
+            {
+                CreatorResolver.SyncFromIssue(context, issueId);
+            }
 
-        context.SaveChanges();
+            onApplied?.Invoke(applied);
+        }
+        else
+        {
+            ProposeAndApply(context, series, MetadataProposalField.Summary, series.Summary, metadata.Description, provider.ProviderKey);
+            ProposeAndApply(context, series, MetadataProposalField.Status, series.Status.ToString(), NormalizedStatusOrNull(metadata.Status), provider.ProviderKey);
+            ProposeAndApply(context, series, MetadataProposalField.Genre, series.Genre, metadata.Genre, provider.ProviderKey);
+            ProposeAndApply(context, series, MetadataProposalField.Creator, series.Creator, metadata.Creator, provider.ProviderKey);
+            ExternalTagImportResolver.ApplyToSeries(context, series, metadata);
+            context.SaveChanges();
+        }
+
         return true;
     }
 
@@ -146,10 +173,41 @@ public static class MetadataLinkResolver
     /// (e.g. MangaBaka's Genre) must never overwrite an existing value with nothing.
     /// </summary>
     private static void ProposeAndApply(
-        PaperbunkrDbContext context, Series series, MetadataProposalField field, string? currentValue, string? providedValue, ExternalMetadataProvider providerKey)
+        PaperbunkrDbContext context, Series series, MetadataProposalField field, string? currentValue, string? providedValue, ExternalMetadataProvider providerKey, bool forceCandidate = false)
     {
         if (string.IsNullOrWhiteSpace(providedValue))
         {
+            return;
+        }
+
+        // A field the user set by hand (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §11), or one a provider cannot fill on its own, is kept as a pending
+        // candidate for the user to accept or reject, and the series is left alone. The same unanswered candidate is not stored twice.
+        string? lockKey = field switch
+        {
+            MetadataProposalField.Summary => Manga.MangaFieldLocks.SummaryKey,
+            MetadataProposalField.Status => Manga.MangaFieldLocks.StatusKey,
+            MetadataProposalField.Genre => Manga.MangaInheritedFields.Genre,
+            _ => null,
+        };
+        if (forceCandidate || (lockKey is not null && Manga.MangaFieldLocks.IsLocked(series, lockKey)))
+        {
+            bool alreadyOffered = context.MetadataProposals.Any(p =>
+                p.SeriesId == series.Id && p.Field == field && p.ProviderKey == providerKey && p.Status == MetadataProposalStatus.Pending && p.ProposedValue == providedValue);
+            if (!alreadyOffered && !string.Equals(currentValue, providedValue, StringComparison.OrdinalIgnoreCase))
+            {
+                context.MetadataProposals.Add(new MetadataProposal
+                {
+                    SeriesId = series.Id,
+                    Field = field,
+                    CurrentValue = currentValue,
+                    ProposedValue = providedValue,
+                    Source = MetadataProposalSource.MetadataProvider,
+                    ProviderKey = providerKey,
+                    Confidence = 1.0m,
+                    Status = MetadataProposalStatus.Pending,
+                });
+            }
+
             return;
         }
 
@@ -274,7 +332,7 @@ public static class MetadataLinkResolver
     /// No-op when <paramref name="provider"/> doesn't implement <see cref="IRelationsProvider"/>.
     /// </summary>
     public static async Task RefreshRelationsAsync(
-        IMetadataProvider provider, PaperbunkrDbContext context, int seriesId, string externalId, CancellationToken cancellationToken)
+        IMetadataProvider provider, PaperbunkrDbContext context, int seriesId, string externalId, CancellationToken cancellationToken, Manga.MangaApplyOptions? options = null)
     {
         if (provider is not IRelationsProvider relationsProvider)
         {

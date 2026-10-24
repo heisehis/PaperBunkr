@@ -89,6 +89,17 @@ public class TrackerAutoSyncServiceTests : IDisposable
     // ---- Push ----
 
     [Fact]
+    public async Task UnavailableRemoteRead_DoesNotOverwriteProgress()
+    {
+        int id = SeedSeries("One", 3, TrackingService.AniList);
+        _adapters[TrackingService.AniList].Remote = null;
+        await CreateService().OnIssueFinishedInReaderAsync(id);
+        Assert.Empty(_adapters[TrackingService.AniList].Pushes);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(context.TrackingLinks.Single().LastSyncedAt);
+    }
+
+    [Fact]
     public async Task AfterReading_PushesForwardOnly_NeverSendsScoreOrDate_AndToastsSuccess()
     {
         int id = SeedSeries("One", readThrough: 3, TrackingService.AniList);
@@ -382,7 +393,7 @@ public class TrackerAutoSyncServiceTests : IDisposable
         private int _getCalls;
         public FakeTracker(TrackingService service) { Service = service; }
         public TrackingService Service { get; }
-        public TrackerRemoteEntry? Remote { get; set; }
+        public TrackerRemoteEntry? Remote { get; set; } = new(ReadingStatus.Planned, 0);
         public string? PushError { get; set; }
         public TaskCompletionSource? Gate { get; set; }
         public bool PushStarted { get; private set; }

@@ -10,7 +10,7 @@
              x:DataType="vm:PreferencesScreenViewModel">
 
     <ScrollViewer>
-        <StackPanel Margin="28,20,28,40" Spacing="20">
+        <StackPanel Margin="24,20,24,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="General" />
 
         <StackPanel Tag="general.startup">
@@ -57,6 +57,12 @@
                                Description="Closing the window also minimizes to tray while this is on.">
                 <pref:SettingsRow.SettingsContent>
                     <ToggleSwitch IsChecked="{Binding MinimizeToTray}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Alert" Title="Taskbar badge"
+                               Description="Shows how many Activity Center alerts are waiting on the taskbar button, and dots the tray icon.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding ShowTaskbarBadge}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="Dismiss" Title="Confirm before closing">

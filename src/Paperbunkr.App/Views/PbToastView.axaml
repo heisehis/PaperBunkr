@@ -10,7 +10,7 @@
              x:DataType="models:ToastRequest">
 
     <Border Width="300" Background="{DynamicResource PbSurface3Brush}" BorderBrush="{DynamicResource PbBorderBrush}"
-            BorderThickness="1,1,1,1" CornerRadius="8" Padding="12,10">
+            BorderThickness="1,1,1,1" CornerRadius="{DynamicResource PbRadius}" Padding="12,10">
         <Border.Styles>
             <Style Selector="Border.severityStripe">
                 <Setter Property="Background" Value="{Binding Severity, Converter={x:Static views:ToastSeverityBrushConverter.Instance}}" />
@@ -20,13 +20,13 @@
             <Border Grid.Column="0" Classes="severityStripe" CornerRadius="2" Margin="0,0,10,0" />
             <StackPanel Grid.Column="1" Spacing="6">
                 <StackPanel Orientation="Horizontal" Spacing="7">
-                    <Border Width="16" Height="16" CornerRadius="8"
+                    <Border Width="16" Height="16" CornerRadius="{DynamicResource PbRadius}"
                             Background="{Binding Severity, Converter={x:Static views:ToastSeverityBrushConverter.Instance}}">
                         <fi:SymbolIcon Symbol="{Binding Severity, Converter={x:Static views:ToastSeverityIconConverter.Instance}}"
                                        FontSize="10" Foreground="{DynamicResource PbSurface0Brush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-                    <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold"
+                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
                                Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center"
                                TextWrapping="Wrap" />
                 </StackPanel>
@@ -42,7 +42,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:ToastAction">
-                            <Button Classes="headerAction ghost" Content="{Binding Label}" Command="{Binding Command}" />
+                            <Button Classes="ghost" Content="{Binding Label}" Command="{Binding Command}" />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

@@ -291,7 +291,7 @@ public static class StoryEventIdCompletion
 
     /// <summary>Series name (volume/year-insensitive) and issue number - the arc lists carry no provider issue ids.</summary>
     private static bool SameIssue(Issue issue, Paperbunkr.Data.ReadingLists.Sources.ArcIssue arcIssue) =>
-        string.Equals((issue.EffectiveNumber() ?? string.Empty).Trim(), arcIssue.Number.Trim(), StringComparison.OrdinalIgnoreCase)
+        Paperbunkr.Data.ReadingLists.Matching.IssueNumberKey.Same(issue.EffectiveNumber(), arcIssue.Number)
         && issue.Series is { } series
         && EventNameKeys.For(series.Name, Array.Empty<string>()).Overlaps(EventNameKeys.For(arcIssue.Series, Array.Empty<string>()));
 

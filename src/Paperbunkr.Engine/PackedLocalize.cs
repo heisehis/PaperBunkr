@@ -33,7 +33,7 @@ namespace cYo.Projects.ComicRack.Engine
 								using (Stream stream2 = zipFile.GetInputStream(entry))
 								{
 									byte[] array = new byte[entry.Size];
-									stream2.Read(array, 0, array.Length);
+								stream2.ReadExactly(array);
 									return new MemoryStream(array);
 								}
 							}

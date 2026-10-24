@@ -92,6 +92,28 @@ public class DetailTabsViewModelTests : IDisposable
         return context.Series.Include(s => s.Issues).First(s => s.Id == _seriesId);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Details_ShowProviderDatesAndPopularity_OnlyForCurrentIdentity(bool manga)
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.ExternalMediaIds.Add(new ExternalMediaId { SeriesId = _seriesId, Provider = ExternalMetadataProvider.AniList, ExternalId = "1" });
+            var metadata = new ExternalMediaMetadata("1", "Title", null, null, null, null, null,
+                PublicationStart: new(1997, 7), PublicationEnd: new(2020), Popularity: 123);
+            context.ExternalMetadataSnapshots.AddRange(
+                new ExternalMetadataSnapshot { SeriesId = _seriesId, Provider = ExternalMetadataProvider.AniList, ExternalId = "1", Payload = System.Text.Json.JsonSerializer.Serialize(metadata) },
+                new ExternalMetadataSnapshot { SeriesId = _seriesId, Provider = ExternalMetadataProvider.AniList, ExternalId = "old", RetrievedAt = DateTime.UtcNow.AddDays(1), Payload = System.Text.Json.JsonSerializer.Serialize(metadata with { PublicationStart = new(1900) }) });
+            context.SaveChanges();
+        }
+        var vm = CreateViewModel(isMangaHost: manga);
+        vm.LoadSeries(LoadSeriesEntity());
+        Assert.Contains(vm.AdditionalDetails, r => r.Label == "AniList · Publication start" && r.Value == "1997-07");
+        Assert.Contains(vm.AdditionalDetails, r => r.Label == "AniList · Popularity (users)" && r.Value == "123");
+        Assert.DoesNotContain(vm.AdditionalDetails, r => r.Value == "1900");
+    }
+
     [Fact]
     public void LoadSeries_IssueWithFormat_TileHasFormat()
     {
@@ -941,6 +963,131 @@ public class DetailTabsViewModelTests : IDisposable
         Assert.Equal("Right to Left", vm.ReadingModeLabel);
     }
 
+    // --- Reading mode picker (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §14) ---
+
+    private void SetSeries(Action<Series> change)
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        change(context.Series.First(s => s.Id == _seriesId));
+        context.SaveChanges();
+    }
+
+    [Theory]
+    [InlineData(ReadingMode.LeftToRight, "Left to Right")]
+    [InlineData(ReadingMode.RightToLeft, "Right to Left")]
+    [InlineData(ReadingMode.TopToBottom, "Top to Bottom")]
+    [InlineData(ReadingMode.Webtoon, "Long Strip")]
+    [InlineData(ReadingMode.VerticalContinuous, "Longstrip (gapped)")]
+    [InlineData(ReadingMode.HorizontalContinuous, "Horizontal Long Strip")]
+    [InlineData(ReadingMode.HorizontalContinuousRightToLeft, "Horizontal Long Strip (RTL)")]
+    public void EveryReadingMode_IsShownByTheReadersOwnName(ReadingMode mode, string expected)
+    {
+        SetSeries(s => s.ReadingMode = mode);
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        // Webtoon and the RTL strip used to show as "Left to Right".
+        Assert.Equal(expected, vm.ReadingModeText);
+        Assert.Equal(expected, vm.ReadingModeLabel);
+    }
+
+    [Fact]
+    public void ThePicker_OffersAllSevenModes_WithADescriptionForTheCurrentOne()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.Equal(7, vm.ReadingModeOptions.Length);
+        Assert.Contains("Long Strip", vm.ReadingModeOptions);
+        Assert.False(string.IsNullOrWhiteSpace(vm.ReadingModeDescription));
+    }
+
+    [Fact]
+    public void PickingAMode_SavesItOnTheSeries_AndUpdatesTheLabel()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.ReadingModeText = "Long Strip";
+
+        Assert.Equal("Long Strip", vm.ReadingModeLabel);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(ReadingMode.Webtoon, context.Series.First(s => s.Id == _seriesId).ReadingMode);
+    }
+
+    [Fact]
+    public void TextThatIsNotAMode_IsIgnored()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.ReadingModeText = "Sideways";
+
+        Assert.Equal("Left to Right", vm.ReadingModeLabel);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(ReadingMode.LeftToRight, context.Series.First(s => s.Id == _seriesId).ReadingMode);
+    }
+
+    [Fact]
+    public void ChoosingAMode_TellsTheHostSoItCanFollow()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        ReadingMode? seen = null;
+        vm.ReadingModeChanged = mode => seen = mode;
+
+        vm.ReadingModeText = "Top to Bottom";
+
+        Assert.Equal(ReadingMode.TopToBottom, seen);
+    }
+
+    [Fact]
+    public void ForAMangaSeries_FlippingTheRightToLeftFlag_MarksTheChaptersAsOwingAWrite()
+    {
+        SetSeries(s => s.ContentType = ContentType.Manga);
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        int? queuedFor = null;
+        vm.SeriesMetadataLinked = id => queuedFor = id;
+
+        vm.ReadingModeText = "Right to Left";
+
+        Assert.Equal(_seriesId, queuedFor);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.All(context.Issues.Where(i => i.SeriesId == _seriesId), i => Assert.True(i.EmbeddedDirty));
+    }
+
+    [Fact]
+    public void ChangingBetweenTwoModesTheFileCannotTellApart_QueuesNothing()
+    {
+        SetSeries(s => s.ContentType = ContentType.Manga);
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        int? queuedFor = null;
+        vm.SeriesMetadataLinked = id => queuedFor = id;
+
+        vm.ReadingModeText = "Long Strip";   // left-to-right to a vertical strip: the file's flag is still "not right-to-left"
+
+        Assert.Null(queuedFor);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.DoesNotContain(context.Issues.Where(i => i.SeriesId == _seriesId), i => i.EmbeddedDirty);
+    }
+
+    [Fact]
+    public void ForAComic_NothingIsMarkedForTheFiles()
+    {
+        SetSeries(s => s.ContentType = ContentType.Comic);
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        int? queuedFor = null;
+        vm.SeriesMetadataLinked = id => queuedFor = id;
+
+        vm.ReadingModeText = "Right to Left";
+
+        Assert.Null(queuedFor);
+    }
+
     // --- Related tab (docs/superpowers/specs/2026-08-17-metadata-model-phase3-media-relations-
     // design.md) ---
 
@@ -1524,7 +1671,8 @@ public class DetailTabsViewModelTests : IDisposable
     {
         var provider = new FakeMetadataProvider
         {
-            GetResult = new ExternalMediaMetadata("30013", "Test Series", "https://anilist.co/manga/30013", null, null, null, null),
+            GetResult = new ExternalMediaMetadata("30013", "Test Series", "https://anilist.co/manga/30013", null, null, null, null,
+                PublicationStart: new(1997, 7), Popularity: 123),
         };
         var vm = CreateViewModel(metadataProvider: provider);
         vm.LoadSeries(LoadSeriesEntity());
@@ -1535,6 +1683,7 @@ public class DetailTabsViewModelTests : IDisposable
 
         var link = Assert.Single(vm.ExternalLinks);
         Assert.Equal("30013", link.ExternalId);
+        Assert.Contains(vm.AdditionalDetails, r => r.Label == "AniList · Publication start" && r.Value == "1997-07");
 
         using (var context = new PaperbunkrDbContext(_dbOptions))
         {
@@ -1557,16 +1706,20 @@ public class DetailTabsViewModelTests : IDisposable
         using (var context = new PaperbunkrDbContext(_dbOptions))
         {
             context.ExternalMediaIds.Add(new ExternalMediaId { SeriesId = _seriesId, Provider = ExternalMetadataProvider.AniList, ExternalId = "30013" });
+            context.ExternalMetadataSnapshots.Add(new ExternalMetadataSnapshot { SeriesId = _seriesId, Provider = ExternalMetadataProvider.AniList,
+                ExternalId = "30013", Payload = System.Text.Json.JsonSerializer.Serialize(new ExternalMediaMetadata("30013", "Title", null, null, null, null, null, PublicationStart: new(1997))) });
             context.SaveChanges();
         }
 
         var vm = CreateViewModel();
         vm.LoadSeries(LoadSeriesEntity());
         var link = Assert.Single(vm.ExternalLinks);
+        Assert.Contains(vm.AdditionalDetails, r => r.Label == "AniList · Publication start" && r.Value == "1997");
 
         vm.UnlinkMetadataCommand.Execute(link);
 
         Assert.Empty(vm.ExternalLinks);
+        Assert.DoesNotContain(vm.AdditionalDetails, r => r.Label.StartsWith("AniList ·", StringComparison.Ordinal));
         using var verifyContext = new PaperbunkrDbContext(_dbOptions);
         Assert.NotNull(verifyContext.Series.Find(_seriesId));
         Assert.Empty(verifyContext.ExternalMediaIds.Where(e => e.SeriesId == _seriesId));
@@ -2088,7 +2241,7 @@ public class DetailTabsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void LoadSeries_WebField_MultipleDistinctValues_IsLinkFalse_ValueJoined()
+    public void LoadSeries_WebField_MultipleDistinctValues_IsOneLinkRowEach()
     {
         var vm = CreateViewModel();
         var series = LoadSeriesEntity();
@@ -2097,8 +2250,8 @@ public class DetailTabsViewModelTests : IDisposable
 
         vm.LoadSeries(series);
 
-        var row = Assert.Single(vm.AdditionalDetails, r => r.Label == "Web");
-        Assert.False(row.IsLink);
-        Assert.Equal("https://example.com/a, https://example.com/b", row.Value);
+        var rows = vm.AdditionalDetails.Where(r => r.Label == "Web").ToList();
+        Assert.Equal(new[] { "https://example.com/a", "https://example.com/b" }, rows.Select(r => r.Value));
+        Assert.All(rows, r => Assert.True(r.IsLink));
     }
 }

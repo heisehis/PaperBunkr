@@ -19,7 +19,8 @@ namespace Paperbunkr.Data.Metadata;
 /// suggestion sourced from one of those carries a fan-wiki key instead of pretending a Wikidata QID
 /// exists.
 /// </summary>
-public sealed record ContinuitySuggestion(Series Series, string? WikidataQid, string? FandomKey, string UniverseLabel, string? UniverseDescription, FormatSignalStrength Strength, string Reason);
+public sealed record ContinuitySuggestion(Series Series, string? WikidataQid, string? FandomKey, string UniverseLabel, string? UniverseDescription, FormatSignalStrength Strength, string Reason,
+    int? MetronUniverseId = null, string? MetronDesignation = null, string? MetronPublisher = null);
 
 /// <summary>
 /// Groups <see cref="Series"/> into shared-universe <see cref="Continuity"/> suggestions by

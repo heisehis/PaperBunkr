@@ -163,7 +163,7 @@ public partial class App : Application
 
         // Activity Center history prune (docs/superpowers/specs/2026-09-03-activity-center-
         // design.md) - same fire-and-forget, self-swallowing shape as the two triggers above.
-        System.Threading.Tasks.Task.Run(ActivityHistoryStore.PruneOnStartup);
+        _ = System.Threading.Tasks.Task.Run(ActivityHistoryStore.PruneOnStartup);
 
         // The application-wide input service (docs/superpowers/specs/2026-10-03-input-service-design.md): every key, mouse-button, wheel and gamepad input resolves to an action
         // through it. keymap.json holds the user's remaps; the first launch after the upgrade carries over the old KeyBinding table's remaps (read-only - the table stays, since
@@ -234,8 +234,8 @@ public partial class App : Application
         var transitionCoordinator = new NavigationTransitionCoordinator(
             SharedElementTransitionService.Shared,
             isReducedMotion: themeService.GetReducedMotion,
-            flightDuration: () => Application.Current!.TryGetResource("PbMotionLarge", null, out var large) && large is TimeSpan d ? d : TimeSpan.FromMilliseconds(320),
-            easing: new CubicEaseOut());
+            flightDuration: Theming.Motion.MotionPolicy.FlightDuration,
+            easing: Application.Current!.TryGetResource("PbMotionMoveEase", null, out var moveEase) && moveEase is Easing flightEase ? flightEase : new CubicEaseOut());
         DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] transition coordinator ready; constructing MainViewModel...");
         var mainViewModel = new MainViewModel(transitionCoordinator.RunAsync, themeService);
 
@@ -255,6 +255,9 @@ public partial class App : Application
         // no subscriber yet), then live thereafter for any theme switch during this session.
         ApplyWindowBackdrop(mainWindow, themeService.LoadTheme(themeService.GetActiveThemeKey()).WindowBackdrop);
         themeService.WindowBackdropRequested += backdrop => ApplyWindowBackdrop(mainWindow, backdrop);
+
+        // The taskbar badge and tray dot are drawn in the skin's accent, so redraw them once a skin switch has settled.
+        themeService.ThemeApplied += () => Avalonia.Threading.Dispatcher.UIThread.Post(() => mainWindow.RefreshTaskbarBadge(rerender: true), Avalonia.Threading.DispatcherPriority.Background);
 
         // Show the main window (its shell chrome renders against the empty default "home" screen),
         // hold the splash to its MinimumVisible floor, then fade it out - all BEFORE the initial
@@ -276,7 +279,7 @@ public partial class App : Application
         // thread so the hand-off doesn't cut straight from the construction freeze into the fade
         // (skipped under reduced motion). Only then fade out.
         await splashViewModel.EnforceMinimumVisibleAsync(splashShownAtUtc);
-        if (!themeService.GetReducedMotion())
+        if (Theming.Motion.MotionPolicy.AllowsContinuous())
         {
             await Task.Delay(TimeSpan.FromMilliseconds(1100));
         }
@@ -342,6 +345,18 @@ public partial class App : Application
             _ = Task.Run(mainViewModel.ShowWhatsNewOrCheckForUpdatesAsync);
         }
 
+        // Provider answers kept between scrapes (docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-core-design.md section 3). Set here,
+        // not as a default, so tests never write into the user's data folder; expired entries are pruned off the UI thread.
+        Paperbunkr.Data.ComicVine.Caching.ProviderCache.Shared = new Paperbunkr.Data.ComicVine.Caching.ProviderCache(Paperbunkr.Data.AppDataPaths.Combine("provider-cache"));
+        _ = Task.Run(() => Paperbunkr.Data.ComicVine.Caching.ProviderCache.Shared.PruneExpired());
+        Paperbunkr.Data.ComicVine.Scraping.ScrapeJobStore.Shared = new Paperbunkr.Data.ComicVine.Scraping.ScrapeJobStore(Paperbunkr.Data.AppDataPaths.Combine("scrape-jobs"));
+        Paperbunkr.Data.ComicVine.Scraping.ScrapeReviewQueue.Shared = new Paperbunkr.Data.ComicVine.Scraping.ScrapeReviewQueue(Paperbunkr.Data.AppDataPaths.Combine("scrape-review.json"));
+        Paperbunkr.Data.ComicVine.Scraping.ScrapeUndoStore.Shared = new Paperbunkr.Data.ComicVine.Scraping.ScrapeUndoStore(Paperbunkr.Data.AppDataPaths.Combine("scrape-undo"));
+        Paperbunkr.Data.ComicVine.Scraping.ScrapeDecisionHistory.Shared = new Paperbunkr.Data.ComicVine.Scraping.ScrapeDecisionHistory(Paperbunkr.Data.AppDataPaths.Combine("scrape-decisions.json"));
+
+        // Manga chapters that still owe a write to their file (edited, then the app closed first) are queued again - only those, never the whole library.
+        _ = Task.Run(mainViewModel.ResumeEmbeddedSyncAsync);
+
         // Safe-mode notice (docs/superpowers/specs/2026-09-10-bootstrap-crash-sentinel-safe-mode-
         // design.md §5.3) - this launch is a post-crash software-rendering retry. A dismissible
         // Activity Center warning, not a modal: the app is fully usable this way. Coexists with the
@@ -362,10 +377,34 @@ public partial class App : Application
             });
         }
 
-        // App chrome (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-
-        // design.md §3) - started once the UI thread is actually pumping, since the watchdog's
-        // heartbeat ping needs a live Dispatcher to answer it.
-        new FreezeWatchdogService().Start();
+        // Freeze watchdog (docs/superpowers/specs/2026-10-21-freeze-watchdog-redesign-design.md) -
+        // started once the UI thread is actually pumping, since the watchdog's heartbeat ping needs
+        // a live Dispatcher to answer it. After a freeze that showed the "not responding" dialog,
+        // the recovery is reported in the Activity Center (RaiseAlert is safe from any thread).
+        new FreezeWatchdogService(onRecoveredAfterFreeze: duration => mainViewModel.Activity.RaiseAlert(new ActivityAlert
+        {
+            Severity = ActivityAlertSeverity.Warning,
+            Title = $"Paperbunkr stopped responding for {FreezeDurationText.Format(duration)}",
+            Detail = "It recovered on its own. A log of what it was doing was saved in case it happens again.",
+            ActionLabel = "Open logs",
+            ActionLink = new ActivityLink(ActivityLinkKind.ExternalUrl, DiagnosticsService.LogDirectory),
+            DedupeKey = "freeze-watchdog-recovered",
+        })).Start();
+
+#if DEBUG
+        // On-screen check for the watchdog (spec §7): PAPERBUNKR_SIMULATE_FREEZE=<seconds> blocks
+        // the UI thread once, 5 s after startup. Debug builds only; not a user feature.
+        if (int.TryParse(Environment.GetEnvironmentVariable("PAPERBUNKR_SIMULATE_FREEZE"), out int simulatedFreezeSeconds)
+            && simulatedFreezeSeconds > 0)
+        {
+            _ = Task.Delay(TimeSpan.FromSeconds(5)).ContinueWith(_ =>
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    DiagnosticsService.LogMilestone($"Simulating a {simulatedFreezeSeconds}s UI freeze (PAPERBUNKR_SIMULATE_FREEZE)");
+                    System.Threading.Thread.Sleep(TimeSpan.FromSeconds(simulatedFreezeSeconds));
+                }));
+        }
+#endif
 
         // Plugin API v2 (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §2) -
         // discovers/precompiles plugins and fires the Startup hook. Runs after the main window
@@ -395,6 +434,16 @@ public partial class App : Application
         // Proactive scan alerts (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-
         // scan-alerts-design.md §4) - same "no natural attach point" reasoning as PluginHost above.
         LibraryFolderScanner.ScanAlertService = new PluginScanAlertService(pluginHost, mainViewModel.Activity);
+        // Reading-list entries a scan just filled in (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.9) - said once,
+        // quietly, and only when something was linked. Raised from the scan's background thread, so hop to the UI thread first.
+        LibraryFolderScanner.ReadingListsHealed = healed => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            mainViewModel.Activity.RaiseAlert(new ActivityAlert
+            {
+                Severity = ActivityAlertSeverity.Info,
+                Title = "Reading lists filled in",
+                Detail = $"New comics matched entries that were waiting for them: {healed.Summary}",
+                DedupeKey = "reading-lists-healed",
+            }));
         // DrawThumbnailOverlay (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-
         // hooks-plan.md §12) - AsyncPluginOverlayImage is a static attached-property helper,
         // same "no natural AttachHost point" reasoning as LibraryFolderScanner above.
@@ -424,6 +473,13 @@ public partial class App : Application
             (seriesId, ct) => Paperbunkr.App.Services.SeriesProviderRefresh.RefreshAsync(Paperbunkr.App.Services.PaperbunkrDb.CreateContext, seriesId, ct),
             Paperbunkr.App.Services.SeriesProviderRefresh.CanRefresh);
         desktop.Exit += (_, _) => smartReactions.Dispose();
+
+        // New comics from a scan are scraped in the background (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 9).
+        var scrapeOnImport = new Paperbunkr.App.Scraper.ScrapeOnImport(
+            Paperbunkr.Data.Events.LibraryEvents.Default,
+            Paperbunkr.App.Services.PaperbunkrDb.CreateContext,
+            ids => mainViewModel.Scraper.ScrapeIssuesAsync(ids, isInteractive: false, jobKind: "Import"));
+        desktop.Exit += (_, _) => scrapeOnImport.Dispose();
 
         // Comic acquisition daemon: the bridge drains its events into Activity Center, then the timer starts. On exit the
         // service is stopped with a short cap so a cycle stuck on the network can never hold the app open.

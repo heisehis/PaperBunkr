@@ -49,7 +49,7 @@
                                 <views:CoverThumb Width="46" Height="64" VerticalAlignment="Top" CoverKey="{Binding CoverKey}"
                                                    IsVisible="{Binding CoverKey, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
                                 <StackPanel Spacing="6">
-                                    <TextBlock Text="{Binding Label}" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    <TextBlock Text="{Binding Label}" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
                                     <TextBlock Text="{Binding Value}" FontSize="40" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}"
                                                TextWrapping="Wrap" />
                                 </StackPanel>

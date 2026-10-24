@@ -244,7 +244,16 @@ namespace cYo.Common.Threading
 		{
 			if (thread != null && thread.IsAlive && !thread.Join(timeOut))
 			{
-				thread.Abort();
+				// Thread.Abort is unsupported on modern .NET. Interrupt a managed wait where possible,
+				// then wait for the worker to leave before its owner releases shared state.
+				try
+				{
+					thread.Interrupt();
+				}
+				catch (ThreadStateException)
+				{
+					// The worker may have exited between the timed join and the interrupt.
+				}
 				thread.Join();
 			}
 		}

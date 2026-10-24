@@ -8,22 +8,14 @@
         screens read as part of the same system as the rest of the reworked app.
     -->
 
-    <Style Selector="Border.statCard">
-        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-        <Setter Property="Padding" Value="16,12" />
-        <Setter Property="MinWidth" Value="120" />
-    </Style>
     <Style Selector="TextBlock.statNumber">
-        <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
+        <Setter Property="FontFamily" Value="{DynamicResource PbDisplayFontFamily}" />
         <Setter Property="FontSize" Value="24" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
     </Style>
     <Style Selector="TextBlock.statLabel">
-        <Setter Property="FontSize" Value="10.5" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         <Setter Property="Margin" Value="0,2,0,0" />
     </Style>
 
@@ -37,7 +29,35 @@
         <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="Padding" Value="10,6" />
+    </Style>
+    <!-- Toolbar search boxes keep a full rounded border (foundation design §4, Q12): form fields are underlined via FluentBridge.axaml's
+         TextControlBorderThemeThickness, and FluentAvalonia's state styles assign PART_BorderElement from those keys, so the part itself is
+         pinned here for every state. -->
+    <Style Selector="TextBox.searchBox /template/ Border#PART_BorderElement">
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+    </Style>
+    <Style Selector="TextBox.searchBox:pointerover /template/ Border#PART_BorderElement">
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbTextMutedBrush}" />
+    </Style>
+    <Style Selector="TextBox.searchBox:focus /template/ Border#PART_BorderElement">
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+
+    <!-- A text box drawn inside its own pill or container (Library toolbar search, Quick Open, ...): no border and no fill in any state.
+         FluentAvalonia's :focus/:pointerover styles set PART_BorderElement's background and thickness from resources, ignoring the
+         TextBox's own Background="Transparent" BorderThickness="0", so the part is pinned here. -->
+    <Style Selector="TextBox.bare">
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBox.bare /template/ Border#PART_BorderElement, TextBox.bare:pointerover /template/ Border#PART_BorderElement, TextBox.bare:focus /template/ Border#PART_BorderElement">
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
     </Style>
 </Styles>

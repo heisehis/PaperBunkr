@@ -30,6 +30,13 @@ public interface IReadingListSource
     /// <summary>Returns the arc's issues already in the source's own curated reading order.</summary>
     Task<IReadOnlyList<ArcIssue>> GetArcIssuesInOrderAsync(string arcId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The same order plus what the source dropped on the way (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.7).
+    /// Only an adapter that can lose entries overrides this; the default reports none.
+    /// </summary>
+    async Task<ArcEntryList> GetArcEntriesAsync(string arcId, CancellationToken cancellationToken) =>
+        new(await GetArcIssuesInOrderAsync(arcId, cancellationToken).ConfigureAwait(false), Array.Empty<string>());
+
     /// <summary>Best-effort synopsis + cover art for the arc itself. Never required to succeed - callers treat a thrown exception or an all-null result the same as "no overview info available."</summary>
     Task<ArcOverviewInfo?> GetArcOverviewAsync(string arcId, CancellationToken cancellationToken);
 }

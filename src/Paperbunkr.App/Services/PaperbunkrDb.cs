@@ -57,6 +57,7 @@ public static class PaperbunkrDb
         SeedSystemSmartLists(context);
         BackfillCharacterIndex(context);
         Paperbunkr.Data.Acquisition.TemplateUpgrade.Run(context);   // one-time: acquisition rename template -> shared template grammar
+        Paperbunkr.Data.ReadingLists.ReadingListTagReconciler.ReconcileAll(CreateContext);
 
         // Deterministically create the AppSettings singleton row here, synchronously, on a single
         // context - not left to whichever caller happens to touch it first. Confirmed necessary the

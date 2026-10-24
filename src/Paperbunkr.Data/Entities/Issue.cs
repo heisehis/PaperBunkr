@@ -132,6 +132,9 @@ public class Issue
 
     public int? PageCount { get; set; }
 
+    /// <summary>Zero-based archive page whose thumbnail represents this issue when several pages are tagged <see cref="PageType.Cover"/>. Null uses the first Cover page, then archive page zero.</summary>
+    public int? PreferredCoverPageNumber { get; set; }
+
     public string? LanguageISO { get; set; }
 
     public string? Format { get; set; }
@@ -383,4 +386,21 @@ public class Issue
     /// list ignores this and still shows every duplicate when browsed directly.
     /// </summary>
     public bool DuplicateAcknowledged { get; set; }
+
+    // --- Embedded-metadata sync state (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §10) ---
+
+    /// <summary>Durable "this file owes a metadata write", set in the same transaction as the edit that made it stale and cleared only after a confirmed write.</summary>
+    public bool EmbeddedDirty { get; set; }
+
+    /// <summary>SHA-256 of what was exported at the last successful write; an unchanged export is never rewritten.</summary>
+    public string? EmbeddedFingerprint { get; set; }
+
+    /// <summary>"size:modifiedTicks" of the file right after our last write; a different stamp later means something else changed the file.</summary>
+    public string? EmbeddedFileStamp { get; set; }
+
+    public EmbeddedSyncState EmbeddedSyncState { get; set; } = EmbeddedSyncState.None;
+
+    public string? EmbeddedSyncMessage { get; set; }
+
+    public List<IssueFieldOverride> FieldOverrides { get; set; } = new();
 }

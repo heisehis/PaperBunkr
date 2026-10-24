@@ -12,12 +12,12 @@
 
     <DataTemplate x:Key="ActivityJobRowTemplate" DataType="models:ActivityJob">
         <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadiusSm}"
-                Padding="9,7" Margin="0,2">
+                Padding="8,8" Margin="0,2">
             <StackPanel Spacing="3">
                 <Grid ColumnDefinitions="Auto,*,Auto">
                     <!-- The job's kind icon (a per-source glyph), ringed by a determinate progress arc while it runs
                          (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #21). -->
-                    <Panel Grid.Column="0" Width="26" Height="26" Margin="0,0,7,0" VerticalAlignment="Center">
+                    <Panel Grid.Column="0" Width="26" Height="26" Margin="0,0,8,0" VerticalAlignment="Center">
                         <controls:ProgressArcRing Fraction="{Binding Fraction}" IsIndeterminate="{Binding IsIndeterminate}" IsVisible="{Binding IsRunning}" />
                         <fi:SymbolIcon FontSize="{StaticResource PbIconSizeXs}" HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Symbol="{Binding Kind, Converter={x:Static views:ActivityKindIconConverter.Instance}}"
@@ -35,7 +35,7 @@
                         <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                     </Button>
 
-                    <Border Grid.Column="2" IsVisible="{Binding IsFinished}" CornerRadius="{StaticResource PbRadiusChip}" Padding="7,1"
+                    <Border Grid.Column="2" IsVisible="{Binding IsFinished}" CornerRadius="{StaticResource PbRadiusChip}" Padding="8,1"
                             Background="{DynamicResource PbSurface2Brush}" VerticalAlignment="Center">
                         <TextBlock FontSize="{DynamicResource PbFontSizeMicro}"
                                    Text="{Binding Status, Converter={x:Static views:ActivityStatusLabelConverter.Instance}}"
@@ -62,18 +62,18 @@
     <DataTemplate x:Key="ActivityGroupHeaderTemplate" DataType="models:ActivityGroupHeader">
         <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,8,0,2">
             <TextBlock Text="{Binding Title}" FontSize="{DynamicResource PbFontSizeMicro}" FontWeight="Bold"
-                       Foreground="{DynamicResource PbTextFaintBrush}" />
+                       Foreground="{DynamicResource PbTextMutedBrush}" />
             <TextBlock Text="{Binding Count}" FontSize="{DynamicResource PbFontSizeMicro}"
-                       Foreground="{DynamicResource PbTextFaintBrush}" />
+                       Foreground="{DynamicResource PbTextMutedBrush}" />
         </StackPanel>
     </DataTemplate>
 
     <DataTemplate x:Key="ActivityAlertRowTemplate" DataType="vm:ActivityAlertViewModel">
         <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadiusSm}"
-                Padding="9,7" Margin="0,2" BorderThickness="3,0,0,0"
+                Padding="8,8" Margin="0,2" BorderThickness="3,0,0,0"
                 BorderBrush="{Binding Alert.Severity, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <fi:SymbolIcon Grid.Column="0" FontSize="{StaticResource PbIconSizeSm}" Margin="0,0,7,0" VerticalAlignment="Top"
+                <fi:SymbolIcon Grid.Column="0" FontSize="{StaticResource PbIconSizeSm}" Margin="0,0,8,0" VerticalAlignment="Top"
                                Symbol="{Binding Alert.Severity, Converter={x:Static views:ActivitySeverityIconConverter.Instance}}"
                                Foreground="{Binding Alert.Severity, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}" />
                 <StackPanel Grid.Column="1" Spacing="2">
@@ -105,9 +105,9 @@
                                FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="4">
                         <TextBlock Text="{Binding StartedUtc, Converter={x:Static views:RelativeTimeConverter.Instance}}"
-                                   FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <TextBlock Text="·" FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <TextBlock Text="{Binding TriggerLabel}" FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                   FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <TextBlock Text="·" FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <TextBlock Text="{Binding TriggerLabel}" FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextMutedBrush}" />
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Spacing="3" Margin="0,0,10,0">

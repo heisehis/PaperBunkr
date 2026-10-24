@@ -69,6 +69,9 @@ public class AppSettings
     /// </summary>
     public bool ReducedMotion { get; set; }
 
+    /// <summary>App-wide motion preference. ReducedMotion remains as a compatibility column for older builds.</summary>
+    public MotionPreferenceMode MotionPreference { get; set; } = MotionPreferenceMode.System;
+
     /// <summary>Whether opening an issue resumes at <see cref="Issue.LastPageRead"/>, or always starts at page 1. CE default: true.</summary>
     public bool OpenLastPage { get; set; } = true;
 
@@ -111,6 +114,22 @@ public class AppSettings
     /// found it's a different feature, not a parity gap to port.
     /// </summary>
     public bool ReaderAutoHideChrome { get; set; } = true;
+
+    /// <summary>
+    /// Preferences > Reader > "Ambient motion" (docs/superpowers/specs/2026-10-20-motion-system-v2-reader-design.md Q34): with the Ambient
+    /// background, the backdrop drifts against the page's pan/scroll (parallax) and sways very slowly while reading. Off by default so the
+    /// reader stays quiet unless chosen; the global Motion setting and the quality tier still gate it. No CE equivalent - a deliberate
+    /// addition.
+    /// </summary>
+    public bool ReaderAmbientMotion { get; set; }
+
+    /// <summary>
+    /// Preferences > Reader > "Book look for spreads" (docs/superpowers/specs/2026-10-20-motion-system-v2-reader-design.md §7): on a double-
+    /// page spread, page bows at the spine and outer edges plus a thin outline - CE's "Realistic pages" (<c>DisplayWorkspace.DrawRealisticPages</c>,
+    /// on by default; <c>EngineConfiguration.PageBowCenter</c>/<c>PageBowBorder</c>) - and page-stack edges showing how far through the book
+    /// you are (a Paperbunkr addition). Spreads only; a reader profile can override it.
+    /// </summary>
+    public bool ReaderBookLook { get; set; } = true;
 
     /// <summary>
     /// Which mechanism reveals the comic reader's chrome clusters - swappable per direct user
@@ -254,6 +273,9 @@ public class AppSettings
     /// CE's own <c>BlendWhilePaging</c> default of <c>false</c>.
     /// </summary>
     public PageTransitionStyle PageTransitionStyle { get; set; } = PageTransitionStyle.None;
+
+    /// <summary>Global comic Reader page framing. Defaults to no frame.</summary>
+    public ReaderPageFrameStyle ReaderPageFrameStyle { get; set; } = ReaderPageFrameStyle.None;
 
     /// <summary>
     /// Page-turn transition duration in milliseconds, UI range 100-600 (spec §2) - CE parity in
@@ -545,6 +567,12 @@ public class AppSettings
     /// to just this one flag since there's no other suppressible message in this app yet.
     /// </summary>
     public bool MinimizeToTrayNoticeShown { get; set; }
+
+    /// <summary>
+    /// Whether the Windows taskbar button shows a count of pending Activity Center alerts (Cosmetics pitch #24)
+    /// and the tray icon gains an accent dot while that count is above zero. No CE precedent; default on because it only adds a small overlay.
+    /// </summary>
+    public bool ShowTaskbarBadge { get; set; } = true;
 
     /// <summary>
     /// Whether clicking the main window's close button asks "Close Paperbunkr?" before actually

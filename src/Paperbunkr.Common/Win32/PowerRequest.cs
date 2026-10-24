@@ -18,7 +18,6 @@ namespace cYo.Common.Win32
 			{
 			}
 
-			[ReliabilityContract(Consistency.WillNotCorruptState, Cer.MayFail)]
 			protected override bool ReleaseHandle()
 			{
 				return NativeMethods.CloseHandle(handle);
@@ -61,7 +60,6 @@ namespace cYo.Common.Win32
 			internal const int POWER_REQUEST_CONTEXT_SIMPLE_STRING = 1;
 
 			[DllImport("kernel32", SetLastError = true)]
-			[ReliabilityContract(Consistency.WillNotCorruptState, Cer.MayFail)]
 			[return: MarshalAs(UnmanagedType.Bool)]
 			internal static extern bool CloseHandle(IntPtr handle);
 

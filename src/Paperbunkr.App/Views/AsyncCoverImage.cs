@@ -354,11 +354,15 @@ public sealed class AsyncCoverImage
     /// toggles-design.md) - CE's <c>FadeInThumbnails</c>, ~120ms matching this codebase's existing
     /// <c>CheckBox.tileSelect</c> hover-fade idiom (<c>LibraryScreen.axaml</c>). Shared instance since
     /// <see cref="Transitions"/> only needs its property/duration/easing set once per <see cref="Image"/>.</summary>
-    private static readonly TimeSpan FadeDuration = TimeSpan.FromMilliseconds(300);
-
     private static Transitions BuildFadeTransitions() => new()
     {
-        new DoubleTransition { Property = Visual.OpacityProperty, Duration = FadeDuration, Easing = new LinearEasing() },
+        // Motion v2 D: the Replace fade and the shared entering curve, read when the fade is armed.
+        new DoubleTransition
+        {
+            Property = Visual.OpacityProperty,
+            Duration = Paperbunkr.App.Theming.Motion.MotionPolicy.Resolve(Paperbunkr.App.Theming.Motion.MotionRole.Replace).Fade,
+            Easing = Application.Current is { } app && app.TryGetResource("PbMotionEase", null, out var ease) && ease is Easing curve ? curve : new LinearEasing(),
+        },
     };
 
     /// <summary>Covers already faded in this session. CE fades an item once, on its first valid image, and keeps the
@@ -381,7 +385,7 @@ public sealed class AsyncCoverImage
         image.Transitions = null;
 
         bool fadeOn = CosmeticThumbnailSettings.FadeInThumbnails
-            && !(Application.Current is not null && Controls.MotionTokens.IsReducedMotion());
+            && (Application.Current is null || Paperbunkr.App.Theming.Motion.MotionPolicy.AllowsMotion(Paperbunkr.App.Theming.Motion.MotionRole.Replace));
         if (fadeOn && !s_fadeWasOn)
         {
             // Just switched on: fade everything again, so the change is visible right away.

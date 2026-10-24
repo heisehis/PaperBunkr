@@ -77,15 +77,15 @@
                               ZoomLevel="{Binding ZoomLevel}" PanOffsetX="{Binding PanOffsetX}" PanOffsetY="{Binding PanOffsetY}"
                               HighQualityDisplay="True" MinZoomLevel="0.25" />
             <Border Grid.Column="1" IsVisible="{Binding IsSideBySide}" Width="1" HorizontalAlignment="Left" Background="{DynamicResource PbBorderBrush}" IsHitTestVisible="False" />
-            <Border Grid.Column="0" Classes="floatingPanel" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12" Padding="8,3" IsHitTestVisible="False">
-                <TextBlock Text="A" FontWeight="Bold" FontSize="14" />
+            <Border Grid.Column="0" Classes="floatingPanel" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12" Padding="8,4" IsHitTestVisible="False">
+                <TextBlock Text="A" FontWeight="Bold" FontSize="15" />
             </Border>
-            <Border Grid.Column="1" IsVisible="{Binding IsSideBySide}" Classes="floatingPanel" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12" Padding="8,3" IsHitTestVisible="False">
-                <TextBlock Text="B" FontWeight="Bold" FontSize="14" />
+            <Border Grid.Column="1" IsVisible="{Binding IsSideBySide}" Classes="floatingPanel" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12" Padding="8,4" IsHitTestVisible="False">
+                <TextBlock Text="B" FontWeight="Bold" FontSize="15" />
             </Border>
-            <Border Grid.Column="0" Grid.ColumnSpan="2" IsVisible="{Binding IsFlicker}" Classes="floatingPanel" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="12" Padding="10,3"
+            <Border Grid.Column="0" Grid.ColumnSpan="2" IsVisible="{Binding IsFlicker}" Classes="floatingPanel" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="12" Padding="10,4"
                     IsHitTestVisible="False">
-                <TextBlock Text="{Binding FlickerLabel, StringFormat='Showing {0}'}" FontWeight="Bold" FontSize="14" />
+                <TextBlock Text="{Binding FlickerLabel, StringFormat='Showing {0}'}" FontWeight="Bold" FontSize="15" />
             </Border>
         </Grid>
 
@@ -104,7 +104,7 @@
                     <TextBlock FontSize="12">
                         <Run Text="{Binding FactsA.SizeLabel, StringFormat='File: {0}', Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding FactsA.Format}" /><Run Text="  ·  " /><Run Text="{Binding FactsA.PageCount, StringFormat='{}{0} pages', Mode=OneWay}" />
                     </TextBlock>
-                    <TextBlock Text="{Binding FactsA.BytesPerPageLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <TextBlock Text="{Binding FactsA.BytesPerPageLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                     <TextBlock Text="{Binding BadgesA}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentTextBrush}" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="2">
@@ -113,7 +113,7 @@
                     <TextBlock FontSize="12">
                         <Run Text="{Binding FactsB.SizeLabel, StringFormat='File: {0}', Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding FactsB.Format}" /><Run Text="  ·  " /><Run Text="{Binding FactsB.PageCount, StringFormat='{}{0} pages', Mode=OneWay}" />
                     </TextBlock>
-                    <TextBlock Text="{Binding FactsB.BytesPerPageLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <TextBlock Text="{Binding FactsB.BytesPerPageLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                     <TextBlock Text="{Binding BadgesB}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentTextBrush}" />
                 </StackPanel>
             </Grid>

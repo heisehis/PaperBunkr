@@ -56,7 +56,7 @@ public class MangaDetailContextMenuBuilderTests : IDisposable
         Assert.NotNull(entries);
         var headers = entries!.Select(e => e.IsSeparator ? null : e.Header).ToList();
         Assert.Equal(
-            new[] { "Edit Properties", "Show in Explorer", null, "Mark as Read", "Mark as Unread", null, "Set Cover…", "Reset Cover" },
+            new[] { "Edit Chapter Details", "Edit Series…", "Show in Explorer", null, "Mark as Read", "Mark as Unread", null, "Set Cover…", "Reset Cover" },
             headers);
     }
 
@@ -69,7 +69,7 @@ public class MangaDetailContextMenuBuilderTests : IDisposable
 
         var entries = builder.Build(row);
 
-        var editEntry = entries!.First(e => e.Header == "Edit Properties");
+        var editEntry = entries!.First(e => e.Header == "Edit Chapter Details");
         Assert.Same(vm.EditChapterPropertiesCommand, editEntry.Command);
         Assert.Same(row, editEntry.CommandParameter);
     }

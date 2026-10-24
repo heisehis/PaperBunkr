@@ -39,23 +39,15 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider
 
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern JxlDecoderStatus JxlDecoderSubscribeEvents(IntPtr decoder, int eventsWanted);
-
-            [CLSCompliant(false)]
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern JxlDecoderStatus JxlDecoderSetInput(IntPtr decoder, byte[] data, UIntPtr size);
 
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern JxlDecoderStatus JxlDecoderProcessInput(IntPtr decoder);
-
-            [CLSCompliant(false)]
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern JxlDecoderStatus JxlDecoderGetBasicInfo(IntPtr decoder, out JxlBasicInfo info);
-
-            [CLSCompliant(false)]
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern JxlDecoderStatus JxlDecoderImageOutBufferSize(IntPtr decoder, ref JxlPixelFormat format, out UIntPtr size);
-
-            [CLSCompliant(false)]
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern JxlDecoderStatus JxlDecoderSetImageOutBuffer(IntPtr decoder, ref JxlPixelFormat format, IntPtr buffer, UIntPtr size);
 
@@ -80,12 +72,8 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider
 
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern JxlEncoderStatus JxlEncoderFrameSettingsSetOption(IntPtr frameSettings, JxlEncoderFrameSettingId option, long value);
-
-            [CLSCompliant(false)]
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern JxlEncoderStatus JxlEncoderSetBasicInfo(IntPtr encoder, ref JxlBasicInfo info);
-
-            [CLSCompliant(false)]
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern JxlEncoderStatus JxlEncoderAddImageFrame(IntPtr frameSettings, ref JxlPixelFormat format, IntPtr buffer, UIntPtr size);
 
@@ -94,20 +82,12 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider
 
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern void JxlEncoderCloseInput(IntPtr encoder);
-
-            [CLSCompliant(false)]
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static unsafe extern JxlEncoderStatus JxlEncoderProcessOutput(IntPtr encoder, byte** nextOut, UIntPtr* availOut);
-
-            [CLSCompliant(false)]
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern void JxlColorEncodingSetToSRGB(ref JxlColorEncoding colorEncoding, int isGray);
-
-            [CLSCompliant(false)]
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern JxlEncoderStatus JxlEncoderSetColorEncoding(IntPtr encoder, ref JxlColorEncoding colorEncoding);
-
-            [CLSCompliant(false)]
             [DllImport(JxlLibrary, CallingConvention = CallingConvention.Cdecl)]
             public static extern JxlEncoderStatus JxlEncoderAddJPEGFrame(IntPtr frameSettings, byte[] buffer, UIntPtr size);
 
@@ -161,8 +141,6 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider
             #endregion
 
             #region Structures
-
-            [CLSCompliant(false)]
             [StructLayout(LayoutKind.Sequential)]
             public struct JxlPixelFormat
             {
@@ -171,8 +149,6 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider
                 public uint endianness;
                 public UIntPtr align;
             }
-
-            [CLSCompliant(false)]
             [StructLayout(LayoutKind.Sequential)]
             public struct JxlBasicInfo
             {
@@ -205,8 +181,6 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider
                 [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
                 public byte[] padding;
             }
-
-            [CLSCompliant(false)]
             [StructLayout(LayoutKind.Sequential)]
             public struct JxlColorEncoding
             {

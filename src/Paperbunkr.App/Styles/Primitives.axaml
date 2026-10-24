@@ -38,15 +38,67 @@
         <Setter Property="ClipToBounds" Value="False" />
     </Style>
 
-    <Style Selector="Control.entranceReady:not(.entered)">
+    <!-- Shared tactile feedback (Motion v2, docs/superpowers/specs/2026-10-20-motion-system-v2-foundation-overlays-design.md §3).
+         Every Button carries the Acknowledge transition, but only the compact families shrink when pressed (Styles/Controls.axaml,
+         0.97); rows, tabs and menu rows answer with colour only - a 300 px row shrinking by 12 px reads as the whole row lurching.
+         No overshoot: the old BackEaseOut sprang past full size on every release. Hover geometry stays stationary: moving the
+         hit-tested button under the pointer makes the state flicker at its edges, so surfaces that lift move an inner visual. -->
+    <Style Selector="Button">
+        <Setter Property="RenderTransform" Value="none" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionAcknowledgeMove}" Easing="{StaticResource PbMotionMoveEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="RenderTransform" Value="none" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Opacity" Value="0.92" />
+    </Style>
+
+    <!-- Toasts (Controls/ToastPresenter.cs, Motion v2 §5.3): a Reveal that rises 8 px and fades in, and leaves by fading only on the
+         shorter exit. -->
+    <Style Selector="Control.toast">
         <Setter Property="Opacity" Value="0" />
         <Setter Property="RenderTransform" Value="translateY(8px)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionRevealFade}" Easing="{StaticResource PbMotionEase}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionRevealMove}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Control.toast.entered">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="RenderTransform" Value="none" />
+    </Style>
+    <Style Selector="Control.toast.leaving">
+        <Setter Property="RenderTransform" Value="none" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionRevealExit}" Easing="{StaticResource PbMotionExitEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- List entrance (Controls/EntranceAnimation.cs; Motion v2 D, Q19): a Replace - fade on PbMotionReplace, a 6 px local rise on the
+         Reveal move token (zero under Reduced, so Reduced just fades). -->
+    <Style Selector="Control.entranceReady:not(.entered)">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="RenderTransform" Value="translateY(6px)" />
     </Style>
     <Style Selector="Control.entranceReady">
         <Setter Property="Transitions">
             <Transitions>
-                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
-                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionReplace}" Easing="{StaticResource PbMotionEase}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionRevealMove}" Easing="{StaticResource PbMotionEase}" />
             </Transitions>
         </Setter>
     </Style>
@@ -55,95 +107,14 @@
         <Setter Property="RenderTransform" Value="none" />
     </Style>
 
-    <!-- Discard-changes / tour-offer modal fade+scale (docs/superpowers/specs/2026-09-07-chrome-
-         content-motion-polish-design.md item 4) - these two are the only remaining overlays still on
-         the old hand-copied Border/#B0000000 pattern (everything else migrated to OverlayShell,
-         which has no animation of its own either - not reused here to avoid silently animating every
-         other OverlayShell consumer app-wide, a bigger blast radius than this item scoped for). -->
-    <Style Selector="Border.modalScrim">
-        <Setter Property="Opacity" Value="0" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-            </Transitions>
-        </Setter>
-    </Style>
-    <Style Selector="Border.modalScrim.open">
-        <Setter Property="Opacity" Value="1" />
-    </Style>
-    <!-- A closed modal is only faded out, not removed, so its buttons stayed Tab stops and directional-move targets. Disabled while closed. -->
-    <Style Selector="Border.modalScrim:not(.open)">
-        <Setter Property="IsEnabled" Value="False" />
-    </Style>
-    <Style Selector="Border.modalCard">
-        <Setter Property="RenderTransform" Value="scale(0.96)" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-            </Transitions>
-        </Setter>
-    </Style>
-    <Style Selector="Border.modalScrim.open Border.modalCard">
-        <Setter Property="RenderTransform" Value="scale(1)" />
+    <!-- Scrollbar thumb opacity from the theme (metrics.scrollbarThumbOpacity). The key exists only when a theme sets it; otherwise this
+         setter resolves to nothing and the framework's own thumb is untouched. The width goes through the framework's ScrollBarSize resource. -->
+    <Style Selector="ScrollBar /template/ Thumb">
+        <Setter Property="Opacity" Value="{DynamicResource PbScrollbarThumbOpacity}" />
     </Style>
 
-    <!-- Button variants - replace default FluentTheme button chrome with Pb* tokens + motion. -->
-    <Style Selector="Button.primary">
-        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-        <Setter Property="Padding" Value="14,8" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-            </Transitions>
-        </Setter>
-    </Style>
-    <Style Selector="Button.primary:pointerover">
-        <Setter Property="Background" Value="{DynamicResource PbAccentTextBrush}" />
-    </Style>
-
-    <Style Selector="Button.secondary">
-        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-        <Setter Property="Padding" Value="14,8" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-            </Transitions>
-        </Setter>
-    </Style>
-    <Style Selector="Button.secondary:pointerover">
-        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
-    </Style>
-
-    <Style Selector="Button.ghost">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-        <Setter Property="Padding" Value="14,8" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-            </Transitions>
-        </Setter>
-    </Style>
-    <Style Selector="Button.ghost:pointerover">
-        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-    </Style>
+    <!-- Button variants (primary / secondary / ghost / danger, sizes, toggle state) live in Styles/Controls.axaml since the 2026-10-19
+         shared-controls pass (docs/superpowers/specs/2026-10-19-ui-polish-shared-controls-design.md). -->
 
     <!-- Text link - a flat, chrome-less button that reads as an inline link (faint text at rest,
          accent on hover). Used for the "what's new" / "full changelog" links on the first-look
@@ -152,8 +123,8 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
-        <Setter Property="FontSize" Value="12.5" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
             <Transitions>
@@ -180,29 +151,6 @@
     <!-- Chip/pill - generalizes the pattern already established in Views/DetailPills.axaml. Two
          separate selectors (not a comma-list) since Border and Button share no common base type
          with Background/BorderBrush/CornerRadius/Padding declared on it. -->
-    <Style Selector="Border.pbChip">
-        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
-        <Setter Property="Padding" Value="12,5" />
-    </Style>
-    <Style Selector="Button.pbChip">
-        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
-        <Setter Property="Padding" Value="12,5" />
-        <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-            </Transitions>
-        </Setter>
-    </Style>
-    <Style Selector="Button.pbChip:pointerover">
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBadgeBrush}" />
-    </Style>
 
     <!-- Reader background texture picker swatches (docs/superpowers/specs/2026-09-10-reader-
          backlog-batch-b-design.md Item 1) - a clickable Button chrome around a filled preview
@@ -212,7 +160,7 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="2" />
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Transitions">
             <Transitions>
@@ -227,7 +175,7 @@
     <Style Selector="Border.textureSwatchFill">
         <Setter Property="Width" Value="56" />
         <Setter Property="Height" Value="38" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
         <Setter Property="ClipToBounds" Value="True" />
     </Style>
 
@@ -344,19 +292,19 @@
     <Style Selector="Border.posterTile:pointerover Button.posterDismiss, Border.posterTile:focus-within Button.posterDismiss">
         <Setter Property="Opacity" Value="1" />
     </Style>
-    <Style Selector="Border.posterTile.shelfCard">
+    <!-- Hover lift (Motion v2 D, Q24): the artwork rises with the damped spring - the same lift as Library's cards - while the focusable,
+         hit-tested tile stays put (it used to scale the whole tile, which made hover flicker at its edges). The keyboard ring overlay moves
+         with the cover so the two stay aligned. -->
+    <Style Selector="Border.posterTile.shelfCard Border.posterCover, Border.posterTile.shelfCard Border.tileRing">
         <Setter Property="RenderTransform" Value="none" />
         <Setter Property="Transitions">
             <Transitions>
-                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionHoverMove}" Easing="{StaticResource PbMotionSpring}" />
             </Transitions>
         </Setter>
     </Style>
-    <Style Selector="Border.posterTile.shelfCard:pointerover">
-        <Setter Property="RenderTransform" Value="scale(1.02)" />
-    </Style>
-    <Style Selector="Border.posterTile.shelfCard:focus-visible">
-        <Setter Property="RenderTransform" Value="scale(1.02)" />
+    <Style Selector="Border.posterTile.shelfCard:pointerover Border.posterCover, Border.posterTile.shelfCard:pointerover Border.tileRing, Border.posterTile.shelfCard:focus-visible Border.posterCover, Border.posterTile.shelfCard:focus-visible Border.tileRing">
+        <Setter Property="RenderTransform" Value="translateY(-3px) scale(1.02)" />
     </Style>
 
     <!-- Insights Today-tab hero row (docs/superpowers/specs/2026-09-23-insights-redesign-design.md) -
@@ -384,11 +332,15 @@
         <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000" />
     </Style>
     <!-- Hover and focus use the shared ring token (PbGlowRing), which follows the skin's accent and the glow-tier setting; a literal colour here stayed orange on every other accent. -->
-    <Style Selector="Border.heroTile:pointerover">
+    <Style Selector="Border.heroTile:not(.inert):pointerover">
         <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
     </Style>
     <Style Selector="Border.heroTile:focus-visible">
         <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
+    </Style>
+    <!-- A tile you can't click (the Insights goal card) neither glows nor shows the hand: the glow read as a selected, clickable card. -->
+    <Style Selector="Border.heroTile.inert">
+        <Setter Property="Cursor" Value="Arrow" />
     </Style>
 
     <!-- Poster cover scrim (docs/superpowers/specs/2026-08-27-library-browsing-4a-poster-grid-
@@ -419,10 +371,10 @@
     </Style>
 
     <Style Selector="Border.floatingPanel">
-        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="Background" Value="{DynamicResource PbPanelFloatingBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbPanelFloatingBorder}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusLg}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbPanelFloatingRadius}" />
         <Setter Property="BoxShadow" Value="{StaticResource PbElevationShadow}" />
         <Setter Property="Transitions">
             <Transitions>

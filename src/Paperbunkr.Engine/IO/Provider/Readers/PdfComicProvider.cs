@@ -39,7 +39,7 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers
 				using (FileStream fileStream = File.OpenRead(source))
 				{
 					byte[] array = new byte[4];
-					fileStream.Read(array, 0, array.Length);
+					fileStream.ReadExactly(array);
 					return array[0] == 37 && array[1] == 80 && array[2] == 68 && array[3] == 70;
 				}
 			}
@@ -53,7 +53,8 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers
 		{
 			using (FileStream inputStream = File.OpenRead(base.Source))
 			{
-				return Base32.ToBase32String(new SHA1Managed().ComputeHash(inputStream));
+				using var sha1 = SHA1.Create();
+				return Base32.ToBase32String(sha1.ComputeHash(inputStream));
 			}
 		}
 

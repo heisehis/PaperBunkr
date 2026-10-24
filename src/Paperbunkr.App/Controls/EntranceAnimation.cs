@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Paperbunkr.App.Theming.Motion;
 
 namespace Paperbunkr.App.Controls;
 
@@ -25,8 +27,8 @@ namespace Paperbunkr.App.Controls;
 /// (<c>LibraryScreenViewModel.PlayEntranceAnimation</c>).
 ///
 /// The actual visual states live in a plain style (Primitives.axaml) keyed off the "entranceReady"/
-/// "entered" classes this adds to each container - so Reduced Motion is honored for free via the
-/// existing PbMotionStandard token zeroing, and a container this never enables for is left
+/// "entered" classes this adds to each container - so Reduced and Off are honoured by the role tokens themselves (Reduced: the
+/// Replace fade stays short and the travel token is zero; Off: both zero), and a container this never enables for is left
 /// untagged, therefore always fully visible regardless of animation state elsewhere.
 ///
 /// <para>
@@ -42,11 +44,15 @@ namespace Paperbunkr.App.Controls;
 /// </summary>
 public static class EntranceAnimation
 {
-    private const int PerItemDelayMs = 24;
-    private const int MaxStaggerIndex = 20;
+    // Motion v2 (docs/superpowers/specs/2026-10-20-motion-system-v2-on-page-design.md Q19): 20 ms per group, at most 6 groups, so the
+    // whole entrance (delay + the fade) finishes within ~320 ms however long the list.
+    private const int PerItemDelayMs = 20;
+    private const int MaxStaggerIndex = 5;
 
+    /// <summary>One-shot is the default since Motion v2 (Q19): a flag that stays true replayed the entrance on every recycled container.
+    /// Owners pulse the flag (false then true) on the result changes that should animate.</summary>
     public static readonly AttachedProperty<bool> OneShotProperty =
-        AvaloniaProperty.RegisterAttached<ItemsControl, bool>("OneShot", typeof(EntranceAnimation));
+        AvaloniaProperty.RegisterAttached<ItemsControl, bool>("OneShot", typeof(EntranceAnimation), defaultValue: true);
 
     public static bool GetOneShot(ItemsControl itemsControl) => itemsControl.GetValue(OneShotProperty);
     public static void SetOneShot(ItemsControl itemsControl, bool value) => itemsControl.SetValue(OneShotProperty, value);
@@ -91,19 +97,30 @@ public static class EntranceAnimation
         {
             if (e.Container is StyledElement container)
             {
-                bool enabled = GetEnabled(itemsControl);
+                // Reduced still fades (the Replace fade token is 100 ms there); only Off has no Replace motion at all.
+                bool enabled = GetEnabled(itemsControl) && MotionPolicy.Resolve(MotionRole.Replace).Enabled;
                 if (enabled && GetOneShot(itemsControl))
                 {
                     // One-shot: animate only inside the window a recent Enabled false->true opened.
                     enabled = Windows.GetOrCreateValue(itemsControl).IsOpen(Stopwatch.GetTimestamp());
                 }
 
-                Prepare(container, e.Index, enabled);
+                Prepare(itemsControl, container, e.Index, enabled);
             }
         };
     }
 
-    private static void Prepare(StyledElement container, int index, bool enabled)
+    /// <summary>The last stagger group (every container from index <see cref="MaxStaggerIndex"/> on) reveals together on one timer per
+    /// list, so a long burst arms at most <see cref="MaxStaggerIndex"/> + 1 timers rather than one per card.</summary>
+    private sealed class TailBatch
+    {
+        public readonly List<StyledElement> Containers = new();
+        public DispatcherTimer? Timer;
+    }
+
+    private static readonly ConditionalWeakTable<ItemsControl, TailBatch> Tails = new();
+
+    private static void Prepare(ItemsControl owner, StyledElement container, int index, bool enabled)
     {
         if (PendingTimers.TryGetValue(container, out var existingTimer))
         {
@@ -124,8 +141,42 @@ public static class EntranceAnimation
 
         container.Classes.Add("entranceReady");
 
+        int delayMs = ComputeDelayMs(index, !MotionPolicy.AllowsMotion(MotionRole.Replace));
+        if (delayMs == 0)
+        {
+            // No stagger for this container (past the first groups, or Reduced): reveal on the next tick, no timer.
+            Dispatcher.UIThread.Post(() => container.Classes.Add("entered"));
+            return;
+        }
+
+        if (index >= MaxStaggerIndex)
+        {
+            var tail = Tails.GetOrCreateValue(owner);
+            tail.Containers.Add(container);
+            if (tail.Timer is null)
+            {
+                Paperbunkr.App.Services.CoverPipelineStats.EntranceTimerArmed();
+                var tailTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(delayMs) };
+                tailTimer.Tick += (_, _) =>
+                {
+                    tailTimer.Stop();
+                    tail.Timer = null;
+                    foreach (var waiting in tail.Containers)
+                    {
+                        waiting.Classes.Add("entered");
+                    }
+
+                    tail.Containers.Clear();
+                };
+                tail.Timer = tailTimer;
+                tailTimer.Start();
+            }
+
+            return;
+        }
+
         Paperbunkr.App.Services.CoverPipelineStats.EntranceTimerArmed();
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ComputeDelayMs(index, MotionTokens.IsReducedMotion())) };
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(delayMs) };
         timer.Tick += (_, _) =>
         {
             timer.Stop();

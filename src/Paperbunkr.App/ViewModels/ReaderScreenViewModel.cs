@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -33,7 +34,7 @@ namespace Paperbunkr.App.ViewModels;
 /// the placeholder colored tile with a static page number is gone; <see cref="CurrentPage"/> is a
 /// real decoded bitmap now. Continuous/webtoon rendering (onboarding.md §8) stays deferred to Beta.
 /// </summary>
-public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
+public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider, ITransientScreen
 {
     /// <summary>Right-click/Menu-key menu for the page-thumbnail rail (docs/superpowers/specs/
     /// 2026-08-31-keyboard-operability-design.md) - delegated out, same pattern as
@@ -240,6 +241,10 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     public string IssueTitle { get; private set; } = string.Empty;
     public string ReadingModeLabel { get; private set; } = "Left to Right";
     public string PageLabel { get; private set; } = string.Empty;
+
+    /// <summary>The page-turn bar's readout (current page and total, split so the current one can be emphasised).</summary>
+    public string CounterCurrentPage { get; private set; } = string.Empty;
+    public string CounterTotalPages { get; private set; } = string.Empty;
     public double ProgressFraction { get; private set; }
 
     /// <summary>The raw effective mode (<c>Issue.ReadingModeOverride ?? Series.ReadingMode</c>), so <see cref="Views.PageCanvas"/> can pick its axis for continuous mode without re-deriving it from <see cref="ReadingModeLabel"/>'s display string.</summary>
@@ -711,6 +716,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private bool _showPageShadow;
 
+    [ObservableProperty]
+    private ReaderPageFrameStyle _pageFrameStyle;
+
     /// <summary>
     /// Item 1 of docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md - a tiled
     /// texture background, alongside the pre-existing Auto/Color modes.
@@ -765,9 +773,13 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         NotifyProfileChanged();
 
         CanvasBackgroundBrush = ComputeCanvasBackgroundBrush(effective.ImageBackgroundMode, effective.BackgroundColor, effective.BackgroundTexture);
-        // Item 1 §1.5 - a page drop-shadow only when a texture background is active (solid Color/
-        // Auto are visually unchanged), and only in paged modes (continuous/webtoon pages abut).
-        ShowPageShadow = effective.ImageBackgroundMode == ImageBackgroundMode.Texture && !IsContinuousMode;
+        SetAmbientActive(effective.ImageBackgroundMode == ImageBackgroundMode.Ambient);
+        AmbientMotionEnabled = appSettings.ReaderAmbientMotion && effective.ImageBackgroundMode == ImageBackgroundMode.Ambient;
+        BookLook = effective.ReaderBookLook;
+        // The page drop-shadow follows the page-frame setting (ReaderPageFrameStyle.SoftShadow, 2026-10-18), and only in paged modes
+        // (continuous/webtoon pages abut).
+        PageFrameStyle = appSettings.ReaderPageFrameStyle;
+        ShowPageShadow = appSettings.ReaderPageFrameStyle == ReaderPageFrameStyle.SoftShadow && !IsContinuousMode;
         PageMarginMultiplier = effective.PageMarginEnabled ? 1.0 - effective.PageMarginPercentWidth : 1.0;
         _preOpenNextIssue = appSettings.PreOpenNextIssue;
         _readerMemoryLimitMb = appSettings.ReaderMemoryLimitMb;
@@ -1016,6 +1028,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         // primary genre is the first genre tag (a small extra query - Tags aren't Included here).
         _sessionStartPage = issue.LastPageRead ?? 0;
         _sessionMaxPage = _sessionStartPage;
+        _keepReadState = issue.HasBeenRead() && series.ReadingStatus != ReadingStatus.ReReading;
         MarkIssueActiveTimeStart();
         _finishedEmittedThisSession = false;
         _sessionSeriesId = series.Id;
@@ -1162,6 +1175,8 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         }
 
         PageLabel = $"PAGE {_currentPageIndex + 1} / {pageCount}";
+        CounterCurrentPage = (_currentPageIndex + 1).ToString(CultureInfo.InvariantCulture);
+        CounterTotalPages = pageCount.ToString(CultureInfo.InvariantCulture);
         ProgressFraction = pageCount > 1 ? (double)_currentPageIndex / (pageCount - 1) : 0;
 
         Bookmarks.Clear();
@@ -1193,7 +1208,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             _pageOverrides.TryGetValue(page, out var pageOverride);
             Thumbnails.Add(new ReaderThumbnailSample
             {
-                CoverBrush = CoverBrush,
+                CoverBrush = CoverBrush, PageNumber = page + 1,
                 IsSelected = page == _currentPageIndex,
                 IsBookmarked = _bookmarkedPages.Contains(page),
                 HasNote = _notedPages.Contains(page),
@@ -1207,6 +1222,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(BreadcrumbSeries));
         OnPropertyChanged(nameof(IssueTitle));
         OnPropertyChanged(nameof(PageLabel));
+        OnPropertyChanged(nameof(BookProgress));
+        OnPropertyChanged(nameof(CounterCurrentPage));
+        OnPropertyChanged(nameof(CounterTotalPages));
         OnPropertyChanged(nameof(ProgressFraction));
 
         RefreshCurrentPage();
@@ -1229,6 +1247,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         }
 
         CurrentPageIndexChanged?.Invoke(_currentPageIndex);
+        RefreshAmbientBackdrop();
     }
 
     /// <summary>Shared by <see cref="Load"/>, <see cref="ToggleReadingMode"/>, and <see cref="SetReadingMode"/> so the label/spatial-flip/continuous-mode switches can't drift apart between them.</summary>
@@ -1243,16 +1262,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         // the trailing " ▾" is dropped now that this feeds a segmented pill row instead of a dropdown
         // button, and the continuous-mode names are unified around a "Long Strip" family instead of
         // each mode inventing its own qualifier.
-        ReadingModeLabel = effectiveMode switch
-        {
-            ReadingMode.RightToLeft => "Right to Left",
-            ReadingMode.TopToBottom => "Top to Bottom",
-            ReadingMode.VerticalContinuous => "Longstrip (gapped)",
-            ReadingMode.HorizontalContinuous => "Horizontal Long Strip",
-            ReadingMode.HorizontalContinuousRightToLeft => "Horizontal Long Strip (RTL)",
-            ReadingMode.Webtoon => "Long Strip",
-            _ => "Left to Right",
-        };
+        ReadingModeLabel = ReadingModeCatalog.LabelFor(effectiveMode);
         OnPropertyChanged(nameof(ReadingModeLabel));
     }
 
@@ -1548,6 +1558,10 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     [NotifyPropertyChangedFor(nameof(IsPageTurnClusterVisible))]
     private bool _isPageTurnClusterHovered;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsContextStripVisible))]
+    private bool _isContextStripHovered;
+
     public bool IsNavigateClusterVisible => ShowChrome || IsNavigateClusterHovered;
     public bool IsActionsClusterVisible => ShowChrome || IsActionsClusterHovered;
     public bool IsViewClusterVisible => ShowChrome || IsViewClusterHovered;
@@ -1595,7 +1609,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private bool _bookmarkJustToggled;
 
-    private static readonly TimeSpan OverlayAutoHideDelay = TimeSpan.FromSeconds(3);
+    /// <summary>The chrome hides only after the pointer has been still this long (Motion v2 E, the user's Q27 rule: pointer idleness is the
+    /// one thing that hides it).</summary>
+    internal static readonly TimeSpan OverlayAutoHideDelay = TimeSpan.FromSeconds(4);
     private DispatcherTimer? _overlayAutoHideTimer;
 
     /// <summary>Preferences > Reader > "Auto-hide toolbar when idle" (AppSettings.ReaderAutoHideChrome,
@@ -1863,7 +1879,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         NotifyAdSeeder(issueId, pageNumber, previousType, effectiveType);
         Thumbnails[pageNumber] = new ReaderThumbnailSample
         {
-            CoverBrush = CoverBrush,
+            CoverBrush = CoverBrush, PageNumber = pageNumber + 1,
             CoverImage = thumbnail.CoverImage,
             IsSelected = thumbnail.IsSelected,
             IsBookmarked = thumbnail.IsBookmarked,
@@ -1884,6 +1900,22 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         if (newSpread is not null)
         {
             RefreshCurrentPage();
+        }
+
+        if (newType is not null && effectiveType != PageType.Cover)
+        {
+            using var preferenceContext = PaperbunkrDb.CreateContext(includeRemote: true);
+            var issue = preferenceContext.Issues.Find(issueId);
+            if (issue?.PreferredCoverPageNumber == pageNumber)
+            {
+                issue.PreferredCoverPageNumber = null;
+                preferenceContext.SaveChanges();
+                if (!string.IsNullOrWhiteSpace(issue.FilePath)
+                    && new CoverThumbnailService().TryGenerateThumbnail(issueId, issue.FilePath, issue.FileSize, force: true))
+                {
+                    CoverImageCache.InvalidateMemoryOnly(issueId.ToString(CultureInfo.InvariantCulture));
+                }
+            }
         }
     }
 
@@ -1906,7 +1938,42 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     }
 
     [RelayCommand] private void SetPageTypeStory(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, PageType.Story, null);
-    [RelayCommand] private void SetPageTypeCover(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, PageType.Cover, null);
+    [RelayCommand]
+    private void SetPageTypeCover(ReaderThumbnailSample? thumbnail)
+    {
+        if (thumbnail is null || _loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        int pageNumber = Thumbnails.IndexOf(thumbnail);
+        if (TryPromotePageToIssueCover(issueId, pageNumber))
+        {
+            SetPageOverride(thumbnail, PageType.Cover, null);
+        }
+    }
+
+    [RelayCommand]
+    private void SetCurrentPageAsIssueCover()
+    {
+        if (_loadedIssueId is int issueId && TryPromotePageToIssueCover(issueId, _currentPageIndex))
+        {
+            var thumbnail = Thumbnails.FirstOrDefault(t => t.PageNumber == _currentPageIndex + 1);
+            if (thumbnail is not null)
+            {
+                SetPageOverride(thumbnail, PageType.Cover, null);
+            }
+        }
+    }
+
+    private static bool TryPromotePageToIssueCover(int issueId, int pageNumber)
+    {
+        using var context = PaperbunkrDb.CreateContext(includeRemote: true);
+        var issue = context.Issues.Find(issueId);
+        return issue is not null
+            && !string.IsNullOrWhiteSpace(issue.FilePath)
+            && new CoverThumbnailService().TrySetIssueCoverPage(issueId, issue.FilePath, pageNumber);
+    }
     [RelayCommand] private void SetPageTypeAdvertisement(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, PageType.Advertisement, null);
     [RelayCommand] private void SetPageTypeDeleted(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, PageType.Deleted, null);
 
@@ -1930,7 +1997,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         var existing = Thumbnails[page];
         Thumbnails[page] = new ReaderThumbnailSample
         {
-            CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = existing.IsSelected, IsBookmarked = isBookmarked,
+            CoverBrush = CoverBrush, PageNumber = page + 1, CoverImage = existing.CoverImage, IsSelected = existing.IsSelected, IsBookmarked = isBookmarked,
             PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint, HasNote = existing.HasNote,
         };
     }
@@ -2007,6 +2074,16 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         ShowChrome = true;
         RestartOverlayAutoHideTimer();
         RefreshShortcutHints();
+    }
+
+    /// <summary>Any pointer movement or press over the reader while the chrome is showing restarts the idle countdown, in either hover mode,
+    /// so the chrome never hides under a pointer that is still being used (Motion v2 E, Q27). Does not show hidden chrome by itself.</summary>
+    public void NotePointerActivity()
+    {
+        if (ShowChrome && _overlayAutoHideTimer is { IsEnabled: true })
+        {
+            RestartOverlayAutoHideTimer();
+        }
     }
 
     /// <summary>Refreshes <see cref="CurrentTimeLabel"/>/<see cref="BatteryStatusLabel"/> (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §2) - called once synchronously from <see cref="Load"/> so the labels aren't blank for up to a minute after opening a book, then again on every <see cref="_clockTimer"/> tick.</summary>
@@ -2174,9 +2251,13 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
                     var existing = Thumbnails[capturedPage];
                     Thumbnails[capturedPage] = new ReaderThumbnailSample
                     {
-                        CoverBrush = CoverBrush, CoverImage = thumb, IsSelected = existing.IsSelected, IsBookmarked = existing.IsBookmarked,
+                        CoverBrush = CoverBrush, PageNumber = existing.PageNumber, CoverImage = thumb, IsSelected = existing.IsSelected, IsBookmarked = existing.IsBookmarked,
                         PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint, HasNote = existing.HasNote,
                     };
+                    if (capturedPage == _currentPageIndex)
+                    {
+                        RefreshAmbientBackdrop();
+                    }
                 });
             }
         });
@@ -2413,8 +2494,13 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     private void UpdatePageLabelAndProgress()
     {
         PageLabel = $"PAGE {_currentPageIndex + 1} / {PageCount}";
+        CounterCurrentPage = (_currentPageIndex + 1).ToString(CultureInfo.InvariantCulture);
+        CounterTotalPages = PageCount.ToString(CultureInfo.InvariantCulture);
         ProgressFraction = PageCount > 1 ? (double)_currentPageIndex / (PageCount - 1) : 0;
         OnPropertyChanged(nameof(PageLabel));
+        OnPropertyChanged(nameof(BookProgress));
+        OnPropertyChanged(nameof(CounterCurrentPage));
+        OnPropertyChanged(nameof(CounterTotalPages));
         OnPropertyChanged(nameof(ProgressFraction));
     }
 
@@ -2436,18 +2522,24 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
             Thumbnails[page] = new ReaderThumbnailSample
             {
-                CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = shouldBeSelected, IsBookmarked = existing.IsBookmarked,
+                CoverBrush = CoverBrush, PageNumber = existing.PageNumber, CoverImage = existing.CoverImage, IsSelected = shouldBeSelected, IsBookmarked = existing.IsBookmarked,
                 PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint, HasNote = existing.HasNote,
             };
         }
 
         IsCurrentPageBookmarked = _bookmarkedPages.Contains(_currentPageIndex);
         CurrentPageIndexChanged?.Invoke(_currentPageIndex);
+        RefreshAmbientBackdrop();
     }
 
     /// <summary>Restarts the debounce window (see <see cref="PositionSaveDebounce"/>) rather than saving immediately - matches spec §6's explicit "throttled to avoid a SaveChanges per scroll-frame."</summary>
     private void SchedulePositionSave(int issueId, int pageIndex)
     {
+        if (_keepReadState && issueId == _loadedIssueId)
+        {
+            return;
+        }
+
         _pendingPositionSaveIssueId = issueId;
         _pendingPositionSaveIndex = pageIndex;
 
@@ -2984,6 +3076,13 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
     private int _storyEndIndex = -1;
 
+    /// <summary>
+    /// True when the issue was already read when it opened and its series isn't set to Re-reading: paging through it then
+    /// leaves the saved position (and so its read state) alone. Only Mark as unread, or setting the series to Re-reading
+    /// before opening, lets reading move the position back.
+    /// </summary>
+    private bool _keepReadState;
+
     private void RecomputeStoryEnd()
     {
         int storyEnd = -1;
@@ -3007,6 +3106,11 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// </summary>
     private bool WriteLastPageRead(Issue issue, int pageIndex)
     {
+        if (_keepReadState)
+        {
+            return false;
+        }
+
         bool reachedStoryEnd = PageCount > 1 && pageIndex == _storyEndIndex && _storyEndIndex < PageCount - 1;
         issue.LastPageRead = reachedStoryEnd ? PageCount - 1 : pageIndex;
         return reachedStoryEnd;
@@ -3185,8 +3289,8 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     [NotifyCanExecuteChangedFor(nameof(ContextStripNextCommand))]
     private bool _canContextStripNext;
 
-    /// <summary>The strip rides with the navigate cluster (hover/chrome) and is also forced visible during the open-flash.</summary>
-    public bool IsContextStripVisible => HasContextStrip && (ShowChrome || IsNavigateClusterHovered || IsContextStripFlashing);
+    /// <summary>The strip follows its own hover target and is also forced visible with the navigate cluster or during the open-flash.</summary>
+    public bool IsContextStripVisible => HasContextStrip && (ShowChrome || IsNavigateClusterHovered || IsContextStripHovered || IsContextStripFlashing);
 
     private int? _contextStripPreviousIssueId;
     private int? _contextStripNextIssueId;

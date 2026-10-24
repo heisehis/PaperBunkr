@@ -31,10 +31,10 @@
         </Style>
     </UserControl.Styles>
 
-    <StackPanel Margin="28,14,28,0" Spacing="10">
+    <StackPanel Margin="24,14,24,0" Spacing="10">
         <TextBlock Text="{Binding Title}" Classes="pbTextBody" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
 
-        <TextBlock Text="No issues here have a comic age yet." FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}"
+        <TextBlock Text="No issues here have a comic age yet." FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
                    IsVisible="{Binding HasNoSections}" />
 
         <!-- Issues per year: click a year to jump to it -->
@@ -53,7 +53,7 @@
                                             Background="{DynamicResource PbAccentBrush}" />
                                 </Button>
                                 <Canvas Height="12" Width="{Binding BarWidth}">
-                                    <TextBlock Text="{Binding AxisLabel}" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                    <TextBlock Text="{Binding AxisLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 </Canvas>
                             </StackPanel>
                         </DataTemplate>
@@ -64,26 +64,26 @@
 
         <!-- Review inferred ages -->
         <StackPanel IsVisible="{Binding !HasNoInferredAges}">
-            <Button Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,4" Command="{Binding ToggleInferredAgesCommand}">
+            <Button Classes="ghost" HorizontalAlignment="Left" Command="{Binding ToggleInferredAgesCommand}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                    <TextBlock Text="Review inferred ages" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                    <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding InferredAges.Count}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                    <TextBlock Text="Review inferred ages" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                    <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding InferredAges.Count}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" /></Border>
                 </StackPanel>
             </Button>
             <StackPanel IsVisible="{Binding InferredAgesExpanded}" Margin="0,6,0,0">
-                <Button Classes="headerAction secondary" Content="Accept all" HorizontalAlignment="Left" Margin="0,0,0,8"
+                <Button Classes="secondary" Content="Accept all" HorizontalAlignment="Left" Margin="0,0,0,8"
                         Command="{Binding AcceptAllInferredAgesCommand}" />
                 <ItemsControl ItemsSource="{Binding InferredAges}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:InferredAgeRowViewModel">
-                            <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,4">
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding DisplayLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
-                                    <TextBlock FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}">
+                                    <TextBlock Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}">
                                         <Run Text="{Binding YearLabel, Mode=OneWay}" /><Run Text=" → " /><Run Text="{Binding AgeLabel, Mode=OneWay}" />
                                     </TextBlock>
                                 </StackPanel>
-                                <Button Grid.Column="1" Classes="headerAction secondary" Content="Accept" VerticalAlignment="Center" Command="{Binding AcceptCommand}" />
+                                <Button Grid.Column="1" Classes="secondary" Content="Accept" VerticalAlignment="Center" Command="{Binding AcceptCommand}" />
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -110,12 +110,11 @@
                                         Classes.bronze="{Binding IsBronze}" Classes.modern="{Binding IsModern}">
                                     <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
                                         <Panel Grid.Column="0" VerticalAlignment="Center">
-                                            <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsExpanded}" />
-                                            <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsFolded}" />
+                                            <fi:SymbolIcon Symbol="ChevronRight" Classes="chevronToggle" Classes.open="{Binding IsExpanded}" FontSize="{StaticResource PbIconSizeXs}" />
                                         </Panel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding HeaderLabel}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                                            <TextBlock Text="{Binding CommonlyCitedRange}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}"
+                                            <TextBlock Text="{Binding HeaderLabel}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                                            <TextBlock Text="{Binding CommonlyCitedRange}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
                                                        VerticalAlignment="Center" IsVisible="{Binding HasCommonlyCitedRange}" ToolTip.Tip="The commonly cited range" />
                                         </StackPanel>
                                         <TextBlock Grid.Column="2" Text="{Binding CountsLabel}" Classes="csFaint" VerticalAlignment="Center" />
@@ -135,21 +134,21 @@
                                                 CommandParameter="{Binding}">
                                             <StackPanel Width="100">
                                                 <Panel>
-                                                    <Border Height="144" CornerRadius="5" ClipToBounds="True" Background="{Binding CoverBrush}">
+                                                    <Border Height="144" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" Background="{Binding CoverBrush}">
                                                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
                                                     </Border>
-                                                    <Border Width="9" Height="9" CornerRadius="9" Background="{DynamicResource PbAccentBrush}"
-                                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="5"
+                                                    <Border Width="9" Height="9" CornerRadius="{DynamicResource PbRadiusChip}" Background="{DynamicResource PbAccentBrush}"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="4"
                                                             IsVisible="{Binding IsUnread}" ToolTip.Tip="Unread" />
-                                                    <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5" Padding="4,1" CornerRadius="3"
+                                                    <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4" Padding="4,1" CornerRadius="{DynamicResource PbRadiusSm}"
                                                             Background="{DynamicResource PbBadgeBrush}" IsVisible="{Binding IsReducedConfidence}"
                                                             ToolTip.Tip="{Binding ConfidenceReason}">
-                                                        <TextBlock Text="?" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                                        <TextBlock Text="?" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource PbBadgeTextBrush}" />
                                                     </Border>
                                                 </Panel>
                                                 <TextBlock Text="{Binding SeriesName}" FontSize="10" Foreground="{DynamicResource PbTextBrush}"
                                                            TextTrimming="CharacterEllipsis" Margin="0,4,0,0" />
-                                                <TextBlock FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}">
+                                                <TextBlock FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}">
                                                     <Run Text="{Binding Title, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding YearLabel, Mode=OneWay}" />
                                                 </TextBlock>
                                             </StackPanel>

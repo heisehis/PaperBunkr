@@ -389,7 +389,10 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
             HasFile = series.RemoteSourceId is not null || series.Issues.Any(i => !string.IsNullOrEmpty(i.FilePath)),
             CoverBrush = CoverBrushFor(series.Name),
             CoverIssueId = coverIssue?.Id,
-            CoverKey = coverIssue is null
+            CoverKey = series.CustomCoverPath is { Length: > 0 } seriesCoverPath
+                && System.IO.File.Exists(Paperbunkr.App.Services.Covers.CustomSeriesCoverPaths.GetPath(seriesCoverPath))
+                ? $"series:{series.Id}"
+                : coverIssue is null
                 ? null
                 : CoverFingerprint.Stem(coverIssue.Id, coverIssue.FilePath, coverIssue.FileSize),
             PanoramaWidth = ComputePanoramaWidth(aspectRatio),

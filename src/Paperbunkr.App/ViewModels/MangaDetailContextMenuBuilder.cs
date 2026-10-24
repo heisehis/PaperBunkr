@@ -26,7 +26,8 @@ public sealed class MangaDetailContextMenuBuilder
 
     private IReadOnlyList<ContextMenuEntry> BuildChapterMenu(ChapterRowSample row) => new[]
     {
-        ContextMenuEntry.Item("Edit Properties", _vm.EditChapterPropertiesCommand, row),
+        ContextMenuEntry.Item("Edit Chapter Details", _vm.EditChapterPropertiesCommand, row),
+        ContextMenuEntry.Item("Edit Series…", _vm.EditSeriesCommand),
         ContextMenuEntry.Item("Show in Explorer", _vm.RevealChapterCommand, row),
         ContextMenuEntry.Separator,
         ContextMenuEntry.Item("Mark as Read", _vm.MarkChapterReadCommand, row),

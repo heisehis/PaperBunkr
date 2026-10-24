@@ -96,7 +96,7 @@ public class WantedArrowKeyTests : IDisposable
 
             // Start from a control in the list body, not the tab header: the first button that is not a tab or a chip.
             var rows = screen.GetVisualDescendants().OfType<Button>()
-                .Where(b => b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Focusable && !b.Classes.Contains("tab") && !b.Classes.Contains("pbChip") && b.TranslatePoint(default, screen)?.Y > 120)
+                .Where(b => b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Focusable && !b.Classes.Contains("tab") && !b.Classes.Contains("filterChip") && b.TranslatePoint(default, screen)?.Y > 120)
                 .OrderBy(b => b.TranslatePoint(default, screen)!.Value.Y)
                 .ToList();
             Assert.True(rows.Count >= 3, $"row buttons: {rows.Count}");
@@ -148,7 +148,7 @@ public class WantedArrowKeyTests : IDisposable
             RunLayout(window);
 
             var first = screen.GetVisualDescendants().OfType<Button>()
-                .Where(b => b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Focusable && !b.Classes.Contains("tab") && !b.Classes.Contains("pbChip") && b.TranslatePoint(default, screen)?.Y > 120)
+                .Where(b => b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Focusable && !b.Classes.Contains("tab") && !b.Classes.Contains("filterChip") && b.TranslatePoint(default, screen)?.Y > 120)
                 .OrderBy(b => b.TranslatePoint(default, screen)!.Value.Y).First();
             first.Focus(NavigationMethod.Tab);
             RunLayout(window);
@@ -199,7 +199,7 @@ public class WantedArrowKeyTests : IDisposable
             RunLayout(window);
 
             var first = screen.GetVisualDescendants().OfType<Button>()
-                .Where(b => b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Focusable && !b.Classes.Contains("tab") && !b.Classes.Contains("pbChip") && b.TranslatePoint(default, screen)?.Y > 120)
+                .Where(b => b.IsEffectivelyVisible && b.IsEffectivelyEnabled && b.Focusable && !b.Classes.Contains("tab") && !b.Classes.Contains("filterChip") && b.TranslatePoint(default, screen)?.Y > 120)
                 .OrderBy(b => b.TranslatePoint(default, screen)!.Value.Y).First();
             first.Focus(NavigationMethod.Tab);
             RunLayout(window);

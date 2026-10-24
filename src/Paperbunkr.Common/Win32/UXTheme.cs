@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
@@ -196,7 +196,7 @@ public static class UXTheme
     /// <remarks>This could be expanded beyond Light/Dark to other Windows themes</remarks>
     public static void SetWindowTheme(IntPtr hwnd)
     {
-        if (!IsDarkModeSupported || hwnd == null || hwnd == IntPtr.Zero) return;
+        if (!IsDarkModeSupported || hwnd == IntPtr.Zero) return;
 
         Native.AllowDarkModeForWindow(hwnd, true);
         Native.SetWindowTheme(hwnd, "DarkMode_Explorer", null);
@@ -219,7 +219,7 @@ public static class UXTheme
 		/// </remarks>
     public static void SetControlTheme(IntPtr hwnd, string themeClass = "DarkMode_Explorer", string subClass = null)
     {
-        if (!IsDarkModeSupported || hwnd == null || hwnd == IntPtr.Zero) return;
+        if (!IsDarkModeSupported || hwnd == IntPtr.Zero) return;
 
         Native.SetWindowTheme(hwnd, themeClass, subClass);
         Native.AllowDarkModeForWindow(hwnd, true);
@@ -236,7 +236,7 @@ public static class UXTheme
     /// </remarks>
     public static void SetComboBoxTheme(IntPtr hwnd)
     {
-        if (!IsDarkModeSupported || hwnd == null || hwnd == IntPtr.Zero) return;
+        if (!IsDarkModeSupported || hwnd == IntPtr.Zero) return;
 
         Native.SetWindowTheme(hwnd, null, "DarkMode_CFD::Combobox");
         Native.COMBOBOXINFO pcbi = default(Native.COMBOBOXINFO);
@@ -277,7 +277,7 @@ public static class UXTheme
     /// </remarks>
     public static void SetListViewTheme(IntPtr hwnd)
     {
-        if (!IsDarkModeSupported || hwnd == null || hwnd == IntPtr.Zero) return;
+        if (!IsDarkModeSupported || hwnd == IntPtr.Zero) return;
 
         SetControlTheme((hwnd));
 
@@ -292,7 +292,7 @@ public static class UXTheme
 
     public static void SetTabControlTheme(IntPtr hwnd)
     {
-        if (!IsDarkModeSupported || hwnd == null || hwnd == IntPtr.Zero) return;
+        if (!IsDarkModeSupported || hwnd == IntPtr.Zero) return;
 
         Native.SetWindowTheme(hwnd, null, "DarkMode::FileExplorerBannerContainer");
         //foreach (var childHandle in Native.EnumChildWindows(hwnd))

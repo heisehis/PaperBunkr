@@ -29,6 +29,14 @@ public static class ReadingListSourceRegistry
     public static string GetDisplayName(string sourceKey) =>
         All.FirstOrDefault(s => s.Key == sourceKey).DisplayName ?? sourceKey;
 
+    /// <summary>Existing bundled service-mark identity, or null until a real source asset is available.</summary>
+    public static string? GetMarkKey(string? sourceKey) => sourceKey switch
+    {
+        "ComicVine" => "ComicVine",
+        "Metron" or "MetronLists" => "Metron",
+        _ => null,
+    };
+
     /// <summary>Returns null when the source key is unknown, or a credentialed source is missing its required credentials.</summary>
     public static IReadingListSource? Get(PaperbunkrDbContext context, string sourceKey)
     {
@@ -39,19 +47,13 @@ public static class ReadingListSourceRegistry
                 return string.IsNullOrEmpty(apiKey) ? null : new ComicVineSource(apiKey);
 
             case "Metron":
-                string? username = CredentialStore.Get(context, "Metron", CredentialKind.Username);
-                string? password = CredentialStore.Get(context, "Metron", CredentialKind.Password);
-                return string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)
-                    ? null
-                    : new MetronSource(username, password);
+                var metronAuth = ComicVine.MetronAuth.Load(context);
+                return metronAuth is null ? null : new MetronSource(metronAuth);
 
             // Curated reading lists (own and public), not arcs - docs/superpowers/specs/2026-10-05-metron-account-sync-design.md D6.
             case "MetronLists":
-                string? listsUser = CredentialStore.Get(context, "Metron", CredentialKind.Username);
-                string? listsPassword = CredentialStore.Get(context, "Metron", CredentialKind.Password);
-                return string.IsNullOrEmpty(listsUser) || string.IsNullOrEmpty(listsPassword)
-                    ? null
-                    : new MetronReadingListSource(new ComicVine.MetronClient(listsUser, listsPassword));
+                var listsAuth = ComicVine.MetronAuth.Load(context);
+                return listsAuth is null ? null : new MetronReadingListSource(new ComicVine.MetronClient(listsAuth));
 
             case "ComicBookReadingOrders":
                 return new ComicBookReadingOrdersSource();

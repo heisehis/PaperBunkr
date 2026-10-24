@@ -9,46 +9,8 @@
     -->
 
     <!-- Buttons -->
-    <Style Selector="Button.headerAction">
-        <Setter Property="Padding" Value="10,5" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-        <Setter Property="FontSize" Value="11.5" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Cursor" Value="Hand" />
-    </Style>
-    <Style Selector="Button.headerAction.ghost">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-    </Style>
-    <Style Selector="Button.headerAction.secondary">
-        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-    </Style>
-    <Style Selector="Button.headerAction.primary">
-        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
-    </Style>
 
     <!-- Overview | Map | Timeline -->
-    <Style Selector="Button.segToggle">
-        <Setter Property="Padding" Value="12,5" />
-        <Setter Property="CornerRadius" Value="4" />
-        <Setter Property="FontSize" Value="11" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        <Setter Property="Cursor" Value="Hand" />
-    </Style>
-    <Style Selector="Button.segToggle.on">
-        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-    </Style>
 
     <!-- Section headings -->
     <Style Selector="TextBlock.csSection">
@@ -58,26 +20,15 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBlock.csFaint">
-        <Setter Property="FontSize" Value="10.5" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
     </Style>
 
     <!-- Hero chips (GCD, source, "in Earth-616") - squircle, never an oval -->
-    <Style Selector="Border.heroChip">
-        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusChip}" />
-        <Setter Property="Padding" Value="6,1" />
+    <Style Selector="Border.pbChip">
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
-    <Style Selector="Button.heroChip">
-        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusChip}" />
-        <Setter Property="Padding" Value="6,1" />
-        <Setter Property="MinHeight" Value="0" />
-        <Setter Property="FontSize" Value="10.5" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Cursor" Value="Hand" />
+    <Style Selector="Button.filterChip">
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
@@ -93,7 +44,7 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="4,2" />
-        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
         <Setter Property="Cursor" Value="Hand" />
     </Style>
@@ -102,21 +53,6 @@
     </Style>
 
     <!-- Reading-list filter chips -->
-    <Style Selector="Button.filterChip">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusChip}" />
-        <Setter Property="Padding" Value="9,3" />
-        <Setter Property="FontSize" Value="11" />
-        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        <Setter Property="Cursor" Value="Hand" />
-    </Style>
-    <Style Selector="Button.filterChip.on">
-        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
-    </Style>
 
     <!-- List rows: calm at rest, manage controls on hover -->
     <Style Selector="Border.itemRow">
@@ -155,7 +91,7 @@
     </Style>
     <Style Selector="Border.posterScrimButton">
         <Setter Property="Background" Value="#B0000000" />
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
     </Style>
     <Style Selector="Border.dropTarget">
         <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
@@ -175,12 +111,7 @@
     </Style>
 
     <!-- Suggestions & checks cards -->
-    <Style Selector="Border.reviewCard">
-        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-        <Setter Property="Padding" Value="12,10" />
+    <Style Selector="Border.card">
         <Setter Property="Margin" Value="0,0,0,8" />
     </Style>
 

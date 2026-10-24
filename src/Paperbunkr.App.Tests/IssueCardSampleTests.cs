@@ -41,4 +41,26 @@ public class IssueCardSampleTests
         // matches the Library's unread marker; a not-yet-read card at fraction 0 or a not-flagged-read fraction 1 is Unread, not blank.
         Assert.Equal(IssueTileGlyph.Unread, Card(isRead: false, readFraction: fraction).TileGlyph);
     }
+
+    [Theory]
+    [InlineData("Annual", "ANNUAL")]
+    [InlineData("One Shot", "SPECIAL")]
+    [InlineData("TPB", "TPB")]
+    public void EditionRibbon_RecognizesStructuredFormatValues(string format, string expected)
+    {
+        var card = new IssueCardSample { Title = "#1", CoverBrush = Brushes.Transparent, Format = format };
+        Assert.True(card.HasEditionRibbon);
+        Assert.Equal(expected, card.EditionRibbonLabel);
+    }
+
+    [Theory]
+    [InlineData("Batman #1 Variant Cover")]
+    [InlineData("Issue 100")]
+    [InlineData("Unknown format")]
+    public void EditionRibbon_DoesNotInferFromAmbiguousText(string format)
+    {
+        var card = new IssueCardSample { Title = "#1", CoverBrush = Brushes.Transparent, Format = format };
+        Assert.False(card.HasEditionRibbon);
+        Assert.Null(card.EditionRibbonLabel);
+    }
 }

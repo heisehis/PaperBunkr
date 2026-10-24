@@ -23,7 +23,7 @@
     </UserControl.Styles>
 
     <ScrollViewer>
-        <StackPanel Margin="28,20,28,40" Spacing="20">
+        <StackPanel Margin="24,20,24,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="Advanced" />
 
         <StackPanel Tag="advanced.rendering">
@@ -41,8 +41,8 @@
                     <ToggleSwitch IsChecked="{Binding PreferNativeOpenGl}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
-            <TextBlock Text="Changes take effect after restarting Paperbunkr." FontSize="11.5"
-                       Foreground="{DynamicResource PbTextFaintBrush}" FontStyle="Italic" Margin="0,-6,0,0" />
+            <TextBlock Text="Changes take effect after restarting Paperbunkr." FontSize="12"
+                       Foreground="{DynamicResource PbTextMutedBrush}" FontStyle="Italic" Margin="0,-6,0,0" />
         </StackPanel>
 
         <!-- File Association (docs/superpowers/specs/2026-09-08-advanced-backup-file-association-
@@ -56,21 +56,21 @@
         <StackPanel Tag="advanced.fileAssociation">
             <TextBlock Classes="settingsGroupCaption" Text="FILE TYPES" />
             <Grid ColumnDefinitions="Auto,*,76,76" Margin="10,0,10,4">
-                <TextBlock Grid.Column="2" Text="Open with" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
-                <TextBlock Grid.Column="3" Text="Thumbnail" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="Open with" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" />
+                <TextBlock Grid.Column="3" Text="Thumbnail" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" />
             </Grid>
             <ItemsControl x:Name="FileAssociationsList" ItemsSource="{Binding FileAssociations}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="models:FileAssociationSummary">
-                        <Grid ColumnDefinitions="Auto,*,76,76" Margin="10,5">
-                            <Border Grid.Column="0" Width="26" Height="26" CornerRadius="7" Background="{DynamicResource PbSurface3Brush}" VerticalAlignment="Center">
+                        <Grid ColumnDefinitions="Auto,*,76,76" Margin="10,4">
+                            <Border Grid.Column="0" Width="26" Height="26" CornerRadius="{DynamicResource PbRadius}" Background="{DynamicResource PbSurface3Brush}" VerticalAlignment="Center">
                                 <fi:SymbolIcon Symbol="Document" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}"
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                                <TextBlock Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                                 <TextBlock Text="{Binding ExtensionList}" FontSize="11" FontFamily="Consolas,monospace"
-                                           Foreground="{DynamicResource PbTextFaintBrush}" />
+                                           Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <TextBlock Text="{Binding ThumbnailOwnerLabel}" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}"
                                            IsVisible="{Binding HasThumbnailOwner}" />
                             </StackPanel>
@@ -84,14 +84,14 @@
                                           Command="{Binding #FileAssociationsList.((vm:PreferencesScreenViewModel)DataContext).ToggleThumbnailCommand}"
                                           CommandParameter="{Binding}"
                                           AutomationProperties.Name="{Binding Name, StringFormat='Show {0} covers as File Explorer thumbnails'}" />
-                            <TextBlock Grid.Column="3" Text="—" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}"
+                            <TextBlock Grid.Column="3" Text="—" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasThumbnail}"
                                        ToolTip.Tip="Paperbunkr doesn't draw File Explorer thumbnails for this type" />
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <TextBlock Margin="10,6,10,0" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+            <TextBlock Margin="10,6,10,0" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}"
                        Text="Thumbnail shows each file's cover in File Explorer, even outside your library. Windows keeps thumbnails it has already made until a file changes; Disk Cleanup → Thumbnails refreshes them straight away." />
         </StackPanel>
 
@@ -127,7 +127,7 @@
             <pref:SettingsRow Icon="Save" Title="Write all library metadata to files now"
                                Description="{Binding WriteAllMetadataStatus}">
                 <pref:SettingsRow.SettingsContent>
-                    <Button Classes="headerAction primary" Command="{Binding WriteAllMetadataToFilesCommand}"
+                    <Button Classes="primary" Command="{Binding WriteAllMetadataToFilesCommand}"
                             IsEnabled="{Binding WriteMetadataToFiles}" Content="Write Now…" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
@@ -156,7 +156,7 @@
                 <pref:SettingsRow.SettingsContent>
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <TextBox Text="{Binding BackupLocation}" Width="280" IsReadOnly="True" />
-                        <Button Classes="headerAction ghost" Command="{Binding BrowseBackupLocationCommand}">
+                        <Button Classes="ghost" Command="{Binding BrowseBackupLocationCommand}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeXs}" />
                                 <TextBlock Text="Browse…" />
@@ -186,7 +186,7 @@
 
             <pref:SettingsRow Icon="Save" Title="Backup now" Description="{Binding BackupStatus}">
                 <pref:SettingsRow.SettingsContent>
-                    <Button Classes="headerAction primary" Command="{Binding BackupNowCommand}">
+                    <Button Classes="primary" Command="{Binding BackupNowCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <fi:SymbolIcon Symbol="Archive" Foreground="{DynamicResource PbBadgeTextBrush}" />
                             <TextBlock Text="Backup Now" />
@@ -202,9 +202,9 @@
                             <Grid ColumnDefinitions="*,Auto" Margin="14,10">
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding DisplayDate}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                    <TextBlock Text="{Binding DisplaySize}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                    <TextBlock Text="{Binding DisplaySize}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 </StackPanel>
-                                <Button Grid.Column="1" Classes="headerAction ghost" Classes.restoreArmed="{Binding IsArmed}" Command="{Binding RestoreCommand}">
+                                <Button Grid.Column="1" Classes="ghost" Classes.restoreArmed="{Binding IsArmed}" Command="{Binding RestoreCommand}">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <fi:SymbolIcon Symbol="ArrowUndo" FontSize="{StaticResource PbIconSizeXs}" />
                                         <TextBlock Text="{Binding RestoreLabel}" />
@@ -216,7 +216,7 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
             <TextBlock Text="Restoring a backup requires restarting Paperbunkr to take effect."
-                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,8,0,0"
+                       FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,8,0,0"
                        IsVisible="{Binding HasBackups}" />
         </StackPanel>
     </StackPanel>

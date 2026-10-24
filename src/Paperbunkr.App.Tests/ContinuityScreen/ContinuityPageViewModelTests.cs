@@ -319,6 +319,36 @@ public class ContinuityPageViewModelTests : ContinuityScreenTestBase
     }
 
     [Fact]
+    public async Task Attention_OutsideSeries_CanBeSelectedAndAddedInBulk()
+    {
+        int hulk = SeedSeries("Hulk", ("1", 2007));
+        int thor = SeedSeries("Thor", ("5", 2007));
+        int ironMan = SeedSeries("Iron Man", ("1", 2007));
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            SeedEvent("Crossover", null, null,
+                context.Issues.Single(i => i.SeriesId == hulk).Id,
+                context.Issues.Single(i => i.SeriesId == thor).Id,
+                context.Issues.Single(i => i.SeriesId == ironMan).Id);
+        }
+
+        var page = Open(SeedContinuity("Earth-616", hulk));
+        Assert.Equal(2, page.OutsideSeries.Count);
+
+        page.SelectAllOutsideSeriesCommand.Execute(null);
+        Assert.Equal(2, page.SelectedOutsideSeriesCount);
+        page.ClearOutsideSeriesSelectionCommand.Execute(null);
+        Assert.Equal(0, page.SelectedOutsideSeriesCount);
+        page.SelectAllOutsideSeriesCommand.Execute(null);
+
+        await page.AddSelectedOutsideSeriesCommand.ExecuteAsync(null);
+        Assert.Equal(new[] { hulk, thor, ironMan }.Order(), page.Members.Select(m => m.SeriesId).Order());
+        Assert.Empty(page.OutsideSeries);
+        using var check = PaperbunkrDb.CreateContext();
+        Assert.Equal(3, check.ContinuityMemberships.Count());
+    }
+
+    [Fact]
     public void Attention_Duplicates_OpenSuggestionsAndChecks()
     {
         int hulk = SeedSeries("Hulk", ("92", 2006), ("93", 2006));

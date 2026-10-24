@@ -37,8 +37,15 @@ public partial class HomeScreen : UserControl
     public HomeScreen()
     {
         InitializeComponent();
-        SectionsHost.ItemTemplate = new HomeSectionTemplateSelector(
-            key => this.TryFindResource(key, out var value) ? value as IDataTemplate : null);
+
+        // Theme layouts (docs/superpowers/specs/2026-10-12-theme-system-v2-gap-analysis-and-plan.md, phase 4): Home publishes what a layout may
+        // place, show and trigger; the layout only arranges it. Shortcuts stay registered on this control (below), so they work in any layout.
+        LayoutHost.Contract = HomeLayoutContract.Instance;
+        LayoutHost.CreateSlot = HomeLayoutContract.CreateSlot;
+        LayoutHost.GetBinding = name => HomeLayoutContract.GetBinding(_viewModel, name);
+        LayoutHost.GetCommand = name => HomeLayoutContract.GetCommand(_viewModel, name);
+        LayoutHost.ApplyMotion = Theming.Motion.ThemeMotionRuntime.Play;
+        LayoutHost.LayoutApplied += () => _focus?.ReclaimIfFocusWithinOrNowhere();
 
         _focus = new FocusReclaimer(this, () => _viewModel is { Sections.Count: > 0 }, FocusDefault);
         KeyDown += OnHomeKeyDown;
@@ -56,8 +63,19 @@ public partial class HomeScreen : UserControl
         DataContextChanged += (_, _) =>
         {
             SubscribeToContentResets(_viewModel, subscribe: false);
+            if (_viewModel is not null)
+            {
+                _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            }
+
             _viewModel = DataContext as HomeScreenViewModel;
             SubscribeToContentResets(_viewModel, subscribe: true);
+            if (_viewModel is not null)
+            {
+                _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            }
+
+            LayoutHost.RefreshBindings();
             TryStartFirstReadyEffects();
         };
         AttachedToVisualTree += (_, _) =>
@@ -103,7 +121,20 @@ public partial class HomeScreen : UserControl
         }
     }
 
-    private void OnContentChanged(object? sender, NotifyCollectionChangedEventArgs e) => _focus.ReclaimIfFocusWithinOrNowhere();
+    private void OnContentChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        _focus.ReclaimIfFocusWithinOrNowhere();
+        LayoutHost.RefreshBindings();
+    }
+
+    // A theme layout shows a few published values (the greeting, whether any section is on); keep them current.
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(HomeScreenViewModel.Greeting) or nameof(HomeScreenViewModel.AllSectionsHidden))
+        {
+            LayoutHost.RefreshBindings();
+        }
+    }
 
     // The spotlight carousel is one group: Left/Right switch panels (AccordionPanel handles them), Up/Down leave it for the row above or
     // below instead of bouncing between its panels, nav buttons and Read now. Every other arrow press falls back to the screen-wide
@@ -155,20 +186,29 @@ public partial class HomeScreen : UserControl
         }
     }
 
-    /// <summary>The section container that holds the spotlight accordion, when <paramref name="from"/> is anywhere inside it.</summary>
-    private Control? SpotlightRootOf(Visual from)
+    /// <summary>
+    /// The section container that holds the spotlight accordion, when <paramref name="from"/> is anywhere inside it. A section's container is
+    /// the presenter whose content is that section's view-model - true in the section list and for a single section a theme layout placed.
+    /// </summary>
+    private static Control? SpotlightRootOf(Visual from)
     {
-        var panel = SectionsHost.ItemsPanelRoot;
         for (Visual? v = from; v is not null; v = v.GetVisualParent())
         {
-            if (ReferenceEquals(v.GetVisualParent(), panel))
+            if (v is Avalonia.Controls.Presenters.ContentPresenter { Content: ViewModels.Home.HomeSectionViewModel } container)
             {
-                return v is Control c && c.GetVisualDescendants().OfType<Controls.AccordionPanel>().Any() ? c : null;
+                return container.GetVisualDescendants().OfType<Controls.AccordionPanel>().Any() ? container : null;
             }
         }
 
         return null;
     }
+
+    /// <summary>Everything inside Home's sections (not the masthead), in visual order, whichever layout is showing.</summary>
+    private IEnumerable<Visual> SectionDescendants() =>
+        this.GetVisualDescendants()
+            .OfType<Avalonia.Controls.Presenters.ContentPresenter>()
+            .Where(p => p.Content is ViewModels.Home.HomeSectionViewModel)
+            .SelectMany(p => p.GetVisualDescendants());
 
     private static Button? OpenSpotlightPanel(Control spotlight) =>
         spotlight.GetVisualDescendants().OfType<Button>()
@@ -177,9 +217,10 @@ public partial class HomeScreen : UserControl
     /// <summary>The spotlight carousel's open panel when there is one (it is the first thing on the page), else the first tile or button, in reading order; the masthead's own controls are reached by Tab/Shift+Tab.</summary>
     private void FocusDefault()
     {
-        var target = SectionsHost.GetVisualDescendants().OfType<Button>()
+        var sections = SectionDescendants().ToList();
+        var target = sections.OfType<Button>()
             .FirstOrDefault(b => b.Classes.Contains("spotlightPanel") && b.Classes.Contains("open") && b.IsEffectivelyEnabled && b.IsEffectivelyVisible) as Control
-            ?? SectionsHost.GetVisualDescendants().OfType<Control>()
+            ?? sections.OfType<Control>()
             .FirstOrDefault(c => c is Button or Border { Focusable: true } && !c.Classes.Contains("spotlightNav") && c.Focusable && c.IsEffectivelyEnabled && c.IsEffectivelyVisible);
         if (target is not null)
         {

@@ -88,7 +88,7 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase, IConte
             return;
         }
 
-        HeaderLabel = $"Edit \"{collection.Name}\"";
+        HeaderLabel = collection.Name; // the dialog subtitle; the title says "Edit collection"
         Name = collection.Name;
         Description = collection.Description ?? string.Empty;
         AccentColor = collection.AccentColor ?? string.Empty;

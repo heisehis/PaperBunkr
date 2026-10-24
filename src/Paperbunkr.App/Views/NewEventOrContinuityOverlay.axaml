@@ -9,49 +9,181 @@
              x:Class="Paperbunkr.App.Views.NewEventOrContinuityOverlay"
              x:DataType="vm:NewEventOrContinuityViewModel">
 
-    <Border Classes="floatingPanel" Width="400">
-        <StackPanel>
-            <Border Padding="18,15" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
-                <TextBlock Classes="pbTextHeading" Text="{Binding Title}" />
-            </Border>
-
-            <StackPanel Margin="18,16" Spacing="12">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="NAME" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
-                    <TextBox Text="{Binding Name}" />
-                </StackPanel>
-                <StackPanel Spacing="6" IsVisible="{Binding IsContinuity}">
-                    <TextBlock Text="PUBLISHER" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
-                    <!-- A suggestion box of the library's publishers, with the chosen one's logo (docs/superpowers/specs/
-                         2026-09-28-continuity-screen-redesign-design.md, R9). Not strict: a new publisher can still be typed. -->
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                        <controls:BrandMark Grid.Column="0" Family="Publisher" Value="{Binding Publisher}" MarkSize="20" MaxMarkWidth="60" ShowText="False" EnsureContrast="True"
-                                            VerticalAlignment="Center">
-                            <controls:BrandMark.IsVisible>
-                                <!-- only a real logo: a publisher with none would fall back to plain text, which reads as a stray mark here -->
-                                <MultiBinding Converter="{x:Static conv:BoolConverters.Or}">
-                                    <Binding Path="IsImage" RelativeSource="{RelativeSource Self}" />
-                                    <Binding Path="IsRaster" RelativeSource="{RelativeSource Self}" />
-                                </MultiBinding>
-                            </controls:BrandMark.IsVisible>
-                        </controls:BrandMark>
-                        <controls:SuggestBox Grid.Column="1" Text="{Binding Publisher}" Suggestions="{Binding PublisherSuggestions}"
-                                             Watermark="optional" AutomationProperties.Name="Publisher" />
-                    </Grid>
-                </StackPanel>
-                <StackPanel Spacing="6">
-                    <TextBlock Text="DESCRIPTION" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
-                    <TextBox Text="{Binding Description}" Watermark="optional" AcceptsReturn="True" TextWrapping="Wrap"
-                             MinHeight="64" MaxHeight="140" />
+    <controls:DialogCard Title="{Binding Title}" Size="Medium">
+        <StackPanel Spacing="12">
+            <StackPanel IsVisible="{Binding IsBasics}" Spacing="12">
+            <StackPanel Spacing="6" IsVisible="{Binding !IsEdit}">
+                <TextBlock Text="WORKFLOW" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <ComboBox ItemsSource="{Binding PresetOptions}" SelectedItem="{Binding SelectedPreset}" AutomationProperties.Name="Creation workflow preset" />
+            </StackPanel>
+            <StackPanel Spacing="6">
+                <TextBlock Text="NAME" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <TextBox Text="{Binding Name}" />
+            </StackPanel>
+            <StackPanel IsVisible="{Binding IsContinuity}" Spacing="6">
+                <TextBlock Text="DESIGNATION" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <TextBox Text="{Binding Designation}" PlaceholderText="Optional, e.g. Earth-616 or Earth-2" AutomationProperties.Name="Continuity designation" />
+                <TextBlock Text="The publisher's label for this universe. Leave blank if unknown; Metron setup may fill it when available." Classes="csFaint" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Spacing="8" IsVisible="{Binding IsContinuity, Converter={x:Static conv:BoolConverters.Not}}">
+                <TextBlock Text="EVENT TYPES" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <ItemsControl ItemsSource="{Binding EventTypeSelections}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:CompileBindings="False">
+                            <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSelected}" Margin="0,0,12,4" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <StackPanel Spacing="5"><TextBlock Text="START DATE (YYYY-MM-DD)" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"/><TextBox Text="{Binding StartDate}" PlaceholderText="optional" AutomationProperties.Name="Event start date"/></StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="5"><TextBlock Text="END DATE (YYYY-MM-DD)" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"/><TextBox Text="{Binding EndDate}" PlaceholderText="optional" AutomationProperties.Name="Event end date"/></StackPanel>
+                </Grid>
+                <TextBlock Text="{Binding DateEntryError}" Foreground="{DynamicResource PbDangerBrush}" IsVisible="{Binding DateEntryError, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                <StackPanel Spacing="5"><TextBlock Text="EVENT TAGS" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"/><TextBox Text="{Binding EventTags}" PlaceholderText="one tag per line" AcceptsReturn="True" MinHeight="48" MaxHeight="90" AutomationProperties.Name="Curated event tags"/></StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="ghost" Content="Choose event cover" Command="{Binding ChooseEventCoverCommand}" AutomationProperties.Name="Choose event cover"/>
+                    <TextBlock Text="Cover selected" IsVisible="{Binding EventCoverPath, Converter={x:Static conv:ObjectConverters.IsNotNull}}" VerticalAlignment="Center" Classes="csFaint"/>
+                    <Button Classes="ghost" Content="Clear" Command="{Binding ClearEventCoverCommand}" IsVisible="{Binding EventCoverPath, Converter={x:Static conv:ObjectConverters.IsNotNull}}"/>
                 </StackPanel>
             </StackPanel>
-
-            <Border Padding="18,13" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0">
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                    <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" />
-                    <Button Classes="primary" Content="{Binding SaveButtonLabel}" Command="{Binding CreateCommand}" IsEnabled="{Binding CanCreate}" />
+            <StackPanel Spacing="6" IsVisible="{Binding IsContinuity}">
+                <TextBlock Text="PUBLISHER" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <!-- A suggestion box of the library's publishers, with the chosen one's logo (docs/superpowers/specs/
+                     2026-09-28-continuity-screen-redesign-design.md, R9). Not strict: a new publisher can still be typed. -->
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <controls:BrandMark Grid.Column="0" Family="Publisher" Value="{Binding Publisher}" MarkSize="20" MaxMarkWidth="60" ShowText="False" EnsureContrast="True"
+                                        VerticalAlignment="Center">
+                        <controls:BrandMark.IsVisible>
+                            <!-- only a real logo: a publisher with none would fall back to plain text, which reads as a stray mark here -->
+                            <MultiBinding Converter="{x:Static conv:BoolConverters.Or}">
+                                <Binding Path="IsImage" RelativeSource="{RelativeSource Self}" />
+                                <Binding Path="IsRaster" RelativeSource="{RelativeSource Self}" />
+                            </MultiBinding>
+                        </controls:BrandMark.IsVisible>
+                    </controls:BrandMark>
+                    <controls:SuggestBox Grid.Column="1" Text="{Binding Publisher}" Suggestions="{Binding PublisherSuggestions}"
+                                         Watermark="optional" AutomationProperties.Name="Publisher" />
+                </Grid>
+            </StackPanel>
+            <StackPanel Spacing="6">
+                <TextBlock Text="DESCRIPTION" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <TextBox Text="{Binding Description}" PlaceholderText="optional" AcceptsReturn="True" TextWrapping="Wrap"
+                         MinHeight="64" MaxHeight="140" />
+            </StackPanel>
+            </StackPanel>
+            <StackPanel IsVisible="{Binding IsProviderStage}" Spacing="12">
+                <TextBlock Text="PROVIDER SETUP" Classes="pbTextHeading" />
+                <TextBlock Text="Search an event arc to preview its source identity and description. Nothing is applied until Review." TextWrapping="Wrap" Classes="csFaint" IsVisible="{Binding IsContinuity, Converter={x:Static conv:BoolConverters.Not}}" />
+                <TextBlock Text="Search by this continuity's name or a universe designation, then choose the matching Metron universe. The existing Find series on Metron catalog browser remains available." TextWrapping="Wrap" Classes="csFaint" IsVisible="{Binding IsContinuity}" />
+                <StackPanel IsVisible="{Binding IsContinuity}" Spacing="8">
+                    <TextBlock Text="SEARCH METRON UNIVERSES" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBox Text="{Binding MetronUniverseQuery}" PlaceholderText="Continuity name or designation" AutomationProperties.Name="Search Metron universes" />
+                        <Button Grid.Column="1" Classes="secondary" Content="Search" Command="{Binding SearchMetronUniversesCommand}" />
+                    </Grid>
+                    <ScrollViewer MaxHeight="190" IsVisible="{Binding HasUniverseResults}">
+                        <ItemsControl ItemsSource="{Binding UniverseResults}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:CompileBindings="False">
+                                    <Button Classes="secondary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,2"
+                                            Command="{Binding $parent[ItemsControl].DataContext.SelectMetronUniverseCommand}"
+                                            CommandParameter="{Binding}">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{Binding Name}" />
+                                            <TextBlock Text="{Binding Designation}" Classes="csFaint" IsVisible="{Binding Designation}" />
+                                            <TextBlock Text="{Binding Publisher}" Classes="csFaint" IsVisible="{Binding Publisher}" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock Text="{Binding SelectedUniverseSummary}" IsVisible="{Binding HasSelectedUniverse}" />
+                    <ScrollViewer MaxHeight="230" IsVisible="{Binding HasSelectedUniverse}">
+                        <ItemsControl ItemsSource="{Binding ProviderSeriesMatches}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:CompileBindings="False">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,4">
+                                        <CheckBox IsChecked="{Binding IsSelected}" IsEnabled="{Binding CanAdd}" AutomationProperties.Name="Add Metron universe series" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding MatchLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </StackPanel>
-            </Border>
+                <StackPanel IsVisible="{Binding IsContinuity, Converter={x:Static conv:BoolConverters.Not}}" Spacing="8">
+                    <ComboBox ItemsSource="{Binding ProviderOptions}" SelectedItem="{Binding ProviderSource}" AutomationProperties.Name="Event provider" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBox Text="{Binding ProviderQuery}" PlaceholderText="Search provider events" AutomationProperties.Name="Search provider events" />
+                        <Button Grid.Column="1" Classes="secondary" Content="Search" Command="{Binding SearchProviderCommand}" />
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding ArcResults}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:CompileBindings="False">
+                                <Button Classes="secondary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                        Content="{Binding Name}" Command="{Binding $parent[ItemsControl].DataContext.SelectProviderArcCommand}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+                <TextBlock Text="{Binding ProviderStatus}" TextWrapping="Wrap" Classes="csFaint" AutomationProperties.LiveSetting="Polite" />
+                <TextBlock Text="Selected provider Event: {Binding SelectedProviderName}" IsVisible="{Binding HasSelectedProvider}" />
+            </StackPanel>
+            <StackPanel IsVisible="{Binding IsReviewStage}" Spacing="10">
+                <TextBlock Text="REVIEW SETUP" Classes="pbTextHeading" />
+                <TextBlock Text="Review provider identity and the fields that will be filled. Existing values and curated memberships are preserved." TextWrapping="Wrap" Classes="csFaint" />
+                <TextBlock Text="{Binding ProviderStatus}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding SelectedUniverseSummary}" IsVisible="{Binding HasSelectedUniverse}" />
+                <TextBlock Text="{Binding ProviderSeriesSummary}" IsVisible="{Binding HasSelectedUniverse}" TextWrapping="Wrap" />
+                <StackPanel IsVisible="{Binding IsContinuity, Converter={x:Static conv:BoolConverters.Not}}" Spacing="6">
+                    <TextBlock Text="OPTIONAL RELATED EVENTS" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <TextBlock Text="Choose existing Events to relate. No relationships are inferred." Classes="csFaint" />
+                    <ComboBox ItemsSource="{Binding RelatedEventRelationTypes}" SelectedItem="{Binding SelectedRelatedEventRelationType}"
+                              AutomationProperties.Name="Relationship type for selected Events" />
+                    <ScrollViewer MaxHeight="130">
+                        <ItemsControl ItemsSource="{Binding RelatedEvents}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:CompileBindings="False">
+                                    <CheckBox Content="{Binding Name}" IsChecked="{Binding IsSelected}" Margin="0,2" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+                <TextBlock Text="{Binding ProviderIssueSummary}" IsVisible="{Binding HasSelectedProvider}" />
+                <ScrollViewer MaxHeight="250" IsVisible="{Binding HasSelectedProvider}">
+                    <ItemsControl ItemsSource="{Binding ProviderIssueMatches}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:CompileBindings="False">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,4">
+                                    <CheckBox IsChecked="{Binding IsSelected}" IsEnabled="{Binding CanAdd}" AutomationProperties.Name="Add exact provider issue match" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Label}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    <TextBlock Grid.Column="2" Text="{Binding SuggestedRoleLabel}" IsVisible="{Binding SuggestedRoleLabel, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                                               FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Problem}" IsVisible="{Binding Problem, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                                               FontSize="10" Foreground="{DynamicResource PbDangerBrush}" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <TextBlock Text="No provider result selected; applying will keep your manual details unchanged." IsVisible="{Binding HasSelectedProvider, Converter={x:Static conv:BoolConverters.Not}}" Classes="csFaint" />
+            </StackPanel>
         </StackPanel>
-    </Border>
+
+        <controls:DialogCard.Footer>
+            <StackPanel>
+                <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" />
+                <Button Classes="ghost" Content="Back" Command="{Binding BackToBasicsCommand}" IsVisible="{Binding IsProviderStage}" />
+                <Button Classes="ghost" Content="Skip setup" Command="{Binding SkipSetupCommand}" IsVisible="{Binding IsProviderStage}" />
+                <Button Classes="ghost" Content="Back" Command="{Binding BackToBasicsCommand}" IsVisible="{Binding IsReviewStage}" />
+                <Button Classes="primary" Content="{Binding SaveButtonLabel}" Command="{Binding CreateCommand}" IsEnabled="{Binding CanCreate}" />
+
+            </StackPanel>
+        </controls:DialogCard.Footer>
+    </controls:DialogCard>
 </UserControl>

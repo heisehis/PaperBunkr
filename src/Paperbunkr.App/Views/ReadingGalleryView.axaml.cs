@@ -28,6 +28,34 @@ public partial class ReadingGalleryView : UserControl
     /// <summary>The glyph on a tile with no cover at all.</summary>
     public static readonly IValueConverter TileGlyph = new FuncValueConverter<bool, Symbol>(isFolder => isFolder ? Symbol.Folder : Symbol.TextBulletListSquare);
 
+    /// <summary>The narrowest a list card may get; the grid takes as many columns of at least this width as fit.</summary>
+    public const double MinCardWidth = 460;
+
+    /// <summary>The gap on the right and bottom of every card (each card's own margin).</summary>
+    public const double CardGap = 12;
+
+    /// <summary>How many list cards fit across; the arrow keys step by this within the list band.</summary>
+    public int ListColumns { get; private set; } = 1;
+
+    /// <summary>How many folder cards fit across - one more than the list columns, so folders read as the smaller cards they are.</summary>
+    public int FolderColumns { get; private set; } = 1;
+
+    /// <summary>Columns and cell width (card plus gap) for the list band of a grid <paramref name="available"/> px wide: as many columns as fit
+    /// at <see cref="MinCardWidth"/>, at least one, sharing the width exactly.</summary>
+    public static (int Columns, double Cell) Layout(double available)
+    {
+        int columns = Math.Max(1, (int)Math.Floor(available / (MinCardWidth + CardGap)));
+        return (columns, available > 0 ? available / columns : MinCardWidth + CardGap);
+    }
+
+    /// <summary>The same for the folder band: one more column than the lists have once there is room for two.</summary>
+    public static (int Columns, double Cell) FolderLayout(double available)
+    {
+        int columns = Layout(available).Columns;
+        columns = columns == 1 ? 1 : columns + 1;
+        return (columns, available > 0 ? available / columns : MinCardWidth + CardGap);
+    }
+
     private static readonly DataFormat<ReadingGalleryTile> DragFormat = DataFormat.CreateInProcessFormat<ReadingGalleryTile>("paperbunkr-reading-gallery-tile");
     private const double DragThreshold = 6;
 
@@ -67,6 +95,25 @@ public partial class ReadingGalleryView : UserControl
         Scroller.AddHandler(DragDrop.DragOverEvent, OnDragOver);
         Scroller.AddHandler(DragDrop.DragLeaveEvent, (_, _) => ClearFeedback());
         Scroller.AddHandler(DragDrop.DropEvent, OnDrop);
+        GalleryContent.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == BoundsProperty)
+            {
+                ListColumns = Layout(GalleryContent.Bounds.Width).Columns;
+                FolderColumns = FolderLayout(GalleryContent.Bounds.Width).Columns;
+            }
+        };
+        // The tag row has no visible bar and no vertical travel, so the wheel scrolls it sideways instead.
+        TagScroller.AddHandler(PointerWheelChangedEvent, (_, e) =>
+        {
+            double step = Math.Abs(e.Delta.X) > Math.Abs(e.Delta.Y) ? e.Delta.X : e.Delta.Y;
+            double max = Math.Max(0, TagScroller.Extent.Width - TagScroller.Viewport.Width);
+            if (step != 0 && max > 0)
+            {
+                TagScroller.Offset = TagScroller.Offset.WithX(Math.Clamp(TagScroller.Offset.X - step * 48, 0, max));
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
         TileGrid.AddHandler(KeyDownEvent, OnRenameKeyDown, RoutingStrategies.Tunnel);
         AddHandler(KeyDownEvent, OnNavigationKeyDown, RoutingStrategies.Tunnel);
         TileGrid.AddHandler(LostFocusEvent, OnRenameLostFocus);
@@ -329,18 +376,33 @@ public partial class ReadingGalleryView : UserControl
             return;
         }
 
-        // 164px tiles + 18px gap.
-        int columns = ReadingListKeyboard.Columns(TileGrid, 182);
+        int columns = Math.Max(1, ListColumns);
+        int folders = vm.Tiles.TakeWhile(t => t.IsFolder).Count();
         if (e.KeyModifiers == KeyModifiers.None)
         {
-            // Up from the first row goes on up to the Continue Reading card or the header; Left from the first column is left for the nav rail.
-            if (e.Key == Key.Up && index < columns && FocusReclaimer.TryMoveDirectionally(this, e))
+            // Up/Down move within and between the folder band and the list band; Up from the top row goes on up to the Continue Reading card or the
+            // header, and Left from the first column is left for the nav rail.
+            if (e.Key is Key.Up or Key.Down)
             {
-                e.Handled = true;
+                var (target, leaves) = ReadingGalleryNavigation.Vertical(e.Key == Key.Down, index, folders, vm.Tiles.Count, FolderColumns, columns);
+                if (target is { } to)
+                {
+                    ReadingListKeyboard.FocusIndex(TileGrid, to, e.Key == Key.Down ? 1 : -1);
+                    e.Handled = true;
+                }
+                else if (leaves)
+                {
+                    e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
+                }
+                else
+                {
+                    e.Handled = true;
+                }
+
                 return;
             }
 
-            if (e.Key == Key.Left && index % columns == 0)
+            if (e.Key == Key.Left && ReadingGalleryNavigation.IsFirstColumn(index, folders, FolderColumns, columns))
             {
                 return;
             }

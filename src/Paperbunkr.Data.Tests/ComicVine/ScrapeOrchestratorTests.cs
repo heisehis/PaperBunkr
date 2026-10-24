@@ -11,6 +11,7 @@ namespace Paperbunkr.Data.Tests.ComicVine;
 /// <summary>Implementation plan Phase 3 verification for the scrape-and-apply orchestrator: auto-
 /// choose vs. interactive review vs. non-interactive skip-and-log, and the overwrite/ignore-blank/
 /// enabled-field write gates.</summary>
+[Collection("ScrapeOrchestratorStatics")] // ScrapeDelayOverride and DelayInvocationCount are static
 public sealed class ScrapeOrchestratorTests : IDisposable
 {
     private readonly string _testRoot;
@@ -121,6 +122,29 @@ public sealed class ScrapeOrchestratorTests : IDisposable
         Assert.False(reviewCalled);
         using PaperbunkrDbContext context = CreateDbContext();
         Assert.Equal("DC Comics", context.Issues.Single(i => i.Id == 1).Publisher);
+    }
+
+    [Theory]
+    [InlineData(null, false, true, "Series story")]
+    [InlineData("My summary", false, true, "My summary")]
+    [InlineData(null, true, true, null)]
+    [InlineData(null, false, false, null)]
+    public async Task ComicVineSeriesDescription_ReachesSeries_WithoutExtraRequest_AndRespectsUserChoices(string? existing, bool locked, bool enabled, string? expected)
+    {
+        var issue = MakeIssue();
+        issue.Series!.Summary = existing;
+        issue.Series.LockedFields = locked ? "Summary" : null;
+        Seed(issue);
+        string response = VolumeSearchJson.Replace("\"start_year\"", "\"description\":\"<p>Series story</p>\",\"start_year\"");
+        var source = Cv(new FakeHttpMessageHandler(response, EmptyIssueSearchJson));
+        var settings = new ScrapeSettings { AutoChooseTopMatch = true };
+        if (!enabled) settings.EnabledScrapeFields.Remove(ScrapeField.Summary);
+        var orchestrator = new ScrapeOrchestrator(source, new ComicVineMatchMemory(CreateDbContext), settings);
+        var result = await orchestrator.ScrapeAsync(new[] { issue }, true,
+            (_, _, _, _, _) => Task.FromResult<ComicVineVolumeSearchResult?>(null), CreateDbContext);
+        Assert.Equal(1, result.Applied);
+        using var context = CreateDbContext();
+        Assert.Equal(expected, context.Series.Single().Summary);
     }
 
     [Fact]

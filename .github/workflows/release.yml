@@ -77,7 +77,20 @@ jobs:
       # BuildInstaller.ps1) - unchanged from before the Velopack detour; Inno Setup was never actually
       # retired, see the design doc's revision note.
       - name: Build installer
-        run: pwsh installer/BuildInstaller.ps1 -Version "${{ steps.version.outputs.version }}"
+        env:
+          SIXLABORS_LICENSE: ${{ secrets.SIXLABORS_LICENSE }}
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIXLABORS_LICENSE)) {
+            throw "Set the SIXLABORS_LICENSE repository secret before publishing a release."
+          }
+          $env:SixLaborsLicenseFile = Join-Path $env:RUNNER_TEMP 'sixlabors.lic'
+          [IO.File]::WriteAllText($env:SixLaborsLicenseFile, $env:SIXLABORS_LICENSE)
+          try {
+            & installer/BuildInstaller.ps1 -Version "${{ steps.version.outputs.version }}"
+          } finally {
+            Remove-Item -LiteralPath $env:SixLaborsLicenseFile -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Install NetSparkle appcast generator
         run: dotnet tool install --global NetSparkleUpdater.Tools.AppCastGenerator

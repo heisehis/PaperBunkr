@@ -38,7 +38,9 @@ public sealed record OverviewSeriesStats(int SeriesId, int? Start, int? End, int
 }
 
 /// <summary>A row of "Events in order". <see cref="LinkBelow"/> is the faint line to the next row when the two are linked.</summary>
-public sealed record OverviewEventRow(int EventId, string Name, string Years, int IssueCount, int ReadCount, string? LinkBelow)
+public sealed record OverviewEventRow(int EventId, string Name, string Years, int IssueCount, int ReadCount, string? LinkBelow,
+    string? Description = null, string? CoverImageUrl = null, StoryEventCoverSource CoverSource = StoryEventCoverSource.None,
+    IReadOnlyList<ContinuityEventTagData>? Tags = null, IReadOnlyList<ContinuityRelatedEventData>? RelatedEvents = null, bool IsExpanded = false)
 {
     /// <summary>"14 issues · 9 read".</summary>
     public string CountLabel => $"{ContinuityOverviewBuilder.Plural(IssueCount, "issue", "issues")} · {ReadCount.ToString("N0", CultureInfo.CurrentCulture)} read";
@@ -46,6 +48,12 @@ public sealed record OverviewEventRow(int EventId, string Name, string Years, in
     public double ReadFraction => IssueCount <= 0 ? 0 : (double)ReadCount / IssueCount;
 
     public bool HasLink => LinkBelow is not null;
+    public bool HasDetails => !string.IsNullOrWhiteSpace(Description) || (Tags?.Count ?? 0) > 0 || (RelatedEvents?.Count ?? 0) > 0 || CoverImageUrl is not null;
+    public string DetailsToggleLabel => IsExpanded ? "Hide event details" : "Show event details";
+    public string? CoverPath { get; init; }
+    public bool HasTags => Tags?.Count > 0;
+    public bool HasRelatedEvents => RelatedEvents?.Count > 0;
+    public bool ShowRemoteCover => CoverPath is null && CoverSource != StoryEventCoverSource.Manual && !string.IsNullOrWhiteSpace(CoverImageUrl);
 }
 
 public enum AttentionKind
@@ -312,7 +320,7 @@ public static class ContinuityOverviewBuilder
     private static List<OverviewEventRow> OrderEvents(ContinuityMapData map)
     {
         var relations = map.Relations.Select(r => (r.SourceId, r.TargetId, r.Type)).ToList();
-        var order = EventChronology.Order(map.Events.Select(e => new EventSpan(e.Id, e.Name, e.Start, e.End)).ToList(), relations);
+        var order = EventChronology.Order(map.Events.Select(e => e.Span).ToList(), relations);
         var byId = map.Events.ToDictionary(e => e.Id);
         var rows = new List<OverviewEventRow>();
         for (int i = 0; i < order.Count; i++)
@@ -334,7 +342,17 @@ public static class ContinuityOverviewBuilder
 
             var issues = e.Members.Select(m => m.IssueId).Distinct().Count();
             var read = e.Members.Where(m => m.ReadState == EventMapReadState.Read).Select(m => m.IssueId).Distinct().Count();
-            rows.Add(new OverviewEventRow(e.Id, e.Name, YearsLabel(e.Start / 100, e.End / 100), issues, read, link));
+            var related = map.Relations.Where(r => r.SourceId == e.Id || r.TargetId == e.Id)
+                .Select(r =>
+                {
+                    bool source = r.SourceId == e.Id;
+                    int otherId = source ? r.TargetId : r.SourceId;
+                    if (!byId.TryGetValue(otherId, out var other)) return null;
+                    RelationType type = source ? r.Type : RelationTypeCatalog.All.GetValueOrDefault(r.Type)?.InverseType ?? r.Type;
+                    return new ContinuityRelatedEventData(otherId, other.Name, type.ToString());
+                }).OfType<ContinuityRelatedEventData>().DistinctBy(r => (r.EventId, r.Relation)).ToList();
+            rows.Add(new OverviewEventRow(e.Id, e.Name, YearsLabel(e.Start / 100, e.End / 100), issues, read, link,
+                e.Description, e.CoverImageUrl, e.CoverSource, e.Tags, related));
         }
 
         return rows;

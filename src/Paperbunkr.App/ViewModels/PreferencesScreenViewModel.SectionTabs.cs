@@ -1,3 +1,4 @@
+using System;
 using Paperbunkr.App.Models;
 
 namespace Paperbunkr.App.ViewModels;
@@ -36,6 +37,12 @@ public partial class PreferencesScreenViewModel
     /// </summary>
     private void RevealSubTab(string anchorKey)
     {
+        if (anchorKey.StartsWith("connections.", StringComparison.Ordinal))
+        {
+            RevealConnectionAnchor(anchorKey);
+            return;
+        }
+
         var entry = PreferenceIndex.Find(anchorKey);
         if (entry?.SubTab is not { } tab)
         {
@@ -46,6 +53,9 @@ public partial class PreferencesScreenViewModel
         {
             case PreferencesSection.Reader:
                 ReaderTabs.Select(tab);
+                break;
+            case PreferencesSection.Appearance:
+                AppearanceTabs.Select(tab);
                 break;
             case PreferencesSection.OrganizeScrape:
                 OrganizeScrape.Tabs.Select(tab);

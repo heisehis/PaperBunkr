@@ -155,6 +155,35 @@ public sealed class LibraryOrganizerServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ExecuteAsync_waits_for_a_metadata_write_on_the_file_to_settle_before_moving_it()
+    {
+        // docs/superpowers/specs/2026-10-21-scraper-organizer-a-reliability-design.md: Scrape then Organize left .crswap copies behind.
+        string source = CreateSourceFile("book.cbz");
+        var issue = MakeIssue(1, source);
+        SeedIssue(issue);
+        var settle = new TaskCompletionSource();
+        var waitedFor = new List<string>();
+        var service = new LibraryOrganizerService(waitForFileSettled: (path, ct) =>
+        {
+            waitedFor.Add(path);
+            return settle.Task;
+        });
+        var profile = MakeProfile(Path.Combine(_testRoot, "library"));
+        OrganizePlan plan = await service.PlanAsync(new[] { issue }, profile, CreateDbContext);
+
+        var run = service.ExecuteAsync(plan, profile, isInteractive: true, null, CreateDbContext);
+        await Task.Delay(100);
+        Assert.True(File.Exists(source)); // still waiting: the write owns the file
+        Assert.Equal(new[] { source }, waitedFor);
+
+        settle.SetResult();
+        OrganizeResult result = await run;
+
+        Assert.Single(result.Succeeded);
+        Assert.False(File.Exists(source));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_copy_mode_duplicates_the_file_and_leaves_the_original_and_its_db_row_untouched()
     {
         string source = CreateSourceFile("book.cbz");

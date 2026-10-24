@@ -58,6 +58,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ReadingListItem> ReadingListItems => Set<ReadingListItem>();
 
+    public DbSet<ReadingListItemSource> ReadingListItemSources => Set<ReadingListItemSource>();
+
     public DbSet<ReadingListTag> ReadingListTags => Set<ReadingListTag>();
 
     public DbSet<ReadingListFolder> ReadingListFolders => Set<ReadingListFolder>();
@@ -74,6 +76,14 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<MetadataProposal> MetadataProposals => Set<MetadataProposal>();
 
+    public DbSet<SeriesCredit> SeriesCredits => Set<SeriesCredit>();
+
+    public DbSet<SeriesTag> SeriesTagRows => Set<SeriesTag>();
+
+    public DbSet<IssueFieldOverride> IssueFieldOverrides => Set<IssueFieldOverride>();
+
+    public DbSet<IssueMetadataSnapshot> IssueMetadataSnapshots => Set<IssueMetadataSnapshot>();
+
     public DbSet<MediaRelation> MediaRelations => Set<MediaRelation>();
 
     public DbSet<RelationEvidence> RelationEvidence => Set<RelationEvidence>();
@@ -83,6 +93,8 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<ContinuityMembership> ContinuityMemberships => Set<ContinuityMembership>();
 
     public DbSet<StoryEvent> StoryEvents => Set<StoryEvent>();
+    public DbSet<StoryEventTag> StoryEventTags => Set<StoryEventTag>();
+    public DbSet<StoryEventTypeAssignment> StoryEventTypeAssignments => Set<StoryEventTypeAssignment>();
 
     public DbSet<EventMembership> EventMemberships => Set<EventMembership>();
 
@@ -98,6 +110,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<EventRelationDismissal> EventRelationDismissals => Set<EventRelationDismissal>();
 
+    public DbSet<EventOrderEvidence> EventOrderEvidence => Set<EventOrderEvidence>();
+
     public DbSet<SeriesRelationDismissal> SeriesRelationDismissals => Set<SeriesRelationDismissal>();
 
     public DbSet<StoryEventCandidateDismissal> StoryEventCandidateDismissals => Set<StoryEventCandidateDismissal>();
@@ -107,6 +121,7 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<ContinuitySuggestionDismissal> ContinuitySuggestionDismissals => Set<ContinuitySuggestionDismissal>();
 
     public DbSet<ContinuityFandomSuggestionDismissal> ContinuityFandomSuggestionDismissals => Set<ContinuityFandomSuggestionDismissal>();
+    public DbSet<ContinuityMetronSuggestionDismissal> ContinuityMetronSuggestionDismissals => Set<ContinuityMetronSuggestionDismissal>();
 
     public DbSet<ContinuityCharacterLookupNegativeCache> ContinuityCharacterLookupNegativeCaches => Set<ContinuityCharacterLookupNegativeCache>();
 
@@ -244,8 +259,10 @@ public class PaperbunkrDbContext : DbContext
     /// </summary>
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        QueueReadingListTagRefresh();
         AnnounceUnmanagedReadingListWrites();
         AnnounceSeriesStatusChanges();
+        StageMangaReclassifyRestores();
 
         const int maxAttempts = 3;
         for (int attempt = 1; ; attempt++)
@@ -263,16 +280,154 @@ public class PaperbunkrDbContext : DbContext
         }
     }
 
+    /// <summary>
+    /// A series leaving the manga family (Manga/Manhua/Manhwa to anything else) gets its chapters' pre-inheritance values restored in the same save
+    /// (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md D8). Done at the save for the same reason as <see cref="AnnounceSeriesStatusChanges"/>: the type is
+    /// changed from many places (both detail screens, the bulk editor, Undo, the classifier), and none of them should have to remember it.
+    /// </summary>
+    private void StageMangaReclassifyRestores()
+    {
+        var leaving = Metadata.Manga.MangaReclassify.FindLeavingManga(this);
+        if (leaving.Count == 0)
+        {
+            return;
+        }
+
+        var creditIssueIds = Metadata.Manga.MangaReclassify.StageRestore(this, leaving);
+        if (creditIssueIds.Count > 0)
+        {
+            RunAfterSave(() =>
+            {
+                foreach (int id in creditIssueIds)
+                {
+                    Metadata.CreatorResolver.SyncFromIssue(this, id);
+                }
+            });
+        }
+    }
+
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        QueueReadingListTagRefresh();
         AnnounceUnmanagedReadingListWrites();
         AnnounceSeriesStatusChanges();
+        StageMangaReclassifyRestores();
         int written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
         RunAfterSaveActions();
         return written;
     }
 
     private List<Action>? _afterSaveActions;
+
+    /// <summary>
+    /// Reconciles derived Reading List tags after any tracked write that can affect them. Centralizing
+    /// this at SaveChanges covers UI edits, imports, scans, and metadata refreshes without requiring
+    /// every writer to remember a separate tag-maintenance call.
+    /// </summary>
+    private void QueueReadingListTagRefresh()
+    {
+        ChangeTracker.DetectChanges();
+        var listIds = new HashSet<int>();
+        var issueIds = new HashSet<int>();
+        var newLists = new List<ReadingList>();
+        bool metadataChanged = false;
+
+        foreach (var entry in ChangeTracker.Entries<ReadingList>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                newLists.Add(entry.Entity);
+            }
+            else if (entry.State == EntityState.Modified &&
+                     new[] { nameof(ReadingList.Source), nameof(ReadingList.Type), nameof(ReadingList.StoryEventId), nameof(ReadingList.ContinuityId) }
+                         .Any(property => entry.Property(property).IsModified))
+            {
+                listIds.Add(entry.Entity.Id);
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<ReadingListItem>())
+        {
+            bool membershipChanged = entry.State is EntityState.Added or EntityState.Deleted
+                || (entry.State == EntityState.Modified &&
+                    (entry.Property(item => item.ReadingListId).IsModified || entry.Property(item => item.IssueId).IsModified));
+            if (membershipChanged)
+            {
+                if (entry.Entity.ReadingListId > 0)
+                {
+                    listIds.Add(entry.Entity.ReadingListId);
+                }
+
+                if (entry.State is EntityState.Deleted or EntityState.Modified && entry.Property(item => item.ReadingListId).OriginalValue > 0)
+                {
+                    listIds.Add(entry.Property(item => item.ReadingListId).OriginalValue);
+                }
+
+                if (entry.Entity.IssueId > 0)
+                {
+                    issueIds.Add(entry.Entity.IssueId);
+                }
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<IssueTag>())
+        {
+            bool tagIdentityChanged = entry.State is EntityState.Added or EntityState.Deleted
+                || (entry.State == EntityState.Modified && new[] { nameof(IssueTag.Value), nameof(IssueTag.Category), nameof(IssueTag.Field) }
+                    .Any(property => entry.Property(property).IsModified));
+            if (!tagIdentityChanged)
+            {
+                continue;
+            }
+
+            issueIds.Add(entry.State == EntityState.Deleted ? entry.Property(tag => tag.IssueId).OriginalValue : entry.Entity.IssueId);
+        }
+
+        foreach (var entry in ChangeTracker.Entries<ReadingListTag>())
+        {
+            if (entry.Entity.Origin == ReadingListTagOrigin.User && entry.State is EntityState.Added or EntityState.Deleted)
+            {
+                int listId = entry.State == EntityState.Deleted
+                    ? entry.Property(tag => tag.ReadingListId).OriginalValue
+                    : entry.Entity.ReadingListId;
+                if (listId > 0)
+                {
+                    listIds.Add(listId);
+                }
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<StoryEvent>())
+        {
+            if (entry.State == EntityState.Modified && entry.Property(eventRow => eventRow.Name).IsModified)
+            {
+                metadataChanged = true;
+                listIds.UnionWith(ReadingLists.Where(list => list.StoryEventId == entry.Entity.Id).Select(list => list.Id));
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Continuity>())
+        {
+            if (entry.State == EntityState.Modified && entry.Property(continuity => continuity.Name).IsModified)
+            {
+                metadataChanged = true;
+                listIds.UnionWith(ReadingLists.Where(list => list.ContinuityId == entry.Entity.Id).Select(list => list.Id));
+            }
+        }
+
+        if (issueIds.Count > 0)
+        {
+            listIds.UnionWith(ReadingListItems.Where(item => issueIds.Contains(item.IssueId)).Select(item => item.ReadingListId));
+        }
+
+        if (listIds.Count == 0 && newLists.Count == 0 && !metadataChanged)
+        {
+            return;
+        }
+
+        RunAfterSave(() => global::Paperbunkr.Data.ReadingLists.ReadingListTagReconciler.Reconcile(this,
+            listIds.Concat(newLists.Select(list => list.Id)).Where(id => id > 0).Distinct().ToArray()));
+    }
 
     /// <summary>
     /// Queues <paramref name="action"/> to run once, after the next <em>successful</em> save on this
@@ -619,6 +774,7 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(s => s.Id);
             builder.Property(s => s.Name).IsRequired();
+            builder.Property(s => s.CustomCoverPath).HasMaxLength(128);
             builder.Property(s => s.GcdMatchSource).HasConversion<string>().HasMaxLength(16);   // GCD data (2026-09-27-gcd-data-design.md §3)
             builder.HasIndex(s => s.GcdSeriesId);
             builder.Property(s => s.ContentType).HasConversion<string>().HasMaxLength(32);
@@ -694,6 +850,7 @@ public class PaperbunkrDbContext : DbContext
         modelBuilder.Entity<Issue>(builder =>
         {
             builder.HasKey(i => i.Id);
+            builder.Property(i => i.PreferredCoverPageNumber);
             builder.HasIndex(i => i.GcdIssueId);
             builder.Property(i => i.ReadingModeOverride).HasConversion<string>().HasMaxLength(32);
             builder.Property(i => i.PageFitModeOverride).HasConversion<string>().HasMaxLength(32);
@@ -1072,14 +1229,38 @@ public class PaperbunkrDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        // What the source asked for (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §4). One-to-one with the item and
+        // gone with it. The three indexes are how a newly arrived comic finds the entries waiting for it without walking every list.
+        modelBuilder.Entity<ReadingListItemSource>(builder =>
+        {
+            builder.HasKey(s => s.Id);
+            builder.HasOne(s => s.Item)
+                .WithOne(i => i.Source)
+                .HasForeignKey<ReadingListItemSource>(s => s.ReadingListItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasIndex(s => s.ReadingListItemId).IsUnique();
+            builder.Property(s => s.Method).HasConversion<string>().HasMaxLength(32);
+            builder.Property(s => s.State).HasConversion<string>().HasMaxLength(32);
+            builder.Property(s => s.SourceKey).HasMaxLength(64);
+            builder.Property(s => s.ComicVineIssueId).HasMaxLength(32);
+            builder.Property(s => s.ComicVineSeriesId).HasMaxLength(32);
+            builder.Property(s => s.MetronIssueId).HasMaxLength(32);
+            builder.Property(s => s.MetronSeriesId).HasMaxLength(32);
+            builder.HasIndex(s => s.ComicVineIssueId);
+            builder.HasIndex(s => s.MetronIssueId);
+            builder.HasIndex(s => new { s.SeriesKey, s.NumberKey });
+        });
+
         // Brand-new table (docs/superpowers/specs/2026-08-23-reading-list-tags-design.md) - no
         // existing rows to backfill, same shape as IssueTag's block above.
         modelBuilder.Entity<ReadingListTag>(builder =>
         {
             builder.HasKey(t => t.Id);
             builder.Property(t => t.Weight).HasConversion<string>().HasMaxLength(32);
+            builder.Property(t => t.Origin).HasConversion<string>().HasMaxLength(16).HasDefaultValue(ReadingListTagOrigin.User).HasSentinel(ReadingListTagOrigin.User);
             builder.Property(t => t.Value).IsRequired();
             builder.HasIndex(t => t.ReadingListId);
+            builder.HasIndex(t => new { t.ReadingListId, t.GeneratedKey }).IsUnique().HasFilter("\"GeneratedKey\" IS NOT NULL");
         });
 
         modelBuilder.Entity<SeriesConflict>(builder =>
@@ -1112,6 +1293,56 @@ public class PaperbunkrDbContext : DbContext
 
         // Brand-new table (like SeriesConflict above) - no existing rows to backfill, so its enum
         // columns need only the conversion, no HasDefaultValue/HasSentinel.
+        // Manga series-centric metadata (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §4). Brand-new tables: nothing to backfill.
+        modelBuilder.Entity<SeriesCredit>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.Role).IsRequired().HasMaxLength(32);
+            builder.Property(c => c.Name).IsRequired();
+            builder.HasOne(c => c.Series).WithMany(s => s.Credits).HasForeignKey(c => c.SeriesId).OnDelete(DeleteBehavior.Cascade);
+            builder.HasIndex(c => c.SeriesId);
+        });
+
+        modelBuilder.Entity<SeriesTag>(builder =>
+        {
+            builder.HasKey(t => t.Id);
+            builder.Property(t => t.Field).HasConversion<string>().HasMaxLength(32);
+            builder.Property(t => t.Weight).HasConversion<string>().HasMaxLength(32);
+            builder.Property(t => t.Value).IsRequired();
+            builder.HasOne(t => t.Series).WithMany(s => s.SeriesTags).HasForeignKey(t => t.SeriesId).OnDelete(DeleteBehavior.Cascade);
+            builder.HasIndex(t => t.SeriesId);
+        });
+
+        modelBuilder.Entity<IssueFieldOverride>(builder =>
+        {
+            builder.HasKey(o => o.Id);
+            builder.Property(o => o.FieldKey).IsRequired().HasMaxLength(32);
+            builder.HasOne(o => o.Issue).WithMany(i => i.FieldOverrides).HasForeignKey(o => o.IssueId).OnDelete(DeleteBehavior.Cascade);
+            builder.HasIndex(o => new { o.IssueId, o.FieldKey }).IsUnique();
+        });
+
+        modelBuilder.Entity<IssueMetadataSnapshot>(builder =>
+        {
+            builder.HasKey(s => s.IssueId);
+            builder.Property(s => s.IssueId).ValueGeneratedNever();
+            builder.Property(s => s.FieldsJson).IsRequired();
+            builder.HasOne(s => s.Issue).WithOne().HasForeignKey<IssueMetadataSnapshot>(s => s.IssueId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Issue>(builder =>
+        {
+            builder.Property(i => i.EmbeddedSyncState).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(EmbeddedSyncState.None)
+                .HasSentinel(EmbeddedSyncState.None);
+            builder.HasIndex(i => i.EmbeddedDirty);
+        });
+
+        modelBuilder.Entity<Series>(builder =>
+        {
+            // True is the CLR-incompatible default (bool defaults false), so the column needs an explicit default for existing rows.
+            builder.Property(s => s.EmbeddedSyncEnabled).HasDefaultValue(true);
+        });
+
         modelBuilder.Entity<MetadataProposal>(builder =>
         {
             builder.HasKey(p => p.Id);
@@ -1190,6 +1421,7 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(c => c.Id);
             builder.Property(c => c.Name).IsRequired();
+            builder.Property(c => c.Designation).HasMaxLength(100);
             builder.HasIndex(c => c.Name);
         });
 
@@ -1228,6 +1460,7 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(e => e.IdentityMemberKey).HasMaxLength(64);
             builder.Property(e => e.IdentityConflict).HasMaxLength(200);
             builder.Property(e => e.WikidataQid).HasMaxLength(32);
+            builder.Property(e => e.CoverSource).HasConversion<string>().HasMaxLength(16).HasDefaultValue(StoryEventCoverSource.None);
 
             builder.HasMany(e => e.Members)
                 .WithOne(m => m.StoryEvent)
@@ -1238,6 +1471,25 @@ public class PaperbunkrDbContext : DbContext
                 .WithOne(a => a.StoryEvent)
                 .HasForeignKey(a => a.StoryEventId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(e => e.Tags).WithOne(t => t.StoryEvent).HasForeignKey(t => t.StoryEventId).OnDelete(DeleteBehavior.Cascade);
+            builder.HasMany(e => e.TypeAssignments).WithOne(t => t.StoryEvent).HasForeignKey(t => t.StoryEventId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<StoryEventTypeAssignment>(builder =>
+        {
+            builder.HasKey(t => new { t.StoryEventId, t.Type });
+            builder.Property(t => t.Type).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(t => t.Type);
+        });
+
+        modelBuilder.Entity<StoryEventTag>(builder =>
+        {
+            builder.HasKey(t => t.Id);
+            builder.Property(t => t.Value).IsRequired().HasMaxLength(200);
+            builder.Property(t => t.Category).IsRequired().HasMaxLength(64);
+            builder.Property(t => t.Weight).HasConversion<string>().HasMaxLength(16);
+            builder.HasIndex(t => new { t.StoryEventId, t.Category, t.Value }).IsUnique();
         });
 
         modelBuilder.Entity<StoryEventAlias>(builder =>
@@ -1248,6 +1500,23 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.Source).HasConversion<string>().HasMaxLength(16);
             builder.HasIndex(a => new { a.StoryEventId, a.Key }).IsUnique();
             builder.HasIndex(a => a.Key);
+        });
+
+        modelBuilder.Entity<EventOrderEvidence>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.Provider).HasConversion<string>().HasMaxLength(16);
+            builder.Property(e => e.SourceId).HasMaxLength(500);
+            builder.Property(e => e.SourceName).HasMaxLength(300);
+            builder.Property(e => e.ListKey).HasMaxLength(16);
+            builder.Property(e => e.PreviousName).HasMaxLength(300);
+            builder.Property(e => e.NextName).HasMaxLength(300);
+            builder.HasIndex(e => new { e.StoryEventId, e.Provider }).IsUnique();
+
+            builder.HasOne(e => e.StoryEvent)
+                .WithMany()
+                .HasForeignKey(e => e.StoryEventId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<EventRelationDismissal>(builder =>
@@ -1573,6 +1842,13 @@ public class PaperbunkrDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<ContinuityMetronSuggestionDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => new { d.SeriesId, d.MetronUniverseId }).IsUnique();
+            builder.HasOne(d => d.Series).WithMany().HasForeignKey(d => d.SeriesId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<ContinuityCharacterLookupNegativeCache>(builder =>
         {
             builder.HasKey(c => c.Id);
@@ -1763,6 +2039,12 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.PageTransitionStyle).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(PageTransitionStyle.None)
                 .HasSentinel(PageTransitionStyle.None);
+            builder.Property(a => a.ReaderPageFrameStyle).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(ReaderPageFrameStyle.None)
+                .HasSentinel(ReaderPageFrameStyle.None);
+            builder.Property(a => a.MotionPreference).HasConversion<string>().HasMaxLength(16)
+                .HasDefaultValue(MotionPreferenceMode.System)
+                .HasSentinel(MotionPreferenceMode.System);
             builder.Property(a => a.PageTransitionDurationMs).HasDefaultValue(250);
             // Same enum-as-string HasSentinel treatment as PageTransitionStyle/DefaultPageFitMode
             // above - Single is both the CLR default and the desired default here too.
@@ -1909,6 +2191,8 @@ public class PaperbunkrDbContext : DbContext
                 .HasDefaultValue(BookTheme.MatchAppSkin)
                 .HasSentinel(BookTheme.MatchAppSkin);
             builder.Property(a => a.BookReaderAutoHideChrome).HasDefaultValue(true);
+            // Book look for spreads (Motion v2 reader §7): on by default, as CE's Realistic pages - existing rows get it too.
+            builder.Property(a => a.ReaderBookLook).HasDefaultValue(true);
 
             // Behavior settings, second batch (docs/superpowers/specs/2026-09-04-behavior-settings-
             // batch2-design.md). HasDefaultValue matters for the two true-by-default columns: their

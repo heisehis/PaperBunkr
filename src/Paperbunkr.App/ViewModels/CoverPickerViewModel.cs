@@ -32,6 +32,7 @@ public sealed record CoverPickerCandidate(int IssueId, string Label)
 public partial class CoverPickerViewModel : ViewModelBase
 {
     private readonly int _targetIssueId;
+    private readonly int? _targetSeriesId;
     private readonly Action _onApplied;
 
     /// <summary>
@@ -57,6 +58,23 @@ public partial class CoverPickerViewModel : ViewModelBase
         }
     }
 
+    public CoverPickerViewModel(int targetSeriesId, Action onApplied, (ExternalMetadataProvider Provider, string ExternalId)? externalProviderCoverContext = null)
+    {
+        _targetIssueId = 0;
+        _targetSeriesId = targetSeriesId;
+        _onApplied = onApplied;
+        SeriesCandidates = new ObservableCollection<CoverPickerCandidate>();
+        ReadingListCandidates = new ObservableCollection<CoverPickerCandidate>();
+        ExternalProviderCandidates = new ObservableCollection<CoverCandidate>();
+        HasExternalProviderTab = externalProviderCoverContext is not null;
+        Load(targetSeriesId);
+        if (externalProviderCoverContext is { } context)
+        {
+            SelectedTabIndex = 3;
+            _ = LoadExternalProviderCandidatesAsync(context);
+        }
+    }
+
     public ObservableCollection<CoverPickerCandidate> SeriesCandidates { get; }
 
     public ObservableCollection<CoverPickerCandidate> ReadingListCandidates { get; }
@@ -68,6 +86,8 @@ public partial class CoverPickerViewModel : ViewModelBase
     public bool HasReadingListCandidates => ReadingListCandidates.Count > 0;
 
     public bool HasExternalProviderTab { get; }
+
+    public bool IsSeriesTarget => _targetSeriesId is not null;
 
     [ObservableProperty]
     private bool _isLoadingExternalProviderCandidates;
@@ -150,7 +170,10 @@ public partial class CoverPickerViewModel : ViewModelBase
     private async Task SelectExternalCandidateAsync(CoverCandidate candidate)
     {
         byte[]? bytes = await ProviderCoverCandidateCache.DownloadBytesAsync(candidate.FullUrl, CancellationToken.None);
-        if (bytes is not null && new CoverThumbnailService().TrySetCustomCoverFromBytes(_targetIssueId, bytes))
+        bool applied = bytes is not null && (_targetSeriesId is int seriesId
+            ? new SeriesCoverService().TrySetCustomCoverFromBytes(seriesId, bytes)
+            : new CoverThumbnailService().TrySetCustomCoverFromBytes(_targetIssueId, bytes));
+        if (applied)
         {
             _onApplied();
         }
@@ -175,15 +198,18 @@ public partial class CoverPickerViewModel : ViewModelBase
             }
         }
 
+        System.Collections.Generic.IReadOnlyCollection<int> anchorIds = _targetSeriesId is int targetSeries
+            ? context.Issues.Where(i => i.SeriesId == targetSeries).Select(i => i.Id).ToList()
+            : new[] { _targetIssueId };
         var myReadingListIds = context.ReadingListItems
-            .Where(ri => ri.IssueId == _targetIssueId)
+            .Where(ri => anchorIds.Contains(ri.IssueId))
             .Select(ri => ri.ReadingListId)
             .ToList();
 
         if (myReadingListIds.Count > 0)
         {
             var candidateIssueIds = context.ReadingListItems
-                .Where(ri => myReadingListIds.Contains(ri.ReadingListId) && ri.IssueId != _targetIssueId)
+                .Where(ri => myReadingListIds.Contains(ri.ReadingListId) && !anchorIds.Contains(ri.IssueId))
                 .Select(ri => ri.IssueId)
                 .Distinct()
                 .Where(id => !seriesIssueIds.Contains(id))
@@ -207,7 +233,10 @@ public partial class CoverPickerViewModel : ViewModelBase
     private void SelectCandidate(CoverPickerCandidate candidate)
     {
         string? path = CoverThumbnailService.GetEffectiveCoverPath(candidate.IssueId);
-        if (path is not null && new CoverThumbnailService().TrySetCustomCover(_targetIssueId, path))
+        bool applied = path is not null && (_targetSeriesId is int seriesId
+            ? new SeriesCoverService().TrySetCustomCover(seriesId, path)
+            : new CoverThumbnailService().TrySetCustomCover(_targetIssueId, path));
+        if (applied)
         {
             _onApplied();
         }
@@ -217,8 +246,21 @@ public partial class CoverPickerViewModel : ViewModelBase
     private async Task BrowseFileAsync()
     {
         string? path = await new FilePickerService().PickImageFileAsync("Choose Cover Image");
-        if (path is not null && new CoverThumbnailService().TrySetCustomCover(_targetIssueId, path))
+        bool applied = path is not null && (_targetSeriesId is int seriesId
+            ? new SeriesCoverService().TrySetCustomCover(seriesId, path)
+            : new CoverThumbnailService().TrySetCustomCover(_targetIssueId, path));
+        if (applied)
         {
+            _onApplied();
+        }
+    }
+
+    [RelayCommand]
+    private void ResetCover()
+    {
+        if (_targetSeriesId is int seriesId)
+        {
+            new SeriesCoverService().Reset(seriesId);
             _onApplied();
         }
     }

@@ -17,7 +17,7 @@
     -->
     <StackPanel Spacing="8">
         <StackPanel Orientation="Horizontal" Spacing="10">
-            <TextBlock Text="Comic details" FontSize="12.5" FontWeight="SemiBold"
+            <TextBlock Text="Comic details" FontSize="13" FontWeight="SemiBold"
                        Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
             <Button Classes="railAdd" Command="{Binding ScrapeCommand}" IsEnabled="{Binding !IsBusy}">
                 <StackPanel Orientation="Horizontal" Spacing="5">
@@ -26,6 +26,6 @@
             </Button>
         </StackPanel>
         <TextBlock Text="{Binding StatusMessage, TargetNullValue='Fills in credits, summary, characters and dates from ComicVine or Metron. The source it starts on is set under Preferences → Organize &amp; Scrape.'}"
-                   Foreground="{DynamicResource PbTextFaintBrush}" FontSize="12" TextWrapping="Wrap" />
+                   Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12" TextWrapping="Wrap" />
     </StackPanel>
 </UserControl>

@@ -1,13 +1,17 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Animation;
+using Avalonia.Platform;
+using Paperbunkr.App.Services.Splash;
 using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Theming.Motion;
 
 namespace Paperbunkr.App.Views;
 
@@ -57,7 +61,11 @@ public partial class SplashWindow : Window
 
         try
         {
-            return new ThemeService().GetSplashAmbientMotion();
+            var service = new ThemeService();
+            MotionPolicy.SetPreference(service.GetMotionPreference());
+            MotionPolicy.SetEffectQuality(service.GetEffectQuality());
+            MotionPolicy.RefreshSystemPreference();
+            return service.GetSplashAmbientMotion() && MotionPolicy.AllowsContinuous();
         }
         catch (Exception ex)
         {
@@ -93,27 +101,48 @@ public partial class SplashWindow : Window
     }
 
     public SplashWindow(bool reducedMotion, bool ambientMotionEnabled)
+        : this(reducedMotion, ambientMotionEnabled, ChoosePalette())
     {
-        _reducedMotion = reducedMotion;
+    }
+
+    public SplashWindow(bool reducedMotion, bool ambientMotionEnabled, SplashPalette palette)
+    {
+        _reducedMotion = reducedMotion || !MotionPolicy.AllowsMotion(MotionRole.Reveal);
         _ambientMotionEnabled = ambientMotionEnabled;
+        Palette = palette;
+        ApplyPalette(palette);
         InitializeComponent();
 
+        // Transparent so the card's rounded corners and shadow show (OverlayHostWindow uses the same setup).
+        TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
         LogoImage.RenderTransform = _logoScale;
+        Card.CornerRadius = new CornerRadius(palette.CornerRadius);
+        LoadingBar.Transitions = new Transitions
+        {
+            new DoubleTransition
+            {
+                Property = Avalonia.Controls.Primitives.RangeBase.ValueProperty,
+                Duration = Paperbunkr.App.Controls.MotionTokens.Get(MotionRole.Replace).Fade,
+                Easing = this.TryFindResource("PbMotionEase", out var ease) && ease is Easing e ? e : new CubicEaseOut(),
+            },
+        };
 
-        var (accent, accentText) = TryGetThemeAccentColors();
+        var accent = palette.Accent;
         AmbientDots.DotColor = accent;
         if (GlowBorder.Background is RadialGradientBrush glowBrush && glowBrush.GradientStops.Count == 2)
         {
-            glowBrush.GradientStops[0].Color = Color.FromArgb(0x8C, accent.R, accent.G, accent.B);
+            // A light surface needs less of the accent for the same soft tint.
+            byte alpha = palette.IsLight ? (byte)0x59 : (byte)0x8C;
+            glowBrush.GradientStops[0].Color = Color.FromArgb(alpha, accent.R, accent.G, accent.B);
             glowBrush.GradientStops[1].Color = Color.FromArgb(0x00, accent.R, accent.G, accent.B);
         }
         if (LoadingBar.Foreground is LinearGradientBrush progressBrush && progressBrush.GradientStops.Count == 2)
         {
             progressBrush.GradientStops[0].Color = accent;
-            progressBrush.GradientStops[1].Color = accentText;
+            progressBrush.GradientStops[1].Color = palette.AccentText;
         }
 
-        if (reducedMotion)
+        if (_reducedMotion)
         {
             LogoImage.Opacity = 1;
             GlowBorder.Opacity = 0.5;
@@ -122,28 +151,49 @@ public partial class SplashWindow : Window
         Opened += OnOpened;
     }
 
+    /// <summary>The palette this splash draws with (exposed for tests).</summary>
+    public SplashPalette Palette { get; }
+
     /// <summary>
-    /// Best-effort read of the persisted theme's Accent/AccentText for the emblem glow + loading-bar
-    /// gradient (docs/superpowers/specs/2026-09-16-theme-system-design.md's own theme system didn't
-    /// cover this window - these two elements were still hardcoded to the "default" theme's palette
-    /// regardless of the active theme). Same shape as <see cref="TryGetReducedMotion"/> just above:
-    /// this runs before the DB integrity check/pending migrations (see that method's own doc
-    /// comment), so a schema-behind-the-model <c>SqliteException</c> is expected and falls back to
-    /// the literal defaults already in SplashWindow.axaml rather than faulting startup.
+    /// The theme this launch will open with, from <c>splash-theme.json</c> (docs/superpowers/specs/2026-10-22-splash-theme-redesign-design.md)
+    /// - never the database, which may be mid-migration here. Auto mode is resolved the way <see cref="ThemeService"/> resolves it a moment
+    /// later: the OS light/dark preference for Follow system, the local hour for Scheduled. Anything missing falls back to the Default theme.
     /// </summary>
-    private static (Color Accent, Color AccentText) TryGetThemeAccentColors()
+    private static SplashPalette ChoosePalette()
     {
         try
         {
-            var themeService = new ThemeService();
-            var theme = themeService.LoadTheme(themeService.GetActiveThemeKey());
-            return (Color.Parse(theme.Colors.Accent), Color.Parse(theme.Colors.AccentText));
+            var snapshot = new SplashThemeStore(SplashThemeStore.DefaultPath()).Load();
+            PlatformThemeVariant? os = Application.Current?.PlatformSettings?.GetColorValues().ThemeVariant;
+            return SplashThemeChooser.Choose(snapshot, os, DateTime.Now.Hour);
         }
         catch (Exception ex)
         {
-            DiagnosticsService.LogMilestone($"Splash: theme accent lookup failed ({ex.GetType().Name}) - using default palette.");
-            return (Color.Parse("#C9803F"), Color.Parse("#E0995A"));
+            DiagnosticsService.LogMilestone($"Splash: theme snapshot lookup failed ({ex.GetType().Name}) - using the default theme.");
+            return SplashPalette.Default;
         }
+    }
+
+    /// <summary>Writes the palette under the usual Pb* keys into this window's own resources, which the XAML's DynamicResources find before
+    /// the application's (which at this point still hold the built-in defaults).</summary>
+    private void ApplyPalette(SplashPalette p)
+    {
+        void Set(string name, Color color)
+        {
+            Resources[$"Pb{name}Color"] = color;
+            Resources[$"Pb{name}Brush"] = new SolidColorBrush(color);
+        }
+
+        Set("Surface1", p.Surface);
+        Set("Bg", p.Surface);
+        Set("Text", p.Text);
+        Set("TextMuted", p.TextMuted);
+        Set("TextFaint", p.TextFaint);
+        Set("Border", p.Border);
+        Set("Accent", p.Accent);
+        Set("AccentText", p.AccentText);
+        Set("AccentSoft", p.AccentSoft);
+        RequestedThemeVariant = p.IsLight ? ThemeVariant.Light : ThemeVariant.Dark;
     }
 
     private void OnOpened(object? sender, EventArgs e)

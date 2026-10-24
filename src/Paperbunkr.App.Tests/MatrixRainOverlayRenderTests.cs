@@ -6,6 +6,8 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Paperbunkr.App.Views;
+using Paperbunkr.App.Theming.Motion;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Tests;
 
@@ -69,28 +71,18 @@ public class MatrixRainOverlayRenderTests
         return count;
     }
 
-    /// <summary>Runs <paramref name="body"/> with the app's motion tokens set to a known value, restoring what was there. The overlay
-    /// deliberately stays idle when <c>PbMotionFast</c> is zero (Reduced Motion), so these tests must not inherit a zero left behind by an
-    /// unrelated test - that made them fail only in full-suite runs, depending on test order.</summary>
-    private static void WithMotion(TimeSpan fast, Action body)
+    /// <summary>Runs <paramref name="body"/> with the shared motion policy set explicitly and restores it afterwards.</summary>
+    private static void WithMotion(bool reduced, Action body)
     {
-        var resources = Application.Current!.Resources;
-        bool had = resources.TryGetValue("PbMotionFast", out var previous);
-        resources["PbMotionFast"] = fast;
+        var previous = MotionPolicy.Preference;
+        MotionPolicy.SetPreference(reduced ? MotionPreferenceMode.Reduced : MotionPreferenceMode.Full);
         try
         {
             body();
         }
         finally
         {
-            if (had)
-            {
-                resources["PbMotionFast"] = previous!;
-            }
-            else
-            {
-                resources.Remove("PbMotionFast");
-            }
+            MotionPolicy.SetPreference(previous);
         }
     }
 
@@ -111,7 +103,7 @@ public class MatrixRainOverlayRenderTests
     }
 
     [Fact]
-    public void Overlay_VisibleFromMount_RendersGreenGlyphs() => WithMotion(TimeSpan.FromMilliseconds(150), () =>
+    public void Overlay_VisibleFromMount_RendersGreenGlyphs() => WithMotion(reduced: false, () =>
     {
         var window = Mount(initiallyVisible: true, out _);
         try
@@ -126,9 +118,9 @@ public class MatrixRainOverlayRenderTests
     });
 
     [Fact]
-    public void Overlay_UnderReducedMotion_StaysIdle_RendersNoGlyphs() => WithMotion(TimeSpan.Zero, () =>
+    public void Overlay_UnderReducedMotion_StaysIdle_RendersNoGlyphs() => WithMotion(reduced: true, () =>
     {
-        // The mechanism behind the order-dependent failure: with PbMotionFast at zero the rain never starts. Kept as a test so the behaviour is
+        // With the shared policy set to reduced motion, the rain never starts. Kept as a test so the behaviour is
         // deliberate and documented, and so a leaked zero shows up here by name instead of as a mysterious "no green pixels".
         var window = Mount(initiallyVisible: true, out _);
         try
@@ -142,7 +134,7 @@ public class MatrixRainOverlayRenderTests
     });
 
     [Fact]
-    public void Overlay_MountedInvisible_ThenFlippedVisible_RendersGreenGlyphs() => WithMotion(TimeSpan.FromMilliseconds(150), () =>
+    public void Overlay_MountedInvisible_ThenFlippedVisible_RendersGreenGlyphs() => WithMotion(reduced: false, () =>
     {
         var window = Mount(initiallyVisible: false, out var overlay);
         try

@@ -18,18 +18,13 @@
              design.md) - a running/queued task gets a soft accent tint on top of its badge, same
              "badge plus additional card-level weight, not badge-replaces-tint" reasoning the
              Connections redesign used for its connected-row tint. -->
-        <Style Selector="Border.scheduledTaskBadge">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
-            <Setter Property="Padding" Value="6,1" />
-        </Style>
         <Style Selector="Border.scheduledTaskCard.scheduledTaskActive">
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
         </Style>
     </UserControl.Styles>
 
     <ScrollViewer>
-        <StackPanel Margin="28,20,28,40" Spacing="20">
+        <StackPanel Margin="24,20,24,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="Automation" />
 
             <pref:SettingsRow Icon="Alert" Title="Notify when a scheduled task finishes"
@@ -44,14 +39,14 @@
             <StackPanel Tag="automation.tasks">
                 <TextBlock Classes="settingsGroupCaption" Text="SCHEDULED TASKS" />
                 <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
-                    <Button Classes="headerAction ghost" Command="{Binding RunAllScheduledTasksNowCommand}"
+                    <Button Classes="ghost" Command="{Binding RunAllScheduledTasksNowCommand}"
                             AutomationProperties.AutomationId="RunAllScheduledTasksNowButton">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <fi:SymbolIcon Symbol="Play" FontSize="{StaticResource PbIconSizeXs}" />
                             <TextBlock Text="Run all now" />
                         </StackPanel>
                     </Button>
-                    <Button Classes="headerAction ghost" Command="{Binding TogglePauseAllScheduledTasksCommand}"
+                    <Button Classes="ghost" Command="{Binding TogglePauseAllScheduledTasksCommand}"
                             AutomationProperties.AutomationId="TogglePauseAllScheduledTasksButton">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <fi:SymbolIcon Symbol="{Binding IsSchedulerPaused, Converter={x:Static views:PauseResumeIconConverter.Instance}}"
@@ -65,7 +60,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:ScheduledTaskRow">
                             <Border Classes="scheduledTaskCard" Classes.scheduledTaskActive="{Binding IsActive}"
-                                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6"
+                                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}"
                                     Padding="14,12" Margin="0,0,0,10">
                                 <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto">
                                     <fi:SymbolIcon Grid.Row="0" Grid.Column="0" Grid.RowSpan="3"
@@ -76,15 +71,15 @@
                                     <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="8">
                                         <TextBlock Text="{Binding DisplayName}" FontSize="13" FontWeight="SemiBold"
                                                    Foreground="{DynamicResource PbTextBrush}" />
-                                        <Border Classes="scheduledTaskBadge" IsVisible="{Binding IsRunning}">
-                                            <TextBlock Text="Running…" FontSize="10.5" Foreground="{DynamicResource PbAccentBrush}" />
+                                        <Border Classes="statusBadge accent" IsVisible="{Binding IsRunning}">
+                                            <TextBlock Text="Running…" FontSize="10" Foreground="{DynamicResource PbAccentBrush}" />
                                         </Border>
-                                        <Border Classes="scheduledTaskBadge" IsVisible="{Binding IsQueued}">
-                                            <TextBlock Text="Queued" FontSize="10.5" Foreground="{DynamicResource PbAccentBrush}" />
+                                        <Border Classes="statusBadge accent" IsVisible="{Binding IsQueued}">
+                                            <TextBlock Text="Queued" FontSize="10" Foreground="{DynamicResource PbAccentBrush}" />
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Description}" FontSize="11.5"
-                                               Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,2,0,8" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Description}" FontSize="12"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" Margin="0,2,0,8" />
 
                                     <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="8">
                                         <controls:SuggestBox IsStrict="True" Text="{Binding ModeText}"
@@ -92,13 +87,13 @@
                                         <TextBox Text="{Binding IntervalHours}" beh:TextSpinner.Enabled="True" beh:TextSpinner.ClampTyped="True" beh:TextSpinner.Minimum="1" beh:TextSpinner.Maximum="720" Width="100"
                                                        IsVisible="{Binding IsIntervalMode}" />
                                         <TextBlock Text="hours" VerticalAlignment="Center" IsVisible="{Binding IsIntervalMode}"
-                                                   FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                         <TimePicker SelectedTime="{Binding DailyAtTime}" ClockIdentifier="24HourClock"
                                                     IsVisible="{Binding IsDailyMode}" />
                                         <TextBlock Text="{Binding LastRunLabel, StringFormat='Last run: {0}'}"
-                                                   FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                                   FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" Margin="12,0,0,0" VerticalAlignment="Center" />
                                         <TextBlock Text="{Binding NextRunLabel, StringFormat='Next: {0}'}"
-                                                   FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                                   FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                                     </StackPanel>
 
                                     <StackPanel Grid.Row="0" Grid.RowSpan="3" Grid.Column="2" Spacing="10" VerticalAlignment="Top">

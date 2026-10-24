@@ -7,4 +7,7 @@ namespace Paperbunkr.App.Models;
 public interface IPlaceholderCoverSource
 {
     string? CoverTitle { get; }
+
+    /// <summary>True only when the library scan verified that this issue's linked file is missing.</summary>
+    bool IsCoverFileMissing => false;
 }

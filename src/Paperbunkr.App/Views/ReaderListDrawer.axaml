@@ -34,7 +34,7 @@
                 <TextBlock DockPanel.Dock="Top" Text="{Binding #Root.HeaderText}" FontSize="15" FontWeight="Bold"
                            Foreground="{DynamicResource PbTextBrush}" Margin="16,18,16,10"
                            IsVisible="{Binding #Root.HasSearchBox, Converter={x:Static conv:BoolConverters.Not}}" />
-                <TextBox DockPanel.Dock="Top" Watermark="{Binding #Root.SearchBoxWatermark}"
+                <TextBox DockPanel.Dock="Top" Classes="searchBox" PlaceholderText="{Binding #Root.SearchBoxWatermark}"
                          Text="{Binding #Root.SearchBoxText, Mode=TwoWay}" Margin="16,16,16,10"
                          AutomationProperties.Name="{Binding #Root.SearchBoxWatermark}"
                          IsVisible="{Binding #Root.HasSearchBox}" />

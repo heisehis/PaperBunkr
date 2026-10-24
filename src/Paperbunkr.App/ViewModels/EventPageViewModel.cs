@@ -38,6 +38,8 @@ public partial class EventPageViewModel : ViewModelBase
     public static EventMembershipRoleOption[] RoleOptions => EventMembershipRoleOption.All;
 
     public static string[] RoleNames { get; } = RoleOptions.Select(o => o.Label).ToArray();
+    public ObservableCollection<string> EventTypes { get; } = new();
+    public bool HasEventTypes => EventTypes.Count > 0;
 
     /// <summary>How one event relates to another (docs/superpowers/specs/2026-08-27-metadata-model-phase4d-event-relations-design.md) -
     /// the creation picker's subset of <see cref="RelationType"/>.</summary>
@@ -60,6 +62,56 @@ public partial class EventPageViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isDescriptionExpanded;
+
+    [ObservableProperty]
+    private bool _isRefreshingProviderDetails;
+
+    [ObservableProperty]
+    private string? _providerRefreshStatus;
+
+    public bool HasProviderRefreshStatus => !string.IsNullOrWhiteSpace(ProviderRefreshStatus);
+
+    partial void OnProviderRefreshStatusChanged(string? value) => OnPropertyChanged(nameof(HasProviderRefreshStatus));
+
+    [RelayCommand]
+    private async Task RefreshProviderDetailsAsync()
+    {
+        if (EventId is not int eventId || IsRefreshingProviderDetails) return;
+        IsRefreshingProviderDetails = true;
+        ProviderRefreshStatus = null;
+        try
+        {
+            var resultObject = await _nav.Runner(() =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                var refresh = StoryEventDetailsCompletion.RefreshEventAsync(context, eventId, default).GetAwaiter().GetResult();
+                var description = context.StoryEvents.AsNoTracking().Where(e => e.Id == eventId).Select(e => e.Description).FirstOrDefault();
+                return (refresh, description);
+            });
+
+            if (EventId != eventId || resultObject is not ValueTuple<StoryEventDetailsCompletion.RefreshResult, string?> result) return;
+            var (refresh, description) = result;
+            if (!refresh.HasProviderIdentity)
+                ProviderRefreshStatus = "No verified Metron or ComicVine arc is linked to this event yet.";
+            else if (!refresh.Attempted)
+                ProviderRefreshStatus = "The linked provider is unavailable. Check your provider connection and try again.";
+            else
+            {
+                if (string.IsNullOrWhiteSpace(Description) && !string.IsNullOrWhiteSpace(description)) Description = description;
+                ProviderRefreshStatus = refresh.Changed
+                    ? $"Provider details refreshed from {refresh.Provider}."
+                    : $"Checked {refresh.Provider}; no new details were available. Existing description and manual cover were kept.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ProviderRefreshStatus = $"Couldn't refresh provider details: {ex.Message}";
+        }
+        finally
+        {
+            IsRefreshingProviderDetails = false;
+        }
+    }
 
     [RelayCommand]
     private void ToggleDescription() => IsDescriptionExpanded = !IsDescriptionExpanded;
@@ -216,6 +268,10 @@ public partial class EventPageViewModel : ViewModelBase
 
         Name = storyEvent.Name;
         Description = storyEvent.Description ?? string.Empty;
+        EventTypes.Clear();
+        foreach (var type in context.StoryEventTypeAssignments.AsNoTracking().Where(t => t.StoryEventId == storyEventId).Select(t => t.Type).ToList())
+            EventTypes.Add(type switch { StoryEventType.LimitedSeries => "Limited Series", StoryEventType.StoryArc => "Story Arc", StoryEventType.OneShotOrSpecial => "One-shot / Special", _ => type.ToString() });
+        OnPropertyChanged(nameof(HasEventTypes));
 
         Members.Clear();
         int position = 1;
@@ -285,8 +341,9 @@ public partial class EventPageViewModel : ViewModelBase
             .Where(r => relationIds.Contains(r.Id))
             .Select(r => new { r.Id, Providers = r.Evidence.Select(e => e.Provider).ToList() })
             .AsEnumerable()
-            .Where(r => r.Providers.Count > 0 && r.Providers.All(p => p is RelationEvidenceProvider.Inferred or RelationEvidenceProvider.Wikidata))
-            .ToDictionary(r => r.Id, r => r.Providers.Contains(RelationEvidenceProvider.Wikidata) ? "Wikidata" : "inferred");
+            .Where(r => r.Providers.Count > 0 && r.Providers.All(p => p is RelationEvidenceProvider.Inferred or RelationEvidenceProvider.Wikidata or RelationEvidenceProvider.Metron))
+            .ToDictionary(r => r.Id, r => r.Providers.Contains(RelationEvidenceProvider.Metron) ? "Metron"
+                : r.Providers.Contains(RelationEvidenceProvider.Wikidata) ? "Wikidata" : "inferred");
 
         ConnectedEvents.Clear();
         AllConnections.Clear();
@@ -312,58 +369,21 @@ public partial class EventPageViewModel : ViewModelBase
     {
         ConnectionSuggestions.Clear();
 
-        // The smart connector's typed suggestions first (weak inferences only - strong ones are saved as inferred relations).
-        var names = context.StoryEvents.Select(e => new { e.Id, e.Name }).ToDictionary(e => e.Id, e => e.Name);
-        var typedPartners = new HashSet<int>();
-        using var gcd = _nav.OpenGcd();
-        foreach (var inference in EventChronologyInference.Infer(context, storyEventId, gcd).Where(i => !i.IsStrong))
+        // Untyped "these look connected" candidates only. The typed ones (a guessed sequel or crossover) were dropped on 2026-10-12: a date
+        // order alone is placement, not a link (docs/superpowers/specs/2026-10-12-continuity-sources-design.md §4.2); strong inferences are
+        // saved by the sweep as inferred relations and show in the strip.
+        foreach (var suggestion in EventRelationSuggestionResolver.GetSuggestions(context, storyEventId))
         {
-            int other = inference.SourceEventId == storyEventId ? inference.TargetEventId : inference.SourceEventId;
-            typedPartners.Add(other);
             ConnectionSuggestions.Add(new EventConnectionSuggestionCard
             {
-                CandidateEventId = other,
-                Name = names.GetValueOrDefault(other, "Event"),
-                Reason = inference.Reason,
-                SuggestedType = inference.Type,
-                SourceEventId = inference.SourceEventId,
-                TargetEventId = inference.TargetEventId,
-                Headline = TypedHeadline(inference, storyEventId, names),
+                CandidateEventId = suggestion.Candidate.Id,
+                Name = suggestion.Candidate.Name,
+                Reason = suggestion.Reason,
+                Headline = suggestion.Candidate.Name,
             });
         }
 
-        foreach (var suggestion in EventRelationSuggestionResolver.GetSuggestions(context, storyEventId))
-        {
-            if (!typedPartners.Contains(suggestion.Candidate.Id))
-            {
-                ConnectionSuggestions.Add(new EventConnectionSuggestionCard
-                {
-                    CandidateEventId = suggestion.Candidate.Id,
-                    Name = suggestion.Candidate.Name,
-                    Reason = suggestion.Reason,
-                    Headline = suggestion.Candidate.Name,
-                });
-            }
-        }
-
         OnPropertyChanged(nameof(HasNoConnectionSuggestions));
-    }
-
-    /// <summary>"Looks like the sequel of Planet Hulk", from the viewed event's side.</summary>
-    private static string TypedHeadline(InferredEventRelation inference, int viewedId, IReadOnlyDictionary<int, string> names)
-    {
-        bool viewedIsSource = inference.SourceEventId == viewedId;
-        int other = viewedIsSource ? inference.TargetEventId : inference.SourceEventId;
-        string otherName = names.GetValueOrDefault(other, "another event");
-        string relation = inference.Type switch
-        {
-            RelationType.Crossover => "Looks like a crossover with",
-            RelationType.Sequel => viewedIsSource ? "Looks like the sequel of" : "Looks like it's followed by",
-            RelationType.Prequel => viewedIsSource ? "Looks like the prequel of" : "Looks like it follows",
-            RelationType.Continuation => viewedIsSource ? "Looks like it continues" : "Looks like it's continued by",
-            _ => "Looks related to",
-        };
-        return $"{relation} {otherName}";
     }
 
     /// <summary>Reload after an edit here, then the sidebar's counts.</summary>

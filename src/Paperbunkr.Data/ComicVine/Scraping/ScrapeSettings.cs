@@ -23,8 +23,55 @@ public sealed class ScrapeSettings
     /// <summary>CE's <c>confirm_issue_b</c>: after the series is chosen, show the issue-match dialog instead of silently applying whatever number matching finds.</summary>
     public bool ConfirmIssueMatch { get; set; } = true;
 
-    /// <summary>Which source scrapes use unless the match dialog switches one run to the other. Scheduled (unattended) scrapes always use this one.</summary>
-    public ComicProvider DefaultProvider { get; set; } = ComicProvider.ComicVine;
+    /// <summary>
+    /// Which source scrapes use unless the match dialog switches one run to the other. Scheduled (unattended) scrapes always use this one.
+    /// Metron first since docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-core-design.md section 1 (it allows far more requests than
+    /// ComicVine's 200 an hour); ComicVine is the fallback (<see cref="FallBackToComicVine"/>).
+    /// </summary>
+    public ComicProvider DefaultProvider { get; set; } = ComicProvider.Metron;
+
+    /// <summary>Which generation of the provider order <see cref="DefaultProvider"/> was saved against; 0 = before Metron became the default. See <see cref="Load"/>.</summary>
+    public int ProviderOrderVersion { get; set; } = CurrentProviderOrderVersion;
+
+    private const int CurrentProviderOrderVersion = 1;
+
+    /// <summary>Books Metron found nothing for are tried on ComicVine (unattended, cover-checked) at the end of the run. Same spec, section 1.</summary>
+    public bool FallBackToComicVine { get; set; } = true;
+
+    /// <summary>How hard a batch pushes (same spec, section 5). Never past a provider's own rate limit; only <see cref="ScrapeSpeed.Careful"/> keeps CE's pause between books.</summary>
+    public ScrapeSpeed Speed { get; set; } = ScrapeSpeed.Balanced;
+
+    /// <summary>An interactive scrape of several comics shows every field it would change before writing any (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 3).</summary>
+    public bool PreviewChanges { get; set; } = true;
+
+    /// <summary>
+    /// Metron fields left blank are filled from ComicVine when the Metron issue names its ComicVine id (same spec, section 4). Off by default:
+    /// it costs one ComicVine request per comic against ComicVine's 200 an hour.
+    /// </summary>
+    public bool FillBlanksFromComicVine { get; set; }
+
+    /// <summary>
+    /// Which source wins a field, when both know it (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 4). A field
+    /// not listed takes the matched source's value. A field listed with the other source is taken from that source's copy of the same issue
+    /// (found through the cross-reference id the two keep), when it has a value. Issue-level fields only: see <see cref="SourcePreferableFields"/>.
+    /// </summary>
+    public Dictionary<ScrapeField, ComicProvider> FieldSourcePreference { get; set; } = new();
+
+    /// <summary>The fields a per-field source choice applies to: every issue-level field, not the series-level ones (series, publisher, volume, count)
+    /// nor the issue number, which the match itself decides.</summary>
+    public static readonly IReadOnlyList<ScrapeField> SourcePreferableFields = new[]
+    {
+        ScrapeField.Title, ScrapeField.Summary, ScrapeField.Published, ScrapeField.Released, ScrapeField.Writer, ScrapeField.Penciller, ScrapeField.Inker,
+        ScrapeField.Colorist, ScrapeField.Letterer, ScrapeField.CoverArtist, ScrapeField.Editor, ScrapeField.Translator, ScrapeField.Characters,
+        ScrapeField.Teams, ScrapeField.Locations, ScrapeField.MainCharacterOrTeam, ScrapeField.Crossovers, ScrapeField.SeriesGroup, ScrapeField.Genre,
+        ScrapeField.Concepts, ScrapeField.AgeRating, ScrapeField.CommunityRating, ScrapeField.Isbn, ScrapeField.Upc, ScrapeField.Webpage, ScrapeField.Imprint,
+    };
+
+    /// <summary>Comics a library scan adds are scraped in the background, unattended (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 9). Needs Metron.</summary>
+    public bool ScrapeNewFiles { get; set; } = true;
+
+    /// <summary>How sure a match must be to apply without asking (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 1).</summary>
+    public ScrapeStrictness Strictness { get; set; } = ScrapeStrictness.Balanced;
 
     /// <summary>
     /// CE's <c>update_rating_b</c> defaults <b>off</b> (configuration.py:62) - it costs an extra API
@@ -101,6 +148,11 @@ public sealed class ScrapeSettings
         try
         {
             var loaded = JsonSerializer.Deserialize<ScrapeSettings>(row.Json, Json) ?? new ScrapeSettings();
+            if (!row.Json.Contains("\"" + nameof(ProviderOrderVersion) + "\"", StringComparison.Ordinal))
+            {
+                loaded.ProviderOrderVersion = 0; // a row saved before the field existed
+            }
+
             if (loaded.FieldSetVersion < CurrentFieldSetVersion)
             {
                 // A saved set only lists the fields that existed when it was saved, so a field added
@@ -112,6 +164,13 @@ public sealed class ScrapeSettings
                 }
 
                 loaded.FieldSetVersion = CurrentFieldSetVersion;
+            }
+
+            if (loaded.ProviderOrderVersion < CurrentProviderOrderVersion)
+            {
+                // Saved before Metron became the default source: switch once; the user can switch back (Save stamps the current version).
+                loaded.DefaultProvider = ComicProvider.Metron;
+                loaded.ProviderOrderVersion = CurrentProviderOrderVersion;
             }
 
             return loaded;
@@ -135,6 +194,27 @@ public sealed class ScrapeSettings
         row.Json = JsonSerializer.Serialize(this, Json);
         context.SaveChanges();
     }
+}
+
+/// <summary>The Speed setting's profiles (docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-core-design.md section 5).</summary>
+public enum ScrapeSpeed
+{
+    /// <summary>CE's own pace: the pause between books (<see cref="ScrapeSettings.ScrapeDelayMs"/>, at least 2 s), one cover download at a time, one file write at a time.</summary>
+    Careful,
+
+    /// <summary>No pause between books (the rate limiters pace requests), candidate covers fetched together, two file writes at once.</summary>
+    Balanced,
+
+    /// <summary>As Balanced, with three file writes at once.</summary>
+    Fast,
+}
+
+/// <summary>How sure a match must be before it applies without asking (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 1).</summary>
+public enum ScrapeStrictness
+{
+    Lenient,
+    Balanced,
+    Strict,
 }
 
 /// <summary>Storage for <see cref="ScrapeSettings"/>: one row, the settings as JSON (a set and two dictionaries don't map to columns usefully).</summary>

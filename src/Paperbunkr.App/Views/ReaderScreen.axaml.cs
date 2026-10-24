@@ -35,6 +35,16 @@ public partial class ReaderScreen : UserControl
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
         InitializePinPanel();
+
+        // Ambient parallax (Motion v2 E, Q32): the backdrop follows the page's pan in paged modes and its scroll in continuous ones.
+        PageCanvasControl.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == PageCanvas.PanOffsetXProperty || e.Property == PageCanvas.PanOffsetYProperty
+                || e.Property == PageCanvas.ScrollOffsetProperty || e.Property == PageCanvas.ReadingModeProperty)
+            {
+                Backdrop.ParallaxSource = ParallaxSourceFor(PageCanvasControl);
+            }
+        };
         ClipOverlay.RegionCaptured += OnClipRegionCaptured;
 
         // Dock-style hover magnify on the page-turn dot strip (on-screen feedback) - AddHandler with
@@ -521,6 +531,15 @@ public partial class ReaderScreen : UserControl
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // The chrome idles away after 4 s without pointer activity (Motion v2 E, Q27). Hidden chrome is out of tab order; if the keyboard
+        // was on one of its controls, hand it to the page so keys keep turning pages instead of driving an invisible toolbar.
+        if (e.PropertyName == nameof(ReaderScreenViewModel.ShowChrome) && _viewModel is { ShowChrome: false }
+            && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is Visual focused
+            && focused.GetSelfAndVisualAncestors().OfType<Border>().Any(b => b.Classes.Contains("chromeCluster")))
+        {
+            PageCanvasControl.Focus();
+        }
+
         if (e.PropertyName == nameof(ReaderScreenViewModel.CurrentPage))
         {
             // Deferred to the next dispatcher cycle: Load() runs before MainViewModel flips
@@ -606,7 +625,7 @@ public partial class ReaderScreen : UserControl
     private const double NavigateZoneWidth = 300, NavigateZoneHeight = 60;
     private const double ActionsZoneWidth = 220, ActionsZoneHeight = 60;
     private const double ViewZoneWidth = 300, ViewZoneHeight = 80;
-    private const double PageTurnZoneWidth = 340, PageTurnZoneHeight = 70;
+    private const double PageTurnZoneWidth = 520, PageTurnZoneHeight = 70;
 
     private void OnReaderPointerMoved(object? sender, PointerEventArgs e)
     {
@@ -615,6 +634,7 @@ public partial class ReaderScreen : UserControl
             return;
         }
 
+        _viewModel.NotePointerActivity();
         if (_viewModel.ChromeHoverMode == ReaderChromeHoverMode.Ambient)
         {
             _viewModel.NotifyCursorActivity();
@@ -627,6 +647,10 @@ public partial class ReaderScreen : UserControl
         _viewModel.IsNavigateClusterHovered = pos.X < NavigateZoneWidth && pos.Y < NavigateZoneHeight;
         _viewModel.IsActionsClusterHovered = pos.X > bounds.Width - ActionsZoneWidth && pos.Y < ActionsZoneHeight;
         _viewModel.IsViewClusterHovered = pos.X < ViewZoneWidth && pos.Y > bounds.Height - ViewZoneHeight;
+        Point? contextStripOrigin = ContextStrip.TranslatePoint(new Point(0, 0), rootVisual);
+        _viewModel.IsContextStripHovered = _viewModel.HasContextStrip
+            && contextStripOrigin is { } origin
+            && new Rect(origin, ContextStrip.Bounds.Size).Contains(pos);
         double pageTurnCenter = bounds.Width / 2;
         _viewModel.IsPageTurnClusterHovered = pos.Y > bounds.Height - PageTurnZoneHeight
             && pos.X > pageTurnCenter - (PageTurnZoneWidth / 2) && pos.X < pageTurnCenter + (PageTurnZoneWidth / 2);
@@ -695,4 +719,13 @@ public partial class ReaderScreen : UserControl
             }
         }
     }
+
+    /// <summary>What the ambient backdrop drifts against: pan in paged modes, plus the scroll position along continuous mode's main axis.</summary>
+    internal static Vector ParallaxSourceFor(PageCanvas canvas) => canvas.ReadingMode switch
+    {
+        ReadingMode.VerticalContinuous or ReadingMode.Webtoon => new Vector(canvas.PanOffsetX, canvas.PanOffsetY + canvas.ScrollOffset),
+        ReadingMode.HorizontalContinuous => new Vector(canvas.PanOffsetX + canvas.ScrollOffset, canvas.PanOffsetY),
+        ReadingMode.HorizontalContinuousRightToLeft => new Vector(canvas.PanOffsetX - canvas.ScrollOffset, canvas.PanOffsetY),
+        _ => new Vector(canvas.PanOffsetX, canvas.PanOffsetY),
+    };
 }

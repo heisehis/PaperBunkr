@@ -115,6 +115,16 @@ load or apply this skill's guidance here even though its name matches. If a futu
 considers adopting Zafiro for real, that's a brainstorming-level architecture decision, not
 something to slide in via skill auto-routing.
 
+## Design language — mandatory for every UI change
+
+Load the project skill **`paperbunkr-design-language`** (`.claude/skills/paperbunkr-design-language/SKILL.md`) before designing, specifying,
+planning, building or reviewing any screen, dialog, popup or control. It records the language set by the 2026-10-19/20 app-wide UI polish:
+the 10/11/12/13/15/18/22 type classes, tokens only (no hex, DynamicResource radii, no oval pills), the 4 px spacing grid and 24 px gutter,
+the shared control families in `Styles/Controls.axaml` (reuse, never restyle locally; icon-only buttons are `iconButton`), `DialogCard` for
+every dialog, `PopupFit` + a ScrollViewer for dropdowns, `PbMotionEase` on every transition, and the 1366×768 minimum window. The 12
+`XamlConsistencyLintTests` rules enforce most of it; the skill says what they can't see. In a design round, don't ask the user which button
+style, font size or radius to use — those are decided there.
+
 ## Input handling — one service, no per-screen key handlers
 
 All keyboard, mouse-button, wheel and gamepad input goes through `IInputService` (`src/Paperbunkr.App/Services/Input/`, design:

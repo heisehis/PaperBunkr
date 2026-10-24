@@ -17,6 +17,7 @@ using Paperbunkr.Data.Credentials;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.ReadingLists;
+using Paperbunkr.Data.ReadingLists.Matching;
 using Paperbunkr.Data.ReadingLists.Sources;
 
 namespace Paperbunkr.App.ViewModels;
@@ -75,13 +76,71 @@ public partial class ReadingListPageViewModel
         try
         {
             var result = await ArcReadingListBuilder.RefreshAsync(context, listId, CancellationToken.None);
-            StatusMessage = $"Added {result.AddedCount}, replaced {result.ReplacedPlaceholderCount} placeholder(s), {result.StillMissingCount} still missing.";
             LoadReadingList(listId);
+            StatusMessage = WithDetails(
+                $"Added {result.AddedCount}, replaced {result.ReplacedPlaceholderCount} placeholder(s), {result.StillMissingCount} still missing.", result.Report);
         }
         catch (Exception ex) when (ex is ReadingListSourceException or InvalidOperationException)
         {
             StatusMessage = ex.Message;
         }
+    }
+
+    /// <summary>
+    /// "Recheck library" (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.9, decision Q8): looks again for the comics
+    /// this list's "missing" entries are waiting for. Works offline and on any list - a .cbl import has no source to refresh from.
+    /// </summary>
+    [RelayCommand]
+    private void RecheckLibrary()
+    {
+        if (_activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        string message;
+        try
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            var healed = ReadingListHealer.RecheckList(context, listId);
+            message = healed.Relinked + healed.NeedChoice + healed.StillMissing + healed.AlreadyInList.Count == 0
+                ? "Nothing in this list is waiting for a comic."
+                : healed.Summary;
+        }
+        catch (Exception ex) when (ex is DbUpdateException or InvalidOperationException)
+        {
+            StatusMessage = $"Recheck failed: {ex.Message}";
+            return;
+        }
+
+        // Reload after the click has finished routing (the rows being rebuilt include the control that raised it).
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            LoadReadingList(listId);
+            StatusMessage = message;
+        });
+    }
+
+    /// <summary>The counts line plus, when the source could not deliver everything, the names behind "duplicate" and "skipped".</summary>
+    private static string WithDetails(string summary, ImportReport? report)
+    {
+        if (report is null)
+        {
+            return summary;
+        }
+
+        string text = summary;
+        if (report.NeedsChoice > 0)
+        {
+            text += report.NeedsChoice == 1 ? " 1 entry needs a choice." : $" {report.NeedsChoice} entries need a choice.";
+        }
+
+        if (report.Incomplete)
+        {
+            text += $" Incomplete: the source lists {report.Reported} entries and {report.Parsed + report.Skipped.Count} were received.";
+        }
+
+        return report.Details() is { } details ? text + Environment.NewLine + details : text;
     }
 
     private bool _loadingFollowArc;
@@ -254,7 +313,9 @@ public partial class ReadingListPageViewModel
         var list = imported.ReadingList!;
         PlaceInThisFolder(list.Id);
         _openList(list.Id);
-        StatusMessage = $"Imported '{list.Name}' with {list.Items.Count} issues.";
+        StatusMessage = imported.Report is { } report
+            ? $"Imported '{list.Name}': {report.Summary}" + (report.Details() is { } details ? Environment.NewLine + details : string.Empty)
+            : $"Imported '{list.Name}' with {list.Items.Count} issues.";
     }
 
     [RelayCommand]
@@ -270,9 +331,9 @@ public partial class ReadingListPageViewModel
         var result = CsvReadingListIO.Import(context, path);
         PlaceInThisFolder(result.List.Id);
         _openList(result.List.Id);
-        StatusMessage = result.SkippedRows.Count == 0
-            ? $"Imported '{result.List.Name}': {result.OwnedCount} owned, {result.PlaceholderCount} missing."
-            : $"Imported '{result.List.Name}': {result.OwnedCount} owned, {result.PlaceholderCount} missing, {result.SkippedRows.Count} row(s) skipped.";
+        StatusMessage = result.Report is { } report
+            ? $"Imported '{result.List.Name}': {report.Summary}" + (report.Details() is { } details ? Environment.NewLine + details : string.Empty)
+            : $"Imported '{result.List.Name}': {result.OwnedCount} owned, {result.PlaceholderCount} missing.";
     }
 
     [RelayCommand]

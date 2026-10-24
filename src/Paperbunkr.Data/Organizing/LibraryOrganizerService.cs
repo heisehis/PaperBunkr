@@ -24,18 +24,26 @@ public sealed class LibraryOrganizerService
     private readonly Func<string, IReadOnlyCollection<int>>? _resolveExcluded;
     private readonly OrganizeUndoLog? _undoLog;
     private readonly Action<string>? _sendToRecycleBin;
+    private readonly Func<string, CancellationToken, Task>? _waitForFileSettled;
 
     /// <param name="resolveExcluded">Turns a profile's exclude-rule JSON into the ids of the issues it matches. Supplied by the app (its rules engine lives above this project); null means "exclude nothing".</param>
     /// <param name="undoLog">Where real moves are recorded for undo; null disables undo.</param>
     /// <param name="sendToRecycleBin">Disposes of a file a Replace overwrites, recoverably. The Recycle Bin helper lives in the app project, so it is injected; null (tests, headless hosts) deletes permanently.</param>
+    /// <param name="waitForFileSettled">
+    /// Waits until no metadata write is rewriting a file, so a move never runs in the middle of one (docs/superpowers/specs/
+    /// 2026-10-21-scraper-organizer-a-reliability-design.md: a scrape followed by Organize left <c>.crswap</c> copies behind). The write-back
+    /// lives in the app project, so it is injected; null (tests, headless hosts) does not wait.
+    /// </param>
     public LibraryOrganizerService(
         Func<string, IReadOnlyCollection<int>>? resolveExcluded = null,
         OrganizeUndoLog? undoLog = null,
-        Action<string>? sendToRecycleBin = null)
+        Action<string>? sendToRecycleBin = null,
+        Func<string, CancellationToken, Task>? waitForFileSettled = null)
     {
         _resolveExcluded = resolveExcluded;
         _undoLog = undoLog;
         _sendToRecycleBin = sendToRecycleBin;
+        _waitForFileSettled = waitForFileSettled;
     }
 
     /// <summary>
@@ -511,6 +519,11 @@ public sealed class LibraryOrganizerService
                 }
 
                 state.Claimed.Add(Path.GetFullPath(destination));
+                if (_waitForFileSettled is not null && profile.Mode != OrganizerMode.Simulate)
+                {
+                    await _waitForFileSettled(move.SourcePath, cancellationToken).ConfigureAwait(false);
+                }
+
                 await PerformMoveAsync(move.Issue, move.SourcePath, destination, profile.Mode, createDbContext, cancellationToken).ConfigureAwait(false);
 
                 if (profile.Mode == OrganizerMode.Move)

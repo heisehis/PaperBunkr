@@ -172,7 +172,7 @@ public class SmartTemplateGalleryTests : IDisposable
             var gallery = screen.GetVisualDescendants().OfType<SmartTemplateGallery>().Single();
             Assert.True(gallery.IsEffectivelyVisible);
             Assert.True(FocusIsInside(window, gallery), $"focus on {Focused(window)} while the gallery is open");
-            int cards = gallery.GetVisualDescendants().OfType<Button>().Count(b => b.Classes.Contains("tplCard"));
+            int cards = gallery.GetVisualDescendants().OfType<Button>().Count(b => b.Classes.Contains("clickCard"));
             Assert.Equal(vm.Gallery.Cards.Count, cards);
 
             Press(window, Key.Escape);

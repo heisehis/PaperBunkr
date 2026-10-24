@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Animation.Easings;
+using Paperbunkr.App.Theming.Motion;
 
 namespace Paperbunkr.App.Services;
 
@@ -39,11 +40,19 @@ public sealed class NavigationTransitionCoordinator
         _easing = easing;
     }
 
+    private CancellationTokenSource? _flight;
+
     /// <param name="sharedKey">Null for a navigation with no shared-element participant (e.g. any Book screen) - skips capture/fly entirely, only <paramref name="swapContent"/> runs.</param>
     /// <param name="swapContent">Exactly today's navigation body (set CurrentScreen, load the target, PushEntry/ReplayEntry) - runs synchronously, before any await, so history/CanNavigateBack etc. update immediately regardless of how the flight resolves.</param>
+    /// <remarks>A newer navigation supersedes an older one (docs/superpowers/specs/2026-10-20-motion-system-v2-navigation-design.md §3.3):
+    /// the previous flight is cancelled and its clone removed before anything else happens.</remarks>
     public async Task RunAsync(string? sharedKey, Action swapContent)
     {
-        if (_isReducedMotion())
+        _flight?.Cancel();
+        _flight = null;
+        _service.Cancel();
+
+        if (_isReducedMotion() || !MotionPolicy.AllowsMotion(MotionRole.Travel))
         {
             swapContent();
             return;
@@ -58,7 +67,19 @@ public sealed class NavigationTransitionCoordinator
 
         if (sharedKey is not null)
         {
-            await _service.FlyToIncomingAsync(sharedKey, _flightDuration(), _easing, CancellationToken.None).ConfigureAwait(true);
+            using var flight = new CancellationTokenSource();
+            _flight = flight;
+            try
+            {
+                await _service.FlyToIncomingAsync(sharedKey, _flightDuration(), _easing, flight.Token).ConfigureAwait(true);
+            }
+            finally
+            {
+                if (ReferenceEquals(_flight, flight))
+                {
+                    _flight = null;
+                }
+            }
         }
     }
 }

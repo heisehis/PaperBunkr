@@ -5,63 +5,16 @@ using Paperbunkr.Data.Metadata;
 namespace Paperbunkr.Data.Tests.StoryEventIdentity;
 
 /// <summary>
-/// <see cref="WikidataEventLinks"/> against a fake Wikidata and <see cref="EventConnectorSweep"/> end to end
-/// (docs/superpowers/specs/2026-09-27-continuity-map-design.md §2, Q11/Q16/Q19). No network.
+/// <see cref="EventConnectorSweep"/> end to end (docs/superpowers/specs/2026-10-12-continuity-sources-design.md §3-§4): strong local
+/// inferences, the Metron reading-list chain, the removal of what only Wikidata ever supported. No network.
 /// </summary>
 public class EventConnectorTests : IdentityTestDb
 {
-    private sealed class FakeWikidata : IWikidataLookup
-    {
-        public Dictionary<string, WikidataEntity> Entities { get; } = new();
-
-        public Dictionary<string, List<string>> Search { get; } = new(StringComparer.OrdinalIgnoreCase);
-
-        public Dictionary<string, List<string>> ByComicVineId { get; } = new();
-
-        public int Calls { get; private set; }
-
-        public Task<IReadOnlyList<WikidataSearchResult>> SearchEntitiesAsync(string name, CancellationToken cancellationToken)
-        {
-            Calls++;
-            var hits = Search.GetValueOrDefault(name) ?? new List<string>();
-            return Task.FromResult<IReadOnlyList<WikidataSearchResult>>(hits.Select(q => new WikidataSearchResult(q, Entities[q].Label)).ToList());
-        }
-
-        public Task<WikidataEntity?> GetEntityAsync(string qid, CancellationToken cancellationToken)
-        {
-            Calls++;
-            return Task.FromResult(Entities.GetValueOrDefault(qid));
-        }
-
-        public Task<IReadOnlyList<string>> FindByComicVineIdAsync(string comicVineId, CancellationToken cancellationToken)
-        {
-            Calls++;
-            return Task.FromResult<IReadOnlyList<string>>(ByComicVineId.GetValueOrDefault(comicVineId) ?? new List<string>());
-        }
-
-        public void Add(string qid, string label, string type, string? publisher = null, string[]? follows = null, string[]? followedBy = null, string[]? cvIds = null) =>
-            Entities[qid] = new WikidataEntity(qid, label, null, new[] { type }, null, null,
-                publisher is null ? Array.Empty<string>() : new[] { publisher }, Array.Empty<string>(), follows, followedBy, cvIds);
-    }
-
-    /// <summary>Planet Hulk → World War Hulk as Wikidata really has it (checked 2026-09-27), placeholder "nothing" included.</summary>
-    private static FakeWikidata RealHulkData()
-    {
-        var wd = new FakeWikidata();
-        wd.Add("Q173496", "Marvel Comics", "Q1320047");
-        wd.Add("Q154242", "nothing", "Q35120");
-        wd.Add("Q2526264", "Planet Hulk", "Q47461344", "Q173496", follows: new[] { "Q154242" }, followedBy: new[] { "Q1048144", "Q154242" });
-        wd.Add("Q1048144", "World War Hulk", "Q3297186", "Q173496", follows: new[] { "Q2526264" });
-        wd.Search["Planet Hulk"] = new() { "Q2526264" };
-        wd.Search["World War Hulk"] = new() { "Q1048144" };
-        return wd;
-    }
-
     private (int Planet, int War) SeedHulkEvents()
     {
         using (var context = NewContext())
         {
-            // Unrelated issue numbers and no shared series: only Wikidata can connect these two.
+            // Unrelated issue numbers and no shared series: nothing local can connect these two.
             context.Series.Add(new Series { Name = "Incredible Hulk", Issues = { new Issue { Number = "92", Year = 2006, Month = 4, Publisher = "Marvel Comics" } } });
             context.Series.Add(new Series { Name = "World War Hulk", Issues = { new Issue { Number = "1", Year = 2007, Month = 6, Publisher = "Marvel" } } });
             context.SaveChanges();
@@ -73,75 +26,115 @@ public class EventConnectorTests : IdentityTestDb
         return (AddEvent("Planet Hulk", StoryEventOrigin.Provider, new[] { hulk }), AddEvent("World War Hulk", StoryEventOrigin.Provider, new[] { war }));
     }
 
+    private void AddMetronList(int eventId, string listId, string listName, string? previous = null, string? next = null)
+    {
+        using var context = NewContext();
+        context.EventOrderEvidence.Add(new EventOrderEvidence
+        {
+            StoryEventId = eventId, Provider = EventOrderProvider.MetronList, SourceId = listId, SourceName = listName, PreviousName = previous, NextName = next,
+        });
+        context.SaveChanges();
+    }
+
     [Fact]
-    public async Task Wikidata_FollowedBy_BecomesAPrequelRelation_PlaceholdersIgnored()
+    public async Task MetronChain_NextList_BecomesAPrequelRelation_WithTheListAsEvidence()
     {
         var (planet, war) = SeedHulkEvents();
+        AddMetronList(planet, "77", "Planet Hulk", next: "World War Hulk");
 
-        var summary = await EventConnectorSweep.RunAsync(Factory, RealHulkData(), 40, CancellationToken.None);
+        var summary = await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
 
-        Assert.Equal(2, summary.WikidataMatched);
+        Assert.Equal(1, summary.Created);
         using var context = NewContext();
         var relation = Assert.Single(context.EventRelations.Include(r => r.Evidence));
         Assert.Equal((planet, war, RelationType.Prequel), (relation.SourceEventId, relation.TargetEventId, relation.RelationType));
         var evidence = Assert.Single(relation.Evidence);
-        Assert.Equal(RelationEvidenceProvider.Wikidata, evidence.Provider);
-        Assert.Equal("Q2526264", evidence.ProviderSourceId);
-        Assert.Equal("Q2526264", context.StoryEvents.Find(planet)!.WikidataQid);
-        Assert.NotNull(context.StoryEvents.Find(war)!.ChronologyCheckedAt);
+        Assert.Equal(RelationEvidenceProvider.Metron, evidence.Provider);
+        Assert.Equal("77", evidence.ProviderSourceId);
+        Assert.True(EventConnectorSweep.IsAutomatic(relation));
     }
 
     [Fact]
-    public async Task Wikidata_WrongTypeOrPublisher_IsNotMatched()
+    public async Task MetronChain_PreviousList_PointsTheOtherWay_AndTheSamePairFromBothEndsIsOneRelation()
     {
-        SeedHulkEvents();
-        var wd = RealHulkData();
-        wd.Add("Q2526264", "Planet Hulk", "Q11424" /* film */, "Q173496", followedBy: new[] { "Q1048144" });
-        wd.Add("Q1048144", "World War Hulk", "Q3297186", "Q99999" /* another publisher */, follows: new[] { "Q2526264" });
-        wd.Add("Q99999", "Some Other Press", "Q1320047");
+        var (planet, war) = SeedHulkEvents();
+        AddMetronList(war, "78", "World War Hulk", previous: "Planet Hulk");
+        AddMetronList(planet, "77", "Planet Hulk", next: "World War Hulk");
 
-        var summary = await EventConnectorSweep.RunAsync(Factory, wd, 40, CancellationToken.None);
+        await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
+        var second = await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
 
-        Assert.Equal(0, summary.WikidataMatched);
+        using var context = NewContext();
+        var relation = Assert.Single(context.EventRelations);
+        Assert.Equal((planet, war), (relation.SourceEventId, relation.TargetEventId));
+        Assert.Equal(0, second.Created);
+    }
+
+    [Fact]
+    public async Task MetronChain_NeighbourThatMatchesNoEventOrSeveral_IsSkipped()
+    {
+        var (planet, _) = SeedHulkEvents();
+        AddEvent("World War Hulk (2007)", StoryEventOrigin.User, AddSeries("WWH Prologue", "1"));      // a second event with the same name key
+        AddMetronList(planet, "77", "Planet Hulk", previous: "Some Event We Do Not Have", next: "World War Hulk");
+
+        await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
+
         using var context = NewContext();
         Assert.Empty(context.EventRelations);
     }
 
     [Fact]
-    public async Task Wikidata_ComicVineIdMatch_BeatsTheNameSearch()
+    public async Task MetronChain_RelationGoesWhenItsEvidenceDoes_AndYourOwnRelationBlocksIt()
     {
-        var (planet, _) = SeedHulkEvents();
+        var (planet, war) = SeedHulkEvents();
+        AddMetronList(planet, "77", "Planet Hulk", next: "World War Hulk");
+        await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
+
         using (var context = NewContext())
         {
-            context.StoryEvents.Find(planet)!.ComicVineArcId = "56000";
+            context.EventOrderEvidence.RemoveRange(context.EventOrderEvidence);
             context.SaveChanges();
         }
 
-        var wd = RealHulkData();
-        wd.Search.Remove("Planet Hulk");                         // the name search would find nothing
-        wd.ByComicVineId["4045-56000"] = new() { "Q2526264" };
+        var removed = await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
 
-        await EventConnectorSweep.RunAsync(Factory, wd, 40, CancellationToken.None);
+        Assert.Equal(1, removed.Removed);
+        using (var context = NewContext())
+        {
+            Assert.Empty(context.EventRelations);
+            EventRelationResolver.TryCreate(context, war, planet, RelationType.Prequel);        // yours, the other way round
+        }
+
+        AddMetronList(planet, "77", "Planet Hulk", next: "World War Hulk");
+        await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
 
         using var check = NewContext();
-        Assert.Equal("Q2526264", check.StoryEvents.Find(planet)!.WikidataQid);
-        Assert.Single(check.EventRelations);
+        var left = Assert.Single(check.EventRelations.Include(r => r.Evidence));
+        Assert.Equal((war, planet), (left.SourceEventId, left.TargetEventId));
+        Assert.False(EventConnectorSweep.IsAutomatic(left));
     }
 
     [Fact]
-    public async Task Wikidata_IsNotAskedAgainWithinThirtyDays()
+    public async Task RelationsOnlyWikidataSupported_AreRemoved_YoursAreNot()
     {
-        SeedHulkEvents();
-        var wd = RealHulkData();
-        await EventConnectorSweep.RunAsync(Factory, wd, 40, CancellationToken.None);
-        int calls = wd.Calls;
+        var (planet, war) = SeedHulkEvents();
+        int other = AddEvent("Other", StoryEventOrigin.User, AddSeries("Other", "1"));
+        using (var context = NewContext())
+        {
+            context.EventRelations.Add(new EventRelation
+            {
+                SourceEventId = planet, TargetEventId = war, RelationType = RelationType.Prequel,
+                Evidence = { new EventRelationEvidence { Provider = RelationEvidenceProvider.Wikidata, ProviderSourceId = "Q2526264", Confidence = 0.9m } },
+            });
+            EventRelationResolver.TryCreate(context, war, other, RelationType.Sequel);
+        }
 
-        var summary = await EventConnectorSweep.RunAsync(Factory, wd, 40, CancellationToken.None);
+        var summary = await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
 
-        Assert.Equal(calls, wd.Calls);
-        Assert.Equal(0, summary.WikidataChecked);
-        using var context = NewContext();
-        Assert.Single(context.EventRelations);                  // still there: not re-checked, not removed
+        Assert.Equal(1, summary.Removed);
+        using var check = NewContext();
+        var left = Assert.Single(check.EventRelations);
+        Assert.Equal((war, other), (left.SourceEventId, left.TargetEventId));
     }
 
     [Fact]
@@ -158,7 +151,7 @@ public class EventConnectorTests : IdentityTestDb
             EventRelationResolver.TryCreate(context, t1, t2, RelationType.Prequel);     // yours
         }
 
-        var first = await EventConnectorSweep.RunAsync(Factory, null, 40, CancellationToken.None);
+        var first = await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
 
         Assert.Equal(1, first.Created);
         using (var context = NewContext())
@@ -172,7 +165,7 @@ public class EventConnectorTests : IdentityTestDb
             context.SaveChanges();
         }
 
-        var second = await EventConnectorSweep.RunAsync(Factory, null, 40, CancellationToken.None);
+        var second = await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
 
         Assert.Equal(1, second.Removed);
         using var check = NewContext();
@@ -186,18 +179,35 @@ public class EventConnectorTests : IdentityTestDb
         var hulk = AddSeries("Hulk", ("105", 2007, 5), ("106", 2007, 6));
         AddEvent("Planet Hulk", StoryEventOrigin.Provider, hulk.Take(1));
         AddEvent("World War Hulk", StoryEventOrigin.Provider, hulk.Skip(1));
-        await EventConnectorSweep.RunAsync(Factory, null, 40, CancellationToken.None);
+        await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
 
         using (var context = NewContext())
         {
             EventConnectorSweep.RemoveRelation(context, context.EventRelations.Single().Id);
         }
 
-        await EventConnectorSweep.RunAsync(Factory, null, 40, CancellationToken.None);
+        await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
 
         using var check = NewContext();
         Assert.Empty(check.EventRelations);
         Assert.Single(check.EventRelationDismissals);
+    }
+
+    [Fact]
+    public async Task DeletingAMetronRelation_DismissesThePair_TooSoItIsNotReadAgain()
+    {
+        var (planet, _) = SeedHulkEvents();
+        AddMetronList(planet, "77", "Planet Hulk", next: "World War Hulk");
+        await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
+        using (var context = NewContext())
+        {
+            EventConnectorSweep.RemoveRelation(context, context.EventRelations.Single().Id);
+        }
+
+        await EventConnectorSweep.RunAsync(Factory, CancellationToken.None);
+
+        using var check = NewContext();
+        Assert.Empty(check.EventRelations);
     }
 
     [Fact]

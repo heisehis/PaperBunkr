@@ -18,4 +18,10 @@ public enum ImageBackgroundMode
     Auto,
     Color,
     Texture,
+
+    /// <summary>
+    /// Cosmetics pitch #22 (docs/superpowers/specs/2026-10-12-cosmetics-pitch-completion-design.md B): a gradient sampled from the current page's edges.
+    /// A deliberate deviation - CE has no such mode - appended last because the enum is persisted as an integer.
+    /// </summary>
+    Ambient,
 }

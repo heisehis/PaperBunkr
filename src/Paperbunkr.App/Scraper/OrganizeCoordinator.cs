@@ -36,7 +36,7 @@ public sealed class OrganizeCoordinator(
 
     /// <summary>The organizer service with the app's rules engine resolving profile exclude rules, and the core undo log.</summary>
     public static LibraryOrganizerService CreateService(Func<PaperbunkrDbContext> createContext) =>
-        new(ResolveExcludedIds, new OrganizeUndoLog(createContext), path => RecycleBinHelper.SendToRecycleBin(path));
+        new(ResolveExcludedIds, new OrganizeUndoLog(createContext), path => RecycleBinHelper.SendToRecycleBin(path), Services.FileWriteBackCoordinator.WaitForSettledAsync);
 
     private static IReadOnlyCollection<int> ResolveExcludedIds(string ruleJson)
     {
@@ -61,9 +61,19 @@ public sealed class OrganizeCoordinator(
             return NoProfilesMessage;
         }
 
-        IReadOnlyList<OrganizerProfile>? chosen = profiles.Count == 1
-            ? profiles
-            : await modalHost.ShowAsync<IReadOnlyList<OrganizerProfile>?>(resolve => new ProfileSelectDialogView { DataContext = new ProfileSelectDialogViewModel(profiles, resolve) });
+        IReadOnlyList<OrganizerProfile>? chosen;
+        try
+        {
+            chosen = profiles.Count == 1
+                ? profiles
+                : await modalHost.ShowAsync<IReadOnlyList<OrganizerProfile>?>(resolve => new ProfileSelectDialogView { DataContext = new ProfileSelectDialogViewModel(profiles, resolve) });
+        }
+        catch (OperationCanceledException)
+        {
+            // Dismissing the profile picker cancels ShowAsync's task. That is a normal user action,
+            // and must not escape through the async library command as an unhandled UI exception.
+            return "Organize cancelled.";
+        }
         if (chosen is not { Count: > 0 })
         {
             return "Organize cancelled.";

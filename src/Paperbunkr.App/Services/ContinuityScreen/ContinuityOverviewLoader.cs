@@ -42,18 +42,9 @@ public static class ContinuityOverviewLoader
             ? new List<OverviewPlaceholder>()
             : Placeholders(context, gcd, gcdIds.ToDictionary(x => x.Gcd, x => x.Id));
 
-        var eventIds = map.Events.Select(e => e.Id).ToHashSet();
+        // "Connections worth confirming" were the smart connector's weak guesses; those were dropped on 2026-10-12 (a date order alone is
+        // placement, not a link: docs/superpowers/specs/2026-10-12-continuity-sources-design.md §4.2), so there is nothing to offer here yet.
         var connections = new List<OverviewConnection>();
-        if (eventIds.Count >= 2)
-        {
-            var names = map.Events.ToDictionary(e => e.Id, e => e.Name);
-            foreach (var inference in EventChronologyInference.Infer(context, null, gcd)
-                         .Where(i => !i.IsStrong && eventIds.Contains(i.SourceEventId) && eventIds.Contains(i.TargetEventId)))
-            {
-                connections.Add(new OverviewConnection(inference.SourceEventId, inference.TargetEventId, inference.Type,
-                    Headline(inference, names), inference.Reason));
-            }
-        }
 
         return ContinuityOverviewBuilder.Build(new ContinuityOverviewInput(map, continuations, placeholders, connections, gcdIds.Count > 0));
     }

@@ -202,6 +202,10 @@ public class ScraperTests : IDisposable
     public async Task WithoutAComicVineKey_TheScrapeSaysWhereToAddOne_AndDoesNothing()
     {
         var id = SeedIssue();
+        using (var context = NewContext())
+        {
+            new ScrapeSettings { DefaultProvider = ComicProvider.ComicVine }.Save(context);
+        }
 
         var message = await Coordinator(null).ScrapeIssuesAsync(new[] { id });
 
@@ -225,7 +229,7 @@ public class ScraperTests : IDisposable
         var id = SeedIssue();
         using (var context = NewContext())
         {
-            new ScrapeSettings { AutoChooseTopMatch = true }.Save(context);
+            new ScrapeSettings { AutoChooseTopMatch = true, DefaultProvider = ComicProvider.ComicVine }.Save(context);
         }
 
         var message = await Coordinator(new FakeComicVine()).ScrapeIssuesAsync(new[] { id }, isInteractive: false);
@@ -252,7 +256,7 @@ public class ScraperTests : IDisposable
         var id = SeedIssue();
         using (var context = NewContext())
         {
-            new ScrapeSettings { AutoChooseTopMatch = true }.Save(context);
+            new ScrapeSettings { AutoChooseTopMatch = true, DefaultProvider = ComicProvider.ComicVine }.Save(context);
         }
 
         var message = await Coordinator(new FakeComicVine { ThrowOnSearch = true }).ScrapeIssuesAsync(new[] { id }, isInteractive: false);
@@ -307,7 +311,7 @@ public class ScraperTests : IDisposable
         var id = SeedIssue();
         using (var context = NewContext())
         {
-            new ScrapeSettings { AutoChooseTopMatch = true }.Save(context);
+            new ScrapeSettings { AutoChooseTopMatch = true, DefaultProvider = ComicProvider.ComicVine }.Save(context);
         }
 
         byte[] coverBytes = TopLightBottomDarkCover();
@@ -362,7 +366,7 @@ public class ScraperTests : IDisposable
             context.Issues.Add(issue);
             context.SaveChanges();
             scraped = issue.Id;
-            new ScrapeSettings { AutoChooseTopMatch = true }.Save(context);
+            new ScrapeSettings { AutoChooseTopMatch = true, DefaultProvider = ComicProvider.ComicVine }.Save(context);
         }
 
         var comicVine = new FakeComicVine();
@@ -469,5 +473,43 @@ public class ScraperTests : IDisposable
         Assert.Equal(ComicProvider.Metron, ScrapeCoordinator.StartingProvider(new[] { Book(null) }, ComicProvider.Metron));
         Assert.Equal(ComicProvider.ComicVine, ScrapeCoordinator.StartingProvider(new[] { Book(ComicProvider.Metron), Book(ComicProvider.ComicVine) }, ComicProvider.ComicVine));   // a tie goes to the default
         Assert.Equal(ComicProvider.Metron, ScrapeCoordinator.StartingProvider(new[] { Book(ComicProvider.Metron), Book(null), Book(null) }, ComicProvider.ComicVine));                // unscraped ones don't outvote a recorded source
+    }
+
+    [Fact]
+    public async Task Metron_is_the_default_source_and_ComicVine_gets_what_it_found_nothing_for()
+    {
+        // docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-core-design.md section 1
+        var id = SeedIssue();
+        using (var context = NewContext())
+        {
+            new ScrapeSettings { AutoChooseTopMatch = true }.Save(context);
+        }
+
+        var asked = new List<ComicProvider>();
+        var comicVine = new FakeComicVine();
+        var coordinator = new ScrapeCoordinator(
+            new NativePluginModalHostViewModel(), NewContext, new ActivityService(dispatch: a => a(), recordRun: _runs.Add), _writeBacks.Add,
+            (provider, _) => { asked.Add(provider); return comicVine; });
+
+        await coordinator.ScrapeIssuesAsync(new[] { id }, isInteractive: false);
+
+        Assert.Equal(ComicProvider.Metron, asked[0]);
+        Assert.Contains(ComicProvider.ComicVine, asked);
+        Assert.Equal(2, comicVine.SearchCalls); // Metron's try, then ComicVine's
+    }
+
+    [Fact]
+    public async Task The_ComicVine_fallback_can_be_switched_off()
+    {
+        var id = SeedIssue();
+        using (var context = NewContext())
+        {
+            new ScrapeSettings { AutoChooseTopMatch = true, FallBackToComicVine = false }.Save(context);
+        }
+
+        var comicVine = new FakeComicVine();
+        await Coordinator(comicVine).ScrapeIssuesAsync(new[] { id }, isInteractive: false);
+
+        Assert.Equal(1, comicVine.SearchCalls);
     }
 }

@@ -12,6 +12,8 @@ public class StoryEventSummary
     public string Name { get; init; } = string.Empty;
 
     public int MemberCount { get; init; }
+    public string EventTypesLabel { get; init; } = string.Empty;
+    public bool HasEventTypes => !string.IsNullOrWhiteSpace(EventTypesLabel);
 
     /// <summary>The event's start date year, else its earliest member's cover year; null when nothing is dated.</summary>
     public int? StartYear { get; init; }

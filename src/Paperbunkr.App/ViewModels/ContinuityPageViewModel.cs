@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,6 +15,7 @@ using Paperbunkr.App.Services.ContinuityScreen;
 using Paperbunkr.App.Services.EventMap;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.ComicVine;
 using Paperbunkr.Data.Gcd;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.ReadingLists;
@@ -50,6 +53,30 @@ public partial class ContinuityPageViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(HasPublisher))]
     private string _publisher = string.Empty;
 
+    /// <summary>The universe's own designation ("Earth-616") when Metron knows it; shown as a chip beside the stats.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDesignation))]
+    private string _designation = string.Empty;
+
+    [ObservableProperty]
+    private bool _isMetronSeriesBrowserOpen;
+
+    [ObservableProperty]
+    private bool _isLoadingMetronSeries;
+
+    [ObservableProperty]
+    private string? _metronSeriesBrowserMessage;
+
+    [ObservableProperty]
+    private string? _metronUniverseLabel;
+
+    public ObservableCollection<MetronContinuitySeriesRowViewModel> MetronUniverseSeries { get; } = new();
+
+    public int SelectedMetronSeriesCount => MetronUniverseSeries.Count(row => row.IsSelected);
+    public bool HasSelectedMetronSeries => SelectedMetronSeriesCount > 0;
+
+    public bool HasDesignation => !string.IsNullOrWhiteSpace(Designation);
+
     public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
 
     public bool HasPublisher => !string.IsNullOrWhiteSpace(Publisher);
@@ -85,6 +112,7 @@ public partial class ContinuityPageViewModel : ViewModelBase
         Name = continuity.Name;
         Description = continuity.Description ?? string.Empty;
         Publisher = continuity.Publisher ?? string.Empty;
+        Designation = continuity.Designation ?? string.Empty;
 
         RefreshMembers(context, continuityId);
         MemberSelection.Clear();
@@ -97,6 +125,10 @@ public partial class ContinuityPageViewModel : ViewModelBase
             IsAddingSeries = false;
             SeriesSearchQuery = string.Empty;
             SeriesSearchResults.Clear();
+            IsMetronSeriesBrowserOpen = false;
+            MetronSeriesBrowserMessage = null;
+            MetronUniverseLabel = null;
+            MetronUniverseSeries.Clear();
             IsCustomOrder = _customOrder.GetValueOrDefault(continuityId);
             _deleteConfirm?.Cancel();          // an armed delete never carries over to another continuity
             ClearOverview();
@@ -177,7 +209,11 @@ public partial class ContinuityPageViewModel : ViewModelBase
 
     public ObservableCollection<OverviewConnection> Connections { get; } = new();
 
-    public ObservableCollection<OutsideSeriesInfo> OutsideSeries { get; } = new();
+    public ObservableCollection<OutsideSeriesRowViewModel> OutsideSeries { get; } = new();
+
+    public int SelectedOutsideSeriesCount => OutsideSeries.Count(row => row.IsSelected);
+
+    public bool HasSelectedOutsideSeries => SelectedOutsideSeriesCount > 0;
 
     public bool HasRuns => Runs.Count > 0;
 
@@ -255,6 +291,44 @@ public partial class ContinuityPageViewModel : ViewModelBase
 
         IsOverviewLoading = false;
         ApplyOverview(overview);
+        CacheEventCovers(overview?.Events ?? Array.Empty<OverviewEventRow>());
+        _ = CompleteEventDetailsAsync(id, generation);
+    }
+
+    private void CacheEventCovers(IEnumerable<OverviewEventRow> rows)
+    {
+        foreach (var row in rows.Where(r => r.CoverSource != StoryEventCoverSource.Manual && !string.IsNullOrWhiteSpace(r.CoverImageUrl)))
+        {
+            int eventId = row.EventId;
+            string url = row.CoverImageUrl!;
+            if (File.Exists(StoryEventCoverPaths.GetPath(eventId))) continue;
+            _ = CacheOneAsync(eventId, url);
+        }
+    }
+
+    private async Task CacheOneAsync(int eventId, string url)
+    {
+        if (!await StoryEventCoverCache.DownloadAndCacheAsync(eventId, url, CancellationToken.None).ConfigureAwait(false)) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            int index = EventsInOrder.ToList().FindIndex(r => r.EventId == eventId && r.CoverImageUrl == url);
+            if (index >= 0) EventsInOrder[index] = EventsInOrder[index] with { CoverPath = StoryEventCoverPaths.GetPath(eventId) };
+        });
+    }
+
+    private async Task CompleteEventDetailsAsync(int continuityId, int generation)
+    {
+        try
+        {
+            bool changed = (bool)(await _nav.Runner(() =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                return StoryEventDetailsCompletion.CompleteAsync(context, continuityId, CancellationToken.None).GetAwaiter().GetResult();
+            }) ?? false);
+            if (changed && generation == _overviewGeneration && ContinuityId == continuityId)
+                await LoadOverviewAsync();
+        }
+        catch { /* Provider enrichment is best-effort and must never prevent the local overview. */ }
     }
 
     [RelayCommand]
@@ -282,7 +356,8 @@ public partial class ContinuityPageViewModel : ViewModelBase
         EventsInOrder.Clear();
         foreach (var row in overview?.Events ?? Array.Empty<OverviewEventRow>())
         {
-            EventsInOrder.Add(row);
+            string coverPath = StoryEventCoverPaths.GetPath(row.EventId);
+            EventsInOrder.Add(row with { CoverPath = File.Exists(coverPath) ? coverPath : null });
         }
 
         Connections.Clear();
@@ -294,7 +369,10 @@ public partial class ContinuityPageViewModel : ViewModelBase
         OutsideSeries.Clear();
         foreach (var s in overview?.OutsideSeries ?? Array.Empty<OutsideSeriesInfo>())
         {
-            OutsideSeries.Add(s);
+            var row = new OutsideSeriesRowViewModel(s);
+            row.PropertyChanged += (_, _) => OnPropertyChanged(nameof(SelectedOutsideSeriesCount));
+            row.PropertyChanged += (_, _) => OnPropertyChanged(nameof(HasSelectedOutsideSeries));
+            OutsideSeries.Add(row);
         }
 
         var attention = overview?.Attention ?? Array.Empty<AttentionItem>();
@@ -479,7 +557,7 @@ public partial class ContinuityPageViewModel : ViewModelBase
 
     /// <summary>Adds a series the continuity's events pull in. Deferred - the row is in the flyout list this rebuilds.</summary>
     [RelayCommand]
-    private void AddOutsideSeries(OutsideSeriesInfo? series)
+    private void AddOutsideSeries(OutsideSeriesRowViewModel? series)
     {
         if (series is null || ContinuityId is not int continuityId)
         {
@@ -497,6 +575,222 @@ public partial class ContinuityPageViewModel : ViewModelBase
         });
     }
 
+    [RelayCommand]
+    private void SelectAllOutsideSeries()
+    {
+        foreach (var row in OutsideSeries) row.IsSelected = true;
+        OnPropertyChanged(nameof(SelectedOutsideSeriesCount));
+        OnPropertyChanged(nameof(HasSelectedOutsideSeries));
+    }
+
+    [RelayCommand]
+    private void ClearOutsideSeriesSelection()
+    {
+        foreach (var row in OutsideSeries) row.IsSelected = false;
+        OnPropertyChanged(nameof(SelectedOutsideSeriesCount));
+        OnPropertyChanged(nameof(HasSelectedOutsideSeries));
+    }
+
+    [RelayCommand]
+    private async Task AddSelectedOutsideSeries()
+    {
+        if (ContinuityId is not int continuityId) return;
+        var ids = OutsideSeries.Where(row => row.IsSelected).Select(row => row.SeriesId).Distinct().ToList();
+        if (ids.Count == 0) return;
+
+        // Yield once so the Flyout button's routed click completes before its content is rebuilt.
+        await Task.Yield();
+        try
+        {
+            int added = await Task.Run(() =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                using var transaction = context.Database.BeginTransaction();
+                if (!context.Continuities.Any(c => c.Id == continuityId)) throw new InvalidOperationException("This continuity no longer exists.");
+                int count = 0;
+                foreach (int seriesId in ids)
+                {
+                    if (!context.Series.Any(s => s.Id == seriesId)) continue;
+                    if (ContinuityResolver.AddSeriesToContinuity(context, seriesId, continuityId)) count++;
+                }
+                transaction.Commit();
+                return count;
+            });
+            if (ContinuityId == continuityId) Reload();
+            _nav.Notify("Series added", $"Added {added} of {ids.Count} selected series to the continuity.");
+        }
+        catch (Exception ex) { _nav.Notify("Couldn't add the selected series", ex.Message); }
+    }
+
+    [RelayCommand]
+    private async Task ToggleMetronSeriesBrowser()
+    {
+        if (IsMetronSeriesBrowserOpen) { IsMetronSeriesBrowserOpen = false; return; }
+        IsMetronSeriesBrowserOpen = true;
+        await LoadMetronUniverseSeriesAsync();
+    }
+
+    [RelayCommand]
+    private async Task RefreshMetronUniverseSeries() => await LoadMetronUniverseSeriesAsync();
+
+    private async Task LoadMetronUniverseSeriesAsync()
+    {
+        if (ContinuityId is not int continuityId) return;
+        int universeId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var continuity = context.Continuities.AsNoTracking().FirstOrDefault(c => c.Id == continuityId);
+            if (continuity is null || !int.TryParse(continuity.MetronId, out universeId) || universeId <= 0)
+            {
+                MetronSeriesBrowserMessage = "Link this continuity to a Metron universe first.";
+                return;
+            }
+        }
+
+        IsLoadingMetronSeries = true;
+        MetronSeriesBrowserMessage = "Loading series from Metron…";
+        try
+        {
+            var result = await Task.Run(async () =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                var provider = ComicProviderFactory.Create(context, ComicProvider.Metron, ComicVineRequestPriority.Low);
+                if (provider is not MetronClient metron) throw new InvalidOperationException(ComicProviderFactory.MissingCredentialsMessage(ComicProvider.Metron));
+                try
+                {
+                    var universe = await metron.GetUniverseAsync(universeId, CancellationToken.None).ConfigureAwait(false);
+                    var catalog = await metron.GetUniverseSeriesAsync(universeId, CancellationToken.None).ConfigureAwait(false);
+                    var links = context.ComicMetadataExternalIds.AsNoTracking()
+                        .Where(link => link.EntityKind == ComicMetadataEntityKind.Series)
+                        .Select(link => new { link.EntityId, link.Provider, link.ExternalId }).ToList();
+                    var seriesGcdIds = context.Series.AsNoTracking()
+                        .Where(series => series.GcdSeriesId != null)
+                        .Select(series => new { series.Id, GcdId = series.GcdSeriesId!.Value }).ToList();
+                    var currentMembers = context.ContinuityMemberships.Where(membership => membership.ContinuityId == continuityId)
+                        .Select(membership => membership.SeriesId).ToHashSet();
+                    var metronById = links.Where(link => link.Provider == ComicProvider.Metron && int.TryParse(link.ExternalId, out _))
+                        .GroupBy(link => int.Parse(link.ExternalId, System.Globalization.CultureInfo.InvariantCulture))
+                        .ToDictionary(group => group.Key, group => group.Select(link => link.EntityId).Distinct().ToHashSet());
+                    var comicVineById = links.Where(link => link.Provider == ComicProvider.ComicVine && int.TryParse(link.ExternalId, out _))
+                        .GroupBy(link => int.Parse(link.ExternalId, System.Globalization.CultureInfo.InvariantCulture))
+                        .ToDictionary(group => group.Key, group => group.Select(link => link.EntityId).Distinct().ToHashSet());
+                    var gcdById = seriesGcdIds.GroupBy(series => series.GcdId)
+                        .ToDictionary(group => group.Key, group => group.Select(series => series.Id).ToHashSet());
+                    var metronBySeries = links.Where(link => link.Provider == ComicProvider.Metron && int.TryParse(link.ExternalId, out _))
+                        .GroupBy(link => link.EntityId)
+                        .ToDictionary(group => group.Key, group => group.Select(link => int.Parse(link.ExternalId, System.Globalization.CultureInfo.InvariantCulture)).ToHashSet());
+                    var comicVineBySeries = links.Where(link => link.Provider == ComicProvider.ComicVine && int.TryParse(link.ExternalId, out _))
+                        .GroupBy(link => link.EntityId)
+                        .ToDictionary(group => group.Key, group => group.Select(link => int.Parse(link.ExternalId, System.Globalization.CultureInfo.InvariantCulture)).ToHashSet());
+                    var gcdBySeries = seriesGcdIds.ToDictionary(series => series.Id, series => series.GcdId);
+                    var rows = catalog.Select(item =>
+                    {
+                        var matches = new List<(HashSet<int> Ids, string Evidence)>();
+                        if (metronById.TryGetValue(item.Id, out var metronIds)) matches.Add((metronIds, "Metron ID match"));
+                        if (item.ComicVineId is int cvId && comicVineById.TryGetValue(cvId, out var cvIds)) matches.Add((cvIds, "ComicVine ID match"));
+                        if (item.GcdId is int gcdId && gcdById.TryGetValue(gcdId, out var gcdIds)) matches.Add((gcdIds, "GCD ID match"));
+                        var matchedIds = matches.SelectMany(match => match.Ids).Distinct().ToList();
+                        if (matchedIds.Count == 0)
+                            return new MetronContinuitySeriesRowViewModel(item, null);
+                        if (matchedIds.Count != 1 || matches.Any(match => match.Ids.Count != 1))
+                            return new MetronContinuitySeriesRowViewModel(item, null, hasIdentityCollision: true);
+                        int localId = matchedIds[0];
+                        var localMetronIds = metronBySeries.GetValueOrDefault(localId);
+                        var localCvIds = comicVineBySeries.GetValueOrDefault(localId);
+                        var localGcd = gcdBySeries.GetValueOrDefault(localId);
+                        if ((localMetronIds is { Count: > 0 } && !localMetronIds.Contains(item.Id))
+                            || (item.ComicVineId is int requestedCv && localCvIds is { Count: > 0 } && !localCvIds.Contains(requestedCv))
+                            || (item.GcdId is int requestedGcd && localGcd is int storedGcd && storedGcd != requestedGcd))
+                            return new MetronContinuitySeriesRowViewModel(item, null, hasIdentityCollision: true);
+                        string evidence = string.Join(" + ", matches.Where(match => match.Ids.Contains(localId)).Select(match => match.Evidence).Distinct());
+                        return new MetronContinuitySeriesRowViewModel(item, localId, currentMembers.Contains(localId), identityMatch: evidence);
+                    }).ToList();
+                    return (universe, Rows: rows, CatalogCount: catalog.Count,
+                        ExactMatches: rows.Count(row => row.HasExactLibraryMatch),
+                        AlreadyInContinuity: rows.Count(row => row.AlreadyInContinuity),
+                        IdentityConflicts: rows.Count(row => row.HasIdentityCollision),
+                        NotFound: rows.Count(row => !row.HasExactLibraryMatch && !row.HasIdentityCollision));
+                }
+                finally { (provider as IDisposable)?.Dispose(); }
+            });
+            MetronUniverseSeries.Clear();
+            foreach (var row in result.Rows)
+            {
+                row.PropertyChanged += (_, _) =>
+                {
+                    OnPropertyChanged(nameof(SelectedMetronSeriesCount));
+                    OnPropertyChanged(nameof(HasSelectedMetronSeries));
+                };
+                MetronUniverseSeries.Add(row);
+            }
+            MetronUniverseLabel = result.universe is null ? $"Metron universe #{universeId}" : result.universe.Name;
+            MetronSeriesBrowserMessage = $"{result.CatalogCount} series in this universe · {result.ExactMatches} provider-ID library matches · {result.AlreadyInContinuity} already in this continuity · {result.NotFound} not found in the library · {result.IdentityConflicts} identity conflicts.";
+        }
+        catch (Exception ex) { MetronSeriesBrowserMessage = $"Metron lookup failed: {ex.Message}"; }
+        finally { IsLoadingMetronSeries = false; }
+    }
+
+    private void ReloadAndKeepMetronBrowserOpen()
+    {
+        Reload();
+        IsMetronSeriesBrowserOpen = true;
+        _ = LoadMetronUniverseSeriesAsync();
+    }
+
+    [RelayCommand]
+    private void AddMetronSeries(MetronContinuitySeriesRowViewModel? row)
+    {
+        if (row is null || !row.CanAdd || row.LocalSeriesId is not int seriesId || ContinuityId is not int continuityId) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            ContinuityResolver.AddSeriesToContinuity(context, seriesId, continuityId);
+            ReloadAndKeepMetronBrowserOpen();
+        });
+    }
+
+    [RelayCommand]
+    private void SelectAllExactMetronSeries()
+    {
+        foreach (var row in MetronUniverseSeries) row.IsSelected = row.CanAdd;
+        OnPropertyChanged(nameof(SelectedMetronSeriesCount));
+        OnPropertyChanged(nameof(HasSelectedMetronSeries));
+    }
+
+    [RelayCommand]
+    private void ClearMetronSeriesSelection()
+    {
+        foreach (var row in MetronUniverseSeries) row.IsSelected = false;
+        OnPropertyChanged(nameof(SelectedMetronSeriesCount));
+        OnPropertyChanged(nameof(HasSelectedMetronSeries));
+    }
+
+    [RelayCommand]
+    private async Task ApplySelectedMetronSeries()
+    {
+        if (ContinuityId is not int continuityId) return;
+        var ids = MetronUniverseSeries.Where(row => row.IsSelected && row.CanAdd).Select(row => row.LocalSeriesId!.Value).Distinct().ToList();
+        if (ids.Count == 0) return;
+        await Task.Yield();
+        try
+        {
+            int added = await Task.Run(() =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                using var transaction = context.Database.BeginTransaction();
+                if (!context.Continuities.Any(c => c.Id == continuityId)) throw new InvalidOperationException("This continuity no longer exists.");
+                int count = 0;
+                foreach (int seriesId in ids)
+                    if (context.Series.Any(s => s.Id == seriesId) && ContinuityResolver.AddSeriesToContinuity(context, seriesId, continuityId)) count++;
+                transaction.Commit();
+                return count;
+            });
+            if (ContinuityId == continuityId) ReloadAndKeepMetronBrowserOpen();
+            _nav.Notify("Metron series added", $"Added {added} of {ids.Count} exact matches to {Name}.");
+        }
+        catch (Exception ex) { _nav.Notify("Couldn't add Metron series", ex.Message); }
+    }
+
     // --- Events in order ---
 
     /// <summary>A row opens its event. Deferred: opening swaps the whole page the row lives in.</summary>
@@ -510,6 +804,19 @@ public partial class ContinuityPageViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand]
+    private void ToggleEventDetails(OverviewEventRow? row)
+    {
+        if (row is null) return;
+        int id = row.EventId;
+        bool expanded = !row.IsExpanded;
+        Dispatcher.UIThread.Post(() =>
+        {
+            int index = EventsInOrder.ToList().FindIndex(current => current.EventId == id);
+            if (index >= 0) EventsInOrder[index] = EventsInOrder[index] with { IsExpanded = expanded };
+        });
+    }
+
     /// <summary>The row's Map button: the event on its Map tab. Deferred like <see cref="OpenEvent"/>.</summary>
     [RelayCommand]
     private void OpenEventMap(OverviewEventRow? row)
@@ -519,6 +826,12 @@ public partial class ContinuityPageViewModel : ViewModelBase
             int id = row.EventId;
             Dispatcher.UIThread.Post(() => _nav.OpenEventMap(id));
         }
+    }
+
+    [RelayCommand]
+    private void OpenRelatedEvent(ContinuityRelatedEventData? related)
+    {
+        if (related is not null) { int id = related.EventId; Dispatcher.UIThread.Post(() => _nav.OpenEvent(id)); }
     }
 
     // --- Series order: Automatic (runs) or Custom (the stored order, dragged) ---
@@ -694,7 +1007,7 @@ public partial class ContinuityPageViewModel : ViewModelBase
             .ToList();
 
         // A nudge, not a block: a series already in other continuities says so under its name (smart features §7.1).
-        var alsoIn = ContinuityCharacterSuggestionResolver.OtherContinuityLines(context, matches.Select(s => s.Id).ToList(), ContinuityId);
+        var alsoIn = ContinuityMembershipLines.OtherContinuityLines(context, matches.Select(s => s.Id).ToList(), ContinuityId);
         foreach (var series in matches)
         {
             SeriesSearchResults.Add(new SeriesSearchResult

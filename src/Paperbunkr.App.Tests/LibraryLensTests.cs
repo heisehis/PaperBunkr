@@ -259,4 +259,68 @@ public class LibraryLensTests : IDisposable
 
         window.Close();
     }
+
+    [Fact]
+    public void NarrowToolbar_CollapsesTheEmptySearch_AndFocusSearchOpensIt()
+    {
+        SeedThreeSeries();
+        var vm = CreateVm();
+        var toolbar = new LibraryToolbar { DataContext = vm };
+        var window = new Window { Width = 1300, Height = 400, Content = toolbar };
+        window.Show();
+        TestDispatcher.Drain();
+        Assert.False(toolbar.IsSearchCollapsed);
+
+        window.Width = 820;
+        TestDispatcher.Drain();
+        Assert.True(toolbar.IsSearchCollapsed);
+
+        toolbar.FocusSearchBox();
+        TestDispatcher.Drain();
+        Assert.False(toolbar.IsSearchCollapsed);
+
+        vm.SearchQuery = "spawn";
+        window.Focus();
+        TestDispatcher.Drain();
+        Assert.False(toolbar.IsSearchCollapsed);
+
+        window.Close();
+    }
+
+    /// <summary>Not an assertion: renders the real toolbar with the app's styles and logs each control's vertical box, when PB_RENDER_OUT is set.</summary>
+    [Fact]
+    public void RenderToolbar()
+    {
+        string? outDir = Environment.GetEnvironmentVariable("PB_RENDER_OUT");
+        if (string.IsNullOrEmpty(outDir))
+        {
+            return;
+        }
+
+        SeedThreeSeries();
+        var vm = CreateVm();
+        Theming.FoundationStyleTests.WithFoundation("cool_technical", () =>
+        {
+            var toolbar = new LibraryToolbar { DataContext = vm };
+            int width = int.TryParse(Environment.GetEnvironmentVariable("PB_RENDER_WIDTH"), out int w) ? w : 1070;
+            var window = new Window { Width = width, Height = 140, Content = toolbar, Background = (Avalonia.Media.IBrush)Avalonia.Application.Current!.FindResource("PbBgBrush")! };
+            window.Show();
+            FocusTestHarness.RunLayout(window);
+            var lines = new System.Collections.Generic.List<string>();
+            foreach (var c in Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(toolbar).OfType<Control>()
+                         .Where(c => c is Button or Avalonia.Controls.Primitives.ToggleButton or TextBox || (c is Border b && b.Classes.Count > 0) || (c is TextBlock t && t.Name is null && t.Text?.Contains("series") == true)))
+            {
+                var p = Avalonia.VisualExtensions.TranslatePoint(c, default, toolbar);
+                if (p is null || !c.IsEffectivelyVisible) continue;
+                lines.Add($"{c.GetType().Name,-12} [{string.Join(' ', c.Classes)}] x={p.Value.X:0} top={p.Value.Y:0} h={c.Bounds.Height:0} mid={p.Value.Y + c.Bounds.Height / 2:0.0} w={c.Bounds.Width:0} va={c.VerticalAlignment} m={c.Margin} name={c.Name}");
+            }
+            File.WriteAllLines(Path.Combine(outDir, "toolbar-boxes.txt"), lines);
+            // PB_RENDER_SCALE (1.25, 1.5) renders as Windows display scaling would (2026-10-20 UI polish SP5 Q4).
+            double scale = double.TryParse(Environment.GetEnvironmentVariable("PB_RENDER_SCALE"), System.Globalization.CultureInfo.InvariantCulture, out double sc) ? sc : 1;
+            var rtb = new Avalonia.Media.Imaging.RenderTargetBitmap(new Avalonia.PixelSize((int)(width * scale), (int)(140 * scale)), new Avalonia.Vector(96 * scale, 96 * scale));
+            rtb.Render(window);
+            rtb.Save(Path.Combine(outDir, $"toolbar-{width}@{scale}.png"));
+            window.Close();
+        });
+    }
 }

@@ -20,6 +20,17 @@ public class EventPageViewModelTests : ContinuityScreenTestBase
     private static int SeedSignalIssue(string seriesName, string number, string format, int year) => SeedIssue(seriesName, number, format, year);
 
     [Fact]
+    public async Task RefreshProviderDetails_ExplainsWhenEventHasNoProviderArc()
+    {
+        var page = OpenEvent(SeedEvent("Locally created event"));
+
+        await page.RefreshProviderDetailsCommand.ExecuteAsync(null);
+
+        Assert.Contains("No verified Metron or ComicVine arc", page.ProviderRefreshStatus);
+        Assert.False(page.IsRefreshingProviderDetails);
+    }
+
+    [Fact]
     public void Search_MatchesBySeriesName_CaseInsensitive()
     {
         SeedIssue("Green Lantern", "13");
@@ -236,24 +247,19 @@ public class EventPageViewModelTests : ContinuityScreenTestBase
         Drain();
 
         Assert.Single(page.AllConnections);
-        Assert.Equal("Secret Empire", Assert.Single(page.FollowedBy).Name);     // a typed Sequel: it shows in the strip, not Related events
+        Assert.Equal("Secret Empire", Assert.Single(page.ConnectedEvents).Name);   // the type you chose (Related) - it carries no order, so no strip
         Assert.True(page.HasNoConnectionSuggestions);
     }
 
     [Fact]
-    public void TypedSuggestion_AcceptCreatesExactlyThatRelation()
+    public void SuggestionsAreNeverTyped_ADateOrderOnItsOwnIsNotASequel()
     {
-        int old = SeedEvent("Secret Wars (1984)", null, null, SeedIssue("Secret Wars", "1", year: 1984));
+        SeedEvent("Secret Wars (1984)", null, null, SeedIssue("Secret Wars", "1", year: 1984));
         int later = SeedEvent("Secret Wars (2015)", null, null, SeedIssue("Secret Wars (2015)", "1", year: 2015));
         var page = OpenEvent(later);
 
-        var card = page.ConnectionSuggestions.First(c => c.IsTyped);
-        Assert.Equal("Looks like the sequel of Secret Wars (1984)", card.Headline);
-        page.ConnectSuggestedEventCommand.Execute(card);
-
-        using var check = PaperbunkrDb.CreateContext();
-        var relation = Assert.Single(check.EventRelations);
-        Assert.Equal((later, old, RelationType.Sequel), (relation.SourceEventId, relation.TargetEventId, relation.RelationType));
+        Assert.DoesNotContain(page.ConnectionSuggestions, c => c.IsTyped);
+        Assert.Empty(PaperbunkrDb.CreateContext().EventRelations);
     }
 
     [Fact]
@@ -277,7 +283,7 @@ public class EventPageViewModelTests : ContinuityScreenTestBase
             context.SaveChanges();
         }
 
-        await EventConnectorSweep.RunAsync(() => PaperbunkrDb.CreateContext(), null, 40, CancellationToken.None);
+        await EventConnectorSweep.RunAsync(() => PaperbunkrDb.CreateContext(), CancellationToken.None);
         var page = OpenEvent(war);
 
         var before = Assert.Single(page.Follows);

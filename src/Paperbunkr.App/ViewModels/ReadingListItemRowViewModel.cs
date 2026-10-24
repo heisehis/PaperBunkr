@@ -70,6 +70,11 @@ public partial class ReadingListItemRowViewModel : ViewModelBase, Models.ISelect
     {
         get
         {
+            if (NeedsChoice)
+            {
+                return "needs a choice — your library has more than one that could be it";
+            }
+
             if (IsMissing)
             {
                 return "missing — not in your library";
@@ -119,6 +124,16 @@ public partial class ReadingListItemRowViewModel : ViewModelBase, Models.ISelect
     public bool IsPlaceholder => Item.Issue is { IsPlaceholder: true };
 
     public bool CanRequest => IsPlaceholder && _onRequest is not null;
+
+    /// <summary>
+    /// The library has comics that could be this entry, but the source did not say enough to pick one (docs/superpowers/specs/2026-10-13-
+    /// cbl-smart-match-core-design.md §7, decision Q15) - Find &amp; link lists them. Only while a placeholder still stands in; needs the
+    /// item loaded with its <see cref="ReadingListItem.Source"/>.
+    /// </summary>
+    public bool NeedsChoice => IsPlaceholder && Item.Source is { State: MatchState.NeedsChoice };
+
+    /// <summary>The word in front of the row's Find &amp; link / Request actions.</summary>
+    public string MissingLabel => NeedsChoice ? "needs a choice ·" : "missing ·";
 
     /// <summary>Phase 4c overhaul (docs/superpowers/specs/2026-08-17-metadata-model-phase4c-reading-list-overhaul-design.md) - reuses <see cref="EventMembershipRole"/>, optional/blank by default.</summary>
     public static Models.EventMembershipRoleOption[] RoleOptions => Models.EventMembershipRoleOption.All;

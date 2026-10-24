@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.crimson_ink",
+  "name": "Crimson Ink",
+  "mode": "Dark",
+  "base": {
+    "palette": {
+      "canvas": "#121214",
+      "ink": "#F2F0EE",
+      "accent": "#E5484D",
+      "success": "#5DBB7A",
+      "badge": "#F2F0EE"
+    },
+    "semantic": {
+      "surface": {
+        "navigation": "#0C0C0E",
+        "raised": "#1A1A1D",
+        "overlay": "#232327"
+      },
+      "border": {
+        "default": "#333338",
+        "strong": "#E5484D"
+      },
+      "badge": {
+        "text": "#121214"
+      },
+      "chart": {
+        "series": {
+          "1": "#E5484D",
+          "2": "#A6A6AD"
+        }
+      }
+    },
+    "metrics": {
+      "radius": 2,
+      "radiusSm": 1,
+      "radiusLg": 3,
+      "scrollbarWidth": 8
+    },
+    "typography": {
+      "heading": {
+        "weight": "Bold"
+      }
+    },
+    "components": {
+      "button.primary": {
+        "radius": 2,
+        "foreground": "#FFFFFF",
+        "states": {
+          "hover": {
+            "background": "#F0595E"
+          }
+        }
+      },
+      "button.secondary": {
+        "radius": 2
+      },
+      "button.ghost": {
+        "radius": 2
+      },
+      "chip": {
+        "radius": 1
+      },
+      "panel.floating": {
+        "radius": 3
+      }
+    }
+  }
+}

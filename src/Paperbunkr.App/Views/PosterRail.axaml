@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:fi="using:FluentIcons.Avalonia" xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:views="using:Paperbunkr.App.Views"
@@ -58,7 +58,7 @@
 
     <StackPanel Margin="0,0,0,16">
         <!-- Hidden when the host supplies its own section header (the Library preview panel passes no Title): the empty row still took ~20 px. -->
-        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,7"
+        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,8"
                     IsVisible="{Binding #u.Title, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
             <TextBlock Text="{Binding #u.Title}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding #u.ContextLabel}" FontSize="10" Foreground="{DynamicResource PbAccentTextBrush}"
@@ -75,7 +75,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:PosterRailItem">
-                            <Button Classes="railCard" Command="{Binding #u.ClickCommand}" CommandParameter="{Binding Payload}">
+                            <Button Classes="railCard" AutomationProperties.Name="{Binding Name}" Command="{Binding #u.ClickCommand}" CommandParameter="{Binding Payload}">
                                 <StackPanel Spacing="4">
                                     <Panel>
                                         <Border Classes="railCover" Background="{Binding CoverBrush}">
@@ -84,18 +84,18 @@
                                                 <!-- Library preview panel's issue rail: cover loaded by cache key like a grid tile (CoverImage stays null there). -->
                                                 <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                                                 <Border Background="{DynamicResource PbBgBrush}" Opacity="0.55" IsVisible="{Binding IsRead}" />
-                                                <TextBlock Text="✓" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}"
-                                                           HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,3,5,0" IsVisible="{Binding IsRead}" />
+                                                <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbAccentTextBrush}"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0" IsVisible="{Binding IsRead}" />
                                             </Panel>
                                         </Border>
-                                        <Button Classes="railRemove" Content="✕"
+                                        <Button Classes="railRemove"
                                                 Command="{Binding #u.RemoveCommand}" CommandParameter="{Binding Payload}"
                                                 IsVisible="{Binding #u.RemoveCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
-                                                ToolTip.Tip="Remove" AutomationProperties.Name="{Binding Name, StringFormat='Remove {0}'}" />
+                                                ToolTip.Tip="Remove" AutomationProperties.Name="{Binding Name, StringFormat='Remove {0}'}"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
                                     </Panel>
-                                    <TextBlock Text="{Binding Name}" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                    <TextBlock Text="{Binding Name}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
                                                TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{Binding SubLabel}" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}"
+                                    <TextBlock Text="{Binding SubLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
                                                IsVisible="{Binding SubLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                 </StackPanel>
                             </Button>
@@ -108,10 +108,10 @@
                     <StackPanel Spacing="4">
                         <Border Classes="railCover" BorderBrush="{DynamicResource PbTextFaintBrush}"
                                 Background="Transparent" BorderThickness="1">
-                            <TextBlock Text="+" FontSize="22" Foreground="{DynamicResource PbTextFaintBrush}"
+                            <TextBlock Text="+" FontSize="22" Foreground="{DynamicResource PbTextMutedBrush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
-                        <TextBlock Text="Add" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="Add" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" />
                     </StackPanel>
                 </Button>
             </StackPanel>

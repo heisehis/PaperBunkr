@@ -2,6 +2,7 @@ using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Tests.ContinuityScreen;
 
@@ -211,5 +212,51 @@ public class SuggestionsChecksViewModelTests : ContinuityScreenTestBase
 
         Assert.True(vm.IsSuggestionsOpen);
         Assert.Equal(provider, vm.Suggestions.FocusedDuplicateEventId);
+    }
+
+    [Fact]
+    public async Task MetronSuggestions_CanBeBulkAcceptedAndCreateOneMetronLinkedContinuity()
+    {
+        int seriesId = SeedSeries("Local Avengers", ("1", 2020));
+        Series series;
+        using (var context = PaperbunkrDb.CreateContext()) series = context.Series.Single(s => s.Id == seriesId);
+        var notifications = new List<string>();
+        var screen = CreateScreen(notify: (title, message) => notifications.Add($"{title}: {message}"));
+        screen.Suggestions.StageContinuitySuggestions(new[]
+        {
+            new ContinuitySuggestion(series, null, null, "Earth-616", null, FormatSignalStrength.Strong, "Metron issue universe identity.", MetronUniverseId: 21),
+        });
+
+        screen.Suggestions.SelectAllContinuitySuggestionsCommand.Execute(null);
+        Assert.True(screen.Suggestions.HasSelectedContinuitySuggestions);
+        await screen.Suggestions.AcceptSelectedContinuitySuggestionsCommand.ExecuteAsync(null);
+        Assert.True(notifications.Count == 0, string.Join(Environment.NewLine, notifications));
+        using var check = PaperbunkrDb.CreateContext();
+        var continuity = Assert.Single(check.Continuities);
+        Assert.Equal("21", continuity.MetronId);
+        Assert.Contains(check.ContinuityMemberships, membership => membership.ContinuityId == continuity.Id && membership.SeriesId == seriesId);
+    }
+
+    [Fact]
+    public void MetronSuggestions_CanBeBulkDismissedAndRemembered()
+    {
+        int seriesId = SeedSeries("Local Avengers", ("1", 2020));
+        Series series;
+        using (var context = PaperbunkrDb.CreateContext()) series = context.Series.Single(s => s.Id == seriesId);
+        var screen = CreateScreen();
+        screen.Suggestions.StageContinuitySuggestions(new[]
+        {
+            new ContinuitySuggestion(series, null, null, "Earth-616", null, FormatSignalStrength.Strong, "Metron issue universe identity.", MetronUniverseId: 21),
+        });
+
+        screen.Suggestions.SelectAllContinuitySuggestionsCommand.Execute(null);
+        screen.Suggestions.DismissSelectedContinuitySuggestionsCommand.Execute(null);
+        Drain();
+
+        Assert.Empty(screen.Suggestions.NewContinuitySuggestions);
+        using var check = PaperbunkrDb.CreateContext();
+        var dismissal = Assert.Single(check.ContinuityMetronSuggestionDismissals);
+        Assert.Equal(seriesId, dismissal.SeriesId);
+        Assert.Equal(21, dismissal.MetronUniverseId);
     }
 }

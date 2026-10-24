@@ -327,7 +327,7 @@ namespace cYo.Common.Drawing
                         byte* intPtr2 = ptr + 1;
                         byte b;
                         ptr[2] = (b = (byte)(0.299f * (float)(int)ptr[2] + 0.587f * (float)(int)ptr[1] + 0.114f * (float)(int)(*ptr)));
-                        *intPtr2 = (b = b);
+                        *intPtr2 = b;
                         *intPtr = b;
                     }
                 });

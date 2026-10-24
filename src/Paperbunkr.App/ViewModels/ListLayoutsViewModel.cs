@@ -23,6 +23,12 @@ public interface IListLayoutHost
 
     string CaptureLayoutJson();
 
+    /// <summary>True when every list on this screen uses one shared saved default instead of per-selection overrides.</summary>
+    bool UsesSingleDefault => false;
+
+    /// <summary>The built-in state restored by Reset when this host has one shared default.</summary>
+    string BuiltInDefaultLayoutJson => CaptureLayoutJson();
+
     /// <summary>Applies a layout to the list on screen and re-renders it. Must not call <see cref="ListLayoutsViewModel.TrackChange"/>'s write path (the caller marks it applied).</summary>
     void ApplyLayoutJson(string json);
 }
@@ -65,6 +71,72 @@ public partial class ListLayoutsViewModel : ObservableObject
     public bool HasLayouts => Layouts.Count > 0;
 
     public bool HasReorderableLayouts => Layouts.Count > 1;
+
+    public bool UsesSingleDefault => _host.UsesSingleDefault;
+
+    public bool ShowSetOnAllLists => true;
+
+    public string ApplyLayoutLabel => UsesSingleDefault ? "Set as default" : "Use here";
+
+    public string SetOnAllLabel => UsesSingleDefault ? "All series" : "All lists";
+
+    public string SetOnAllTip => UsesSingleDefault ? "Use on every series, including ones with their own layout" : "Set on all lists";
+
+    /// <summary>
+    /// Raised after a write that can change which layout the screen should show without going through the screen: set as default,
+    /// a series' own layout set or cleared, set on all series, reset. A detail screen re-resolves its series' layout on it.
+    /// </summary>
+    public event Action? AssignmentsChanged;
+
+    /// <summary>The assignment key of one series' own detail layout (docs/superpowers/specs/2026-10-19-detail-layouts-v2-design.md, Q8).</summary>
+    public static string SeriesKey(int seriesId) => $"series:{seriesId}";
+
+    public bool HasAssignment(string selectionKey) => _service.GetAssignment(_host.LayoutScreen, selectionKey) is not null;
+
+    /// <summary>The named layout a series' own layout is a copy of, or null when it follows the default or no longer matches one.</summary>
+    public int? SeriesLayoutId(int seriesId)
+    {
+        if (_service.GetAssignment(_host.LayoutScreen, SeriesKey(seriesId)) is not { } json)
+        {
+            return null;
+        }
+
+        return _service.ListNamed(_host.LayoutScreen).FirstOrDefault(l => string.Equals(l.StateJson, json, StringComparison.Ordinal))?.Id;
+    }
+
+    /// <summary>"Use only for this series": the series gets its own copy of the named layout.</summary>
+    public void UseForSeries(int seriesId, int layoutId)
+    {
+        if (_service.ListNamed(_host.LayoutScreen).FirstOrDefault(l => l.Id == layoutId) is not { } layout)
+        {
+            return;
+        }
+
+        _service.SetAssignment(_host.LayoutScreen, SeriesKey(seriesId), layout.StateJson);
+        AssignmentsChanged?.Invoke();
+    }
+
+    /// <summary>"Follow the default": drops the series' own layout.</summary>
+    public void FollowDefault(int seriesId)
+    {
+        _service.ClearAssignment(_host.LayoutScreen, SeriesKey(seriesId));
+        AssignmentsChanged?.Invoke();
+    }
+
+    /// <summary>Makes a named layout the default of a one-default screen (the Workspace popup's detail rows).</summary>
+    [RelayCommand]
+    private void SetAsDefault(int id)
+    {
+        if (_service.ListNamed(_host.LayoutScreen).FirstOrDefault(l => l.Id == id) is not { } layout)
+        {
+            _post(RefreshLayouts);
+            return;
+        }
+
+        _service.SetAssignment(_host.LayoutScreen, ListLayoutAssignment.DefaultKey, layout.StateJson);
+        AssignmentsChanged?.Invoke();
+        CloseMenuDeferred();
+    }
 
     /// <summary>Asks for a layout name: (current name or null, what to do with the answer). <c>MainViewModel</c> swaps in the layout-worded prompt.</summary>
     public Action<string?, Action<string>> PromptForName { get; set; }
@@ -192,6 +264,12 @@ public partial class ListLayoutsViewModel : ObservableObject
     [RelayCommand]
     private void ApplyLayout(int id)
     {
+        if (_host.UsesSingleDefault)
+        {
+            SetAsDefault(id);
+            return;
+        }
+
         var layout = _service.ListNamed(_host.LayoutScreen).FirstOrDefault(l => l.Id == id);
         if (layout is null)
         {
@@ -207,6 +285,14 @@ public partial class ListLayoutsViewModel : ObservableObject
     [RelayCommand]
     private void ResetToDefault()
     {
+        if (_host.UsesSingleDefault)
+        {
+            _service.SetAssignment(_host.LayoutScreen, ListLayoutAssignment.DefaultKey, _host.BuiltInDefaultLayoutJson);
+            AssignmentsChanged?.Invoke();
+            CloseMenuDeferred();
+            return;
+        }
+
         _service.ClearAssignment(_host.LayoutScreen, _host.LayoutSelectionKey);
         if (_service.GetAssignment(_host.LayoutScreen, ListLayoutAssignment.DefaultKey) is { } json)
         {
@@ -282,6 +368,20 @@ public partial class ListLayoutsViewModel : ObservableObject
         var layout = _service.ListNamed(_host.LayoutScreen).FirstOrDefault(l => l.Id == id);
         if (layout is null)
         {
+            return;
+        }
+
+        if (_host.UsesSingleDefault)
+        {
+            if (Confirm is not null
+                && !await Confirm($"Use the layout \"{layout.Name}\" on every series? Series with their own layout go back to following the default.", "Set on all series", "Set on all series", false))
+            {
+                return;
+            }
+
+            _service.SetOnAllLists(_host.LayoutScreen, layout.StateJson);
+            AssignmentsChanged?.Invoke();
+            CloseMenuDeferred();
             return;
         }
 

@@ -298,6 +298,26 @@ internal sealed class MangaBakaSeriesDto
     [JsonPropertyName("tags_v2")]
     public List<MangaBakaTagV2Dto>? TagsV2 { get; set; }
 
+    [JsonPropertyName("content_rating")]
+    public string? ContentRating { get; set; }
+
+    [JsonPropertyName("original_language")]
+    public string? OriginalLanguage { get; set; }
+
+    /// <summary>0-100 community score; null when unrated.</summary>
+    [JsonPropertyName("rating")]
+    public double? Rating { get; set; }
+
+    [JsonPropertyName("state")]
+    public string? State { get; set; }
+
+    /// <summary>Id of the series this one was merged into (a number, or null).</summary>
+    [JsonPropertyName("merged_with")]
+    public JsonElement MergedWith { get; set; }
+
+    [JsonPropertyName("publishers")]
+    public List<MangaBakaPublisherDto>? Publishers { get; set; }
+
     [JsonPropertyName("relationships_v2")]
     public List<MangaBakaRelationshipV2Dto>? RelationshipsV2 { get; set; }
 
@@ -323,6 +343,19 @@ internal sealed class MangaBakaTitleDto
     public bool IsPrimary { get; set; }
 }
 
+internal sealed class MangaBakaPublisherDto
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("language")]
+    public string? Language { get; set; }
+
+    /// <summary>"Original" (the first publisher, e.g. Shueisha), "English", or "Other".</summary>
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+}
+
 internal sealed class MangaBakaTagV2Dto
 {
     [JsonPropertyName("name")]
@@ -333,6 +366,10 @@ internal sealed class MangaBakaTagV2Dto
 
     [JsonPropertyName("is_genre")]
     public bool IsGenre { get; set; }
+
+    /// <summary>How central the tag is to this series: core, defining, recurrent, incidental or unweighted.</summary>
+    [JsonPropertyName("weight")]
+    public string? Weight { get; set; }
 
     [JsonPropertyName("is_spoiler")]
     public bool IsSpoiler { get; set; }
@@ -354,6 +391,10 @@ internal sealed class MangaBakaRelationshipV2Dto
 /// either without a custom converter.</summary>
 internal sealed class MangaBakaSourceDto
 {
+    // Retain identifiers for sources without a first-class adapter (for example Anime News Network).
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? AdditionalSources { get; set; }
+
     [JsonPropertyName("anilist")]
     public MangaBakaSourceEntryDto? AniList { get; set; }
 
@@ -450,7 +491,86 @@ internal static class MangaBakaNormalizer
         Demographic: null, // Confirmed absent from the v1 schema entirely, not just empty for a given series.
         CrossReferences: ResolveCrossReferences(dto.Source),
         GenreTags: dto.Genres is { Count: > 0 } genreTags ? genreTags : null,
-        OtherTags: ResolveOtherTags(dto.TagsV2));
+        OtherTags: ResolveOtherTags(dto.TagsV2),
+        CountryOfOrigin: null,
+        OriginalLanguage: dto.OriginalLanguage,
+        WeightedTags: ResolveWeightedTags(dto.TagsV2),
+        Authors: CleanNames(dto.Authors),
+        Artists: CleanNames(dto.Artists),
+        Publishers: ResolvePublishers(dto.Publishers),
+        ContentRating: dto.ContentRating,
+        Rating: dto.Rating,
+        AlternateTitles: ResolveAlternateTitles(dto),
+        MergedWithId: ResolveMergedWith(dto),
+        AdditionalIdentifiers: ResolveAdditionalIdentifiers(dto.Source));
+
+    private static IReadOnlyDictionary<string, string>? ResolveAdditionalIdentifiers(MangaBakaSourceDto? source)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in source?.AdditionalSources ?? [])
+        {
+            if (entry.Value.ValueKind != JsonValueKind.Object || !entry.Value.TryGetProperty("id", out var id)) continue;
+            string? value = id.ValueKind switch
+            {
+                JsonValueKind.String => id.GetString(),
+                JsonValueKind.Number => id.GetRawText(),
+                _ => null,
+            };
+            if (!string.IsNullOrWhiteSpace(value)) result[entry.Key] = value;
+        }
+        return result.Count == 0 ? null : result;
+    }
+
+    private static IReadOnlyList<string>? CleanNames(List<string>? names)
+    {
+        var cleaned = names?.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return cleaned is { Count: > 0 } ? cleaned : null;
+    }
+
+    private static IReadOnlyList<ProviderPublisher>? ResolvePublishers(List<MangaBakaPublisherDto>? publishers)
+    {
+        var rows = publishers?.Where(p => !string.IsNullOrWhiteSpace(p.Name)).Select(p => new ProviderPublisher(p.Name!.Trim(), p.Language, p.Type)).ToList();
+        return rows is { Count: > 0 } ? rows : null;
+    }
+
+    /// <summary>Every tag with the weight MangaBaka gives it for this series ("unweighted" becomes <see cref="IssueTagWeight.Unset"/>), genres and spoilers included but flagged.</summary>
+    private static IReadOnlyList<ProviderTag>? ResolveWeightedTags(List<MangaBakaTagV2Dto>? tagsV2)
+    {
+        var rows = tagsV2?
+            .Where(t => !string.IsNullOrWhiteSpace(t.Name))
+            .Select(t => new ProviderTag(t.Name!.Trim(), CategoryFromNamePath(t.NamePath), WeightFrom(t.Weight), t.IsGenre, t.IsSpoiler))
+            .ToList();
+        return rows is { Count: > 0 } ? rows : null;
+    }
+
+    private static IssueTagWeight WeightFrom(string? weight) => weight?.Trim().ToLowerInvariant() switch
+    {
+        "core" => IssueTagWeight.Core,
+        "defining" => IssueTagWeight.Defining,
+        "recurrent" => IssueTagWeight.Recurrent,
+        "incidental" => IssueTagWeight.Incidental,
+        _ => IssueTagWeight.Unset,
+    };
+
+    /// <summary>The other titles this series goes by (English, romanized and the rest, any language), without the ones already shown as the main titles.</summary>
+    private static IReadOnlyList<string>? ResolveAlternateTitles(MangaBakaSeriesDto dto)
+    {
+        var main = new HashSet<string>(new[] { ResolveDisplayTitle(dto), dto.Title, dto.NativeTitle, dto.RomanizedTitle }.Where(t => !string.IsNullOrWhiteSpace(t))!, StringComparer.OrdinalIgnoreCase);
+        var alternates = dto.Titles?
+            .Select(t => t.Title)
+            .Where(t => !string.IsNullOrWhiteSpace(t) && !main.Contains(t!.Trim()))
+            .Select(t => t!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return alternates is { Count: > 0 } ? alternates : null;
+    }
+
+    private static string? ResolveMergedWith(MangaBakaSeriesDto dto) => dto.MergedWith.ValueKind switch
+    {
+        JsonValueKind.Number => dto.MergedWith.GetRawText(),
+        JsonValueKind.String => dto.MergedWith.GetString(),
+        _ => null,
+    };
 
     /// <summary>English beats the flat <c>title</c> field beats the first primary-flagged
     /// localization beats whatever's first - never throws even when every title field is somehow

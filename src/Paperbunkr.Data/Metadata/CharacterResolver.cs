@@ -85,6 +85,11 @@ public static class CharacterResolver
         var orphans = context.Characters.Where(c => !c.Appearances.Any()).ToList();
         if (orphans.Count > 0)
         {
+            // Provider ids point at a row by number: left behind they would block the same character, re-created later under a new row, from ever
+            // getting its id back (an external id belongs to exactly one local row). docs/superpowers/specs/2026-10-12-continuity-sources-design.md §5.
+            var orphanIds = orphans.Select(c => c.Id).ToList();
+            context.ComicMetadataExternalIds.RemoveRange(
+                context.ComicMetadataExternalIds.Where(e => e.EntityKind == ComicMetadataEntityKind.Character && orphanIds.Contains(e.EntityId)));
             context.Characters.RemoveRange(orphans);
             context.SaveChanges();
         }

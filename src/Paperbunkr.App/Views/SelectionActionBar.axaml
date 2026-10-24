@@ -27,13 +27,6 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
             <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
         </Style>
-        <Style Selector="Button.barAction.danger">
-            <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
-        </Style>
-        <Style Selector="Button.barAction.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
-            <Setter Property="Background" Value="{DynamicResource PbDangerSoftBrush}" />
-        </Style>
         <Style Selector="Button.barAction:disabled /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
             <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />

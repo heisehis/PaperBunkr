@@ -49,4 +49,7 @@ public static class TitleNormalizer
     /// arc candidate grouping) and as the final tier inside <see cref="NamesMatch"/>.
     /// </summary>
     public static string StripDown(string s) => RxSpecial.Replace(s, string.Empty);
+
+    /// <summary>The name without a volume marker ("X Vol. 2" → "X") - tier 2 of <see cref="NamesMatch"/> on its own.</summary>
+    public static string StripVolume(string s) => RxVolume.Replace(s, string.Empty).Trim();
 }

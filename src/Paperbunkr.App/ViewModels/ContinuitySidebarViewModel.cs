@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -46,6 +47,13 @@ public partial class ContinuitySidebarViewModel : ViewModelBase
     public bool HasNoContinuities => Continuities.Count == 0;
 
     public bool HasNoEvents => Events.Count == 0;
+
+    public string[] EventTypeFilters { get; } = new[] { "All types", "Unclassified", "Crossover", "Limited Series", "Story Arc", "One-shot / Special", "Other" };
+
+    [ObservableProperty]
+    private string _selectedEventTypeFilter = "All types";
+
+    partial void OnSelectedEventTypeFilterChanged(string value) => RefreshEvents();
 
     public string ContinuitiesCountLabel => Continuities.Count.ToString(System.Globalization.CultureInfo.CurrentCulture);
 
@@ -154,9 +162,13 @@ public partial class ContinuitySidebarViewModel : ViewModelBase
                 e.Name,
                 Count = e.Members.Count,
                 e.StartDate,
+                EventTypes = e.TypeAssignments.Select(t => t.Type).ToList(),
                 FirstYear = e.Members.Min(m => m.Issue!.Year),
             })
             .AsEnumerable()
+            .Where(e => SelectedEventTypeFilter == "All types"
+                || (SelectedEventTypeFilter == "Unclassified" && e.EventTypes.Count == 0)
+                || e.EventTypes.Any(type => FormatEventType(type) == SelectedEventTypeFilter))
             .OrderBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
 
@@ -169,6 +181,7 @@ public partial class ContinuitySidebarViewModel : ViewModelBase
             {
                 Id = row.Id,
                 Name = row.Name,
+                EventTypesLabel = string.Join(" · ", row.EventTypes.Select(FormatEventType)),
                 MemberCount = row.Count,
                 StartYear = row.StartDate?.Year ?? row.FirstYear,
                 IsActive = row.Id == active,
@@ -179,4 +192,12 @@ public partial class ContinuitySidebarViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasNoEvents));
         OnPropertyChanged(nameof(EventsCountLabel));
     }
+
+    private static string FormatEventType(StoryEventType type) => type switch
+    {
+        StoryEventType.LimitedSeries => "Limited Series",
+        StoryEventType.StoryArc => "Story Arc",
+        StoryEventType.OneShotOrSpecial => "One-shot / Special",
+        _ => type.ToString(),
+    };
 }

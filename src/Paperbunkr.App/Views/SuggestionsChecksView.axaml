@@ -16,7 +16,7 @@
         <StyleInclude Source="avares://Paperbunkr.App/Styles/ContinuityChrome.axaml" />
     </UserControl.Styles>
 
-    <StackPanel Margin="28,24,28,40" Spacing="18" MaxWidth="900" HorizontalAlignment="Left">
+    <StackPanel Margin="24,24,24,40" Spacing="18" MaxWidth="900" HorizontalAlignment="Left">
         <!-- Header + the two checks -->
         <StackPanel Spacing="10">
             <TextBlock Classes="pbTextHeading" Text="Suggestions &amp; checks" />
@@ -24,7 +24,7 @@
                        FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
             <WrapPanel>
                 <StackPanel Margin="0,0,16,6" Spacing="3">
-                    <Button Classes="headerAction secondary" Command="{Binding CheckStoryEventsCommand}" IsEnabled="{Binding !IsFindingDuplicates}"
+                    <Button Classes="secondary" Command="{Binding CheckStoryEventsCommand}" IsEnabled="{Binding CanChangeStoryEvents}"
                             ToolTip.Tip="Look up ComicVine and Metron arc ids, merge events that are the same arc, and work out which events come before which">
                         <Panel>
                             <TextBlock Text="Checking story events…" IsVisible="{Binding IsFindingDuplicates}" />
@@ -35,45 +35,66 @@
                                IsVisible="{Binding StoryEventCheckResult, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                 </StackPanel>
                 <StackPanel Margin="0,0,16,6" Spacing="3">
-                    <Button Classes="headerAction secondary" Command="{Binding CheckForWikidataSuggestionsCommand}" IsEnabled="{Binding !IsCheckingWikidataSuggestions}"
-                            ToolTip.Tip="Ask Wikidata which of your series share a universe (a network check, one lookup per series)">
-                        <Panel>
-                            <TextBlock Text="Checking Wikidata…" IsVisible="{Binding IsCheckingWikidataSuggestions}" />
-                            <TextBlock Text="Check Wikidata" IsVisible="{Binding !IsCheckingWikidataSuggestions}" />
-                        </Panel>
-                    </Button>
-                    <TextBlock Text="{Binding WikidataCheckResult}" Classes="csFaint" TextWrapping="Wrap" MaxWidth="360"
-                               IsVisible="{Binding WikidataCheckResult, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Classes="secondary" Command="{Binding CheckMetronCommand}" IsEnabled="{Binding !IsCheckingMetron}">
+                            <Panel>
+                                <TextBlock Text="Checking Metron…" IsVisible="{Binding IsCheckingMetron}" />
+                                <TextBlock Text="Check Metron" IsVisible="{Binding !IsCheckingMetron}" />
+                            </Panel>
+                        </Button>
+                        <Button Classes="ghost" Content="Cancel" Command="{Binding CancelMetronCheckCommand}" IsVisible="{Binding IsCheckingMetron}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding MetronCheckResult}" Classes="csFaint" TextWrapping="Wrap" MaxWidth="360"
+                               IsVisible="{Binding MetronCheckResult, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                 </StackPanel>
             </WrapPanel>
+        </StackPanel>
+
+        <StackPanel Spacing="8" IsVisible="{Binding StoryEventBatchStatus, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+            <TextBlock Classes="pbTextMeta" Text="{Binding StoryEventBatchStatus}" TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Polite" />
+            <ProgressBar Minimum="0" Maximum="{Binding StoryEventBatchTotal}" Value="{Binding StoryEventBatchCompleted}"
+                         IsVisible="{Binding IsStoryEventBatchRunning}" />
         </StackPanel>
 
         <!-- Nothing to review -->
         <StackPanel Spacing="10" HorizontalAlignment="Center" Margin="0,24,0,0" IsVisible="{Binding IsEmpty}">
             <controls:EmptyIllustration Kind="Timeline" HorizontalAlignment="Center" />
             <TextBlock Text="Nothing to review" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" />
-            <TextBlock Text="Run a check above to look for more." Classes="csFaint" HorizontalAlignment="Center" />
+            <TextBlock Text="Run Check story events or Check Metron above to look for more." Classes="csFaint" HorizontalAlignment="Center" />
         </StackPanel>
 
         <!-- New story-event suggestions -->
         <StackPanel Spacing="8" IsVisible="{Binding !HasNoNewStoryEventCandidates}">
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <TextBlock Classes="csSection" Text="New story events" />
-                <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding NewStoryEventCandidates.Count}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding NewStoryEventCandidates.Count}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" /></Border>
             </StackPanel>
+            <WrapPanel IsEnabled="{Binding CanChangeStoryEvents}">
+                <TextBlock Classes="pbTextMeta" Text="{Binding StoryEventSelectionLabel}" VerticalAlignment="Center" Margin="0,0,12,8" />
+                <Button Classes="ghost" Content="Select all" Command="{Binding SelectAllStoryEventsCommand}" Margin="0,0,8,8" />
+                <Button Classes="ghost" Content="Clear" Command="{Binding ClearStoryEventSelectionCommand}" Margin="0,0,8,8" />
+                <Button Classes="primary" Content="Accept selected" Command="{Binding AcceptSelectedStoryEventsCommand}" Margin="0,0,8,8" />
+                <Button Classes="ghost" Content="Dismiss selected" Command="{Binding DismissSelectedStoryEventsCommand}" Margin="0,0,8,8" />
+            </WrapPanel>
             <ItemsControl ItemsSource="{Binding NewStoryEventCandidates}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:StoryEventCandidateRowViewModel">
-                        <Border Classes="reviewCard">
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                                <StackPanel Grid.Column="0" Spacing="3">
+                        <Border Classes="card" Padding="12,10">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" IsEnabled="{Binding !IsQueueBusy}"
+                                          VerticalAlignment="Center" AutomationProperties.Name="{Binding ArcName, StringFormat='Select {0}'}" />
+                                <StackPanel Grid.Column="1" Spacing="3">
                                     <TextBlock Text="{Binding ArcName}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
-                                    <TextBlock Text="{Binding Reason}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding Reason}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding BatchError}" Classes="pbTextCaption" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource PbDangerBrush}"
+                                               IsVisible="{Binding BatchError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <Button Classes="headerAction primary" Content="Accept" Command="{Binding AcceptCommand}" IsEnabled="{Binding !IsAccepting}"
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Button Classes="primary" Content="Accept" Command="{Binding AcceptCommand}" IsEnabled="{Binding CanAct}"
                                             AutomationProperties.Name="{Binding ArcName, StringFormat='Accept {0}'}" />
-                                    <Button Classes="headerAction ghost" Content="Dismiss" Command="{Binding DismissCommand}" IsEnabled="{Binding !IsAccepting}"
+                                    <Button Classes="ghost" Content="Dismiss" Command="{Binding DismissCommand}" IsEnabled="{Binding CanAct}"
                                             AutomationProperties.Name="{Binding ArcName, StringFormat='Dismiss {0}'}" />
                                 </StackPanel>
                             </Grid>
@@ -84,54 +105,25 @@
         </StackPanel>
 
         <!-- Possible duplicates -->
-        <StackPanel Spacing="8" IsVisible="{Binding HasPossibleDuplicates}">
+        <StackPanel Spacing="8" IsVisible="{Binding HasPossibleDuplicates}" IsEnabled="{Binding CanChangeStoryEvents}">
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <TextBlock Classes="csSection" Text="Possible duplicates" />
-                <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding PossibleDuplicatesSummary}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding PossibleDuplicatesSummary}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" /></Border>
             </StackPanel>
             <ItemsControl ItemsSource="{Binding PossibleDuplicates}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:StoryEventDuplicateRowViewModel">
-                        <Border Classes="reviewCard" AutomationProperties.Name="{Binding AutomationName}">
+                        <Border Classes="card" Padding="12,10" AutomationProperties.Name="{Binding AutomationName}">
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                                 <StackPanel Grid.Column="0" Spacing="3">
                                     <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
-                                    <TextBlock Text="{Binding Reason}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                                    <TextBlock Text="{Binding KeptLabel}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" IsVisible="{Binding IsPair}" />
+                                    <TextBlock Text="{Binding Reason}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding KeptLabel}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" IsVisible="{Binding IsPair}" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <Button Classes="headerAction primary" Content="Merge" Command="{Binding MergeCommand}" IsVisible="{Binding IsPair}" />
-                                    <Button Classes="headerAction ghost" Content="Not the same" Command="{Binding NotTheSameCommand}" IsVisible="{Binding IsPair}" />
-                                    <Button Classes="headerAction secondary" Content="Check again" Command="{Binding CheckAgainCommand}" IsVisible="{Binding IsConflictOnly}" />
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </StackPanel>
-
-        <!-- Shared-character suggestions (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.1): series that share three or more
-             characters with a continuity's members. Local only, so they are here as soon as the panel opens. -->
-        <StackPanel Spacing="8" IsVisible="{Binding HasCharacterSuggestions}">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-                <TextBlock Classes="csSection" Text="Shared characters" />
-                <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding CharacterSuggestions.Count}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
-            </StackPanel>
-            <ItemsControl ItemsSource="{Binding CharacterSuggestions}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:CharacterSuggestionRowViewModel">
-                        <Border Classes="reviewCard">
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                                <StackPanel Grid.Column="0" Spacing="3">
-                                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap">
-                                        <Run Text="{Binding SeriesName, Mode=OneWay}" /> <Run Text="→" /> <Run Text="{Binding ContinuityName, Mode=OneWay}" />
-                                    </TextBlock>
-                                    <TextBlock Text="{Binding Reason}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <Button Classes="headerAction primary" Content="Accept" Command="{Binding AcceptCommand}" />
-                                    <Button Classes="headerAction ghost" Content="Dismiss" Command="{Binding DismissCommand}" />
+                                    <Button Classes="primary" Content="Merge" Command="{Binding MergeCommand}" IsVisible="{Binding IsPair}" />
+                                    <Button Classes="ghost" Content="Not the same" Command="{Binding NotTheSameCommand}" IsVisible="{Binding IsPair}" />
+                                    <Button Classes="secondary" Content="Check again" Command="{Binding CheckAgainCommand}" IsVisible="{Binding IsConflictOnly}" />
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -142,24 +134,34 @@
 
         <!-- Shared-universe suggestions -->
         <StackPanel Spacing="8" IsVisible="{Binding !HasNoNewContinuitySuggestions}">
-            <StackPanel Orientation="Horizontal" Spacing="6">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="6">
                 <TextBlock Classes="csSection" Text="Shared universes" />
-                <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding NewContinuitySuggestions.Count}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
-            </StackPanel>
+                <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding NewContinuitySuggestions.Count}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" /></Border>
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5">
+                <Button Classes="ghost" Content="Select all" Command="{Binding SelectAllContinuitySuggestionsCommand}" />
+                <Button Classes="ghost" Content="Clear" Command="{Binding ClearContinuitySuggestionSelectionCommand}" />
+                <Button Classes="primary" Content="Accept selected" Command="{Binding AcceptSelectedContinuitySuggestionsCommand}" IsEnabled="{Binding HasSelectedContinuitySuggestions}" />
+                <Button Classes="ghost" Content="Dismiss selected" Command="{Binding DismissSelectedContinuitySuggestionsCommand}" IsEnabled="{Binding HasSelectedContinuitySuggestions}" />
+              </StackPanel>
+            </Grid>
             <ItemsControl ItemsSource="{Binding NewContinuitySuggestions}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:ContinuitySuggestionRowViewModel">
-                        <Border Classes="reviewCard">
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                                <StackPanel Grid.Column="0" Spacing="3">
+                        <Border Classes="card" Padding="12,10">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center"
+                                          AutomationProperties.Name="{Binding SeriesName, StringFormat='Select suggestion for {0}'}" />
+                                <StackPanel Grid.Column="1" Spacing="3">
                                     <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap">
                                         <Run Text="{Binding SeriesName, Mode=OneWay}" /> <Run Text="→" /> <Run Text="{Binding UniverseLabel, Mode=OneWay}" />
                                     </TextBlock>
-                                    <TextBlock Text="{Binding Reason}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding Reason}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                    <Button Classes="headerAction primary" Content="Accept" Command="{Binding AcceptCommand}" />
-                                    <Button Classes="headerAction ghost" Content="Dismiss" Command="{Binding DismissCommand}" />
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Button Classes="primary" Content="Accept" Command="{Binding AcceptCommand}" />
+                                    <Button Classes="ghost" Content="Dismiss" Command="{Binding DismissCommand}" />
                                 </StackPanel>
                             </Grid>
                         </Border>

@@ -93,11 +93,32 @@ public class CoverThumbnailService
             }
         }
 
-        using Bitmap? page = PageDecodeCore.DecodeSinglePage(filePath, 0);
+        int pageNumber = ResolveCoverPageNumber(issueId);
+        using Bitmap? page = PageDecodeCore.DecodeSinglePage(filePath, pageNumber);
+        if (page is null && pageNumber != 0)
+        {
+            // A stale preferred page (for example after an archive is replaced) must not blank
+            // the issue cover. Page zero remains the final compatibility fallback.
+            using Bitmap? fallback = PageDecodeCore.DecodeSinglePage(filePath, 0);
+            if (fallback is null)
+            {
+                return false;
+            }
+
+            return SaveThumbnail(issueId, fallback, out aspectRatio);
+        }
+
         if (page is null)
         {
             return false;
         }
+
+        return SaveThumbnail(issueId, page, out aspectRatio);
+    }
+
+    private static bool SaveThumbnail(int issueId, Bitmap page, out double? aspectRatio)
+    {
+        aspectRatio = null;
 
         try
         {
@@ -114,8 +135,80 @@ public class CoverThumbnailService
                 Math.Max(1, (int)Math.Round(size.Height * scale)));
 
             using Bitmap scaled = page.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality);
-            scaled.Save(destPath, new JpegBitmapEncoderOptions { Quality = JpegQuality });
+            scaled.Save(CoverThumbnailPaths.GetCachePath(issueId), new JpegBitmapEncoderOptions { Quality = JpegQuality });
             aspectRatio = size.Width / (double)size.Height;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private int ResolveCoverPageNumber(int issueId)
+    {
+        try
+        {
+            using var context = _contextFactory();
+            var issue = context.Issues.Find(issueId);
+            if (issue is null)
+            {
+                return 0;
+            }
+
+            var coverPages = context.IssuePages
+                .Where(page => page.IssueId == issueId && page.PageType == Paperbunkr.Data.Entities.PageType.Cover)
+                .OrderBy(page => page.PageNumber)
+                .Select(page => page.PageNumber)
+                .ToList();
+            return issue.PreferredCoverPageNumber is int preferred && coverPages.Contains(preferred)
+                ? preferred
+                : coverPages.FirstOrDefault();
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>Promotes an archive page to the preferred issue cover. The generated replacement is
+    /// written before changing metadata or removing a manual override, so a failed decode preserves
+    /// the cover the reader already showed.</summary>
+    public bool TrySetIssueCoverPage(int issueId, string filePath, int pageNumber)
+    {
+        if (pageNumber < 0)
+        {
+            return false;
+        }
+
+        using Bitmap? page = PageDecodeCore.DecodeSinglePage(filePath, pageNumber);
+        if (page is null || !SaveThumbnail(issueId, page, out var ratio) || ratio is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var context = _contextFactory();
+            var issue = context.Issues.Find(issueId);
+            if (issue is null)
+            {
+                return false;
+            }
+
+            var row = context.IssuePages.FirstOrDefault(p => p.IssueId == issueId && p.PageNumber == pageNumber);
+            if (row is null)
+            {
+                row = new Paperbunkr.Data.Entities.IssuePage { IssueId = issueId, PageNumber = pageNumber };
+                context.IssuePages.Add(row);
+            }
+
+            row.PageType = Paperbunkr.Data.Entities.PageType.Cover;
+            issue.PreferredCoverPageNumber = pageNumber;
+            context.SaveChanges();
+            CustomCoverPaths.Delete(issueId);
+            CoverImageCache.InvalidateMemoryOnly(issueId.ToString(CultureInfo.InvariantCulture));
+            CoverAspectRatioStore.ReportRatio(issueId, ratio.Value);
             return true;
         }
         catch

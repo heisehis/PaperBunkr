@@ -19,7 +19,7 @@
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <TextBlock Grid.Column="0" Classes="pbTextHeading" Text="Wanted" VerticalAlignment="Center" Margin="0,0,24,10" />
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Bottom">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="20" VerticalAlignment="Bottom">
                     <Button Classes="tab" Classes.active="{Binding IsQueueTab}" Command="{Binding GoQueueCommand}"
                             AutomationProperties.AutomationId="WantedTabQueue">
                         <StackPanel Orientation="Horizontal" Spacing="6">
@@ -43,7 +43,7 @@
                     </Button>
                 </StackPanel>
 
-                <Button Grid.Column="2" Classes="headerAction primary" Command="{Binding SearchNowCommand}" VerticalAlignment="Center" Margin="0,0,0,10"
+                <Button Grid.Column="2" Classes="primary" Command="{Binding SearchNowCommand}" VerticalAlignment="Center" Margin="0,0,0,10"
                         AutomationProperties.AutomationId="WantedSearchNowButton">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" />
@@ -56,9 +56,9 @@
 
         <!-- One scroll region per tab (each view owns its own) -->
         <Panel Grid.Row="1">
-            <tabs:QueueView IsVisible="{Binding IsQueueTab}" />
-            <tabs:SeriesView IsVisible="{Binding IsSeriesTab}" />
-            <tabs:ReleasesView IsVisible="{Binding IsReleasesTab}" />
+            <tabs:QueueView IsVisible="{Binding IsQueueTab}" controls:Replace.On="{Binding IsQueueTab}" />
+            <tabs:SeriesView IsVisible="{Binding IsSeriesTab}" controls:Replace.On="{Binding IsSeriesTab}" />
+            <tabs:ReleasesView IsVisible="{Binding IsReleasesTab}" controls:Replace.On="{Binding IsReleasesTab}" />
         </Panel>
     </Grid>
 </UserControl>

@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://paperbunkr.app/schemas/theme-v2.json",
+  "title": "Paperbunkr theme (schema version 2)",
+  "description": "The theme.json at the root of a .crpck package. Editor help only: Paperbunkr validates a theme itself when it is installed and reports problems by JSON path. A file without schemaVersion is a version 1 theme and keeps working unchanged.",
+  "type": "object",
+  "required": ["schemaVersion", "name"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "id": { "type": "string", "description": "A stable identity for the family, reverse-domain style (org.example.mytheme). The user's own customizations are stored against it, so do not change it between releases." },
+    "name": { "type": "string" },
+    "category": { "type": "string", "description": "\"accessibility\" lists the theme under Accessibility in the gallery." },
+    "mode": { "enum": ["Dark", "Light"], "description": "Only for a theme with no variants block." },
+    "base": { "$ref": "#/$defs/layer", "description": "Applies to every variant." },
+    "variants": {
+      "type": "object",
+      "maxProperties": 8,
+      "description": "Variant id (no ':') to what differs from base. An id containing 'oled' or a kind of 'oled' is a designed true-black variant.",
+      "additionalProperties": {
+        "allOf": [
+          { "$ref": "#/$defs/layer" },
+          {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "mode": { "enum": ["Dark", "Light"] },
+              "kind": { "enum": ["light", "dark", "oled", "highContrast"] }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "color": { "type": "string", "pattern": "^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$", "description": "#RGB, #RRGGBB or #AARRGGBB." },
+    "ref": { "type": "object", "required": ["ref"], "additionalProperties": false, "properties": { "ref": { "type": "string", "description": "Another token's path, for example \"palette.accent\" or \"action.primary\". Cycles are reported and ignored." } } },
+    "colorValue": { "anyOf": [ { "$ref": "#/$defs/color" }, { "$ref": "#/$defs/ref" } ] },
+    "numberValue": { "anyOf": [ { "type": "number" }, { "$ref": "#/$defs/ref" } ] },
+    "tokenTree": {
+      "type": "object",
+      "description": "Nested objects are flattened with dots: { \"status\": { \"danger\": \"#E5645A\" } } sets status.danger.",
+      "additionalProperties": { "anyOf": [ { "$ref": "#/$defs/colorValue" }, { "type": ["number", "string", "boolean"] }, { "$ref": "#/$defs/tokenTree" } ] }
+    },
+    "layer": {
+      "type": "object",
+      "properties": {
+        "palette": {
+          "type": "object",
+          "description": "Raw colours. canvas (or background/bg), ink (or text/foreground) and accent (or primary) are enough for a complete theme: every role not set below is worked out from them.",
+          "additionalProperties": { "$ref": "#/$defs/colorValue" }
+        },
+        "semantic": {
+          "$ref": "#/$defs/tokenTree",
+          "description": "Roles: surface.canvas|navigation|recessed|default|raised|overlay, text.primary|secondary|muted|accent|inverse, border.default|strong|focus, action.primary|primaryText|soft|hover|pressed|disabled, selection.background|foreground, focus.ring, status.success|danger|warning|info (each with .soft), badge.background|text|soft, chart.series.1-6, glow.color, hero.gradient.start|end, hero.scrim, era.platinum|golden|silver|bronze|modern (each with .soft), reader.chrome.background|border|text|textMuted, reader.background.page|text."
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "spacingUnit": { "$ref": "#/$defs/numberValue" },
+            "radius": { "$ref": "#/$defs/numberValue" },
+            "radiusSm": { "$ref": "#/$defs/numberValue" },
+            "radiusLg": { "$ref": "#/$defs/numberValue" },
+            "scrollbarWidth": { "$ref": "#/$defs/numberValue" },
+            "scrollbarThumbOpacity": { "$ref": "#/$defs/numberValue" }
+          }
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "windowBackdrop": { "enum": ["None", "Mica", "Acrylic"] },
+            "matrixGlyphs": {}
+          }
+        },
+        "typography": {
+          "type": "object",
+          "description": "Roles: display, heading, body, caption, monospace. A family that is not installed falls back to the built-in font and is reported.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "family": { "type": "string" },
+              "size": { "type": "number", "minimum": 6, "maximum": 96 },
+              "weight": { "type": ["string", "number"] }
+            }
+          }
+        },
+        "icons": {
+          "type": "object",
+          "description": "Semantic icon name (navigation.home, action.search, reader.next, ...) to \"symbol:Name\", \"path:<svg path data>\", or a .svg / image file inside the package.",
+          "additionalProperties": { "type": "string" }
+        },
+        "materials": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/material" }
+        },
+        "surfaces": {
+          "type": "object",
+          "description": "Surface (canvas, navigation, recessed, default, raised, overlay) to the name of a material.",
+          "additionalProperties": { "type": "string" }
+        },
+        "components": {
+          "type": "object",
+          "description": "Roles: button.primary, button.secondary, button.ghost, chip, panel.floating.",
+          "additionalProperties": { "$ref": "#/$defs/component" }
+        },
+        "motion": {
+          "type": "object",
+          "description": "Name to a motion. Built-in names a layout can use without declaring them: fadeIn, fadeUp, scaleIn.",
+          "additionalProperties": { "$ref": "#/$defs/motion" }
+        },
+        "layouts": {
+          "type": "object",
+          "description": "Screen name to a layout, inline or as the path of a JSON file in the package. Screens that publish a layout contract: Home. Layouts apply only when the user turns on Theme layouts.",
+          "additionalProperties": { "anyOf": [ { "type": "string" }, { "$ref": "#/$defs/layout" } ] }
+        }
+      }
+    },
+    "material": {
+      "type": "object",
+      "properties": {
+        "type": { "enum": ["solid", "acrylic", "linearGradient", "radialGradient", "image", "texture"] },
+        "color": { "$ref": "#/$defs/color" },
+        "fallback": { "$ref": "#/$defs/color", "description": "The flat colour used at Performance quality and whenever the material cannot be built." },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "angle": { "type": "number" },
+        "center": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+        "radius": { "type": "number" },
+        "stops": { "type": "array", "items": { "anyOf": [ { "$ref": "#/$defs/color" }, { "type": "object", "required": ["color"], "properties": { "at": { "type": "number", "minimum": 0, "maximum": 1 }, "color": { "$ref": "#/$defs/color" } } } ] } },
+        "source": { "type": "string", "description": "An image inside the package. Never a URL." }
+      }
+    },
+    "componentProperties": {
+      "type": "object",
+      "properties": {
+        "background": { "anyOf": [ { "$ref": "#/$defs/colorValue" }, { "type": "string", "pattern": "^material:" } ] },
+        "foreground": { "$ref": "#/$defs/colorValue" },
+        "border": { "$ref": "#/$defs/colorValue" },
+        "radius": { "$ref": "#/$defs/numberValue" }
+      }
+    },
+    "component": {
+      "allOf": [
+        { "$ref": "#/$defs/componentProperties" },
+        {
+          "type": "object",
+          "properties": {
+            "states": {
+              "type": "object",
+              "description": "hover, pressed, disabled. A state you leave out is worked out from the normal look.",
+              "additionalProperties": { "$ref": "#/$defs/componentProperties" }
+            }
+          }
+        }
+      ]
+    },
+    "motion": {
+      "type": "object",
+      "required": ["keyframes"],
+      "additionalProperties": false,
+      "properties": {
+        "trigger": { "type": "string" },
+        "duration": { "type": "integer", "minimum": 40, "maximum": 10000 },
+        "delay": { "type": "integer", "minimum": 0, "maximum": 5000 },
+        "easing": { "enum": ["linear", "cubicIn", "cubicOut", "cubicInOut", "quadOut", "quadInOut", "sineInOut", "backOut", "expoOut"] },
+        "iterations": { "anyOf": [ { "type": "integer", "minimum": 1, "maximum": 20 }, { "const": "infinite" } ], "description": "\"infinite\" may only change opacity, and plays only at High effect quality on mains power." },
+        "then": { "type": "string", "description": "The name of a motion to play afterwards." },
+        "keyframes": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 16,
+          "description": "The first is at 0, the last at 1, and the last must be at rest (opacity 1, no offset, scale 1, no rotation).",
+          "items": {
+            "type": "object",
+            "required": ["at"],
+            "additionalProperties": false,
+            "properties": {
+              "at": { "type": "number", "minimum": 0, "maximum": 1 },
+              "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+              "translateX": { "type": "number", "minimum": -600, "maximum": 600 },
+              "translateY": { "type": "number", "minimum": -600, "maximum": 600 },
+              "scale": { "type": "number" },
+              "rotate": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "required": ["root"],
+      "properties": {
+        "contract": { "type": "integer", "description": "The version of the screen's contract this layout was written for. Home is at 1." },
+        "root": { "$ref": "#/$defs/layoutNode" },
+        "breakpoints": {
+          "type": "object",
+          "maxProperties": 6,
+          "description": "The first breakpoint whose width range contains the screen's width applies. Overrides change properties of existing nodes by id; they cannot add, remove, retype or re-parent a node.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "minWidth": { "type": "number", "minimum": 0 },
+              "maxWidth": { "type": "number", "minimum": 0 },
+              "overrides": { "type": "object", "additionalProperties": { "type": "object" } }
+            }
+          }
+        }
+      }
+    },
+    "condition": {
+      "anyOf": [
+        { "type": "boolean" },
+        { "type": "string", "description": "A value the screen publishes, for example \"home.hasSections\"." },
+        { "type": "object", "required": ["not"], "additionalProperties": false, "properties": { "not": { "type": "string" } } }
+      ]
+    },
+    "thickness": { "anyOf": [ { "type": "number", "minimum": 0 }, { "type": "string", "description": "\"all\", \"horizontal,vertical\" or \"left,top,right,bottom\"." } ] },
+    "layoutNode": {
+      "type": "object",
+      "required": ["id", "type"],
+      "description": "At most 200 nodes, 12 levels deep, 40 children per node.",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$", "description": "Unique in the layout and stable between releases: breakpoints and the user's own adjustments refer to it." },
+        "type": {
+          "description": "A built-in container or element, or a component the screen publishes (Home.Masthead, Home.Search, Home.Greeting, Home.Sections, Home.Section).",
+          "anyOf": [
+            { "enum": ["Stack", "Grid", "Dock", "Split", "Tabs", "Overlay", "Scroll", "Panel", "Text", "Image", "Icon", "Button", "Spacer", "Divider", "Extension"] },
+            { "type": "string", "pattern": "^[A-Z][A-Za-z]*\\.[A-Z][A-Za-z]*$" }
+          ]
+        },
+        "children": { "type": "array", "maxItems": 40, "items": { "$ref": "#/$defs/layoutNode" } },
+        "width": { "type": "number" }, "height": { "type": "number" },
+        "minWidth": { "type": "number" }, "maxWidth": { "type": "number" }, "minHeight": { "type": "number" }, "maxHeight": { "type": "number" },
+        "margin": { "$ref": "#/$defs/thickness" }, "padding": { "$ref": "#/$defs/thickness" },
+        "align": { "enum": ["left", "center", "right", "stretch"] },
+        "valign": { "enum": ["top", "center", "bottom", "stretch"] },
+        "visible": { "$ref": "#/$defs/condition" },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "motion": { "type": "string", "description": "A motion to play when the node appears." },
+        "dock": { "enum": ["left", "top", "right", "bottom", "fill"] },
+        "column": { "type": "integer" }, "row": { "type": "integer" }, "columnSpan": { "type": "integer" }, "rowSpan": { "type": "integer" },
+        "title": { "type": "string", "description": "The tab header when the node is a child of Tabs. May show published values: \"Everything ({home.sectionCount})\"." },
+        "orientation": { "enum": ["vertical", "horizontal"] },
+        "spacing": { "type": "number" },
+        "columns": { "type": "string" }, "rows": { "type": "string" },
+        "ratio": { "type": "number", "minimum": 0.05, "maximum": 0.95 },
+        "background": { "type": "string", "description": "A colour, a role (\"surface.raised\") or \"material:name\"." },
+        "border": { "type": "string" }, "borderWidth": { "type": "number" }, "radius": { "type": "number" },
+        "text": { "type": "string", "maxLength": 400, "description": "May show published values in braces: \"{home.greeting}\". Nothing else is evaluated." },
+        "style": { "type": "string", "description": "Text: hero, heading, body, caption. Button: primary, secondary, ghost." },
+        "color": { "type": "string" }, "wrap": { "type": "boolean" },
+        "source": { "type": "string", "description": "Image: a file inside the package. Never a URL." },
+        "stretch": { "enum": ["fill", "uniform", "uniformToFill", "none"] },
+        "name": { "type": "string", "description": "Icon: a semantic icon name." },
+        "icon": { "type": "string" }, "size": { "type": "number" },
+        "command": { "type": "string", "description": "Button: a command the screen publishes (home.refresh, home.search, home.openLibrary, home.openInsights, home.customize)." },
+        "section": { "type": "string", "description": "Home.Section: spotlight, needsAttention, continueReading, upNext, recentlyAdded, collections, becauseYouRead, readingList." },
+        "provider": { "type": "string", "description": "Extension: the id of a component provider. When it is not installed the node's single child is shown instead." },
+        "component": { "type": "string" }
+      }
+    }
+  }
+}

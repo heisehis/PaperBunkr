@@ -23,8 +23,8 @@ public sealed class AcquisitionCycle(
     IEventPublisher events,
     Func<DateTime>? now = null,
     GrabService? grabService = null,
-    Func<string, string, IComicVineClient>? createMetron = null,
-    Func<string, string, IPullListSource>? createPullListSource = null,
+    Func<MetronAuth, IComicVineClient>? createMetron = null,
+    Func<MetronAuth, IPullListSource>? createPullListSource = null,
     Func<string, IPullListSource>? createComicVinePullList = null)
 {
     public const string NotConfiguredAlert = "acquisition-not-configured";
@@ -236,7 +236,7 @@ public sealed class AcquisitionCycle(
             }
             catch (ComicVineException ex) when (ex.ApiStatusCode == 100)
             {
-                events.Publish(new DaemonAlertEvent(alert, DaemonAlertSeverity.Warning, provider == ComicProvider.Metron ? "Metron rejected your login" : "ComicVine rejected your API key", "Update it in Preferences → Connections."));
+                events.Publish(new DaemonAlertEvent(alert, DaemonAlertSeverity.Warning, provider == ComicProvider.Metron ? "Metron rejected your API token or login" : "ComicVine rejected your API key", "Update it in Preferences → Connections."));
                 stopped.Add(provider);
             }
             catch (ComicVineException ex)
@@ -322,14 +322,13 @@ public sealed class AcquisitionCycle(
             return;
         }
 
-        var user = CredentialStore.Get(context, "Metron", CredentialKind.Username);
-        var password = CredentialStore.Get(context, "Metron", CredentialKind.Password);
+        var metron = MetronAuth.Load(context);
         var apiKey = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey);
 
         IPullListSource source;
-        if (!string.IsNullOrWhiteSpace(user) && !string.IsNullOrEmpty(password))
+        if (metron is not null)
         {
-            source = (createPullListSource ?? ((u, p) => new MetronClient(u, p, ComicVineRequestPriority.Low)))(user, password);
+            source = (createPullListSource ?? (a => new MetronClient(a, ComicVineRequestPriority.Low)))(metron);
         }
         else if (!string.IsNullOrWhiteSpace(apiKey))
         {
@@ -350,7 +349,7 @@ public sealed class AcquisitionCycle(
         }
         catch (ComicVineException ex) when (ex.ApiStatusCode == 100)
         {
-            events.Publish(new DaemonAlertEvent(alert, DaemonAlertSeverity.Warning, provider == ComicProvider.Metron ? "Metron rejected your login" : "ComicVine rejected your API key", "Update it in Preferences → Connections."));
+            events.Publish(new DaemonAlertEvent(alert, DaemonAlertSeverity.Warning, provider == ComicProvider.Metron ? "Metron rejected your API token or login" : "ComicVine rejected your API key", "Update it in Preferences → Connections."));
         }
         catch (ComicVineException ex)
         {
@@ -363,14 +362,8 @@ public sealed class AcquisitionCycle(
     {
         if (provider == ComicProvider.Metron)
         {
-            var user = CredentialStore.Get(context, "Metron", CredentialKind.Username);
-            var password = CredentialStore.Get(context, "Metron", CredentialKind.Password);
-            if (string.IsNullOrWhiteSpace(user) || string.IsNullOrEmpty(password))
-            {
-                return null;
-            }
-
-            return (createMetron ?? ((u, p) => new MetronClient(u, p, ComicVineRequestPriority.Low)))(user, password);
+            var metron = MetronAuth.Load(context);
+            return metron is null ? null : (createMetron ?? (a => new MetronClient(a, ComicVineRequestPriority.Low)))(metron);
         }
 
         var apiKey = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey);

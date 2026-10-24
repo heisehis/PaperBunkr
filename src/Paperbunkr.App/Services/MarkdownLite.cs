@@ -22,6 +22,7 @@ public enum MdRunStyle
     Italic,
     Code,
     Link,
+    Underline,
 }
 
 /// <summary>One inline run. <see cref="Target"/> is set for <see cref="MdRunStyle.Link"/> only.</summary>
@@ -48,14 +49,64 @@ public static class MarkdownLite
 
     // Tried left to right at each position, so "**" is bold before "*" can be italic. The italic forms need a non-word, non-marker
     // character (or the edge) on both outer sides, so snake_case and 2*3*4 stay literal.
-    private static readonly Regex InlinePattern = new(
+    private const string InlineAlternatives =
         @"\*\*(?<bold>[^*]+?)\*\*" +
         @"|`(?<code>[^`]+)`" +
         @"|\[(?<ltext>[^\]]+)\]\((?<ltarget>[^)\s]+)\)" +
         @"|<(?<auto>https?://[^>\s]+)>" +
         @"|(?<![\w*])\*(?<ital>[^*\s](?:[^*]*?[^*\s])?)\*(?![\w*])" +
-        @"|(?<![\w_])_(?<ital2>[^_\s](?:[^_]*?[^_\s])?)_(?![\w_])",
-        RegexOptions.Compiled);
+        @"|(?<![\w_])_(?<ital2>[^_\s](?:[^_]*?[^_\s])?)_(?![\w_])";
+
+    private static readonly Regex InlinePattern = new(InlineAlternatives, RegexOptions.Compiled);
+
+    // Descriptions also underline (<u>) and turn a bare web address into a link.
+    private static readonly Regex DescriptionInlinePattern = new(
+        InlineAlternatives + @"|<u>(?<under>.+?)</u>" + @"|(?<auto2>https?://[^\s<>)\]]*[^\s<>)\].,;:!?'""])", RegexOptions.Compiled);
+
+    private static readonly Regex HtmlBreak = new(@"<\s*(br|/p|/div|/li)\s*/?>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex HtmlTag = new(@"</?\s*(?!u>|/u>)[a-z][^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// A provider or user-typed description as blocks: <c>**bold**</c>, <c>*italic*</c>, <c>&lt;b&gt;</c>/<c>&lt;i&gt;</c>/<c>&lt;u&gt;</c>, <c>[b]</c>/<c>[i]</c>/<c>[u]</c>,
+    /// <c>[text](url)</c> and bare web addresses render; other tags are dropped and every line break starts a new paragraph (descriptions are written line by line).
+    /// </summary>
+    private static readonly Regex RuleLine = new(@"^[\s\-_=–—]+$", RegexOptions.Compiled);
+
+    public static IReadOnlyList<MdBlock> ParseDescription(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return [];
+        }
+
+        string s = text.Replace("\r\n", "\n");
+        s = Regex.Replace(s, @"<\s*(b|strong)\s*>(.*?)<\s*/\s*(b|strong)\s*>", "**$2**", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        s = Regex.Replace(s, @"<\s*(i|em)\s*>(.*?)<\s*/\s*(i|em)\s*>", "*$2*", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        s = Regex.Replace(s, @"<\s*u\s*>(.*?)<\s*/\s*u\s*>", "<u>$1</u>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        s = Regex.Replace(s, @"\[b\](.*?)\[/b\]", "**$1**", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        s = Regex.Replace(s, @"\[i\](.*?)\[/i\]", "*$1*", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        s = Regex.Replace(s, @"\[u\](.*?)\[/u\]", "<u>$1</u>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        s = Regex.Replace(s, @"<\s*a\s[^>]*href\s*=\s*""([^""]+)""[^>]*>(.*?)<\s*/\s*a\s*>", "[$2]($1)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        s = HtmlBreak.Replace(s, "\n");
+        s = HtmlTag.Replace(s, string.Empty);
+        s = System.Net.WebUtility.HtmlDecode(s);
+
+        var blocks = new List<MdBlock>();
+        foreach (string raw in s.Split('\n'))
+        {
+            string line = raw.Trim();
+            // A line of only dashes, underscores or equals signs is a scraped separator, not text (2026-10-20 UI polish, remaining screens Q5).
+            if (line.Length == 0 || RuleLine.IsMatch(line))
+            {
+                continue;
+            }
+
+            var runs = ParseInline(line, DescriptionInlinePattern);
+            blocks.Add(new MdBlock(MdBlockKind.Paragraph, runs));
+        }
+
+        return blocks;
+    }
 
     public static IReadOnlyList<MdBlock> Parse(string markdown)
     {
@@ -174,11 +225,13 @@ public static class MarkdownLite
         return normalized.Length == 0 ? [] : [new MdBlock(MdBlockKind.Preformatted, [new MdRun(normalized, MdRunStyle.Plain)])];
     }
 
-    public static IReadOnlyList<MdRun> ParseInline(string text)
+    public static IReadOnlyList<MdRun> ParseInline(string text) => ParseInline(text, InlinePattern);
+
+    private static IReadOnlyList<MdRun> ParseInline(string text, Regex pattern)
     {
         var runs = new List<MdRun>();
         int lastEnd = 0;
-        foreach (Match m in InlinePattern.Matches(text))
+        foreach (Match m in pattern.Matches(text))
         {
             if (m.Index > lastEnd)
             {
@@ -200,6 +253,14 @@ public static class MarkdownLite
             else if (m.Groups["auto"].Success)
             {
                 runs.Add(new MdRun(m.Groups["auto"].Value, MdRunStyle.Link, m.Groups["auto"].Value));
+            }
+            else if (m.Groups["auto2"].Success)
+            {
+                runs.Add(new MdRun(m.Groups["auto2"].Value, MdRunStyle.Link, m.Groups["auto2"].Value));
+            }
+            else if (m.Groups["under"].Success)
+            {
+                runs.Add(new MdRun(m.Groups["under"].Value, MdRunStyle.Underline));
             }
             else
             {

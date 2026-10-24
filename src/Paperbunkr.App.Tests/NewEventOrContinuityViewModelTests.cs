@@ -1,11 +1,16 @@
 using System;
 using System.IO;
 using System.Linq;
+using Avalonia.Controls;
+using Avalonia.VisualTree;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
+using Paperbunkr.App.Views;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
+using static Paperbunkr.App.Tests.FocusTestHarness;
 
 namespace Paperbunkr.App.Tests;
 
@@ -49,6 +54,9 @@ public class NewEventOrContinuityViewModelTests : IDisposable
 
         Assert.True(vm.CanCreate);
         vm.CreateCommand.Execute(null);
+        Assert.Equal(NewEventOrContinuityViewModel.SetupStage.Provider, vm.Stage);
+        Assert.Equal(0, created);
+        vm.SkipSetupCommand.Execute(null);
 
         Assert.Equal(NewEventOrContinuityViewModel.Kind.Event, kind);
         Assert.NotEqual(0, created);
@@ -64,13 +72,16 @@ public class NewEventOrContinuityViewModelTests : IDisposable
         vm.Reset(NewEventOrContinuityViewModel.Kind.Continuity);
         vm.Name = "Ultimate Universe";
         vm.Publisher = "Marvel";
+        vm.Designation = "Earth-616";
 
         vm.CreateCommand.Execute(null);
+        vm.SkipSetupCommand.Execute(null);
 
         using var context = PaperbunkrDb.CreateContext();
         var c = context.Continuities.Single(x => x.Id == created);
         Assert.Equal("Ultimate Universe", c.Name);
         Assert.Equal("Marvel", c.Publisher);
+        Assert.Equal("Earth-616", c.Designation);
     }
 
     /// <summary>Carries the old sidebar "new continuity" test's intent (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md):
@@ -83,14 +94,50 @@ public class NewEventOrContinuityViewModelTests : IDisposable
         vm.Reset(NewEventOrContinuityViewModel.Kind.Continuity);
         vm.Name = "Earth-616";
         vm.CreateCommand.Execute(null);
+        vm.SkipSetupCommand.Execute(null);
         vm.Reset(NewEventOrContinuityViewModel.Kind.Continuity);
         vm.Name = "earth-616";
         vm.Publisher = "Marvel";
         vm.CreateCommand.Execute(null);
+        vm.SkipSetupCommand.Execute(null);
 
         Assert.Equal(ids[0], ids[1]);
         using var context = PaperbunkrDb.CreateContext();
         Assert.Equal("Marvel", Assert.Single(context.Continuities).Publisher);     // filled in what it lacked
+    }
+
+    [Fact]
+    public void Presets_PreselectEditableEventType_AndPersistIt()
+    {
+        int saved = 0;
+        var vm = new NewEventOrContinuityViewModel((_, id) => saved = id, () => { });
+        vm.Reset(NewEventOrContinuityViewModel.Kind.Event);
+        vm.SelectedPreset = "Crossover Event";
+        Assert.True(vm.EventTypeSelections.Single(t => t.Type == StoryEventType.Crossover).IsSelected);
+        vm.EventTypeSelections.Single(t => t.Type == StoryEventType.LimitedSeries).IsSelected = true;
+        vm.Name = "Test crossover";
+        vm.CreateCommand.Execute(null);
+        vm.SkipSetupCommand.Execute(null);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Equal(2, context.StoryEventTypeAssignments.Count(t => t.StoryEventId == saved));
+        Assert.Contains(context.StoryEventTypeAssignments, t => t.StoryEventId == saved && t.Type == StoryEventType.Crossover);
+        Assert.Contains(context.StoryEventTypeAssignments, t => t.StoryEventId == saved && t.Type == StoryEventType.LimitedSeries);
+    }
+
+    [Fact]
+    public void ClosingAfterBasicsLeavesEntitySavedForLaterSetup()
+    {
+        int opened = 0;
+        var vm = new NewEventOrContinuityViewModel((_, id) => opened = id, () => { });
+        vm.Reset(NewEventOrContinuityViewModel.Kind.Continuity);
+        vm.Name = "Saved universe";
+        vm.CreateCommand.Execute(null);
+        vm.CancelCommand.Execute(null);
+        Assert.NotEqual(0, opened);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Contains(context.Continuities, c => c.Name == "Saved universe");
     }
 
     [Fact]
@@ -115,6 +162,54 @@ public class NewEventOrContinuityViewModelTests : IDisposable
         Assert.False(vm.HasPublisher);
         vm.Publisher = "Marvel";
         Assert.True(vm.HasPublisher);
+    }
+
+    [Fact]
+    public void MetronUniverseResults_RenderTheirSelectionCommand()
+    {
+        WithThemeAndTokens(() =>
+        {
+            using var styles = AppStyles();
+            using var resources = AppResources();
+            var vm = new NewEventOrContinuityViewModel((_, _) => { }, () => { });
+            vm.Reset(NewEventOrContinuityViewModel.Kind.Continuity);
+            vm.Stage = NewEventOrContinuityViewModel.SetupStage.Provider;
+            vm.UniverseResults.Add(new MetronUniverseInfo(42, "Earth-616", "616", "Marvel"));
+            var window = new Window { Content = new NewEventOrContinuityOverlay { DataContext = vm }, Width = 800, Height = 700 };
+
+            window.Show();
+            RunLayout(window);
+
+            var resultButton = window.GetVisualDescendants().OfType<Button>()
+                .Single(button => button.Command == vm.SelectMetronUniverseCommand);
+            Assert.True(resultButton.IsEffectivelyVisible);
+            window.Close();
+        });
+    }
+
+    [Fact]
+    public void ProviderSetup_SmallWindowKeepsActionsVisibleAndScrollsTheForm()
+    {
+        // The form scrolls inside the shared DialogCard body (its height is capped at the window height minus 48), and the footer with the
+        // Create button stays put - loaded with the real dialog styles so the card's template is the one the app uses.
+        Theming.FoundationStyleTests.WithFoundation("default", () =>
+        {
+            var vm = new NewEventOrContinuityViewModel((_, _) => { }, () => { });
+            vm.Reset(NewEventOrContinuityViewModel.Kind.Continuity);
+            vm.Stage = NewEventOrContinuityViewModel.SetupStage.Provider;
+
+            var view = new NewEventOrContinuityOverlay { DataContext = vm };
+            var window = new Window { Content = view, Width = 620, Height = 250 };
+            window.Show();
+            RunLayout(window);
+
+            var scrollViewer = view.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault(s => s.Name == "PART_BodyScroller");
+            Assert.NotNull(scrollViewer);
+            Assert.True(scrollViewer!.Extent.Height > scrollViewer.Viewport.Height);
+            Assert.Contains(window.GetVisualDescendants().OfType<Button>(), button =>
+                button.Command == vm.CreateCommand && button.IsEffectivelyVisible);
+            window.Close();
+        });
     }
 
     [Fact]

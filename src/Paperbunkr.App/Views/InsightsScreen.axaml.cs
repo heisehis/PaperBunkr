@@ -469,7 +469,7 @@ public partial class InsightsScreen : UserControl
             poster.Arrange(new Rect(size));
             var bitmap = new RenderTargetBitmap(new PixelSize(1080, 1920));
             bitmap.Render(poster);
-            bitmap.Save(path);
+            bitmap.Save(path, PngBitmapEncoderOptions.Default);
         }
         catch (Exception ex)
         {

@@ -58,7 +58,16 @@ public partial class NewReadingListViewModel : ViewModelBase
         SelectedStoryEvent = null;
         StoryEventOptions.Clear();
         using var context = PaperbunkrDb.CreateContext();
-        foreach (var e in context.StoryEvents.OrderBy(e => e.Name).Select(e => new StoryEventOption(e.Id, e.Name)))
+        foreach (var e in context.StoryEvents.OrderBy(e => e.Name)
+                     .Select(e => new { e.Id, e.Name, Types = e.TypeAssignments.Select(t => t.Type).ToList() })
+                     .AsEnumerable()
+                     .Select(e => new StoryEventOption(e.Id, e.Name, string.Join(" · ", e.Types.Select(t => t switch
+                     {
+                         StoryEventType.LimitedSeries => "Limited Series",
+                         StoryEventType.StoryArc => "Story Arc",
+                         StoryEventType.OneShotOrSpecial => "One-shot / Special",
+                         _ => t.ToString(),
+                     })))))
         {
             StoryEventOptions.Add(e);
         }
@@ -252,12 +261,12 @@ public partial class NewReadingListViewModel : ViewModelBase
     // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-
     // plan.md). Story-event names are user-defined and may collide - first match by name wins
     // (accepted; see the plan doc). Empty text clears the picker.
-    public IReadOnlyList<string> StoryEventNames => StoryEventOptions.Select(o => o.Name).ToList();
+    public IReadOnlyList<string> StoryEventNames => StoryEventOptions.Select(o => o.DisplayLabel).ToList();
 
     public string SelectedStoryEventText
     {
-        get => SelectedStoryEvent?.Name ?? string.Empty;
-        set => SelectedStoryEvent = StoryEventOptions.FirstOrDefault(o => o.Name == value);
+        get => SelectedStoryEvent?.DisplayLabel ?? string.Empty;
+        set => SelectedStoryEvent = StoryEventOptions.FirstOrDefault(o => o.DisplayLabel == value || o.Name == value);
     }
 
     // --- Story arc search (its own minimal copy - screen-state on ReadingListPageViewModel isn't reusable here) ---
@@ -354,8 +363,9 @@ public partial class NewReadingListViewModel : ViewModelBase
         }
     }
 
-    public sealed record StoryEventOption(int Id, string Name)
+    public sealed record StoryEventOption(int Id, string Name, string TypeLabel = "")
     {
+        public string DisplayLabel => string.IsNullOrWhiteSpace(TypeLabel) ? Name : $"{Name} · {TypeLabel}";
         public override string ToString() => Name;
     }
 }

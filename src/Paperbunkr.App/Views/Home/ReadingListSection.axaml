@@ -4,7 +4,8 @@
                     xmlns:home="using:Paperbunkr.App.ViewModels.Home"
                     xmlns:controls="using:Paperbunkr.App.Controls">
 
-    <!-- Try This Reading List - unchanged content, now a movable section (docs/superpowers/specs/2026-09-28-home-improvements-design.md I1). -->
+    <!-- Try This Reading List - a movable section. The description is capped at four lines: some lists carry a whole essay.
+         Was unchanged content when it became a section (docs/superpowers/specs/2026-09-28-home-improvements-design.md I1). -->
     <DataTemplate x:Key="HomeSection.readingList" DataType="home:ReadingListSectionViewModel">
         <StackPanel Spacing="12" controls:ScrollReveal.Enabled="True">
             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -19,8 +20,9 @@
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="22,0" Spacing="6">
                         <TextBlock Text="{Binding Home.ReadingListSpotlight.Name}" Classes="pbTextHeading" FontSize="24" />
-                        <TextBlock Text="{Binding Home.ReadingListSpotlight.Synopsis}" FontSize="12.5"
-                                   Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Home.ReadingListSpotlight.Synopsis}" FontSize="13"
+                                   Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                                   MaxLines="4" TextTrimming="CharacterEllipsis" />
                         <ItemsControl ItemsSource="{Binding Home.ReadingListSpotlight.Tags}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -28,7 +30,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="x:String">
                                     <Border Classes="pbChip" Margin="0,4,6,0">
-                                        <TextBlock Text="{Binding}" FontSize="10.5" FontWeight="SemiBold"
+                                        <TextBlock Text="{Binding}" FontSize="10" FontWeight="SemiBold"
                                                    Foreground="{DynamicResource PbAccentTextBrush}" />
                                     </Border>
                                 </DataTemplate>

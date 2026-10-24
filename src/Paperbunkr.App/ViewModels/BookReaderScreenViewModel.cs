@@ -46,7 +46,7 @@ namespace Paperbunkr.App.ViewModels;
 /// slider drag would otherwise fire a DB write per tick. Search is a linear scan over the
 /// already-parsed in-memory chapters (design spec §7) - no persistent index.
 /// </summary>
-public partial class BookReaderScreenViewModel : ViewModelBase
+public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
 {
     private readonly Action _goBack;
 

@@ -1,3 +1,5 @@
+using System;
+using Avalonia;
 using Avalonia.Media;
 using Paperbunkr.Data.Entities;
 
@@ -13,6 +15,34 @@ namespace Paperbunkr.App.Models;
 /// </summary>
 public static class BookThemeBrushes
 {
+    // What "Match app" looked like before it followed the theme, and what it still is when no theme has been applied (a headless host).
+    private static readonly Color LegacyMatchAppPage = Color.Parse("#14161B");
+    private static readonly Color LegacyMatchAppText = Color.Parse("#ECE7DB");
+
+    /// <summary>
+    /// The active app theme's reading surface: its <c>reader.background.page</c> and <c>reader.background.text</c> roles
+    /// (docs/superpowers/specs/2026-10-12-theme-system-v2-gap-analysis-and-plan.md, phase 6, decision D7), read from the live resources so
+    /// "Match app" really does match whatever theme, variant and overrides are showing. Null when no theme has published them. A seam for tests.
+    /// </summary>
+    internal static Func<(Color Page, Color Text)?> AppColors { get; set; } = ReadAppColors;
+
+    internal static (Color Page, Color Text)? ReadAppColors()
+    {
+        var resources = Application.Current?.Resources;
+        if (resources is not null
+            && resources.TryGetResource("PbReaderPageColor", null, out var page) && page is Color pageColor
+            && resources.TryGetResource("PbReaderPageTextColor", null, out var text) && text is Color textColor)
+        {
+            return (pageColor, textColor);
+        }
+
+        return null;
+    }
+
+    private static Color MatchAppPage => AppColors()?.Page ?? LegacyMatchAppPage;
+
+    private static Color MatchAppText => AppColors()?.Text ?? LegacyMatchAppText;
+
     public static IBrush ContentBackground(BookTheme theme) => theme switch
     {
         BookTheme.Light => Brushes.White,
@@ -20,7 +50,7 @@ public static class BookThemeBrushes
         BookTheme.Sepia => new SolidColorBrush(Color.Parse("#F2E6CE")),
         BookTheme.OledBlack => Brushes.Black,
         BookTheme.HighContrast => Brushes.Black,
-        _ => new SolidColorBrush(Color.Parse("#14161B")), // MatchAppSkin
+        _ => new SolidColorBrush(MatchAppPage), // MatchAppSkin
     };
 
     public static IBrush ContentForeground(BookTheme theme) => theme switch
@@ -30,14 +60,14 @@ public static class BookThemeBrushes
         BookTheme.Sepia => new SolidColorBrush(Color.Parse("#3A2F22")),
         BookTheme.OledBlack => new SolidColorBrush(Color.Parse("#E0E0E0")),
         BookTheme.HighContrast => Brushes.White,
-        _ => new SolidColorBrush(Color.Parse("#ECE7DB")), // MatchAppSkin
+        _ => new SolidColorBrush(MatchAppText), // MatchAppSkin
     };
 
     /// <summary>
     /// Chrome bar / settings sheet background - the same per-theme hue as <see cref="ContentBackground"/>
     /// at ~80% opacity (0xCC) so it reads as an overlay atop the reading pane rather than a fully
-    /// opaque bar. MatchAppSkin's value is byte-identical to the pre-redesign chrome bars' hardcoded
-    /// <c>#CC14161B</c>, so that theme's look is unchanged by this redesign.
+    /// opaque bar. MatchAppSkin is the app theme's reading surface at the same opacity (<c>#CC14161B</c>, the
+    /// pre-redesign chrome colour, only when no theme has been applied).
     /// </summary>
     public static IBrush ChromeBackground(BookTheme theme) => theme switch
     {
@@ -46,7 +76,7 @@ public static class BookThemeBrushes
         BookTheme.Sepia => new SolidColorBrush(Color.Parse("#CCF2E6CE")),
         BookTheme.OledBlack => new SolidColorBrush(Color.Parse("#CC000000")),
         BookTheme.HighContrast => new SolidColorBrush(Color.Parse("#CC000000")),
-        _ => new SolidColorBrush(Color.Parse("#CC14161B")), // MatchAppSkin
+        _ => new SolidColorBrush(Color.FromArgb(0xCC, MatchAppPage.R, MatchAppPage.G, MatchAppPage.B)), // MatchAppSkin
     };
 
     /// <summary>

@@ -32,7 +32,7 @@ public partial class LibraryHealthSectionState : ObservableObject
 }
 
 /// <summary>
-/// The thirteen collapsible sections of the Library Health card, each with its open state, sub-tab and scroll anchor
+/// The collapsible sections of the Library Health card, each with its open state, sub-tab and scroll anchor
 /// (docs/superpowers/specs/2026-09-26-library-health-subtabs-design.md). All start closed; a deep link or search hit opens the
 /// one it targets. A closed section is never measured, so its list builds no rows.
 /// </summary>
@@ -48,15 +48,17 @@ public sealed class LibraryHealthSections
         ReportedPages = new("reportedPages", LibraryHealthTab.Review, "library.healthReportedPages");
         SimilarSeries = new("similarSeries", LibraryHealthTab.Review, "library.healthSimilarSeries");
         Publishers = new("publishers", LibraryHealthTab.Review, "library.healthPublishers");
+        ReadingLists = new("readingLists", LibraryHealthTab.Review, "library.healthReadingLists");
         CollectionGaps = new("collectionGaps", LibraryHealthTab.Review, "library.healthCollectionGaps");
         MetadataConsistency = new("metadataConsistency", LibraryHealthTab.Review, "library.healthMetadataConsistency");
         Missing = new("missing", LibraryHealthTab.Files, "library.healthMissing");
         EmptyRows = new("emptyRows", LibraryHealthTab.Files, "library.healthEmptyRows");
         RecentlyRemoved = new("recentlyRemoved", LibraryHealthTab.Files, "library.healthRecentlyRemoved");
+        LeftoverFiles = new("leftoverFiles", LibraryHealthTab.Files, "library.healthLeftoverFiles");
         All = new[]
         {
-            Duplicates, SeriesConflicts, ContentType, Proposals, AdPages, ReportedPages, SimilarSeries, Publishers, CollectionGaps, MetadataConsistency,
-            Missing, EmptyRows, RecentlyRemoved,
+            Duplicates, SeriesConflicts, ContentType, Proposals, AdPages, ReportedPages, SimilarSeries, Publishers, ReadingLists, CollectionGaps, MetadataConsistency,
+            Missing, EmptyRows, RecentlyRemoved, LeftoverFiles,
         };
         MissingDismissed = new("missingDismissed", LibraryHealthTab.Files, Missing.Anchor);
         EmptyRowsDismissed = new("emptyRowsDismissed", LibraryHealthTab.Files, EmptyRows.Anchor);
@@ -92,11 +94,17 @@ public sealed class LibraryHealthSections
     /// <summary>Publisher logos and issues with no publisher (docs/superpowers/specs/2026-10-04-publisher-icons-user-folder-and-gaps-design.md).</summary>
     public LibraryHealthSectionState Publishers { get; }
 
+    /// <summary>Reading-list entries that read "missing" though the comic is in the library (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §6).</summary>
+    public LibraryHealthSectionState ReadingLists { get; }
+
     public LibraryHealthSectionState Missing { get; }
 
     public LibraryHealthSectionState EmptyRows { get; }
 
     public LibraryHealthSectionState RecentlyRemoved { get; }
+
+    /// <summary>Swap copies left beside comics by a metadata write or an organize (docs/superpowers/specs/2026-10-21-scraper-organizer-a-reliability-design.md).</summary>
+    public LibraryHealthSectionState LeftoverFiles { get; }
 
     /// <summary>
     /// The collapsed "Dismissed" sub-groups nested inside Missing Files and Empty Rows (docs/superpowers/specs/

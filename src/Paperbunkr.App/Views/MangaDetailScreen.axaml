@@ -34,42 +34,17 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style Selector="controls|SuggestBox.contentTypePicker /template/ TextBox#PART_TextBox">
-            <Setter Property="Padding" Value="10,3" />
-            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="10,0" />
+            <!-- Same 28 px as the Undo / Needs review buttons beside it (2026-10-20 remaining screens Q2). -->
+            <Setter Property="MinHeight" Value="{DynamicResource PbControlHeight}" />
         </Style>
 
-        <Style Selector="Button.chapterFilterPill">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-            <Setter Property="Padding" Value="10,4" />
-            <Setter Property="FontSize" Value="11.5" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                    <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                    <BrushTransition Property="Foreground" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Button.chapterFilterPill:pointerover">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
-        </Style>
-        <Style Selector="Button.chapterFilterPill.active">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
-        </Style>
 
         <Style Selector="TextBlock.volumeHeader">
-            <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
+            <Setter Property="FontFamily" Value="{DynamicResource PbDisplayFontFamily}" />
             <Setter Property="FontSize" Value="15" />
             <Setter Property="LetterSpacing" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="Margin" Value="0,14,0,4" />
         </Style>
 
@@ -78,7 +53,7 @@
             <Setter Property="BorderThickness" Value="0,0,0,1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="CornerRadius" Value="0" />
-            <Setter Property="Padding" Value="8,9" />
+            <Setter Property="Padding" Value="8,8" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
@@ -98,8 +73,8 @@
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="TextBlock.chapterMeta">
-            <Setter Property="FontSize" Value="10.5" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style Selector="ProgressBar.chapterProgress">
@@ -113,7 +88,7 @@
 
     <ScrollViewer>
         <StackPanel Margin="0,0,0,50">
-            <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="28,20,28,12">
+            <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="24,20,24,12">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
                     <TextBlock Text="Back to Library" VerticalAlignment="Center" />
@@ -129,7 +104,12 @@
                                              Text="{Binding #Screen.((vm:MangaDetailScreenViewModel)DataContext).SelectedContentTypeText}"
                                              Suggestions="{Binding #Screen.((vm:MangaDetailScreenViewModel)DataContext).ContentTypeNames}"
                                              ToolTip.Tip="Content Type" />
-                        <Button Classes="headerAction ghost" Content="Undo" VerticalAlignment="Center"
+                        <Button Classes="ghost" Content="Needs review" VerticalAlignment="Center"
+                                IsVisible="{Binding #Screen.((vm:MangaDetailScreenViewModel)DataContext).NeedsReview}"
+                                Command="{Binding #Screen.((vm:MangaDetailScreenViewModel)DataContext).EditSeriesCommand}"
+                                ToolTip.Tip="This series' chapters disagree on some details (for example two publishers). Open Edit Series to confirm them."
+                                AutomationProperties.Name="Needs review: open Edit Series" />
+                        <Button Classes="ghost" Content="Undo" VerticalAlignment="Center"
                                 IsVisible="{Binding #Screen.((vm:MangaDetailScreenViewModel)DataContext).CanUndoContentType}"
                                 Command="{Binding #Screen.((vm:MangaDetailScreenViewModel)DataContext).UndoContentTypeCommand}"
                                 ToolTip.Tip="{Binding #Screen.((vm:MangaDetailScreenViewModel)DataContext).UndoContentTypeLabel, StringFormat='{}{0}. Undo puts the old type back.'}"
@@ -138,10 +118,10 @@
                 </views:DetailBand.LeadingContent>
             </views:DetailBand>
 
-            <StackPanel Margin="28,0,28,0">
+            <StackPanel Margin="24,0,24,0">
                 <!-- Unified tab strip -->
                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,18,0,0">
-                    <StackPanel Orientation="Horizontal" Spacing="22">
+                    <StackPanel Orientation="Horizontal" Spacing="20">
                         <Button Classes="tab" Classes.active="{Binding IsChaptersTab}" Command="{Binding GoChaptersTabCommand}">
                             <StackPanel Orientation="Horizontal" Spacing="7">
                                 <fi:SymbolIcon Symbol="TextBulletList" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
@@ -172,39 +152,43 @@
                 </Border>
 
                 <!-- Chapters tab: release feed -->
-                <StackPanel IsVisible="{Binding IsChaptersTab}" Margin="0,16,0,0">
+                <StackPanel IsVisible="{Binding IsChaptersTab}" controls:Replace.On="{Binding IsChaptersTab}" Margin="0,16,0,0">
                     <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
-                        <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.All}}"
+                        <Button Classes="filterChip" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.All}}"
                                 Content="All" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.All}" />
-                        <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.Unread}}"
+                        <Button Classes="filterChip" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.Unread}}"
                                 Content="Unread" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.Unread}" />
-                        <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.Bookmarked}}"
+                        <Button Classes="filterChip" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.Bookmarked}}"
                                 Content="Bookmarked" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.Bookmarked}" />
-                        <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.Missing}}"
+                        <Button Classes="filterChip" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.Missing}}"
                                 Content="Missing" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.Missing}" />
                         <Border Width="1" Background="{DynamicResource PbBorderBrush}" Margin="6,2" />
-                        <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterSortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterSortField.Number}}"
+                        <Button Classes="filterChip" Classes.active="{Binding IsChapterSortByNumber}"
                                 Command="{Binding SetChapterSortFieldCommand}" CommandParameter="{x:Static models:ChapterSortField.Number}">
                             <StackPanel Orientation="Horizontal" Spacing="5">
                                 <fi:SymbolIcon Symbol="TextSortAscending" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
                                 <TextBlock Text="By Number" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterSortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterSortField.Date}}"
+                        <Button Classes="filterChip" Classes.active="{Binding IsChapterSortByDate}"
                                 Command="{Binding SetChapterSortFieldCommand}" CommandParameter="{x:Static models:ChapterSortField.Date}">
                             <StackPanel Orientation="Horizontal" Spacing="5">
                                 <fi:SymbolIcon Symbol="Calendar" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
                                 <TextBlock Text="By Date" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button Classes="chapterFilterPill" Command="{Binding ToggleChapterSortDirectionCommand}"
+                        <Button Classes="filterChip" Command="{Binding ToggleChapterSortDirectionCommand}"
                                 ToolTip.Tip="Toggle sort direction" AutomationProperties.Name="Toggle sort direction">
                             <fi:SymbolIcon Symbol="{Binding ChapterSortDirectionSymbol}" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
                         </Button>
                     </StackPanel>
 
-                    <TextBlock IsVisible="{Binding !HasChapters}" Text="No chapters match this filter." FontSize="12.5"
-                               Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,10,0,0" />
+                    <TextBlock IsVisible="{Binding !HasChapters}" Text="No chapters match this filter." FontSize="13"
+                               Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,10,0,0" />
+
+                    <!-- Draggable chapter-table header (resize / reorder columns); 23px = card border + card padding + row padding. -->
+                    <views:DetailListHeader x:Name="ChapterListHeader" Cells="{Binding ChapterHeaderCells}" IsVisible="{Binding HasChapters}"
+                                            LeadingInset="23,0,0,0" Margin="0,10,0,6" />
 
                     <ItemsControl x:Name="ChapterGroupsList" ItemsSource="{Binding ChapterGroups}">
                         <ItemsControl.ItemTemplate>
@@ -219,25 +203,17 @@
                                                         Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).OpenChapterCommand}"
                                                         CommandParameter="{Binding}">
                                                     <Grid>
-                                                        <Grid ColumnDefinitions="60,*,Auto,Auto,Auto,Auto,110" VerticalAlignment="Center">
-                                                            <TextBlock Grid.Column="0" Classes="chapterNumber" Text="{Binding DisplayNumber}" />
-                                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7" Margin="8,0">
-                                                                <TextBlock Classes="chapterTitle" Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                                <controls:StatusBadge Variant="New" IsVisible="{Binding IsNew}" />
-                                                            </StackPanel>
-                                                            <fi:SymbolIcon Grid.Column="2" Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Margin="0,0,8,0"
-                                                                    Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding ShowReadGlyph}"
-                                                                    ToolTip.Tip="Read" AutomationProperties.AccessibilityView="Raw" />
-                                                            <fi:SymbolIcon Grid.Column="3" Symbol="Bookmark" FontSize="{StaticResource PbIconSizeXs}" Margin="0,0,8,0" IsVisible="{Binding HasBookmark}" />
-                                                            <fi:SymbolIcon Grid.Column="4" Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Margin="0,0,8,0" IsVisible="{Binding IsMissing}"
-                                                                    Foreground="{DynamicResource PbBadgeBrush}" />
-                                                            <controls:BrandMark Grid.Column="5" Family="ScanGroup" Value="{Binding ScanInformation}"
-                                                                    ShowText="True" MarkSize="{StaticResource PbIconSizeXs}" Margin="0,0,10,0"
-                                                                    VerticalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}"
-                                                                    IsVisible="{Binding HasScanInformation}" />
-                                                            <TextBlock Grid.Column="6" Classes="chapterMeta" Text="{Binding Date, StringFormat='{}{0:MMM d, yyyy}'}" HorizontalAlignment="Right" />
-                                                        </Grid>
-                                                        <ProgressBar Classes="chapterProgress" Value="{Binding ReadPercentage}" Minimum="0" Maximum="100" IsVisible="{Binding IsInProgress}" />
+                                                        <ItemsControl ItemsSource="{Binding ListCells}" VerticalAlignment="Center">
+                                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate x:DataType="models:DetailListCell">
+                                                                    <TextBlock Width="{Binding Width}" Text="{Binding Text}" VerticalAlignment="Center" Margin="8,0"
+                                                                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                                               ToolTip.Tip="{Binding AccessibleLabel}" AutomationProperties.Name="{Binding AccessibleLabel}" />
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                        <ProgressBar Classes="chapterProgress" Value="{Binding ReadPercentage}" Minimum="0" Maximum="100" IsVisible="{Binding ShowProgressIndicator}" />
                                                     </Grid>
                                                 </Button>
                                             </DataTemplate>

@@ -1,6 +1,6 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:anim="using:Avalonia.Animation">
+                    xmlns:motion="using:Paperbunkr.App.Theming.Motion">
     <!-- The app's design tokens, moved out of App.axaml (which merges this file) so headless tests can load the real tokens without
          instantiating the App and its FluentAvaloniaTheme. ThemeService still writes live values into Application.Resources itself,
          which wins over this merged dictionary, exactly as before. -->
@@ -75,6 +75,8 @@
          theme-independent - a morning sky is the same colour on every light skin - but live here as named resources so a skin
          or a later theme.json field can override them. -->
     <Color x:Key="PbHeroScrimColor">#59000000</Color>
+    <!-- The shade over a Home spotlight sliver: darker than the hero scrim, and dark in every theme because it sits on cover art. -->
+    <Color x:Key="PbCoverShadeColor">#8C000000</Color>
     <Color x:Key="PbSkyMorningTopColor">#BFE0FF</Color>
     <Color x:Key="PbSkyMorningBottomColor">#FFE7C9</Color>
     <Color x:Key="PbSkyAfternoonTopColor">#8FC3F2</Color>
@@ -134,12 +136,17 @@
          buttons) - added 2026-08-30 via the avalonia-pro-max/review-checklist audit, values
          kept identical to the prior literals so this is a zero-visual-diff rename, not a
          redesign. -->
-    <x:Double x:Key="PbFontSizeBody">13</x:Double>
+    <!-- 2026-10-19 UI polish foundation (docs/superpowers/specs/2026-10-19-ui-polish-foundation-design.md §1): one whole-pixel scale,
+         10 · 11 · 12 · 13 · 15 · 18 · 22. Control and Overline stay as keys but now equal Body and Micro; every literal FontSize in
+         XAML is pinned to this scale by XamlConsistencyLintTests. -->
+    <x:Double x:Key="PbFontSizeMicro">10</x:Double>
+    <x:Double x:Key="PbFontSizeOverline">10</x:Double>
     <x:Double x:Key="PbFontSizeCaption">11</x:Double>
-    <x:Double x:Key="PbFontSizeControl">12.5</x:Double>
-    <x:Double x:Key="PbFontSizeMeta">11.5</x:Double>
-    <x:Double x:Key="PbFontSizeOverline">10.5</x:Double>
-    <x:Double x:Key="PbFontSizeMicro">9.5</x:Double>
+    <x:Double x:Key="PbFontSizeMeta">12</x:Double>
+    <x:Double x:Key="PbFontSizeBody">13</x:Double>
+    <x:Double x:Key="PbFontSizeControl">13</x:Double>
+    <x:Double x:Key="PbFontSizeSection">15</x:Double>
+    <x:Double x:Key="PbFontSizeTitle">18</x:Double>
 
     <!-- Icon-size scale (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-
          design.md §1) - based on the avalonia-pro-max/icons-imagery steps, then bumped one
@@ -163,6 +170,16 @@
     <CornerRadius x:Key="PbRadiusLg">14</CornerRadius>
     <!-- Chips are squircles, not ovals: a radius well under half a chip's height keeps the corners round without collapsing the ends into a pill. -->
     <CornerRadius x:Key="PbRadiusChip">9</CornerRadius>
+    <!-- Form fields are underlined (foundation design §4): rounded top corners over a flat bottom line. Per-corner, so it can't be derived
+         from the theme's single radiusSm and is not theme-written. -->
+    <CornerRadius x:Key="PbFieldRadius">4,4,0,0</CornerRadius>
+
+    <!-- Shared control sizes (docs/superpowers/specs/2026-10-19-ui-polish-shared-controls-design.md, Q7 "compact"): every button, segmented
+         switch and menu row is 28 tall, 22 with .sm. PbControlBorderBrush outlines segmented groups and filter chips - faint, following the
+         live theme through its colour. -->
+    <x:Double x:Key="PbControlHeight">28</x:Double>
+    <x:Double x:Key="PbControlHeightSm">22</x:Double>
+    <SolidColorBrush x:Key="PbControlBorderBrush" Color="{DynamicResource PbTextFaintColor}" />
 
     <!-- Density tokens (docs/superpowers/specs/2026-09-21-cosmetics-pitch-2-design.md #17) - these are the Comfortable values; ThemeService
          overwrites them at startup and live from Preferences > Appearance > Density. Consumers use DynamicResource. -->
@@ -170,69 +187,42 @@
     <Thickness x:Key="PbDetailsRowPadding">0,3</Thickness>
     <Thickness x:Key="PbSidebarItemPadding">8,7</Thickness>
 
-    <!-- Motion tokens (design doc, "snappy & responsive") - PbMotionFast is overwritten to
-         TimeSpan.Zero live by ThemeService.ApplyReducedMotion when the user enables the
-         Preferences > Appearance > Reduced Motion toggle, so consumers just bind to it rather
-         than checking a flag themselves. -->
-    <x:TimeSpan x:Key="PbMotionFast">0:0:0.15</x:TimeSpan>
-    <CubicEaseOut x:Key="PbMotionEase" />
+    <!-- Motion v2 (docs/superpowers/specs/2026-10-20-motion-system-v2-foundation-overlays-design.md §3). Every animation belongs to one
+         role (Acknowledge / Hover / Reveal / Replace / Travel / Ambient). ThemeService.WriteMotionTokens overwrites these durations from
+         MotionPolicy.Resolve on start and on every Motion / quality change; the values here are the Full defaults. Opacity runs on a
+         *Fade token and RenderTransform on the matching *Move token: Reduced keeps the fade short and zeroes the move, so a surface
+         simply fades with no travel. Use the role tokens in new XAML. -->
+    <x:TimeSpan x:Key="PbMotionAcknowledge">0:0:0.09</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionAcknowledgeMove">0:0:0.09</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionHoverFade">0:0:0.12</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionHoverMove">0:0:0.16</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionRevealFade">0:0:0.18</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionRevealMove">0:0:0.18</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionRevealExit">0:0:0.12</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionReplace">0:0:0.16</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionTravelFade">0:0:0.22</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionTravelMove">0:0:0.22</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionFlight">0:0:0.28</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionAmbient">0:0:0.36</x:TimeSpan>
 
-    <!-- Slower, dedicated duration for content crossfades (docs/superpowers/specs/2026-08-24-
-         home-screen-design.md's dynamic/reactive follow-up) - distinct from PbMotionFast's
-         150ms interaction speed, matching the hero's own auto-rotation feel rather than a
-         button-hover feel. Also zeroed by ThemeService.ApplyReducedMotion, same as PbMotionFast. -->
-    <x:TimeSpan x:Key="PbMotionSlow">0:0:0.7</x:TimeSpan>
+    <!-- Curves (§3.2). PbMotionEase: everything that enters (strong decelerate). PbMotionExitEase: everything that leaves (accelerate).
+         PbMotionMoveEase: a change between two on-screen states (press, flight, ambient). PbMotionSpring: a damped spring that
+         overshoots ~3 % once and settles - hover lift and panel arrival only. Overshooting easings (BackEase, ElasticEase, BounceEase)
+         are banned by lint. -->
+    <SplineEasing x:Key="PbMotionEase" X1="0.05" Y1="0.7" X2="0.1" Y2="1" />
+    <SplineEasing x:Key="PbMotionExitEase" X1="0.3" Y1="0" X2="0.8" Y2="0.15" />
+    <SplineEasing x:Key="PbMotionMoveEase" X1="0.2" Y1="0" X2="0" Y2="1" />
+    <motion:DampedSpringEasing x:Key="PbMotionSpring" />
 
-    <!-- docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - two more
-         durations alongside PbMotionFast/PbMotionSlow above, both zeroed the same way by
-         ThemeService.ApplyReducedMotion/ApplyPersistedSettings:
-         - PbMotionStandard: drill-down screen cross-fade (push/pop), sidebar, breadcrumb.
-         - PbMotionLarge: the shared-element cover flight (NavigationTransitionCoordinator).
-         The shared-element flight's own reduced-motion handling doesn't depend on this
-         resource's liveness at all - NavigationTransitionCoordinator checks the reduced-motion
-         flag itself and skips capturing/flying entirely, in code, before ever touching a
-         duration. PbMotionStandard's liveness matters only for PbDrillTransition below. -->
-    <x:TimeSpan x:Key="PbMotionStandard">0:0:0.22</x:TimeSpan>
-    <x:TimeSpan x:Key="PbMotionLarge">0:0:0.32</x:TimeSpan>
+    <!-- Legacy keys, kept as aliases of their role equivalents so existing transitions follow v2 timing and policy: Fast = Hover fade,
+         Standard = Reveal fade, Large = Flight, Slow = Ambient. Lint counts their uses and the count may only go down. -->
+    <x:TimeSpan x:Key="PbMotionFast">0:0:0.12</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionStandard">0:0:0.18</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionLarge">0:0:0.28</x:TimeSpan>
+    <x:TimeSpan x:Key="PbMotionSlow">0:0:0.36</x:TimeSpan>
 
-    <!-- Directional screen-slide (docs/superpowers/specs/2026-08-24-navigation-shell-motion-
-         system-design.md) - direction comes from MainViewModel.IsTransitionReversed
-         (TransitioningContentControl.IsTransitionReversed), not this resource. Duration/Easing
-         are captured once when this resource is constructed (a StaticResource, per the
-         CornerRadius finding above) - NOT re-read live, so Reduced Motion does NOT affect
-         screen-slide speed, only the Setter-based Transitions (buttons, FloatingPanel, rail
-         width) from Phase 1/this phase. Confirmed by reading PageSlide's own source - Duration
-         is a plain settable property read once by TransitioningContentControl at transition
-         start, not bound to anything live. Accepted as-is: screen-slide always runs at full
-         speed even with Reduced Motion on - a real, deliberate gap, not an oversight. -->
-    <anim:PageSlide x:Key="PbScreenSlide" Duration="{StaticResource PbMotionFast}" Orientation="Horizontal"
-                    SlideInEasing="{StaticResource PbMotionEase}" SlideOutEasing="{StaticResource PbMotionEase}" />
-
-    <!-- Drill-down push/pop (docs/superpowers/specs/2026-09-04-navigation-transition-system-
-         design.md) - one shared transition, direction from MainViewModel.IsDrillTransitionReversed,
-         same "one resource + a reversed bool" shape as PbScreenSlide above rather than two
-         separate push/pop resources. Duration is StaticResource, not DynamicResource - tried the
-         latter first and it's a compile error (AVLN3000, "no suitable setter... for argument
-         BindingBase"): CrossFade/PageSlide's Duration is a plain CLR property, not an
-         AvaloniaProperty, so it can only ever take a StaticResource's already-resolved value at
-         parse time - DynamicResource has nothing to attach a live subscription to. This confirms
-         (doesn't just repeat) PbScreenSlide's own documented finding just above: same gap,
-         inherited on purpose rather than worked around, since the underlying Avalonia API makes
-         a real live-duration fix impossible without a custom IPageTransition. Reduced Motion
-         does NOT affect this cross-fade's speed, same as PbScreenSlide - accepted, not an
-         oversight. -->
-    <!-- 2026-09-05 fix: this originally paired CrossFade with a vertical PageSlide for a
-         directional push/pop flourish. PageSlide has no configurable slide distance - it always
-         slides the full control width/height, which at 220ms read as an abrupt full-screen shove
-         competing with the fade, not the subtle "few-pixel drift" the design called for (and not
-         what the approved visual-companion demo showed - cross-fade + scale only, no full-screen
-         slide). User-reported "transitions don't feel smooth" after shipping; CrossFade alone
-         is the fix - plain, proven, matches the demo. IsDrillTransitionReversed is now inert for
-         this specific transition (CrossFade is symmetric) but stays wired - harmless, and it's
-         what a future directional refinement (a real custom IPageTransition, not PageSlide) would
-         key off. -->
-    <anim:CrossFade x:Key="PbDrillTransition" Duration="{StaticResource PbMotionStandard}"
-                    FadeInEasing="{StaticResource PbMotionEase}" FadeOutEasing="{StaticResource PbMotionEase}" />
+    <!-- Screen transitions are Controls/RouteHost (Motion v2 navigation, docs/superpowers/specs/2026-10-20-motion-system-v2-navigation-
+         design.md); the old PbScreenSlide / PbDrillTransition page transitions are gone. -->
 
     <!-- Bundled fonts (design doc's Typography section). PbDisplayFontFamily (Bebas Neue) is
          for hero/heading text only, referenced directly via StaticResource in Styles/Typography.axaml
@@ -241,4 +231,40 @@
          ApplyFontResource sets that live (it's what "no override" now resolves to; see that
          file's DefaultFontFamily field for why it's set in code, not XAML). -->
     <FontFamily x:Key="PbDisplayFontFamily">avares://Paperbunkr.App/Assets/Fonts/#Bebas Neue</FontFamily>
+
+    <!-- Theme typography roles (docs/superpowers/specs/2026-10-12-theme-system-v2-gap-analysis-and-plan.md, phase 3). ThemeService writes
+         live values for all of these from the active theme; what is here is only the look before the first apply (and in headless tests
+         that never apply a theme), and equals the built-in default. -->
+    <FontFamily x:Key="PbHeadingFontFamily">avares://Paperbunkr.App/Assets/Fonts/#Bebas Neue</FontFamily>
+    <FontFamily x:Key="PbMonoFontFamily">Cascadia Code, Consolas, Courier New, monospace</FontFamily>
+    <x:Double x:Key="PbFontSizeHero">42</x:Double>
+    <x:Double x:Key="PbFontSizeHeading">22</x:Double>
+    <FontWeight x:Key="PbDisplayFontWeight">Normal</FontWeight>
+    <FontWeight x:Key="PbHeadingFontWeight">Normal</FontWeight>
+
+    <!-- Component roles (phase 3): same rule as above. Each equals the token the control was bound to before roles existed. -->
+    <SolidColorBrush x:Key="PbButtonPrimaryBackground" Color="{StaticResource PbAccentColor}" />
+    <SolidColorBrush x:Key="PbButtonPrimaryForeground" Color="{StaticResource PbBadgeTextColor}" />
+    <SolidColorBrush x:Key="PbButtonPrimaryBorder" Color="{StaticResource PbAccentColor}" />
+    <SolidColorBrush x:Key="PbButtonPrimaryBackgroundHover" Color="{StaticResource PbAccentTextColor}" />
+    <CornerRadius x:Key="PbButtonPrimaryRadius">5</CornerRadius>
+    <SolidColorBrush x:Key="PbButtonSecondaryBackground" Color="{StaticResource PbChromeColor}" />
+    <SolidColorBrush x:Key="PbButtonSecondaryForeground" Color="{StaticResource PbTextColor}" />
+    <!-- Outlines of secondary/ghost buttons and chips use the faint text colour (2026-10-19 shared controls Q4): PbBorder is ~1.35:1 against
+         the surface in every theme, so outlined controls read as plain text (most visibly in Matrix); faint is 3.1-3.8:1. -->
+    <SolidColorBrush x:Key="PbButtonSecondaryBorder" Color="{StaticResource PbTextFaintColor}" />
+    <SolidColorBrush x:Key="PbButtonSecondaryBackgroundHover" Color="{StaticResource PbSurface3Color}" />
+    <CornerRadius x:Key="PbButtonSecondaryRadius">5</CornerRadius>
+    <SolidColorBrush x:Key="PbButtonGhostBackground" Color="Transparent" />
+    <SolidColorBrush x:Key="PbButtonGhostForeground" Color="{StaticResource PbTextMutedColor}" />
+    <SolidColorBrush x:Key="PbButtonGhostBorder" Color="{StaticResource PbTextFaintColor}" />
+    <SolidColorBrush x:Key="PbButtonGhostBorderHover" Color="{StaticResource PbAccentColor}" />
+    <CornerRadius x:Key="PbButtonGhostRadius">5</CornerRadius>
+    <SolidColorBrush x:Key="PbChipBackground" Color="{StaticResource PbChromeColor}" />
+    <SolidColorBrush x:Key="PbChipBorder" Color="{StaticResource PbTextFaintColor}" />
+    <SolidColorBrush x:Key="PbChipBorderHover" Color="{StaticResource PbBadgeColor}" />
+    <CornerRadius x:Key="PbChipRadius">9</CornerRadius>
+    <SolidColorBrush x:Key="PbPanelFloatingBackground" Color="{StaticResource PbSurface3Color}" />
+    <SolidColorBrush x:Key="PbPanelFloatingBorder" Color="{StaticResource PbBorderColor}" />
+    <CornerRadius x:Key="PbPanelFloatingRadius">14</CornerRadius>
 </ResourceDictionary>

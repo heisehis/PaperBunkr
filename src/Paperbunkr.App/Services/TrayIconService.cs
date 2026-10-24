@@ -44,5 +44,26 @@ public sealed class TrayIconService : IDisposable
         set => _trayIcon.IsVisible = value;
     }
 
+    private bool? _dotShown;
+
+    /// <summary>Swaps in the accent-dotted tray logo while there are new releases (Cosmetics pitch #24); a no-op when unchanged.</summary>
+    public void SetAccentDot(bool show, bool rerender = false)
+    {
+        if (_dotShown == show && !rerender)
+        {
+            return;
+        }
+
+        try
+        {
+            _trayIcon.Icon = TaskbarBadgeIcons.RenderTray(show);
+            _dotShown = show;
+        }
+        catch
+        {
+            // Keep whatever icon is showing.
+        }
+    }
+
     public void Dispose() => _trayIcon.Dispose();
 }

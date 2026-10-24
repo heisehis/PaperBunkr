@@ -16,9 +16,51 @@ namespace Paperbunkr.App.Views;
 /// </summary>
 public partial class LibraryToolbar : UserControl
 {
+    /// <summary>Below this toolbar width the Workspace button shows only its icon, so the search box keeps its room (2026-10-20 Library pass Q7).</summary>
+    public const double CompactWidth = 1000;
+
+    /// <summary>Below this toolbar width an empty, unfocused search pill collapses to an icon button (2026-10-20 UI polish SP5 Q5: at
+    /// 1366×768 with the sidebar and preview panel open, the pill was squeezed to a sliver).</summary>
+    public const double SearchCollapseWidth = 900;
+
     public LibraryToolbar()
     {
         InitializeComponent();
+        SizeChanged += (_, e) =>
+        {
+            WorkspaceButton.Classes.Set("compact", e.NewSize.Width < CompactWidth);
+            UpdateSearchCollapse();
+        };
+        // A query set from elsewhere (a chip, a saved workspace) opens the pill.
+        SearchBox.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == TextBox.TextProperty)
+            {
+                UpdateSearchCollapse();
+            }
+        };
+    }
+
+    /// <summary>True while the search pill shows as an icon.</summary>
+    public bool IsSearchCollapsed => SearchCollapsedButton.IsVisible;
+
+    private void UpdateSearchCollapse()
+    {
+        bool collapse = Bounds.Width > 0 && Bounds.Width < SearchCollapseWidth && !SearchBox.IsFocused && string.IsNullOrEmpty(SearchBox.Text);
+        SearchCollapsedButton.IsVisible = collapse;
+        LibrarySearchBoxContainer.IsVisible = !collapse;
+    }
+
+    private void ExpandSearch()
+    {
+        SearchCollapsedButton.IsVisible = false;
+        LibrarySearchBoxContainer.IsVisible = true;
+    }
+
+    private void OnSearchCollapsedClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        ExpandSearch();
+        SearchBox.Focus(NavigationMethod.Tab);
     }
 
     /// <summary>
@@ -31,7 +73,11 @@ public partial class LibraryToolbar : UserControl
     public event EventHandler? FocusGridRequested;
 
     /// <summary>"/" from anywhere in the grid focuses this - see <see cref="LibraryScreen.OnLibraryScreenKeyDown"/>.</summary>
-    public void FocusSearchBox() => SearchBox.Focus();
+    public void FocusSearchBox()
+    {
+        ExpandSearch();
+        SearchBox.Focus();
+    }
 
     /// <summary>Search suggestions popup (docs/superpowers/specs/2026-08-31-library-search-
     /// suggestions-design.md) - focus is a UI-side event with no XAML command equivalent, so this
@@ -44,6 +90,7 @@ public partial class LibraryToolbar : UserControl
     private void OnSearchBoxLostFocus(object? sender, FocusChangedEventArgs e)
     {
         (DataContext as LibraryScreenViewModel)?.OnSearchBoxLostFocus();
+        UpdateSearchCollapse();
     }
 
     /// <summary>Bottom-edge fade on the Sort and Group popups: a 0-1 opacity mask ending transparent, applied only while

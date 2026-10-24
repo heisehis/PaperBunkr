@@ -1,0 +1,324 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pbc="using:Paperbunkr.App.Controls"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="720"
+             x:Class="Paperbunkr.App.Views.MangaSeriesEditorOverlay"
+             x:DataType="vm:MangaSeriesEditorViewModel">
+
+    <!--
+        Edit Series for a manga-family series (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §6, D11). A borderless floating panel over the dimmed
+        Manga Detail screen, same pattern as IssuePropertiesScreen: header and tab strip stay pinned, only the tab content scrolls. One Save changes the series and every
+        chapter without an override of its own follows.
+    -->
+    <UserControl.Styles>
+        <!-- Look comes from the shared fieldLabel (Styles/FormControls.axaml); here labels sit beside their field, not above it. -->
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0" />
+        </Style>
+        <Style Selector="TextBlock.fieldNote">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <!-- Weight segmented control and value chip: same look as the Issue Properties editor's tag rows (styles are per file in Avalonia). -->
+        <Style Selector="Border.pbChip TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.sectionIntro">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </UserControl.Styles>
+
+    <UserControl.Resources>
+        <!-- A weighted tag list: one row per value (name, category, how central it is, remove), then a box to add more. -->
+        <DataTemplate x:Key="TagListTemplate" x:DataType="vm:MangaTagListViewModel">
+            <StackPanel Spacing="8" Margin="0,0,0,22">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Classes="fieldLabel" Text="{Binding Label}" />
+                    <Button Grid.Column="1" Classes="iconButton" IsVisible="{Binding IsLocked}" Command="{Binding UnlockCommand}"
+                            ToolTip.Tip="Set by you. A provider refresh will not change this list. Click to let providers update it again."
+                            AutomationProperties.Name="Unlock this list so providers can update it">
+                        <fi:SymbolIcon Symbol="LockClosed" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbAccentBrush}" />
+                    </Button>
+                </Grid>
+                <TextBlock Classes="fieldNote" IsVisible="{Binding HasReviewNote}" Text="{Binding ReviewNote}" />
+                <TextBlock Classes="fieldNote" IsVisible="{Binding !HasRows}" Text="Nothing here yet. Add one below." />
+                <ItemsControl ItemsSource="{Binding Rows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:TagEditRowViewModel">
+                            <Grid ColumnDefinitions="170,*,Auto,Auto" Margin="0,0,0,8">
+                                <Border Grid.Column="0" Classes="pbChip" HorizontalAlignment="Left"><TextBlock Text="{Binding Value}" TextTrimming="CharacterEllipsis" /></Border>
+                                <pbc:SuggestBox Grid.Column="1" Text="{Binding Category}" Suggestions="{Binding $parent[ItemsControl].((vm:MangaTagListViewModel)DataContext).CategorySuggestions}" Watermark="Category (e.g. Themes, Activities)" Margin="8,0" AutomationProperties.Name="Category" />
+                                <Border Grid.Column="2" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" Height="26" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Classes="segItem" Content="Unset" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Unset}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Unset}" />
+                                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                                        <Button Classes="segItem" Content="Incidental" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Incidental}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Incidental}" />
+                                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                                        <Button Classes="segItem" Content="Recurrent" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Recurrent}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Recurrent}" />
+                                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                                        <Button Classes="segItem" Content="Defining" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Defining}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Defining}" />
+                                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                                        <Button Classes="segItem" Content="Core" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Core}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Core}" />
+                                    </StackPanel>
+                                </Border>
+                                <Button Grid.Column="3" Classes="iconButton" Margin="6,0,0,0" ToolTip.Tip="Remove"
+                                        Command="{Binding $parent[ItemsControl].((vm:MangaTagListViewModel)DataContext).RemoveCommand}" CommandParameter="{Binding}"
+                                        AutomationProperties.Name="Remove this value">
+                                    <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="*,Auto">
+                    <pbc:SuggestBox Grid.Column="0" Text="{Binding AddText}" Suggestions="{Binding Suggestions}" IsMultiValue="True" Watermark="Add one or several, separated by commas" AutomationProperties.Name="Add values" />
+                    <Button Grid.Column="1" Classes="ghost" Margin="8,0,0,0" Content="Add" Command="{Binding AddCommand}" />
+                </Grid>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- One editable field: label, optional lock marker, the text, and a "chapters disagree" note. -->
+        <DataTemplate x:Key="FieldRowTemplate" x:DataType="vm:MangaFieldRowViewModel">
+            <StackPanel Spacing="4" Margin="0,0,0,14">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Classes="fieldLabel" Text="{Binding Label}" />
+                    <Button Grid.Column="1" Classes="iconButton" IsVisible="{Binding IsLocked}"
+                            Command="{Binding UnlockCommand}" ToolTip.Tip="{Binding LockTooltip}"
+                            AutomationProperties.Name="Unlock this field so providers can update it">
+                        <fi:SymbolIcon Symbol="LockClosed" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbAccentBrush}" />
+                    </Button>
+                </Grid>
+                <pbc:SuggestBox Text="{Binding Text}" Suggestions="{Binding Suggestions}" IsMultiValue="{Binding IsMultiValue}" Watermark="{Binding Hint}" AutomationProperties.Name="{Binding Label}" />
+                <TextBlock Classes="fieldNote" IsVisible="{Binding HasReviewNote}" Text="{Binding ReviewNote}" />
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <!-- Was 880 wide: the tag rows (value, category, weight switch, remove) need the extra-large width. Header text, review banner and tab strip
+         stay pinned; only the tab content scrolls. -->
+    <pbc:DialogCard Title="Edit series" Subtitle="{Binding HeaderLabel}" Size="XLarge" IsBodyScrollable="False" CloseCommand="{Binding CancelCommand}">
+        <DockPanel LastChildFill="True">
+            <!-- The chapters disagreed on something: say so once, up top. -->
+            <Border DockPanel.Dock="Top" IsVisible="{Binding NeedsReview}" Margin="0,0,0,12" Padding="14,10"
+                    Background="{DynamicResource PbAccentSoftBrush}" CornerRadius="{DynamicResource PbRadius}">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentBrush}" VerticalAlignment="Top" />
+                    <TextBlock Classes="fieldNote" Text="{Binding ReviewSummary}" MaxWidth="780" />
+                </StackPanel>
+            </Border>
+                <Border DockPanel.Dock="Bottom" Margin="0,12,0,0" IsVisible="{Binding ShowExceptionPrompt}" Padding="14,12"
+                        Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                        CornerRadius="{DynamicResource PbRadius}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Classes="sectionIntro" Text="{Binding ExceptionPromptText}" AutomationProperties.LiveSetting="Assertive" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Classes="primary" Content="Keep as exceptions" Command="{Binding KeepAsExceptionsCommand}"
+                                    AutomationProperties.AutomationId="MangaSeriesEditorKeepExceptions" />
+                            <Button Classes="ghost" Content="Replace them" Command="{Binding ReplaceAllCommand}"
+                                    AutomationProperties.AutomationId="MangaSeriesEditorReplaceAll" />
+                            <Button Classes="ghost" Content="Back" Command="{Binding DismissExceptionPromptCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            <!-- Tab strip -->
+            <Border DockPanel.Dock="Top" Classes="tabStrip">
+            <StackPanel Orientation="Horizontal" Spacing="20">
+                <Button Classes="tab" Classes.active="{Binding IsIdentityTab}" Command="{Binding GoIdentityCommand}" Content="Identity &amp; titles" />
+                <Button Classes="tab" Classes.active="{Binding IsCreatorsTab}" Command="{Binding GoCreatorsCommand}" Content="Creators" />
+                <Button Classes="tab" Classes.active="{Binding IsPublicationTab}" Command="{Binding GoPublicationCommand}" Content="Publication" />
+                <Button Classes="tab" Classes.active="{Binding IsClassificationTab}" Command="{Binding GoClassificationCommand}" Content="Classification" />
+                <Button Classes="tab" Classes.active="{Binding IsDescriptionTab}" Command="{Binding GoDescriptionCommand}" Content="Description" />
+                <Button Classes="tab" Classes.active="{Binding IsSourcesTab}" Command="{Binding GoSourcesCommand}" Content="Sources" />
+                <Button Classes="tab" Classes.active="{Binding IsAdvancedTab}" Command="{Binding GoAdvancedCommand}" Content="Advanced" />
+            </StackPanel>
+            </Border>
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <Panel>
+
+                    <!-- ===================== Identity & titles ===================== -->
+                    <StackPanel IsVisible="{Binding IsIdentityTab}" Margin="0,16,0,8" Spacing="14">
+                        <StackPanel Spacing="4">
+                            <TextBlock Classes="fieldLabel" Text="TITLE" />
+                            <TextBox Text="{Binding Name}" AutomationProperties.AutomationId="MangaSeriesEditorName" AutomationProperties.Name="Series title" />
+                        </StackPanel>
+                        <TextBlock Classes="sectionIntro" Text="The title shown across the library. The other titles below are used when searching and for the line under the title on this screen." />
+                        <StackPanel Spacing="4">
+                            <TextBlock Classes="fieldLabel" Text="NATIVE TITLE" />
+                            <TextBox Text="{Binding NativeTitle}" PlaceholderText="Original script. Separate several with ;" AutomationProperties.Name="Native title" />
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Classes="fieldLabel" Text="ROMANIZED TITLE" />
+                            <TextBox Text="{Binding RomanizedTitle}" PlaceholderText="Separate several with ;" AutomationProperties.Name="Romanized title" />
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Classes="fieldLabel" Text="ENGLISH OR OTHER LOCALIZED TITLE" />
+                            <TextBox Text="{Binding LocalizedTitle}" PlaceholderText="Separate several with ;" AutomationProperties.Name="Localized title" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- ===================== Creators ===================== -->
+                    <StackPanel IsVisible="{Binding IsCreatorsTab}" Margin="28,20,28,12">
+                        <TextBlock Classes="sectionIntro" Margin="0,0,0,16"
+                                   Text="Changing a credit here changes it on every chapter that has no credit of its own. A chapter you edited by hand keeps its own." />
+                        <ItemsControl ItemsSource="{Binding CreditRows}" ItemTemplate="{StaticResource FieldRowTemplate}" />
+                    </StackPanel>
+
+                    <!-- ===================== Publication ===================== -->
+                    <StackPanel IsVisible="{Binding IsPublicationTab}" Margin="28,20,28,12">
+                        <ItemsControl ItemsSource="{Binding PublicationRows}" ItemTemplate="{StaticResource FieldRowTemplate}" />
+                        <StackPanel Spacing="4" Margin="0,0,0,14">
+                            <TextBlock Classes="fieldLabel" Text="PUBLICATION STATUS" />
+                            <pbc:SuggestBox Text="{Binding StatusText}" Suggestions="{Binding StatusOptions}" IsStrict="True" HorizontalAlignment="Left" MinWidth="220"
+                                            AutomationProperties.Name="Publication status" />
+                            <TextBlock Classes="fieldNote" Text="Whether the series is still being published. Your own reading progress is set on the series header." />
+                        </StackPanel>
+                        <StackPanel Spacing="4" Margin="0,0,0,14">
+                            <TextBlock Classes="fieldLabel" Text="READING MODE" />
+                            <pbc:SuggestBox Text="{Binding ReadingModeText}" Suggestions="{Binding ReadingModeOptions}" IsStrict="True" HorizontalAlignment="Left" MinWidth="260"
+                                            AutomationProperties.Name="Reading mode" />
+                            <TextBlock Classes="fieldNote" Text="{Binding ReadingModeDescription}" />
+                            <TextBlock Classes="fieldNote" Text="A file can only record left-to-right or right-to-left, so the long-strip modes are kept in Paperbunkr and are not written into files." />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- ===================== Classification ===================== -->
+                    <StackPanel IsVisible="{Binding IsClassificationTab}" Margin="28,20,28,12">
+                        <TextBlock Classes="sectionIntro" Margin="0,0,0,16"
+                                   Text="How central each genre and tag is to the series: Core and Defining are what it is about, Incidental is a passing element. Sources fills these in from MangaBaka; you can change any of them. The weights pass down to every chapter without a setting of its own." />
+                        <ItemsControl ItemsSource="{Binding ClassificationRows}" ItemTemplate="{StaticResource FieldRowTemplate}" />
+                        <ContentControl Content="{Binding Genres}" ContentTemplate="{StaticResource TagListTemplate}" />
+                        <ContentControl Content="{Binding Tags}" ContentTemplate="{StaticResource TagListTemplate}" />
+                    </StackPanel>
+
+                    <!-- ===================== Description ===================== -->
+                    <StackPanel IsVisible="{Binding IsDescriptionTab}" Margin="0,16,0,8" Spacing="8">
+                        <TextBlock Classes="fieldLabel" Text="SERIES SUMMARY" />
+                        <TextBox Text="{Binding Summary}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="180" AutomationProperties.Name="Series summary" />
+                        <TextBlock Classes="fieldNote"
+                                   Text="Chapters keep their own synopsis. A chapter with none shows this one, and it is what gets written into the file. Change the cover with Change Cover on the series header." />
+                    </StackPanel>
+
+                    <!-- ===================== Sources ===================== -->
+                    <Panel IsVisible="{Binding IsSourcesTab}">
+                    <StackPanel Margin="0,16,0,8" Spacing="16" DataContext="{Binding Sources}" x:DataType="vm:MangaSeriesSourcesViewModel">
+                        <TextBlock Classes="sectionIntro"
+                                   Text="Where this series' details come from. Refresh fetches a source again. A detail you set yourself is never replaced: the source's version shows up below to accept or dismiss." />
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Classes="fieldLabel" Text="LINKED SOURCES" />
+                            <TextBlock Classes="fieldNote" IsVisible="{Binding !HasLinks}"
+                                       Text="Nothing is linked yet. Link a source from the Details tab of the series." />
+                            <ItemsControl ItemsSource="{Binding Links}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:MangaSourceLinkRowViewModel">
+                                        <Border Classes="card" Padding="14,10" Margin="0,0,0,8">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding ProviderLabel}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                                    <TextBlock Classes="fieldNote" Text="{Binding ExternalId, StringFormat='Id {0}'}" />
+                                                    <TextBlock Classes="fieldNote" Text="{Binding LastFetchedText}" />
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Classes="ghost" Content="Refresh" Command="{Binding RefreshCommand}"
+                                                        AutomationProperties.Name="Refresh from this source" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <CheckBox IsChecked="{Binding IncludeSpoilerTags}" Content="Include spoiler tags when refreshing" />
+
+                        <StackPanel Spacing="8">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Classes="fieldLabel" Text="OFFERED BY A SOURCE" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Classes="ghost" Content="Accept all" Command="{Binding AcceptAllCommand}" IsVisible="{Binding HasCandidates}"
+                                        ToolTip.Tip="Accept every offered value except ones you set by hand and the reading-mode suggestion" />
+                            </Grid>
+                            <TextBlock Classes="fieldNote" IsVisible="{Binding !HasCandidates}" Text="Nothing is waiting for you." />
+                            <ItemsControl ItemsSource="{Binding Candidates}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:MangaSourceCandidateRowViewModel">
+                                        <Border Classes="card" Padding="14,12" Margin="0,0,0,8">
+                                            <StackPanel Spacing="8">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Text="{Binding FieldLabel}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                                        <fi:SymbolIcon Symbol="LockClosed" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbAccentBrush}"
+                                                                       IsVisible="{Binding IsLocked}" ToolTip.Tip="You set this yourself, so it was not replaced."
+                                                                       AutomationProperties.Name="Set by you" />
+                                                        <TextBlock Classes="fieldNote" Text="{Binding ProviderText}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                                <TextBlock Classes="fieldNote" TextTrimming="CharacterEllipsis" MaxLines="3" Text="{Binding CurrentText, StringFormat='Now: {0}'}" ToolTip.Tip="{Binding CurrentText}" />
+                                                <TextBlock Classes="sectionIntro" MaxLines="6" TextTrimming="CharacterEllipsis" Text="{Binding ProposedText, StringFormat='Offered: {0}'}" ToolTip.Tip="{Binding ProposedText}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding NeedsRole}">
+                                                    <TextBlock Classes="fieldLabel" Text="CREDIT AS" />
+                                                    <pbc:SuggestBox Text="{Binding Role}" Suggestions="{Binding RoleOptions}" IsStrict="True" MinWidth="160"
+                                                                    AutomationProperties.Name="Credit these names as" />
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button Classes="primary" Content="Accept" Command="{Binding AcceptCommand}" />
+                                                    <Button Classes="ghost" Content="Dismiss" Command="{Binding RejectCommand}" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <TextBlock Classes="fieldNote" Text="{Binding StatusText}" IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
+                    </Panel>
+
+                    <!-- ===================== Advanced ===================== -->
+                    <StackPanel IsVisible="{Binding IsAdvancedTab}" Margin="0,16,0,8" Spacing="16">
+                        <StackPanel Spacing="6">
+                            <CheckBox IsChecked="{Binding EmbeddedSyncEnabled}" Content="Write this series' metadata into its files" />
+                            <TextBlock Classes="fieldNote"
+                                       Text="When on, edits are written into each chapter file in the background (only if file write-back is enabled in Preferences). Turning it off never stops chapters from following the series inside Paperbunkr." />
+                        </StackPanel>
+
+                        <Border Classes="card" Padding="14,12">
+                            <StackPanel Spacing="10">
+                                <TextBlock Classes="fieldLabel" Text="FILES" />
+                                <TextBlock Classes="sectionIntro" Text="{Binding SyncSummaryText}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Classes="ghost" Content="Retry failed" Command="{Binding RetryFailedCommand}" />
+                                    <Button Classes="ghost" Content="Write anyway" Command="{Binding WriteAnywayCommand}"
+                                            ToolTip.Tip="Replace files that were changed outside Paperbunkr with the library's metadata" />
+                                    <Button Classes="ghost" Content="Verify embedded metadata" Command="{Binding VerifyCommand}" IsEnabled="{Binding !IsVerifying}"
+                                            ToolTip.Tip="Read each file and compare it with the library. Changes nothing." />
+                                </StackPanel>
+                                <TextBlock Classes="fieldNote" Text="{Binding VerifyResultText}" IsVisible="{Binding VerifyResultText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" AutomationProperties.LiveSetting="Polite" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                </Panel>
+            </ScrollViewer>
+        </DockPanel>
+        <pbc:DialogCard.Footer>
+            <StackPanel>
+                <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}"
+                        AutomationProperties.AutomationId="MangaSeriesEditorCancel" />
+                <Button Classes="primary" Content="Save" Command="{Binding SaveCommand}" IsEnabled="{Binding !IsSaving}"
+                        AutomationProperties.AutomationId="MangaSeriesEditorSave" />
+            </StackPanel>
+        </pbc:DialogCard.Footer>
+    </pbc:DialogCard>
+</UserControl>

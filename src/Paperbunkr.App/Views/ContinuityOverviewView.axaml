@@ -6,6 +6,7 @@
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:services="using:Paperbunkr.App.Services"
              xmlns:cs="using:Paperbunkr.App.Services.ContinuityScreen"
+             xmlns:eventmap="using:Paperbunkr.App.Services.EventMap"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -43,7 +44,7 @@
                                             CommandParameter="{Binding Card}" />
                             </Button.KeyBindings>
                             <Panel>
-                                <Border Height="144" CornerRadius="5" ClipToBounds="True" Background="{Binding CoverBrush}">
+                                <Border Height="144" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" Background="{Binding CoverBrush}">
                                     <Image views:AsyncCoverImage.SourceId="{Binding Card.CoverKey}" Stretch="UniformToFill" />
                                 </Border>
                                 <views:TileCosmeticsOverlay DataContext="{Binding Card}" />
@@ -52,13 +53,13 @@
                         <Button Padding="0" Background="Transparent" BorderThickness="0" Cursor="Hand" IsVisible="{Binding IsPlaceholder}"
                                 AutomationProperties.Name="{Binding AutomationName}" ToolTip.Tip="Not in your library - open it on comics.org (Grand Comics Database™)"
                                 Command="{x:Static services:ExternalLinks.OpenWebCommand}" CommandParameter="{Binding Url}">
-                            <Border Height="144" CornerRadius="5" BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}"
+                            <Border Height="144" CornerRadius="{DynamicResource PbRadiusSm}" BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}"
                                     Background="{DynamicResource PbSurface2Brush}" Opacity="0.6">
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6">
                                     <fi:SymbolIcon Symbol="Globe" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbTextFaintBrush}"
                                                    HorizontalAlignment="Center" />
-                                    <TextBlock Text="Not in your library" FontSize="9.5" TextWrapping="Wrap" TextAlignment="Center" Width="80"
-                                               Foreground="{DynamicResource PbTextFaintBrush}" />
+                                    <TextBlock Text="Not in your library" FontSize="10" TextWrapping="Wrap" TextAlignment="Center" Width="80"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" />
                                 </StackPanel>
                             </Border>
                         </Button>
@@ -68,31 +69,31 @@
                                   MinWidth="0" Padding="0" AutomationProperties.Name="Select this series"
                                   Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).ToggleMemberSelectionCommand}"
                                   CommandParameter="{Binding Card}" />
-                        <Button Classes="headerAction ghost posterHover" Padding="4" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="4"
-                                Background="#B0000000" ToolTip.Tip="Remove from continuity" AutomationProperties.Name="Remove from continuity"
+                        <Button Classes="iconButton posterHover" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="4"
+                                ToolTip.Tip="Remove from continuity" AutomationProperties.Name="Remove from continuity"
                                 IsVisible="{Binding IsSeries}"
                                 Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).RemoveSeriesCommand}"
                                 CommandParameter="{Binding Card}">
                             <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" Foreground="White" />
                         </Button>
-                        <Button Classes="headerAction ghost posterHover" Padding="4" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4"
-                                Background="#B0000000" ToolTip.Tip="Edit note" AutomationProperties.Name="Edit note"
+                        <Button Classes="iconButton posterHover" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4"
+                                ToolTip.Tip="Edit note" AutomationProperties.Name="Edit note"
                                 IsVisible="{Binding IsSeries}"
                                 Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).BeginEditNoteCommand}"
                                 CommandParameter="{Binding Card}">
                             <fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeXs}" Foreground="White" />
                         </Button>
                     </Panel>
-                    <TextBlock Text="{Binding Name}" FontSize="10.5" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                    <TextBlock Text="{Binding Name}" FontSize="10" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
                                Margin="0,4,0,0" ToolTip.Tip="{Binding Name}" />
-                    <TextBlock Text="{Binding Years}" Classes="csFaint" FontSize="9.5" IsVisible="{Binding HasYears}" />
-                    <TextBlock Text="{Binding Card.MembershipNote}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                    <TextBlock Text="{Binding Years}" Classes="csFaint" FontSize="10" IsVisible="{Binding HasYears}" />
+                    <TextBlock Text="{Binding Card.MembershipNote}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
                                TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"
                                ToolTip.Tip="{Binding Card.MembershipNote}"
                                IsVisible="{Binding Card.HasMembershipNote, FallbackValue=False}" />
-                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,3,0,0" IsVisible="{Binding Card.IsEditingNote, FallbackValue=False}">
-                        <TextBox Text="{Binding Card.MembershipNote}" FontSize="10" Width="66" MinHeight="0" Padding="4,2" Watermark="note" />
-                        <Button Classes="headerAction ghost" Padding="4" ToolTip.Tip="Save note" AutomationProperties.Name="Save note"
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,4,0,0" IsVisible="{Binding Card.IsEditingNote, FallbackValue=False}">
+                        <TextBox Text="{Binding Card.MembershipNote}" FontSize="10" Width="66" MinHeight="0" Padding="4,2" PlaceholderText="note" />
+                        <Button Classes="iconButton" ToolTip.Tip="Save note" AutomationProperties.Name="Save note"
                                 Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).SetNoteCommand}"
                                 CommandParameter="{Binding Card}">
                             <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" />
@@ -103,13 +104,61 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <StackPanel Margin="28,16,28,0" Spacing="18">
+    <StackPanel Margin="24,16,24,0" Spacing="18">
+
+        <!-- Browse the selected continuity's Metron universe independently of library-wide Suggestions & checks. -->
+        <Border Background="{DynamicResource PbSurface2Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="12"
+                IsVisible="{Binding IsMetronSeriesBrowserOpen}">
+            <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                    <StackPanel>
+                        <TextBlock Text="Find continuity series on Metron" Classes="csSection" />
+                        <TextBlock Text="Browse every series Metron lists in this universe. Library matches are linked by exact Metron series ID; title similarity alone is never used." Classes="csFaint" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Classes="ghost" Content="Refresh" Command="{Binding RefreshMetronUniverseSeriesCommand}"
+                            IsEnabled="{Binding !IsLoadingMetronSeries}" />
+                    <Button Grid.Column="2" Classes="ghost" Content="Close" Command="{Binding ToggleMetronSeriesBrowserCommand}" />
+                </Grid>
+                <TextBlock Text="Metron universe" Classes="csFaint" />
+                <TextBlock Text="{Binding MetronUniverseLabel}" FontWeight="SemiBold" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <TextBlock Text="{Binding MetronSeriesBrowserMessage}" Classes="csFaint" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{Binding SelectedMetronSeriesCount, StringFormat='{}{0} selected'}" Classes="csFaint" VerticalAlignment="Center" />
+                        <Button Classes="ghost" Content="Select all found" Command="{Binding SelectAllExactMetronSeriesCommand}" />
+                        <Button Classes="ghost" Content="Clear" Command="{Binding ClearMetronSeriesSelectionCommand}" />
+                        <Button Classes="primary" Content="Apply selected" Command="{Binding ApplySelectedMetronSeriesCommand}" IsEnabled="{Binding HasSelectedMetronSeries}" />
+                    </StackPanel>
+                </Grid>
+                <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding MetronUniverseSeries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MetronContinuitySeriesRowViewModel">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,4" ColumnSpacing="8">
+                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" IsEnabled="{Binding CanAdd}" VerticalAlignment="Center"
+                                              AutomationProperties.Name="Select Metron series found in library" />
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                                        <TextBlock Text="{Binding Details}" Classes="csFaint" FontSize="10" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{Binding LibraryStatus}" Classes="csFaint" VerticalAlignment="Center" />
+                                    <Button Grid.Column="3" Classes="secondary" Content="Add"
+                                            IsVisible="{Binding CanAdd}" AutomationProperties.Name="Add exact Metron series match to this continuity"
+                                            Command="{Binding $parent[ItemsControl].((vm:ContinuityPageViewModel)DataContext).AddMetronSeriesCommand}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
 
         <!-- Add series -->
         <Border Background="{DynamicResource PbSurface2Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="12"
                 IsVisible="{Binding IsAddingSeries}">
             <StackPanel Spacing="8">
-                <TextBox Classes="searchBox" Watermark="Search series by name…" Text="{Binding SeriesSearchQuery}">
+                <TextBox Classes="searchBox" PlaceholderText="Search series by name…" Text="{Binding SeriesSearchQuery}">
                     <TextBox.InnerLeftContent>
                         <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" Margin="8,0,2,0" />
                     </TextBox.InnerLeftContent>
@@ -117,11 +166,11 @@
                         <KeyBinding Gesture="Enter" Command="{Binding SearchSeriesCommand}" />
                     </TextBox.KeyBindings>
                 </TextBox>
-                <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="5" Padding="8,6" IsVisible="{Binding AnySeriesSelected}">
+                <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="8,6" IsVisible="{Binding AnySeriesSelected}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Text="{Binding SeriesSelectionSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                        <Button Classes="headerAction primary" Padding="10,4" FontSize="11" Content="Add selected" Command="{Binding AddSelectedSeriesCommand}" />
-                        <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Clear" Command="{Binding ClearSeriesSelectionCommand}" />
+                        <TextBlock Text="{Binding SeriesSelectionSummary}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                        <Button Classes="primary sm" Content="Add selected" Command="{Binding AddSelectedSeriesCommand}" />
+                        <Button Classes="ghost sm" Content="Clear" Command="{Binding ClearSeriesSelectionCommand}" />
                     </StackPanel>
                 </Border>
                 <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -134,12 +183,12 @@
                                               Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).ToggleSeriesSelectionCommand}"
                                               CommandParameter="{Binding}" />
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        <TextBlock Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
                                         <!-- "Also in: X, Y" - the series already belongs to other continuities (smart features §7.1). -->
                                         <TextBlock Text="{Binding OtherContinuities}" IsVisible="{Binding HasOtherContinuities}" FontSize="11"
-                                                   Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding OtherContinuities}" />
+                                                   Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding OtherContinuities}" />
                                     </StackPanel>
-                                    <Button Grid.Column="2" Classes="headerAction ghost" Content="Add"
+                                    <Button Grid.Column="2" Classes="ghost" Content="Add"
                                             Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).AddSeriesCommand}"
                                             CommandParameter="{Binding}" />
                                 </Grid>
@@ -153,7 +202,7 @@
         <!-- Needs attention -->
         <Border Classes="attention" IsVisible="{Binding HasAttention}">
             <WrapPanel>
-                <TextBlock Text="Needs attention" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
+                <TextBlock Text="Needs attention" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
                            VerticalAlignment="Center" Margin="0,0,10,0" />
                 <Button Classes="attentionItem" Content="{Binding DuplicatesAttention.Text}" Command="{Binding OpenDuplicatesCommand}"
                         IsVisible="{Binding DuplicatesAttention, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
@@ -175,13 +224,13 @@
                                                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,6">
                                                     <StackPanel Spacing="2">
                                                         <TextBlock Text="{Binding Headline}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
-                                                        <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
                                                         <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" Margin="0,2,0,0">
-                                                            <Button Classes="headerAction secondary" Content="Accept" Padding="10,3"
+                                                            <Button Classes="secondary" Content="Accept"
                                                                     AutomationProperties.Name="{Binding Headline, StringFormat='Accept: {0}'}"
                                                                     Command="{Binding $parent[ItemsControl].((vm:ContinuityPageViewModel)DataContext).AcceptConnectionCommand}"
                                                                     CommandParameter="{Binding}" />
-                                                            <Button Classes="headerAction ghost" Content="Dismiss" Padding="10,3"
+                                                            <Button Classes="ghost" Content="Dismiss"
                                                                     AutomationProperties.Name="{Binding Headline, StringFormat='Dismiss: {0}'}"
                                                                     Command="{Binding $parent[ItemsControl].((vm:ContinuityPageViewModel)DataContext).DismissConnectionCommand}"
                                                                     CommandParameter="{Binding}" />
@@ -202,16 +251,26 @@
                         <Flyout Placement="BottomEdgeAlignedLeft">
                             <StackPanel Width="400" Spacing="6">
                                 <TextBlock Text="{Binding OutsideAttention.Text}" Classes="csSection" TextWrapping="Wrap" />
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <TextBlock Text="{Binding SelectedOutsideSeriesCount, StringFormat='{}{0} selected'}" Classes="csFaint" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                        <Button Classes="ghost" Content="Select all" Command="{Binding SelectAllOutsideSeriesCommand}" />
+                                        <Button Classes="ghost" Content="Clear" Command="{Binding ClearOutsideSeriesSelectionCommand}" />
+                                        <Button Classes="primary" Content="Add selected" Command="{Binding AddSelectedOutsideSeriesCommand}" IsEnabled="{Binding HasSelectedOutsideSeries}" />
+                                    </StackPanel>
+                                </Grid>
                                 <ScrollViewer MaxHeight="380" HorizontalScrollBarVisibility="Disabled">
                                     <ItemsControl ItemsSource="{Binding OutsideSeries}">
                                         <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="cs:OutsideSeriesInfo">
-                                                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3" ColumnSpacing="8">
-                                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource PbTextBrush}"
+                                            <DataTemplate x:DataType="vm:OutsideSeriesRowViewModel">
+                                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,4" ColumnSpacing="8">
+                                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center"
+                                                              AutomationProperties.Name="{Binding Name, StringFormat='Select {0}'}" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource PbTextBrush}"
                                                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
-                                                    <TextBlock Grid.Column="1" Text="{Binding IssueCount, StringFormat='{}{0} in its events'}" Classes="csFaint"
+                                                    <TextBlock Grid.Column="2" Text="{Binding IssueCount, StringFormat='{}{0} in its events'}" Classes="csFaint"
                                                                VerticalAlignment="Center" />
-                                                    <Button Grid.Column="2" Classes="headerAction secondary" Content="Add" Padding="10,3"
+                                                    <Button Grid.Column="3" Classes="secondary" Content="Add"
                                                             AutomationProperties.Name="{Binding Name, StringFormat='Add {0} to this continuity'}"
                                                             Command="{Binding $parent[ItemsControl].((vm:ContinuityPageViewModel)DataContext).AddOutsideSeriesCommand}"
                                                             CommandParameter="{Binding}" />
@@ -231,7 +290,7 @@
         <StackPanel Spacing="10">
             <Grid ColumnDefinitions="*,Auto">
                 <TextBlock Grid.Column="0" Classes="csSection" Text="{Binding SeriesHeader}" />
-                <Button Grid.Column="1" Classes="headerAction ghost" AutomationProperties.Name="Series order">
+                <Button Grid.Column="1" Classes="ghost" AutomationProperties.Name="Series order">
                     <StackPanel Orientation="Horizontal" Spacing="4">
                         <TextBlock Text="{Binding OrderLabel}" />
                         <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" />
@@ -247,16 +306,16 @@
 
             <StackPanel Spacing="10" HorizontalAlignment="Center" IsVisible="{Binding HasNoMembers}">
                 <controls:EmptyIllustration Kind="Timeline" HorizontalAlignment="Center" />
-                <TextBlock Text="No series yet — Add series to get started." FontSize="12.5" HorizontalAlignment="Center"
-                           Foreground="{DynamicResource PbTextFaintBrush}" />
-                <Button Classes="headerAction secondary" Content="＋ Add series" HorizontalAlignment="Center" Command="{Binding ToggleAddSeriesCommand}" />
+                <TextBlock Text="No series yet — Add series to get started." FontSize="13" HorizontalAlignment="Center"
+                           Foreground="{DynamicResource PbTextMutedBrush}" />
+                <Button Classes="secondary" HorizontalAlignment="Center" Command="{Binding ToggleAddSeriesCommand}"><StackPanel Orientation="Horizontal" Spacing="6"><fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Add series" VerticalAlignment="Center" /></StackPanel></Button>
             </StackPanel>
 
-            <Border Background="{DynamicResource PbSurface2Brush}" CornerRadius="5" Padding="8,6" IsVisible="{Binding AnyMembersSelected}">
+            <Border Background="{DynamicResource PbSurface2Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="8,6" IsVisible="{Binding AnyMembersSelected}">
                 <StackPanel Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="{Binding MemberSelectionSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                    <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Remove from continuity" Command="{Binding RemoveSelectedSeriesCommand}" />
-                    <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Clear" Command="{Binding ClearMemberSelectionCommand}" />
+                    <TextBlock Text="{Binding MemberSelectionSummary}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                    <Button Classes="ghost sm" Content="Remove from continuity" Command="{Binding RemoveSelectedSeriesCommand}" />
+                    <Button Classes="ghost sm" Content="Clear" Command="{Binding ClearMemberSelectionCommand}" />
                 </StackPanel>
             </Border>
 
@@ -302,9 +361,9 @@
                     <DataTemplate x:DataType="cs:OverviewEventRow">
                         <StackPanel>
                             <Border Classes="itemRow">
-                                <Grid ColumnDefinitions="90,*,170,Auto" ColumnSpacing="10">
+                                <Grid ColumnDefinitions="90,*,170,Auto,Auto" ColumnSpacing="6">
                                     <TextBlock Grid.Column="0" Text="{Binding Years}" Classes="csFaint" FontSize="11" VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Classes="headerAction ghost" Padding="2" HorizontalAlignment="Left"
+                                    <Button Grid.Column="1" Classes="ghost" HorizontalAlignment="Left"
                                             AutomationProperties.Name="{Binding Name, StringFormat='Open {0}'}"
                                             Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).OpenEventCommand}"
                                             CommandParameter="{Binding}">
@@ -315,7 +374,7 @@
                                         <TextBlock Text="{Binding CountLabel}" Classes="csFaint" />
                                         <ProgressBar Classes="thin" Value="{Binding ReadFraction}" />
                                     </StackPanel>
-                                    <Button Grid.Column="3" Classes="headerAction ghost" Padding="6,3"
+                                    <Button Grid.Column="3" Classes="ghost"
                                             AutomationProperties.Name="{Binding Name, StringFormat='Open map for {0}'}"
                                             Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).OpenEventMapCommand}"
                                             CommandParameter="{Binding}">
@@ -324,9 +383,31 @@
                                             <TextBlock Text="Map" FontSize="11" VerticalAlignment="Center" />
                                         </StackPanel>
                                     </Button>
+                                    <Button Grid.Column="4" Classes="ghost"
+                                            Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).ToggleEventDetailsCommand}"
+                                            CommandParameter="{Binding}" AutomationProperties.Name="{Binding DetailsToggleLabel}">
+                                        <TextBlock Text="Details" FontSize="11" />
+                                    </Button>
                                 </Grid>
                             </Border>
-                            <TextBlock Text="{Binding LinkBelow}" FontSize="10.5" Foreground="{DynamicResource PbAccentTextBrush}"
+                            <Border IsVisible="{Binding IsExpanded}" Margin="100,4,0,8" Padding="12" Classes="itemRow">
+                                <Grid ColumnDefinitions="120,*" ColumnSpacing="14">
+                                    <Image Grid.Column="0" Width="120" Height="160" Stretch="UniformToFill" IsVisible="{Binding CoverPath, Converter={x:Static conv:ObjectConverters.IsNotNull}}" views:RemoteThumbnailImage.LocalPath="{Binding CoverPath}" />
+                                    <Image Grid.Column="0" Width="120" Height="160" Stretch="UniformToFill" IsVisible="{Binding ShowRemoteCover}" views:RemoteThumbnailImage.SourceUrl="{Binding CoverImageUrl}" />
+                                    <StackPanel Grid.Column="1" Spacing="8">
+                                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding Description, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                                        <StackPanel Spacing="4" IsVisible="{Binding HasTags}">
+                                            <TextBlock Text="TAGS" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            <ItemsControl ItemsSource="{Binding Tags}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate x:DataType="eventmap:ContinuityEventTagData"><Border Padding="8,4" Margin="0,0,4,4" CornerRadius="{DynamicResource PbRadius}" Background="{DynamicResource PbSurfaceBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"><TextBlock Text="{Binding DisplayValue}" FontSize="10" ToolTip.Tip="{Binding Category}" /></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                                        </StackPanel>
+                                        <StackPanel Spacing="4" IsVisible="{Binding HasRelatedEvents}">
+                                            <TextBlock Text="RELATED EVENTS" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            <ItemsControl ItemsSource="{Binding RelatedEvents}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="eventmap:ContinuityRelatedEventData"><Button Classes="ghost" HorizontalAlignment="Left" Command="{Binding $parent[views:ContinuityOverviewView].((vm:ContinuityPageViewModel)DataContext).OpenRelatedEventCommand}" CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name, StringFormat='Open related event {0}'}"><StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="{Binding Relation}" Classes="csFaint"/><TextBlock Text="{Binding Name}" /></StackPanel></Button></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <TextBlock Text="{Binding LinkBelow}" FontSize="10" Foreground="{DynamicResource PbAccentTextBrush}"
                                        Margin="100,0,0,2" IsVisible="{Binding HasLink}" />
                         </StackPanel>
                     </DataTemplate>

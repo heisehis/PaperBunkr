@@ -52,17 +52,25 @@ public sealed class MetronReadingListSource(MetronClient client) : IReadingListS
         return results;
     }
 
-    public async Task<IReadOnlyList<ArcIssue>> GetArcIssuesInOrderAsync(string arcId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ArcIssue>> GetArcIssuesInOrderAsync(string arcId, CancellationToken cancellationToken) =>
+        (await GetArcEntriesAsync(arcId, cancellationToken).ConfigureAwait(false)).Issues;
+
+    /// <summary>The list's own <c>count</c> is reported, so hitting <see cref="MaxPages"/> or a row with no issue shows as an incomplete fetch.</summary>
+    public async Task<ArcEntryList> GetArcEntriesAsync(string arcId, CancellationToken cancellationToken)
     {
         var issues = new List<(int Order, ArcIssue Issue)>();
+        var skipped = new List<string>();
+        int? reported = null;
         string? url = $"{BaseUrl}/reading_list/{Uri.EscapeDataString(arcId)}/items/";
         for (int page = 0; page < MaxPages && url is not null; page++)
         {
             var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+            reported ??= root["count"] is JsonValue count && int.TryParse(count.ToString(), out int total) ? total : null;
             foreach (var node in (root["results"] as JsonArray)?.OfType<JsonObject>() ?? Enumerable.Empty<JsonObject>())
             {
                 if (node["issue"] is not JsonObject issue)
                 {
+                    skipped.Add($"Metron list item {node["id"]?.ToString() ?? "?"} (no issue attached)");
                     continue;
                 }
 
@@ -76,7 +84,7 @@ public sealed class MetronReadingListSource(MetronClient client) : IReadingListS
         }
 
         // Metron already returns them by `order`; sorting again costs nothing and doesn't trust it to.
-        return issues.OrderBy(i => i.Order).Select(i => i.Issue).ToList();
+        return new ArcEntryList(issues.OrderBy(i => i.Order).Select(i => i.Issue).ToList(), skipped, reported);
     }
 
     public async Task<ArcOverviewInfo?> GetArcOverviewAsync(string arcId, CancellationToken cancellationToken)

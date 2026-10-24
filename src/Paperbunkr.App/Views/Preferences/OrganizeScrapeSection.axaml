@@ -27,7 +27,7 @@
             <ScrollViewer IsVisible="{Binding Tabs.SelectedKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=scrape}">
                 <StackPanel Margin="0,16,28,24" Spacing="20">
                     <TextBlock Text="Right-click comics or a series and choose Scrape to match them and fill in their details. These options control how a scrape behaves."
-                               FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+                               FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
 
                     <StackPanel Tag="organizeScrape.source">
                         <TextBlock Classes="settingsGroupCaption" Text="SOURCE" />
@@ -35,7 +35,7 @@
                                            Description="Where scrapes look comics up. Metron is an alternative to ComicVine; its login is managed under Connections. You can switch a single scrape inside the match dialog, and scheduled scrapes always use this one.">
                             <pref:SettingsRow.SettingsContent>
                                 <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <TextBlock Text="Metron login not set" VerticalAlignment="Center" FontSize="12" IsVisible="{Binding !HasMetronLogin}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    <TextBlock Text="Metron not connected" VerticalAlignment="Center" FontSize="12" IsVisible="{Binding !HasMetronLogin}" Foreground="{DynamicResource PbTextMutedBrush}" />
                                     <controls:SuggestBox IsStrict="True" Width="140" Text="{Binding DefaultProviderText}" Suggestions="{x:Static vm:OrganizeScrapeSettingsViewModel.ProviderNames}"
                                                          AutomationProperties.Name="Scrape from" AutomationProperties.AutomationId="ScrapeDefaultProvider" />
                                 </StackPanel>
@@ -47,7 +47,7 @@
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <TextBlock Text="Connected" VerticalAlignment="Center" FontSize="12" IsVisible="{Binding HasComicVineKey}" Foreground="{DynamicResource PbSuccessBrush}" />
                                     <TextBlock Text="Not set" VerticalAlignment="Center" FontSize="12" IsVisible="{Binding !HasComicVineKey}" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                    <Button Classes="headerAction ghost" Content="Open Connections" Command="{Binding OpenConnectionsCommand}"
+                                    <Button Classes="ghost" Content="Open Connections" Command="{Binding OpenConnectionsCommand}"
                                             AutomationProperties.AutomationId="ScrapeOpenConnectionsButton" />
                                 </StackPanel>
                             </pref:SettingsRow.SettingsContent>
@@ -92,10 +92,107 @@
                             </pref:SettingsRow.SettingsContent>
                         </pref:SettingsRow>
 
+                        <pref:SettingsRow Icon="Shield" Title="How sure before applying"
+                                           Description="{Binding StrictnessDescription}">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Width="140" Text="{Binding StrictnessText}" Suggestions="{x:Static vm:OrganizeScrapeSettingsViewModel.StrictnessNames}"
+                                                     AutomationProperties.Name="How sure before applying" AutomationProperties.AutomationId="ScrapeStrictness" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+
+                        <pref:SettingsRow Icon="Flash" Title="Speed"
+                                           Description="Balanced and Fast never pause between comics: each source's own rate limit paces the requests, and answers already fetched are reused. Careful keeps ComicRack's pause below.">
+                            <pref:SettingsRow.SettingsContent>
+                                <controls:SuggestBox IsStrict="True" Width="140" Text="{Binding SpeedText}" Suggestions="{x:Static vm:OrganizeScrapeSettingsViewModel.SpeedNames}"
+                                                     AutomationProperties.Name="Scrape speed" AutomationProperties.AutomationId="ScrapeSpeed" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+
+                        <pref:SettingsRow Icon="ArrowForward" Title="Try ComicVine when Metron finds nothing"
+                                           Description="At the end of a Metron scrape, the comics it found nothing for get one automatic, cover-checked try on ComicVine. Needs a ComicVine key.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding FallBackToComicVine}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.Name="Try ComicVine when Metron finds nothing" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+
+                        <pref:SettingsRow Icon="Eye" Title="Show the changes before applying"
+                                           Description="When you scrape several comics, every field each match would change is shown at the end, and only the comics you keep are written.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding PreviewChanges}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.Name="Show the changes before applying" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+
+                        <pref:SettingsRow Icon="ArrowSync" Title="Fill blanks from ComicVine"
+                                           Description="After a Metron match, fields Metron left empty are filled from the same issue on ComicVine, when Metron knows its ComicVine id. Never replaces a value. Costs one ComicVine request per comic (ComicVine allows 200 an hour), so large batches run slower. Needs a ComicVine key.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding FillBlanksFromComicVine}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.Name="Fill blanks from ComicVine" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+
                         <pref:SettingsRow Icon="Clock" Title="Delay between comics (ms)"
-                                           Description="A pause before each comic after the first in a batch, separate from the source's own per-request rate limit.">
+                                           Description="Careful speed only: a pause before each comic after the first in a batch, on top of the source's own rate limit.">
                             <pref:SettingsRow.SettingsContent>
                                 <TextBox Text="{Binding ScrapeDelayMs}" Width="120" AutomationProperties.Name="Delay between comics in milliseconds" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                    <!-- Automation (docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-core-design.md section 8, and the C spec's review queue). -->
+                    <StackPanel Tag="organizeScrape.automation">
+                        <TextBlock Classes="settingsGroupCaption" Text="AUTOMATION" />
+
+                        <pref:SettingsRow Icon="Search" Title="Scrape all unmatched comics"
+                                           Description="Every comic that has never been matched, in the background without asking. What it can't confirm waits in the review list below. A long run can be cancelled and resumed.">
+                            <pref:SettingsRow.SettingsContent>
+                                <Button Classes="secondary" Content="Scrape all unmatched" Command="{Binding ScrapeAllUnmatchedCommand}"
+                                        AutomationProperties.AutomationId="ScrapeAllUnmatchedButton" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+
+                        <pref:SettingsRow Icon="ArrowDownload" Title="Scrape new comics automatically"
+                                           Description="Comics a library scan adds are matched in the background from Metron. Clear matches apply; the rest wait for review. Never slows the scan down. Needs Metron.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding ScrapeNewFiles}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.Name="Scrape new comics automatically" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+
+                        <pref:SettingsRow Icon="ArrowClockwise" Title="Unfinished scrape" IsVisible="{Binding HasUnfinishedScrape}"
+                                           Description="{Binding UnfinishedScrapeText}">
+                            <pref:SettingsRow.SettingsContent>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Classes="ghost" Content="Discard" Command="{Binding DiscardUnfinishedScrapeCommand}" AutomationProperties.AutomationId="DiscardUnfinishedScrape" />
+                                    <Button Classes="secondary" Content="Resume" Command="{Binding ResumeUnfinishedScrapeCommand}" AutomationProperties.AutomationId="ResumeUnfinishedScrape" />
+                                </StackPanel>
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+
+                        <pref:SettingsRow Icon="Eye" Title="Waiting for review"
+                                           Description="Comics an unattended scrape couldn't match with confidence. Review them a series at a time.">
+                            <pref:SettingsRow.SettingsContent>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="pbTextMeta" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}"
+                                               Text="{Binding ReviewQueueCount, StringFormat='{}{0} comics'}" />
+                                    <Button Classes="secondary" Content="Review" Command="{Binding ShowReviewQueueCommand}" IsEnabled="{Binding HasReviewItems}"
+                                            AutomationProperties.AutomationId="OpenScrapeReviewQueue" />
+                                </StackPanel>
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+
+                        <pref:SettingsRow Icon="History" Title="Undo the last scrape" IsVisible="{Binding CanUndoLastScrape}"
+                                           Description="{Binding LastScrapeText}">
+                            <pref:SettingsRow.SettingsContent>
+                                <Button Classes="secondary" Content="Undo" Command="{Binding UndoLastScrapeCommand}"
+                                        ToolTip.Tip="Put those comics' details back as they were before that scrape"
+                                        AutomationProperties.AutomationId="UndoLastScrape" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+
+                        <pref:SettingsRow Icon="Database" Title="Saved source answers"
+                                           Description="{Binding ProviderCacheSummary}">
+                            <pref:SettingsRow.SettingsContent>
+                                <Button Classes="ghost" Content="Refresh provider data" Command="{Binding RefreshProviderDataCommand}"
+                                        ToolTip.Tip="Forget saved searches, issue lists and details so the next scrape asks the sources again"
+                                        AutomationProperties.AutomationId="RefreshProviderData" />
                             </pref:SettingsRow.SettingsContent>
                         </pref:SettingsRow>
                     </StackPanel>
@@ -127,8 +224,8 @@
                         <StackPanel Spacing="8" Margin="0,8,0,0">
                             <TextBlock Text="Fields to fill in" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Classes="headerAction ghost" Content="All" Command="{Binding EnableAllFieldsCommand}" />
-                                <Button Classes="headerAction ghost" Content="None" Command="{Binding DisableAllFieldsCommand}" />
+                                <Button Classes="ghost" Content="All" Command="{Binding EnableAllFieldsCommand}" />
+                                <Button Classes="ghost" Content="None" Command="{Binding DisableAllFieldsCommand}" />
                             </StackPanel>
                             <ItemsControl ItemsSource="{Binding FieldToggles}" MaxWidth="640" HorizontalAlignment="Left">
                                 <ItemsControl.ItemsPanel>
@@ -144,6 +241,34 @@
                             </ItemsControl>
                         </StackPanel>
                     </StackPanel>
+
+                    <!-- Which source wins (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 4). -->
+                    <StackPanel Tag="organizeScrape.fieldSources" Spacing="8">
+                        <TextBlock Classes="settingsGroupCaption" Text="WHICH SOURCE WINS" />
+                        <Grid ColumnDefinitions="*,Auto" MaxWidth="640" HorizontalAlignment="Left">
+                            <TextBlock Grid.Column="0" Classes="pbTextMeta" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                                       Text="For each field, the source whose value is kept when Metron and ComicVine both know it. The other source's copy of the same issue is found through the id they share; it costs one request to that source per comic (ComicVine allows 200 an hour). &quot;Matched source&quot; keeps whatever the match came from." />
+                            <Button Grid.Column="1" Classes="ghost" Content="Reset" Command="{Binding ResetFieldSourcesCommand}" VerticalAlignment="Top" Margin="12,0,0,0"
+                                    ToolTip.Tip="Every field back to Matched source" />
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding FieldSources}" MaxWidth="640" HorizontalAlignment="Left">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:FieldSourceChoice">
+                                    <Grid ColumnDefinitions="*,Auto" Width="312" Margin="0,0,8,4">
+                                        <TextBlock Grid.Column="0" Classes="pbTextBody" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                                        <controls:SuggestBox Grid.Column="1" IsStrict="True" Width="148" Text="{Binding ChoiceText}"
+                                                             Suggestions="{x:Static vm:FieldSourceChoice.Choices}"
+                                                             AutomationProperties.Name="{Binding Name, StringFormat='Source for {0}'}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </StackPanel>
             </ScrollViewer>
 
@@ -154,7 +279,7 @@
                     <StackPanel Tag="organizeScrape.filters" Spacing="10">
                         <TextBlock Classes="settingsGroupCaption" Text="IGNORE RULES" />
                         <TextBlock Text="Drop unlikely results before they are scored (CE's advanced scraper settings). These apply to whichever source a scrape runs on."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
 
                         <StackPanel Orientation="Horizontal" Spacing="12">
                             <StackPanel Spacing="4">
@@ -184,7 +309,7 @@
                     <StackPanel Tag="organizeScrape.names" Spacing="10">
                         <TextBlock Classes="settingsGroupCaption" Text="NAME MAPPING" />
                         <TextBlock Text="Rewrite publisher names as they are written. Imprint mapping runs first, then aliases."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
                         <StackPanel Spacing="4">
                             <TextBlock Text="Imprint to parent publisher (Imprint --> Publisher, one per line)" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
                             <TextBox Text="{Binding ImprintOverrides}" AcceptsReturn="True" Height="80" Width="520" HorizontalAlignment="Left" AutomationProperties.Name="Imprint overrides" />
@@ -198,7 +323,7 @@
                     <StackPanel Tag="organizeScrape.scanCredits" Spacing="10">
                         <TextBlock Classes="settingsGroupCaption" Text="SCANNER CREDITS" />
                         <TextBlock Text="Right-click comics and choose Find scanner from file name to copy the scan or release group out of a name such as “Saga 054 (2018) (Digital) (Zone-Empire)” into Scan Information. Common group names and the words that are never a scanner (Digital, c2c, of 4, a year, a language) are built in; add your own here."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
                         <StackPanel Spacing="4">
                             <TextBlock Text="More scanner names (one per line)" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
                             <TextBox Text="{Binding ScannerNames}" AcceptsReturn="True" Height="80" Width="520" HorizontalAlignment="Left" AutomationProperties.Name="More scanner names" />
@@ -217,7 +342,7 @@
                     <StackPanel Tag="organizeScrape.profiles" Spacing="10" IsVisible="{Binding Profiles, Converter={x:Static ObjectConverters.IsNotNull}}">
                         <TextBlock Classes="settingsGroupCaption" Text="ORGANIZER PROFILES" />
                         <TextBlock Text="Right-click comics or a series and choose Organize to move or copy files into folders named by a profile's templates. Every move can be undone."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+                                   FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
                         <scraper:ProfileManagerView DataContext="{Binding Profiles}" />
                     </StackPanel>
                 </StackPanel>
@@ -228,7 +353,7 @@
         <Border Grid.Row="3" IsVisible="{Binding IsSaveFooterVisible}" Margin="0,0,28,0" Padding="0,10,0,14"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0">
             <StackPanel Orientation="Horizontal" Spacing="12">
-                <Button Classes="headerAction primary" Command="{Binding SaveCommand}" VerticalAlignment="Center" AutomationProperties.AutomationId="ScrapeSaveButton">
+                <Button Classes="primary" Command="{Binding SaveCommand}" VerticalAlignment="Center" AutomationProperties.AutomationId="ScrapeSaveButton">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <fi:SymbolIcon Symbol="Save" FontSize="{StaticResource PbIconSizeXs}" />
                         <TextBlock Text="Save" />

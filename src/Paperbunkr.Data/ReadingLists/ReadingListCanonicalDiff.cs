@@ -61,11 +61,10 @@ public static class ReadingListCanonicalDiff
     /// <summary>Compares the list with an already fetched provider order. Read-only.</summary>
     public static CanonicalDiff Compute(PaperbunkrDbContext context, int listId, string sourceKey, IReadOnlyList<ArcIssue> providerOrder)
     {
+        // One library read for the whole order; a provider id the source supplied is used before series and number.
+        var local = Matching.ReadingListResolver.FindExisting(context, providerOrder.Select(arc => arc.ToReference(sourceKey)).ToList());
         var entries = providerOrder
-            .Select((arc, position) => new CanonicalEntry(
-                position,
-                arc,
-                ReadingListMatcher.FindExisting(context, arc.Series, arc.Number, year: arc.Year > 0 ? arc.Year : null)?.Id))
+            .Select((arc, position) => new CanonicalEntry(position, arc, local[position]))
             .ToList();
 
         var listIssueIds = context.ReadingListItems.Where(i => i.ReadingListId == listId)

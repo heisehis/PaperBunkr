@@ -23,6 +23,7 @@ public sealed class PlaceholderCoverText : Control
 
     private FormattedText? _initials;
     private FormattedText? _title;
+    private FormattedText? _reason;
     private string? _cachedFor;
     private int _cachedWidth;
 
@@ -71,7 +72,7 @@ public sealed class PlaceholderCoverText : Control
 
         string title = source.CoverTitle ?? string.Empty;
         int width = (int)Bounds.Width;
-        if (_initials is null || _title is null || _cachedFor != title || _cachedWidth != width)
+        if (_initials is null || _title is null || _reason is null || _cachedFor != title || _cachedWidth != width)
         {
             double initialsSize = Math.Clamp(width * 0.30, 16, 46);
             _initials = new FormattedText(
@@ -86,6 +87,16 @@ public sealed class PlaceholderCoverText : Control
                 Trimming = TextTrimming.CharacterEllipsis,
                 TextAlignment = TextAlignment.Center,
             };
+            _reason = new FormattedText(
+                source.IsCoverFileMissing ? "FILE MISSING" : "NO COVER AVAILABLE",
+                CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                new Typeface(FontFamily.Default, FontStyle.Normal, FontWeight.SemiBold), Math.Clamp(width * 0.055, 7, 9), TitleBrush)
+            {
+                MaxTextWidth = Math.Max(1, width - 12),
+                MaxLineCount = 1,
+                Trimming = TextTrimming.CharacterEllipsis,
+                TextAlignment = TextAlignment.Center,
+            };
             _cachedFor = title;
             _cachedWidth = width;
         }
@@ -94,5 +105,6 @@ public sealed class PlaceholderCoverText : Control
         double top = Math.Max(6, (Bounds.Height * 0.42) - (blockHeight / 2));
         context.DrawText(_initials, new Point((Bounds.Width - _initials.Width) / 2, top));
         context.DrawText(_title, new Point(8, top + _initials.Height + 6));
+        context.DrawText(_reason, new Point((Bounds.Width - _reason.Width) / 2, Math.Max(4, Bounds.Height - _reason.Height - 7)));
     }
 }

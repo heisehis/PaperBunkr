@@ -176,9 +176,10 @@ public class ReadingGalleryAndPathTests : IDisposable
 
         var screen = NewScreen();
         screen.Gallery.Refresh();
-        Assert.Equal(new[] { "All", "#crisis" }, screen.Gallery.TagChips.Select(c => c.Label));
+        // Both lists carry the generated "List type" tag (User), which also filters, so it leads (2 lists) and "crisis" (1) follows.
+        Assert.Equal(new[] { "All", "#User", "#crisis" }, screen.Gallery.TagChips.Select(c => c.Label));
 
-        screen.Gallery.SelectTagCommand.Execute(screen.Gallery.TagChips[1]);
+        screen.Gallery.SelectTagCommand.Execute(screen.Gallery.TagChips.Single(c => c.Value == "crisis"));
         Assert.Equal(new[] { "A" }, screen.Gallery.Tiles.Select(t => t.Name));   // found inside its folder
         Assert.False(screen.Gallery.ShowContinueRow);
     }

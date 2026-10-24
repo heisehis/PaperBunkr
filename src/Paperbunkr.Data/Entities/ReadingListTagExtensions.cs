@@ -12,21 +12,24 @@ namespace Paperbunkr.Data.Entities;
 /// </summary>
 public static class ReadingListTagExtensions
 {
+    /// <summary>The user's own tags, comma-joined. Generated tags (docs/superpowers/specs/2026-10-15-reading-list-auto-tags-design.md) are maintained
+    /// from source metadata and member comics, so they are neither listed nor edited here.</summary>
     public static string? JoinedTags(this ReadingList list)
     {
-        var values = list.Tags.Select(t => t.Value).ToList();
+        var values = list.Tags.Where(t => t.Origin == ReadingListTagOrigin.User).Select(t => t.Value).ToList();
         return values.Count > 0 ? string.Join(", ", values) : null;
     }
 
     /// <summary>
     /// Diffs <paramref name="rawValues"/> against the list's existing tags: removes tags no longer
     /// present, adds tags for new values (<see cref="IssueTagWeight.Unset"/>, "Uncategorized"), and
-    /// leaves every surviving tag's Category/Weight untouched.
+    /// leaves every surviving tag's Category/Weight untouched. Only user tags take part: a generated tag is never removed by this diff, and a user
+    /// tag that repeats a generated tag's value is added alongside it.
     /// </summary>
     public static void MergeFrom(this ReadingList list, IEnumerable<string?> rawValues)
     {
         var incoming = SplitDistinct(rawValues);
-        var existing = list.Tags.ToList();
+        var existing = list.Tags.Where(t => t.Origin == ReadingListTagOrigin.User).ToList();
 
         foreach (var tag in existing)
         {

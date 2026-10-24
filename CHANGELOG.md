@@ -3,6 +3,33 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.0-beta] - 2026-10-24
+
+### Added
+
+- **Manga series metadata.** Edit series metadata, inherit it on issues, review provider sources, and
+  preserve series metadata during file synchronisation.
+- **Story events and continuities.** More event details, provider-backed ordering evidence, guided
+  creation, bulk Metron discovery, and bulk accept/dismiss actions for new story-event suggestions.
+- **Reading lists.** Generated tags, source marks, improved matching, and clearer reading progress.
+- **Reader presentation.** Issue and series cover choices, comic page frames, chapter openings,
+  spread page curls, and book-look presentation.
+
+### Changed
+
+- **App-wide presentation.** Updated shared controls, detail layouts, publisher marks, branding,
+  theme previews, and motion preferences, including reduced-motion behaviour.
+- **Scraping and organising.** More reliable provider searches, series matching and splitting,
+  field precedence, diagnostics, and post-scan verification.
+- **Windows installer.** Clearer install, update, repair and uninstall flows; project-derived
+  version checks; downgrade protection; and guarded, optional library-data removal.
+
+### Fixed
+
+- Scraping a comic matched to a different source series no longer renames an unrelated shared series.
+- Provider searches better account for recent series, special issues, and title variants.
+- Scraper skip controls respond to mouse and keyboard input, with deferred dialog dismissal.
+
 ## [0.7.85-beta] - 2026-10-12
 
 ### Added

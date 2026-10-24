@@ -9,11 +9,20 @@ public sealed class ReaderThumbnailSample
     public bool IsSelected { get; init; }
     public required IBrush CoverBrush { get; init; }
 
+    /// <summary>1-based page number, shown under the hover preview on the page dots (Cosmetics pitch #23).</summary>
+    public int PageNumber { get; init; }
+
+    /// <summary>Caption for the page-dot preview.</summary>
+    public string PageNumberText => PageNumber > 0 ? $"Page {PageNumber}" : string.Empty;
+
     /// <summary>Real decoded page thumbnail, null until the background generation pass reaches this page.</summary>
     public Bitmap? CoverImage { get; init; }
 
     /// <summary>Drives the corner ribbon indicator (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md) - CE draws the same kind of marker on its own thumbnail rail.</summary>
     public bool IsBookmarked { get; init; }
+
+    /// <summary>Screen-reader text for the page dot; keeps the marker's meaning available without relying on its color.</summary>
+    public string AccessiblePageLabel => IsBookmarked ? $"{PageNumberText}, bookmarked" : PageNumberText;
 
     /// <summary>The page has a note (docs/superpowers/specs/2026-09-26-comic-reader-inreader-reference-design.md #7): its page dot is tinted.</summary>
     public bool HasNote { get; init; }

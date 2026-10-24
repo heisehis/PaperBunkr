@@ -25,7 +25,6 @@ namespace cYo.Common.Compression.SevenZip
 				[return: MarshalAs(UnmanagedType.Bool)]
 				private static extern bool FreeLibrary(IntPtr hModule);
 
-				[ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
 				protected override bool ReleaseHandle()
 				{
 					return FreeLibrary(handle);

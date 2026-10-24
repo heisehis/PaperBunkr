@@ -23,17 +23,21 @@ public sealed class MetronSource : IReadingListSource
     private static readonly TimeSpan MinRequestInterval = TimeSpan.FromMilliseconds(500);
 
     private readonly HttpClient _http;
-    private readonly string _login = string.Empty;
+    private readonly ComicVine.MetronAuth _auth;
     private readonly object _throttleLock = new();
     private DateTime _lastRequestUtc = DateTime.MinValue;
 
     public MetronSource(string username, string password)
+        : this(ComicVine.MetronAuth.Basic(username, password))
+    {
+    }
+
+    public MetronSource(ComicVine.MetronAuth auth)
     {
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("Paperbunkr/0.1 (comic library manager)");
-        string basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
-        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", basic);
-        _login = basic;
+        _http.DefaultRequestHeaders.Authorization = auth.Header();
+        _auth = auth;
     }
 
     public string SourceKey => "Metron";
@@ -69,9 +73,14 @@ public sealed class MetronSource : IReadingListSource
         return list;
     }
 
-    public async Task<IReadOnlyList<ArcIssue>> GetArcIssuesInOrderAsync(string arcId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ArcIssue>> GetArcIssuesInOrderAsync(string arcId, CancellationToken cancellationToken) =>
+        (await GetArcEntriesAsync(arcId, cancellationToken).ConfigureAwait(false)).Issues;
+
+    /// <summary>The paginated list also says how many issues the arc has (<c>count</c>), so a short fetch shows as incomplete.</summary>
+    public async Task<ArcEntryList> GetArcEntriesAsync(string arcId, CancellationToken cancellationToken)
     {
         var result = new List<ArcIssue>();
+        int? reported = null;
 
         // /issue_list/ is a standard paginated DRF list response ({count,next,previous,results}) -
         // the queryset is already ordered by cover_date/series/number server-side, so pages are
@@ -80,6 +89,7 @@ public sealed class MetronSource : IReadingListSource
         while (!string.IsNullOrEmpty(url))
         {
             var page = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
+            reported ??= page?["count"] is JsonValue count && int.TryParse(count.ToString(), out int total) ? total : null;
             foreach (var node in page?["results"]?.AsArray() ?? new JsonArray())
             {
                 if (node is null)
@@ -93,7 +103,7 @@ public sealed class MetronSource : IReadingListSource
             url = page?["next"]?.GetValue<string>();
         }
 
-        return result;
+        return new ArcEntryList(result, Array.Empty<string>(), reported);
     }
 
     /// <summary>One row of Metron's arc issue list as an <see cref="ArcIssue"/>. A story title is read if the row carries one (a <c>name</c>
@@ -115,8 +125,16 @@ public sealed class MetronSource : IReadingListSource
             Number: node["number"]?.GetValue<string>() ?? string.Empty,
             Year: ParseYearFromDate(coverDate) ?? ParseYearFromDate(storeDate) ?? 0,
             CoverImageUrl: node["image"]?.GetValue<string>(),
-            Title: string.IsNullOrWhiteSpace(title) ? null : title.Trim());
+            Title: string.IsNullOrWhiteSpace(title) ? null : title.Trim(),
+            // Read when the row carries them and left empty when it does not: the list rows' exact fields were not checked against a live
+            // response, and an id is never made up (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.3).
+            ComicVineIssueId: PositiveId(node["cv_id"]),
+            MetronIssueId: PositiveId(node["id"]),
+            MetronSeriesId: PositiveId(node["series"]?["id"]));
     }
+
+    private static string? PositiveId(JsonNode? node) =>
+        node is JsonValue value && long.TryParse(value.ToString(), out long id) && id > 0 ? id.ToString() : null;
 
     public async Task<ArcOverviewInfo?> GetArcOverviewAsync(string arcId, CancellationToken cancellationToken)
     {
@@ -144,7 +162,7 @@ public sealed class MetronSource : IReadingListSource
     private async Task<JsonNode?> GetJsonAsync(string url, CancellationToken cancellationToken)
     {
         // Shared with every other Metron request the app makes: a rejected login must not be sent a third time (see MetronLoginGuard).
-        if (ComicVine.MetronLoginGuard.ShouldHold(_login, out var hold))
+        if (ComicVine.MetronLoginGuard.ShouldHold(_auth.Key, out var hold))
         {
             throw new ReadingListSourceException(DisplayName, ComicVine.MetronLoginGuard.HoldMessage(hold));
         }
@@ -170,8 +188,8 @@ public sealed class MetronSource : IReadingListSource
 
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
-            ComicVine.MetronLoginGuard.RecordRejected(_login);
-            throw new ReadingListSourceException(DisplayName, "Metron rejected the configured username/password (401 Unauthorized).");
+            ComicVine.MetronLoginGuard.RecordRejected(_auth.Key);
+            throw new ReadingListSourceException(DisplayName, _auth.IsToken ? "Metron rejected the configured API token (401 Unauthorized)." : "Metron rejected the configured username/password (401 Unauthorized).");
         }
 
         JsonNode? root;

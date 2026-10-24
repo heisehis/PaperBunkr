@@ -4,8 +4,8 @@
 ; but with deliberate deviations, decided with the user before writing this file (or added in the
 ; 2026-09-01 full-customization pass, noted per section below):
 ;   1. Self-contained publish (dotnet publish -r win-x64 --self-contained) instead of CE's
-;      detect-and-download-.NET-Framework-4.8 dance - Paperbunkr bundles its own .NET 8 runtime,
-;      so there is no prerequisite-installation [Code] section here at all.
+;      detect-and-download-.NET-Framework-4.8 dance - Paperbunkr bundles its own runtime,
+;      so no separate runtime prerequisite installer is needed.
 ;   2. File-association registration is opt-in via the per-format "associate<fmt>" [Tasks] entries
 ;      below (one checkbox per comic format: .pdf .cbz .cbr .cb7 .cbt .cbw .djvu), and even then
 ;      the installer does NOT hand-write the ProgID/extension registry keys itself the way CE's
@@ -22,22 +22,24 @@
 ;      decision 7).
 ;
 ; Build with installer\BuildInstaller.ps1, which runs the publish step (and generates
-; publish\License.txt and publish\InfoAfter.txt - see LicenseFile / InfoAfterFile below) then
+; publish\License.txt - see LicenseFile below) then
 ; invokes this script - see that file for the expected /DMyAppVersion and /DMyAppSetupFile
 ; parameters.
 
 #define MyAppName "Paperbunkr"
 #ifndef MyAppVersion
-#define MyAppVersion "0.3.1-beta"
+#error Supply /DMyAppVersion via BuildInstaller.ps1 (the app project is the version source).
 #endif
 ; Pure x.y.z.w form for VersionInfoVersion (the setup exe's own file-version resource) - the
 ; "-beta" suffix in MyAppVersion is not a valid VS_FIXEDFILEINFO version. BuildInstaller.ps1
 ; derives this from the -Version it's given (leading numeric run, padded to four parts) and passes
 ; it as /DMyAppVersionNumeric, so it tracks src/Paperbunkr.App/Paperbunkr.App.csproj's <Version>
-; automatically. The literal below is only a fallback for compiling the .iss directly without the
-; build script (docs/superpowers/specs/2026-09-10-versioning-convention-design.md, Q6).
+; automatically. Direct compilation requires the same explicit version inputs.
 #ifndef MyAppVersionNumeric
-#define MyAppVersionNumeric "0.3.1.0"
+#error Supply /DMyAppVersionNumeric via BuildInstaller.ps1.
+#endif
+#if Copy(MyAppVersion, 1, Pos("-beta", MyAppVersion) - 1) != RemoveFileExt(MyAppVersionNumeric)
+#error MyAppVersion and MyAppVersionNumeric must identify the same beta release.
 #endif
 #ifndef MyAppSetupFile
 #define MyAppSetupFile "PaperbunkrSetup"
@@ -45,7 +47,13 @@
 #define MyAppPublisher "Paperbunkr Project"
 #define MyAppExeName "Paperbunkr.App.exe"
 #define MyAppURL "https://github.com/heisehis/PaperBunkr"
+#ifndef PublishDir
 #define PublishDir "publish\win-x64"
+#endif
+#ifndef LicensePath
+#define LicensePath "publish\License.txt"
+#endif
+#define HasThumbnailHandler FileExists(AddBackslash(SourcePath) + PublishDir + "\Paperbunkr.ShellThumbnails.dll")
 
 [Setup]
 ; Generated once for this project - do not reuse for any other installer, and do not regenerate
@@ -61,7 +69,8 @@ AppUpdatesURL={#MyAppURL}/releases
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
-; Always show the "Select Destination Location" page. Inno's default (DisableDirPage=auto) hides
+; Show the destination page on the full flow. Quick Update skips it in ShouldSkipPage.
+; Inno's default (DisableDirPage=auto) hides
 ; it whenever UsePreviousAppDir finds a prior install in the registry - which, with this project's
 ; frequent re-installs (and the InitializeSetup upgrade path), meant it almost never appeared. The
 ; page still pre-fills the previous directory, so a repair/upgrade is just one extra Next click.
@@ -72,6 +81,8 @@ DisableDirPage=no
 PrivilegesRequired=admin
 OutputDir=Output
 OutputBaseFilename={#MyAppSetupFile}
+; Keep diagnostics for silent version rejections as well as interactive failures.
+SetupLogging=yes
 Compression=lzma
 SolidCompression=yes
 ; "modern dynamic": modern look, and Setup checks the Windows light/dark theme at launch and
@@ -95,7 +106,7 @@ VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Setup
 VersionInfoCopyright=Paperbunkr Project, AGPLv3
 ; Wizard branding (Welcome/Finished page side image + the small badge on every other page) -
-; the hexagon-"P" emblem from the app's own logo (src/Paperbunkr.App/Assets/paperbunkr-logo-source.png),
+; the current emblem and wordmark from the app's own logo (src/Paperbunkr.App/Assets/paperbunkr-logo-source.png),
 ; per user direction to give the installer some personality rather than Inno's stock gray gradient.
 ; See docs/superpowers/specs/2026-09-09-installer-redesign-design.md decision 1 for the full
 ; rationale; the short version:
@@ -134,7 +145,7 @@ WizardImageBackColorDynamicDark=none
 ; TERMS.md's opening line ("By downloading, installing, or running Paperbunkr... you agree...") is
 ; exactly the sort of thing that should be backed by a real accept click, not just an About
 ; screen. See docs/superpowers/specs/2026-09-09-installer-redesign-design.md decision 3.
-LicenseFile=publish\License.txt
+LicenseFile={#LicensePath}
 ; No pre-install "what's new" / changelog page: release notes now live on the app's own first-run
 ; Welcome screen instead (user direction, 2026-09-09), so the installer no longer duplicates them.
 ; No InfoAfterFile page either - a separate "Information" page with its own Next button before the
@@ -145,6 +156,10 @@ LicenseFile=publish\License.txt
 ; [Code] InitializeSetup gate below land back in the previously-used install directory - see
 ; design decision 7 ("falling through to the normal wizard").
 UsePreviousAppDir=yes
+UsePreviousTasks=yes
+UsePreviousSetupType=yes
+UsePreviousGroup=yes
+UsePreviousLanguage=yes
 ; Auto-update (src/Paperbunkr.App/Services/UpdateService.cs) runs this same installer over a copy
 ; of Paperbunkr that may still be mid-shutdown when Setup starts (the app launches Setup first, so
 ; the UAC prompt gets the foreground, then exits; InitializeSetup waits for it below). Restart
@@ -169,20 +184,26 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Messages]
 ; Custom Welcome-page copy (user direction: "give the installer personality") - Inno Setup's
 ; %n is a literal line break within a [Messages] string, not a placeholder needing escaping.
-WelcomeLabel1=Welcome to the {#MyAppName} Beta!
-WelcomeLabel2=Get ready to get bunked!%n%nYou're about to install {#MyAppName} {#MyAppVersion} on this computer.%n%nA few things before you dive in:%n     -  This is an early beta - expect rough edges and the occasional bug.%n     -  A ComicRack-inspired comic && manga library and reader, built fresh from scratch.%n     -  Fully self-contained - no separate .NET install needed.%n     -  Your library and settings stay local; nothing leaves this machine.%n     -  Found something broken? We'd love to hear about it.%n%nClick Next to continue, or Cancel to make a quiet escape.
+WelcomeLabel1=Welcome to {#MyAppName}
+WelcomeLabel2=A home for your next great read.%n%nInstall {#MyAppName} {#MyAppVersion} to organise and read comics, manga and books.%n%nThe .NET runtime is included.%n%nYour library data is stored locally. Online features can contact their services.%n%nThis is beta software. Please report problems through our GitHub project.%n%nSelect Next to get started.
+WizardSelectComponents=Choose shortcuts
+SelectComponentsDesc=The complete application is always installed. These choices only change its shortcuts.
+SelectComponentsLabel2=Select the shortcuts you want to create:
+WizardSelectTasks=Make it yours
+SelectTasksDesc=Choose optional Windows integrations.
+SelectTasksLabel2=File associations and cover thumbnails are optional. You can also manage them later in Preferences.
 ; Custom Finished-page copy, matching the Welcome page's personality (user direction). The Finished
 ; page in "modern" style already mirrors the Welcome page - same big side image, its own Finish
 ; button - so this is where the post-install info lives now (no separate InfoAfterFile page). The
 ; two postinstall [Run] checkboxes ("Open Paperbunkr now" / "Browse the wiki") render just below
 ; this text.
-FinishedHeadingLabel={#MyAppName} is bunked in and ready.
-FinishedLabel={#MyAppName} {#MyAppVersion} has been installed on this computer.%n%nNew here? Add your first comic or book folder from Preferences > Libraries, and the wiki has the full walkthrough.
+FinishedHeadingLabel=Your next read is ready.
+FinishedLabel={#MyAppName} {#MyAppVersion} has been installed on this computer.%n%nNew here? Add your first comic or book folder from Preferences > Library. The wiki has the full walkthrough.
 
 [Types]
-Name: "full";    Description: "Full installation";
-Name: "compact"; Description: "Compact installation";
-Name: "custom";  Description: "Custom installation"; Flags: iscustom
+Name: "full";    Description: "Start Menu and desktop shortcuts";
+Name: "compact"; Description: "Start Menu shortcut only";
+Name: "custom";  Description: "Choose shortcuts"; Flags: iscustom
 
 [Components]
 Name: "app";        Description: "{#MyAppName} (Required)";   Types: full compact custom; Flags: fixed
@@ -221,7 +242,9 @@ Name: "associatefb2";  Description: ".fb2, .zip  (FictionBook 2 - also claims pl
 Name: "associatemobi"; Description: ".mobi, .azw, .azw3  (Kindle / MOBI)";            GroupDescription: "Associate Book file types with {#MyAppName}:"; Flags: unchecked
 ; File Explorer cover thumbnails (docs/superpowers/specs/2026-09-30-explorer-cover-thumbnails-design.md,
 ; decisions 13/17): one opt-in box; turns on every thumbnail type no other program already draws.
+#if HasThumbnailHandler
 Name: "explorerthumbnails"; Description: "Show comic and book covers as thumbnails in File Explorer"; GroupDescription: "File Explorer:"; Flags: unchecked
+#endif
 
 [Files]
 ; The entire self-contained publish output (see installer\BuildInstaller.ps1) - exe, every
@@ -261,7 +284,9 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .ep
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .fb2 .zip"; Tasks: associatefb2;  Flags: runhidden waituntilterminated; StatusMsg: "Registering .fb2/.zip association..."
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .mobi .azw .azw3"; Tasks: associatemobi; Flags: runhidden waituntilterminated; StatusMsg: "Registering .mobi/.azw/.azw3 association..."
 ; After the associations, so the handler is also registered under any Paperbunkr ProgID they just created.
+#if HasThumbnailHandler
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-thumbnails"; Tasks: explorerthumbnails; Flags: runhidden waituntilterminated; StatusMsg: "Registering File Explorer thumbnails..."
+#endif
 ; Finished-page checkboxes (postinstall = rendered as a checkbox on the Finished page;
 ; skipifsilent = hidden for silent/auto-update runs). "Open Paperbunkr now" stays checked by
 ; default; "Browse the wiki" is opt-in (unchecked). The wiki entry is a URL opened via the shell
@@ -306,23 +331,91 @@ end;
 // Existing-install gate (deviation #3b in the file header; 2026-09-09 installer redesign,
 // decision 7). Modelled on how the Visual C++ Redistributable installers react when re-run over
 // an existing install: not a second full wizard, but Repair / Uninstall (same version) or a
-// lighthearted upgrade prompt (older version). A fresh machine is completely unaffected - it
+// labelled update choices (older version). A fresh machine is completely unaffected - it
 // returns True immediately and goes straight to Welcome.
+var
+  QuickUpdate: Boolean;
+  DeleteProfile: Boolean;
+  ProfileToDelete: String;
+
+#include "InstallerLogic.iss"
+
+function RejectSetup(const MessageText: String): Boolean;
+begin
+  Log(MessageText);
+  if not WizardSilent() then
+    TaskDialogMsgBox('Setup cannot continue', MessageText, mbError, MB_OK, ['Close'], 0);
+  // InitializeSetup=False gives Inno's documented nonzero initialization exit status.
+  Result := False;
+end;
+
 function InitializeSetup(): Boolean;
 var
-  UninstallString: String;
-  OldVersion: String;
-  ResultCode: Integer;
-  Choice: Integer;
-  Waited: Integer;
+  UninstallString, OldVersion, InstalledDir, FileVersion: String;
+  ResultCode, Choice, Waited, Comparison: Integer;
 begin
   Result := True;
+  QuickUpdate := False;
+  UninstallString := GetPrevRegString('UninstallString');
+  if UninstallString <> '' then
+  begin
+    OldVersion := GetPrevRegString('DisplayVersion');
+    if not TryCompareReleases(OldVersion, '{#MyAppVersion}', Comparison) then
+    begin
+      InstalledDir := GetPrevRegString('InstallLocation');
+      if (InstalledDir = '') or not GetVersionNumbersString(
+        AddBackslash(InstalledDir) + '{#MyAppExeName}', FileVersion) then
+        FileVersion := '';
+      if not TryCompareReleases(FileVersion, '{#MyAppVersion}', Comparison) then
+      begin
+        Result := RejectSetup('The installed Paperbunkr version could not be read. ' +
+          'Setup has left it unchanged. Check its installation or use its existing uninstaller before trying again.');
+        exit;
+      end;
+      OldVersion := FileVersion;
+    end;
+    if Comparison > 0 then
+    begin
+      Result := RejectSetup('Paperbunkr ' + OldVersion + ' is already installed. This installer contains {#MyAppVersion}.' +
+        ''#13#10#13#10 + 'Installing an older release is blocked because it may not support your library database. ' +
+        'Use an installer for the same or a newer release.');
+      exit;
+    end;
+    // The safety gate precedes this silent shortcut, so silent downgrades are blocked too.
+    QuickUpdate := Comparison < 0;
+    if not WizardSilent() then
+    begin
+      if Comparison = 0 then
+      begin
+        Choice := TaskDialogMsgBox('Paperbunkr is already installed',
+          'Installed release: ' + OldVersion + #13#10 + 'Installer: {#MyAppVersion}',
+          mbConfirmation, MB_YESNOCANCEL, ['&Repair'#13#10'Reinstall application files and review installation options.',
+           '&Uninstall'#13#10'Remove the application using its existing uninstaller.', '&Cancel'], 0);
+        if Choice <> IDYES then
+        begin
+          if Choice = IDNO then
+          begin
+            if not Exec(RemoveQuotes(UninstallString), '', '', SW_SHOW, ewNoWait, ResultCode) then
+              TaskDialogMsgBox('The uninstaller could not start', SysErrorMessage(ResultCode) +
+                ''#13#10 + 'You can try again from Windows Installed apps.', mbError, MB_OK, ['Close'], 0);
+          end;
+          Result := False;
+          exit;
+        end;
+      end
+      else
+      begin
+        Choice := TaskDialogMsgBox('Update Paperbunkr',
+          'Installed: ' + OldVersion + #13#10 + 'Available: {#MyAppVersion}' + #13#10#13#10 +
+          'Your library data will be preserved.', mbConfirmation, MB_YESNOCANCEL, ['&Update'#13#10'Keep the current location, shortcuts and integration choices.',
+           '&Change installation options'#13#10'Review the location, shortcuts and integrations.', '&Cancel'], 0);
+        if (Choice <> IDYES) and (Choice <> IDNO) then begin Result := False; exit; end;
+        QuickUpdate := Choice = IDYES;
+      end;
+    end;
+  end;
 
-  // Launched by the app's own Restart-to-update (UpdateService.ApplyUpdatesAndRestart), which
-  // starts Setup and then shuts down. Give that shutdown (exit handlers, auto-backup) up to 60s to
-  // release the AppMutex, so the user isn't shown the "Paperbunkr is running" prompt for an app
-  // that is already closing. This runs before Inno's own AppMutex check, which still catches an
-  // app that never exits. A manual run (no flag) skips the wait entirely.
+  // In-app update starts Setup before shutdown. Give its backup/exit handlers up to 60s.
   if ExpandConstant('{param:PAPERBUNKRUPDATE|0}') = '1' then
   begin
     Waited := 0;
@@ -332,77 +425,65 @@ begin
       Waited := Waited + 250;
     end;
   end;
+end;
 
-  UninstallString := GetPrevRegString('UninstallString');
-  if UninstallString = '' then
-    exit;
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := SkipQuickUpdatePage(QuickUpdate, PageID);
+end;
 
-  // A silent re-run (NetSparkle auto-update relaunches this installer) must never block on a
-  // prompt nobody can see - fall straight through to the normal reinstall-over-existing flow.
-  if WizardSilent() then
-    exit;
-
-  OldVersion := GetPrevRegString('DisplayVersion');
-
-  if OldVersion = '{#MyAppVersion}' then
+procedure InitializeWizard();
+begin
+  if QuickUpdate then
   begin
-    // Re-running THIS release's installer over the same version.
-    Choice := MsgBox('{#MyAppName} {#MyAppVersion} is already bunked in on this computer.' + #13#10 + #13#10 +
-      'Repair it (reinstall over the existing files), or remove it?' + #13#10 + #13#10 +
-      'Yes  =  Repair' + #13#10 +
-      'No  =  Uninstall' + #13#10 +
-      'Cancel  =  do nothing',
-      mbConfirmation, MB_YESNOCANCEL);
-    if Choice = IDYES then
-      exit  // Repair: fall through to the normal wizard; UsePreviousAppDir pre-fills the path.
-    else if Choice = IDNO then
-    begin
-      // Run the EXISTING install's own uninstaller (including whatever [Code] prompts that
-      // version shipped, e.g. the "delete my library data" opt-in below), then bow out.
-      Exec(RemoveQuotes(UninstallString), '', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
-      Result := False;
-    end
-    else
-      Result := False;  // Cancel.
-  end
-  else
-  begin
-    // Older release found - a beta point release, or a pre-2026-09-01 alpha (its DisplayVersion,
-    // e.g. "0.1.1-alpha", reads back verbatim, so this one message covers every era). Tone
-    // matches WelcomeLabel1/2 rather than a generic system "previous version found" dialog.
-    if OldVersion = '' then
-      OldVersion := 'an earlier version';
-    if MsgBox('Oh hey, welcome back! Looks like you already have {#MyAppName} ' + OldVersion +
-      ' bunked in here.' + #13#10 + #13#10 +
-      'Ready to move up to {#MyAppName} {#MyAppVersion}? Click Yes to upgrade, or No to leave things as they are.',
-      mbConfirmation, MB_YESNO) = IDYES then
-      exit  // Upgrade: fall through to the normal wizard over the existing directory.
-    else
-      Result := False;
+    WizardForm.FinishedHeadingLabel.Caption := 'Paperbunkr has been updated.';
+    WizardForm.FinishedLabel.Caption := 'Paperbunkr {#MyAppVersion} has been installed.' +
+      ''#13#10#13#10 + 'Your library is ready when you are.';
   end;
 end;
 
-// Opt-in "delete my library data" prompt on uninstall (deviation #3 in the file header). Paperbunkr
-// itself never writes anything outside %APPDATA%\Paperbunkr (see
-// src/Paperbunkr.Data/PaperbunkrDbContext.cs's own DbPath resolution, which this path matches
-// exactly) - the user's actual comic/book files on disk are never touched either way, only
-// Paperbunkr's own library index/settings/cache. Guarded by "not UninstallSilent" so a silent
-// uninstall (e.g. driven by another installer or a scripted CI cleanup) never blocks on a prompt
-// nobody can see.
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+// Choose before application removal; perform deletion only after CLI cleanup has finished.
+function InitializeUninstall(): Boolean;
 var
-  DataDir: String;
+  Choice: Integer;
 begin
-  if CurUninstallStep = usUninstall then
+  Result := True;
+  DeleteProfile := False;
+  ProfileToDelete := ExpandConstant('{userappdata}\Paperbunkr');
+  if UninstallSilent() or not DirExists(ProfileToDelete) then exit;
+  Choice := TaskDialogMsgBox('Keep your Paperbunkr library data?',
+    'Removing the application can leave your library ready for a future installation.' + #13#10#13#10 +
+    'Profile folder: ' + ProfileToDelete + #13#10#13#10 +
+    'Custom data locations and external databases are preserved. Comic and book folders are not removed.',
+    mbConfirmation, MB_YESNO, ['&Keep library data'#13#10'Recommended. Preserve this profile and remove only the application.',
+     '&Delete library data'#13#10'Also remove the contents of the profile folder.'], 0);
+  if Choice <> IDNO then exit;
+  if not IsSafeProfileTarget(ProfileToDelete, ExpandConstant('{userappdata}')) then
   begin
-    if not UninstallSilent then
+    TaskDialogMsgBox('Library data will be kept',
+      'The profile contains a redirected or unreadable location. Setup will remove the application only.',
+      mbInformation, MB_OK, ['Continue'], 0);
+    exit;
+  end;
+  DeleteProfile := MsgBox('Permanently delete everything in this Paperbunkr profile folder?' +
+    ''#13#10#13#10 + ProfileToDelete + #13#10#13#10 +
+    'This includes the database, settings, cached covers/thumbnails, backups, plugins and logs.' +
+    ''#13#10#13#10 + 'Comic and book library folders and custom data locations will remain. ' +
+    'Choose No to keep the profile and continue removing the application.',
+    mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if (CurUninstallStep = usPostUninstall) and DeleteProfile then
+  begin
+    if not IsSafeProfileTarget(ProfileToDelete, ExpandConstant('{userappdata}')) or
+      not RemovePlainTree(ProfileToDelete) then
     begin
-      DataDir := ExpandConstant('{userappdata}\Paperbunkr');
-      if DirExists(DataDir) then
-      begin
-        if MsgBox('Also delete your Paperbunkr library data (database, settings, and cached thumbnails)?' + #13#10 + #13#10 + DataDir + #13#10 + #13#10 + 'Your comic and book files themselves are never touched - only Paperbunkr''s own library index.', mbConfirmation, MB_YESNO) = IDYES then
-          DelTree(DataDir, True, True, True);
-      end;
+      Log('Profile deletion failed or was refused: ' + ProfileToDelete);
+      MsgBox('The application was removed, but some library data could not be deleted.' +
+        ''#13#10#13#10 + 'The remaining folder is: ' + ProfileToDelete,
+        mbInformation, MB_OK);
     end;
   end;
 end;

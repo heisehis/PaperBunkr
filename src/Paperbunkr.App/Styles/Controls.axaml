@@ -1,0 +1,532 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fi="using:FluentIcons.Avalonia">
+    <!--
+        Shared controls (docs/superpowers/specs/2026-10-19-ui-polish-shared-controls-design.md). The ONE definition of each control family:
+        button (primary / secondary / ghost / danger, .sm, iconButton), segmented switch (segGroup + segItem), tab, sidebar item, chips
+        (filterChip, pbChip, statusBadge; countPill lives in Badges.axaml), card / clickCard, and the dropdown menu row.
+        Views use these classes and never restyle them locally - XamlConsistencyLintTests fails on a local Selector for any of them.
+        Transparent families pin FluentAvalonia's :pointerover/:pressed /template/ ContentPresenter background themselves; otherwise the
+        framework paints a grey hover box that reads as a second selection.
+    -->
+
+    <!-- Button variants - replace default FluentTheme button chrome with Pb* tokens + motion. -->
+    <!-- Component roles (docs/superpowers/specs/2026-10-12-theme-system-v2-gap-analysis-and-plan.md, phase 3): each of these styles reads the
+         resources of one published role (button.primary, button.secondary, button.ghost, chip, panel.floating), written by ThemeService from
+         the theme. The defaults are the tokens these styles were bound to before, so an unstyled component is unchanged. Hover, pressed and
+         disabled skins are NOT declared here: a rule bound to a resource a theme did not provide blanks the framework's own state visual
+         instead of falling through to it, so the engine creates those in code, and only once a theme first skins a role
+         (Theming/Runtime/ThemeStateStyleHost.cs). -->
+    <Style Selector="Button.primary">
+        <Setter Property="Background" Value="{DynamicResource PbButtonPrimaryBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbButtonPrimaryBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource PbButtonPrimaryForeground}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbButtonPrimaryRadius}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.primary:pointerover">
+        <Setter Property="Background" Value="{DynamicResource PbButtonPrimaryBackgroundHover}" />
+    </Style>
+
+    <Style Selector="Button.secondary">
+        <Setter Property="Background" Value="{DynamicResource PbButtonSecondaryBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbButtonSecondaryBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource PbButtonSecondaryForeground}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbButtonSecondaryRadius}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.secondary:pointerover">
+        <Setter Property="Background" Value="{DynamicResource PbButtonSecondaryBackgroundHover}" />
+    </Style>
+
+    <Style Selector="Button.ghost">
+        <Setter Property="Background" Value="{DynamicResource PbButtonGhostBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbButtonGhostBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource PbButtonGhostForeground}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbButtonGhostRadius}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.ghost:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbButtonGhostBorderHover}" />
+    </Style>
+
+
+    <!-- ============ 1. Buttons: size, danger, toggle state, icon button ============ -->
+    <!-- Compact sizes (Q7): 28 tall, 22 with .sm. MinHeight rather than Height so a label that wraps still fits. -->
+    <!-- Every shared control centres itself vertically, so a row mixing buttons, chips and segments shares one centre line (a plain
+         Button and a ToggleButton otherwise disagree by a few pixels in a horizontal StackPanel). -->
+    <Style Selector="Button.primary, Button.secondary, Button.ghost, Button.danger, Button.iconButton, Button.segItem, Button.filterChip, Border.segGroup, Border.pbChip">
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.filterChip">
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="Button.primary, Button.secondary, Button.ghost, Button.danger">
+        <Setter Property="MinHeight" Value="{DynamicResource PbControlHeight}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeBody}" />
+    </Style>
+    <Style Selector="Button.primary.sm, Button.secondary.sm, Button.ghost.sm, Button.danger.sm">
+        <Setter Property="MinHeight" Value="{DynamicResource PbControlHeightSm}" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMeta}" />
+    </Style>
+
+    <!-- Disabled: a neutral surface with muted text, so an action that isn't available yet ("Create" before a name) reads as such instead
+         of fading into the card (it was near-invisible in Matrix). -->
+    <Style Selector="Button.primary:disabled /template/ ContentPresenter, Button.secondary:disabled /template/ ContentPresenter, Button.danger:disabled /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+    </Style>
+    <Style Selector="Button.ghost:disabled /template/ ContentPresenter">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+    </Style>
+
+    <Style Selector="Button.danger">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbButtonGhostRadius}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter, Button.danger:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbDangerSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
+    </Style>
+
+    <!-- Toggle state on outlined buttons: a chosen reader option, an open dropdown trigger, a pinned tool. Primary has none. -->
+    <Style Selector="Button.secondary.active, Button.secondary.open, Button.ghost.active, Button.ghost.open, Button.ghost.on">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
+    <Style Selector="Button.secondary.active /template/ ContentPresenter, Button.secondary.open /template/ ContentPresenter, Button.ghost.active /template/ ContentPresenter, Button.ghost.open /template/ ContentPresenter, Button.ghost.on /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
+
+    <!-- Icon-only button: a square, clickable at its visible size (design §1 - below the 32 px guideline by the user's compact choice). -->
+    <Style Selector="Button.iconButton">
+        <Setter Property="Width" Value="{DynamicResource PbControlHeight}" />
+        <Setter Property="Height" Value="{DynamicResource PbControlHeight}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.iconButton.sm">
+        <Setter Property="Width" Value="{DynamicResource PbControlHeightSm}" />
+        <Setter Property="Height" Value="{DynamicResource PbControlHeightSm}" />
+    </Style>
+    <Style Selector="Button.iconButton:pointerover /template/ ContentPresenter, Button.iconButton:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="Button.iconButton.active /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
+
+    <!-- ============ 2. Segmented switch ============ -->
+    <!-- Group 28 tall = 1 border + 2 padding + 22 item + 2 padding + 1 border. Selected = solid accent (Q6). segToggle stays on items TabStrip steps through (Services/Input/TabStrip.cs). -->
+    <Style Selector="Border.segGroup">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbControlBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="Padding" Value="2" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <!-- 22 + 2 x 2 padding + 2 x 1 border = the 28 px control height. -->
+    <Style Selector="Button.segItem">
+        <Setter Property="MinHeight" Value="22" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeBody}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.segItem.sm">
+        <Setter Property="MinHeight" Value="16" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMeta}" />
+    </Style>
+    <Style Selector="Button.segItem:pointerover /template/ ContentPresenter, Button.segItem:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="Button.segItem.active, Button.segItem.on">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbButtonPrimaryForeground}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.segItem.active /template/ ContentPresenter, Button.segItem.on /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbButtonPrimaryForeground}" />
+    </Style>
+    <!-- Icons (and any TextBlock that sets its own muted colour) inside the selected segment take the on-accent colour, or they vanish
+         into the accent fill. -->
+    <Style Selector="Button.segItem.active fi|SymbolIcon, Button.segItem.on fi|SymbolIcon">
+        <Setter Property="Foreground" Value="{DynamicResource PbButtonPrimaryForeground}" />
+    </Style>
+    <Style Selector="Button.segItem.active TextBlock, Button.segItem.on TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource PbButtonPrimaryForeground}" />
+    </Style>
+
+    <!-- ============ 3. Tab ============ -->
+    <Style Selector="Border.tabStrip">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <Style Selector="Button.tab">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0,0,0,2" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="Padding" Value="0,6,0,9" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeBody}" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <!-- No filled hover box (it read as a second selected tab next to the underlined one, audit shot 8): hover only brightens the text. -->
+    <Style Selector="Button.tab:pointerover /template/ ContentPresenter, Button.tab:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="Button.tab.active">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.tab.active /template/ ContentPresenter, Button.tab.active:pointerover /template/ ContentPresenter">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+
+    <!-- A strip with the sliding underline (Controls/TabIndicator.cs, Motion v2 D Q20) draws one bar for the whole strip; the tabs' own
+         underline steps aside. -->
+    <Style Selector="Panel.tabIndicatorHost > Button.tab.active">
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Panel.tabIndicatorHost > Button.tab.active /template/ ContentPresenter, Panel.tabIndicatorHost > Button.tab.active:pointerover /template/ ContentPresenter">
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <!-- ============ 4. Sidebar item ============ -->
+    <!-- Selected = 3 px accent bar + soft tint (Q9). The bar is a left border, transparent when not selected so every label sits at the same
+         x; not an inset BoxShadow, whose string can't take a DynamicResource colour. The app focus adorner rings a focused row. -->
+    <Style Selector="Button.sideItemButton, Button.prefNavItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="3,0,0,0" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="0,5,5,0" />
+        <Setter Property="Padding" Value="{DynamicResource PbSidebarItemPadding}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeBody}" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.sideItemButton:pointerover /template/ ContentPresenter, Button.prefNavItem:pointerover /template/ ContentPresenter, Button.sideItemButton:pressed /template/ ContentPresenter, Button.prefNavItem:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="Button.sideItemButton.active, Button.prefNavItem.active">
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.sideItemButton.active /template/ ContentPresenter, Button.prefNavItem.active /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <!-- A row label trims, and keeps 8 px from a trailing count pill: untrimmed, a long name drew under the pill (Smart Lists sidebar). -->
+    <Style Selector="TextBlock.sideItemLabel">
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="Button.sideItemButton.active TextBlock.sideItemLabel">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+
+    <!-- ============ 5. Chips ============ -->
+    <!-- Filter chip: toggles a filter. -->
+    <Style Selector="Button.filterChip, ToggleButton.filterChip">
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbControlBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbChipRadius}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMeta}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.filterChip:pointerover /template/ ContentPresenter, ToggleButton.filterChip:pointerover /template/ ContentPresenter, Button.filterChip:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="Button.filterChip.active, Button.filterChip.on, Button.filterChip.open, ToggleButton.filterChip:checked">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.filterChip.active /template/ ContentPresenter, Button.filterChip.on /template/ ContentPresenter, Button.filterChip.open /template/ ContentPresenter, ToggleButton.filterChip:checked /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
+
+    <!-- Tag chip: a static label (optionally with a Button.iconButton.sm remove glyph). -->
+    <Style Selector="Border.pbChip">
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbChipRadius}" />
+    </Style>
+    <Style Selector="Border.pbChip TextBlock">
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMeta}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Status badge: one state, one indicator (a dot or an icon, never both). Colour variants by class. -->
+    <Style Selector="Border.statusBadge">
+        <Setter Property="MinHeight" Value="20" />
+        <Setter Property="Padding" Value="7,0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.statusBadge TextBlock">
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeCaption}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.statusBadge.accent"><Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" /></Style>
+    <Style Selector="Border.statusBadge.accent TextBlock"><Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" /></Style>
+    <Style Selector="Border.statusBadge.success"><Setter Property="Background" Value="{DynamicResource PbSuccessSoftBrush}" /></Style>
+    <Style Selector="Border.statusBadge.success TextBlock"><Setter Property="Foreground" Value="{DynamicResource PbSuccessBrush}" /></Style>
+    <Style Selector="Border.statusBadge.warning"><Setter Property="Background" Value="{DynamicResource PbBadgeSoftBrush}" /></Style>
+    <Style Selector="Border.statusBadge.warning TextBlock"><Setter Property="Foreground" Value="{DynamicResource PbBadgeBrush}" /></Style>
+    <Style Selector="Border.statusBadge.danger"><Setter Property="Background" Value="{DynamicResource PbDangerSoftBrush}" /></Style>
+    <Style Selector="Border.statusBadge.danger TextBlock"><Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" /></Style>
+
+    <!-- Weighted tag chips on the Detail band (weighted tags, 2026-10-14): how central a tag is to the series. Restored as filterChip
+         variants after the shared-controls migration; colours as before. -->
+    <Style Selector="Button.filterChip.core">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+    </Style>
+    <Style Selector="Button.filterChip.core /template/ ContentPresenter, Button.filterChip.core:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+    </Style>
+    <Style Selector="Button.filterChip.core Ellipse">
+        <Setter Property="Fill" Value="{DynamicResource PbBadgeTextBrush}" />
+    </Style>
+    <Style Selector="Button.filterChip.defining">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
+    <Style Selector="Button.filterChip.recurrent">
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+
+    <!-- Destructive confirm (ConfirmDialogView binds Classes.destructive on its primary button): the primary turns danger-red. -->
+    <Style Selector="Button.primary.destructive">
+        <Setter Property="Background" Value="{DynamicResource PbDangerBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+    </Style>
+    <Style Selector="Button.primary.destructive /template/ ContentPresenter, Button.primary.destructive:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbDangerBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+    </Style>
+
+    <!-- Preferences > Connections tiles (docs/superpowers/specs/2026-10-12-connections-appearance-redesign-design.md): a connected provider
+         keeps the accent-soft tint; the selected tile gets the clickCard accent border (bound as .active). -->
+    <Style Selector="Button.clickCard.connConnected /template/ ContentPresenter, Button.clickCard.connConnected:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+    </Style>
+
+    <!-- Keyboard Shortcuts: a chip for a gamepad binding (.pad) is badge-tinted, a key chip neutral. -->
+    <Style Selector="Border.pbChip.pad">
+        <Setter Property="Background" Value="{DynamicResource PbBadgeSoftBrush}" />
+    </Style>
+
+    <!-- ============ 6. Card / 7. Clickable card ============ -->
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="Padding" Value="16" />
+    </Style>
+    <Style Selector="Border.card.selected">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+    <Style Selector="Border.card.tight">
+        <Setter Property="Padding" Value="12,10" />
+    </Style>
+
+    <Style Selector="Button.clickCard">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.clickCard:pointerover /template/ ContentPresenter, Button.clickCard:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbControlBorderBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="Button.clickCard.active /template/ ContentPresenter, Button.clickCard.on /template/ ContentPresenter, Button.clickCard.selected /template/ ContentPresenter">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+
+    <!-- ============ 8. Menu row in a dropdown ============ -->
+    <!-- Matches MenuFlyoutPresenter MenuItem (Styles/Menu.axaml) so custom dropdowns and context menus look alike. -->
+    <Style Selector="Border.dropdown">
+        <Setter Property="Background" Value="{DynamicResource PbPanelFloatingBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbPanelFloatingBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbPanelFloatingRadius}" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="BoxShadow" Value="{DynamicResource PbElevationShadow}" />
+    </Style>
+    <Style Selector="Button.menuRow">
+        <Setter Property="MinHeight" Value="{DynamicResource PbControlHeight}" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeBody}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <!-- Stretch, not Left: a row with a trailing count (Grid "*,Auto") needs the full width, or the count lands against the label
+             ("Comic824"). Plain text still reads left-aligned. -->
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.menuRow:pointerover /template/ ContentPresenter, Button.menuRow:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="Button.menuRow.active">
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.menuRow.active /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
+
+    <!-- Popup entrance (Controls/PopupMotion.cs, Motion v2 §5.4): every popup's child fades in and travels 4 px away from its anchor on
+         the Reveal tokens - dropping when it opens below, rising when above. No exit: a popup closes at once. -->
+    <Style Selector="Control.popupEnter">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="RenderTransform" Value="translateY(-4px)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionRevealFade}" Easing="{StaticResource PbMotionEase}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionRevealMove}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Control.popupEnter.popupUp">
+        <Setter Property="RenderTransform" Value="translateY(4px)" />
+    </Style>
+    <Style Selector="Control.popupEnter.popupEntered">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="RenderTransform" Value="none" />
+    </Style>
+
+    <!-- Expander chevron (Motion v2 D, Q25): one ChevronRight that turns 90 degrees to point down while .open, on the Acknowledge move
+         token and the move curve (Reduced snaps). Replaces the old pair of icons swapped by IsVisible. -->
+    <Style Selector="fi|SymbolIcon.chevronToggle">
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransform" Value="none" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionAcknowledgeMove}" Easing="{StaticResource PbMotionMoveEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="fi|SymbolIcon.chevronToggle.open">
+        <Setter Property="RenderTransform" Value="rotate(90deg)" />
+    </Style>
+
+    <!-- Press feedback (Motion v2 §3.3, Q3): only the compact families shrink, to 0.97, on the Acknowledge token (the transition is on
+         every Button in Primitives.axaml). Rows, tabs, sidebar rows and menu rows answer with colour only. -->
+    <Style Selector="Button.primary:pressed, Button.secondary:pressed, Button.ghost:pressed, Button.danger:pressed, Button.iconButton:pressed, Button.segItem:pressed, Button.clickCard:pressed, Button.card:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+    </Style>
+
+    <!-- Reduced / Off (Motion v2 §4.3). ThemeService puts .motionReduced on every app window; no transform is *held* for a state then,
+         so press and hover lift answer with colour only. Last in the last app style file so it wins over the rules above. These are the
+         only styles that may key off the motion mode (a view whose own local styles lift something repeats the override locally). -->
+    <Style Selector="Window.motionReduced Button:pressed, Window.motionReduced Border.posterCover, Window.motionReduced Border.tileRing">
+        <Setter Property="RenderTransform" Value="none" />
+    </Style>
+</Styles>

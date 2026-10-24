@@ -168,7 +168,7 @@ public class LibraryOpenKeysTests : IDisposable
             var (vm, screen, window) = ShowSeriesLibrary();
             Assert.True(vm.ShowContinueStrip);
 
-            var stripCard = screen.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("continueCard") && b.IsEffectivelyVisible);
+            var stripCard = screen.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("clickCard") && b.IsEffectivelyVisible);
             var tile = screen.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("card") && b.IsEffectivelyVisible);
             Assert.True(stripCard.TranslatePoint(default, screen)!.Value.Y < tile.TranslatePoint(default, screen)!.Value.Y, "the strip sits above the grid");
 

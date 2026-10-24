@@ -20,7 +20,7 @@
                    FontWeight="Bold" FontSize="15" Foreground="{DynamicResource PbTextBrush}"
                    Margin="0,0,0,8" TextWrapping="Wrap" />
         <TextBlock x:Name="DetailTextBlock" Grid.Row="1"
-                   FontFamily="Consolas,monospace" FontSize="11.5"
+                   FontFamily="Consolas,monospace" FontSize="12"
                    Foreground="{DynamicResource PbTextMutedBrush}"
                    Margin="0,0,0,14" TextWrapping="Wrap" />
 
@@ -28,10 +28,10 @@
             <DockPanel Margin="10">
                 <TextBlock x:Name="NoBackupsTextBlock" DockPanel.Dock="Top"
                            Text="No backups were found - Restore is unavailable."
-                           Foreground="{DynamicResource PbTextFaintBrush}" FontSize="12"
+                           Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12"
                            Margin="0,0,0,8" IsVisible="False" TextWrapping="Wrap" />
                 <TextBlock DockPanel.Dock="Top" Text="Available backups (newest first):"
-                           Foreground="{DynamicResource PbTextFaintBrush}" FontSize="12" Margin="0,0,0,6" />
+                           Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12" Margin="0,0,0,6" />
                 <ListBox x:Name="BackupsListBox" Background="Transparent" BorderThickness="0" />
             </DockPanel>
         </Border>

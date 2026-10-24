@@ -80,7 +80,7 @@ public partial class ContinuityScreenViewModel : ViewModelBase
 
         Sidebar = new ContinuitySidebarViewModel(() => _activeContinuityId, () => _activeEventId, DeleteContinuity, DeleteEvent);
         Suggestions = new SuggestionsChecksViewModel(notifyAction, _activity, id => LoadEvent(id), id => LoadContinuity(id), AfterIdentityWork,
-            () => Sidebar.SuggestionsCount = Suggestions!.TotalCount);
+            () => Sidebar.SuggestionsCount = Suggestions!.TotalCount, Sidebar.RefreshEvents);
         ContinuityPage = new ContinuityPageViewModel(Navigation);
         EventPage = new EventPageViewModel(Navigation);
         Timeline = new ContinuityTimelineViewModel(id => _goToReader(id));

@@ -19,18 +19,25 @@ public partial class TagPillViewModel : ObservableObject
     private readonly Action<string> _search;
     private readonly Action<IssueTagWeight>? _reweight;
 
-    public TagPillViewModel(string value, string? category, IssueTagWeight weight, Action<string> search, Action<IssueTagWeight>? reweight)
+    public TagPillViewModel(string value, string? category, IssueTagWeight weight, Action<string> search, Action<IssueTagWeight>? reweight, bool isGenerated = false)
     {
         Value = value;
         Category = category ?? "Uncategorized";
         _weight = weight;
         _search = search;
         _reweight = reweight;
+        IsGenerated = isGenerated;
     }
 
     public string Value { get; }
 
     public string Category { get; }
+
+    public bool IsGenerated { get; }
+
+    public bool CanRemove => !IsGenerated;
+
+    public string Tooltip => IsGenerated ? $"Generated from {Category.ToLowerInvariant()} metadata" : "User tag";
 
     [ObservableProperty]
     private IssueTagWeight _weight;

@@ -45,7 +45,21 @@ public class LibraryHealthService
     /// <summary>Full-library sweep - every non-placeholder issue with a FilePath, regardless of source folder or <c>WatchedFolder.Watch</c>.</summary>
     public async Task<LibraryHealthVerifyResult> VerifyAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
     {
-        return await Task.Run(() => Verify(progress, ct, issueIds: null), ct);
+        return await Task.Run(() => Verify(progress, ct, issueIds: null, presenceSnapshot: null), ct);
+    }
+
+    /// <summary>
+    /// Missing-file-only sweep after Scan Now. Uses paths observed during the completed scan for
+    /// covered watched roots and checks paths outside that coverage live. Present archives are not
+    /// opened, so this does not refresh empty/unreadable-file state.
+    /// </summary>
+    public async Task<LibraryHealthVerifyResult> VerifyMissingAsync(
+        LibraryScanPresenceSnapshot presenceSnapshot,
+        IProgress<(int Done, int Total)> progress,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(presenceSnapshot);
+        return await Task.Run(() => Verify(progress, ct, issueIds: null, presenceSnapshot), ct);
     }
 
     /// <summary>
@@ -55,7 +69,7 @@ public class LibraryHealthService
     /// </summary>
     public async Task<LibraryHealthVerifyResult> VerifyAsync(IReadOnlyCollection<int> issueIds, IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
     {
-        return await Task.Run(() => Verify(progress, ct, issueIds), ct);
+        return await Task.Run(() => Verify(progress, ct, issueIds, presenceSnapshot: null), ct);
     }
 
     /// <summary>Issues read, checked and saved per round trip. Internal so a test can force several pages with a handful of rows.</summary>
@@ -73,7 +87,11 @@ public class LibraryHealthService
     /// 5,000-comic library as a tracked entity at once. A pass that is cancelled keeps the pages it already saved; each issue's
     /// own result is complete and correct either way.
     /// </summary>
-    private LibraryHealthVerifyResult Verify(IProgress<(int Done, int Total)> progress, CancellationToken ct, IReadOnlyCollection<int>? issueIds)
+    private LibraryHealthVerifyResult Verify(
+        IProgress<(int Done, int Total)> progress,
+        CancellationToken ct,
+        IReadOnlyCollection<int>? issueIds,
+        LibraryScanPresenceSnapshot? presenceSnapshot)
     {
         int total;
         using (var counting = _contextFactory())
@@ -108,7 +126,7 @@ public class LibraryHealthService
                 foreach (var issue in issues)
                 {
                     ct.ThrowIfCancellationRequested();
-                    VerifyOne(issue, newlyConfirmed, ref missingNow, ref confirmedMissing, ref contentEmptyNow);
+                    VerifyOne(issue, newlyConfirmed, ref missingNow, ref confirmedMissing, ref contentEmptyNow, presenceSnapshot);
                     progress.Report((++done, total));
                 }
 
@@ -132,7 +150,7 @@ public class LibraryHealthService
 
         // Same one-episode rule for an empty series: once it has issues again, its dismissal no longer
         // applies. Full passes only - a scoped pass (one removed folder) isn't a statement about every series.
-        if (issueIds is null)
+        if (issueIds is null && presenceSnapshot is null)
         {
             using var context = _contextFactory();
             foreach (var series in context.Series.Where(s => s.EmptyRowAcknowledged && s.Issues.Any()))
@@ -146,10 +164,18 @@ public class LibraryHealthService
         return new LibraryHealthVerifyResult(done, missingNow, confirmedMissing, contentEmptyNow);
     }
 
-    private void VerifyOne(Issue issue, List<MissingFileConfirmedEvent> newlyConfirmed, ref int missingNow, ref int confirmedMissing, ref int contentEmptyNow)
+    private void VerifyOne(
+        Issue issue,
+        List<MissingFileConfirmedEvent> newlyConfirmed,
+        ref int missingNow,
+        ref int confirmedMissing,
+        ref int contentEmptyNow,
+        LibraryScanPresenceSnapshot? presenceSnapshot)
     {
         int previousCount = issue.MissingVerificationCount;
-        bool exists = File.Exists(issue.FilePath);
+        bool exists = presenceSnapshot is not null && presenceSnapshot.TryGetExists(issue.FilePath, out bool snapshotExists)
+            ? snapshotExists
+            : File.Exists(issue.FilePath);
         issue.FileIsMissing = !exists;
         issue.MissingVerificationCount = exists ? 0 : issue.MissingVerificationCount + 1;
 
@@ -189,7 +215,7 @@ public class LibraryHealthService
             // Files, not Empty Rows.
             issue.IsContentEmpty = false;
         }
-        else
+        else if (presenceSnapshot is null)
         {
             // Cheap probe: PageDecodeCore.TryOpenProvider already returns null for an unopenable
             // file or one that opens with zero pages - a corrupt/empty archive. Only opens the

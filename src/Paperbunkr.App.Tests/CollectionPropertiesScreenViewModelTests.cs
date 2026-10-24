@@ -64,7 +64,7 @@ public class CollectionPropertiesScreenViewModelTests : IDisposable
 
         vm.Load(_collectionId);
 
-        Assert.Equal("Edit \"Original Name\"", vm.HeaderLabel);
+        Assert.Equal("Original Name", vm.HeaderLabel);
         Assert.Equal("Original Name", vm.Name);
         Assert.Equal("Original description", vm.Description);
         Assert.Equal("#C9803F", vm.AccentColor);

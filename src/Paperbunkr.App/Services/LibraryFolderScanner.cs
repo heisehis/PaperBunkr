@@ -18,8 +18,110 @@ using Paperbunkr.Plugins.Hooks;
 
 namespace Paperbunkr.App.Services;
 
+/// <summary>
+/// Transient file-presence snapshot from a completed full library scan. It only answers for paths
+/// under roots that were fully enumerated and whose extensions were supported by the scanner;
+/// callers must fall back to a live check when it cannot answer.
+/// </summary>
+public sealed class LibraryScanPresenceSnapshot
+{
+    private readonly HashSet<string> _observedComicPaths;
+    private readonly HashSet<string> _supportedExtensions;
+    private readonly string[] _completedRoots;
+
+    internal LibraryScanPresenceSnapshot(
+        IEnumerable<string> observedComicPaths,
+        IEnumerable<string> supportedExtensions,
+        IEnumerable<string> completedRoots)
+    {
+        _observedComicPaths = new HashSet<string>(observedComicPaths, StringComparer.OrdinalIgnoreCase);
+        _supportedExtensions = new HashSet<string>(supportedExtensions, StringComparer.OrdinalIgnoreCase);
+        _completedRoots = completedRoots.ToArray();
+    }
+
+    /// <summary>
+    /// Returns true when the snapshot covers <paramref name="path"/> and sets
+    /// <paramref name="exists"/> to whether it was observed. Returns false when a live existence
+    /// check is required.
+    /// </summary>
+    public bool TryGetExists(string? path, out bool exists)
+    {
+        exists = false;
+        if (!TryCanonicalize(path, out string canonicalPath)
+            || !_supportedExtensions.Contains(Path.GetExtension(canonicalPath)))
+        {
+            return false;
+        }
+
+        foreach (string root in _completedRoots)
+        {
+            if (IsWithinRoot(root, canonicalPath))
+            {
+                exists = _observedComicPaths.Contains(canonicalPath);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    internal static bool TryCanonicalize(string? path, out string canonicalPath)
+    {
+        canonicalPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            canonicalPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or System.Security.SecurityException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsWithinRoot(string root, string path)
+    {
+        try
+        {
+            string relative = Path.GetRelativePath(root, path);
+            return !Path.IsPathRooted(relative)
+                && !relative.Equals("..", StringComparison.Ordinal)
+                && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+}
+
 /// <summary>Result of a completed <see cref="LibraryFolderScanner"/> run.</summary>
-public record LibraryFolderScanResult(int IssuesAdded, int SeriesTouched, IReadOnlyList<int> AddedIssueIds);
+public record LibraryFolderScanResult(int IssuesAdded, int SeriesTouched, IReadOnlyList<int> AddedIssueIds)
+{
+    /// <summary>Timing and path counts for a full watched-folder scan; null for targeted imports.</summary>
+    public LibraryFolderScanDiagnostics? Diagnostics { get; init; }
+
+    /// <summary>Transient presence data from a completed full watched-folder scan; null for targeted imports.</summary>
+    public LibraryScanPresenceSnapshot? PresenceSnapshot { get; init; }
+}
+
+/// <summary>Low-overhead measurements of one full watched-folder scan.</summary>
+public sealed record LibraryFolderScanDiagnostics(
+    int AvailableWatchedFolders,
+    long FilePathsEnumerated,
+    long SupportedComicFiles,
+    long AlreadyTrackedPaths,
+    long CandidateFiles,
+    int IssuesImported,
+    TimeSpan EnumerationAndFiltering,
+    TimeSpan ImportProcessing,
+    TimeSpan TotalScan);
 
 /// <summary>Result of a completed <see cref="LibraryFolderScanner.SyncMetadataAsync"/> run.</summary>
 public record LibraryMetadataSyncResult(int IssuesUpdated);
@@ -59,6 +161,39 @@ public class LibraryFolderScanner
     /// <summary>Proactive scan-alert check (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-scan-alerts-design.md §4) - same "no natural attach point" reasoning as <see cref="PluginHost"/> above.</summary>
     public static PluginScanAlertService? ScanAlertService { get; set; }
 
+    /// <summary>
+    /// Told when a scan filled in reading-list entries that were waiting for the comics it added (docs/superpowers/specs/2026-10-13-cbl-
+    /// smart-match-core-design.md §5.9) - the Activity Center entry is raised from here. Same "no natural attach point" reasoning as
+    /// <see cref="PluginHost"/>; null in tests, where the relink still happens and simply is not announced.
+    /// </summary>
+    public static Action<Paperbunkr.Data.ReadingLists.Matching.HealResult>? ReadingListsHealed { get; set; }
+
+    /// <summary>
+    /// Points the reading-list entries that were waiting for these comics at them. Every scan path (full scan, live folder watch, drag and
+    /// drop) funnels through <see cref="ImportFiles"/>, so this one call covers them all. On its own context, after the scan has saved; a
+    /// failure here never fails the scan - the entries simply stay as they were and "Recheck library" can try again.
+    /// </summary>
+    private void HealReadingLists(IReadOnlyCollection<int> addedIssueIds)
+    {
+        if (addedIssueIds.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            using var context = _contextFactory();
+            var healed = Paperbunkr.Data.ReadingLists.Matching.ReadingListHealer.RecheckFor(context, addedIssueIds);
+            if (healed.Relinked > 0)
+            {
+                ReadingListsHealed?.Invoke(healed);
+            }
+        }
+        catch (Exception ex) when (ex is DbUpdateException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
+        {
+        }
+    }
+
     public LibraryFolderScanner()
         : this(PaperbunkrDb.CreateContext)
     {
@@ -81,7 +216,8 @@ public class LibraryFolderScanner
     private LibraryFolderScanResult ScanAll(IProgress<(int Done, int Total)> progress, CancellationToken ct)
     {
         using var context = _contextFactory();
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var totalTimer = System.Diagnostics.Stopwatch.StartNew();
+        var enumerationTimer = System.Diagnostics.Stopwatch.StartNew();
 
         var supportedExtensions = new HashSet<string>(Providers.Readers.GetFileExtensions(), StringComparer.OrdinalIgnoreCase);
         var existingPaths = new HashSet<string>(
@@ -90,6 +226,12 @@ public class LibraryFolderScanner
 
         var candidateFiles = new List<string>();
         var scannedFolders = new List<string>();
+        var canonicalScannedRoots = new List<string>();
+        var observedComicPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int availableWatchedFolders = 0;
+        long filePathsEnumerated = 0;
+        long supportedComicFiles = 0;
+        long alreadyTrackedPaths = 0;
         foreach (string folder in context.WatchedFolders.Select(w => w.Path).ToList())
         {
             if (!Directory.Exists(folder))
@@ -97,13 +239,58 @@ public class LibraryFolderScanner
                 continue;
             }
 
+            availableWatchedFolders++;
+            foreach (string file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+            {
+                filePathsEnumerated++;
+                bool supportedComic = supportedExtensions.Contains(Path.GetExtension(file));
+                if (supportedComic && LibraryScanPresenceSnapshot.TryCanonicalize(file, out string canonicalFile))
+                {
+                    observedComicPaths.Add(canonicalFile);
+                }
+
+                if (!supportedComic)
+                {
+                    continue;
+                }
+
+                supportedComicFiles++;
+                if (existingPaths.Contains(file))
+                {
+                    alreadyTrackedPaths++;
+                    continue;
+                }
+
+                candidateFiles.Add(file);
+            }
+
+            // A root becomes authoritative only after its recursive enumeration completes.
             scannedFolders.Add(folder);
-            candidateFiles.AddRange(
-                Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
-                    .Where(f => supportedExtensions.Contains(Path.GetExtension(f)) && !existingPaths.Contains(f)));
+            if (LibraryScanPresenceSnapshot.TryCanonicalize(folder, out string canonicalRoot))
+            {
+                canonicalScannedRoots.Add(canonicalRoot);
+            }
         }
 
-        var result = ImportFiles(context, candidateFiles, progress, ct);
+        enumerationTimer.Stop();
+        var importTimer = System.Diagnostics.Stopwatch.StartNew();
+        var imported = ImportFiles(context, candidateFiles, progress, ct);
+        importTimer.Stop();
+        totalTimer.Stop();
+        var result = imported with
+        {
+            PresenceSnapshot = new LibraryScanPresenceSnapshot(observedComicPaths, supportedExtensions, canonicalScannedRoots),
+            Diagnostics = new LibraryFolderScanDiagnostics(
+                availableWatchedFolders,
+                filePathsEnumerated,
+                supportedComicFiles,
+                alreadyTrackedPaths,
+                candidateFiles.Count,
+                imported.IssuesAdded,
+                enumerationTimer.Elapsed,
+                importTimer.Elapsed,
+                totalTimer.Elapsed),
+        };
 
         // LibraryScanCompleted plugin hook (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md
         // §5): raised here, at the one chokepoint every full scan shares (Scan Now, the scheduled task,
@@ -116,7 +303,7 @@ public class LibraryFolderScanner
             result.IssuesAdded,
             UpdatedCount: 0,
             result.SeriesTouched,
-            stopwatch.Elapsed,
+            totalTimer.Elapsed,
             result.AddedIssueIds,
             Array.Empty<int>()));
 
@@ -203,6 +390,9 @@ public class LibraryFolderScanner
 
         var seriesTouched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var addedIssues = new List<Issue>();
+        // A new chapter in an already-confirmed manga series takes the series' values instead of whatever its file embeds
+        // (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md §5). One lookup per series per scan; null = not applicable.
+        var mangaInheritance = new Dictionary<int, Paperbunkr.Data.Metadata.Manga.MangaSeriesInheritance?>();
         var embeddedMetronIds = new List<(Issue Issue, EmbeddedMetronIds Ids)>();
         int issuesAdded = 0;
 
@@ -297,6 +487,8 @@ public class LibraryFolderScanner
                     context.Series.Add(series);
                     seriesByName[seriesName] = series;
                 }
+
+                series = series ?? throw new InvalidOperationException("Series resolution did not produce a series.");
 
                 var issue = new Issue
                 {
@@ -400,6 +592,16 @@ public class LibraryFolderScanner
                     }
                 }
 
+                if (series.Id != 0)
+                {
+                    if (!mangaInheritance.TryGetValue(series.Id, out var inheritance))
+                    {
+                        mangaInheritance[series.Id] = inheritance = Paperbunkr.Data.Metadata.Manga.MangaSeriesInheritance.Load(context, series.Id);
+                    }
+
+                    inheritance?.Apply(issue);
+                }
+
                 series.Issues.Add(issue);
                 context.Issues.Add(issue);
 
@@ -456,7 +658,9 @@ public class LibraryFolderScanner
             ScanAlertService?.CheckForNewGroupsAsync().GetAwaiter().GetResult();
         }
 
-        return new LibraryFolderScanResult(issuesAdded, seriesTouched.Count, addedIssues.Select(i => i.Id).ToList());
+        var addedIssueIds = addedIssues.Select(i => i.Id).ToList();
+        HealReadingLists(addedIssueIds);
+        return new LibraryFolderScanResult(issuesAdded, seriesTouched.Count, addedIssueIds);
     }
 
     /// <summary>

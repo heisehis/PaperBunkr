@@ -16,6 +16,92 @@ public partial class LibraryScreenViewModel : IListLayoutHost
     /// <summary>The "List layouts" section of the Workspace menu, and the Edit Layouts overlay's view model.</summary>
     public ListLayoutsViewModel ListLayouts { get; private set; } = null!;
 
+    // --- Detail screen layouts (docs/superpowers/specs/2026-10-18-detail-screen-list-layouts-design.md) ---
+    // The comic and manga detail screens' named layouts are managed from this screen's Workspace popup, under the Library's own
+    // list layouts, the same place every other list layout lives. The view models are the detail screens' own (MainViewModel
+    // hands them over), so applying one here re-renders the detail screen the next time it shows.
+
+    private ListLayoutsViewModel? _comicDetailLayouts;
+    private ListLayoutsViewModel? _mangaDetailLayouts;
+    private bool _showMangaDetailLayouts;
+
+    /// <summary>The comic detail screens' layouts (Issues and Specials). Null outside the app shell (tests).</summary>
+    public ListLayoutsViewModel? ComicDetailLayouts
+    {
+        get => _comicDetailLayouts;
+        set
+        {
+            if (SetProperty(ref _comicDetailLayouts, value))
+            {
+                RaiseDetailLayoutBindings();
+            }
+        }
+    }
+
+    /// <summary>The manga detail screens' chapter layouts. Null outside the app shell (tests).</summary>
+    public ListLayoutsViewModel? MangaDetailLayouts
+    {
+        get => _mangaDetailLayouts;
+        set
+        {
+            if (SetProperty(ref _mangaDetailLayouts, value))
+            {
+                RaiseDetailLayoutBindings();
+            }
+        }
+    }
+
+    public bool HasDetailLayouts => ComicDetailLayouts is not null || MangaDetailLayouts is not null;
+
+    /// <summary>Which detail type the Workspace popup's "Detail screen layouts" section shows: false = Comic, true = Manga.</summary>
+    public bool ShowMangaDetailLayouts
+    {
+        get => _showMangaDetailLayouts;
+        set
+        {
+            if (SetProperty(ref _showMangaDetailLayouts, value))
+            {
+                RaiseDetailLayoutBindings();
+            }
+        }
+    }
+
+    public bool ShowComicDetailLayouts => !ShowMangaDetailLayouts;
+
+    /// <summary>The detail layouts the section's rows and actions act on.</summary>
+    public ListLayoutsViewModel? ActiveDetailLayouts => ShowMangaDetailLayouts ? MangaDetailLayouts : ComicDetailLayouts;
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void ShowDetailLayoutsFor(string kind) => ShowMangaDetailLayouts = kind == "manga";
+
+    /// <summary>A "Detail layout ▸" pick from a series' right-click menu: a named layout used only for that series, or null to follow the default.</summary>
+    public sealed record DetailLayoutChoice(int SeriesId, int? LayoutId, bool Manga);
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void SetSeriesDetailLayout(DetailLayoutChoice choice)
+    {
+        if ((choice.Manga ? MangaDetailLayouts : ComicDetailLayouts) is not { } layouts)
+        {
+            return;
+        }
+
+        if (choice.LayoutId is int layoutId)
+        {
+            layouts.UseForSeries(choice.SeriesId, layoutId);
+        }
+        else
+        {
+            layouts.FollowDefault(choice.SeriesId);
+        }
+    }
+
+    private void RaiseDetailLayoutBindings()
+    {
+        OnPropertyChanged(nameof(HasDetailLayouts));
+        OnPropertyChanged(nameof(ShowComicDetailLayouts));
+        OnPropertyChanged(nameof(ActiveDetailLayouts));
+    }
+
     /// <summary>True while a layout is being applied: the per-field change hooks must neither save nor re-render in between.</summary>
     private bool _applyingListLayout;
 

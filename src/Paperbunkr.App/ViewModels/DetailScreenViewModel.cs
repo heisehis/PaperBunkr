@@ -39,7 +39,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         _goDetailForSeries = goDetailForSeries ?? (_ => { });
         _enqueueMetadataWriteBack = enqueueMetadataWriteBack;
         CoverBrush = SeriesCardSample.Gradient("#442a1c", "#c9803f");
-        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, RefreshForSelection, onQuickRate, _goDetailForSeries, goToReader, goLibraryWithCollection, goLibraryWithSearch, trackerAutoSync);
+        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, RefreshForSelection, onQuickRate, _goDetailForSeries, goToReader, goLibraryWithCollection, goLibraryWithSearch, trackerAutoSync, ReloadCurrentSeries);
         Band = new DetailBandViewModel(goLibraryWithSearch, () => Tabs.GoDetailsCommand.Execute(null), ReweightTag);
     }
 
@@ -54,6 +54,8 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     private string _focusedIssueLabel = "Read Issue";
     private int? _coverIssueId;
     private int? _seriesId;
+
+    public void SetReadingIssueId(int? issueId) => Tabs.SetReadingIssueId(issueId);
     private bool _isLoadingSeries;
     private Bitmap? _seriesCoverImage;
     private Bitmap? _seriesBackdrop;
@@ -170,7 +172,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     /// cover-bearing issue yet to target.
     /// </summary>
     private CoverPickerViewModel? BuildCoverPickerViewModel() =>
-        !IsRemoteSeries && _coverIssueId is int issueId ? new CoverPickerViewModel(issueId, _seriesId, ReloadCurrentSeries, FindMangaBakaCoverContext()) : null;
+        !IsRemoteSeries && _seriesId is int seriesId ? new CoverPickerViewModel(seriesId, ReloadCurrentSeries, FindMangaBakaCoverContext()) : null;
 
     /// <summary>
     /// Surfaces the picker's "From External Provider" tab automatically whenever this series is
@@ -479,7 +481,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         if (Tabs.SelectedIssueIds.Count == 1)
         {
             int issueId = Tabs.SelectedIssueIds.Single();
-            var issue = context.Issues.Include(i => i.Series).ThenInclude(s => s.Issues)
+            var issue = context.Issues.Include(i => i.Series).ThenInclude(s => s!.Issues)
                 .Include(i => i.MetadataProposals).Include(i => i.Tags).FirstOrDefault(i => i.Id == issueId);
             if (issue is null)
             {
@@ -662,5 +664,10 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     }
 
     [RelayCommand]
-    private Task ChangeSeriesCoverAsync() => _coverIssueId is int issueId ? ChangeCoverAsync(issueId) : Task.CompletedTask;
+    private async Task ChangeSeriesCoverAsync()
+    {
+        if (_seriesId is not int seriesId) return;
+        string? path = await new FilePickerService().PickImageFileAsync("Choose Series Cover Image");
+        if (path is not null && new SeriesCoverService().TrySetCustomCover(seriesId, path)) ReloadCurrentSeries();
+    }
 }

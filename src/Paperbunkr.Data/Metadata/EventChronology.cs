@@ -6,8 +6,12 @@ using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.Data.Metadata;
 
-/// <summary>An event's name and date span as <c>year*100+month</c> keys (month 0 when unknown); null when nothing is dated.</summary>
-public sealed record EventSpan(int EventId, string Name, int? Start, int? End);
+/// <summary>
+/// An event's name and date span as <c>year*100+month</c> keys (month 0 when unknown); null when nothing is dated.
+/// <paramref name="SortKey"/> is where the event is placed when an outside reading order moved it (see <see cref="EventChronology.ApplyReadingOrder"/>);
+/// null = place it by its own dates. <paramref name="Rank"/> is its position in that reading order, used to break ties.
+/// </summary>
+public sealed record EventSpan(int EventId, string Name, int? Start, int? End, int? SortKey = null, int? Rank = null);
 
 /// <summary>
 /// Puts story events in chronological order (docs/superpowers/specs/2026-09-27-continuity-map-design.md §2). Directional relations
@@ -59,7 +63,8 @@ public static class EventChronology
         var remaining = new HashSet<int>(byId.Keys);
         var order = new List<int>(byId.Count);
         IEnumerable<EventSpan> Sorted(IEnumerable<int> ids) => ids.Select(id => byId[id])
-            .OrderBy(e => e.Start ?? e.End ?? int.MaxValue)
+            .OrderBy(e => e.SortKey ?? e.Start ?? e.End ?? int.MaxValue)
+            .ThenBy(e => e.Rank ?? int.MaxValue)
             .ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase)
             .ThenBy(e => e.EventId);
 
@@ -186,6 +191,92 @@ public static class EventChronology
     /// (<see cref="IssueDateKey"/>: GCD's on-sale dates when <paramref name="gcd"/> is given, cover dates otherwise).
     /// </summary>
     public static Dictionary<int, EventSpan> LoadSpans(PaperbunkrDbContext context, IReadOnlyCollection<int>? eventIds = null, Gcd.GcdDataStore? gcd = null)
+    {
+        // Comic Book Reading Orders' story order holds ranked events to its sequence (docs/superpowers/specs/2026-10-12-continuity-sources-design.md §4.2).
+        // The whole ranked list is fitted, not just the requested events, so a subset (one continuity) is placed the same as the whole library.
+        var ranked = context.EventOrderEvidence.AsNoTracking()
+            .Where(e => e.Provider == EventOrderProvider.Cbro && e.Rank != null && e.ListKey != null)
+            .Select(e => new { e.StoryEventId, e.ListKey, e.Rank })
+            .ToList();
+        if (ranked.Count == 0)
+        {
+            return LoadOwnSpans(context, eventIds, gcd);
+        }
+
+        var wanted = eventIds?.Concat(ranked.Select(r => r.StoryEventId)).Distinct().ToList();
+        var fitted = ApplyReadingOrder(LoadOwnSpans(context, wanted, gcd), ranked.Select(r => (r.ListKey!, r.StoryEventId, r.Rank!.Value)));
+        if (eventIds is null)
+        {
+            return fitted;
+        }
+
+        var only = eventIds.ToHashSet();
+        return fitted.Where(kv => only.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
+    }
+
+    /// <summary>
+    /// Holds events ranked by an outside reading order to that order, without trusting any one of their dates: within each list, the events'
+    /// own start dates are fitted to the nearest non-decreasing sequence (isotonic median regression, pool-adjacent-violators), and each ranked
+    /// event's <see cref="EventSpan.SortKey"/> is its fitted value. A single mis-dated event (a reprint dated decades late) is outvoted by its
+    /// neighbours instead of dragging every later event up with it; "Second Clone Saga (1994)" listed after "Age of Apocalypse (1995)" is placed
+    /// next to it, while unranked events keep their own dates. An undated ranked event takes the place of the one before it in the list.
+    /// </summary>
+    public static Dictionary<int, EventSpan> ApplyReadingOrder(IReadOnlyDictionary<int, EventSpan> spans, IEnumerable<(string ListKey, int EventId, int Rank)> ranks)
+    {
+        var result = new Dictionary<int, EventSpan>(spans);
+        foreach (var list in ranks.Where(r => spans.ContainsKey(r.EventId)).GroupBy(r => r.ListKey))
+        {
+            var ordered = list.OrderBy(r => r.Rank).ThenBy(r => r.EventId).ToList();
+            var blocks = new List<(List<int> Values, List<int> Items)>();
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                var span = spans[ordered[i].EventId];
+                if ((span.Start ?? span.End) is not int own)
+                {
+                    continue;
+                }
+
+                blocks.Add((new List<int> { own }, new List<int> { i }));
+                while (blocks.Count >= 2 && Median(blocks[^2].Values) > Median(blocks[^1].Values))
+                {
+                    var last = blocks[^1];
+                    blocks.RemoveAt(blocks.Count - 1);
+                    blocks[^1].Values.AddRange(last.Values);
+                    blocks[^1].Items.AddRange(last.Items);
+                }
+            }
+
+            var keys = new int?[ordered.Count];
+            foreach (var (values, items) in blocks)
+            {
+                int median = Median(values);
+                foreach (int item in items)
+                {
+                    keys[item] = median;
+                }
+            }
+
+            int? previous = null;
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                keys[i] ??= previous;
+                previous = keys[i];
+                var span = spans[ordered[i].EventId];
+                result[span.EventId] = span with { SortKey = keys[i], Rank = ordered[i].Rank };
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>The lower median, so the result is always one of the values.</summary>
+    private static int Median(List<int> values)
+    {
+        var sorted = values.OrderBy(v => v).ToList();
+        return sorted[(sorted.Count - 1) / 2];
+    }
+
+    private static Dictionary<int, EventSpan> LoadOwnSpans(PaperbunkrDbContext context, IReadOnlyCollection<int>? eventIds, Gcd.GcdDataStore? gcd)
     {
         var events = context.StoryEvents.AsNoTracking()
             .Where(e => eventIds == null || eventIds.Contains(e.Id))

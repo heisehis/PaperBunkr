@@ -179,6 +179,9 @@ public sealed class MarkdownView : Border
                 case MdRunStyle.Bold:
                     inlines.Add(new Run(run.Text) { FontWeight = FontWeight.SemiBold });
                     break;
+                case MdRunStyle.Underline:
+                    inlines.Add(new Run(run.Text) { TextDecorations = TextDecorations.Underline });
+                    break;
                 case MdRunStyle.Italic:
                     inlines.Add(new Run(run.Text) { FontStyle = FontStyle.Italic });
                     break;

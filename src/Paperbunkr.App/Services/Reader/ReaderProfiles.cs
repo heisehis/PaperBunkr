@@ -44,6 +44,7 @@ public static class ReaderProfileOverlay
         if (profile.PageMarginEnabled is { } margin) copy.PageMarginEnabled = margin;
         if (profile.PageMarginPercentWidth is { } marginWidth) copy.PageMarginPercentWidth = marginWidth;
         if (profile.ReaderAutoHideChrome is { } autoHide) copy.ReaderAutoHideChrome = autoHide;
+        if (profile.ReaderBookLook is { } bookLook) copy.ReaderBookLook = bookLook;
         if (profile.ReaderChromeHoverMode is { } hover) copy.ReaderChromeHoverMode = hover;
         if (profile.PagedTapZoneLayout is { } pagedLayout) copy.PagedTapZoneLayout = pagedLayout;
         if (profile.PagedTapZoneInvert is { } pagedInvert) copy.PagedTapZoneInvert = pagedInvert;

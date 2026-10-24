@@ -56,10 +56,16 @@ public sealed class AniListMetadataProvider : IMetadataProvider, ITrackerSearchP
             genres
             coverImage { large }
             staff { edges { role node { name { full } } } }
-            startDate { year }
+            startDate { year month day }
+            endDate { year month day }
+            popularity
+            synonyms
+            averageScore
+            isAdult
+            idMal
             format
             countryOfOrigin
-            tags { name rank isMediaSpoiler }
+            tags { name rank category isMediaSpoiler }
             relations { edges { relationType node { id title { romaji english } siteUrl } } }
           }
         }
@@ -321,6 +327,12 @@ internal sealed class AniListMediaDto
     [JsonPropertyName("startDate")]
     public AniListFuzzyDateDto? StartDate { get; set; }
 
+    [JsonPropertyName("endDate")]
+    public AniListFuzzyDateDto? EndDate { get; set; }
+
+    [JsonPropertyName("popularity")]
+    public int? Popularity { get; set; }
+
     [JsonPropertyName("format")]
     public string? Format { get; set; }
 
@@ -330,6 +342,19 @@ internal sealed class AniListMediaDto
 
     [JsonPropertyName("tags")]
     public List<AniListTagDto>? Tags { get; set; }
+
+    [JsonPropertyName("synonyms")]
+    public List<string>? Synonyms { get; set; }
+
+    /// <summary>Community score, 0-100.</summary>
+    [JsonPropertyName("averageScore")]
+    public int? AverageScore { get; set; }
+
+    [JsonPropertyName("isAdult")]
+    public bool IsAdult { get; set; }
+
+    [JsonPropertyName("idMal")]
+    public int? IdMal { get; set; }
 
     [JsonPropertyName("relations")]
     public AniListRelationConnectionDto? Relations { get; set; }
@@ -376,6 +401,12 @@ internal sealed class AniListFuzzyDateDto
 {
     [JsonPropertyName("year")]
     public int? Year { get; set; }
+
+    [JsonPropertyName("month")]
+    public int? Month { get; set; }
+
+    [JsonPropertyName("day")]
+    public int? Day { get; set; }
 }
 
 internal sealed class AniListTagDto
@@ -388,6 +419,9 @@ internal sealed class AniListTagDto
 
     [JsonPropertyName("isMediaSpoiler")]
     public bool IsMediaSpoiler { get; set; }
+
+    [JsonPropertyName("category")]
+    public string? Category { get; set; }
 }
 
 internal sealed class AniListRelationConnectionDto

@@ -51,4 +51,7 @@ public enum LibraryViewMode
     PosterGrid,
     List,
     DetailsTable,
+
+    /// <summary>Cosmetics pitch #19: items as book spines on shelf rows. Appended last; the column is stored as a string, so no migration is needed.</summary>
+    Bookshelf,
 }

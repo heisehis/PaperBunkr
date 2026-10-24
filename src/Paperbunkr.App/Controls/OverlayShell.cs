@@ -1,3 +1,4 @@
+using System;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
@@ -25,6 +26,12 @@ namespace Paperbunkr.App.Controls;
 /// handled here - <c>MainViewModel.Escape()</c> already centrally owns Escape for every overlay,
 /// and its own doc comment records a real bug from two uncoordinated Escape handlers fighting
 /// over precedence; this control must not reintroduce that.
+///
+/// <para>
+/// <b>Motion</b> (docs/superpowers/specs/2026-10-20-motion-system-v2-foundation-overlays-design.md §5.1): opening and closing run the shared
+/// <see cref="Reveal"/> lifecycle - the scrim fades and the card settles from 0.98 on the Reveal tokens (styles in
+/// <c>Styles/Overlays.axaml</c>); a close ends interaction at once and collapses after the exit; a reopen mid-exit reverses.
+/// </para>
 /// </summary>
 public class OverlayShell : ContentControl
 {
@@ -60,6 +67,13 @@ public class OverlayShell : ContentControl
 
     private Border? _scrim;
     private bool _deferredContentRealized;
+    /// <summary>Runs the collapse after the exit (forwards to <see cref="Reveal.ScheduleAfter"/>). A seam because the headless test
+    /// dispatcher never fires timers.</summary>
+    internal static Func<Action, TimeSpan, IDisposable> ScheduleAfter
+    {
+        get => Reveal.ScheduleAfter;
+        set => Reveal.ScheduleAfter = value;
+    }
 
     public OverlayShell()
     {
@@ -67,7 +81,11 @@ public class OverlayShell : ContentControl
         // (IsOpen defaults to false) never runs that handler - without this, it would keep
         // Avalonia's own Visual.IsVisible default of true, showing an unopened overlay.
         IsVisible = IsOpen;
+        Classes.Set("open", IsOpen);
     }
+
+    /// <summary>True between a close and the end of its exit animation: still drawn, no longer interactive.</summary>
+    public bool IsClosing => Reveal.IsClosing(this);
 
     /// <summary>
     /// When true, the shell's <see cref="ContentControl.ContentTemplate"/> is not materialized
@@ -132,22 +150,22 @@ public class OverlayShell : ContentControl
 
     static OverlayShell()
     {
-        IsOpenProperty.Changed.AddClassHandler<OverlayShell>((shell, e) =>
-        {
-            bool open = (bool)e.NewValue!;
-            shell.IsVisible = open;
+        IsOpenProperty.Changed.AddClassHandler<OverlayShell>((shell, e) => shell.OnIsOpenChanged((bool)e.NewValue!));
+    }
 
+    private void OnIsOpenChanged(bool open) =>
+        Reveal.Apply(this, open, beforeOpenClass: () =>
+        {
             // First open of a DeferContent shell: hand the ContentPresenter a non-null Content so
             // it materializes ContentTemplate now. Content is the shell's own DataContext (the
             // MainViewModel), so the {Binding SomeVm} on the template's root view resolves exactly
             // as it did when the view was an inline child. Cached after the first realize.
-            if (open && shell.DeferContent && !shell._deferredContentRealized)
+            if (DeferContent && !_deferredContentRealized)
             {
-                shell._deferredContentRealized = true;
-                shell.Content ??= shell.DataContext;
+                _deferredContentRealized = true;
+                Content ??= DataContext;
             }
         });
-    }
 
     protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
     {

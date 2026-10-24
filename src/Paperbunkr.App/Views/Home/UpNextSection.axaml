@@ -29,7 +29,7 @@
                                 CommandParameter="{Binding}" AutomationProperties.Name="{Binding AccessibleName}">
                             <Grid ColumnDefinitions="22,Auto,*,Auto" ColumnSpacing="10">
                                 <TextBlock Grid.Column="0" Text="{Binding Rank}" FontSize="13" FontWeight="Bold" VerticalAlignment="Center"
-                                           HorizontalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                           HorizontalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <Border Grid.Column="1" Width="30" Height="44" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
                                         Background="{Binding CoverBrush}">
                                     <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
@@ -37,7 +37,7 @@
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
                                     <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
                                                Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
-                                    <TextBlock Text="{Binding Reason}" FontSize="11.5"
+                                    <TextBlock Text="{Binding Reason}" FontSize="12"
                                                Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <TextBlock Grid.Column="3" Text="{Binding TimeLeft}" IsVisible="{Binding HasTimeLeft}" FontSize="12"

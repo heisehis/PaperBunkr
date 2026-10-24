@@ -197,7 +197,7 @@ public partial class ReaderScreenViewModel
             Directory.CreateDirectory(folder);
             using (var file = File.Create(Path.Combine(folder, "page.png")))
             {
-                page.Save(file);
+                page.Save(file, PngBitmapEncoderOptions.Default);
             }
 
             var json = JsonSerializer.Serialize(new

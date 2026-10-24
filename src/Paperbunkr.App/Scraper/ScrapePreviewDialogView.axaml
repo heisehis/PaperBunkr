@@ -1,0 +1,72 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Paperbunkr.App.Scraper"
+             xmlns:data="using:Paperbunkr.Data.ComicVine.Scraping"
+             mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="520"
+             x:Class="Paperbunkr.App.Scraper.ScrapePreviewDialogView"
+             x:DataType="vm:ScrapePreviewDialogViewModel">
+
+    <!-- "What this scrape would change" (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 3), shown in the
+         scraper's own modal host after the batch header closes, like the batch summary. Left: the matched comics with a keep box. Right: the
+         selected comic's fields, before and after. Nothing is written until Apply. -->
+    <!-- No fixed width: the host's DialogCard (Large) sets it; a 760 px frame inside it was clipped on both sides (reported 2026-10-21). -->
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+        <TextBlock Grid.Row="0" Classes="dialogTitle" Text="Check the changes before applying" />
+        <TextBlock Grid.Row="1" Classes="pbTextMeta" Text="{Binding Subtitle}" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" Margin="0,4,0,8" />
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+            <Button Classes="ghost sm" Content="Keep all" Command="{Binding KeepAllCommand}" />
+            <Button Classes="ghost sm" Content="Keep none" Command="{Binding KeepNoneCommand}" />
+            <Button Classes="ghost sm" Content="Drop series-only matches" Command="{Binding DropSeriesOnlyCommand}"
+                    ToolTip.Tip="Untick the comics where no issue was found, only the series" />
+        </StackPanel>
+
+        <Grid Grid.Row="3" ColumnDefinitions="2*,16,3*">
+            <ListBox Grid.Column="0" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" MaxHeight="360"
+                     x:Name="Comics" AutomationProperties.Name="Matched comics">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ScrapePreviewRow">
+                        <Grid ColumnDefinitions="Auto,*" Margin="0,4">
+                            <CheckBox Grid.Column="0" IsChecked="{Binding IsKept}" Focusable="False" VerticalAlignment="Top" Margin="0,0,8,0"
+                                      AutomationProperties.Name="{Binding BookLabel, StringFormat='Apply {0}'}" />
+                            <StackPanel Grid.Column="1" Spacing="4">
+                                <TextBlock Classes="pbTextBody" Text="{Binding BookLabel}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding BookLabel}" />
+                                <TextBlock Classes="pbTextCaption" Text="{Binding MatchText}" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding MatchText}" />
+                                <TextBlock Classes="pbTextCaption" Text="{Binding ChangeCountText}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <Border Grid.Column="2" Classes="card" MaxHeight="360">
+                <Panel>
+                    <TextBlock Classes="pbTextMeta" Text="This match changes nothing on this comic." Foreground="{DynamicResource PbTextMutedBrush}"
+                               IsVisible="{Binding !HasSelectedChanges}" TextWrapping="Wrap" />
+                    <ScrollViewer IsVisible="{Binding HasSelectedChanges}" Padding="0,0,12,0">
+                        <ItemsControl ItemsSource="{Binding SelectedChanges}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="data:ScrapeFieldChange">
+                                    <Grid ColumnDefinitions="112,*" Margin="0,4">
+                                        <TextBlock Grid.Column="0" Classes="pbTextMeta" Text="{Binding Field}" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Field}" />
+                                        <StackPanel Grid.Column="1" Spacing="4">
+                                            <TextBlock Classes="pbTextMeta" Text="{Binding Before}" Foreground="{DynamicResource PbTextMutedBrush}" TextDecorations="Strikethrough" TextWrapping="Wrap" />
+                                            <TextBlock Classes="pbTextBody" Text="{Binding After}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Panel>
+            </Border>
+        </Grid>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+            <Button Classes="ghost" Content="Apply nothing" Command="{Binding ApplyNothingCommand}" IsCancel="True" />
+            <Button Classes="primary" Content="{Binding ApplyLabel}" Command="{Binding ApplyCommand}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

@@ -75,43 +75,36 @@ public class EventChronologyInferenceTests : IdentityTestDb
         Assert.DoesNotContain(Infer(), r => r.IsStrong);
     }
 
+    // The three weak guesses (same name years apart, overlapping-date Crossover, date order plus a shared word) were dropped on 2026-10-12:
+    // date order alone is placement, not a link (docs/superpowers/specs/2026-10-12-continuity-sources-design.md §4.2).
+
     [Fact]
-    public void SameBaseNameYearsApart_IsAWeakSequel()
+    public void SameBaseNameYearsApart_IsNotLinked()
     {
-        int old = AddEvent("Secret Wars (1984)", StoryEventOrigin.Provider, AddSeries("Secret Wars", ("1", 1984, 5)));
-        int later = AddEvent("Secret Wars (2015)", StoryEventOrigin.Provider, AddSeries("Secret Wars (2015)", ("1", 2015, 7)));
+        AddEvent("Secret Wars (1984)", StoryEventOrigin.Provider, AddSeries("Secret Wars", ("1", 1984, 5)));
+        AddEvent("Secret Wars (2015)", StoryEventOrigin.Provider, AddSeries("Secret Wars (2015)", ("1", 2015, 7)));
 
-        var r = Assert.Single(Infer());
-
-        Assert.Equal((later, old, RelationType.Sequel), (r.SourceEventId, r.TargetEventId, r.Type));
-        Assert.False(r.IsStrong);
-        Assert.Equal("Same name, 1984 and 2015", r.Reason);
+        Assert.Empty(Infer());
     }
 
     [Fact]
-    public void SharedIssues_WithOverlappingDates_AreAWeakCrossover()
+    public void SharedIssues_WithOverlappingDates_AreNotACrossoverGuess()
     {
         var shared = AddSeries("Avengers", ("1", 2010, 1), ("2", 2010, 2));
         AddEvent("Siege", StoryEventOrigin.Provider, shared);
         AddEvent("Heroic Age", StoryEventOrigin.Provider, shared.Skip(1));
 
-        var r = Assert.Single(Infer());
-
-        Assert.Equal(RelationType.Crossover, r.Type);
-        Assert.False(r.IsStrong);
+        Assert.Empty(Infer());
     }
 
     [Fact]
-    public void DateOrderAndASharedWord_IsAWeakSequel_DateAloneIsNot()
+    public void DateOrderAndASharedWord_IsNotLinked()
     {
-        int a = AddEvent("Infinity Gauntlet", StoryEventOrigin.Provider, AddSeries("Infinity Gauntlet", ("1", 1991, 7)));
-        int b = AddEvent("Infinity War", StoryEventOrigin.Provider, AddSeries("Infinity War", ("1", 1992, 6)));
+        AddEvent("Infinity Gauntlet", StoryEventOrigin.Provider, AddSeries("Infinity Gauntlet", ("1", 1991, 7)));
+        AddEvent("Infinity War", StoryEventOrigin.Provider, AddSeries("Infinity War", ("1", 1992, 6)));
         AddEvent("Unrelated Thing", StoryEventOrigin.Provider, AddSeries("Other", ("1", 1993, 1)));
 
-        var r = Assert.Single(Infer());
-
-        Assert.Equal((b, a, RelationType.Sequel), (r.SourceEventId, r.TargetEventId, r.Type));
-        Assert.Contains("both named “Infinity”", r.Reason);
+        Assert.Empty(Infer());
     }
 
     [Fact]

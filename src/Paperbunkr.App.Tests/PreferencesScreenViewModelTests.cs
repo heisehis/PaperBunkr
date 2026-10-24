@@ -247,11 +247,11 @@ public class PreferencesScreenViewModelTests : IDisposable
     {
         var sections = new LibraryHealthSections();
 
-        Assert.Equal(13, sections.All.Count);
-        Assert.Equal(13, sections.All.Select(s => s.Anchor).Distinct().Count());
-        Assert.Equal(13, sections.All.Select(s => s.Key).Distinct().Count());
+        Assert.Equal(14, sections.All.Count);
+        Assert.Equal(sections.All.Count, sections.All.Select(s => s.Anchor).Distinct().Count());
+        Assert.Equal(sections.All.Count, sections.All.Select(s => s.Key).Distinct().Count());
         Assert.All(new[] { sections.Missing, sections.EmptyRows, sections.RecentlyRemoved }, s => Assert.Equal(Paperbunkr.App.Models.LibraryHealthTab.Files, s.Tab));
-        Assert.Equal(10, sections.All.Count(s => s.Tab == Paperbunkr.App.Models.LibraryHealthTab.Review));
+        Assert.Equal(11, sections.All.Count(s => s.Tab == Paperbunkr.App.Models.LibraryHealthTab.Review));
         Assert.Same(sections.Duplicates, sections.Find("duplicates"));
         Assert.Same(sections.Duplicates, sections.Find("library.healthDuplicates"));
         Assert.Null(sections.Find("library.health"));
@@ -299,6 +299,294 @@ public class PreferencesScreenViewModelTests : IDisposable
             // Never the real registry in tests (docs/superpowers/specs/2026-09-30-explorer-cover-thumbnails-design.md).
             ThumbnailHandlers = new ThumbnailHandlerService(thumbnailRegistry ?? new FakeThumbnailRegistry(), FakeThumbnailRegistry.CreateAppDirectory()),
         };
+    }
+
+    // ===================== Connections + Appearance redesign (docs/superpowers/specs/2026-10-12-connections-appearance-redesign-design.md) =====================
+
+    private PreferencesScreenViewModel CreateRedesignViewModel(out ConnectionStatusStore store)
+    {
+        var vm = CreateViewModel();
+        store = new ConnectionStatusStore(Path.Combine(Path.GetTempPath(), $"pb_connstatus_{Guid.NewGuid():N}.json"));
+        vm.UseConnectionStatusStore(store);
+        vm.EnsureLoaded();
+        return vm;
+    }
+
+    [Fact]
+    public void Connections_Tiles_AreGroupedMetadataTrackersDownloads()
+    {
+        var vm = CreateRedesignViewModel(out _);
+
+        Assert.Equal(new[] { "ComicVine", "Metron", "Gcd" }, vm.MetadataTiles.Select(r => r.Id));
+        Assert.Equal(9, vm.TrackerTiles.Count);
+        Assert.Equal("TrackerBehavior", vm.TrackerTiles[^1].Id);
+        Assert.Equal(new[] { "Prowlarr", "qBittorrent" }, vm.DownloadTiles.Select(r => r.Id));
+        Assert.All(vm.MetadataTiles, r => Assert.Equal(ConnectionGroup.Metadata, r.Group));
+        Assert.All(vm.TrackerTiles, r => Assert.Equal(ConnectionGroup.Trackers, r.Group));
+        Assert.All(vm.DownloadTiles, r => Assert.Equal(ConnectionGroup.Downloads, r.Group));
+    }
+
+    [Fact]
+    public void Connections_Summary_CountsAccountsOnly()
+    {
+        var vm = CreateRedesignViewModel(out _);
+        Assert.Equal("0 of 12 connected", vm.ConnectionSummaryText);
+
+        vm.SourceProviderRows.Single(r => r.Id == "ComicVine").IsConnected = true;
+        vm.TrackerProviderRows.First().IsConnected = true;
+
+        Assert.Equal("2 of 12 connected", vm.ConnectionSummaryText);
+    }
+
+    [Fact]
+    public void Connections_SelectingATile_MarksItAndClearsThePreviousOne()
+    {
+        var vm = CreateRedesignViewModel(out _);
+        var comicVine = vm.SourceProviderRows.Single(r => r.Id == "ComicVine");
+        var metron = vm.SourceProviderRows.Single(r => r.Id == "Metron");
+
+        vm.OpenConnectionDialogCommand.Execute(comicVine);
+        Assert.True(comicVine.IsSelected);
+
+        vm.OpenConnectionDialogCommand.Execute(metron);
+        Assert.False(comicVine.IsSelected);
+        Assert.True(metron.IsSelected);
+
+        vm.CloseConnectionDialogCommand.Execute(null);
+        Assert.False(metron.IsSelected);
+        Assert.False(vm.IsConnectionDialogOpen);
+    }
+
+    [Fact]
+    public void Connections_Disconnect_NeedsTwoPresses()
+    {
+        var vm = CreateRedesignViewModel(out _);
+        var row = vm.SourceProviderRows.Single(r => r.Id == "ComicVine");
+        row.SecretValue = "KEY";
+        row.SaveCommand!.Execute(null);
+        Assert.True(row.IsConnected);
+        Assert.True(row.CanDisconnect);
+
+        row.DisconnectConfirm!.TriggerCommand.Execute(null);
+        Assert.True(row.DisconnectConfirm.IsArmed);
+        Assert.True(row.IsConnected);                       // the first press only arms it
+
+        row.DisconnectConfirm.TriggerCommand.Execute(null);
+        Assert.False(row.IsConnected);
+        Assert.False(row.DisconnectConfirm.IsArmed);
+    }
+
+    [Fact]
+    public void Connections_TestConnection_OnAServiceWithNoReadOnlyCheck_SaysSoAndRecordsNothing()
+    {
+        var vm = CreateRedesignViewModel(out var store);
+        var row = vm.SourceProviderRows.Single(r => r.Id == "ComicVine");
+        row.SecretValue = "KEY";
+        row.SaveCommand!.Execute(null);
+
+        vm.TestConnectionCommand.Execute(row);
+
+        Assert.Contains("no read-only check", vm.ConnectionDialogStatus);
+        Assert.Null(row.LastCheck);                          // no fake pass
+        Assert.Empty(store.Load());
+    }
+
+    [Fact]
+    public void Connections_TestConnection_WhenNotSetUp_SaysThereIsNothingToTest()
+    {
+        var vm = CreateRedesignViewModel(out _);
+        var row = vm.TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.Kitsu));
+
+        vm.TestConnectionCommand.Execute(row);
+
+        Assert.Contains("not set up", vm.ConnectionDialogStatus);
+    }
+
+    [Fact]
+    public void Connections_FailedCheck_ShowsInTheAttentionStripAndOnTheTile()
+    {
+        var vm = CreateRedesignViewModel(out _);
+        Assert.False(vm.HasAttention);
+
+        var prowlarr = vm.DownloadTiles.Single(r => r.Id == "Prowlarr");
+        prowlarr.IsConnected = true;
+        prowlarr.LastCheck = ConnectionCheck.Failed(ConnectionFailure.Unreachable, DateTimeOffset.UtcNow, "Connection refused");
+
+        Assert.Equal(ConnectionStatus.Unreachable, prowlarr.Status);
+        Assert.True(vm.HasAttention);
+        Assert.Equal("1 needs attention", vm.AttentionTitle);
+        Assert.Contains("Prowlarr", vm.AttentionText);
+        Assert.Contains("Connection refused", vm.AttentionText);
+
+        vm.OpenAttentionRowCommand.Execute(null);
+        Assert.Same(prowlarr, vm.SelectedConnectionProvider);
+    }
+
+    [Fact]
+    public void Connections_Disconnecting_ForgetsTheLastCheck()
+    {
+        var vm = CreateRedesignViewModel(out var store);
+        var row = vm.DownloadTiles.Single(r => r.Id == "Prowlarr");
+        row.IsConnected = true;
+        var failed = ConnectionCheck.Failed(ConnectionFailure.Unreachable, DateTimeOffset.UtcNow, "down");
+        row.LastCheck = failed;
+        store.Record(row.Id, failed);
+
+        row.IsConnected = false;
+
+        Assert.Null(row.LastCheck);
+        Assert.False(store.Load().ContainsKey("Prowlarr"));
+    }
+
+    [Fact]
+    public void Connections_Metron_HasAccountSyncAndActivityTabs()
+    {
+        var vm = CreateRedesignViewModel(out _);
+        var metron = vm.SourceProviderRows.Single(r => r.Id == "Metron");
+
+        vm.OpenConnectionDialogCommand.Execute(metron);
+        Assert.True(vm.IsMetronSelected);
+        Assert.Equal(PreferencesScreenViewModel.MetronTabKeys.Account, vm.MetronTabs.SelectedKey);
+        Assert.True(vm.ShowCredentialBody);
+        Assert.False(vm.ShowMetronSyncBody);
+        Assert.False(vm.ShowAccountActivity);               // Metron has its Activity tab instead
+
+        vm.MetronTabs.Select(PreferencesScreenViewModel.MetronTabKeys.Sync);
+        Assert.True(vm.ShowMetronSyncBody);
+        Assert.False(vm.ShowCredentialBody);
+
+        vm.MetronTabs.Select(PreferencesScreenViewModel.MetronTabKeys.Activity);
+        Assert.True(vm.ShowMetronActivityBody);
+    }
+
+    [Theory]
+    [InlineData("connections.metronSync", "Metron")]
+    [InlineData("connections.gcdData", "Gcd")]
+    [InlineData("connections.trackingBehavior", "TrackerBehavior")]
+    public void Connections_SearchHitInsideAPane_SelectsItsTile(string anchor, string expectedId)
+    {
+        var vm = CreateRedesignViewModel(out _);
+
+        vm.RequestScrollToAnchor(anchor);
+
+        Assert.Equal(expectedId, vm.SelectedConnectionProvider?.Id);
+        Assert.True(vm.IsConnectionDialogOpen);
+        if (anchor == "connections.metronSync")
+        {
+            Assert.True(vm.ShowMetronSyncBody);
+        }
+    }
+
+    [Fact]
+    public void Connections_Gcd_TileReflectsTheDataState_AndIsNotCountedAsAnAccount()
+    {
+        var vm = CreateRedesignViewModel(out _);
+        var gcd = vm.MetadataTiles.Single(r => r.Id == "Gcd");
+
+        Assert.False(gcd.IsAccount);
+        Assert.False(gcd.NeedsAttention);
+
+        // The installer looks at the real data folder, so assert the tile mirrors whatever is there rather than assuming it is empty.
+        Assert.Equal(vm.GcdData.IsInstalled, gcd.IsConnected);
+        if (vm.GcdData.IsInstalled)
+        {
+            Assert.StartsWith("Data ", gcd.StatusText);
+        }
+        else
+        {
+            Assert.Equal("Not downloaded", gcd.StatusText);
+        }
+    }
+
+    [Theory]
+    [InlineData("401 Unauthorized", ConnectionFailure.Auth)]
+    [InlineData("Wrong API key", ConnectionFailure.Auth)]
+    [InlineData("Connection refused", ConnectionFailure.Unreachable)]
+    [InlineData("", ConnectionFailure.Unreachable)]
+    public void Connections_ClassifyFailure_SeparatesAuthFromUnreachable(string message, ConnectionFailure expected)
+        => Assert.Equal(expected, PreferencesScreenViewModel.ClassifyFailure(message));
+
+    [Fact]
+    public void Appearance_Tabs_StartOnThemeAndSearchHitsSelectTheirTab()
+    {
+        var vm = CreateRedesignViewModel(out _);
+        Assert.Equal(PreferencesScreenViewModel.AppearanceTabKeys.Theme, vm.AppearanceTabs.SelectedKey);
+
+        vm.RequestScrollToAnchor("appearance.cosmetics");
+        Assert.Equal(PreferencesScreenViewModel.AppearanceTabKeys.Covers, vm.AppearanceTabs.SelectedKey);
+
+        vm.RequestScrollToAnchor("appearance.interface");
+        Assert.Equal(PreferencesScreenViewModel.AppearanceTabKeys.Interface, vm.AppearanceTabs.SelectedKey);
+
+        vm.RequestScrollToAnchor("appearance.autoSwitch");
+        Assert.Equal(PreferencesScreenViewModel.AppearanceTabKeys.Theme, vm.AppearanceTabs.SelectedKey);
+    }
+
+    [Fact]
+    public void Appearance_EveryAppearanceIndexEntry_NamesATab()
+    {
+        foreach (var entry in PreferenceIndex.Entries.Where(e => e.Section == PreferencesSection.Appearance))
+        {
+            Assert.False(string.IsNullOrEmpty(entry.SubTab), $"{entry.AnchorKey} has no SubTab");
+        }
+    }
+
+    [Fact]
+    public void Appearance_ThemeGroups_SplitDarkLightAndAccessibility()
+    {
+        var vm = CreateRedesignViewModel(out _);
+
+        Assert.Equal(new[] { "Dark", "Light", "Accessibility" }, vm.ThemeGroups.Select(g => g.Title));
+        Assert.Contains(vm.ThemeGroups[0].Themes, t => t.Key == "matrix");
+        Assert.Contains(vm.ThemeGroups[1].Themes, t => t.Key == "daylight");
+        Assert.Contains(vm.ThemeGroups[1].Themes, t => t.Key == "windows_11");
+        Assert.Equal(new[] { "colorblind_safe", "maximum_contrast" }, vm.ThemeGroups[2].Themes.Select(t => t.Key).OrderBy(k => k));
+        Assert.Equal(vm.Themes.Count, vm.ThemeGroups.Sum(g => g.Themes.Count));
+    }
+
+    [Fact]
+    public void Appearance_Inspector_FollowsTheActiveTheme()
+    {
+        var vm = CreateRedesignViewModel(out _);
+        Assert.NotNull(vm.ActiveThemeSummary);
+        Assert.Equal("default", vm.ActiveThemeSummary!.Key);
+
+        vm.SelectThemeCommand.Execute(vm.Themes.Single(t => t.Key == "daylight"));
+
+        Assert.Equal("daylight", vm.ActiveThemeSummary!.Key);
+        Assert.Equal("Light", vm.ActiveThemeSummary.ModeLabel);
+    }
+
+    [Fact]
+    public void Appearance_ContrastBadges_ArePassingForDefaultAndHonestlyLowForWindows11()
+    {
+        var vm = CreateRedesignViewModel(out _);
+
+        var def = vm.Themes.Single(t => t.Key == "default");
+        Assert.True(def.TextContrastOk);
+        Assert.True(def.AccentContrastOk);
+        Assert.EndsWith(":1", def.TextContrastText);
+
+        var win11 = vm.Themes.Single(t => t.Key == "windows_11");
+        Assert.False(win11.AccentContrastOk);               // #0078D4 on #F3F3F3 is 4.08:1, a known pre-existing miss
+        Assert.Contains("below", win11.AccentContrastAutomationName);
+    }
+
+    [Fact]
+    public void Appearance_Samples_MarkTheActiveGlowTierAndDensity()
+    {
+        var vm = CreateRedesignViewModel(out _);
+
+        Assert.Equal(4, vm.GlowTierSamples.Count);
+        Assert.Equal(3, vm.DensitySamples.Count);
+        Assert.Single(vm.GlowTierSamples, s => s.IsActive);
+        Assert.Single(vm.DensitySamples, s => s.IsActive);
+
+        vm.DensityText = DensityPresets.NameOf(DensityPresets.Compact);
+        Assert.Equal(DensityPresets.Compact, vm.DensitySamples.Single(s => s.IsActive).Preset);
+
+        vm.GlowTierText = "Vivid";
+        Assert.Equal(ThemeService.GlowTierVivid, vm.GlowTierSamples.Single(s => s.IsActive).Tier);
     }
 
     // ===================== Keyboard focus reclaim (docs/superpowers/specs/2026-09-29-keyboard-focus-reclaim-phases-2-6-design.md) =====================
@@ -979,10 +1267,9 @@ public class PreferencesScreenViewModelTests : IDisposable
         int themeCountAfterFirstLoad = vm.Themes.Count;
         vm.EnsureLoaded();
 
-        // 10 built-ins now (docs/superpowers/specs/2026-09-16-theme-system-design.md's full catalog),
-        // not just Default - the "Once" in this test's name is about EnsureLoaded's own idempotency
-        // guard, asserted by the equality check below, not about the theme count itself.
-        Assert.Equal(10, vm.Themes.Count);
+        // 20 built-in families now (10 version 1, 10 version 2 listing one entry per variant = 28 entries) - the "Once" in this test's
+        // name is about EnsureLoaded's own idempotency guard, asserted by the equality check below, not about the theme count itself.
+        Assert.Equal(28, vm.Themes.Count);
         Assert.Equal(themeCountAfterFirstLoad, vm.Themes.Count);
         Assert.Contains("System Default", vm.FontFamilies);
         Assert.Equal("System Default", vm.SelectedFontFamily);
@@ -1086,31 +1373,45 @@ public class PreferencesScreenViewModelTests : IDisposable
     [Fact]
     public void ReducedMotion_Change_PersistsToAppSettings_AndAppliesLive()
     {
-        // Turning Reduced Motion on rewrites four process-global motion tokens to zero. Put them back afterwards: leaving them at zero silently
-        // switches off every later test that needs real motion (the Matrix rain render tests found this the hard way - they only failed when
-        // this test happened to run first).
+        // Choosing Reduced rewrites the process-global motion tokens and the shared policy. Put both back afterwards: leaving them
+        // reduced silently switches off every later test that needs real motion (the Matrix rain render tests found this the hard way).
         var resources = Avalonia.Application.Current!.Resources;
-        string[] keys = { "PbMotionFast", "PbMotionSlow", "PbMotionStandard", "PbMotionLarge" };
+        string[] keys =
+        {
+            "PbMotionFast", "PbMotionSlow", "PbMotionStandard", "PbMotionLarge", "PbMotionAcknowledge", "PbMotionAcknowledgeMove",
+            "PbMotionHoverFade", "PbMotionHoverMove", "PbMotionRevealFade", "PbMotionRevealMove", "PbMotionRevealExit", "PbMotionReplace",
+            "PbMotionTravelFade", "PbMotionTravelMove", "PbMotionFlight", "PbMotionAmbient",
+        };
         var before = keys.ToDictionary(k => k, k => resources.TryGetValue(k, out var v) ? v : null);
+        var previousPreference = Paperbunkr.App.Theming.Motion.MotionPolicy.Preference;
         try
         {
             var vm = CreateViewModel();
             vm.EnsureLoaded();
-            Assert.False(vm.ReducedMotion);
+            Assert.Equal(nameof(MotionPreferenceMode.System), vm.MotionPreferenceText);
 
-            vm.ReducedMotion = true;
+            vm.MotionPreferenceText = nameof(MotionPreferenceMode.Reduced);
 
             using var context = new PaperbunkrDbContext(_dbOptions);
             Assert.True(context.GetOrCreateAppSettings().ReducedMotion);
-            Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionFast"]);
-            Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionSlow"]);
-            // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - PbMotionStandard/
-            // PbMotionLarge get the same zero-on-reduced-motion treatment as Fast/Slow above.
-            Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionStandard"]);
-            Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionLarge"]);
+            Assert.Equal(MotionPreferenceMode.Reduced, context.GetOrCreateAppSettings().MotionPreference);
+
+            // Motion v2 §3.4: Reduced keeps short fades and zeroes all travel; the legacy keys follow their role aliases.
+            Assert.Equal(TimeSpan.FromMilliseconds(100), resources["PbMotionRevealFade"]);
+            Assert.Equal(TimeSpan.Zero, resources["PbMotionRevealMove"]);
+            Assert.Equal(TimeSpan.Zero, resources["PbMotionFlight"]);
+            Assert.Equal(TimeSpan.FromMilliseconds(100), resources["PbMotionFast"]);
+            Assert.Equal(TimeSpan.FromMilliseconds(100), resources["PbMotionStandard"]);
+            Assert.Equal(TimeSpan.Zero, resources["PbMotionLarge"]);
+            Assert.Equal(TimeSpan.Zero, resources["PbMotionSlow"]);
+
+            vm.MotionPreferenceText = nameof(MotionPreferenceMode.Off);
+            Assert.Equal(TimeSpan.Zero, resources["PbMotionRevealFade"]);
+            Assert.Equal(TimeSpan.Zero, resources["PbMotionFast"]);
         }
         finally
         {
+            Paperbunkr.App.Theming.Motion.MotionPolicy.SetPreference(previousPreference);
             foreach (var (key, value) in before)
             {
                 if (value is null)
@@ -2632,7 +2933,11 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         var job = Assert.Single(activity.RecentJobs);
         Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
-        Assert.Equal("No new issues found.", job.ResultSummary);
+        Assert.StartsWith("No new issues found. Scan:", job.ResultSummary);
+        Assert.Contains("0 paths / 0 supported / 0 already tracked / 0 new", job.ResultSummary);
+        Assert.Contains("enumerate", job.ResultSummary);
+        Assert.Contains("import", job.ResultSummary);
+        Assert.Contains("total", job.ResultSummary);
         Assert.False(vm.IsScanning);
         Assert.Null(vm.CurrentComicFolderJob);
     }
@@ -2650,6 +2955,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         using (var context = new PaperbunkrDbContext(_dbOptions))
         {
             context.GetOrCreateAppSettings().AutoRemoveMissingOnScan = true;
+            context.WatchedFolders.Add(new WatchedFolder { Path = _scanRoot });
             context.SaveChanges();
         }
 
@@ -2665,6 +2971,36 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.Single(verify.RemovedFilePaths);
         var job = Assert.Single(activity.RecentJobs);
         Assert.Contains("Automatically removed 1 confirmed-missing file", job.ResultSummary);
+        Assert.Contains("verification", job.ResultSummary);
+    }
+
+    [Fact]
+    public async Task ScanNow_AutoRemoveMissingOnScan_PreservesPresentComicContentHealth()
+    {
+        string comicPath = Path.Combine(_scanRoot, "present.cbz");
+        CbzFixture.Create(comicPath, pageCount: 1);
+        int issueId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().AutoRemoveMissingOnScan = true;
+            context.WatchedFolders.Add(new WatchedFolder { Path = _scanRoot });
+            var series = new Series { Name = "Present Series", EmptyRowAcknowledged = true };
+            var issue = new Issue { Series = series, Number = "1", FilePath = comicPath, IsContentEmpty = true };
+            context.Issues.Add(issue);
+            context.SaveChanges();
+            issueId = issue.Id;
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        await vm.ScanNowCommand.ExecuteAsync(null);
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var issueAfter = verify.Issues.Include(i => i.Series).Single(i => i.Id == issueId);
+        Assert.False(issueAfter.FileIsMissing);
+        Assert.True(issueAfter.IsContentEmpty); // automatic cleanup must not run the full content probe
+        Assert.True(issueAfter.Series!.EmptyRowAcknowledged); // only full Verify resets this state
+        Assert.Empty(verify.RemovedLibraryEntries);
     }
 
     [Fact]
@@ -2790,7 +3126,11 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         var job = Assert.Single(activity.RecentJobs);
         Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
-        Assert.Equal("No new issues found.", job.ResultSummary);
+        Assert.StartsWith("No new issues found. Scan:", job.ResultSummary);
+        Assert.Contains("0 paths / 0 supported / 0 already tracked / 0 new", job.ResultSummary);
+        Assert.Contains("enumerate ", job.ResultSummary);
+        Assert.Contains("import ", job.ResultSummary);
+        Assert.Contains("total ", job.ResultSummary);
         Assert.Empty(activity.ActiveJobs);
     }
 
@@ -2966,7 +3306,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         await vm.ScanNowCommand.ExecuteAsync(null);
 
         var job = Assert.Single(activity.RecentJobs);
-        Assert.Equal("Added 1 issue across 1 series.", job.ResultSummary);
+        Assert.StartsWith("Added 1 issue across 1 series. Scan:", job.ResultSummary);
+        Assert.Contains("covers", job.ResultSummary);
         using var verifyContext = new PaperbunkrDbContext(_dbOptions);
         var issue = Assert.Single(verifyContext.Issues);
         string stem = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize);
@@ -3723,6 +4064,9 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.FindSimilarSeriesCommand.Execute(null);
 
         var row = Assert.Single(vm.SimilarSeriesCandidates);
+        Assert.True(vm.HasScannedSimilarSeries);
+        Assert.False(vm.NoSimilarSeriesCandidates);
+        Assert.True(vm.LibraryHealthSections.SimilarSeries.IsOpen);
         Assert.Equal("Cataclysm - The Ultimates", row.IncomingName); // fewer issues = source
         Assert.Equal("Cataclysm: The Ultimates", row.MatchedName); // more issues = target
     }
@@ -3742,6 +4086,9 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.FindSimilarSeriesCommand.Execute(null);
 
         Assert.Empty(vm.SimilarSeriesCandidates);
+        Assert.True(vm.HasScannedSimilarSeries);
+        Assert.True(vm.NoSimilarSeriesCandidates);
+        Assert.True(vm.LibraryHealthSections.SimilarSeries.IsOpen);
     }
 
     [Fact]
@@ -3775,6 +4122,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         Assert.Empty(vm.SimilarSeriesCandidates);
+        Assert.False(vm.HasSimilarSeriesCandidates);
+        Assert.True(vm.NoSimilarSeriesCandidates);
         using var verify = new PaperbunkrDbContext(_dbOptions);
         Assert.Null(verify.Series.Find(sourceId));
         var target2 = verify.Series.Include(s => s.Issues).Single(s => s.Id == targetId);

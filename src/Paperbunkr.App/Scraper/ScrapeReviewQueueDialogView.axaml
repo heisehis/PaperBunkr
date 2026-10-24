@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Paperbunkr.App.Scraper"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="480"
+             x:Class="Paperbunkr.App.Scraper.ScrapeReviewQueueDialogView"
+             x:DataType="vm:ScrapeReviewQueueDialogViewModel">
+
+    <!-- The review list (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 2), shown in the scraper's own
+         modal host like the batch summary. One row per library series; Review closes this and runs an interactive scrape of that series. -->
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <TextBlock Grid.Row="0" Classes="dialogTitle" Text="Waiting for review" />
+        <TextBlock Grid.Row="1" Classes="pbTextMeta" Text="{Binding Subtitle}" ToolTip.Tip="Arrow keys move between series; Enter reviews one, Delete skips it." Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" Margin="0,4,0,12" />
+
+        <ScrollViewer Grid.Row="2" MaxHeight="360" Padding="0,0,12,0">
+            <ListBox x:Name="SeriesList" ItemsSource="{Binding Groups}" SelectedItem="{Binding SelectedGroup}"
+                     AutomationProperties.Name="Series waiting for review" AutomationProperties.HelpText="Enter reviews the selected series, Delete skips it">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ScrapeReviewSeriesGroup">
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,8">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,12,0">
+                                    <TextBlock Classes="pbTextBody" FontWeight="SemiBold" Text="{Binding SeriesName}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Classes="pbTextMeta" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis">
+                                        <Run Text="{Binding CountText}" /><Run Text=" · " /><Run Text="{Binding Preview}" />
+                                    </TextBlock>
+                                    <TextBlock Classes="pbTextCaption" Foreground="{DynamicResource PbTextMutedBrush}" Text="{Binding Reason}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button Classes="ghost sm" Content="Never" Focusable="False"
+                                            Command="{Binding $parent[ListBox].((vm:ScrapeReviewQueueDialogViewModel)DataContext).NeverCommand}" CommandParameter="{Binding}"
+                                            ToolTip.Tip="Never scrape these comics again" />
+                                    <Button Classes="ghost sm" Content="Skip" Focusable="False"
+                                            Command="{Binding $parent[ListBox].((vm:ScrapeReviewQueueDialogViewModel)DataContext).SkipCommand}" CommandParameter="{Binding}"
+                                            ToolTip.Tip="Take them off this list" />
+                                    <Button Classes="secondary sm" Content="Review" Focusable="False"
+                                            Command="{Binding $parent[ListBox].((vm:ScrapeReviewQueueDialogViewModel)DataContext).ReviewCommand}" CommandParameter="{Binding}"
+                                            ToolTip.Tip="Pick this series' match" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+            <Button Classes="ghost" Content="Close" Command="{Binding CloseCommand}" IsCancel="True" />
+            <Button Classes="primary" Content="Review all" Command="{Binding ReviewAllCommand}" IsEnabled="{Binding !IsEmpty}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

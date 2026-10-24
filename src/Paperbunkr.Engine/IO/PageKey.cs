@@ -31,6 +31,8 @@ namespace cYo.Projects.ComicRack.Engine.IO
 			return base.CreateHashCode() ^ adjustment.GetHashCode();
 		}
 
+		public override int GetHashCode() => base.GetHashCode();
+
 		public override bool Equals(object obj)
 		{
 			PageKey pageKey = obj as PageKey;

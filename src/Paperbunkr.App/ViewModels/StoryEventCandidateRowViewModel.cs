@@ -16,12 +16,14 @@ public partial class StoryEventCandidateRowViewModel : ViewModelBase
 {
     private readonly Func<StoryEventCandidateRowViewModel, Task> _onAccept;
     private readonly Action<StoryEventCandidateRowViewModel> _onDismiss;
+    private readonly Action? _onStateChanged;
 
-    public StoryEventCandidateRowViewModel(StoryEventCandidate candidate, Func<StoryEventCandidateRowViewModel, Task> onAccept, Action<StoryEventCandidateRowViewModel> onDismiss)
+    public StoryEventCandidateRowViewModel(StoryEventCandidate candidate, Func<StoryEventCandidateRowViewModel, Task> onAccept, Action<StoryEventCandidateRowViewModel> onDismiss, Action? onStateChanged = null)
     {
         Candidate = candidate;
         _onAccept = onAccept;
         _onDismiss = onDismiss;
+        _onStateChanged = onStateChanged;
     }
 
     public StoryEventCandidate Candidate { get; }
@@ -37,9 +39,29 @@ public partial class StoryEventCandidateRowViewModel : ViewModelBase
     public int MemberCount => Candidate.Members.Count;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanAct))]
+    [NotifyCanExecuteChangedFor(nameof(AcceptCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DismissCommand))]
     private bool _isAccepting;
 
-    [RelayCommand]
+    [ObservableProperty]
+    private bool _isSelected;
+
+    [ObservableProperty]
+    private string? _batchError;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanAct))]
+    [NotifyCanExecuteChangedFor(nameof(AcceptCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DismissCommand))]
+    private bool _isQueueBusy;
+
+    public bool CanAct => !IsAccepting && !IsQueueBusy;
+
+    partial void OnIsSelectedChanged(bool value) => _onStateChanged?.Invoke();
+    partial void OnIsAcceptingChanged(bool value) => _onStateChanged?.Invoke();
+
+    [RelayCommand(CanExecute = nameof(CanAct))]
     private async Task Accept()
     {
         IsAccepting = true;
@@ -53,6 +75,6 @@ public partial class StoryEventCandidateRowViewModel : ViewModelBase
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanAct))]
     private void Dismiss() => _onDismiss(this);
 }

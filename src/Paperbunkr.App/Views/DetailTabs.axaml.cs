@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
@@ -18,6 +19,8 @@ public partial class DetailTabs : UserControl
     public DetailTabs()
     {
         InitializeComponent();
+        IssueListHeader.ColumnResized += (field, width) => _viewModel?.SetIssueColumnWidth(field, width);
+        IssueListHeader.ColumnMoved += (field, target) => _viewModel?.MoveIssueColumn(field, target);
         _focus = new FocusReclaimer(this, () => _viewModel is { } vm && (vm.IsIssuesTab || vm.IsSpecialsTab), FocusFirstIssue);
         DataContextChanged += (_, _) => Subscribe();
         AttachedToVisualTree += (_, _) => _focus.Reclaim();

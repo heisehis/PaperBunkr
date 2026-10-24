@@ -56,6 +56,27 @@ public class ContinuityScreenViewModelTests : ContinuityScreenTestBase
     }
 
     [Fact]
+    public void Sidebar_EventTypeFilter_IncludesUnclassifiedAndKeepsTypesOnRows()
+    {
+        int crossover = SeedEvent("Crossover Event");
+        int arc = SeedEvent("Story Arc Event");
+        SeedEvent("Unclassified Event");
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.StoryEventTypeAssignments.Add(new StoryEventTypeAssignment { StoryEventId = crossover, Type = StoryEventType.Crossover });
+            context.StoryEventTypeAssignments.Add(new StoryEventTypeAssignment { StoryEventId = arc, Type = StoryEventType.StoryArc });
+            context.SaveChanges();
+        }
+
+        var sidebar = CreateScreen().Sidebar;
+        Assert.Equal("Crossover", sidebar.Events.Single(row => row.Id == crossover).EventTypesLabel);
+        sidebar.SelectedEventTypeFilter = "Story Arc";
+        Assert.Equal(arc, Assert.Single(sidebar.Events).Id);
+        sidebar.SelectedEventTypeFilter = "Unclassified";
+        Assert.Equal("Unclassified Event", Assert.Single(sidebar.Events).Name);
+    }
+
+    [Fact]
     public void SidebarTab_OpensOnContinuitiesFirst_IsRemembered_AndFollowsWhatOpens()
     {
         var (eventId, _, continuityId) = SeedCrisis();

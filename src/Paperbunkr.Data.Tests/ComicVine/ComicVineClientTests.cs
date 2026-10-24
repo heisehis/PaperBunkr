@@ -30,6 +30,22 @@ public class ComicVineClientTests
         $$"""{"status_code":1,"error":"OK","number_of_total_results":{{total}},"offset":{{offset}},"results":{{results}}}""";
 
     [Fact]
+    public async Task ReleaseList_EmptyPageBeforeReportedTotal_IsNotACompleteReplacement()
+    {
+        const string body = """{"status_code":1,"error":"OK","number_of_total_results":10,"offset":0,"results":[]}""";
+        var (client, handler) = Make(_ => (HttpStatusCode.OK, body));
+        try
+        {
+            await client.GetReleasesAsync(DateTime.Today, DateTime.Today.AddDays(7), CancellationToken.None);
+        }
+        catch (ComicVineException)
+        {
+            return;
+        }
+        Assert.Fail($"Incomplete release page was accepted after {handler.Requests.Count} requests.");
+    }
+
+    [Fact]
     public async Task SearchVolumes_ParsesFields_IncludingStringYearsAndPublisher()
     {
         var (client, handler) = Make(_ => (HttpStatusCode.OK, Ok("""
@@ -46,6 +62,8 @@ public class ComicVineClientTests
         var url = handler.Requests[0].RequestUri!.OriginalString;
         Assert.Contains("/volumes/?api_key=KEY", url);
         Assert.Contains("filter=name:Spawn%20%26%20co", url);   // query is escaped, not concatenated raw
+        Assert.Contains("&field_list=", url);
+        Assert.Contains(",description", url);
     }
 
     [Fact]

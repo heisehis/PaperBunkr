@@ -1,0 +1,54 @@
+{
+  // Gazette: a sample single-look light theme that shows Home as tabs. Same screen, same content as Harbor, arranged differently.
+  "schemaVersion": 2,
+  "id": "org.paperbunkr.samples.gazette",
+  "name": "Gazette",
+  "mode": "Light",
+  "base": {
+    "palette": { "canvas": "#F7F3EA", "ink": "#221E18", "accent": "#A8431F" },
+    "semantic": {
+      "border": { "default": "#D8CFBD" },
+      // "Match app" in the book reader uses these two.
+      "reader": { "background": { "page": "#FBF8F1", "text": "#221E18" } }
+    },
+    "metrics": { "radius": 2, "radiusSm": 2, "radiusLg": 4 },
+    "typography": {
+      "display": { "family": "Georgia", "size": 44, "weight": "Bold" },
+      "heading": { "family": "Georgia", "size": 26 }
+    },
+    "components": {
+      "button.primary": { "radius": 2 },
+      "chip": { "radius": 2 },
+      "panel.floating": { "radius": 4 }
+    },
+    "layouts": {
+      "Home": {
+        "contract": 1,
+        "root": {
+          "id": "root", "type": "Dock", "children": [
+            { "id": "masthead", "type": "Home.Masthead", "dock": "top" },
+            {
+              "id": "tabs", "type": "Tabs", "dock": "fill", "margin": "24,8,24,0", "children": [
+                {
+                  "id": "reading", "type": "Scroll", "title": "Reading", "children": [
+                    {
+                      "id": "readingStack", "type": "Stack", "spacing": 20, "padding": "0,16,0,40", "children": [
+                        { "id": "continue", "type": "Home.Section", "section": "continueReading" },
+                        { "id": "upNext", "type": "Home.Section", "section": "upNext" }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "everything", "type": "Scroll", "title": "Everything ({home.sectionCount})", "children": [
+                    { "id": "sections", "type": "Home.Sections", "margin": "0,16,0,40", "motion": "fadeIn" }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

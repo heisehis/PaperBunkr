@@ -29,11 +29,11 @@
                     <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center" Spacing="2">
                         <TextBlock Text="{Binding Home.NeedsAttention.Headline}" FontSize="13" FontWeight="SemiBold"
                                    Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="{Binding Home.NeedsAttention.Reason}" FontSize="11.5"
+                        <TextBlock Text="{Binding Home.NeedsAttention.Reason}" FontSize="12"
                                    Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding Home.NeedsAttention.ActionLabel}" FontSize="12.5" FontWeight="SemiBold"
+                        <TextBlock Text="{Binding Home.NeedsAttention.ActionLabel}" FontSize="13" FontWeight="SemiBold"
                                    Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
                         <fi:SymbolIcon Symbol="ArrowRight" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentTextBrush}" />
                     </StackPanel>

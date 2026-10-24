@@ -92,11 +92,9 @@ namespace cYo.Projects.ComicRack.Engine
 			if (IsScanning)
 			{
 				abortScanning = true;
-				if (!scanningThread.Join(10000))
-				{
-					scanningThread.Abort();
-					scanningThread.Join();
-				}
+				// The scan loop checks abortScanning between files; Thread.Abort is unsupported on
+				// modern .NET, so wait for the current file operation and cooperative stop to finish.
+				scanningThread.Join();
 			}
 			if (clearQueue)
 			{

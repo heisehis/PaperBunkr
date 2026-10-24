@@ -20,15 +20,27 @@ public sealed class RemoteThumbnailImage
 
     public static readonly AttachedProperty<string?> SourceUrlProperty =
         AvaloniaProperty.RegisterAttached<RemoteThumbnailImage, Image, string?>("SourceUrl");
+    public static readonly AttachedProperty<string?> LocalPathProperty =
+        AvaloniaProperty.RegisterAttached<RemoteThumbnailImage, Image, string?>("LocalPath");
 
     static RemoteThumbnailImage()
     {
         SourceUrlProperty.Changed.AddClassHandler<Image>(OnSourceUrlChanged);
+        LocalPathProperty.Changed.AddClassHandler<Image>((image, e) =>
+        {
+            image.Source = null;
+            if (e.NewValue is string path && System.IO.File.Exists(path))
+            {
+                try { image.Source = new Avalonia.Media.Imaging.Bitmap(path); } catch (System.IO.IOException) { }
+            }
+        });
     }
 
     public static void SetSourceUrl(Image target, string? value) => target.SetValue(SourceUrlProperty, value);
 
     public static string? GetSourceUrl(Image target) => target.GetValue(SourceUrlProperty);
+    public static void SetLocalPath(Image target, string? value) => target.SetValue(LocalPathProperty, value);
+    public static string? GetLocalPath(Image target) => target.GetValue(LocalPathProperty);
 
     private static void OnSourceUrlChanged(Image image, AvaloniaPropertyChangedEventArgs e)
     {

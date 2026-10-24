@@ -18,14 +18,14 @@
         fields reuse the TextSpinner behaviour; a secret is a masked TextBox. Colours are theme resources only.
     -->
     <Border Width="560" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-            BorderThickness="1" CornerRadius="8" Padding="20">
+            BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="20">
         <StackPanel Spacing="12">
             <Grid ColumnDefinitions="*,Auto">
                 <TextBlock Classes="pbTextHeading" Text="{Binding Title}" VerticalAlignment="Center" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                    <Button Content="Import…" Command="{Binding ImportCommand}" FontSize="11" Padding="8,3" />
-                    <Button Content="Export…" Command="{Binding ExportCommand}" FontSize="11" Padding="8,3" />
-                    <Button Content="{Binding ResetAll.Label}" Command="{Binding ResetAll.TriggerCommand}" FontSize="11" Padding="8,3" />
+                    <Button Content="Import…" Command="{Binding ImportCommand}" FontSize="11" Padding="8,4" />
+                    <Button Content="Export…" Command="{Binding ExportCommand}" FontSize="11" Padding="8,4" />
+                    <Button Content="{Binding ResetAll.Label}" Command="{Binding ResetAll.TriggerCommand}" FontSize="11" Padding="8,4" />
                 </StackPanel>
             </Grid>
 
@@ -33,7 +33,7 @@
                        Foreground="{DynamicResource PbTextMutedBrush}" AutomationProperties.LiveSetting="Polite" />
 
             <Border IsVisible="{Binding HasSecretsUnavailableNote}" Background="{DynamicResource PbAccentSoftBrush}"
-                    CornerRadius="6" Padding="10">
+                    CornerRadius="{DynamicResource PbRadiusSm}" Padding="10">
                 <TextBlock Text="{Binding SecretsUnavailableNote}" FontSize="12" TextWrapping="Wrap"
                            Foreground="{DynamicResource PbTextBrush}" />
             </Border>
@@ -68,16 +68,16 @@
                                                              AutomationProperties.Name="{Binding Label}" />
 
                                         <StackPanel IsVisible="{Binding IsLocked}" Spacing="4" HorizontalAlignment="Right">
-                                            <TextBlock Text="Locked by the plugin once a value is saved." FontSize="11.5"
+                                            <TextBlock Text="Locked by the plugin once a value is saved." FontSize="12"
                                                        Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
                                             <Button Content="{Binding Unlock.Label}" Command="{Binding Unlock.TriggerCommand}"
-                                                    FontSize="11" Padding="8,3" HorizontalAlignment="Right" />
+                                                    FontSize="11" Padding="8,4" HorizontalAlignment="Right" />
                                         </StackPanel>
 
                                         <Button IsVisible="{Binding CanReset}" Content="Reset to default" Command="{Binding ResetCommand}"
-                                                FontSize="11" Padding="8,3" HorizontalAlignment="Right" />
+                                                FontSize="11" Padding="8,4" HorizontalAlignment="Right" />
 
-                                        <TextBlock IsVisible="{Binding HasError}" Text="{Binding Error}" FontSize="11.5"
+                                        <TextBlock IsVisible="{Binding HasError}" Text="{Binding Error}" FontSize="12"
                                                    TextWrapping="Wrap" Foreground="{DynamicResource PbDangerBrush}"
                                                    AutomationProperties.LiveSetting="Polite" />
                                     </StackPanel>

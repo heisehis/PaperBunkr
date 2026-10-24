@@ -17,6 +17,8 @@ public class BrandMarkRenderSmokeTests
 
     [Theory]
     [InlineData(MarkFamily.Service, "AniList", MarkKind.SvgAsset)]
+    [InlineData(MarkFamily.Service, "ComicVine", MarkKind.SvgAsset)]
+    [InlineData(MarkFamily.Service, "Metron", MarkKind.SvgAsset)]
     [InlineData(MarkFamily.Service, "ReadThingsRight", MarkKind.LetterMark)]
     [InlineData(MarkFamily.Publisher, "Marvel", MarkKind.SvgAsset)]
     [InlineData(MarkFamily.Publisher, "DSTLRY", MarkKind.LetterMark)]
@@ -26,7 +28,7 @@ public class BrandMarkRenderSmokeTests
     [InlineData(MarkFamily.Format, "Annual", MarkKind.SvgAsset)]
     [InlineData(MarkFamily.Format, "EPUB", MarkKind.Glyph)]
     [InlineData(MarkFamily.AgeRating, "Teen", MarkKind.SvgAsset)]
-    [InlineData(MarkFamily.AgeRating, "MA15+", MarkKind.LetterMark)]
+    [InlineData(MarkFamily.AgeRating, "MA15+", MarkKind.Raster)]
     [InlineData(MarkFamily.Language, "ja", MarkKind.Flag)]
     [InlineData(MarkFamily.Language, "eo", MarkKind.Text)]
     [InlineData(MarkFamily.ReadingStatus, "Reading", MarkKind.Glyph)]

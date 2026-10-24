@@ -23,6 +23,14 @@ public class MarkdownLiteTests
     }
 
     [Fact]
+    public void ParseDescription_DropsSeparatorOnlyLines()
+    {
+        var blocks = MarkdownLite.ParseDescription("The heroes return.\n-----\n___\n= = =\nA new threat rises.");
+
+        Assert.Equal(["The heroes return.", "A new threat rises."], blocks.Select(b => b.PlainText));
+    }
+
+    [Fact]
     public void Parse_HardWrappedParagraph_JoinsIntoOneBlock()
     {
         var block = Assert.Single(MarkdownLite.Parse("Paperbunkr is open-source software distributed under its project license. These\nTerms govern your use."));

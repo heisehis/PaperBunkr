@@ -1,0 +1,279 @@
+# Paperbunkr
+
+ComicRack-inspired comic/manga library and reader, Avalonia/.NET 8. Full design doc:
+[docs/onboarding.md](docs/onboarding.md). CE parity audit: [docs/ce-feature-inventory.md](docs/ce-feature-inventory.md).
+
+## Roadmap status — check this first in a new session
+
+- **Source of truth:** [docs/paperbunkr-todo.md](docs/paperbunkr-todo.md) — renamed 2026-09-18 from
+  `alpha-todo.md` now that Alpha is done; same file, same content, P0–P7 historical checklist plus
+  the unsequenced Beta backlog, with commit refs and rationale for every status.
+- **Live dashboard (lighter view, same data):**
+  https://Codex.ai/artifact/2Zf5nmJiCzARE4MKgKAVMF (old `/code/artifact/...` link 404s)
+- **Kept in sync by:** a scheduled cloud routine (`paperbunkr-alpha-tracker-sync`, every 6h,
+  read-only) that diffs `git log` against the dashboard's own embedded `HEAD` marker and
+  republishes only verified status changes. It never edits `docs/paperbunkr-todo.md` or commits
+  anything — manage/inspect it at https://Codex.ai/code/routines.
+- **If you land roadmap-relevant work in a session:** update `docs/paperbunkr-todo.md` by hand (status,
+  commit ref, what you verified — not just what the commit message claims). The dashboard's own
+  6-hourly check will pick up the underlying commits regardless, but the written doc is what a
+  human actually reads for the "why."
+- The doc drifted out of sync with the repo once already (see its "Live tracker" section) —
+  don't assume either the doc or the dashboard is current without checking `git log` against the
+  `HEAD` hash each one records.
+
+## Standing rule
+
+Before adding any field, default, or behavior, verify it against the original ComicRack CE
+source/behavior (`_reference/ComicRackCE`) rather than assuming — this project is a from-scratch
+rewrite aiming for CE parity plus deliberate deviations, not a guess at what CE probably did.
+
+## Communication style — no caveman
+
+Do **not** use the `caveman` terse-prose plugin's style on this project (reversed 2026-09-19; it was
+briefly a prerequisite from 2026-09-12). Write normal prose. The plugin is installed at user scope,
+so its hooks may still inject "CAVEMAN MODE ACTIVE" text here — ignore it.
+
+## Design workflow — grilling is the clarifying-questions step
+
+The `brainstorming` skill (still mandatory before any feature/behavior work, per its own
+HARD-GATE) governs the pipeline: explore context → clarify → propose approaches → present design
+→ write `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` → user reviews → hand off to
+`writing-plans`. For Paperbunkr, **replace brainstorming's "one question at a time" clarification
+(its checklist step 3) with a `/grilling` pass** (`mattpocock-skills` plugin, installed
+2026-09-05 at user scope):
+
+- Build the **design tree** — every decision branches into the decisions that hang off it — and
+  work it in **rounds**. Each round, ask the *entire settled frontier* at once: number the
+  questions, give each a recommended answer in the `❓ Q1 … ➡️ <recommendation>` format, then
+  wait. The user's answers reshape the tree; recompute the frontier and ask the next round.
+- **Facts are your job, never the user's.** When a frontier question needs something from the
+  repo (does CE do X? does this type exist? what does `_reference/ComicRackCE` say?), dispatch a
+  subagent to find it instead of asking — and don't block the rest of the frontier on it. This
+  pairs directly with the Standing rule above: CE-parity questions get *looked up*, not guessed
+  at and not punted to the user.
+- The session ends only when the frontier is empty — every branch visited, nothing silently
+  assumed. Do not start writing the design doc until the user confirms shared understanding.
+- Everything else in `brainstorming` stays: the HARD-GATE, YAGNI, 2–3 approaches with a
+  recommendation, the spec self-review, the user-review gate, and the `writing-plans` hand-off.
+- **Auto-trigger is allowed.** The model-invoked `grilling` skill may fire on its own when a
+  design or plan is worth stress-testing; `/grill-me` also runs it on demand. `/grill-with-docs`
+  is the variant that also writes ADRs/glossary via `domain-modeling` — use it when the work
+  introduces genuinely new domain vocabulary, not routine feature work.
+
+## UI/Avalonia foundation — mandatory across all phases
+
+Load the `avalonia` skill (installed via https://github.com/linuxdevel/Avalonia-skills, symlinked
+into `~/.Codex/skills/avalonia`) for **every** UI/Avalonia-touching phase of work on Paperbunkr,
+not just implementation:
+
+- **Brainstorming/design** — when exploring a UI idea or option space, route through the relevant
+  `avalonia`/`avalonia-pro-max` subskill (design-system, layout-patterns, components, motion,
+  accessibility, themes) before proposing approaches, so trade-offs are grounded in real Avalonia
+  constraints instead of guessed API shape.
+- **Spec write-ups** (`docs/superpowers/specs/*-design.md`) — check the matching subskill while
+  drafting so the spec doesn't bake in something Avalonia can't do cleanly (e.g. native sticky
+  headers, per-property DynamicResource inside a `BoxShadows`/gradient string).
+- **Planning** (`writing-plans`) — when a plan step touches XAML/styling/animation/testing/
+  deployment, cite the subskill that governs it.
+- **Implementation** — load the matching subskill before writing or reviewing the XAML/C#, and run
+  `avalonia-pro-max/review-checklist` before calling UI work done (see the 2026-08-30 detail-screens
+  polish pass for a worked example: it caught hardcoded hex colors that silently don't react to the
+  app's own runtime skin system — a real defect, not a style nit).
+
+**How to actually load a subskill (verified 2026-08-30 after it kept failing):** Codex only
+registers a skill for a *top-level* directory under `~/.Codex/skills/` that has its own `SKILL.md`
+directly inside it — that's `avalonia` itself. The 19 "subskills" this router table names
+(`avalonia-xaml`, `avalonia-mvvm`, every `avalonia-pro-max/*` entry, etc.) are nested *inside*
+`avalonia`'s own folder and are **not** separately registered, no matter how the routing table
+reads. Two things that look plausible both fail silently or loudly:
+- `Skill(skill: "avalonia-xaml")` (or any subskill name) → hard error, `Unknown skill: ...`.
+- `Skill(skill: "avalonia", args: "avalonia-pro-max/review-checklist")` → no error, but does
+  nothing useful either — it just reprints the top-level router's own `SKILL.md` with the args
+  tacked on as inert text; nothing reads `args` to pick a different file.
+
+The only thing that actually works: after the router names the subskill you need, `Read` (or
+`Glob` then `Read`) its `SKILL.md` directly off disk —
+`~/.Codex/skills/avalonia/<subskill-path>/SKILL.md`, e.g.
+`~/.Codex/skills/avalonia/avalonia-pro-max/review-checklist/SKILL.md`. That's how every subskill
+load in this project has actually happened so far; treat "invoke it like a skill" as never an
+option for anything below the router.
+
+The `avalonia-docs` MCP server (`https://docs-mcp.avaloniaui.net/mcp`, added 2026-08-30 via
+`Codex mcp add`) is available for live API lookups when a subskill doesn't cover something —
+prefer it over guessing.
+
+To update the skill later: `git -C ~/.local/share/avalonia-skills pull --ff-only` (no need to
+re-run the curl installer).
+
+**Explicitly excluded: `avalonia-layout-zafiro`.** A skill by this name may appear in
+`~/.Codex/skills` (symlinked from `~/.agents/skills`) — it teaches `Zafiro.Avalonia`-specific
+patterns (`HeaderedContainer`, `EdgePanel`, its own `Interaction.Behaviors`/icon extension).
+Paperbunkr has no dependency on `Zafiro.Avalonia` or ReactiveUI/DynamicData (it's on
+CommunityToolkit.Mvvm) and a 2026-08-30 decision was to **not** adopt the Zafiro stack — do not
+load or apply this skill's guidance here even though its name matches. If a future session
+considers adopting Zafiro for real, that's a brainstorming-level architecture decision, not
+something to slide in via skill auto-routing.
+
+## Input handling — one service, no per-screen key handlers
+
+All keyboard, mouse-button, wheel and gamepad input goes through `IInputService` (`src/Paperbunkr.App/Services/Input/`, design:
+[docs/superpowers/specs/2026-10-03-input-service-design.md](docs/superpowers/specs/2026-10-03-input-service-design.md)). `MainWindow` forwards
+its Tunnel events to it; the service resolves a physical input to a semantic `InputAction` through the keymap, and screens/controls
+**register a handler for the actions they own**. Do not add `KeyDown` handlers, `KeyBindings`, `KeyGesture`s or `PointerWheelChanged`
+shortcuts for a *hotkey* on a screen.
+
+- **Adding a shortcut:** add a `const` to `InputActionIds` and one `InputActionInfo` (scope, reader-state context, default bindings) to
+  `InputActions.Core`; handle it in the owning view with an `AttachedInputRegistration` (`focusRoot: () => this` keeps it quiet while a dialog
+  or popup has focus). Preferences > Keyboard Shortcuts, conflict detection, import/export and the user's `keymap.json` pick it up with no other
+  change. Reader-state variants are separate actions (`PageTurnRight` / `PanRight` / `ScrollRight`), selected by the scope's `InputContext`.
+- **A new screen gets shortcuts the same way every screen does** (design §14): in its constructor,
+  `ScreenInput.Attach(this, InputScope.X, new Dictionary<string, Func<bool>> { [InputActionIds.Refresh] = () => ... })`, plus an `InputService` property for tests. A handler
+  returns false to decline, so the shared actions (`Refresh` F5, `NewItem` Ctrl+N, `Save` Ctrl+S, `FocusSearch` Ctrl+F, `TabNext`/`TabPrevious`) are claimed only when the screen can do them
+  right now; anything it declines reaches the next screen or the shell. Run commands that rebuild the focused row's collections through `ScreenInput.Deferred`. A tab strip needs no code:
+  give its buttons the class `tab` (or `segToggle`/`ipTab`/`prefNavItem`) and `active`/`on`, and `TabStrip.Step` drives it from the bumpers and Ctrl+PageUp/PageDown.
+- **The controller is app-wide** (`AppGamepadHost`): its D-pad, A, Y and right stick are the `App.Focus*`/`Activate`/`ContextMenu`/`Scroll*` actions, which send the focused control the key
+  it already handles. So a new control needs no controller code; it only has to work from the keyboard.
+- **Item keys are remappable already.** Don't add a hardcoded Enter/Delete/F2/arrow check expecting it to be the only path: the user may have moved the action to another key, in which case the
+  service sends your control the *canonical* key (design §14, `InputActionInfo.CanonicalKey`). Keep handling the plain key and it works with any binding.
+- **Plugin commands are actions** (`PluginInputActions`, Plugin API 4.3): a Library-hook command shows up in Preferences > Keyboard Shortcuts without the plugin doing anything; its manifest
+  `shortcut` attribute only sets the default.
+- **The app-wide focus ring is an adorner, and Avalonia clips an adorner to its adorned control's clip.** Buttons clip to their bounds, which is why the ring template sets
+  `AdornerLayer.IsClipEnabled="False"`; `Controls/FocusRingAdorner` (the template root) puts back only the clip to the enclosing `ScrollViewer` viewports, so a half-scrolled control's ring does not draw over a
+  header. Don't add a second hand-rolled inner border on `:focus-visible` (it insets the content and doubles the ring); if a control needs a different ring,
+  set its `FocusAdorner` to null and draw one inside its own bounds.
+- **A read-only `SuggestBox` must not open itself on keyboard focus or a bare Down** (arrowing through a form would pop every dropdown open): it opens on a click, Enter, Space or Alt+Down.
+- **Don't make a control inside a card focusable unless the keyboard needs it** (the tile-select checkboxes are mouse-only): the arrow keys' directional search treats a nested control as a neighbour.
+- **Avalonia's `ItemsControl` handles arrow keys itself, and on a virtualizing list of focusable rows that drops focus** (it runs after the focused row and before a screen's *bubbling* `KeyDown`).
+  A screen with such a list takes its directional move on the **tunnel** (see `WantedScreen`). This only reproduces in the real `MainWindow`: test keyboard behaviour there (`RealWindowKeyboardTests`).
+- **An inset `BoxShadow` draws nothing on a control that has a `BorderThickness`.** For an inside ring on such a control use an inside `FocusAdorner` (see `PreferencesScreen.axaml`'s `prefNavItem`).
+- **Text boxes reached with the arrow keys or a pad only browse** (`TextEntryMode`): Enter or F2 or a click edits, Esc goes back, Tab and Ctrl+F land ready to type. Don't focus a box with
+  `NavigationMethod.Directional` unless you want that; use `Tab`/`Unspecified` to put the user straight into typing.
+- **A Button also swallows Enter and Space** before a XAML `KeyDown=` handler on it runs. A card that opens with Enter must either keep a bound `Command` or have the key tunnelled from an
+  ancestor (`LibraryScreen.OnScreenCardKeyDownTunnel`).
+- **A Button swallows a left press** (Avalonia 12): an instance `PointerPressed` handler declared in XAML on a `Button` never sees it. Tunnel from an ancestor instead (see
+  `LibraryScreen.OnScreenPointerPressedTunnel`).
+- **What stays a control's own key handler:** arrow navigation among a list's items, Enter/Space/Delete/F2 on the focused item, type-ahead,
+  Enter-to-commit/Esc-to-cancel in a text box, drag mechanics. If the behavior needs the *focused item*, it is the control's, not an action.
+- **Text boxes:** the service already ignores keyboard actions while a `TextBox` (or anything implementing `IInputSuppressor`) has focus, except
+  actions flagged `FiresInTextInput` (Escape, browser-back, quick open). A control that must see every key, mouse button and wheel turn
+  (a capture box) implements `IInputSuppressor` with `InputSuppression.All`.
+- **Headless tests that press keys** attach the window with `InputHost.Attach(window, service)` and pass the service to the view model — the same
+  thing `MainWindow` does. The default `InputServiceLocator.Current` is the do-nothing service, so anything not given a real one ignores keys.
+- **Persistence:** user remaps are `keymap.json` next to the database (overrides only). The old `KeyBinding` table is read once by
+  `LegacyKeyBindingImporter` and is left in place on purpose (worktrees share the dev DB) — don't write to it, don't drop it casually.
+
+## Running the App tests
+
+The full `Paperbunkr.App.Tests` suite (~5,300 tests) takes far too long to run after every change. Day to day run the fast set, and target the classes you touched:
+
+```bash
+dotnet test src/Paperbunkr.App.Tests --filter "Speed!=Slow"                      # everything except the slow classes
+dotnet test src/Paperbunkr.App.Tests --filter "FullyQualifiedName~WantedArrowKeyTests"   # one class
+dotnet test src/Paperbunkr.App.Tests --filter "Speed=Slow"                        # only the slow ones (run before a release)
+```
+
+A class or test that takes more than ~30 s is tagged `[Trait("Speed", "Slow")]` (`MainViewModelTests`, `AdPageDetectionServiceTests`, `DensityPresetTests`, `PreferencesScreenViewModelTests`, two sweeps in
+`RealWindowKeyboardTests`). Never start a second `dotnet test`/`dotnet build` on the project while one is running: they share the output folder and stall each other.
+
+## Build gotcha: adding a new Avalonia View
+
+Adding a brand-new `.axaml` file with a fresh `x:Class` (a View not previously compiled in this
+project) can fail the first `dotnet build` with `Avalonia error AVLN2000: Unable to find type`.
+Root cause (verified by binlog inspection): `CompileAvaloniaXaml` — the MSBuild target that weaves
+compiled XAML IL into the assembly and builds the runtime `!AvaloniaResources` index — has no
+`Inputs`/`Outputs` of its own. It only runs as a `TargetsTriggeredByCompilation` side effect of
+`CoreCompile`. If `CoreCompile` succeeds (writing the `.dll`) but the immediately-following
+`CompileAvaloniaXamlTask` then fails, that failure never touches the `.dll`'s timestamp. The next
+plain `dotnet build` sees the `.dll` newer than every source file, skips `CoreCompile` entirely
+(and therefore skips `CompileAvaloniaXaml` too), and reports **0 Errors** — but the XAML weave
+never actually reran. The shipped assembly is the same un-woven artifact from the failed build,
+with no valid `!AvaloniaResources` index for *any* view in the project, so the app crashes at
+startup with `XamlLoadException: No precompiled XAML found for ...App` even though `App.axaml` was
+never touched.
+
+**Avoid it:** always add the code-behind `.cs` (even a minimal
+`partial class X : UserControl { public X() => InitializeComponent(); }`) in the same step as the
+new `.axaml`. `x:Class` types aren't stubbed out by a source generator in this Avalonia version —
+without a matching compiled partial class, `CompileAvaloniaXamlTask` has nothing to bind to and
+`AVLN2000` is not transient, it will recur on every genuinely fresh compile (confirmed via
+`dotnet build -t:Rebuild`, which honestly re-fails instead of masking the error).
+
+**If a build ever fails inside XAML compilation after `CoreCompile` already produced output,
+don't just retry `dotnet build`** — a bare retry can silently report success while shipping a
+never-woven assembly. Fix the real compile error first, then force `CoreCompile`'s own output to
+be seen as stale before rebuilding:
+
+```bash
+rm src/Paperbunkr.App/obj/Debug/net8.0/Paperbunkr.App.dll src/Paperbunkr.App/obj/Debug/net8.0/Paperbunkr.App.pdb
+dotnet build src/Paperbunkr.App/Paperbunkr.App.csproj
+```
+
+`dotnet build -t:Rebuild` works too. Deleting only the Avalonia-specific cache under
+`obj/.../Avalonia/` does **not** help — that's not what gates the skip. Treat "0 Errors" alone as
+insufficient proof the weave ran; verify by launching the exe (or grepping a `-v:diag` log for
+`CompileAvaloniaXaml` actually executing, not `"skipped... previously built successfully"`).
+
+## Runtime gotcha: `TextLayout`'s `maxHeight: 0` is a zero-height clip, not "unconstrained"
+
+Found 2026-09-02 building `ParagraphView` (docs/superpowers/specs/2026-09-01-books-reader-
+ergonomics-and-annotations-design.md) — cost a full debugging session because it fails **silently**,
+with no exception and no crash log entry: every paragraph rendered as exactly one line tall
+regardless of actual text length, so the reflow reader's whole reading pane looked blank (chrome/
+title still rendered fine, since nothing there depended on this).
+
+If you construct `Avalonia.Media.TextFormatting.TextLayout` via the `(ITextSource textSource,
+TextParagraphProperties paragraphProperties, TextTrimming textTrimming, Double maxWidth, Double
+maxHeight, Int32 maxLines)` constructor (or its `TextRunCache`-taking sibling), passing `maxHeight:
+0` does **not** mean "no height constraint" the way `maxWidth`'s own "0 = let it grow" convention
+might lead you to assume. It's a literal zero-height clip, floored at one line — the layout reports
+exactly one line's height and refuses to add more, no matter how long the text or how the
+`TextWrapping`/`maxWidth`/`maxLines` values are set. Confirmed directly: same text, same width, same
+wrapping settings, only `maxHeight` changed — `0` → 1 line; `5000` → 5 correctly-wrapped lines.
+
+**Use `double.PositiveInfinity` for "let the layout take whatever height its content needs."** This
+also means `TextLines.Count`/`Height` alone don't prove wrapping works in a test — assert that height
+*increases* for longer text at the *same* width (a single short/narrow smoke-test measurement can
+pass even when wrapping is completely broken, since one clipped line still reports a positive,
+plausible-looking height).
+
+## Runtime gotcha: don't remove/detach a control from inside a routed event it's still raising
+
+Found 2026-09-12 chasing an `Avalonia.ArgumentOutOfRangeException` inside
+`Visual.OnDetachedFromVisualTreeCore` → `AvaloniaList<T>.Remove` → `SetVisualParent` — first
+reported from `SuggestBox`'s dropdown, then found independently in well over a dozen more spots
+(Library/Books workspace + reading-list + collection + smart-list + continuity/event delete
+buttons, the reader's TOC/bookmark/highlight/search drawers and their delete buttons, Detail
+screen's external-metadata/tracker linking, Activity Center's peek popover and alert dismiss, the
+plugin manager, Library Health's missing-files list, the PDF reader's captures drawer, keyboard
+shortcut chip removal — see `git log` around this date for the full fix set across ~15 files).
+
+The shape is always the same: a `Button` (or other control) lives **inside** a `Popup`'s content or
+an `ItemsControl`/`ListBox` row, and the command that `Button` raises — still synchronously routing
+that very `Click`/`PointerReleased`/`KeyDown` event — closes the `Popup` (sets its bound `IsOpen`
+property to `false`) or mutates the `ObservableCollection` backing that same row (`.Remove()`,
+`.Clear()`, a full reload that clears-and-repopulates). Either one detaches the clicking control's
+own visual subtree while Avalonia is still walking up the route calling handlers on it, which
+corrupts the framework's internal child-list bookkeeping and throws — reliably if the removal is
+unconditional and synchronous, intermittently if it's behind an `await` that sometimes completes
+without yielding (e.g. a cache hit skipping a real I/O round-trip).
+
+**Fix: defer the close/removal one dispatcher tick** — `Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+/* IsOpen = false, or collection.Remove(item)/.Clear() */)` — so it runs after the triggering event
+has finished routing instead of synchronously inline. Apply this at the specific call site inside
+the command, not by making the whole shared helper it calls (`RefreshSidebar`, `LoadFromDatabase`,
+etc.) asynchronous, since those helpers are usually also called from genuinely safe contexts. If a
+`using var context = ...` from the same method is needed only for the deferred branch, create a
+*fresh* context inside the `Dispatcher.UIThread.Post` lambda instead of capturing the outer one —
+the outer `using` disposes it as soon as the (now non-blocking) command method returns, before the
+deferred callback ever runs.
+
+Any brand-new "remove this row" / "link this item and dismiss" / "close this popup from a row
+inside it" button is a candidate for this bug — check it against this pattern before assuming a
+plain synchronous property-set or `.Remove()` call is fine.
+
+## Imported Claude Cowork project instructions
+
+- ask clarifying questions to tailor the answers accordingly
+- when i ask for alternatives to something, try to give me at least 10
+- Always be adversarial when I make inquiries. If I give you an instruction and you do not understand the context of what I gave you, you must ask before you proceed.

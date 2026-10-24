@@ -14,8 +14,13 @@ public interface IComicProvider : IComicVineClient, IComicVineVolumeSearch, ICom
     ComicProvider Kind { get; }
 }
 
+public sealed record MetronUniverseSeries(int Id, string Name, string? StartYear, int? ComicVineId = null, int? GcdId = null);
+
 /// <summary>One issue an exact-id lookup found: enough to fetch its details and its series.</summary>
 public sealed record ComicIssueHit(int IssueId, int SeriesId);
+
+/// <summary>A Metron series found by an exact external series identity.</summary>
+public sealed record ComicSeriesHit(int SeriesId);
 
 /// <summary>
 /// A source that can find an issue by an id it didn't issue itself (docs/superpowers/specs/2026-10-05-metron-api-efficiency-and-matching-design.md section 2).
@@ -26,6 +31,12 @@ public interface IComicIssueLookup
     Task<IReadOnlyList<ComicIssueHit>> FindIssuesByComicVineIdAsync(int comicVineIssueId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<ComicIssueHit>> FindIssuesByUpcAsync(string upc, CancellationToken cancellationToken);
+}
+
+/// <summary>Exact cross-provider lookup for a series identifier.</summary>
+public interface IComicSeriesLookup
+{
+    Task<IReadOnlyList<ComicSeriesHit>> FindSeriesByComicVineIdAsync(int comicVineSeriesId, CancellationToken cancellationToken);
 }
 
 /// <summary>A source that can say, in one request, which of its series changed since a moment in time (same design, section 1).</summary>
@@ -57,10 +68,10 @@ public static class MetronHttp
 
 /// <summary>
 /// Metron (metron.cloud) as a comic provider, mapped onto the same neutral records the ComicVine client returns. Endpoints and field names are from Metron's own API source:
-/// <c>series/?name=</c> (paged, 100 per page), <c>series/{id}/</c>, <c>series/{id}/issue_list/</c>, <c>issue/{id}/</c>; HTTP Basic auth.
+/// <c>series/?name=</c> (paged, 100 per page), <c>series/{id}/</c>, <c>series/{id}/issue_list/</c>, <c>issue/{id}/</c>; API token or legacy HTTP Basic login (<see cref="MetronAuth"/>).
 /// A Metron series has no cover image; its issues do.
 /// </summary>
-public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.IStoryArcSource, IComicIssueLookup, ISeriesChangeSource
+public sealed class MetronClient : IComicProvider, IIssueFirstSeriesSearch, IPullListSource, Scraping.IStoryArcSource, IComicIssueLookup, IComicSeriesLookup, ISeriesChangeSource, Metadata.IMetronEventLists, Metadata.IMetronUniverses
 {
     private const string BaseUrl = "https://metron.cloud/api";
     private const int MaxPages = 30;
@@ -88,16 +99,33 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
     private static readonly Regex Tags = new("<[^>]+>", RegexOptions.Compiled);
 
     private readonly HttpClient _http;
-    private readonly string _authorization;
+    private readonly MetronAuth _auth;
     private readonly ComicVineRequestPriority _priority;
 
+    /// <summary>The legacy username + password login (HTTP Basic).</summary>
     public MetronClient(string username, string password, ComicVineRequestPriority priority = ComicVineRequestPriority.High, HttpClient? http = null)
+        : this(MetronAuth.Basic(username, password), priority, http)
     {
-        _authorization = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
+    }
+
+    /// <summary>Whatever <see cref="MetronAuth"/> says: the saved API token, or the legacy login.</summary>
+    public MetronClient(MetronAuth auth, ComicVineRequestPriority priority = ComicVineRequestPriority.High, HttpClient? http = null)
+    {
+        _auth = auth;
         _priority = priority;
         _http = http ?? MetronHttp.Client;
         GuardLogin = http is null;
     }
+
+    /// <summary>The credential this client sends.</summary>
+    public MetronAuth Auth => _auth;
+
+    /// <summary>
+    /// One cheap authenticated request (the first page of publishers), for Test connection. Throws <see cref="ComicVineException"/>
+    /// with code 100 when Metron refuses the credential.
+    /// </summary>
+    public async Task VerifyAsync(CancellationToken cancellationToken) =>
+        await SendAsync(HttpMethod.Get, $"{BaseUrl}/publisher/?page=1", body: null, retryTransportFailure: true, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// Whether <see cref="MetronLoginGuard"/> applies: yes for the real, shared client; no for a client a test hands in, so one test's
@@ -131,6 +159,35 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
 
         // Metron doesn't order by size, and ComicVine's order is "most issues first", which callers rely on for tie-breaks.
         return volumes.OrderByDescending(v => v.CountOfIssues).Take(maxResults).ToList();
+    }
+
+    /// <summary>
+    /// <c>issue/?series_name=&amp;number=</c> (series name is a contains match): each matching issue names its series. Two pages at most; the year is not
+    /// used, since an issue's cover year and its series' start year differ.
+    /// </summary>
+    public async Task<IReadOnlyList<ComicVineVolume>> FindSeriesByIssueAsync(string seriesName, string issueNumber, int? year, CancellationToken cancellationToken)
+    {
+        var series = new Dictionary<int, ComicVineVolume>();
+        // Metron's names mostly drop a leading "The" ("Amazing Spider-Man: Halloween Special"), and series_name is a contains match.
+        string withoutThe = System.Text.RegularExpressions.Regex.Replace(seriesName.Trim(), @"^the\s+", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        string? url = $"{BaseUrl}/issue/?series_name={Uri.EscapeDataString(withoutThe)}&number={Uri.EscapeDataString(issueNumber)}";
+        for (int page = 0; page < 2 && url is not null; page++)
+        {
+            var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+            foreach (var node in (root["results"] as JsonArray) ?? new JsonArray())
+            {
+                if (node?["series"] is JsonObject s && s["id"] is { } idNode && int.TryParse(idNode.ToString(), out int id) && !series.ContainsKey(id))
+                {
+                    int? began = s["year_began"] is { } y && int.TryParse(y.ToString(), out int parsed) ? parsed : null;
+                    string name = CleanName(s["name"]?.GetValue<string>() ?? string.Empty, began);
+                    series[id] = new ComicVineVolume(id, name, null, began, 0, ImageUrl: null);
+                }
+            }
+
+            url = root["next"]?.GetValue<string?>();
+        }
+
+        return series.Values.ToList();
     }
 
     public async Task<ComicVineVolume?> GetVolumeAsync(int volumeId, CancellationToken cancellationToken)
@@ -208,6 +265,172 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
         return issues;
     }
 
+    /// <summary>The most EVENT lists of one name worth opening for their neighbours: duplicates of one event differ by who made them, not by what comes next.</summary>
+    private const int MaxEventListDetails = 2;
+
+    /// <summary>
+    /// The EVENT reading list for an event name and the lists before and after it (docs/superpowers/specs/2026-10-12-continuity-sources-design.md §4.2).
+    /// Metron's <c>reading_list</c> filters and its <c>previous</c>/<c>next</c> fields were read from Metron's own source, not yet checked against a live
+    /// response, so every missing or unexpected field simply means "no neighbour". A name that fits no list, or several that cannot be told apart, is null.
+    /// </summary>
+    public async Task<Metadata.MetronEventListInfo?> FindEventListAsync(string eventName, CancellationToken cancellationToken)
+    {
+        string wanted = Metadata.EventNameKeys.Key(StripYearSuffix(eventName));
+        if (wanted.Length == 0)
+        {
+            return null;
+        }
+
+        var root = await GetAsync($"{BaseUrl}/reading_list/?list_type=EVENT&name={Uri.EscapeDataString(StripYearSuffix(eventName))}", cancellationToken).ConfigureAwait(false);
+        var matches = new List<(int Id, string Name)>();
+        foreach (var node in (root["results"] as JsonArray) ?? new JsonArray())
+        {
+            if (node is JsonObject o && PositiveInt(o["id"]) is int id && o["name"]?.GetValue<string>() is { Length: > 0 } name
+                && Metadata.EventNameKeys.Key(StripYearSuffix(name)) == wanted)
+            {
+                matches.Add((id, name));
+            }
+        }
+
+        if (matches.Count == 0)
+        {
+            return null;
+        }
+
+        Metadata.MetronEventListInfo? first = null;
+        foreach (var (id, name) in matches.Take(MaxEventListDetails))
+        {
+            JsonNode detail;
+            try
+            {
+                detail = await GetAsync($"{BaseUrl}/reading_list/{id}/", cancellationToken).ConfigureAwait(false);
+            }
+            catch (ComicVineException ex) when (ex.ApiStatusCode == 101)
+            {
+                continue;
+            }
+
+            string? previous = (detail["previous"] as JsonObject)?["name"]?.GetValue<string>();
+            string? next = (detail["next"] as JsonObject)?["name"]?.GetValue<string>();
+            var info = new Metadata.MetronEventListInfo(id.ToString(CultureInfo.InvariantCulture), name, previous, next);
+            first ??= info;
+            if (previous is not null || next is not null)
+            {
+                return info;
+            }
+        }
+
+        return first;
+    }
+
+    private static string StripYearSuffix(string name) => TrailingYear.Replace(name, string.Empty).Trim();
+
+    /// <summary>A universe's name, designation ("Earth-616") and publisher; fields from Metron's own serializer source, not yet checked against a live response.</summary>
+    public async Task<IReadOnlyList<Metadata.MetronUniverseInfo>> SearchUniversesAsync(string query, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return Array.Empty<Metadata.MetronUniverseInfo>();
+
+        var results = new Dictionary<int, Metadata.MetronUniverseInfo>();
+        foreach (string filter in new[] { "name", "designation" })
+        {
+            string? url = $"{BaseUrl}/universe/?{filter}={Uri.EscapeDataString(query.Trim())}";
+            for (int page = 0; page < MaxPages && url is not null; page++)
+            {
+                var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+                foreach (var node in (root["results"] as JsonArray) ?? new JsonArray())
+                {
+                    if (node is not JsonObject item || PositiveInt(item["id"]) is not int id
+                        || item["name"]?.GetValue<string>() is not { Length: > 0 } name) continue;
+                    string? designation = item["designation"]?.GetValue<string?>()?.Trim();
+                    string? publisher = (item["publisher"] as JsonObject)?["name"]?.GetValue<string?>()?.Trim();
+                    string? description = item["desc"]?.GetValue<string?>()?.Trim();
+                    results[id] = new Metadata.MetronUniverseInfo(id, name, string.IsNullOrWhiteSpace(designation) ? null : designation,
+                        string.IsNullOrWhiteSpace(publisher) ? null : publisher, string.IsNullOrWhiteSpace(description) ? null : description);
+                }
+                url = root["next"]?.GetValue<string?>();
+            }
+            if (url is not null) throw new ComicVineException("Metron universe search exceeded the pagination limit.");
+        }
+        return results.Values.ToList();
+    }
+
+    public async Task<Metadata.MetronUniverseInfo?> GetUniverseAsync(int universeId, CancellationToken cancellationToken)
+    {
+        JsonNode root;
+        try
+        {
+            root = await GetAsync($"{BaseUrl}/universe/{universeId}/", cancellationToken).ConfigureAwait(false);
+        }
+        catch (ComicVineException ex) when (ex.ApiStatusCode == 101)
+        {
+            return null;
+        }
+
+        if (root is not JsonObject o || o["name"]?.GetValue<string>() is not { Length: > 0 } name)
+        {
+            return null;
+        }
+
+        string? designation = o["designation"]?.GetValue<string>()?.Trim();
+        string? publisher = (o["publisher"] as JsonObject)?["name"]?.GetValue<string>()?.Trim();
+        string? description = o["desc"]?.GetValue<string>()?.Trim();
+        return new Metadata.MetronUniverseInfo(universeId, name,
+            string.IsNullOrWhiteSpace(designation) ? null : designation,
+            string.IsNullOrWhiteSpace(publisher) ? null : publisher,
+            string.IsNullOrWhiteSpace(description) ? null : description);
+    }
+
+    /// <summary>Lists Metron series explicitly assigned to a universe; never performs title-based matching.</summary>
+    public async Task<IReadOnlyList<MetronUniverseSeries>> GetUniverseSeriesAsync(int universeId, CancellationToken cancellationToken)
+    {
+        var rows = new List<MetronUniverseSeries>();
+        string? url = $"{BaseUrl}/series/?universe_id={universeId}";
+        for (int page = 0; page < MaxPages && url is not null; page++)
+        {
+            var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+            foreach (var node in (root["results"] as JsonArray) ?? new JsonArray())
+            {
+                if (node is not JsonObject o || PositiveInt(o["id"]) is not int id) continue;
+                string? name = ReadSeriesName(o);
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                rows.Add(new MetronUniverseSeries(id, name, o["year_began"]?.ToString(), PositiveInt(o["cv_id"]), PositiveInt(o["gcd_id"])));
+            }
+            url = root["next"]?.GetValue<string?>();
+        }
+        if (url is not null) throw new ComicVineException("Metron universe series exceeded the pagination limit.");
+
+        // Some Metron deployments do not populate the reverse series filter even though issue
+        // universe tags are present. Recover the same exact provider identities from the documented
+        // issue filter; each issue row includes its Metron series id. This remains ID-based and never
+        // falls back to comparing titles.
+        if (rows.Count == 0)
+        {
+            var byId = new Dictionary<int, MetronUniverseSeries>();
+            url = $"{BaseUrl}/issue/?universe_id={universeId}";
+            for (int page = 0; page < MaxPages && url is not null; page++)
+            {
+                var root = await GetAsync(url, cancellationToken).ConfigureAwait(false);
+                foreach (var node in (root["results"] as JsonArray) ?? new JsonArray())
+                {
+                    if (node is not JsonObject issue || issue["series"] is not JsonObject series
+                        || PositiveInt(series["id"]) is not int id) continue;
+                    string? name = ReadSeriesName(series);
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+                    var candidate = new MetronUniverseSeries(id, name, series["year_began"]?.ToString(), PositiveInt(series["cv_id"]), PositiveInt(series["gcd_id"]));
+                    if (!byId.TryGetValue(id, out var existing) || (existing.ComicVineId is null && existing.GcdId is null))
+                        byId[id] = candidate;
+                }
+                url = root["next"]?.GetValue<string?>();
+            }
+            if (url is not null) throw new ComicVineException("Metron universe issue list exceeded the pagination limit.");
+            rows.AddRange(byId.Values);
+        }
+        return rows;
+    }
+
+    private static string? ReadSeriesName(JsonObject series) =>
+        series["series"]?.GetValue<string>() ?? series["name"]?.GetValue<string>();
+
     public async Task<IReadOnlyList<ComicVineIssue>> GetVolumeIssuesAsync(int volumeId, CancellationToken cancellationToken)
     {
         var issues = new List<ComicVineIssue>();
@@ -273,6 +496,18 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
     public Task<IReadOnlyList<ComicIssueHit>> FindIssuesByUpcAsync(string upc, CancellationToken cancellationToken) =>
         FindIssuesAsync($"upc={Uri.EscapeDataString(upc.Trim())}", cancellationToken);
 
+    public async Task<IReadOnlyList<ComicSeriesHit>> FindSeriesByComicVineIdAsync(int comicVineSeriesId, CancellationToken cancellationToken)
+    {
+        var root = await GetAsync($"{BaseUrl}/series/?cv_id={comicVineSeriesId.ToString(CultureInfo.InvariantCulture)}", cancellationToken).ConfigureAwait(false);
+        var hits = new List<ComicSeriesHit>();
+        foreach (var node in (root["results"] as JsonArray) ?? new JsonArray())
+        {
+            if (node is JsonObject series && PositiveInt(series["id"]) is int seriesId)
+                hits.Add(new ComicSeriesHit(seriesId));
+        }
+        return hits;
+    }
+
     /// <summary>One page is all an exact filter can need: a caller only acts on exactly one hit, and anything more is "ambiguous" whatever the count.</summary>
     private async Task<IReadOnlyList<ComicIssueHit>> FindIssuesAsync(string filter, CancellationToken cancellationToken)
     {
@@ -319,6 +554,8 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
             url = root["next"]?.GetValue<string?>();
         }
 
+        if (url is not null)
+            throw new ComicVineException("Metron release list exceeded the pagination limit; the cached list was kept.");
         return entries;
     }
 
@@ -445,7 +682,11 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
             RatingCount: o["rating_count"] is { } rc && int.TryParse(rc.ToString(), out int count) ? count : null,
             Imprint: (o["imprint"] as JsonObject)?["name"]?.GetValue<string>(),
             Variants: variants,
-            GcdId: PositiveInt(o["gcd_id"]));
+            GcdId: PositiveInt(o["gcd_id"]))
+        {
+            ComicVineId = PositiveInt(o["cv_id"]),
+            SeriesSortName = series?["sort_name"]?.GetValue<string>(),
+        };
     }
 
     /// <summary>The <c>detail</c> text of a Metron error body, trimmed of its trailing full stop, or null when there is none.</summary>
@@ -487,7 +728,12 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
         var name = CleanName(raw, year);
         int count = o["issue_count"] is { } c && int.TryParse(c.ToString(), out int n) ? n : 0;
 
-        return new ComicVineVolume(o["id"]!.GetValue<int>(), name, (o["publisher"] as JsonObject)?["name"]?.GetValue<string>(), year, count, ImageUrl: null);
+        return new ComicVineVolume(o["id"]!.GetValue<int>(), name, (o["publisher"] as JsonObject)?["name"]?.GetValue<string>(), year, count, ImageUrl: null)
+        {
+            // Only the standalone series detail carries these; the list rows leave them null.
+            Status = o["status"] is JsonObject st ? st["name"]?.GetValue<string>() : o["status"]?.GetValue<string>(),
+            Description = StripHtml(o["desc"]?.GetValue<string>()),
+        };
     }
 
     public static string CleanName(string display, int? year)
@@ -564,9 +810,9 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
         }
 
         // A login Metron has just rejected is not sent again: three 401s in five minutes get the address blocked for a day.
-        if (GuardLogin && MetronLoginGuard.ShouldHold(_authorization, out var hold))
+        if (GuardLogin && MetronLoginGuard.ShouldHold(_auth.Key, out var hold))
         {
-            throw new ComicVineException(MetronLoginGuard.HoldMessage(hold), 100);
+            throw new ComicVineException(MetronLoginGuard.HoldMessage(hold), 100) { HttpStatus = 401 }; // a refused login, held back
         }
 
         JsonNode? root = null;
@@ -591,7 +837,7 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
                     request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
                 }
 
-                request.Headers.Authorization = new AuthenticationHeaderValue("Basic", _authorization);
+                request.Headers.Authorization = _auth.Header();
                 request.Headers.UserAgent.ParseAdd("Paperbunkr (comic library manager)");
                 using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
                 status = response.StatusCode;
@@ -620,14 +866,14 @@ public sealed class MetronClient : IComicProvider, IPullListSource, Scraping.ISt
                 case HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden:
                     if (GuardLogin)
                     {
-                        MetronLoginGuard.RecordRejected(_authorization);
+                        MetronLoginGuard.RecordRejected(_auth.Key);
                     }
 
                     // Metron says why in its own words ("Invalid username/password.", "You do not have permission..."); a 403 is not a wrong
                     // password, and saying "rejected your login" for both sent people to retype a password that was fine.
                     string? detail = Detail(responseBody);
                     throw new ComicVineException(status == HttpStatusCode.Unauthorized
-                        ? $"Metron rejected your login{(detail is null ? "" : $" ({detail})")}. Check it under Preferences → Connections."
+                        ? $"Metron rejected your {(_auth.IsToken ? "API token" : "login")}{(detail is null ? "" : $" ({detail})")}. Check it under Preferences → Connections."
                         : $"Metron refused this request{(detail is null ? "" : $" ({detail})")}. Your login was accepted, but it isn't allowed to do this.", 100)
                     {
                         HttpStatus = (int)status,

@@ -94,54 +94,16 @@ public sealed class CategoryDonut : Control
 
     public double SweepProgress { get => GetValue(SweepProgressProperty); set => SetValue(SweepProgressProperty, value); }
 
-    /// <summary>The duration of the entry sweep: the app's large-motion token, which is <see cref="TimeSpan.Zero"/> under Reduced Motion (so the
-    /// donut simply appears whole). Falls back to 0 when no resource is found (headless/design-time): no animation rather than a guessed one.</summary>
-    internal TimeSpan EntranceDuration()
-        => this.TryFindResource("PbMotionLarge", out object? value) && value is TimeSpan duration ? duration : TimeSpan.Zero;
-
-    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
-    {
-        base.OnPropertyChanged(change);
-        if (change.Property == SlicesProperty)
-        {
-            StartEntrance();
-        }
-    }
-
+    /// <summary>
+    /// A data change (a new range, a new composition) crossfades the chart in on the Replace token (Motion v2 D, Q23) - it used to sweep
+    /// the ring around from zero, the "spinning doughnut" the motion system rules out. The ring is always drawn whole
+    /// (<see cref="SweepProgress"/> stays 1); totals and labels show their final values at once.
+    /// </summary>
     private void StartEntrance()
     {
-        int generation = ++_sweepGeneration;
-        var duration = EntranceDuration();
-        if (duration <= TimeSpan.Zero || TopLevel.GetTopLevel(this) is not { } topLevel)
-        {
-            SweepProgress = 1;
-            return;
-        }
-
-        SweepProgress = 0;
-        double startSeconds = double.NaN;
-
-        void Frame(TimeSpan timestamp)
-        {
-            if (generation != _sweepGeneration)
-            {
-                return; // superseded by a newer data change (or detached)
-            }
-
-            if (double.IsNaN(startSeconds))
-            {
-                startSeconds = timestamp.TotalSeconds;
-            }
-
-            double t = Math.Clamp((timestamp.TotalSeconds - startSeconds) / duration.TotalSeconds, 0, 1);
-            SweepProgress = 1 - Math.Pow(1 - t, 3); // ease-out cubic
-            if (t < 1)
-            {
-                topLevel.RequestAnimationFrame(Frame);
-            }
-        }
-
-        topLevel.RequestAnimationFrame(Frame);
+        _sweepGeneration++;
+        SweepProgress = 1;
+        Paperbunkr.App.Controls.Replace.Play(this);
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)

@@ -12,6 +12,9 @@ public sealed record CblImportResult(
     string? RefusedReason)
 {
     public bool Refused => RefusedReason is not null;
+
+    /// <summary>For a reading list: what became of every entry (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.7).</summary>
+    public Matching.ImportReport? Report { get; init; }
 }
 
 /// <summary>
@@ -30,7 +33,8 @@ public static class CblImport
                 return new CblImportResult(CblFileKind.SmartList, null, smart.List, smart.Warnings, smart.RefusedReason);
 
             case CblFileKind.ReadingList:
-                return new CblImportResult(CblFileKind.ReadingList, CblReadingListIO.Import(context, path), null, Array.Empty<CeImportWarning>(), null);
+                var (list, report) = CblReadingListIO.ImportWithReport(context, path);
+                return new CblImportResult(CblFileKind.ReadingList, list, null, Array.Empty<CeImportWarning>(), null) { Report = report };
 
             default:
                 throw new InvalidDataException($"'{path}' is not a valid CBL list.");

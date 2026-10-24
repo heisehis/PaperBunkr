@@ -58,6 +58,20 @@ public interface IComicVineVolumeSearch
     Task<IReadOnlyList<ComicVineVolume>> SearchVolumesAsync(string query, int maxResults, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Series found through one of their issues (reported 2026-10-22: "X-Men" never matched anything after 2007). A name search alone can't reach a
+/// series under a busy name - Metron returned the first 25 of hundreds alphabetically ("Astonishing X-Men"...), ComicVine 200 of 1,559 oldest
+/// first, ignoring its own sort - but "an issue numbered 37 in a series whose name contains X-Men" names the right few directly.
+/// </summary>
+public interface IIssueFirstSeriesSearch
+{
+    /// <summary>
+    /// Series whose name contains <paramref name="seriesName"/> and that have an issue numbered <paramref name="issueNumber"/>; when
+    /// <paramref name="year"/> is given a source may use it to narrow by cover date (ComicVine needs it). Issue counts are unknown (0).
+    /// </summary>
+    Task<IReadOnlyList<ComicVineVolume>> FindSeriesByIssueAsync(string seriesName, string issueNumber, int? year, CancellationToken cancellationToken);
+}
+
 /// <summary>The one entry point both series pickers use: search ComicVine (as many pages as the client supports), then rank against what is known locally.</summary>
 public static class VolumeSearchService
 {

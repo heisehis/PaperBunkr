@@ -43,7 +43,9 @@ public sealed record ReaderProfileState(
     // Image quality (docs/superpowers/specs/2026-09-26-comic-reader-image-quality-design.md): auto-levels, sharpen 0-3 and auto-crop of scan borders.
     bool? AutoLevels = null,
     int? Sharpen = null,
-    bool? AutoCrop = null);
+    bool? AutoCrop = null,
+    // Book look for spreads (Motion v2 reader §7): appended, so older profiles read it as "not set".
+    bool? ReaderBookLook = null);
 
 /// <summary>Serialization for a reader profile's <see cref="Workspace.StateJson"/>: enums as names, unknown and missing keys tolerated, a corrupt blob yields an empty profile (sets nothing) rather than throwing.</summary>
 public static class ReaderProfileStateJson

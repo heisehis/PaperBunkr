@@ -25,7 +25,7 @@
                                 <fi:SymbolIcon Classes="sectionIcon" Symbol="Lightbulb" />
                                 <controls:SplitText Classes="heading" Text="{Binding SeedSeriesName, StringFormat='Because you read {0}'}" />
                             </StackPanel>
-                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8,-8,-8,0">
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8,-12,-8,0">
                                 <StackPanel Orientation="Horizontal" Spacing="10" Margin="2,2,2,6">
                                     <StackPanel Spacing="4" VerticalAlignment="Top"
                                                 IsVisible="{Binding SeedSeries, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
@@ -40,7 +40,7 @@
                                                 Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
                                                 CommandParameter="{Binding SeedSeries}" />
                                         </LayoutTransformControl>
-                                        <TextBlock Text="you read" FontSize="10.5" HorizontalAlignment="Center"
+                                        <TextBlock Text="you read" FontSize="10" HorizontalAlignment="Center"
                                                    Foreground="{DynamicResource PbAccentTextBrush}" />
                                     </StackPanel>
                                     <fi:SymbolIcon Symbol="ArrowRight" FontSize="18" VerticalAlignment="Center" Margin="0,0,0,40"

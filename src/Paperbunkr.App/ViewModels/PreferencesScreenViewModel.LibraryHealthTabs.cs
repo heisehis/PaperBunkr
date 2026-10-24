@@ -26,6 +26,16 @@ public partial class PreferencesScreenViewModel
     /// <summary>The "Publisher logos" section's own view model (publishers with no logo, issues with no publisher, the user icon folder).</summary>
     public PublisherGapsViewModel PublisherGaps => _publisherGaps ??= new PublisherGapsViewModel(dialogs: _dialogService);
 
+    private ReadingListRepairViewModel? _readingListRepair;
+
+    /// <summary>The "Reading list repairs" section's own view model (entries reading "missing" whose comic is in the library).</summary>
+    public ReadingListRepairViewModel ReadingListRepair => _readingListRepair ??= new ReadingListRepairViewModel();
+
+    private LeftoverFilesViewModel? _leftoverFiles;
+
+    /// <summary>The "Leftover files" section's own view model (swap copies left beside comics).</summary>
+    public LeftoverFilesViewModel LeftoverFiles => _leftoverFiles ??= new LeftoverFilesViewModel(_contextFactory, _activity);
+
     // Smart features S1 (docs/superpowers/specs/2026-10-06-smart-features-design.md §3.3, §3.4). Both scan when their section is first
     // opened (InitLibraryHealthTabs) and again on Rescan.
     private CollectionGapsViewModel? _collectionGaps;

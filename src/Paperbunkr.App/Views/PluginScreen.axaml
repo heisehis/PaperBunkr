@@ -22,14 +22,14 @@
 
         <!-- ============ Sidebar ============ -->
         <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto" Margin="0,0,16,0">
-            <TextBox Grid.Row="0" Text="{Binding FilterText}" Watermark="Filter plugins…" Margin="0,0,0,10" />
+            <TextBox Grid.Row="0" Text="{Binding FilterText}" PlaceholderText="Filter plugins…" Margin="0,0,0,10" />
 
             <ScrollViewer Grid.Row="1">
                 <ItemsControl ItemsSource="{Binding FilteredPackages}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:PluginPackageRowViewModel">
                             <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                    Padding="8,6" Margin="0,0,0,2" Command="{Binding SelectCommand}">
+                                    Margin="0,0,0,2" Command="{Binding SelectCommand}">
                                 <StackPanel Spacing="4">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <Ellipse Width="8" Height="8" VerticalAlignment="Center" IsVisible="{Binding !IsBroken}" Fill="#4CAF50" />
@@ -37,11 +37,11 @@
                                         <TextBlock Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <Border IsVisible="{Binding IsNativeTier}" Background="#3A2E0E" CornerRadius="3" Padding="5,1">
-                                            <TextBlock Text="Native" FontSize="9" Foreground="#E0B84D" />
+                                        <Border IsVisible="{Binding IsNativeTier}" Background="#3A2E0E" CornerRadius="{DynamicResource PbRadiusSm}" Padding="4,1">
+                                            <TextBlock Text="Native" FontSize="10" Foreground="#E0B84D" />
                                         </Border>
-                                        <Border IsVisible="{Binding IsPending}" Background="#1E3A5A" CornerRadius="3" Padding="5,1">
-                                            <TextBlock Text="Restart to apply" FontSize="9" Foreground="#6EB4E8" />
+                                        <Border IsVisible="{Binding IsPending}" Background="#1E3A5A" CornerRadius="{DynamicResource PbRadiusSm}" Padding="4,1">
+                                            <TextBlock Text="Restart to apply" FontSize="10" Foreground="#6EB4E8" />
                                         </Border>
                                     </StackPanel>
                                 </StackPanel>
@@ -63,7 +63,7 @@
                 <TextBlock Text="No plugin selected." FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
                            HorizontalAlignment="Center" TextAlignment="Center" />
                 <TextBlock Text="Select a plugin on the left, or install a package to get started." FontSize="12"
-                           Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center"
+                           Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center"
                            TextAlignment="Center" TextWrapping="Wrap" />
             </StackPanel>
 
@@ -74,7 +74,7 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel Grid.Column="0" Spacing="4">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="{Binding Name}" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                                <TextBlock Classes="pbTextHeading" Text="{Binding Name}" />
                                 <TextBlock Text="{Binding Version, StringFormat='v{0}'}" FontSize="12" VerticalAlignment="Center"
                                            Foreground="{DynamicResource PbTextMutedBrush}"
                                            IsVisible="{Binding Version, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
@@ -84,14 +84,14 @@
                             <TextBlock Text="{Binding RequiresApiText}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                        IsVisible="{Binding HasRequiresApi}" />
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Border IsVisible="{Binding IsNativeTier}" Background="#1E3A5A" CornerRadius="3" Padding="6,2">
+                                <Border IsVisible="{Binding IsNativeTier}" Background="#1E3A5A" CornerRadius="{DynamicResource PbRadiusSm}" Padding="6,2">
                                     <TextBlock Text="Native" FontSize="11" Foreground="#6EB4E8" />
                                 </Border>
-                                <Border IsVisible="{Binding IsNativeTier}" Background="#3A2E0E" CornerRadius="3" Padding="6,2"
+                                <Border IsVisible="{Binding IsNativeTier}" Background="#3A2E0E" CornerRadius="{DynamicResource PbRadiusSm}" Padding="6,2"
                                         ToolTip.Tip="This is a native plugin: it has full read/write access to your library database and does not go through the audited-write gate scripted plugins use.">
                                     <TextBlock Text="Full read/write access" FontSize="11" Foreground="#E0B84D" />
                                 </Border>
-                                <Border IsVisible="{Binding IsPending}" Background="#1E3A5A" CornerRadius="3" Padding="6,2"
+                                <Border IsVisible="{Binding IsPending}" Background="#1E3A5A" CornerRadius="{DynamicResource PbRadiusSm}" Padding="6,2"
                                         ToolTip.Tip="This change (install or remove) is staged and takes effect the next time you restart Paperbunkr.">
                                     <TextBlock Text="Restart to apply" FontSize="11" Foreground="#6EB4E8" />
                                 </Border>
@@ -101,7 +101,7 @@
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
                             <Button Content="Reload" IsVisible="{Binding ShowReload}" Command="{Binding ReloadCommand}"
                                     ToolTip.Tip="Re-scans and recompiles every script-tier plugin - no restart needed. Use this after fixing a broken script." />
-                            <Button Content="⚙ Configure" IsVisible="{Binding HasConfigure}" Command="{Binding ConfigureCommand}" />
+                            <Button IsVisible="{Binding HasConfigure}" Command="{Binding ConfigureCommand}"><StackPanel Orientation="Horizontal" Spacing="6"><fi:SymbolIcon Symbol="Settings" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Configure" VerticalAlignment="Center" /></StackPanel></Button>
                             <Button Content="Open log folder" Command="{Binding OpenLogFolderCommand}"
                                     ToolTip.Tip="Opens the folder holding every plugin's log file - this plugin's is named after its key." />
                             <Button Content="{Binding DeleteConfirm.Label}" Command="{Binding DeleteConfirm.TriggerCommand}" />
@@ -109,11 +109,11 @@
                     </Grid>
 
                     <!-- Load-failure banner -->
-                    <Border IsVisible="{Binding HasLoadError}" Background="#3A1414" CornerRadius="6" Padding="10">
+                    <Border IsVisible="{Binding HasLoadError}" Background="#3A1414" CornerRadius="{DynamicResource PbRadiusSm}" Padding="10">
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Grid.Column="0" Text="{Binding LoadError, StringFormat='Failed to load: {0}'}" FontSize="12"
                                        Foreground="#E06060" TextWrapping="Wrap" VerticalAlignment="Center" />
-                            <Button Grid.Column="1" Content="Copy error" FontSize="11" Padding="8,3" Command="{Binding CopyErrorCommand}" />
+                            <Button Grid.Column="1" Content="Copy error" FontSize="11" Padding="8,4" Command="{Binding CopyErrorCommand}" />
                         </Grid>
                     </Border>
 
@@ -150,19 +150,19 @@
                                                        Foreground="#E06060"
                                                        TextWrapping="Wrap" IsVisible="{Binding IsBroken}" />
                                             <TextBlock Text="{Binding PerformanceText}" FontSize="11"
-                                                       Foreground="{DynamicResource PbTextFaintBrush}"
+                                                       Foreground="{DynamicResource PbTextMutedBrush}"
                                                        IsVisible="{Binding HasPerformance}" />
                                         </StackPanel>
 
                                         <ToggleSwitch Grid.Column="1" IsChecked="{Binding IsEnabled}" VerticalAlignment="Top" Margin="0,0,8,0" OnContent="{x:Null}" OffContent="{x:Null}" />
 
-                                        <Button Grid.Column="2" Content="Run" FontSize="11" Padding="8,3"
+                                        <Button Grid.Column="2" Content="Run" FontSize="11" Padding="8,4"
                                                 VerticalAlignment="Top" Margin="0,0,8,0"
                                                 IsVisible="{Binding CanRunManually}"
                                                 Command="{Binding RunCommand}"
                                                 ToolTip.Tip="Runs this command now and shows its result as a toast - this hook needs no live selection/context, so it can be triggered on demand." />
 
-                                        <Button Grid.Column="3" Classes="ghost" Padding="4" VerticalAlignment="Top"
+                                        <Button AutomationProperties.Name="This command has its own configuration script - click to run it." Grid.Column="3" Classes="iconButton" VerticalAlignment="Top"
                                                 IsVisible="{Binding HasConfigure}"
                                                 Command="{Binding OpenConfigureCommand}"
                                                 ToolTip.Tip="This command has its own configuration script - click to run it.">

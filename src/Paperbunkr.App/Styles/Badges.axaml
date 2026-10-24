@@ -31,10 +31,10 @@
                         <Ellipse Width="9" Height="9" Fill="{DynamicResource PbAccentTextBrush}"
                                  ToolTip.Tip="Unread" AutomationProperties.AccessibilityView="Raw"
                                  IsVisible="{TemplateBinding IsUnread}" />
-                        <Border CornerRadius="3" Padding="4,0" VerticalAlignment="Center"
+                        <Border CornerRadius="{DynamicResource PbRadiusSm}" Padding="4,0" VerticalAlignment="Center"
                                 Background="{DynamicResource PbAccentBrush}"
                                 IsVisible="{TemplateBinding IsNew}">
-                            <TextBlock Text="NEW" FontSize="8" FontWeight="Bold"
+                            <TextBlock Text="NEW" FontSize="10" FontWeight="Bold"
                                        Foreground="{DynamicResource PbBadgeTextBrush}" />
                         </Border>
                     </Panel>
@@ -51,6 +51,8 @@
         <Setter Property="CornerRadius" Value="{StaticResource PbRadiusChip}" />
         <Setter Property="Padding" Value="7,2" />
         <Setter Property="MinWidth" Value="16" />
+        <!-- One height for every cover-corner badge (count, rating, all-read tick) - 2026-10-20 Library pass Q4. -->
+        <Setter Property="MinHeight" Value="20" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="HorizontalAlignment" Value="Center" />
     </Style>
@@ -71,27 +73,9 @@
     <!-- Squircle (PbRadius), not a capsule - user direction 2026-09-07 after seeing the capsule
          shape land in the real app (both this and DetailBand's bandChip had briefly gone to a
          999 capsule during the badge-unification pass; reverted here). -->
-    <Style Selector="Border.tagPill">
-        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-        <Setter Property="Padding" Value="10,4" />
-    </Style>
-    <Style Selector="Button.tagPill">
-        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-        <Setter Property="Padding" Value="10,4" />
+    <!-- Wrap spacing for tag walls only (chips flowing in a WrapPanel). App-wide it pushed filter chips in toolbars 3 px off centre. -->
+    <Style Selector="WrapPanel > Button.filterChip">
         <Setter Property="Margin" Value="0,0,6,6" />
-        <Setter Property="Cursor" Value="Hand" />
-    </Style>
-    <Style Selector="Button.tagPill:pointerover">
-        <Setter Property="BorderBrush" Value="{DynamicResource PbBadgeBrush}" />
-    </Style>
-    <Style Selector="Button.tagPill:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
     </Style>
     <Style Selector="TextBlock.tagPillText">
         <Setter Property="FontSize" Value="11" />

@@ -30,7 +30,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Border Classes="pbChip"><TextBlock Classes="pbTextCaption" Text="Action" /></Border>
                     <Border Classes="pbChip"><TextBlock Classes="pbTextCaption" Text="Sci-Fi" /></Border>
-                    <Button Classes="pbChip"><TextBlock Classes="pbTextCaption" Text="Clickable" /></Button>
+                    <Button Classes="filterChip"><TextBlock Classes="pbTextCaption" Text="Clickable" /></Button>
                 </StackPanel>
             </StackPanel>
 

@@ -2255,6 +2255,10 @@ continuity/metadata CE never had), 9 (biggest quality-of-life win for scanned li
 (cheapest, immediate for manga readers), then 4, 5, 10, 16, 19 as cheap flow wins.
 
 ### Insights pitch (unscoped, pitched 2026-09-21)
+**Update 2026-10-12: all 10 built.** #3 rhythm, #5 drop-off breakdown, #7 affinity, #8 storage and #10 milestones landed on the Trends and History tabs
+(`docs/superpowers/specs/2026-10-12-insights-pitch-completion-design.md`). Deviations: #7's "unowned works by your top creators → Wanted" is **not built**
+(needs creator-aware Wanted items and a Metron/ComicVine lookup — a separate project); #8 covers comics only (no `Book.FileSize`). The "Not started" lines
+below are the original 2026-09-21 pitch text, kept for the item descriptions.
 ~~Not started~~ — **5 of 10 built** via the 2026-09-22 decomposition (see "Insights pitch, decomposed
 2026-09-22" in `paperbunkr-todo.md`, confirmed 2026-09-29): #1 year-in-review recap, #2 reading
 goals/challenges, #4 backlog burn-down (as the nightly-snapshot foundation), #6 period-over-period
@@ -2407,3 +2411,24 @@ immediately useful.
 - **Portable device / wireless sync** — excluded, feature doesn't exist in Paperbunkr's model
 - **Multi-tab/multi-window book-open (CE's MDI model)** — confirmed non-goal, single-screen
   rail-nav is the deliberate design target (Mihon/Komikku-style)
+
+### Cosmetic options parked for later (2026-10-17)
+The user selected all 15 options from the follow-up cosmetic pitch except #8 (reader spread gutter). These are idea capture only; defer them until after the planned app-wide animation-system revamp, then grill each against current code before scoping:
+
+1. Library cover mats — slim theme-aware mounts behind covers, with optional accent edge.
+2. Library hover spotlight — lift/brighten the hovered card and soften nearby cards, while keeping focus and selection distinct.
+3. Collection color identity — apply each collection's existing accent across card headers and details.
+4. Series divider cards — compact cover-led group headers with title and item count.
+5. Issue-cover edition ribbon — mark annuals, specials, variants, and collected editions from metadata.
+6. Detail issue rail covers — tiny covers, restrained hover lift, and a current-issue marker.
+7. Reading-list progress path — ordered steps showing completed items on reading-list cards.
+8. ~~Reader spread gutter~~ — explicitly excluded by the user; do not carry forward.
+9. Reader page-frame styles — none, paper edge, or soft shadow, with reduced-motion and high-contrast support.
+10. Reader bookmark marker — consistent bookmark marks on page dots and thumbnail rail.
+11. Book chapter ornaments — theme-aware chapter markers and opening-cap styling in reflowable book views.
+12. Metadata source marks — consistent compact provider/tracker marks using the shared brand-mark system.
+13. Cover-failure treatment — distinct placeholders for missing files, failed decodes, and intentionally absent covers.
+14. Library selection color wash — subtle accent wash on selected cards, preserving existing checkbox and focus ring.
+15. Theme preview gallery polish — larger live Library-card, reader-page, and bookshelf-spine samples from real skin resources.
+
+**Sequencing decision:** complete the app-wide animation-system revamp first; these cosmetics remain parked until that work is done.

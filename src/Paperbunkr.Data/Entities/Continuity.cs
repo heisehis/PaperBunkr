@@ -59,6 +59,12 @@ public class Continuity
     /// </summary>
     public string? MetronId { get; set; }
 
+    /// <summary>
+    /// The universe's own designation ("Earth-616"), from Metron's <c>/universe/</c> catalogue; null for a continuity Metron does not know
+    /// (docs/superpowers/specs/2026-10-12-continuity-sources-design.md §3). Empty = asked Metron and it has none; null = not asked yet.
+    /// </summary>
+    public string? Designation { get; set; }
+
     /// <summary>Join rows to the member <see cref="Series"/>, each with its own note and sort order.</summary>
     public List<ContinuityMembership> Memberships { get; set; } = new();
 }

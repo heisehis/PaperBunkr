@@ -11,7 +11,19 @@ using Paperbunkr.Data.Metadata;
 namespace Paperbunkr.App.Services.EventMap;
 
 /// <summary>One story event touching the continuity: its date span and its members as map rows, in the event's own order.</summary>
-public sealed record ContinuityEventData(int Id, string Name, int? Start, int? End, IReadOnlyList<EventMapRow> Members);
+public sealed record ContinuityEventData(int Id, string Name, int? Start, int? End, IReadOnlyList<EventMapRow> Members, int? SortKey = null, int? Rank = null,
+    string? Description = null, string? CoverImageUrl = null, StoryEventCoverSource CoverSource = StoryEventCoverSource.None,
+    IReadOnlyList<ContinuityEventTagData>? Tags = null)
+{
+    /// <summary>The event as <see cref="EventChronology"/> orders it: its span plus where an outside reading order placed it.</summary>
+    public EventSpan Span => new(Id, Name, Start, End, SortKey, Rank);
+}
+
+public sealed record ContinuityEventTagData(string Value, string Category, bool IsIssueDerived)
+{
+    public string DisplayValue => IsIssueDerived ? $"{Value} · Comic" : Value;
+}
+public sealed record ContinuityRelatedEventData(int EventId, string Name, string Relation);
 
 /// <summary>A stored relation between two of the continuity's events, with who asserted it and why (for the connector tooltip).</summary>
 public sealed record ContinuityRelationData(int SourceId, int TargetId, RelationType Type, bool IsYours, string Provenance);
@@ -34,6 +46,18 @@ public sealed record ContinuityMapData(
 /// </summary>
 public static class ContinuityMapLoader
 {
+    private static IEnumerable<ContinuityEventTagData> EventTags(PaperbunkrDbContext context, int eventId, IEnumerable<Issue> members)
+    {
+        var curated = context.StoryEventTags.AsNoTracking().Where(t => t.StoryEventId == eventId)
+            .Select(t => new ContinuityEventTagData(t.Value, t.Category, false)).ToList();
+        var issueIds = members.Select(i => i.Id).Distinct().ToList();
+        var derived = context.IssueTags.AsNoTracking().Where(t => issueIds.Contains(t.IssueId))
+            .Select(t => new { t.Value, t.Category, t.Field }).ToList()
+            .Select(t => new ContinuityEventTagData(t.Value, t.Category ?? (t.Field == IssueTagField.Genre ? "Genre" : "Uncategorized"), true));
+        return curated.Concat(derived).GroupBy(t => (t.Value.Trim().ToUpperInvariant(), t.Category.Trim().ToUpperInvariant()))
+            .Select(g => g.OrderBy(t => t.IsIssueDerived).First());
+    }
+
     /// <param name="gcd">The installed Grand Comics Database extract, when there is one: matched issues are dated by GCD's on-sale dates
     /// (docs/superpowers/specs/2026-09-27-gcd-data-design.md §4).</param>
     public static ContinuityMapData? LoadData(PaperbunkrDbContext context, int continuityId, GcdDataStore? gcd = null)
@@ -68,6 +92,7 @@ public static class ContinuityMapLoader
             .Where(m => eventIds.Contains(m.StoryEventId))
             .Include(m => m.Issue).ThenInclude(i => i!.Series)
             .Include(m => m.Issue).ThenInclude(i => i!.MetadataProposals)
+            .Include(m => m.Issue).ThenInclude(i => i!.Tags)
             .OrderBy(m => m.Position).ThenBy(m => m.Id)
             .ToList();
 
@@ -91,7 +116,12 @@ public static class ContinuityMapLoader
                 id, spans[id].Name, spans[id].Start, spans[id].End,
                 memberships.Where(m => m.StoryEventId == id && m.Issue is not null)
                     .Select(m => ToRow(m.Issue!, m.Role, memberSeries, membershipId: m.IssueId, position: m.Position, gcdDates))
-                    .ToList()))
+                    .ToList(),
+                spans[id].SortKey, spans[id].Rank,
+                context.StoryEvents.AsNoTracking().Where(e => e.Id == id).Select(e => e.Description).FirstOrDefault(),
+                context.StoryEvents.AsNoTracking().Where(e => e.Id == id).Select(e => e.CoverImageUrl).FirstOrDefault(),
+                context.StoryEvents.AsNoTracking().Where(e => e.Id == id).Select(e => e.CoverSource).FirstOrDefault(),
+                EventTags(context, id, memberships.Where(m => m.StoryEventId == id).Select(m => m.Issue).OfType<Issue>()).ToList()))
             .ToList();
 
         var relations = context.EventRelations.AsNoTracking()
@@ -104,6 +134,7 @@ public static class ContinuityMapLoader
                 var evidence = r.Evidence.FirstOrDefault();
                 string provenance = !automatic ? "yours"
                     : evidence?.Provider == RelationEvidenceProvider.Wikidata ? $"Wikidata {evidence.ProviderSourceId}"
+                    : evidence?.Provider == RelationEvidenceProvider.Metron ? $"Metron · {evidence.ProviderRelationType}"
                     : $"inferred · {evidence?.ProviderRelationType}";
                 return new ContinuityRelationData(r.SourceEventId, r.TargetEventId, r.RelationType, !automatic, provenance);
             })
@@ -265,7 +296,7 @@ public static class ContinuityMapBuilder
         else
         {
             var order = EventChronology.Order(
-                visible.Select(e => new EventSpan(e.Id, e.Name, e.Start, e.End)).ToList(),
+                visible.Select(e => e.Span).ToList(),
                 data.Relations.Select(r => (r.SourceId, r.TargetId, r.Type)));
             var byId = visible.ToDictionary(e => e.Id);
             var loose = SortLoose(data.LooseIssues, seriesOrder);

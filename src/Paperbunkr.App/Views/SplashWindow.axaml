@@ -4,77 +4,78 @@
         xmlns:local="using:Paperbunkr.App.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="480" d:DesignHeight="340"
+        mc:Ignorable="d" d:DesignWidth="512" d:DesignHeight="372"
         x:Class="Paperbunkr.App.Views.SplashWindow"
         x:DataType="vm:SplashViewModel"
         Title="Paperbunkr"
-        Width="480" Height="340"
+        Width="512" Height="372"
         CanResize="False"
-        SystemDecorations="None"
+        WindowDecorations="None"
         ShowInTaskbar="False"
         Topmost="True"
         WindowStartupLocation="CenterScreen"
-        TransparencyLevelHint="None"
-        Background="#0A0B0D">
+        Background="Transparent">
 
     <!--
-        Shown first from App.axaml.cs while the heavy startup work runs (integrity check +
-        migrations on a background thread; view-model + main-window construction on the UI thread).
-        Background stays the literal brand dark regardless of theme (this window has no chrome to
-        theme, just the emblem glow and the loading bar) - but the two gradient brushes below (the
-        GlowBorder radial gradient and LoadingBar's Foreground) have their stops re-colored in the
-        constructor from the persisted theme's own Accent/AccentText (best-effort, same try/catch-and-fall-back-to-these-literals pattern as
-        TryGetReducedMotion, since ApplyPersistedSettings/App.axaml.cs's real Application.Resources
-        write happens later in startup, after this window is already constructed and showing).
+        The startup splash (docs/superpowers/specs/2026-10-22-splash-theme-redesign-design.md). It shows before the database is ready, so the
+        constructor picks a SplashPalette from splash-theme.json (the theme this launch will open with, Auto mode included) and writes it into
+        this window's own Resources under the usual Pb* keys. Everything below is token-coloured, so a light theme gets a light splash.
 
-        The entrance + breathing motion is driven entirely from code-behind (Animation.RunAsync,
-        kicked off from the Opened event) rather than from XAML <Style.Animations>. A style
-        animation whose selector already matches at parse time can "run" against a control that
-        has no live clock yet and finish before the first paint - which is exactly what happened
-        across three earlier attempts here ("no animation"). Starting it from Opened guarantees a
-        realized visual with a running clock. Reduced motion (ThemeService.GetReducedMotion) skips
-        it and snaps the resting values.
+        The window is transparent and 16 px larger than the 480x340 card on every side, so the card can have rounded corners and a shadow.
+
+        The entrance + breathing motion is driven from code-behind (Animation.RunAsync from Opened), not XAML style animations - see the
+        code-behind's summary for why.
     -->
-    <Grid RowDefinitions="*,Auto,Auto,*">
-        <!-- Ambient drifting dots (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #6) - idle until
-             SplashWindow.OnOpened starts them, and only when motion is allowed. Behind everything else. -->
-        <local:AmbientDotsOverlay x:Name="AmbientDots" Grid.RowSpan="4" />
-        <Panel Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,28">
-            <Border x:Name="GlowBorder" Width="190" Height="190" Opacity="0.35">
-                <Border.Background>
-                    <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="50%" RadiusY="50%">
-                        <GradientStop Color="#8CC9803F" Offset="0" />
-                        <GradientStop Color="#00C9803F" Offset="0.72" />
-                    </RadialGradientBrush>
-                </Border.Background>
-            </Border>
-            <Image x:Name="LogoImage" Width="122" Height="122" Opacity="0"
-                   RenderTransformOrigin="50%,50%"
-                   Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png" />
-        </Panel>
+    <Border x:Name="Card" Margin="16"
+            Background="{DynamicResource PbSurface1Brush}"
+            BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+            CornerRadius="{DynamicResource PbRadiusLg}"
+            BoxShadow="{DynamicResource PbElevationShadow}"
+            ClipToBounds="True">
+        <Grid RowDefinitions="*,Auto,Auto">
+            <!-- Ambient drifting dots (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #6), behind everything else. -->
+            <local:AmbientDotsOverlay x:Name="AmbientDots" Grid.RowSpan="3" />
 
-        <StackPanel Grid.Row="2" HorizontalAlignment="Center" Spacing="14">
-            <ProgressBar x:Name="LoadingBar" Width="240" Height="3" Minimum="0" Maximum="1"
-                         Value="{Binding Progress}"
-                         Background="#25252B" CornerRadius="2" ShowProgressText="False">
-                <ProgressBar.Transitions>
-                    <Transitions>
-                        <DoubleTransition Property="Value" Duration="0:0:0.4" Easing="CubicEaseOut" />
-                    </Transitions>
-                </ProgressBar.Transitions>
+            <!-- Lockup: emblem with its glow, then the name and tagline. -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="16"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,24,0,0">
+                <Panel Width="152" Height="152">
+                    <Border x:Name="GlowBorder" Opacity="0.35">
+                        <Border.Background>
+                            <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="50%" RadiusY="50%">
+                                <GradientStop Color="Transparent" Offset="0" />
+                                <GradientStop Color="Transparent" Offset="0.72" />
+                            </RadialGradientBrush>
+                        </Border.Background>
+                    </Border>
+                    <Image x:Name="LogoImage" Width="104" Height="104" Opacity="0" AutomationProperties.Name="Paperbunkr"
+                           RenderTransformOrigin="50%,50%"
+                           Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-splash.png" />
+                </Panel>
+                <StackPanel VerticalAlignment="Center" Spacing="4">
+                    <TextBlock Classes="pbTextHero" Text="Paperbunkr" />
+                    <TextBlock Classes="pbTextMeta" Text="Your comics. Your machine" />
+                </StackPanel>
+            </StackPanel>
+
+            <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="16,0,16,12">
+                <TextBlock Grid.Column="0" Classes="pbTextMeta" Text="{Binding StatusMessage}" AutomationProperties.LiveSetting="Polite"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Classes="pbTextCaption" Text="{Binding VersionText}"
+                           Margin="12,0,0,0" VerticalAlignment="Center" />
+            </Grid>
+
+            <ProgressBar x:Name="LoadingBar" Grid.Row="2" Height="3" MinHeight="0" CornerRadius="0"
+                         Minimum="0" Maximum="1" Value="{Binding Progress}"
+                         Background="{DynamicResource PbBorderBrush}" ShowProgressText="False">
+                <!-- The Value transition is added in code (Replace role, PbMotionEase): the motion resources may not be loaded yet. -->
                 <ProgressBar.Foreground>
                     <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-                        <GradientStop Color="#B06A2E" Offset="0" />
-                        <GradientStop Color="#D9A441" Offset="1" />
+                        <GradientStop Color="Transparent" Offset="0" />
+                        <GradientStop Color="Transparent" Offset="1" />
                     </LinearGradientBrush>
                 </ProgressBar.Foreground>
             </ProgressBar>
-            <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="#8A8F98"
-                       HorizontalAlignment="Center" />
-        </StackPanel>
-
-        <TextBlock Grid.Row="3" Text="{Binding VersionText}"
-                   HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,15,13"
-                   FontSize="10.5" Foreground="#565B64" />
-    </Grid>
+        </Grid>
+    </Border>
 </Window>

@@ -35,11 +35,63 @@ public class ReaderChromeTintTests
     }
 
     [Fact]
-    public void ChromeBackground_MatchAppSkin_MatchesThePreRedesignHardcodedChromeColor()
+    public void MatchAppSkin_WithNoAppThemeApplied_KeepsThePreRedesignColors()
     {
-        // The reader chrome bars were hardcoded to #CC14161B before this redesign - MatchAppSkin
-        // (the default BookReaderSettings.Theme) must keep that exact look, not just something close.
-        Assert.Equal(Color.Parse("#CC14161B"), ColorOf(BookThemeBrushes.ChromeBackground(BookTheme.MatchAppSkin)));
+        // The reader chrome bars were hardcoded to #CC14161B before the HUD redesign; that stays the look whenever no theme has
+        // published a reading surface (a headless host), so nothing renders blank.
+        var original = BookThemeBrushes.AppColors;
+        BookThemeBrushes.AppColors = () => null;
+        try
+        {
+            Assert.Equal(Color.Parse("#CC14161B"), ColorOf(BookThemeBrushes.ChromeBackground(BookTheme.MatchAppSkin)));
+            Assert.Equal(Color.Parse("#14161B"), ColorOf(BookThemeBrushes.ContentBackground(BookTheme.MatchAppSkin)));
+            Assert.Equal(Color.Parse("#ECE7DB"), ColorOf(BookThemeBrushes.ContentForeground(BookTheme.MatchAppSkin)));
+        }
+        finally
+        {
+            BookThemeBrushes.AppColors = original;
+        }
+    }
+
+    [Fact]
+    public void MatchAppSkin_FollowsTheAppThemesReadingSurface()
+    {
+        // Theme v2, phase 6: "Match app" reads the active theme's reader.background roles instead of a fixed approximation.
+        var original = BookThemeBrushes.AppColors;
+        BookThemeBrushes.AppColors = () => (Color.Parse("#FAF7F0"), Color.Parse("#2A2620"));
+        try
+        {
+            Assert.Equal(Color.Parse("#FAF7F0"), ColorOf(BookThemeBrushes.ContentBackground(BookTheme.MatchAppSkin)));
+            Assert.Equal(Color.Parse("#2A2620"), ColorOf(BookThemeBrushes.ContentForeground(BookTheme.MatchAppSkin)));
+            Assert.Equal(Color.Parse("#CCFAF7F0"), ColorOf(BookThemeBrushes.ChromeBackground(BookTheme.MatchAppSkin)));
+            Assert.Equal(Color.Parse("#2A2620"), ColorOf(BookThemeBrushes.ChromeForeground(BookTheme.MatchAppSkin)));
+        }
+        finally
+        {
+            BookThemeBrushes.AppColors = original;
+        }
+    }
+
+    [Theory]
+    [InlineData(BookTheme.Light, "#FFFFFF", "#1A1A1A")]
+    [InlineData(BookTheme.Dark, "#1C1C1C", "#E0E0E0")]
+    [InlineData(BookTheme.Sepia, "#F2E6CE", "#3A2F22")]
+    [InlineData(BookTheme.OledBlack, "#000000", "#E0E0E0")]
+    [InlineData(BookTheme.HighContrast, "#000000", "#FFFFFF")]
+    public void EveryOtherBookTheme_KeepsItsOwnColors_WhateverTheAppThemeIs(BookTheme theme, string background, string foreground)
+    {
+        // A reader's own Light/Dark/Sepia/OLED/High-contrast choice is content, not chrome: the app theme never recolours it.
+        var original = BookThemeBrushes.AppColors;
+        BookThemeBrushes.AppColors = () => (Color.Parse("#123456"), Color.Parse("#ABCDEF"));
+        try
+        {
+            Assert.Equal(Color.Parse(background), ColorOf(BookThemeBrushes.ContentBackground(theme)));
+            Assert.Equal(Color.Parse(foreground), ColorOf(BookThemeBrushes.ContentForeground(theme)));
+        }
+        finally
+        {
+            BookThemeBrushes.AppColors = original;
+        }
     }
 
     [Fact]

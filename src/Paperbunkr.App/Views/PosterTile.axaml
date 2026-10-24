@@ -7,10 +7,10 @@
              mc:Ignorable="d" d:DesignWidth="140" d:DesignHeight="210"
              x:Class="Paperbunkr.App.Views.PosterTile"
              x:Name="ThisControl"
-             Padding="6">
+             Padding="6,10,6,6">
 
-    <!-- The 6px padding is the focus ring's gutter: Avalonia only repaints inside a control's own bounds, so the ring (PbGlowRing's 4px
-         spread plus the focus pop's scale) has to fit inside the tile - the same fix Library's cards needed (2026-09-26). The Home shelves
+    <!-- The padding is the focus ring's gutter: Avalonia only repaints inside a control's own bounds, so the ring (PbGlowRing's 4px
+         spread plus the focus lift and scale) has to fit inside the tile. The top needs 10px for the upward lift. The Home shelves
          take the gutter back out of their margins and spacing, so covers stay where they were. -->
 
     <!--

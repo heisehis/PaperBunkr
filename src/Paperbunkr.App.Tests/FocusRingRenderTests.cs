@@ -174,7 +174,7 @@ public class FocusRingRenderTests
             var top = PixelOutside(window, cover, 70, -3);
 
             Assert.True(left.Red > before.Red + 40, $"left side: before R{before.Red}, after R{left.Red}");
-            Assert.True(top.Red > before.Red + 40, $"top side: before R{before.Red}, after R{top.Red}");
+            Assert.True(top.Red > before.Red + 40, $"top side: before R{before.Red}, after R{top.Red}; cover {cover.TranslatePoint(default, window)} tile {tile.TranslatePoint(default, window)}; shelf {shelf.Bounds} offset {shelf.Offset}");
             window.Close();
         });
     }

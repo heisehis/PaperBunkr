@@ -19,7 +19,7 @@
                 <Button Grid.Column="1" Classes="viewAllLink" Content="View Library →"
                         Command="{Binding Home.GoToLibraryCommand}" AutomationProperties.AutomationId="HomeViewLibraryLink" />
             </Grid>
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8,-8,-8,0" IsVisible="{Binding Home.HasRecentlyAdded}">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8,-12,-8,0" IsVisible="{Binding Home.HasRecentlyAdded}">
                 <ItemsControl ItemsSource="{Binding Home.RecentlyAdded}" Margin="2,2,2,6" AutomationProperties.AutomationId="HomeRecentlyAddedList"
                               controls:EntranceAnimation.Enabled="{Binding Home.PlayEntranceAnimation}">
                     <ItemsControl.ItemsPanel>

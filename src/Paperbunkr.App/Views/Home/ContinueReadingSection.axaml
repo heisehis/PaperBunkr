@@ -17,7 +17,7 @@
                 <fi:SymbolIcon Classes="sectionIcon" Symbol="{Binding Icon}" />
                 <controls:SplitText Classes="heading" Text="{Binding Title}" AutomationProperties.AutomationId="{Binding HeaderAutomationId}" />
             </StackPanel>
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8,-8,-8,0" IsVisible="{Binding Home.HasContinueReading}">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8,-12,-8,0" IsVisible="{Binding Home.HasContinueReading}">
                 <ItemsControl ItemsSource="{Binding Home.ContinueReading}" Margin="2,2,2,6" AutomationProperties.AutomationId="HomeContinueReadingList"
                               controls:EntranceAnimation.Enabled="{Binding Home.PlayEntranceAnimation}">
                     <ItemsControl.ItemsPanel>

@@ -172,12 +172,11 @@ public class MarkResolverTests
     [Theory]
     [InlineData("MA15+", "MA15+")]
     [InlineData("R18+", "R18+")]
-    public void ResolveAgeRating_ChipTierValues_AreColouredLetterMarks(string input, string label)
+    public void ResolveAgeRating_AustralianValues_UseCeArtwork(string input, string label)
     {
         var spec = _r.ResolveAgeRating(input);
-        Assert.Equal(MarkKind.LetterMark, spec.Kind);
-        Assert.Equal(label, spec.Text);
-        Assert.NotNull(spec.Background);
+        Assert.Equal(MarkKind.Raster, spec.Kind);
+        Assert.EndsWith($"/AgeRatingsAustralia/{label}.png", spec.AssetPath);
     }
 
     [Fact]

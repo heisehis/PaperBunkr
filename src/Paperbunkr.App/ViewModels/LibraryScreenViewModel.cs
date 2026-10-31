@@ -34,6 +34,7 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvider
 {
+    public Func<Paperbunkr.Data.ReadingLists.PreparedImport, Task>? RequestReadingListImportReview { get; set; }
     /// <summary>Right-click menus for the Library grids (docs/superpowers/specs/2026-08-29-context-
     /// menu-rebuild-design.md). Delegated to keep the menu tree out of this already-large file;
     /// consumed by <see cref="Controls.ContextMenuHost"/> attached to the screen root.</summary>
@@ -3115,7 +3116,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         // ImportDroppedPathsAsync: DragImportService has no progress callback, so this is an
         // indeterminate job, but completion now follows the normal toast-policy path.
         using var job = _activity.StartJob(ActivityJobKind.Import, "Importing dropped files");
-        var result = await new DragImportService().ImportAsync(paths);
+        var result = await new DragImportService(previewReadingLists: RequestReadingListImportReview is not null).ImportAsync(paths);
+        if (result.PendingReadingLists is { } pending && RequestReadingListImportReview is not null) await RequestReadingListImportReview(pending);
         ReloadAfterChange();
 
         var parts = new List<string>();
@@ -3564,7 +3566,24 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         _pluginHost = host;
         OnPropertyChanged(nameof(HasPluginHost));
+        RaiseToolbarPluginCommandsChanged();
+        host.CommandsChanged += () => Avalonia.Threading.Dispatcher.UIThread.Post(RaiseToolbarPluginCommandsChanged);
     }
+
+    private void RaiseToolbarPluginCommandsChanged()
+    {
+        OnPropertyChanged(nameof(ToolbarPluginCommands));
+        OnPropertyChanged(nameof(HasToolbarPluginCommands));
+    }
+
+    /// <summary>
+    /// Library commands a plugin put on the toolbar with <c>toolbar="true"</c> (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-
+    /// 4-5-pitch-completion-design.md §E) - listed by the toolbar's Plugins button, run on the current selection.
+    /// </summary>
+    public IReadOnlyList<Command> ToolbarPluginCommands => LibraryPluginCommands.Where(c => c.Toolbar).ToList();
+
+    /// <summary>The toolbar's Plugins button only exists for a user with at least one such command.</summary>
+    public bool HasToolbarPluginCommands => ToolbarPluginCommands.Count > 0;
 
     public bool HasPluginHost => _pluginHost is not null;
 

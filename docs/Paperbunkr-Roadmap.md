@@ -105,22 +105,21 @@ the two-step confirm, never a silent link).
   `TrackerAdapterFactory` (+ `ITrackerDetailedPush` implemented by all 8 adapters, `TrackerProviderMap`);
   the bulk Sync button now reports every tracker's real error, not just MangaBaka/MangaDex's. Fakes
   can now be injected, closing the old "no seam to inject a fake tracker adapter" test gap.
-- Known limits: an auto-pull failure can't be told apart from "no entry" (`ITrackerAdapter.GetEntryAsync`
-  collapses both to null), so pull raises no failure alert - push does. No persisted retry queue (next entry).
+- Known limit: auto-pull still uses the legacy nullable lookup and does not report transient lookup failures separately; automatic push/retry uses the typed lookup outcome.
 - Observed, not fixed (unverified): `MetadataWriteBackQueue` is built before `MainViewModel.Activity`
   is assigned (its jobs may never reach the status bar) and calls `_showToast` off the UI thread.
 
-### Tracker auto-push offline/retry queue — backlog, deferred 2026-09-18
+### Tracker auto-push offline/retry queue — implemented 2026-10-25
 
-Deferred by the user from the Tracking-settings pass (auto-push after reading / on mark-as-read):
-v1 has **no** queue - a failed automatic push raises an Activity Center alert with the real error
-and the manual "Sync with Trackers" button is the retry. Later work: persist failed pushes (highest
-chapter per link, coalesced), retry with backoff when the network returns, drop after N attempts,
-surface pending/failed state through the Activity Center. Reference: Komikku's `DelayedTrackingStore`
-+ `DelayedTrackingUpdateJob` (WorkManager, network-CONNECTED constraint, exponential backoff from 5
-min, gives up after 3 retries, keeps only the highest chapter per track). In-repo pattern to copy:
-`Services/MetadataWriteBackQueue.cs` (debounced, coalesced, serial). `TrackingLink.LastSyncedAt`/
-`LastSyncedIssueNumber` already exist, declared but unused.
+Design + plan: `docs/superpowers/specs/2026-10-25-tracker-auto-push-retry-queue-{design,plan}.md`.
+One durable row per tracker link stores the target ID, latest status/highest chapter, retry count,
+due time and last error. Transient lookup/push failures receive five scheduled retries at 1/2/4/8/16
+minutes; due work resumes at app launch, network recovery and a 30-second check while open. Paused
+settings or disconnected credentials do not consume attempts. The Activity Center shows pending and
+exhausted rows with Retry now and exhausted-only Dismiss. Manual sync success clears only that link;
+unlink/retarget clears stale work. Retry execution always rechecks the remote entry and target ID.
+**Verified:** main Debug App build succeeded with 0 errors; `git diff --check` had no whitespace
+errors. Tests and native visual/accessibility review were not run in this delivery.
 
 ### Per-tracker Score & Finish-date — implemented 2026-09-18 (on-screen verification pending)
 
@@ -710,7 +709,7 @@ several other pieces; the App-side client/server/UI is what still needs the brai
 ### Metadata Model platform (user-supplied `PAPERBUNKR_METADATA_MODEL.md`, 2026-08-17/18)
 79-section implementation spec covering canonical metadata, relationships, events/reading lists,
 external providers, and recommendations — its own §68 "Migration Strategy" defines 7 phases.
-**Phases 1-6a shipped (plus net-new Phases 4d-4g, 2026-08-27), Phase 7 explicitly deferred, plus
+**Phases 1-6a shipped (plus net-new Phases 4d-4g, 2026-08-27), Phase 7 built minimal 2026-10-26 (`CollectionContent`, driven by chapter alignment), plus
 the Specials Tab — shipped 2026-09-02, `32ec248`** (not dropped — the source doc itself gates it:
 "Implement only when needed by the reader and collected-edition use cases," and there's no concrete
 driving use case yet; revisit if one shows up). Design specs:
@@ -2052,45 +2051,47 @@ anything against a real running app with a real plugin, and DPAPI on any account
 *enforces* use of `ReadingListManager` (backlog item 20); the headless test environment can't template an
 `ItemsControl`, so the settings view's row layout inside the running app is a by-eye check.
 
-### Plugin API pitches — deferred (pitched 2026-09-20)
+### Plugin API pitches (pitched 2026-09-20) — items 1–14 built 2026-10-28 as Plugin API 4.5 (uncommitted, on-screen check pending)
+Spec + plan: `docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md` / `-plan.md` (read its "As implemented" deviations). 7 and 12 were cut by decision. Original text kept below for the history.
+
 Not started — each needs its own brainstorm → design spec before implementation. Captured so the
 ideas aren't lost, not because scope/approach is settled. These are everything the 2026-09-20 pitch
 list proposed that was **not** taken into `docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md`
 (versioning, Activity reporter, `BookRead`/`LibraryScanCompleted`/`MissingFileDetected`/
 `ReadingListChanged`, settings schema — that spec's §9 is the authoritative non-goals list).
 
-1. **Plugin-registered metadata provider** — plugins register as a scraper alongside ComicVine /
+1. ✅ **Plugin-registered metadata provider** — *4.5: `Environment.Providers.RegisterMetadata`; matches become Pending proposals.* Original: — plugins register as a scraper alongside ComicVine /
    AniList / MangaBaka and propose through the existing `MetadataProposals` path so the user
    approves and nothing writes silently. Needs `IMetadataProvider` (today in `Paperbunkr.Data`,
    not plugin-facing) exposed or wrapped.
-2. **Plugin cover provider** — alternate cover source feeding the cover picker and
+2. ✅ **Plugin cover provider** — *4.5: `RegisterCovers`, shown in the cover picker's External tab.* Original: — alternate cover source feeding the cover picker and
    `ArcCoverImageCache` (a separate system from the reader's cover pipeline).
-3. **Extensible arc/CBL lookup source** — make the CBL Manager port's 6 built-in sources a list a
+3. ✅ **Extensible arc/CBL lookup source** — *4.5: `RegisterArcSource`, a `plugin:<key>` source in `ReadingListSourceRegistry`.* Original: — make the CBL Manager port's 6 built-in sources a list a
    plugin can add to.
-4. **Native UI surfaces** — issue-detail panel and Library toolbar action (next to
+4. ✅ **Native UI surfaces** — *4.5: `menus`/`toolbar` attributes, reading-list menu, toolbar Plugins button, `INativeIssueDetailUi` (Detail Plugins tab), `INativeInsightsWidget`.* Original: — issue-detail panel and Library toolbar action (next to
    `INativeSeriesDetailUi`), context-menu contributions via a registrar on the shared `MenuFlyout`
    mechanism, and a custom Insights widget.
-5. **Smart-list custom fields/operators** — plugin-defined virtual fields (e.g. "days since last
+5. ✅ **Smart-list custom fields/operators** — *4.5: `<Fields>` + `Environment.Fields`, typed custom values compared by type in Smart Lists.* Original: — plugin-defined virtual fields (e.g. "days since last
    read") usable in `IRulesEngine` and the SmartList editor; pairs with the Virtual Tags dynamic
    sort/group axis.
-6. **Network permission manifest** — declare allowed hosts (`network="api.example.com"`), shown in
+6. ✅ **Network permission manifest** — *4.5: `<Network>`, install confirm, `Environment.Http` limited to declared hosts.* Original: — declare allowed hosts (`network="api.example.com"`), shown in
    the plugin-install prompt. Same "accidental overreach, not adversarial isolation" model as the
    existing sandbox.
-7. **Scoped `IFileSystem` facade** — limit plugins to declared folders instead of raw `System.IO`.
+7. ⛔ **Scoped `IFileSystem` facade** — *cut 2026-10-28: unenforceable (scripts can call `System.IO`; native is full trust).* Original: — limit plugins to declared folders instead of raw `System.IO`.
    Only worth doing if it can actually be enforced.
-8. **`IMetadataWriter` batch/transaction API with dry-run diff** — reuse the `confirmWrites`
+8. ✅ **`IMetadataWriter` batch/transaction API with dry-run diff** — *4.5: `Writer.BeginBatch()` + preview + one-transaction apply.* Original: — reuse the `confirmWrites`
    machinery for "show me what will change", then apply or roll back.
-9. **Plugin dev mode** — hot-reload of `.csx` scripts and a live log pane in the Plugin screen.
+9. ✅ **Plugin dev mode** — *4.5: Developer mode (auto-reload of script plugins, live log pane).* Original: — hot-reload of `.csx` scripts and a live log pane in the Plugin screen.
    Pitched as the highest-leverage item for getting third-party plugins written at all.
-10. **Scaffolding command + typed `.d.cs` reference stub** — IntelliSense for `.csx`.
-11. **`Paperbunkr.Plugins.Testing` package** — publish the Data-Manager fixture-plugin pattern
+10. ✅ **Scaffolding command + typed `.d.cs` reference stub** — *4.5: New plugin… (C#/Python/native); `#r` editor lines instead of a `.d.cs`.* Original: — IntelliSense for `.csx`.
+11. ✅ **`Paperbunkr.Plugins.Testing` package** — *4.5: a project in the repo (not NuGet), with `PluginScriptRunner`.* Original: — publish the Data-Manager fixture-plugin pattern
     (`Paperbunkr.Plugins.Tests`) as a reusable test harness.
-12. **Plugin-to-plugin service registry** — `environment.Publish<T>()` / `Get<T>()`. Recommended
+12. ⛔ **Plugin-to-plugin service registry** — *cut 2026-10-28 as recommended.* Original: — `environment.Publish<T>()` / `Get<T>()`. Recommended
     cut unless a real plugin needs it (invites dependency-ordering problems).
-13. **Further domain hooks** — `SeriesStatusChanged` (tracker sync has many write paths, so emit
+13. ✅ **Further domain hooks** — *`ContinuityCompleted` (4.4, also covers story events); `SeriesStatusChanged` + `ScheduledTaskRan` (4.5).* Original: — `SeriesStatusChanged` (tracker sync has many write paths, so emit
     points need surveying first), `ContinuityCompleted` / `EventCompleted` (wait for their own
     feature to settle), `ScheduledTaskRan`.
-14. **Native UI surfaces for Python plugins** — the `.py` path (IronPython, `PythonCommand`) has no
+14. ✅ **Native UI surfaces for Python plugins** — *closed 2026-10-28: Python gets every manifest surface, not native Avalonia controls.* Original: — the `.py` path (IronPython, `PythonCommand`) has no
     equivalent of `INativeSeriesDetailUi` / `INativePluginSettingsUi`.
 
 *From an external review of the 4.1 spec (2026-09-20) — new ideas not already covered above:*
@@ -2259,14 +2260,16 @@ continuity/metadata CE never had), 9 (biggest quality-of-life win for scanned li
 (`docs/superpowers/specs/2026-10-12-insights-pitch-completion-design.md`). Deviations: #7's "unowned works by your top creators → Wanted" is **not built**
 (needs creator-aware Wanted items and a Metron/ComicVine lookup — a separate project); #8 covers comics only (no `Book.FileSize`). The "Not started" lines
 below are the original 2026-09-21 pitch text, kept for the item descriptions.
-~~Not started~~ — **5 of 10 built** via the 2026-09-22 decomposition (see "Insights pitch, decomposed
+~~Not started~~ — **all 10 built.** 5 via the 2026-09-22 decomposition (see "Insights pitch, decomposed
 2026-09-22" in `paperbunkr-todo.md`, confirmed 2026-09-29): #1 year-in-review recap, #2 reading
 goals/challenges, #4 backlog burn-down (as the nightly-snapshot foundation), #6 period-over-period
-deltas, #9 recommendations surface. **Still not started:** #3 reading rhythm, #5 drop-off analysis,
-#7 creator/publisher affinity, #8 storage/format breakdown, #10 milestones timeline. Checked against the
+deltas, #9 recommendations surface. The other 5 — #3 reading rhythm, #5 drop-off analysis,
+#7 creator/publisher affinity, #8 storage/format breakdown, #10 milestones timeline — were built
+2026-10-12 (`2026-10-12-insights-pitch-completion-design.md`; uncommitted, user-verified on screen
+the same day). Checked against the
 shipped Insights/Stats v2 sections above: none of these repeat the attention cards, streaks, pace
 chart, activity heatmap, library growth, breakdowns, top genres/creators, or highlights row.
-"You vs Community" stays deferred (needs adapter work to populate `ExternalRating`). New cards
+"You vs Community" was **built 2026-10-26** (manga adapters already wrote `ExternalRating`; see `paperbunkr-todo.md`). New cards
 should use the plain inline `Border.card` markup the Stats tab uses (the reusable `StatCard`
 control rendered blank from a self-referencing element binding).
 

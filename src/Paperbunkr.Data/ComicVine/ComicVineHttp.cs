@@ -9,7 +9,8 @@ namespace Paperbunkr.Data.ComicVine;
 /// </summary>
 public static class ComicVineHttp
 {
-    public static ComicVineRateLimitHandler Handler { get; } = new(new HttpClientHandler());
+    // Background calls (daemon, scheduled syncs) hold back while a scrape or the UI is using ComicVine.
+    public static ComicVineRateLimitHandler Handler { get; } = new(new HttpClientHandler(), new ComicVineRateLimitHandler.Options { ForegroundQuietPeriod = TimeSpan.FromSeconds(15) });
 
     /// <summary>
     /// Timeout is infinite on purpose: the handler enforces its own per-request timeout on the actual

@@ -20,4 +20,16 @@ public class SeriesAssociation
     public string ExternalSeriesId { get; set; } = string.Empty;
 
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The associated series' own ComicVine id, read from its Metron record so it can be matched to a local series that has no Metron
+    /// id (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §3.1). Null = not looked up, or Metron has none.
+    /// </summary>
+    public int? ComicVineSeriesId { get; set; }
+
+    /// <summary>The associated series' Grand Comics Database id, same purpose as <see cref="ComicVineSeriesId"/>.</summary>
+    public int? GcdSeriesId { get; set; }
+
+    /// <summary>When <see cref="ComicVineSeriesId"/>/<see cref="GcdSeriesId"/> were last looked up; null = never. Rechecked after 30 days.</summary>
+    public DateTime? IdsCheckedUtc { get; set; }
 }

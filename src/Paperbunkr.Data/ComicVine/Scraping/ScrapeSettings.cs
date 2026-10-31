@@ -74,13 +74,11 @@ public sealed class ScrapeSettings
     public ScrapeStrictness Strictness { get; set; } = ScrapeStrictness.Balanced;
 
     /// <summary>
-    /// CE's <c>update_rating_b</c> defaults <b>off</b> (configuration.py:62) - it costs an extra API
-    /// call CE never made by default. Everything else defaults on. Fixed docs/superpowers/specs/
-    /// 2026-09-24-comicvine-scraper-fidelity-design.md §1.3 - this previously defaulted on along with
-    /// every other field.
+    /// Every field defaults on. CE's <c>update_rating_b</c> defaults <b>off</b> (configuration.py:62) because it costs an extra API
+    /// call CE never made by default - a deliberate deviation as of docs/superpowers/specs/2026-10-26-you-vs-community-and-chapter-alignment-design.md:
+    /// the Insights "You vs Community" card needs the community rating stored. A saved profile keeps its own choice (<see cref="FieldSetVersion"/> is not bumped).
     /// </summary>
-    public HashSet<ScrapeField> EnabledScrapeFields { get; set; } =
-        new(Enum.GetValues<ScrapeField>().Where(f => f != ScrapeField.CommunityRating));
+    public HashSet<ScrapeField> EnabledScrapeFields { get; set; } = new(Enum.GetValues<ScrapeField>());
 
     /// <summary>Which generation of the field list <see cref="EnabledScrapeFields"/> was saved against; 0 for a row saved before this existed. See <see cref="Load"/>.</summary>
     public int FieldSetVersion { get; set; }

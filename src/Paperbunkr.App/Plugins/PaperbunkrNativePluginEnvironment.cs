@@ -58,6 +58,9 @@ public sealed class PaperbunkrNativePluginEnvironment : INativePluginUiEnvironme
     public IThemePlugin ThemePlugin => _inner.ThemePlugin;
     public IPluginActivity Activity => _inner.Activity;
     public IPluginLogger Log => _inner.Log;
+    public IPluginFields Fields => _inner.Fields;
+    public IPluginProviders Providers => _inner.Providers;
+    public IPluginHttp Http => _inner.Http;
     public IEnumerable<string> LibraryPaths => _inner.LibraryPaths;
 
     public string CommandPath

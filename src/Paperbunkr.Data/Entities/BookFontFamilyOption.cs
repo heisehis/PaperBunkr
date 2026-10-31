@@ -13,4 +13,7 @@ public enum BookFontFamilyOption
     Sans,
     Mono,
     OpenDyslexic,
+
+    /// <summary>A font installed on this machine, named by <c>AppSettings.BookReaderCustomFont</c> (docs/superpowers/specs/2026-10-27-books-slice3b-reader-typography-aids-design.md §3).</summary>
+    Custom,
 }

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.ReadingLists.Matching;
 
 namespace Paperbunkr.App.Services;
 
@@ -27,6 +28,8 @@ public sealed class MetadataEditHistoryService
 
     private readonly Stack<MetadataEditHistoryEntry> _undoStack = new();
     private readonly Stack<MetadataEditHistoryEntry> _redoStack = new();
+
+    public HealResult LastHealingResult { get; private set; } = HealResult.Nothing;
 
     public bool CanUndo => _undoStack.Count > 0;
 
@@ -80,7 +83,7 @@ public sealed class MetadataEditHistoryService
         }
 
         var entry = _undoStack.Pop();
-        Apply(contextFactory, entry.Target, entry.Before);
+        LastHealingResult = Apply(contextFactory, entry.Target, entry.Before);
         _redoStack.Push(entry);
         return entry.Description;
     }
@@ -93,27 +96,28 @@ public sealed class MetadataEditHistoryService
         }
 
         var entry = _redoStack.Pop();
-        Apply(contextFactory, entry.Target, entry.After);
+        LastHealingResult = Apply(contextFactory, entry.Target, entry.After);
         _undoStack.Push(entry);
         return entry.Description;
     }
 
-    private static void Apply(System.Func<PaperbunkrDbContext> contextFactory, MetadataEditTarget target, Dictionary<int, Dictionary<string, string?>> snapshots)
+    private static HealResult Apply(System.Func<PaperbunkrDbContext> contextFactory, MetadataEditTarget target, Dictionary<int, Dictionary<string, string?>> snapshots)
     {
         using var context = contextFactory();
 
         if (target == MetadataEditTarget.Book)
         {
-            var books = context.Books.Where(b => snapshots.Keys.Contains(b.Id)).ToList();
+            var books = context.Books.Include(b => b.Tags).Where(b => snapshots.Keys.Contains(b.Id)).ToList();
             foreach (var book in books)
             {
                 BookMetadataSnapshot.Apply(book, snapshots[book.Id]);
             }
 
             context.SaveChanges();
-            return;
+            return HealResult.Nothing;
         }
 
+        var identityBefore = ReadingListHealingCoordinator.Capture(context, snapshots.Keys);
         var issues = context.Issues.Include(i => i.Series).Include(i => i.Tags)
             .Where(i => snapshots.Keys.Contains(i.Id)).ToList();
         foreach (var issue in issues)
@@ -126,5 +130,8 @@ public sealed class MetadataEditHistoryService
         }
 
         context.SaveChanges();
+        var identityAfter = ReadingListHealingCoordinator.Capture(context, snapshots.Keys);
+        var changed = ReadingListHealingCoordinator.Changed(identityBefore, identityAfter);
+        return changed.Count == 0 ? HealResult.Nothing : ReadingListHealer.RecheckFor(context, changed);
     }
 }

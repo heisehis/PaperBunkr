@@ -24,6 +24,7 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class NewReadingListViewModel : ViewModelBase
 {
+    public Func<PreparedImport, Task>? RequestImportReview { get; set; }
     public enum BuildMethod { Blank, Import, Arc, Event }
 
     private const string DefaultName = "New Reading List";
@@ -149,6 +150,18 @@ public partial class NewReadingListViewModel : ViewModelBase
         string? path = await _filePicker.PickOpenFileAsync("Import Reading List", "cbl", "Reading List (.cbl / .csv)");
         if (path is null)
         {
+            return;
+        }
+
+        if (RequestImportReview is not null && (path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase) || CblFile.Detect(path) == CblFileKind.ReadingList))
+        {
+            try
+            {
+                var prepared = await Task.Run(() => path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase) ? CsvReadingListIO.Prepare(path) : CblReadingListIO.Prepare(path));
+                if (NameWasCustomised) prepared = prepared with { Name = ResolvedName };
+                await RequestImportReview(new PreparedImport(new[] { prepared }, Array.Empty<string>()));
+            }
+            catch (Exception ex) { StatusMessage = ex.Message; }
             return;
         }
 
@@ -348,6 +361,13 @@ public partial class NewReadingListViewModel : ViewModelBase
 
         try
         {
+            if (RequestImportReview is not null)
+            {
+                var prepared = await ArcReadingListBuilder.PrepareAsync(source, row.Result, CancellationToken.None);
+                if (NameWasCustomised) prepared = prepared with { Name = ResolvedName };
+                await RequestImportReview(new PreparedImport(new[] { prepared }, Array.Empty<string>()));
+                return;
+            }
             var list = await ArcReadingListBuilder.CreateFromArcAsync(context, source, row.Result, CancellationToken.None);
             if (NameWasCustomised)
             {

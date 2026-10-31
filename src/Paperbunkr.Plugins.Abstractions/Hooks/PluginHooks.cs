@@ -48,14 +48,22 @@ public static class PluginHooks
     /// </summary>
     public const string ContinuityCompleted = "ContinuityCompleted";
 
-    /// <summary>The notification-only domain-event hooks - the only hooks that aren't in the 4.0 baseline: four from Plugin API 4.1, and <see cref="ContinuityCompleted"/> from 4.4.</summary>
-    public static readonly IReadOnlyList<string> DomainEventHooks = new[] { BookRead, LibraryScanCompleted, MissingFileDetected, ReadingListChanged, ContinuityCompleted };
+    /// <summary>A series' publication status changed (Plugin API 4.5) - by a tracker sync, a scrape, or the user. One event per series per save.</summary>
+    public const string SeriesStatusChanged = "SeriesStatusChanged";
+
+    /// <summary>A scheduled task finished a run (Plugin API 4.5) - on its schedule or from "Run now". Fires whether it succeeded, failed or was cancelled.</summary>
+    public const string ScheduledTaskRan = "ScheduledTaskRan";
+
+    /// <summary>The notification-only domain-event hooks - the only hooks that aren't in the 4.0 baseline: four from Plugin API 4.1, <see cref="ContinuityCompleted"/> from 4.4, and <see cref="SeriesStatusChanged"/>/<see cref="ScheduledTaskRan"/> from 4.5.</summary>
+    public static readonly IReadOnlyList<string> DomainEventHooks = new[] { BookRead, LibraryScanCompleted, MissingFileDetected, ReadingListChanged, ContinuityCompleted, SeriesStatusChanged, ScheduledTaskRan };
 
     private const string DescBookRead = "Actions when a Book is finished";
     private const string DescLibraryScan = "Actions when a Library scan completes";
     private const string DescMissingFile = "Actions when a file is confirmed missing";
     private const string DescReadingList = "Actions when a Reading List changes";
     private const string DescContinuityCompleted = "Actions when a Continuity or Story Event is finished";
+    private const string DescSeriesStatus = "Actions when a Series' status changes";
+    private const string DescScheduledTask = "Actions when a scheduled task runs";
 
     private const string DescEditBooks = "Edit/Update Books Commands";
     private const string DescNewBooks = "Create New Books Commands";
@@ -93,6 +101,8 @@ public static class PluginHooks
         [MissingFileDetected] = DescMissingFile,
         [ReadingListChanged] = DescReadingList,
         [ContinuityCompleted] = DescContinuityCompleted,
+        [SeriesStatusChanged] = DescSeriesStatus,
+        [ScheduledTaskRan] = DescScheduledTask,
     };
 
     /// <summary>
@@ -102,7 +112,12 @@ public static class PluginHooks
     /// <see cref="ValidHooks"/> rather than folded into it so <see cref="ValidHooks"/>'s shape is unchanged.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, Version> HookSince = ValidHooks.Keys
-        .ToDictionary(hook => hook, hook => hook == ContinuityCompleted ? new Version(4, 4) : DomainEventHooks.Contains(hook) ? new Version(4, 1) : new Version(4, 0));
+        .ToDictionary(hook => hook, hook => hook switch
+        {
+            SeriesStatusChanged or ScheduledTaskRan => new Version(4, 5),
+            ContinuityCompleted => new Version(4, 4),
+            _ => DomainEventHooks.Contains(hook) ? new Version(4, 1) : new Version(4, 0),
+        });
 
     /// <summary>The API version <paramref name="hook"/> first shipped in, or null for a hook name this host doesn't know.</summary>
     public static Version? Since(string hook) => HookSince.GetValueOrDefault(hook);

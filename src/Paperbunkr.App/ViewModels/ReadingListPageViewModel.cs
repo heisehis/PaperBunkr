@@ -86,6 +86,15 @@ public partial class ReadingListPageViewModel : ViewModelBase
 
     public int? ActiveListId => _activeReadingListId;
 
+    public Func<int?, Task>? RequestReview { get; set; }
+    public Func<PreparedImport, Task>? RequestImportReview { get; set; }
+    public Func<Task>? RequestReviewHistory { get; set; }
+    [RelayCommand] private Task ReviewHistory() => RequestReviewHistory?.Invoke() ?? Task.CompletedTask;
+
+    [RelayCommand]
+    private async Task ReviewUnresolved()
+    { if (RequestReview is not null) await RequestReview(null); }
+
     public bool IsListOpen => _activeReadingListId is not null;
 
     /// <summary>Every row in reading order (the path and cover wall are views of these).</summary>

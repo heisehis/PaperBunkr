@@ -120,14 +120,24 @@ public sealed class PluginApiCompatibilityTests
     }
 
     [Fact]
-    public void Four_domain_event_hooks_first_shipped_in_4_1_and_ContinuityCompleted_in_4_4()
+    public void Domain_event_hooks_record_the_version_each_first_shipped_in()
     {
         Assert.Equal(
-            new[] { PluginHooks.BookRead, PluginHooks.LibraryScanCompleted, PluginHooks.MissingFileDetected, PluginHooks.ReadingListChanged, PluginHooks.ContinuityCompleted },
+            new[]
+            {
+                PluginHooks.BookRead, PluginHooks.LibraryScanCompleted, PluginHooks.MissingFileDetected, PluginHooks.ReadingListChanged,
+                PluginHooks.ContinuityCompleted, PluginHooks.SeriesStatusChanged, PluginHooks.ScheduledTaskRan,
+            },
             PluginHooks.DomainEventHooks);
         Assert.All(PluginHooks.DomainEventHooks, hook =>
         {
-            Assert.Equal(hook == PluginHooks.ContinuityCompleted ? new Version(4, 4) : new Version(4, 1), PluginHooks.Since(hook));
+            Version expected = hook switch
+            {
+                PluginHooks.SeriesStatusChanged or PluginHooks.ScheduledTaskRan => new Version(4, 5),
+                PluginHooks.ContinuityCompleted => new Version(4, 4),
+                _ => new Version(4, 1),
+            };
+            Assert.Equal(expected, PluginHooks.Since(hook));
             Assert.Contains(hook, PluginHooks.ValidHooks.Keys);
         });
     }

@@ -452,7 +452,7 @@ public sealed class ScrapeOrchestrator
                 }
 
                 found = ApplyAdvancedFilters(found);
-                return found
+                var scored = found
                     .Select(c => (Volume: c, Score: MatchScoreCalculator.Compute(
                         designation is null ? ComicFormatHints.CleanQuery(seriesName) : $"{ComicFormatHints.CleanQuery(seriesName)} {designation}",
                         issue.EffectiveFormat(),
@@ -461,8 +461,14 @@ public sealed class ScrapeOrchestrator
                         c,
                         _matchMemory.WasChosen(searchKey, c.Id),
                         DateTime.UtcNow.Year) + ComicFormatHints.Agreement(bookFormat, c.Name)))
-                    .OrderByDescending(c => c.Score)
-                    .ToList();
+                    .OrderByDescending(c => c.Score);
+
+                // The "Maximum search results" cap keeps the best-scoring candidates, not the first ones to arrive (reported 2026-10-29: "X-Men"
+                // never matched and ComicVine's list stopped at 2007). The list is several searches joined - Metron's alphabetical page of 100
+                // ("Astonishing X-Men", "Giant-Size X-Men"...), ComicVine's oldest-first volumes, then the issue-first hits that name the right
+                // series - so capping it in arrival order cut off every recent volume and every issue-first hit. CE caps one relevance-ordered
+                // ComicVine search, which is what keeping the top scores reproduces.
+                return (_settings.MaxSearchResults is int max && max > 0 ? scored.Take(max) : scored).ToList();
             }
 
             // A series already matched earlier in this run - by the user, by an id, or by the automatic matcher - carries its other comics
@@ -987,14 +993,8 @@ public sealed class ScrapeOrchestrator
     /// valid in-range volume to make room for one the year filters would have removed anyway.</summary>
     private IReadOnlyList<ComicVineVolumeSearchResult> ApplyAdvancedFilters(IReadOnlyList<ComicVineVolumeSearchResult> candidates)
     {
-        IEnumerable<ComicVineVolumeSearchResult> filtered = candidates.Where(PassesYearAndPublisherFilters);
-
-        if (_settings.MaxSearchResults is int max && max > 0)
-        {
-            filtered = filtered.Take(max);
-        }
-
-        return filtered.ToList();
+        // The result-count cap is applied by the caller after scoring (see SearchAndRank).
+        return candidates.Where(PassesYearAndPublisherFilters).ToList();
     }
 
     /// <summary>Ported verbatim from CE's real <c>dbutils.filter_series_refs</c> (verified) - a
@@ -1502,8 +1502,16 @@ public sealed class ScrapeOrchestrator
     /// caller falls back to the volume's own art in that case, same as force-series-art being on.</summary>
     public async Task<string?> FindIssueCoverUrlAsync(int volumeId, CancellationToken cancellationToken = default)
     {
+        return (await FindIssueSummaryAsync(volumeId, cancellationToken).ConfigureAwait(false))?.ImageUrl;
+    }
+
+    /// <summary>Finds the issue whose own cover is used in a series review, including its
+    /// <c>associated_images</c> choices for the review carousel.</summary>
+    public async Task<ComicVineIssueSummary?> FindIssueSummaryAsync(int volumeId, CancellationToken cancellationToken = default)
+    {
         IReadOnlyList<ComicVineIssueSummary> summaries = await LoadIssuesAsync(volumeId, cancellationToken).ConfigureAwait(false);
-        return FindByNumber(summaries, CurrentBookNumber)?.ImageUrl;
+        return FindByNumber(summaries, CurrentBookNumber)
+            ?? (summaries.Count == 1 ? summaries[0] : null);
     }
 
     /// <summary>

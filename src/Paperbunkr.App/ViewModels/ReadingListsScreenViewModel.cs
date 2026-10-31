@@ -45,6 +45,17 @@ public partial class ReadingListsScreenViewModel : ViewModelBase, IContextMenuPr
             id => LoadReadingList(id, triggerEntrance: true),
             FilterByTag);
 
+        Review = new ReadingListReviewViewModel(dialogs, () => IsReviewMode = false, () =>
+        {
+            RefreshSidebar();
+            if (List.ActiveListId is int id) List.LoadReadingList(id);
+        });
+        List.RequestReview = async itemId => await OpenReviewAsync(List.ActiveListId is int id ? new[] { id } : Array.Empty<int>(), itemId);
+        List.RequestImportReview = async input => await OpenImportReviewAsync(input, List.FolderId);
+        Gallery.RequestImportReview = async input => await OpenImportReviewAsync(input, Gallery.CurrentFolderId);
+        Gallery.RequestReviewLists = () => OpenReviewAsync(Array.Empty<int>());
+        Gallery.RequestReviewHistory = List.RequestReviewHistory = () => { IsReviewMode = true; return Review.ShowHistoryAsync(); };
+
         if (loadOnConstruction)
         {
             Gallery.Refresh();
@@ -54,6 +65,30 @@ public partial class ReadingListsScreenViewModel : ViewModelBase, IContextMenuPr
     public ReadingGalleryViewModel Gallery { get; }
 
     public ReadingListPageViewModel List { get; }
+
+    public ReadingListReviewViewModel Review { get; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowGalleryView), nameof(ShowListView))]
+    private bool _isReviewMode;
+    public bool ShowGalleryView => !IsReviewMode && !IsListMode;
+    public bool ShowListView => !IsReviewMode && IsListMode;
+
+    partial void OnIsListModeChanged(bool value)
+    { OnPropertyChanged(nameof(ShowGalleryView)); OnPropertyChanged(nameof(ShowListView)); }
+
+    public async Task OpenReviewAsync(int[] listIds, int? itemId = null)
+    {
+        IsReviewMode = true;
+        if (await Review.CanStartAsync()) await Review.StartReviewAsync(listIds, itemId);
+    }
+    public async Task OpenImportReviewAsync(PreparedImport input, int? parentFolder)
+    {
+        IsReviewMode = true;
+        if (await Review.CanStartAsync()) await Review.StartImportAsync(input, parentFolder);
+    }
+    [RelayCommand] private Task ReviewLists() => OpenReviewAsync(Array.Empty<int>());
+    [RelayCommand] private async Task ReviewHistory() { IsReviewMode = true; await Review.ShowHistoryAsync(); }
 
     /// <summary>Gallery or an open list.</summary>
     [ObservableProperty]
@@ -74,6 +109,7 @@ public partial class ReadingListsScreenViewModel : ViewModelBase, IContextMenuPr
     /// <summary>Called on every visit: reload whichever view is showing. The first visit lands on the gallery.</summary>
     public void EnsureListLoaded()
     {
+        if (IsReviewMode) return;
         if (IsListMode && List.ActiveListId is int id)
         {
             List.LoadReadingList(id, triggerEntrance: true);
@@ -97,6 +133,7 @@ public partial class ReadingListsScreenViewModel : ViewModelBase, IContextMenuPr
 
     public void LoadReadingList(int readingListId, bool triggerEntrance = false)
     {
+        IsReviewMode = false;
         IsListMode = true;
         List.LoadReadingList(readingListId, triggerEntrance);
         if (List.ActiveListId is null)

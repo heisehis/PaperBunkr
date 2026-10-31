@@ -176,6 +176,18 @@ public static class InputActions
             new(InputActionIds.BookNextPage, BookReaderGroup, "Next page", InputScope.BookReader, Always, [K(Key.Right), K(Key.PageDown), K(Key.Space)]),
             new(InputActionIds.BookPreviousPage, BookReaderGroup, "Previous page", InputScope.BookReader, Always, [K(Key.Left), K(Key.PageUp)]),
             new(InputActionIds.BookAnnouncePosition, BookReaderGroup, "Announce reading position", InputScope.BookReader, Always, [K(Key.W, Ctrl | Shift)]),
+            new(InputActionIds.BookJumpBack, BookReaderGroup, "Back to previous position (after a jump)", InputScope.BookReader, Always, [K(Key.Left, Alt)]),
+            new(InputActionIds.BookLookUp, BookReaderGroup, "Look up the selected word", InputScope.BookReader, Always, [K(Key.L)]),
+            new(InputActionIds.BookSpeakToggle, BookReaderGroup, "Read aloud start / stop", InputScope.BookReader, Always, [K(Key.T)]),
+            new(InputActionIds.BookSpeakPause, BookReaderGroup, "Read aloud pause / resume", InputScope.BookReader, Always, [K(Key.T, Shift)]),
+            new(InputActionIds.BookSpeakFaster, BookReaderGroup, "Read aloud faster", InputScope.BookReader, Always, [K(Key.Up, Ctrl)]),
+            new(InputActionIds.BookSpeakSlower, BookReaderGroup, "Read aloud slower", InputScope.BookReader, Always, [K(Key.Down, Ctrl)]),
+            new(InputActionIds.BookRulerToggle, BookReaderGroup, "Reading ruler on / off", InputScope.BookReader, Always, [K(Key.R)]),
+            new(InputActionIds.BookRulerLineUp, BookReaderGroup, "Reading ruler up one line", InputScope.BookReader, Always, [K(Key.Up, Alt)]),
+            new(InputActionIds.BookRulerLineDown, BookReaderGroup, "Reading ruler down one line", InputScope.BookReader, Always, [K(Key.Down, Alt)]),
+            new(InputActionIds.BookAutoScrollToggle, BookReaderGroup, "Auto-scroll start / stop", InputScope.BookReader, Always, [K(Key.A)]),
+            new(InputActionIds.BookAutoScrollFaster, BookReaderGroup, "Auto-scroll faster", InputScope.BookReader, Always, [K(Key.OemPeriod)]),
+            new(InputActionIds.BookAutoScrollSlower, BookReaderGroup, "Auto-scroll slower", InputScope.BookReader, Always, [K(Key.OemComma)]),
 
             // ----- Compare. Mirrors the keys the screen documented: Left/Right and PageUp/PageDown turn A's page, Space or F flips, M switches mode, 0 resets the view, 1 and 2 keep A or B. -----
             new(InputActionIds.CompareNextPage, CompareGroup, "Next page", InputScope.Compare, Always, [K(Key.Right), K(Key.PageDown)]),

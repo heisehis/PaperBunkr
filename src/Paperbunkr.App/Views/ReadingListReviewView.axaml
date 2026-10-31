@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels" xmlns:views="using:Paperbunkr.App.Views"
+             x:Class="Paperbunkr.App.Views.ReadingListReviewView" x:DataType="vm:ReadingListReviewViewModel"
+             Background="{DynamicResource PbBgBrush}">
+    <UserControl.Styles>
+        <Style Selector="ListBox"><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style>
+        <Style Selector="ListBoxItem:selected /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" /></Style>
+        <Style Selector="Grid.reviewBody.compact Border.reviewQueue"><Setter Property="Grid.ColumnSpan" Value="2" /></Style>
+        <Style Selector="Grid.reviewBody.compact Border.reviewDetail"><Setter Property="Grid.Column" Value="0" /><Setter Property="Grid.ColumnSpan" Value="2" /></Style>
+        <Style Selector="Grid.reviewBody.compact.detail Border.reviewQueue"><Setter Property="IsVisible" Value="False" /></Style>
+        <Style Selector="Grid.reviewBody.compact:not(.detail) Border.reviewDetail"><Setter Property="IsVisible" Value="False" /></Style>
+    </UserControl.Styles>
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="24" RowSpacing="12">
+        <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="4">
+                <TextBlock Classes="pbTextHeading" Text="{Binding Title}" />
+                <TextBlock Classes="pbTextMeta" Text="{Binding Summary}" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <Button Classes="ghost" Content="Back" Command="{Binding BackCommand}" />
+                <Button Classes="secondary" Content="History" Command="{Binding OpenHistoryCommand}" IsEnabled="{Binding !IsBusy}" />
+            </StackPanel>
+        </Grid>
+        <ProgressBar Grid.Row="1" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="4" />
+        <Panel Grid.Row="2" IsEnabled="{Binding !IsBusy}">
+            <Grid RowDefinitions="Auto,*,Auto" IsVisible="{Binding IsSelector}">
+                <TextBlock Classes="pbTextSection" Text="Choose lists to review" />
+                <ListBox Grid.Row="1" x:Name="ListSelector" ItemsSource="{Binding Lists}" AutomationProperties.Name="Lists to review">
+                    <ListBox.ItemTemplate><DataTemplate x:DataType="vm:ReviewListOption">
+                        <CheckBox Content="{Binding Name}" IsChecked="{Binding Selected}" Foreground="{DynamicResource PbTextBrush}" />
+                    </DataTemplate></ListBox.ItemTemplate>
+                </ListBox>
+                <Button Grid.Row="2" Classes="primary" HorizontalAlignment="Right" Content="Review selected lists" Command="{Binding ReviewSelectedCommand}" />
+            </Grid>
+            <Grid Classes="reviewBody" Classes.compact="{Binding Compact}" Classes.detail="{Binding ShowDetail}"
+                  ColumnDefinitions="2*,3*" ColumnSpacing="16" IsVisible="{Binding ShowReviewBody}">
+                <Border Classes="card reviewQueue">
+                    <ListBox x:Name="EntryQueue" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" AutomationProperties.Name="Entries to review">
+                        <ListBox.ItemTemplate><DataTemplate x:DataType="vm:ReviewRow">
+                            <StackPanel Spacing="4">
+                                <TextBlock Classes="pbTextMeta" Text="{Binding ListName}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Classes="pbTextBody" Text="{Binding Label}" TextWrapping="Wrap" />
+                                <TextBlock Classes="pbTextMeta" Text="{Binding Status}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </DataTemplate></ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+                <Border Grid.Column="1" Classes="card reviewDetail">
+                    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="12">
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                            <Button Classes="ghost" Content="Entry queue" Command="{Binding ShowQueueCommand}" IsVisible="{Binding Compact}" HorizontalAlignment="Left" />
+                            <Button Grid.Column="1" Classes="secondary" Content="Previous" Command="{Binding StepCommand}" CommandParameter="previous" />
+                            <Button Grid.Column="2" Classes="secondary" Content="Next" Command="{Binding StepCommand}" CommandParameter="next" />
+                        </Grid>
+                        <StackPanel Grid.Row="1" Spacing="4">
+                            <TextBlock Classes="pbTextSection" Text="{Binding SelectedRow.Label}" TextWrapping="Wrap" />
+                            <TextBlock Classes="pbTextMeta" Text="{Binding SelectedRow.Details}" TextWrapping="Wrap" />
+                            <TextBlock Classes="pbTextBody" Text="{Binding SelectedRow.Status}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="4">
+                            <TextBlock x:Name="SearchLabel" Classes="fieldLabel" Text="Search library" />
+                            <TextBox Grid.Row="1" x:Name="ReviewSearch" Text="{Binding SearchQuery}" PlaceholderText="Series, number or year"
+                                     AutomationProperties.AutomationId="ReadingListReviewSearch" AutomationProperties.LabeledBy="{Binding #SearchLabel}" />
+                            <Button Grid.Row="1" Grid.Column="1" Classes="secondary" Content="Search" Command="{Binding SearchCommand}" />
+                        </Grid>
+                        <Panel Grid.Row="3">
+                        <TextBlock Classes="pbTextMeta" Text="No candidates. Search the library or leave this entry unresolved."
+                                   IsVisible="{Binding NoCandidates}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                        <ListBox x:Name="CandidateList" ItemsSource="{Binding Candidates}" AutomationProperties.Name="Candidate comics">
+                            <ListBox.ItemTemplate><DataTemplate x:DataType="vm:ReviewCandidate">
+                                <Button Classes="menuRow" HorizontalAlignment="Stretch" Command="{Binding $parent[views:ReadingListReviewView].((vm:ReadingListReviewViewModel)DataContext).ChooseCommand}" CommandParameter="{Binding}">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Classes="pbTextBody" Text="{Binding Label}" TextWrapping="Wrap" />
+                                        <TextBlock Classes="pbTextMeta" Text="{Binding Details}" TextWrapping="Wrap" />
+                                        <TextBlock Classes="pbTextMeta" Text="{Binding Reason}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate></ListBox.ItemTemplate>
+                        </ListBox>
+                        </Panel>
+                        <WrapPanel Grid.Row="4">
+                            <Button Classes="ghost" Content="Clear choice" Command="{Binding ClearChoiceCommand}" Margin="0,0,8,8" />
+                            <Button Classes="secondary" Content="Apply choice elsewhere…" Command="{Binding ApplyElsewhereCommand}" Margin="0,0,8,8" />
+                        </WrapPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+            <Border Classes="card" Background="{DynamicResource PbSurface1Brush}" IsVisible="{Binding IsHistory}">
+                <Grid RowDefinitions="Auto,*" RowSpacing="12">
+                    <Grid ColumnDefinitions="*,Auto"><TextBlock Classes="pbTextSection" Text="Review history · last 30 days" />
+                        <Button Grid.Column="1" Classes="ghost" Content="Return to review" Command="{Binding CloseHistoryCommand}" /></Grid>
+                    <ListBox Grid.Row="1" x:Name="HistoryList" ItemsSource="{Binding History}" AutomationProperties.Name="Review batches">
+                        <ListBox.ItemTemplate><DataTemplate x:DataType="vm:ReviewHistoryRow">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                <TextBlock Classes="pbTextBody" Text="{Binding Details}" TextWrapping="Wrap" />
+                                <Button Grid.Column="1" Classes="secondary" Content="Undo…" Command="{Binding $parent[views:ReadingListReviewView].((vm:ReadingListReviewViewModel)DataContext).UndoCommand}" CommandParameter="{Binding}" />
+                            </Grid>
+                        </DataTemplate></ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Panel>
+        <StackPanel Grid.Row="3" Spacing="8">
+            <ScrollViewer MaxHeight="96" HorizontalScrollBarVisibility="Disabled">
+                <TextBlock Classes="pbTextBody" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+            </ScrollViewer>
+            <WrapPanel IsEnabled="{Binding !IsBusy}">
+                <CheckBox Content="Keep unresolved entries" IsChecked="{Binding KeepUnresolved}" IsVisible="{Binding IsImport}" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,16,8" />
+                <Button Classes="primary" Content="Apply" Command="{Binding ApplyCommand}" IsVisible="{Binding ShowReviewBody}" Margin="0,0,8,8" />
+                <Button Classes="secondary" Content="Recheck" Command="{Binding RecheckCommand}" IsVisible="{Binding ShowReviewBody}" Margin="0,0,8,8" />
+                <Button Classes="ghost" Content="Discard" Command="{Binding DiscardCommand}" Margin="0,0,8,8" />
+                <Button Classes="secondary" Content="Undo last review…" Command="{Binding UndoLastCommand}" IsVisible="{Binding HasImmediateUndo}" Margin="0,0,8,8" />
+            </WrapPanel>
+        </StackPanel>
+    </Grid>
+</UserControl>

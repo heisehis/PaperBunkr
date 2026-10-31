@@ -66,6 +66,39 @@ public class BookFolderScanServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ScanAllAsync_ImportsDescriptiveMetadata_WithFileSources_AndSeriesOnlyWhenDeclared()
+    {
+        EpubFixture.Create(Path.Combine(_scanRoot, "dune.epub"), title: "Dune Messiah", seriesName: "Dune Chronicles", extraMetadataXml: """
+                <dc:publisher>Ace Books</dc:publisher>
+                <dc:identifier>urn:isbn:978-0-441-17271-9</dc:identifier>
+                <dc:subject>Science Fiction</dc:subject>
+                <meta name="calibre:series_index" content="2"/>
+
+            """);
+        EpubFixture.Create(Path.Combine(_scanRoot, "standalone.epub"), title: "Standalone Tale");
+        AddBookFolder(_scanRoot);
+
+        var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        Assert.Equal(2, result.BooksAdded);
+        Assert.Equal(1, result.SeriesTouched);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var dune = context.Books.Include(b => b.BookSeries).Include(b => b.Tags).Include(b => b.FieldSources).Single(b => b.Title == "Dune Messiah");
+        Assert.Equal("Dune Chronicles", dune.BookSeries!.Name);
+        Assert.Equal(2f, dune.SeriesIndex);
+        Assert.Equal("Ace Books", dune.Publisher);
+        Assert.Equal("9780441172719", dune.ISBN);
+        Assert.Equal("en", dune.LanguageISO);
+        Assert.Contains(dune.Tags, t => t.Field == BookTagField.Genre && t.Value == "Science Fiction");
+        Assert.All(dune.FieldSources, s => Assert.Equal(BookFieldSourceKind.File, s.Source));
+
+        var standalone = context.Books.Include(b => b.FieldSources).Single(b => b.Title == "Standalone Tale");
+        Assert.Null(standalone.BookSeriesId);
+        Assert.Null(standalone.SeriesIndex);
+        Assert.Equal(BookReadingStatus.Unread, standalone.Status);
+    }
+
+    [Fact]
     public async Task ScanAllAsync_ImportsPdf_FallsBackToFileNameForTitle()
     {
         PdfFixture.Create(Path.Combine(_scanRoot, "Untitled Manuscript.pdf"), "Some page text.");

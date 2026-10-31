@@ -3,6 +3,8 @@ using System.Linq;
 using FluentIcons.Common;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.Services;
+using Paperbunkr.Data.Entities;
 using Paperbunkr.Plugins;
 
 namespace Paperbunkr.App.ViewModels;
@@ -33,13 +35,18 @@ public sealed class BooksContextMenuBuilder
         var entries = new List<ContextMenuEntry>
         {
             ContextMenuEntry.Item("Edit…", _vm.EditBookCommand, card.BookId, Symbol.Edit),
+            ContextMenuEntry.Item("Match metadata…", _vm.MatchBookCommand, card.BookId, Symbol.Search),
         };
+        AddIfPresent(entries, ContextMenuEntry.SubMenu("Set status", StatusChildren(card.BookId), Symbol.CheckmarkCircle));
+        AddIfPresent(entries, ContextMenuEntry.SubMenu("Rate", RatingChildren(card.BookId), Symbol.Star));
         AddIfPresent(entries, ContextMenuEntry.SubMenu("Add to Collection", CollectionChildren(card.BookId), Symbol.CollectionsAdd));
 
         // Plugin API v2 Books hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-
         // plan.md §3/§4) - one entry per enabled command, same "no anchor if nothing's registered"
         // gating Library's own plugin entry uses (_vm.HasPluginHost).
-        var pluginCommands = _vm.HasPluginHost ? _vm.NovelBooksPluginCommands.ToList() : new List<Command>();
+        var pluginCommands = _vm.HasPluginHost
+            ? _vm.NovelBooksPluginCommands.Where(c => c.ShowsInMenu(Command.MenuNames.Books)).ToList()
+            : new List<Command>();
         if (pluginCommands.Count > 0)
         {
             AddIfPresent(entries, ContextMenuEntry.SubMenu(
@@ -69,6 +76,27 @@ public sealed class BooksContextMenuBuilder
         {
             entries.Add(entry);
         }
+    }
+
+    private IEnumerable<ContextMenuEntry?> StatusChildren(int bookId)
+    {
+        foreach (var status in System.Enum.GetValues<BookReadingStatus>())
+        {
+            yield return ContextMenuEntry.Item(BookStatusLabels.ToLabel(status), _vm.SetBookStatusCommand, (bookId, status));
+        }
+    }
+
+    private IEnumerable<ContextMenuEntry?> RatingChildren(int bookId)
+    {
+        for (int half = 10; half >= 1; half--)
+        {
+            float stars = half / 2f;
+            yield return ContextMenuEntry.Item(
+                stars == 1f ? "1 star" : $"{stars:0.#} stars", _vm.RateBookCommand, (bookId, (float?)stars));
+        }
+
+        yield return ContextMenuEntry.Separator;
+        yield return ContextMenuEntry.Item("Clear rating", _vm.RateBookCommand, (bookId, (float?)null));
     }
 
     private IEnumerable<ContextMenuEntry?> CollectionChildren(int bookId)

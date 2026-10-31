@@ -8,7 +8,7 @@
     <!-- Single source of truth for the release version (docs/superpowers/specs/
          2026-09-01-auto-update-and-changelog-design.md). CI derives the SemVer release tag/appcast
          version from this by dropping the trailing revision segment and appending "-beta". -->
-    <Version>0.8.0.0</Version>
+    <Version>0.8.2.0</Version>
     <!-- We stamp InformationalVersion ourselves in _PbStampBuildMetadata below; turn off the SDK's
          own SourceLink-driven "+<SourceRevisionId>" append so it can't double-stamp. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -128,6 +128,8 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- Read aloud (docs/superpowers/specs/2026-10-27-books-slice4d-read-aloud-design.md): Windows' installed speech voices. Windows only; the engine is created only where OperatingSystem.IsWindows. -->
+    <PackageReference Include="System.Speech" Version="10.0.0" />
     <PackageReference Include="DialogHost.Avalonia" Version="0.12.3" />
     <PackageReference Include="FluentAvaloniaUI" Version="3.1.0" />
     <!-- Runs the guided-view panel detector (Services/Reader/Panels/OnnxPanelDetector.cs); CPU provider only. -->

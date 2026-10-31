@@ -43,6 +43,9 @@ public partial class HomeScreenViewModel : ViewModelBase
     private readonly Action<string> _goLibraryWithSearch;
     private readonly Action<int, int> _goReaderForIssueInReadingList;
     private readonly Action<int, BookFormat> _goReaderForBook;
+
+    /// <summary>Book Detail, for the book rows (books redesign §7.4); null falls back to the reader.</summary>
+    private readonly Action<int>? _goBookDetail;
     private readonly Action<int> _goLibraryWithCollection;
     private readonly Action _goInsights;
     private readonly Action<string> _goPreferencesAnchor;
@@ -62,8 +65,9 @@ public partial class HomeScreenViewModel : ViewModelBase
     public HomeScreenViewModel(Action<int> goDetailForSeries, Action<int> goReaderForIssue, Action<string> goLibraryWithSearch,
         Action<int, int> goReaderForIssueInReadingList, Action<int, BookFormat> goReaderForBook, Action<int>? goLibraryWithCollection = null,
         ThemeService? themeService = null, bool loadOnConstruction = true, IToastHost? toastHost = null, Action? goInsights = null,
-        Action<string>? goPreferencesAnchor = null, Func<DateTime>? localNow = null)
+        Action<string>? goPreferencesAnchor = null, Func<DateTime>? localNow = null, Action<int>? goBookDetail = null)
     {
+        _goBookDetail = goBookDetail;
         _goDetailForSeries = goDetailForSeries;
         _goReaderForIssue = goReaderForIssue;
         _goLibraryWithSearch = goLibraryWithSearch;
@@ -93,6 +97,8 @@ public partial class HomeScreenViewModel : ViewModelBase
             [HomeSectionKey.ContinueReading] = new ContinueReadingSectionViewModel(this),
             [HomeSectionKey.UpNext] = new UpNextSectionViewModel(this),
             [HomeSectionKey.RecentlyAdded] = new RecentlyAddedSectionViewModel(this),
+            [HomeSectionKey.BookUpNext] = new BookUpNextSectionViewModel(this),
+            [HomeSectionKey.BookRecentlyAdded] = new BookRecentlyAddedSectionViewModel(this),
             [HomeSectionKey.Collections] = new CollectionsSectionViewModel(this),
             [HomeSectionKey.BecauseYouRead] = new BecauseYouReadSectionViewModel(this),
             [HomeSectionKey.ReadingList] = new ReadingListSectionViewModel(this),
@@ -143,6 +149,8 @@ public partial class HomeScreenViewModel : ViewModelBase
         var wanted = _visibleKeys
             .Where(k => k != HomeSectionKey.NeedsAttention || NeedsAttention is not null)
             .Where(k => k != HomeSectionKey.UpNext || UpNext.Count > 0)
+            .Where(k => k != HomeSectionKey.BookUpNext || BookUpNext.Count > 0)
+            .Where(k => k != HomeSectionKey.BookRecentlyAdded || BookRecentlyAdded.Count > 0)
             .Select(k => _sectionsByKey[k])
             .ToList();
 
@@ -479,6 +487,29 @@ public partial class HomeScreenViewModel : ViewModelBase
 
     public bool HasCollections => Collections.Count > 0;
 
+    /// <summary>Books slice 2a rows (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §9). Each section leaves Home while its list is empty.</summary>
+    public ObservableCollection<HomeResumeCard> BookUpNext { get; } = new();
+
+    public ObservableCollection<HomeResumeCard> BookRecentlyAdded { get; } = new();
+
+    /// <summary>Opens a book from one of the book rows ("Next in your book series", "New books") in Book Detail: they are books you have not
+    /// started, so Detail comes first (books redesign §7.4). Continue Reading still opens the reader.</summary>
+    [RelayCommand]
+    private void OpenBookRow(HomeResumeCard? card)
+    {
+        if (card?.Book is { } book)
+        {
+            if (_goBookDetail is { } detail)
+            {
+                detail(book.BookId);
+            }
+            else
+            {
+                _goReaderForBook(book.BookId, book.Format);
+            }
+        }
+    }
+
     [ObservableProperty]
     private ReadingListSpotlightSample? _readingListSpotlight;
 
@@ -699,6 +730,18 @@ public partial class HomeScreenViewModel : ViewModelBase
             }
         }
 
+        var bookUpNext = new List<HomeResumeCard>();
+        if (visible.Contains(HomeSectionKey.BookUpNext))
+        {
+            bookUpNext.AddRange(HomeFeedResolver.GetUpNextBooksInSeries(context).Select(b => new HomeResumeCard { Book = HomeBookCard.FromBook(b) }));
+        }
+
+        var bookRecentlyAdded = new List<HomeResumeCard>();
+        if (visible.Contains(HomeSectionKey.BookRecentlyAdded))
+        {
+            bookRecentlyAdded.AddRange(HomeFeedResolver.GetRecentlyAddedBooks(context, DateTime.UtcNow).Select(b => new HomeResumeCard { Book = HomeBookCard.FromBook(b) }));
+        }
+
         var recentlyAdded = visible.Contains(HomeSectionKey.RecentlyAdded)
             ? HomeFeedResolver.GetRecentlyAdded(context).Select(SeriesCardSample.FromSeries).ToList()
             : new List<SeriesCardSample>();
@@ -825,7 +868,7 @@ public partial class HomeScreenViewModel : ViewModelBase
         }
 
         return new HomeFeedSnapshot(layout.Visible, settings.HomeSeasonalFlourish, continueReading, recentlyAdded, collections,
-            becauseYouRead, spotlight, attention, mastheadBackdrop, accentColor, readingListSpotlight, upNext);
+            becauseYouRead, spotlight, attention, mastheadBackdrop, accentColor, readingListSpotlight, upNext, bookUpNext, bookRecentlyAdded);
     }
 
     /// <summary>Pushes a <see cref="BuildSnapshot"/> result into the bound observable state. UI thread.</summary>
@@ -841,6 +884,8 @@ public partial class HomeScreenViewModel : ViewModelBase
         ReplaceAll(SpotlightItems, s.Spotlight);
         NeedsAttention = s.Attention;
         ReplaceAll(UpNext, s.UpNext);
+        ReplaceAll(BookUpNext, s.BookUpNext);
+        ReplaceAll(BookRecentlyAdded, s.BookRecentlyAdded);
         OnPropertyChanged(nameof(HasUpNext));
 
         ReplaceAll(SpotlightPanels, s.Spotlight.Select(sample => new SpotlightPanelViewModel(sample)).ToList());
@@ -887,7 +932,9 @@ public partial class HomeScreenViewModel : ViewModelBase
         Bitmap? MastheadBackdrop,
         Color AccentColor,
         ReadingListSpotlightSample? ReadingListSpotlight,
-        IReadOnlyList<HomeUpNextRow> UpNext);
+        IReadOnlyList<HomeUpNextRow> UpNext,
+        IReadOnlyList<HomeResumeCard> BookUpNext,
+        IReadOnlyList<HomeResumeCard> BookRecentlyAdded);
 
     /// <summary>Re-renders the cover wall against the new theme's base colour (no DB requery) and re-evaluates the light-theme
     /// sky, so a theme switch while on Home updates the masthead live.</summary>

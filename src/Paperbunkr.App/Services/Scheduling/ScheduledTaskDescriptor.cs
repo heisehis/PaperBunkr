@@ -20,6 +20,11 @@ namespace Paperbunkr.App.Services.Scheduling;
 /// <param name="DefaultEnabled">Seed enabled flag.</param>
 /// <param name="DefaultMode">Seed schedule mode.</param>
 /// <param name="RunAsync">The work. Reports progress via the handle; returns a one-line result summary.</param>
+/// <param name="UsesHeavyJobLane">
+/// False for a task that is only slow because it is rate-limited (it waits on a remote service at background priority, with little database or disk
+/// work): it then runs beside the heavy-job lane instead of holding it. Holding the lane for a 10-minute Metron sync left a scrape the user started
+/// waiting behind it with nothing on screen, after every restart too (reported 2026-10-28).
+/// </param>
 public sealed record ScheduledTaskDescriptor(
     string Id,
     string DisplayName,
@@ -30,4 +35,5 @@ public sealed record ScheduledTaskDescriptor(
     TimeSpan DefaultInterval,
     bool DefaultEnabled,
     ScheduleMode DefaultMode,
-    Func<IActivityJobHandle, CancellationToken, Task<string>> RunAsync);
+    Func<IActivityJobHandle, CancellationToken, Task<string>> RunAsync,
+    bool UsesHeavyJobLane = true);

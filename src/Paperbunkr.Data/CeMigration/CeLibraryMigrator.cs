@@ -5,6 +5,7 @@ using cYo.Projects.ComicRack.Engine.Database;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
+using Paperbunkr.Data.SmartLists.CeImport;
 
 namespace Paperbunkr.Data.CeMigration;
 
@@ -66,6 +67,22 @@ public class CeLibraryMigrator
         return ComicDatabase.LoadXml(comicDbXmlPath, StripComicListsAndDeserialize, progress);
     }
 
+    public static CeLibraryLoadResult LoadFromXmlWithSmartLists(string comicDbXmlPath, Action<int>? progress = null)
+    {
+        IReadOnlyList<CeSmartListDraft> lists = Array.Empty<CeSmartListDraft>();
+        ComicDatabase database = ComicDatabase.LoadXml(comicDbXmlPath, source =>
+        {
+            var document = XDocument.Load(source);
+            lists = CeComicDbSmartListReader.Read(document);
+            document.Root?.Element("ComicLists")?.Remove();
+            using var stripped = new MemoryStream();
+            document.Save(stripped);
+            stripped.Position = 0;
+            return XmlUtility.Load<ComicDatabase>(stripped, compressed: false);
+        }, progress);
+        return new CeLibraryLoadResult(database, lists);
+    }
+
     /// <summary>
     /// Migration only ever reads <see cref="ComicDatabase.Books"/> - it has nothing to do with
     /// CE's serialized Smart Lists/saved searches (a distinct, unrelated concept from Paperbunkr's
@@ -97,7 +114,7 @@ public class CeLibraryMigrator
     /// (both within the incoming batch and against series already in <paramref name="context"/>),
     /// so the UI can show them before the user chooses to commit.
     /// </summary>
-    public MigrationPreview Preview(ComicDatabase database, PaperbunkrDbContext context)
+    public MigrationPreview Preview(ComicDatabase database, PaperbunkrDbContext context, IReadOnlyList<CeSmartListDraft>? smartLists = null)
     {
         var seriesNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         int guessedContentType = 0;
@@ -121,7 +138,17 @@ public class CeLibraryMigrator
             .Concat(SeriesNameMatcher.FindAgainstExistingCandidates(distinctNames, existingNames))
             .ToList();
 
-        return new MigrationPreview(seriesNames.Count, issueCount, guessedContentType, conflicts);
+        smartLists ??= Array.Empty<CeSmartListDraft>();
+        var existingListNames = context.SmartLists.Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var smartListRows = new List<CeSmartListPreviewRow>();
+        foreach (CeSmartListDraft draft in smartLists)
+        {
+            string name = draft.IsEmpty ? draft.Name : UniqueName(draft.Name, existingListNames);
+            if (!draft.IsEmpty) existingListNames.Add(name);
+            smartListRows.Add(new CeSmartListPreviewRow(draft.Name, name, !draft.IsEmpty, draft.Warnings,
+                draft.IsEmpty ? $"'{draft.Name}' was not imported: none of its conditions can be used here, and an empty list would match the whole library." : null));
+        }
+        return new MigrationPreview(seriesNames.Count, issueCount, guessedContentType, conflicts, smartListRows);
     }
 
     /// <summary>
@@ -131,7 +158,7 @@ public class CeLibraryMigrator
     /// silently dropped - it's written as a <see cref="SeriesConflictStatus.Pending"/>
     /// <see cref="SeriesConflict"/> row for the Needs Review queue.
     /// </summary>
-    public MigrationResult Migrate(ComicDatabase database, PaperbunkrDbContext context, MigrationOptions? options = null)
+    public MigrationResult Migrate(ComicDatabase database, PaperbunkrDbContext context, MigrationOptions? options = null, IReadOnlyList<CeSmartListDraft>? smartLists = null)
     {
         options ??= new MigrationOptions();
 
@@ -139,6 +166,9 @@ public class CeLibraryMigrator
         int seriesMerged = 0;
         int issuesCreated = 0;
         int guessedContentType = 0;
+        int smartListsCreated = 0;
+        int smartListsRejected = 0;
+        var smartListWarnings = new List<string>();
 
         var effectiveInfoCache = new Dictionary<ComicBook, ComicInfo?>();
         var rawGroups = GroupBySeries(database, effectiveInfoCache).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
@@ -288,8 +318,36 @@ public class CeLibraryMigrator
 
         int conflictsPending = WriteConflictRows(context, rawNames, existingSeriesByName, existingNamesBeforeMigration, canonicalOf, rawNameToSeries, options);
 
+        var takenListNames = context.SmartLists.Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (CeSmartListDraft draft in smartLists ?? Array.Empty<CeSmartListDraft>())
+        {
+            if (draft.IsEmpty)
+            {
+                smartListsRejected++;
+                smartListWarnings.Add($"'{draft.Name}' was not imported: none of its conditions can be used here, and an empty list would match the whole library.");
+                continue;
+            }
+            SmartList imported = draft.List;
+            imported.Name = UniqueName(draft.Name, takenListNames);
+            takenListNames.Add(imported.Name);
+            imported.SortOrder = context.SmartLists.Count() + smartListsCreated;
+            context.SmartLists.Add(imported);
+            smartListsCreated++;
+            smartListWarnings.AddRange(draft.Warnings.Select(w => w with { ListName = imported.Name }).Select(w => w.ToString()));
+        }
+
         context.SaveChanges();
-        return new MigrationResult(seriesCreated, issuesCreated, guessedContentType, seriesMerged, conflictsPending);
+        return new MigrationResult(seriesCreated, issuesCreated, guessedContentType, seriesMerged, conflictsPending, smartListsCreated, smartListsRejected, smartListWarnings);
+    }
+
+    private static string UniqueName(string name, HashSet<string> taken)
+    {
+        if (!taken.Contains(name)) return name;
+        for (int n = 2; ; n++)
+        {
+            string candidate = $"{name} ({n})";
+            if (!taken.Contains(candidate)) return candidate;
+        }
     }
 
     /// <summary>
@@ -574,10 +632,12 @@ public class CeLibraryMigrator
 }
 
 /// <summary>Result of <see cref="CeLibraryMigrator.Preview"/> - the §14 step 2 "dry-run scan" plus §14 step 3 conflict candidates.</summary>
-public record MigrationPreview(int SeriesCount, int IssueCount, int SeriesWithGuessedContentType, List<SeriesConflictCandidate> ConflictCandidates);
+public sealed record CeLibraryLoadResult(ComicDatabase Database, IReadOnlyList<CeSmartListDraft> SmartLists);
+public sealed record CeSmartListPreviewRow(string SourceName, string ImportedName, bool WillImport, IReadOnlyList<CeImportWarning> Warnings, string? RefusedReason);
+public record MigrationPreview(int SeriesCount, int IssueCount, int SeriesWithGuessedContentType, List<SeriesConflictCandidate> ConflictCandidates, IReadOnlyList<CeSmartListPreviewRow>? SmartLists = null);
 
 /// <summary>Result of <see cref="CeLibraryMigrator.Migrate"/> - what was actually committed.</summary>
-public record MigrationResult(int SeriesCreated, int IssuesCreated, int SeriesWithGuessedContentType, int SeriesMerged, int ConflictsPending);
+public record MigrationResult(int SeriesCreated, int IssuesCreated, int SeriesWithGuessedContentType, int SeriesMerged, int ConflictsPending, int SmartListsCreated = 0, int SmartListsRejected = 0, IReadOnlyList<string>? SmartListWarnings = null);
 
 /// <summary>
 /// The user's §14 step 3 conflict decisions, passed into <see cref="CeLibraryMigrator.Migrate"/>.

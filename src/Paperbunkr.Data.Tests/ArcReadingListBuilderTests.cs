@@ -12,6 +12,20 @@ namespace Paperbunkr.Data.Tests;
 /// </summary>
 public class ArcReadingListBuilderTests : IDisposable
 {
+    [Fact]
+    public async Task PreparedArc_FetchesOnceAndKeepsSourceNameWhenListNameIsCustomized()
+    {
+        var source = new FakeReadingListSource("FakeSource", new[] { new ArcIssue("Kilo Station", "1", 2020, null) },
+            new ArcOverviewInfo("Overview", "https://example.com/cover.jpg"));
+        var prepared = await ArcReadingListBuilder.PrepareAsync(source, new ArcSearchResult("arc-1", "Signal War", null, null, 1), CancellationToken.None);
+        Assert.Empty(_context.ReadingLists); Assert.Empty(_context.Issues);
+        var manifest = ReadingListImportReview.Resolve(_context, new(new[] { prepared with { Name = "My custom list" } }, Array.Empty<string>()));
+        ReadingListImportReview.Commit(_context, manifest, Array.Empty<ImportReviewChoice>(), true, null);
+        var list = _context.ReadingLists.Single();
+        Assert.Equal("My custom list", list.Name); Assert.Equal("Signal War", list.ArcName);
+        Assert.Equal("arc-1", list.ArcId); Assert.Equal("FakeSource", list.Source); Assert.Equal("Overview", list.Description);
+        Assert.Equal(1, source.IssueRequests); Assert.Equal(1, source.OverviewRequests);
+    }
     private readonly string _dbPath;
     private readonly PaperbunkrDbContext _context;
 
@@ -265,6 +279,8 @@ public class ArcReadingListBuilderTests : IDisposable
 /// <summary>Minimal in-memory <see cref="IReadingListSource"/> double for tests - no network.</summary>
 internal sealed class FakeReadingListSource : IReadingListSource
 {
+    public int IssueRequests { get; private set; }
+    public int OverviewRequests { get; private set; }
     private readonly IReadOnlyList<ArcIssue> _issues;
     private readonly ArcOverviewInfo? _overview;
 
@@ -283,9 +299,9 @@ internal sealed class FakeReadingListSource : IReadingListSource
     public Task<IReadOnlyList<ArcSearchResult>> SearchAsync(string query, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<ArcSearchResult>>(Array.Empty<ArcSearchResult>());
 
-    public Task<IReadOnlyList<ArcIssue>> GetArcIssuesInOrderAsync(string arcId, CancellationToken cancellationToken) =>
-        Task.FromResult(_issues);
+    public Task<IReadOnlyList<ArcIssue>> GetArcIssuesInOrderAsync(string arcId, CancellationToken cancellationToken)
+    { IssueRequests++; return Task.FromResult(_issues); }
 
-    public Task<ArcOverviewInfo?> GetArcOverviewAsync(string arcId, CancellationToken cancellationToken) =>
-        Task.FromResult(_overview);
+    public Task<ArcOverviewInfo?> GetArcOverviewAsync(string arcId, CancellationToken cancellationToken)
+    { OverviewRequests++; return Task.FromResult(_overview); }
 }

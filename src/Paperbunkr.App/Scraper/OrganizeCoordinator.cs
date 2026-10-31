@@ -129,11 +129,12 @@ public sealed class OrganizeCoordinator(
 
         var profileLabel = profiles.Count == 1 ? profiles[0].Name : $"{profiles.Count} profiles";
 
-        List<Issue> books;
-        using (var context = createContext())
+        // Off the UI thread: SQLite's "async" calls complete synchronously, so everything here would otherwise run inside the click that started it.
+        List<Issue> books = await Task.Run(() =>
         {
-            books = context.Issues.Include(i => i.Series).Where(i => issueIds.Contains(i.Id) && i.FilePath != null).ToList();
-        }
+            using var context = createContext();
+            return context.Issues.Include(i => i.Series).Where(i => issueIds.Contains(i.Id) && i.FilePath != null).ToList();
+        }, cancellationToken);
 
         if (books.Count == 0)
         {
@@ -155,7 +156,9 @@ public sealed class OrganizeCoordinator(
             using var laneSlot = HeavyJobLane.Activate(await HeavyJobLane.Shared.EnterAsync(isInteractive, linked.Token));
             owned?.Begin();
 
-            var plans = await _service.PlanManyAsync(books, profiles, createContext).ConfigureAwait(false);
+            // Planning loads the library, runs the exclude rules and stats every destination; the moves below copy and rename real files.
+            // Both are synchronous disk work, and this method is entered on the UI thread (and re-enters it when a dialog closes), so they run on the pool.
+            var plans = await Task.Run(() => _service.PlanManyAsync(books, profiles, createContext), linked.Token).ConfigureAwait(false);
 
             // A manual run shows what is about to happen before any file moves. A scheduled run has nobody to ask. A run where nothing
             // would move (everything in place, or only problems) has nothing to confirm - go straight on and report.
@@ -178,12 +181,12 @@ public sealed class OrganizeCoordinator(
                 }
             }
 
-            var results = await _service.ExecuteManyAsync(
+            var results = await Task.Run(() => _service.ExecuteManyAsync(
                 plans, isInteractive,
                 isInteractive ? (incoming, existingPath, ct) => ShowCollisionAsync(incoming, existingPath) : null,
                 createContext,
                 (done, total, label) => job.Report(done, total, label),
-                linked.Token).ConfigureAwait(false);
+                linked.Token), linked.Token).ConfigureAwait(false);
 
             // Only a real Move changes what the library knows about a file. A Simulate touched nothing and a Copy left
             // the original where it was, so neither has any reason to rewrite an archive.

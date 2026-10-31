@@ -113,6 +113,21 @@ public class MangaDexMetadataProviderTests
     }
 
     [Fact]
+    public async Task GetAsync_TakesTheVoteCountFromTheRatingDistribution()
+    {
+        const string statistics = """
+            {"result":"ok","statistics":{"a1c7c817-4e59-43b7-9365-09675a149a6f":{"rating":{"average":9.5,"bayesian":9.25,"distribution":{"1":1,"9":4,"10":15}}}}}
+            """;
+        var provider = CreateProvider(new StubHandler((request, _) => JsonResponse(
+            HttpStatusCode.OK, request.RequestUri!.AbsolutePath.Contains("statistics") ? statistics : GetByIdResponseJson)));
+
+        ExternalMediaMetadata? metadata = await provider.GetAsync("a1c7c817-4e59-43b7-9365-09675a149a6f", CancellationToken.None);
+
+        Assert.Equal(92.5, metadata!.Rating!.Value, 1);
+        Assert.Equal(20, metadata.RatingVoteCount);
+    }
+
+    [Fact]
     public async Task GetAsync_FallsBackToAltTitles_WhenPrimaryTitleMapIsEmpty()
     {
         var provider = CreateProvider(new StubHandler((_, _) => JsonResponse(HttpStatusCode.OK, PartialNullResponseJson)));

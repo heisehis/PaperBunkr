@@ -30,9 +30,13 @@ public sealed class PluginHostService
     private MainViewModel? _main;
     private IPluginEnvironment? _environment;
 
+    /// <summary>The app's host once <see cref="Initialize"/> ran - for the few menu builders that are constructed in many places with no host to pass in.</summary>
+    public static PluginHostService? Current { get; private set; }
+
     public void Initialize(MainViewModel main, Window mainWindow)
     {
         _main = main;
+        Current = this;
 
         // Applies any Native-tier install/uninstall that stayed pending from a previous session
         // (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-design.md §4) - must run
@@ -49,11 +53,18 @@ public sealed class PluginHostService
             ComicDisplay = new PaperbunkrComicDisplay(main.Reader),
             Metadata = new PaperbunkrMetadataGraph(),
             Rules = new PaperbunkrRulesEngine(),
-            Writer = new PaperbunkrMetadataWriter(),
+            Writer = new PaperbunkrMetadataWriter
+            {
+                // Plugin API 4.5 write-batch preview (§D2): the shared confirm dialog, from whatever thread the plugin is on.
+                ShowDialog = request => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => main.Dialogs.ShowAsync(request)),
+            },
             ThemePlugin = new PaperbunkrThemePlugin(),
             ActivityService = main.Activity,
             ResolvePluginName = key => Engine.PackageNames.GetValueOrDefault(key, key),
             SettingsAccess = Settings,
+            FieldSchemaFor = key => Engine.FieldSchemas.GetValueOrDefault(key),
+            NetworkHostsFor = key => Engine.NetworkHosts.GetValueOrDefault(key) ?? Array.Empty<string>(),
+            ProviderRegistry = Providers,
         };
 
         // Native-capable (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-design.md §3) -
@@ -62,12 +73,14 @@ public sealed class PluginHostService
         // IPluginEnvironment interface, so nothing about the existing script sandbox changes.
         _environment = new PaperbunkrNativePluginEnvironment(baseEnvironment, main.Activity, main.NativePluginModalHost);
 
+        PluginReadingListSource.Install(Providers);
         DiscoverAndApplyOverrides();
 
         ActivityForAlerts = main.Activity;
         AttachDomainEvents(main.ReadingEvents, LibraryEvents.Default);
 
         InvokeAndReport(PluginHooks.Startup, env => new StartupHookGlobals { Environment = env });
+        DeveloperMode = PluginDeveloperSettings.LoadDeveloperMode();
     }
 
     /// <summary>
@@ -79,6 +92,160 @@ public sealed class PluginHostService
     /// it) survive a live reload. A no-op before <see cref="Initialize"/> has run.
     /// </summary>
     public void RediscoverPlugins() => DiscoverAndApplyOverrides();
+
+    // ---- Developer mode (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §A1) ----
+
+    private PluginFolderWatcher? _watcher;
+    private bool _developerMode;
+
+    /// <summary>Quiet period before a burst of file changes becomes one reload. Tests shorten it.</summary>
+    internal TimeSpan ReloadQuietPeriod { get; set; } = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>How a watcher callback reaches the UI thread. Tests run it inline.</summary>
+    internal Action<Action> PostToUi { get; set; } = action => Avalonia.Threading.Dispatcher.UIThread.Post(action);
+
+    /// <summary>Where plugins live for the watcher. Defaults to the real root; tests point it elsewhere.</summary>
+    internal Func<string> PluginsRoot { get; set; } = () => PluginPaths.RootDirectory;
+
+    /// <summary>Raised on the UI thread after a dev-mode reload, with the keys of the plugins whose files changed.</summary>
+    public event Action<IReadOnlyList<string>>? PluginsReloaded;
+
+    /// <summary>
+    /// Watches script plugins and re-discovers them when their files change. Turning it on starts the watcher; off disposes it.
+    /// The caller persists the choice (<see cref="PluginDeveloperSettings"/>).
+    /// </summary>
+    public bool DeveloperMode
+    {
+        get => _developerMode;
+        set
+        {
+            if (_developerMode == value)
+            {
+                return;
+            }
+
+            _developerMode = value;
+            _watcher?.Dispose();
+            _watcher = null;
+            if (value)
+            {
+                try
+                {
+                    _watcher = new PluginFolderWatcher(PluginsRoot(), ReloadQuietPeriod, paths => PostToUi(() => ReloadChanged(paths)));
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsService.LogMilestone($"Plugin developer mode: couldn't watch the plugins folder: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shows "New plugin…" (§A3) and re-discovers after a plugin was created. Returns the new plugin's key, or null when the
+    /// dialog was cancelled or there's no UI environment.
+    /// </summary>
+    public async Task<string?> OpenNewPluginDialogAsync()
+    {
+        if (_environment is not INativePluginUiEnvironment uiEnvironment)
+        {
+            return null;
+        }
+
+        PluginScaffoldResult? result;
+        try
+        {
+            result = await uiEnvironment.ShowModalAsync<PluginScaffoldResult?>(resolve => new NewPluginDialogView
+            {
+                DataContext = new NewPluginDialogViewModel(PluginsRoot(), AppContext.BaseDirectory, resolve),
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+
+        if (result is not { Succeeded: true, Folder: { } folder })
+        {
+            return null;
+        }
+
+        RediscoverPlugins();
+        return KeysForPaths(new[] { System.IO.Path.Combine(folder, "plugin.xml") }).FirstOrDefault();
+    }
+
+    /// <summary>The plugin keys whose folder contains one of <paramref name="paths"/>, from the current discovery.</summary>
+    internal IReadOnlyList<string> KeysForPaths(IEnumerable<string> paths)
+    {
+        var keys = new List<string>();
+        foreach ((string key, string folder) in Engine.PackageFolders)
+        {
+            string prefix = folder.TrimEnd('\\', '/') + System.IO.Path.DirectorySeparatorChar;
+            if (paths.Any(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                keys.Add(key);
+            }
+        }
+
+        return keys;
+    }
+
+    /// <summary>
+    /// Re-discovers after a dev-mode change and reports a plugin that came back blocked or broken - once per plugin, through the
+    /// Activity Center. A clean reload is silent. Native plugins can't be swapped in place, so their folders are only reported.
+    /// </summary>
+    internal void ReloadChanged(IReadOnlyList<string> paths)
+    {
+        RediscoverPlugins();
+        IReadOnlyList<string> keys = KeysForPaths(paths);
+        foreach (string key in keys)
+        {
+            // A reloaded plugin registers its sources again from its own Startup commands (Plugin API 4.5 §C), as at app start.
+            Providers.Remove(key);
+            foreach (Command startup in Engine.GetCommands(PluginHooks.Startup).Where(c => c.PluginKey == key && c.Environment is not null).ToList())
+            {
+                _ = RunCommandAsync(startup, new StartupHookGlobals { Environment = startup.Environment! });
+            }
+
+            string? problem = DescribeProblem(key);
+            IActivityService? activity = ActivityForAlerts ?? _main?.Activity;
+            string name = Engine.PackageNames.GetValueOrDefault(key, key);
+            if (problem is null)
+            {
+                LogFiles.Write(key, "INF", "Reloaded after a file change.");
+                continue;
+            }
+
+            LogFiles.Write(key, "ERR", $"Reload failed: {problem}");
+            activity?.RaiseAlert(new ActivityAlert
+            {
+                Severity = ActivityAlertSeverity.Warning,
+                Title = $"{name} didn't reload",
+                Detail = problem,
+                DedupeKey = $"plugin:{key}:reload",
+            });
+        }
+
+        PluginsReloaded?.Invoke(keys);
+    }
+
+    /// <summary>Why <paramref name="key"/> isn't usable after discovery, or null when it is.</summary>
+    internal string? DescribeProblem(string key)
+    {
+        if (Engine.PackageApiInfo.GetValueOrDefault(key)?.BlockedReason is { } blocked)
+        {
+            return blocked;
+        }
+
+        if (Engine.NativeLoadResults.GetValueOrDefault(key)?.LoadError is { } loadError)
+        {
+            return loadError;
+        }
+
+        var commands = Engine.AllCommands.Where(c => c.PluginKey == key).ToList();
+        Command? broken = commands.FirstOrDefault(c => c.IsBroken);
+        return broken is null ? null : $"\"{broken.Name}\": {broken.CompileError}";
+    }
 
     /// <summary>Raised after the set of enabled commands may have changed: a discovery pass, or a command or package switched on or off. The keyboard-shortcut list follows it.</summary>
     public event Action? CommandsChanged;
@@ -99,15 +266,49 @@ public sealed class PluginHostService
 
         try
         {
-            Engine.Discover(PluginPaths.RootDirectory, _environment);
+            Engine.Discover(PluginsRoot(), _environment);
             RejectNativePluginsWithTwoSettingsDefinitions();
             ApplyPersistedOverrides();
+            PublishPluginSourcesAndFields();
             CommandsChanged?.Invoke();
         }
         catch (Exception ex)
         {
             DiagnosticsService.LogMilestone($"Plugin discovery failed: {ex.Message}");
         }
+    }
+
+    /// <summary>Every source plugins registered through <c>Environment.Providers</c> (Plugin API 4.5 §C). Tests supply their own.</summary>
+    public PluginProviderRegistry Providers { get; internal set; } = PluginProviderRegistry.Shared;
+
+    /// <summary>
+    /// True when <paramref name="pluginKey"/> is usable: discovered, not blocked, and either has no commands or at least one enabled.
+    /// Its fields and sources only count while this holds.
+    /// </summary>
+    private bool IsLive(string pluginKey)
+    {
+        if (Engine.PackageApiInfo.GetValueOrDefault(pluginKey)?.BlockedReason is not null)
+        {
+            return false;
+        }
+
+        var commands = Engine.AllCommands.Where(c => c.PluginKey == pluginKey).ToList();
+        return commands.Count == 0 || commands.Any(c => c.Enabled);
+    }
+
+    /// <summary>
+    /// After a discovery or an enable/disable: the Smart List engine learns the live plugins' smart fields (§D1), and registrations
+    /// from plugins that are gone or switched off are dropped (§C).
+    /// </summary>
+    private void PublishPluginSourcesAndFields()
+    {
+        Providers.LogFiles = LogFiles;
+        var live = Engine.PackageNames.Keys.Where(IsLive).ToList();
+        Providers.RetainOnly(live);
+        Paperbunkr.Data.SmartLists.PluginFieldTypeRegistry.Replace(
+            live.Where(Engine.FieldSchemas.ContainsKey)
+                .SelectMany(key => Engine.FieldSchemas[key].Fields.Select(f => new Paperbunkr.Data.SmartLists.PluginSmartField(
+                    f.StorageName, $"{f.Label} ({Engine.PackageNames.GetValueOrDefault(key, key)})", f.Type))));
     }
 
     /// <summary>
@@ -131,6 +332,8 @@ public sealed class PluginHostService
 
     public void Shutdown()
     {
+        _watcher?.Dispose();
+        _watcher = null;
         DetachDomainEvents();
         InvokeAndReport(PluginHooks.Shutdown, env => new ShutdownHookGlobals { Environment = env });
     }
@@ -365,6 +568,49 @@ public sealed class PluginHostService
         return null;
     }
 
+
+    /// <summary>True when a loaded native plugin can add a panel to an issue (§E) - lets the Detail screen show its Plugins tab.</summary>
+    public bool HasIssueDetailExtensions => LiveModules<INativeIssueDetailUi>().Any();
+
+    /// <summary>Every live native plugin's panel for <paramref name="issue"/> (§E), in plugin-name order. A view that throws is skipped and logged.</summary>
+    public IReadOnlyList<PluginView> GetIssueDetailExtensions(Issue issue) =>
+        BuildViews<INativeIssueDetailUi>((ui, env) => ui.CreateIssueDetailView(env, issue));
+
+    /// <summary>Every live native plugin's Insights card content (§E).</summary>
+    public IReadOnlyList<PluginView> GetInsightsWidgets() =>
+        BuildViews<INativeInsightsWidget>((ui, env) => ui.CreateInsightsView(env));
+
+    private IEnumerable<(string Key, T Module)> LiveModules<T>() where T : class =>
+        Engine.NativeLoadResults
+            .Where(r => r.Value.Module is T && IsLive(r.Key))
+            .Select(r => (r.Key, (T)(object)r.Value.Module!));
+
+    private IReadOnlyList<PluginView> BuildViews<T>(Func<T, INativePluginUiEnvironment, Control?> create) where T : class
+    {
+        if (_environment is not INativePluginUiEnvironment uiEnvironment)
+        {
+            return Array.Empty<PluginView>();
+        }
+
+        var views = new List<PluginView>();
+        foreach ((string key, T module) in LiveModules<T>().OrderBy(m => Engine.PackageNames.GetValueOrDefault(m.Key, m.Key)))
+        {
+            try
+            {
+                if (create(module, uiEnvironment) is { } view)
+                {
+                    views.Add(new PluginView(Engine.PackageNames.GetValueOrDefault(key, key), view));
+                }
+            }
+            catch (Exception ex)
+            {
+                LogFiles.Write(key, "ERR", $"Creating its {typeof(T).Name} view failed: {ex.Message}", ex);
+            }
+        }
+
+        return views;
+    }
+
     /// <summary>Master enable/disable for every command a package owns at once (docs §4.4/§4.5) -
     /// a bulk write over the existing per-command <see cref="PluginCommandState"/> mechanism, no new
     /// persisted state of its own.</summary>
@@ -375,6 +621,7 @@ public sealed class PluginHostService
             SetCommandEnabled(command, enabled);
         }
 
+        PublishPluginSourcesAndFields();
         CommandsChanged?.Invoke();
     }
 
@@ -383,7 +630,7 @@ public sealed class PluginHostService
     {
         command.Enabled = enabled;
 
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = ContextFactory();
         var row = context.PluginCommandStates.FirstOrDefault(s => s.PluginKey == command.PluginKey && s.CommandKey == command.Key);
         if (row is null)
         {
@@ -405,7 +652,7 @@ public sealed class PluginHostService
 
     private void ApplyPersistedOverrides()
     {
-        using var context = PaperbunkrDb.CreateContext();
+        using var context = ContextFactory();
         var overrides = context.PluginCommandStates.ToList();
         foreach (var cmd in Engine.AllCommands)
         {
@@ -505,6 +752,8 @@ public sealed class PluginHostService
         events.ReadingListChanged += OnReadingListChanged;
         events.CollectionCompleted += OnCollectionCompleted;
         events.ManagerBypassed += OnManagerBypassed;
+        events.SeriesStatusChanged += OnSeriesStatusChanged;
+        events.ScheduledTaskRan += OnScheduledTaskRan;
     }
 
     internal void DetachDomainEvents()
@@ -522,6 +771,8 @@ public sealed class PluginHostService
             _subscribedEvents.ReadingListChanged -= OnReadingListChanged;
             _subscribedEvents.CollectionCompleted -= OnCollectionCompleted;
             _subscribedEvents.ManagerBypassed -= OnManagerBypassed;
+            _subscribedEvents.SeriesStatusChanged -= OnSeriesStatusChanged;
+            _subscribedEvents.ScheduledTaskRan -= OnScheduledTaskRan;
             _subscribedEvents = null;
         }
     }
@@ -627,6 +878,44 @@ public sealed class PluginHostService
             Name = completed.Name,
             IssueCount = completed.IssueCount,
             CompletedAtUtc = completed.CompletedAtUtc,
+        });
+    }
+
+    /// <summary>Plugin API 4.5 (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §B): raised by the context after the save, one per series.</summary>
+    private void OnSeriesStatusChanged(SeriesStatusChangedEvent change)
+    {
+        if (!HasCommands(PluginHooks.SeriesStatusChanged))
+        {
+            return;
+        }
+
+        DomainHooks.Dispatch(PluginHooks.SeriesStatusChanged, env => new SeriesStatusChangedHookGlobals
+        {
+            Environment = env,
+            SeriesId = change.SeriesId,
+            SeriesName = change.SeriesName,
+            OldStatus = change.OldStatus.ToString(),
+            NewStatus = change.NewStatus.ToString(),
+        });
+    }
+
+    /// <summary>Plugin API 4.5 (§B): a scheduled task finished a run.</summary>
+    private void OnScheduledTaskRan(ScheduledTaskRanEvent run)
+    {
+        if (!HasCommands(PluginHooks.ScheduledTaskRan))
+        {
+            return;
+        }
+
+        DomainHooks.Dispatch(PluginHooks.ScheduledTaskRan, env => new ScheduledTaskRanHookGlobals
+        {
+            Environment = env,
+            TaskId = run.TaskId,
+            TaskName = run.TaskName,
+            StartedUtc = run.StartedUtc,
+            Duration = run.Duration,
+            Outcome = run.Outcome.ToString(),
+            Message = run.Message,
         });
     }
 

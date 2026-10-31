@@ -103,6 +103,8 @@ scanning.
 | `MissingFileDetected` | A file is **confirmed** missing (Library Health's threshold) - once when it crosses the threshold, not on every check | `ItemId`, `FilePath`, `Title` |
 | `ReadingListChanged` | A reading list's items or order change - one event per action, so importing 300 issues is one event | `ListId`, `ListName`, `Kind`, `AddedIssueIds`, `RemovedIssueIds` |
 | `ContinuityCompleted` (API 4.4) | You finish the last unread issue of a continuity or a story event - once per completion | `Kind`, `Id`, `Name`, `IssueCount`, `CompletedAtUtc` |
+| `SeriesStatusChanged` (API 4.5) | A series' publication status changes - by a tracker sync, a scrape or you - once per series per save | `SeriesId`, `SeriesName`, `OldStatus`, `NewStatus` (`Unknown`, `Ongoing`, `Completed`, `Cancelled`, `Hiatus`) |
+| `ScheduledTaskRan` (API 4.5) | A scheduled task finishes a run, on its schedule or from **Run now** | `TaskId`, `TaskName`, `StartedUtc`, `Duration`, `Outcome` (`Succeeded`, `Failed`, `Cancelled`), `Message` |
 
 `ContinuityCompleted.Kind` is `CompletedCollectionKind.Continuity` or `CompletedCollectionKind.StoryEvent`,
 and `Id` is that continuity's or story event's id. A continuity counts as complete when every issue of
@@ -207,6 +209,114 @@ automatically. Logging never throws. Each command also shows a muted line on the
 average and slowest time, failures, timeouts and dropped events since the app started (not saved between runs).
 
 Needs API `4.2` - declare `requiresApi="4.2"`.
+
+### Developer mode, a starter plugin, and testing (API 4.5)
+
+Turn on **Developer mode** at the bottom of the Plugin screen's list. While it's on:
+- A script plugin **reloads by itself** half a second after you save its `.csx`, `.py` or `plugin.xml`. If the reload leaves it
+  broken, the Activity Center says why; a clean reload is silent. Native plugins still need a restart.
+- Each plugin's detail shows its **live log** (the last 200 lines of its log file), with Copy and Clear.
+- **New plugin…** creates a working starter in your plugins folder: a C# script, a Python script, or a native (compiled) plugin. The C#
+  starter begins with `#r` lines naming Paperbunkr's API assemblies, so an editor such as VS Code can show you every type. (`Environment`
+  and `Books` are supplied when the script runs, so an editor shows those two as unknown.) The native starter is a `.csproj`; build it with
+  `dotnet build` and restart Paperbunkr.
+
+To test a plugin from your own test project, reference `src/Paperbunkr.Plugins.Testing` (in the Paperbunkr repository): it has fake
+environments that record what your plugin logged and reported, and `PluginScriptRunner`, which loads your plugin folder exactly as
+Paperbunkr does and runs one command:
+
+```csharp
+var runner = new PluginScriptRunner(@"..\..\..\my-plugin");
+object? result = await runner.RunAsync("my-plugin.run", env => new BooksHookGlobals { Environment = env, Books = books });
+Assert.Contains(runner.Environment.RecordedLog.Entries, e => e.Message.Contains("Ran on"));
+```
+
+### Smart fields: your own Smart List fields (API 4.5)
+
+Declare fields in `plugin.xml` and push a value per book; each field then appears in the Smart List editor (by its label, with your
+plugin's name) and is compared as its type - a number field supports *greater than*, a date field *in the last N days*, and so on.
+
+```xml
+<Fields>
+  <Field key="daysSinceRead" label="Days since read" type="number" />   <!-- number, text, date or toggle -->
+</Fields>
+```
+```csharp
+Environment.Fields.Set(book, "daysSinceRead", "42");    // false (and logged) for an undeclared field or a bad value
+string? days = Environment.Fields.Get(book, "daysSinceRead");
+Environment.Fields.Clear("daysSinceRead");               // every book
+```
+
+Values are stored in the library database only (as the custom value `<your-key>.daysSinceRead`), never written into files. A book without a
+value never matches a number, date or yes/no condition. If your plugin is removed, Smart Lists that used its field keep working and compare it
+as plain text.
+
+### Writing in bulk, with a preview (API 4.5)
+
+`Environment.Writer.BeginBatch()` collects changes without saving them. `PreviewAndApplyAsync` shows the user every change -
+"Kilo Station #1 - Format: (empty) → Trade Paperback" - and saves all of them together only if they choose **Apply**:
+
+```csharp
+var batch = Environment.Writer.BeginBatch();
+foreach (var book in Books) batch.SetFormat(book, "Trade Paperback");
+bool applied = await batch.PreviewAndApplyAsync("Mark as trade paperbacks");
+```
+
+A batch that would change nothing shows no dialog and returns `false`. Applying counts as the user agreeing, so a `confirmWrites="true"`
+command doesn't need its own `AskQuestion` first.
+
+### Adding metadata, cover and story-arc sources (API 4.5)
+
+From a `Startup` command, register what your plugin can look up. Every call Paperbunkr makes to you is limited to 30 seconds; an exception or
+a timeout shows as "unavailable" and is written to your log.
+
+```csharp
+Environment.Providers.RegisterMetadata("My Wiki",
+    async (query, ct) => /* search */ new List<PluginMetadataMatch> { new("id-1", "Kilo Station") },
+    async (id, ct) => new PluginSeriesMetadata { Description = "...", Status = "Ongoing", Genres = new[] { "Horror" } });
+
+Environment.Providers.RegisterCovers("My Covers",
+    async (request, ct) => new List<PluginCover> { new("https://.../thumb.jpg", "https://.../full.jpg", "Variant B") });
+
+Environment.Providers.RegisterArcSource("My Arcs", browsable: false,
+    async (query, ct) => new List<PluginArc> { new("arc-1", "Secret Wars", "Marvel", 1984) },
+    async (arcId, ct) => new List<PluginArcEntry> { new("Secret Wars", "1", Year: 1984) });
+```
+
+- **Metadata** sources appear in a series' metadata search as "My Wiki (plugin)". Choosing a match adds its values to **Needs Review** as
+  proposals; nothing changes until the user accepts them.
+- **Cover** sources add their covers to the cover picker's **External** tab.
+- **Story-arc** sources appear in the reading-list source picker. A list imported from one remembers it; if the plugin is removed, the list
+  still opens but Refresh says the source is unavailable.
+
+### Where your commands show up (API 4.5)
+
+A Library command shows in the Library and Detail right-click menus, and a Books command in the Books menu, as before. Choose the places
+yourself with `menus` (any of `library`, `detail`, `readinglist`, `books`), and add `toolbar="true"` to put a Library command under the
+Library toolbar's **Plugins** button (it runs on the selected books):
+
+```xml
+<Command hook="Library" key="mine.tag" name="Tag for later" script="tag.csx" menus="library,readinglist" toolbar="true" />
+```
+
+A native plugin can also add a panel for one issue (implement `INativeIssueDetailUi`; it shows in the Detail screen's **Plugins** tab) and a
+card on **Insights → Today** (`INativeInsightsWidget`). Python plugins get everything in `plugin.xml` - settings, fields, menus, the toolbar -
+but not those native panels.
+
+### Declaring the hosts you talk to (API 4.5)
+
+```xml
+<Network>
+  <Host name="api.example.com" />
+  <Host name="*.cdn.example.com" />   <!-- the domain and any subdomain -->
+</Network>
+```
+
+The install prompt and your plugin's detail show these hosts. `Environment.Http` (`GetStringAsync`, `GetBytesAsync`, `SendAsync`) only reaches
+declared hosts; anything else throws `PluginNetworkException` and is logged. This is a declaration to the user plus a guard on
+`Environment.Http` - it doesn't stop other ways a plugin could connect, and the app never claims it does.
+
+Needs API `4.5` - declare `requiresApi="4.5"`.
 
 ### Declaring the API version you need
 

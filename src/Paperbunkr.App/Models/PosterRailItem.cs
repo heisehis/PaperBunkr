@@ -31,6 +31,12 @@ public sealed class PosterRailItem
     /// <summary>Draws a small check on the cover and dims it (the Library preview panel's issue rail).</summary>
     public bool IsRead { get; init; }
 
+    /// <summary>
+    /// A related-series suggestion (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §6.3): the card is dimmed and
+    /// offers Accept beside the usual ✕ (which dismisses it).
+    /// </summary>
+    public bool IsSuggestion { get; init; }
+
     /// <summary>The source sample (e.g. <c>RelatedSeriesSample</c>) - passed to Remove/click commands unchanged.</summary>
     public object? Payload { get; init; }
 }

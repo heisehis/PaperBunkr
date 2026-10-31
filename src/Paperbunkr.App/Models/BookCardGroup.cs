@@ -19,4 +19,26 @@ public sealed class BookCardGroup
     public int? BookSeriesId { get; init; }
 
     public required ObservableCollection<BookCardSample> Items { get; init; }
+
+    /// <summary>The header's count (books redesign §3.4): "12", or for a series with gaps "3 of 4 · 1 missing". Read when the header is
+    /// built; groups are rebuilt rather than edited in place.</summary>
+    public string CountLabel
+    {
+        get
+        {
+            int ghosts = 0;
+            foreach (var item in Items)
+            {
+                if (item.IsGhost)
+                {
+                    ghosts++;
+                }
+            }
+
+            int owned = Items.Count - ghosts;
+            return ghosts == 0 ? owned.ToString(System.Globalization.CultureInfo.CurrentCulture) : $"{owned} of {Items.Count} · {ghosts} missing";
+        }
+    }
+
+    public bool IsSeries => BookSeriesId is not null;
 }

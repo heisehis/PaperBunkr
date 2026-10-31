@@ -44,6 +44,18 @@ public interface IPluginEnvironment : IPluginConfig, ICloneable
 
     IThemePlugin ThemePlugin { get; }
 
+    // Plugin API 4.5 (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md). Default implementations decline,
+    // so an environment written before 4.5 (a test double, an older host) still compiles; the app supplies working ones.
+
+    /// <summary>Values for this plugin's declared smart fields (§D1).</summary>
+    IPluginFields Fields => UnavailablePluginFields.Instance;
+
+    /// <summary>Registers metadata, cover and story-arc sources this plugin provides (§C).</summary>
+    IPluginProviders Providers => UnavailablePluginProviders.Instance;
+
+    /// <summary>HTTP limited to the hosts this plugin declares in <c>&lt;Network&gt;</c> (§F).</summary>
+    IPluginHttp Http => UnavailablePluginHttp.Instance;
+
     /// <summary>No localization pipeline exists yet - ships as a documented pass-through (returns <paramref name="text"/> unchanged). Shape kept for future-proofing only.</summary>
     string Localize(string resourceKey, string elementKey, string text);
 }

@@ -147,10 +147,16 @@ public sealed class BangumiTrackerAdapter : ITrackerSearchProvider, ITrackerAdap
     /// needs it, and the alias avoids an extra <c>GET /v0/me</c> round trip.</summary>
     public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
     {
+        var result = await GetEntryOutcomeAsync(context, link, cancellationToken).ConfigureAwait(false);
+        return result.Succeeded ? result.Value : null;
+    }
+
+    public async Task<TrackerOperationResult<TrackerRemoteEntry>> GetEntryOutcomeAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
         string? token = CredentialStore.Get(context, nameof(TrackingService.Bangumi), CredentialKind.ApiKey);
         if (string.IsNullOrEmpty(token))
         {
-            return null;
+            return TrackerOperationResult<TrackerRemoteEntry>.Permanent("Bangumi is not connected.");
         }
 
         var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/users/-/collections/{link.ExternalId}");
@@ -162,22 +168,21 @@ public sealed class BangumiTrackerAdapter : ITrackerSearchProvider, ITrackerAdap
         {
             response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return null;
+            return TrackerOperationClassifier.FromNetworkFailure<TrackerRemoteEntry>(ex);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return null;
+            return TrackerOperationClassifier.Timeout<TrackerRemoteEntry>();
         }
 
         using (response)
         {
-            // 404 covers "subject is not collected by user" (confirmed from Mihon's own
-            // statusLibManga error handling) - genuinely "no entry", not a failure.
             if (!response.IsSuccessStatusCode)
             {
-                return null;
+                string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return TrackerOperationClassifier.FromHttpFailure<TrackerRemoteEntry>(response, body, notFoundMeansMissing: true);
             }
 
             BangumiCollectionResponseDto? parsed;
@@ -187,16 +192,16 @@ public sealed class BangumiTrackerAdapter : ITrackerSearchProvider, ITrackerAdap
             }
             catch (JsonException)
             {
-                return null;
+                return TrackerOperationResult<TrackerRemoteEntry>.Permanent("Bangumi returned an invalid lookup response.");
             }
 
             if (parsed?.Type is not int type)
             {
-                return null;
+                return TrackerOperationResult<TrackerRemoteEntry>.Missing();
             }
 
             decimal? score = parsed.Rate is int rate and > 0 ? rate / 2m : null;
-            return new TrackerRemoteEntry(BangumiCollectionTypeMapper.FromCollectionType(type), parsed.EpStatus, score);
+            return TrackerOperationResult<TrackerRemoteEntry>.Success(new TrackerRemoteEntry(BangumiCollectionTypeMapper.FromCollectionType(type), parsed.EpStatus, score));
         }
     }
 

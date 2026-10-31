@@ -91,6 +91,83 @@ public partial class BooksScreen : UserControl
         // Type-ahead (docs/superpowers/specs/2026-09-12-grid-typeahead-rangeselect-quit-design.md).
         ContentGrid.AddHandler(TextInputEvent, OnContentTextInput, RoutingStrategies.Tunnel);
         ContentGrid.AddHandler(KeyDownEvent, OnContentKeyDownForBackspace, RoutingStrategies.Tunnel);
+
+        // Redesign §3.3-3.5: the pinned group header follows the scroll, and the toolbar sheds labels in narrow windows.
+        ContentScroller.ScrollChanged += (_, _) => UpdatePinnedGroupHeader();
+        SizeChanged += (_, e) => ApplyWidthClasses(e.NewSize.Width);
+    }
+
+    /// <summary>Below this screen width Group / Sort / Shelves drop their labels to icons; below <see cref="CompactWidth"/> the nightstand hides too.</summary>
+    public const double NarrowWidth = 1100;
+
+    public const double CompactWidth = 900;
+
+    private void ApplyWidthClasses(double width)
+    {
+        Classes.Set("narrow", width < NarrowWidth);
+        Classes.Set("compact", width < CompactWidth);
+    }
+
+    /// <summary>Room the pinned header needs; once less than this of a group is left on screen, the next group's real header takes over.</summary>
+    private const double PinnedGroupHeaderHandOff = 44;
+
+    /// <summary>
+    /// Shows <c>PinnedGroupHeader</c> for the group whose own header has scrolled under the top of the content (the Library's pattern,
+    /// docs/superpowers/specs/2026-10-04-library-redesign-design.md Slice 2). It looks only at the realized group containers, never at cards.
+    /// </summary>
+    private void UpdatePinnedGroupHeader()
+    {
+        var pinned = FindPinnedGroup();
+        if (pinned is null)
+        {
+            if (PinnedGroupHeader.IsVisible)
+            {
+                PinnedGroupHeader.IsVisible = false;
+            }
+
+            return;
+        }
+
+        if (PinnedGroupHeaderText.Text != pinned.Header)
+        {
+            PinnedGroupHeaderText.Text = pinned.Header;
+        }
+
+        if (PinnedGroupHeaderCount.Text != pinned.CountLabel)
+        {
+            PinnedGroupHeaderCount.Text = pinned.CountLabel;
+        }
+
+        PinnedGroupHeader.IsVisible = true;
+    }
+
+    private BookCardGroup? FindPinnedGroup()
+    {
+        if (ContentScroller.Offset.Y <= 0)
+        {
+            return null;
+        }
+
+        var groups = GroupedGrid.IsEffectivelyVisible ? GroupedGrid : GroupedShelf.IsEffectivelyVisible ? GroupedShelf : null;
+        if (groups is null)
+        {
+            return null;
+        }
+
+        foreach (var container in groups.GetRealizedContainers())
+        {
+            if (container.DataContext is not BookCardGroup group || container.TranslatePoint(default, ContentScroller) is not { } top)
+            {
+                continue;
+            }
+
+            if (top.Y < 0 && top.Y + container.Bounds.Height > PinnedGroupHeaderHandOff)
+            {
+                return group;
+            }
+        }
+
+        return null;
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -121,7 +198,7 @@ public partial class BooksScreen : UserControl
     /// Groups control (items are groups) is excluded.</summary>
     private System.Collections.Generic.IEnumerable<ItemsControl> CardLists() =>
         this.GetVisualDescendants().OfType<ItemsControl>()
-            .Where(l => l.IsEffectivelyVisible && l.ItemCount > 0 && l.Items[0] is BookCardSample);
+            .Where(l => l.IsEffectivelyVisible && l.ItemCount > 0 && l.Items[0] is BookCardSample && !ReferenceEquals(l, NightstandList));
 
     private ItemsControl? ActiveCardList() => CardLists().FirstOrDefault();
 
@@ -185,14 +262,45 @@ public partial class BooksScreen : UserControl
         }
     }
 
+    /// <summary>A rail letter: scroll the first book (flat list) or group (grouped) filed under it into view. The Books panels are plain wrapping
+    /// panels, so the container exists; a dimmed letter (nothing under it) does nothing.</summary>
+    private void OnAlphabetIndexLetterClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string letter } || DataContext is not BooksScreenViewModel vm)
+        {
+            return;
+        }
+
+        if (vm.IsGrouped)
+        {
+            // The outer group lists are plain stacks, so every group has a container.
+            int group = Services.BooksAlphabet.FirstGroupIndex(vm.Groups, letter);
+            if (group >= 0)
+            {
+                (vm.IsGridView ? GroupedGrid : GroupedShelf).ContainerFromIndex(group)?.BringIntoView();
+            }
+
+            return;
+        }
+
+        // The flat lists virtualize, so an off-screen book has no container: ScrollIntoView realizes it first.
+        int book = Services.BooksAlphabet.FirstBookIndex(vm.Books, vm.SortField, letter);
+        if (book >= 0)
+        {
+            (vm.IsGridView ? FlatGrid : FlatShelf).ScrollIntoView(book);
+        }
+    }
+
     /// <summary>Spatial arrow-key navigation across the Books grid (docs/superpowers/specs/
     /// 2026-08-31-keyboard-operability-design.md), mirroring <c>LibraryScreen.axaml.cs</c>'s own
     /// <c>OnCardKeyDown</c> - this handler is only ever attached to <c>BookCardTemplate</c>'s card
     /// Button, so unlike Library's version there's no target-type gate needed.</summary>
     private void OnCardKeyDown(object? sender, KeyEventArgs e)
     {
-        if (sender is not Button { DataContext: not null } button ||
-            button.FindAncestorOfType<ItemsControl>() is not { } itemsControl)
+        // A spine is the Button itself; a cover card (BookCoverCard) wraps its Button, which the key bubbled up from.
+        var button = sender as Button
+            ?? (sender as Control)?.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Classes.Contains("card"));
+        if (button is not { DataContext: not null } || button.FindAncestorOfType<ItemsControl>() is not { } itemsControl)
         {
             return;
         }

@@ -68,7 +68,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
     // design.md §"Chrome auto-hide") - AutoHideChromeToggle (below) mirrors the global
     // AppSettings.BookReaderAutoHideChrome column directly; not a per-book override, unlike
     // Settings' own font/spacing/theme values.
-    private const double AutoHideDelaySeconds = 2.5;
+    private const double AutoHideDelaySeconds = 3; // books redesign §5.2: the clusters fade after 3 s idle
     private readonly DispatcherTimer _autoHideTimer;
 
     /// <summary>
@@ -97,7 +97,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
     private bool _finishedEmittedThisSession;
 
     /// <summary>Active reading time for the open book, stored with the session's page delta (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.1).</summary>
-    private readonly Services.Reader.ReaderActivityTracker _activity = new();
+    internal Services.Reader.ReaderActivityTracker _activity = new();
 
     public BookReaderScreenViewModel(Action goBack, IReadingEventRecorder? readingEventRecorder = null)
     {
@@ -110,10 +110,16 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
         // Skipped entirely while LoadBook is seeding Settings from the AppSettings/Book-override
         // chain (see _isSeedingSettings) - that's not a real navigation to react to, and recomputing
         // then can hit a disposed _source (see that field's doc comment).
-        Settings.PropertyChanged += (_, _) =>
+        Settings.PropertyChanged += (_, e) =>
         {
             if (!_isSeedingSettings)
             {
+                // Choosing an installed font switches the family option to "Custom" so the choice takes effect.
+                if (e.PropertyName == nameof(BookReaderSettings.CustomFont) && !string.IsNullOrWhiteSpace(Settings.CustomFont))
+                {
+                    Settings.FontFamilyOption = BookFontFamilyOption.Custom;
+                }
+
                 RecomputeCurrentPage();
             }
         };
@@ -141,41 +147,71 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
     /// </summary>
     public void NotifyPointerActivity(bool nearTopEdge)
     {
-        if (!AutoHideChromeToggle || IsAnyDrawerOpen)
+        if (IsAnyDrawerOpen)
         {
             return;
         }
 
+        // Books redesign §5.2: an edge always brings the clusters back, auto-hide or not ("Keep toolbar visible" only stops the fade).
         if (!IsChromeVisible)
         {
             if (nearTopEdge)
             {
                 IsChromeVisible = true;
-                RestartAutoHideTimer();
+                if (AutoHideChromeToggle)
+                {
+                    RestartAutoHideTimer();
+                }
             }
 
             return;
         }
 
-        RestartAutoHideTimer();
+        if (AutoHideChromeToggle)
+        {
+            RestartAutoHideTimer();
+        }
     }
 
     /// <summary>Any key press also reveals hidden chrome, same as <see cref="NotifyPointerActivity"/>'s near-top-edge case - called from <c>BookReaderScreen.axaml.cs</c>'s existing key handling.</summary>
     public void NotifyKeyActivity()
     {
-        if (!AutoHideChromeToggle || IsAnyDrawerOpen || IsChromeVisible)
+        if (IsAnyDrawerOpen || IsChromeVisible)
         {
             return;
         }
 
         IsChromeVisible = true;
-        RestartAutoHideTimer();
+        if (AutoHideChromeToggle)
+        {
+            RestartAutoHideTimer();
+        }
     }
 
     private void RestartAutoHideTimer()
     {
         _autoHideTimer.Stop();
-        _autoHideTimer.Start();
+        if (!_pointerOverChrome)
+        {
+            _autoHideTimer.Start();
+        }
+    }
+
+    private bool _pointerOverChrome;
+
+    /// <summary>The clusters live in their own windows, so the page sees no pointer moves while the pointer rests on one. They must not fade from
+    /// under the pointer: the countdown pauses while it is over a cluster and starts again when it leaves.</summary>
+    public void SetPointerOverChrome(bool over)
+    {
+        _pointerOverChrome = over;
+        if (over)
+        {
+            _autoHideTimer.Stop();
+        }
+        else if (AutoHideChromeToggle && IsChromeVisible && !IsAnyDrawerOpen)
+        {
+            RestartAutoHideTimer();
+        }
     }
 
     public BookReaderSettings Settings { get; } = new();
@@ -224,6 +260,39 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
         }
     }
 
+    private IReadOnlyList<BookTocEntry> _tocEntries = Array.Empty<BookTocEntry>();
+
+    private int _activeTocEntry = -1;
+
+    /// <summary>
+    /// Marks the contents row the reader is in (the last entry of this file at or before the current block). The rows are replaced wholesale to refresh their flag, so unless the file
+    /// just changed (<paramref name="force"/>) this only rebuilds when the active row actually moved.
+    /// </summary>
+    private void RefreshTocActive(bool force)
+    {
+        int active = _units.Units.Count > 0 ? _units.RowOf(_unitIndex) : BookTocBuilder.ActiveIndex(_tocEntries, _position.ChapterIndex, CurrentChapterHtml, _position.BlockId);
+        if (!force && active == _activeTocEntry)
+        {
+            return;
+        }
+
+        _activeTocEntry = active;
+        for (int i = 0; i < TableOfContents.Count; i++)
+        {
+            var row = TableOfContents[i];
+            TableOfContents[i] = new BookChapterSummary
+            {
+                Index = row.Index,
+                Title = row.Title,
+                Fragment = row.Fragment,
+                IsActive = i == active,
+                PartTitle = row.PartTitle,
+            };
+        }
+
+        RebuildTocGroups();
+    }
+
     public ObservableCollection<BookBookmarkSummary> Bookmarks { get; } = new();
 
     public ObservableCollection<BookHighlightSummary> Highlights { get; } = new();
@@ -246,6 +315,9 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
     /// the <c>NativeWebView</c> via <c>NavigateToString</c> whenever it changes. Null for PDF.</summary>
     [ObservableProperty]
     private string? _currentChapterHtml;
+
+    /// <summary>The open book's language code, declared on the chapter document so hyphenation can pick a dictionary.</summary>
+    public string? BookLanguage { get; private set; }
 
     [ObservableProperty]
     private bool _isChromeVisible;
@@ -313,11 +385,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
     [NotifyPropertyChangedFor(nameof(ProgressLabel))]
     private double _progressPercent;
 
-    /// <summary>0-1 view of <see cref="ProgressPercent"/> - <c>ReaderChrome</c>'s <c>ProgressFraction</c> (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md) takes a fraction, matching the PDF reader's own <c>ProgressFraction</c> shape, while this VM's own math (chapter-start fraction, WebView scroll reporting) stayed percent-based from the WebView redesign - this is just the display-unit conversion between the two.</summary>
-    public double ProgressFraction => ProgressPercent / 100.0;
-
-    /// <summary>Bottom-bar label for <c>ReaderChrome</c> - "{Chapter title} · {percent}%".</summary>
-    public string ProgressLabel => $"{ChapterTitle} · {ProgressPercent:F0}%";
+    // ProgressLabel / ProgressFraction (the bottom bar) live in BookReaderScreenViewModel.Layout.cs: book page, unit title, screen page or percent.
 
     [ObservableProperty]
     private bool _canGoPrevious;
@@ -398,6 +466,15 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
         Settings.ParagraphSpacing = _book.ParagraphSpacingOverride ?? appSettings.BookReaderParagraphSpacing;
         Settings.PageMargin = _book.PageMarginOverride ?? appSettings.BookReaderPageMargin;
         Settings.Theme = _book.ThemeOverride ?? appSettings.BookReaderTheme;
+        Settings.Justify = _book.JustifyOverride ?? appSettings.BookReaderJustify;
+        Settings.Hyphenate = _book.HyphenateOverride ?? appSettings.BookReaderHyphenate;
+        Settings.UsePublisherStyles = appSettings.BookReaderUsePublisherStyles;
+        Settings.CustomFont = appSettings.BookReaderCustomFont;
+        BookLanguage = _book.LanguageISO;
+        SeedAids(appSettings);
+        SeedLookUp(appSettings);
+        SeedSpeech(appSettings);
+        SeedLayout(appSettings);
         _isSeedingSettings = false;
         // Via the property, not the backing field directly, so the font sheet's bound checkbox
         // picks up the loaded value - OnAutoHideChromeToggleChanged firing here re-saves the same
@@ -411,18 +488,21 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
         BookTitle = _book.Title;
 
         TableOfContents.Clear();
-        for (int i = 0; i < _source.Chapters.Count; i++)
+        _tocEntries = BookTocBuilder.Build(_source.Chapters);
+        for (int i = 0; i < _tocEntries.Count; i++)
         {
             TableOfContents.Add(new BookChapterSummary
             {
-                Index = i,
-                Title = _source.Chapters[i].Title,
+                Index = _tocEntries[i].ChapterIndex,
+                Title = _tocEntries[i].Title,
+                Fragment = _tocEntries[i].Fragment,
                 IsActive = i == 0,
-                PartTitle = _source.Chapters[i].PartTitle,
+                PartTitle = _tocEntries[i].PartTitle,
             });
         }
 
         RebuildTocGroups();
+        BuildUnits(_source);
 
         Bookmarks.Clear();
         foreach (var bookmark in _book.Bookmarks.OrderByDescending(b => b.CreatedTime))
@@ -458,24 +538,33 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
         // Lazy-populate CharacterCount too - feeds the Insights dashboard's "pages" estimate for
         // reflowed novels (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §6).
         _book.CharacterCount = (int)Math.Min(int.MaxValue, TotalSourceChars());
-        _book.Finished = false;
+        // Opening moves any status (Unread, WantToRead, Abandoned, or a Finished re-read) to Reading
+        // (docs/superpowers/specs/2026-10-26-books-slice1-data-foundation-design.md §3.2).
+        _book.Status = BookReadingStatus.Reading;
         context.SaveChanges();
 
         // Reading-event log: one Opened row, session char-delta baseline captured now.
         _sessionStartCharOffset = CharOffsetOf(_position);
         _finishedEmittedThisSession = false;
-        _readingEventRecorder?.RecordOpened(ReadingItemType.Novel, _book.Id, _book.BookSeriesId, publisher: null, primaryGenre: null);
+        _readingEventRecorder?.RecordOpened(ReadingItemType.Novel, _book.Id, _book.BookSeriesId, publisher: null, primaryGenre: FirstGenre(context, _book.Id));
         _activity.Start();
 
-        IsChromeVisible = false;
         IsTocOpen = false;
         IsFontSheetOpen = false;
         IsBookmarksOpen = false;
         IsHighlightsOpen = false;
         IsSearchOpen = false;
         IsHighlightPopupOpen = false;
+        // Books redesign §5.2: the clusters show when a book opens, so they can be found, then fade after 3 s (or stay, with "Keep toolbar visible").
+        IsChromeVisible = true;
+        if (AutoHideChromeToggle)
+        {
+            RestartAutoHideTimer();
+        }
+
         RecomputeCurrentPage();
         PositionRestoreRequested?.Invoke(_position.BlockId);
+        StartPageMap(appSettings.BookPageWordsMin, appSettings.BookPageWordsMax);
     }
 
     public void UpdateViewportSize(Size size)
@@ -548,14 +637,16 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
             return;
         }
 
-        var chapter = _source.Chapters[_position.ChapterIndex];
-        ReadingPositionAnnouncement = $"Chapter {_position.ChapterIndex + 1} of {_source.Chapters.Count}: {chapter.Title}";
+        // Counted in contents entries, the chapters the reader sees, not in files.
+        string title = _unitIndex < _units.Units.Count ? _units.Units[_unitIndex].Title : _source.Chapters[_position.ChapterIndex].Title;
+        ReadingPositionAnnouncement = $"Chapter {_unitIndex + 1} of {Math.Max(1, _units.Units.Count)}: {title}";
     }
 
     [RelayCommand]
     private void OpenFontSheet()
     {
         CloseAllOverlays();
+        RefreshSpeechAvailability();
         IsFontSheetOpen = true;
     }
 
@@ -623,6 +714,13 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
         book.ParagraphSpacingOverride = Settings.ParagraphSpacing;
         book.PageMarginOverride = Settings.PageMargin;
         book.ThemeOverride = Settings.Theme;
+        book.JustifyOverride = Settings.Justify;
+        book.HyphenateOverride = Settings.Hyphenate;
+
+        // The book's-own-styling switch and the installed-font choice are global, not per book.
+        var appSettings = context.GetOrCreateAppSettings();
+        appSettings.BookReaderUsePublisherStyles = Settings.UsePublisherStyles;
+        appSettings.BookReaderCustomFont = Settings.CustomFont;
         context.SaveChanges();
     }
 
@@ -656,6 +754,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
 
         _history.Push(_position);
         _position = new BookPosition(highlight.ChapterIndex, highlight.BlockId);
+        NoteJump(_history.Peek(), _position);
         // Deferred: same reason as GoToChapter above - this command runs from a row Button.Click
         // still routing through the Highlights drawer's own Popup content.
         Dispatcher.UIThread.Post(() => IsHighlightsOpen = false);
@@ -702,6 +801,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
     {
         _pendingHighlightSelection = (blockId, startOffset, length, Truncate(excerpt, 140));
         _editingHighlightId = null;
+        UpdateLookUpState(excerpt);
 
         IsEditingExistingHighlight = false;
         HighlightPopupNote = string.Empty;
@@ -720,6 +820,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
 
         _pendingHighlightSelection = null;
         _editingHighlightId = summary.Id;
+        UpdateLookUpState(string.Empty);
 
         IsEditingExistingHighlight = true;
         HighlightPopupNote = summary.Note ?? string.Empty;
@@ -736,15 +837,22 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
     /// </summary>
     public void OnPositionCaptured(string blockId, double progressionFraction, string excerpt)
     {
-        _activity.NoteInput(); // the position only moves when the reader scrolls or turns a page
+        if (!IsAutoScrolling)
+        {
+            _activity.NoteInput(); // the position only moves when the reader scrolls or turns a page (auto-scroll moves it by itself, so it must not keep a session alive)
+        }
+
         if (_source is null)
         {
             return;
         }
 
+        ClearJumpBackAfterSettle();
         _position = new BookPosition(_position.ChapterIndex, blockId, progressionFraction);
         _currentBlockExcerpt = excerpt;
         IsCurrentPositionBookmarked = Bookmarks.Any(b => b.ChapterIndex == _position.ChapterIndex && b.BlockId == blockId);
+        RefreshTocActive(force: false);
+        RefreshFooter();
         PersistPosition();
     }
 
@@ -844,7 +952,8 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
         }
 
         _history.Push(_position);
-        _position = new BookPosition(chapter.Index);
+        _position = new BookPosition(chapter.Index, chapter.Fragment);
+        NoteJump(_history.Peek(), _position);
         // Deferred: this command runs from a row Button.Click still routing through the TOC
         // drawer's own Popup content. Closing it synchronously here detaches that same row's
         // visual tree mid-route, which crashes Avalonia's detach walk with an
@@ -853,6 +962,11 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
         Dispatcher.UIThread.Post(() => IsTocOpen = false);
         RecomputeCurrentPage();
         PersistPosition();
+        if (chapter.Fragment is not null)
+        {
+            // A contents row can point into the middle of a file: scroll to its element once the chapter is showing (same hand-off a bookmark jump uses).
+            PositionRestoreRequested?.Invoke(chapter.Fragment);
+        }
     }
 
     /// <summary>
@@ -873,11 +987,14 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
             return;
         }
 
+        ClearJumpBack();
+        StopSpeaking();
         _history.Push(_position);
 
-        if (_position.ChapterIndex + 1 < _source.Chapters.Count)
+        // By reading unit (a contents entry), not by file: a file can hold several chapters (docs/superpowers/specs/2026-10-27-books-reader-paged-scroll-modes-design.md §4).
+        if (_unitIndex + 1 < _units.Units.Count)
         {
-            _position = new BookPosition(_position.ChapterIndex + 1);
+            _position = StartOf(_unitIndex + 1);
         }
         else
         {
@@ -892,18 +1009,24 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
         PersistPosition();
     }
 
-    /// <summary>Retreats one whole chapter - see <see cref="NextPage"/>'s doc comment for why this is chapter-, not column-, granularity at the ViewModel level now.</summary>
+    /// <summary>
+    /// Goes back into the previous reading unit and lands on its last page (spec §5.2), the way turning back a page in a printed book does. Called when
+    /// the page reports it is already at the unit's start.
+    /// </summary>
     [RelayCommand]
     private void PreviousPage()
     {
-        if (_history.Count == 0)
+        if (_source is null || _unitIndex <= 0)
         {
             return;
         }
 
-        _position = _history.Pop();
+        ClearJumpBack();
+        StopSpeaking();
+        _position = StartOf(_unitIndex - 1);
         RecomputeCurrentPage();
         PersistPosition();
+        PositionRestoreRequested?.Invoke(LastPageAnchor);
     }
 
     [RelayCommand]
@@ -1016,6 +1139,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
 
         _history.Push(_position);
         _position = new BookPosition(bookmark.ChapterIndex, bookmark.BlockId);
+        NoteJump(_history.Peek(), _position);
         // Deferred: same reason as GoToChapter above - this command runs from a row Button.Click
         // still routing through the Bookmarks drawer's own Popup content.
         Dispatcher.UIThread.Post(() => IsBookmarksOpen = false);
@@ -1040,6 +1164,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
         // Converting search to a BlockId anchor is explicitly deferred - see that design doc's
         // Background section.
         _position = new BookPosition(result.ChapterIndex);
+        NoteJump(_history.Peek(), _position);
         // Deferred: same reason as GoToChapter above - this command runs from a row Button.Click
         // still routing through the Search drawer's own Popup content.
         Dispatcher.UIThread.Post(() => IsSearchOpen = false);
@@ -1162,6 +1287,13 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
         book.LastBlockId = string.IsNullOrEmpty(_position.BlockId) ? null : _position.BlockId;
         book.LastProgressionFraction = _position.ProgressionFraction;
         book.LastOpenedTime = DateTime.UtcNow;
+
+        // The Books spread's pull quote (docs/superpowers/specs/2026-10-27-books-section-redesign-design.md §6.1). An empty excerpt (no block
+        // reported yet) keeps the previous quote rather than blanking it.
+        if (Paperbunkr.App.Services.Books.QuoteExcerpt.Cut(_currentBlockExcerpt) is { } quote)
+        {
+            book.LastExcerpt = quote;
+        }
         if (markFinished)
         {
             book.Finished = true;
@@ -1174,10 +1306,18 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
             _finishedEmittedThisSession = true;
             int pages = ReadingPageMath.EstimatePagesFromChars(CharOffsetOf(_position) - _sessionStartCharOffset);
             _readingEventRecorder?.RecordFinished(
-                ReadingItemType.Novel, book.Id, book.BookSeriesId, publisher: null, primaryGenre: null,
+                ReadingItemType.Novel, book.Id, book.BookSeriesId, publisher: null, primaryGenre: FirstGenre(context, book.Id),
                 pagesRead: pages > 0 ? pages : null);
         }
     }
+
+    /// <summary>The book's first Genre tag, frozen into the reading event for Insights (novels used to write null).</summary>
+    private static string? FirstGenre(Paperbunkr.Data.PaperbunkrDbContext context, int bookId) =>
+        context.BookTags
+            .Where(t => t.BookId == bookId && t.Field == BookTagField.Genre)
+            .OrderBy(t => t.Id)
+            .Select(t => t.Value)
+            .FirstOrDefault();
 
     /// <summary>Total character count across every parsed chapter/paragraph of the open source (design §6).</summary>
     private long TotalSourceChars()
@@ -1247,7 +1387,12 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
         }
 
         int pages = ReadingPageMath.EstimatePagesFromChars(CharOffsetOf(_position) - _sessionStartCharOffset);
-        _readingEventRecorder?.UpdateSessionPages(ReadingItemType.Novel, _bookId, pages, _activity.Stop());
+        int activeSeconds = _activity.Stop();
+        _readingEventRecorder?.UpdateSessionPages(ReadingItemType.Novel, _bookId, pages, activeSeconds);
+        ClearJumpBack();
+        IsAutoScrolling = false;
+        StopSpeaking();
+        ShowSessionSummary(activeSeconds, pages);
     }
 
     private void RecomputeCurrentPage()
@@ -1285,44 +1430,39 @@ public partial class BookReaderScreenViewModel : ViewModelBase, ITransientScreen
 
         if (CurrentChapterHasNothingToShow(_position.ChapterIndex))
         {
-            int firstWithContent = Enumerable.Range(0, _source.Chapters.Count)
+            // The nearest file with something to show, forward first (a blank file met by turning pages must not bounce back to the book's start).
+            int count = _source.Chapters.Count;
+            int withContent = Enumerable.Range(_position.ChapterIndex, count - _position.ChapterIndex).Concat(Enumerable.Range(0, _position.ChapterIndex).Reverse())
                 .FirstOrDefault(i => !CurrentChapterHasNothingToShow(i), -1);
-            if (firstWithContent >= 0 && firstWithContent != _position.ChapterIndex)
+            if (withContent >= 0 && withContent != _position.ChapterIndex)
             {
-                _position = new BookPosition(firstWithContent);
+                _position = new BookPosition(withContent);
             }
         }
 
-        var chapter = _source.Chapters[_position.ChapterIndex];
+        _unitIndex = UnitOfPosition(_position);
+        string title = _unitIndex < _units.Units.Count ? _units.Units[_unitIndex].Title : _source.Chapters[_position.ChapterIndex].Title;
 
-        ChapterTitle = chapter.Title;
-        ReadingPositionAnnouncement = chapter.Title;
-        CanGoPrevious = _history.Count > 0;
+        ChapterTitle = title;
+        ReadingPositionAnnouncement = title;
+        CanGoPrevious = _unitIndex > 0;
         // Books reflow reader WebView redesign (docs/superpowers/specs/2026-09-02-books-reflow-
         // reader-webview-redesign-design.md, Step 4) - drives BookReaderScreen.axaml.cs's
         // NativeWebView.NavigateToString via a PropertyChanged subscription. Null for PDF (which has
         // no Html) or a source that hasn't populated it yet.
-        CurrentChapterHtml = chapter.Html;
+        // Every block gets its stable "pb-p<n>" id here: highlights, bookmarks, the saved reading position, the jump-back chip and read aloud all anchor to it, and
+        // nothing else in the pipeline assigns them (BlockIdInjector had no production caller before 2026-10-27; deterministic, so stored anchors stay valid).
+        // The page shows one reading unit, cut out of the file after the ids are assigned over the whole file (paged/scroll spec §4).
+        CurrentChapterHtml = CurrentUnitHtml();
 
-        for (int i = 0; i < TableOfContents.Count; i++)
-        {
-            TableOfContents[i] = new BookChapterSummary
-            {
-                Index = TableOfContents[i].Index,
-                Title = TableOfContents[i].Title,
-                IsActive = TableOfContents[i].Index == _position.ChapterIndex,
-                PartTitle = TableOfContents[i].PartTitle,
-            };
-        }
-
-        RebuildTocGroups();
+        RefreshTocActive(force: true);
 
         // Chapter-start fraction only - within-chapter progress is the WebView's own concern now
         // (BookReaderScreen.axaml.cs's ApplyScrollResult overwrites this from real scrollTop/
         // scrollHeight once the page has actually rendered and the user starts scrolling/paging).
-        ProgressPercent = _source.Chapters.Count > 0
-            ? (double)_position.ChapterIndex / _source.Chapters.Count * 100
-            : 0;
+        // Within-unit fraction: the page overwrites it as it scrolls/pages (ApplyScrollResult); the bar itself follows book pages (Layout partial).
+        ProgressPercent = 0;
+        RefreshFooter();
 
         // (ChapterIndex, BlockId) match (docs/superpowers/specs/2026-09-07-books-reader-pagination-
         // and-position-fix-design.md) - a real value only once OnPositionCaptured has fired for this

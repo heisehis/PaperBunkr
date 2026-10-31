@@ -81,7 +81,8 @@ public partial class InsightsScreen : UserControl
         // wheel event bubbles to the ScrollViewer, not whether ScottPlot's own zoom interaction fires.
         // The actual fix (per ScottPlot's own "Plot in a Scroll Viewer" Avalonia demo) is removing the
         // MouseWheelZoom response from each chart's UserInputProcessor outright.
-        foreach (var chart in new[] { GrowthChart, PaceChart, BurnDownChart, RatingsChart, PublicationYearChart })
+        AttachHover(CommunityChart, (x, y) => DescribeCommunityPoint(x, y));
+        foreach (var chart in new[] { GrowthChart, PaceChart, BurnDownChart, RatingsChart, PublicationYearChart, CommunityChart })
         {
             chart.HandleMouseWheelEvent = false;
             chart.UserInputProcessor.RemoveAll<ScottPlot.Interactivity.UserActionResponses.MouseWheelZoom>();
@@ -148,6 +149,7 @@ public partial class InsightsScreen : UserControl
         if (_subscribed is not null)
         {
             _subscribed.Stats.ChartsChanged -= RenderCharts;
+            _subscribed.Stats.CommunityChanged -= RenderCommunity;
             _subscribed.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
@@ -155,12 +157,68 @@ public partial class InsightsScreen : UserControl
         if (_subscribed is not null)
         {
             _subscribed.Stats.ChartsChanged += RenderCharts;
+            _subscribed.Stats.CommunityChanged += RenderCommunity;
+            RenderCommunity(_subscribed.Stats.Community);
             _subscribed.PropertyChanged += OnViewModelPropertyChanged;
             if (_subscribed.Stats.Snapshot is { } snap)
             {
                 RenderCharts(snap);
             }
         }
+    }
+
+    private IReadOnlyList<Paperbunkr.Data.Metadata.CommunityComparisonRow> _communityRows = Array.Empty<Paperbunkr.Data.Metadata.CommunityComparisonRow>();
+
+    /// <summary>
+    /// The "You vs Community" scatter: community score across, your score up, both 0-100, with the y = x line so the distance from it is the
+    /// disagreement. Series you rate higher sit above the line.
+    /// </summary>
+    private void RenderCommunity(Paperbunkr.Data.Metadata.CommunityComparison comparison)
+    {
+        var plot = CommunityChart.Plot;
+        plot.Clear();
+        InsightsChartTheme.Apply(plot);
+        _communityRows = comparison.Rows;
+
+        if (comparison.ComparableSeries < StatsScreenViewModel.MinCommunityComparable)
+        {
+            CommunityChart.Refresh();
+            return;
+        }
+
+        var diagonal = plot.Add.Line(0, 0, 100, 100);
+        diagonal.Color = InsightsChartTheme.Muted;
+        diagonal.LineWidth = 1;
+        diagonal.LinePattern = ScottPlot.LinePattern.Dashed;
+
+        var points = plot.Add.Scatter(comparison.Rows.Select(r => r.Community).ToArray(), comparison.Rows.Select(r => r.User).ToArray());
+        points.LineWidth = 0;
+        points.MarkerSize = 7;
+        points.Color = InsightsChartTheme.Accent;
+
+        plot.Axes.SetLimits(0, 100, 0, 100);
+        plot.XLabel("Community score");
+        plot.YLabel("Your score");
+        plot.HideLegend();
+        CommunityChart.Refresh();
+    }
+
+    /// <summary>The series nearest the pointer (within a few points of the scatter's 0-100 scale), as "Name: you 90, community 62".</summary>
+    private string? DescribeCommunityPoint(double x, double y)
+    {
+        Paperbunkr.Data.Metadata.CommunityComparisonRow? nearest = null;
+        double best = 16; // squared distance, i.e. within 4 points
+        foreach (var row in _communityRows)
+        {
+            double d = (row.Community - x) * (row.Community - x) + (row.User - y) * (row.User - y);
+            if (d < best)
+            {
+                best = d;
+                nearest = row;
+            }
+        }
+
+        return nearest is null ? null : $"{nearest.SeriesName}: you {nearest.User:0}, community {nearest.Community:0}";
     }
 
     private void RenderCharts(StatsSnapshot snapshot)

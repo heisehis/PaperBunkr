@@ -55,6 +55,62 @@ public sealed class PluginLogFiles
         }
     }
 
+    /// <summary>
+    /// The last <paramref name="maxLines"/> lines of the live log for the dev-mode log pane (docs/superpowers/specs/2026-10-28-
+    /// plugin-api-4-5-pitch-completion-design.md §A2), or empty when nothing has been logged. Reads with shared access so it never
+    /// blocks a writer. Never throws.
+    /// </summary>
+    public string[] ReadTail(string pluginKey, int maxLines)
+    {
+        try
+        {
+            string path = PathFor(pluginKey);
+            if (!File.Exists(path))
+            {
+                return Array.Empty<string>();
+            }
+
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var lines = new System.Collections.Generic.Queue<string>(maxLines);
+            while (reader.ReadLine() is { } line)
+            {
+                if (lines.Count == maxLines)
+                {
+                    lines.Dequeue();
+                }
+
+                lines.Enqueue(line);
+            }
+
+            return lines.ToArray();
+        }
+        catch (Exception)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    /// <summary>Empties the live log (the rolled <c>.1.log</c> is kept). Never throws.</summary>
+    public void Clear(string pluginKey)
+    {
+        try
+        {
+            string path = PathFor(pluginKey);
+            object gate = _locks.GetOrAdd(path, _ => new object());
+            lock (gate)
+            {
+                if (File.Exists(path))
+                {
+                    File.WriteAllText(path, string.Empty);
+                }
+            }
+        }
+        catch (Exception)
+        {
+        }
+    }
+
     private static void RollIfFull(string path)
     {
         var info = new FileInfo(path);

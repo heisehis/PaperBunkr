@@ -1,6 +1,13 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:fi="using:FluentIcons.Avalonia">
+        xmlns:fi="using:FluentIcons.Avalonia"
+        xmlns:controls="using:Paperbunkr.App.Controls">
+    <!-- Star rating (Books slice 1): accent fill over a faint outline; both are icon-class uses of the tokens. -->
+    <Style Selector="controls|StarRating">
+        <Setter Property="FilledBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="EmptyBrush" Value="{DynamicResource PbTextFaintBrush}" />
+    </Style>
+
     <!--
         Shared controls (docs/superpowers/specs/2026-10-19-ui-polish-shared-controls-design.md). The ONE definition of each control family:
         button (primary / secondary / ghost / danger, .sm, iconButton), segmented switch (segGroup + segItem), tab, sidebar item, chips

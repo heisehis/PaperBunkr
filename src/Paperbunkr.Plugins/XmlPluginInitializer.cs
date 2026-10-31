@@ -81,6 +81,8 @@ public static class XmlPluginInitializer
                     Image = entry.Image,
                     Enabled = entry.Enabled,
                     ConfirmWrites = entry.ConfirmWrites,
+                    Menus = entry.Menus,
+                    Toolbar = entry.Toolbar,
                     ScriptPath = Path.Combine(pluginDir, entry.Script),
                 };
             case ".py":
@@ -95,6 +97,8 @@ public static class XmlPluginInitializer
                     Image = entry.Image,
                     Enabled = entry.Enabled,
                     ConfirmWrites = entry.ConfirmWrites,
+                    Menus = entry.Menus,
+                    Toolbar = entry.Toolbar,
                     ScriptPath = Path.Combine(pluginDir, entry.Script),
                     // An empty Method isn't rejected here - PreCompile's own ContainsVariable check
                     // turns it into a real CompileError message instead of a silent skip.

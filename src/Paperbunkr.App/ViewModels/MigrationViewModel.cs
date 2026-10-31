@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.CeMigration;
+using Paperbunkr.Data.SmartLists.CeImport;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -35,6 +36,7 @@ public partial class MigrationViewModel : ViewModelBase
     private readonly Action? _onCompleted;
 
     private ComicDatabase? _loadedDatabase;
+    private IReadOnlyList<CeSmartListDraft> _loadedSmartLists = Array.Empty<CeSmartListDraft>();
     private readonly HashSet<SeriesConflictCandidate> _mergeDecisions = new();
     private readonly HashSet<SeriesConflictCandidate> _keepSeparateDecisions = new();
 
@@ -47,6 +49,7 @@ public partial class MigrationViewModel : ViewModelBase
     }
 
     public ObservableCollection<SeriesConflictRowViewModel> Conflicts { get; }
+    public ObservableCollection<string> SmartListPreviewNotes { get; } = new();
 
     [ObservableProperty]
     private MigrationStage _stage = MigrationStage.Locate;
@@ -94,6 +97,12 @@ public partial class MigrationViewModel : ViewModelBase
     [ObservableProperty]
     private string _guessedContentTypeLabel = "0";
 
+    [ObservableProperty]
+    private string _smartListImportableLabel = "0";
+
+    [ObservableProperty]
+    private string _smartListSkippedLabel = "0";
+
     // --- Results stage ---
     [ObservableProperty]
     private string _seriesCreatedLabel = "0";
@@ -128,6 +137,7 @@ public partial class MigrationViewModel : ViewModelBase
         Stage = MigrationStage.Locate;
         ErrorMessage = null;
         _loadedDatabase = null;
+        _loadedSmartLists = Array.Empty<CeSmartListDraft>();
         Conflicts.Clear();
         _mergeDecisions.Clear();
         _keepSeparateDecisions.Clear();
@@ -177,7 +187,9 @@ public partial class MigrationViewModel : ViewModelBase
 
         try
         {
-            _loadedDatabase = CeLibraryMigrator.LoadFromXml(SelectedPath);
+            CeLibraryLoadResult loaded = CeLibraryMigrator.LoadFromXmlWithSmartLists(SelectedPath);
+            _loadedDatabase = loaded.Database;
+            _loadedSmartLists = loaded.SmartLists;
         }
         catch (Exception ex)
         {
@@ -193,7 +205,7 @@ public partial class MigrationViewModel : ViewModelBase
             preview = await Task.Run(() =>
             {
                 using var context = PaperbunkrDb.CreateContext();
-                return new CeLibraryMigrator().Preview(database, context);
+                return new CeLibraryMigrator().Preview(database, context, _loadedSmartLists);
             });
         }
         finally
@@ -204,6 +216,20 @@ public partial class MigrationViewModel : ViewModelBase
         SeriesCountLabel = preview.SeriesCount.ToString();
         IssueCountLabel = preview.IssueCount.ToString();
         GuessedContentTypeLabel = preview.SeriesWithGuessedContentType.ToString();
+
+        IReadOnlyList<CeSmartListPreviewRow> smartListRows = preview.SmartLists ?? Array.Empty<CeSmartListPreviewRow>();
+        SmartListImportableLabel = smartListRows.Count(r => r.WillImport).ToString();
+        SmartListSkippedLabel = smartListRows.Count(r => !r.WillImport).ToString();
+        SmartListPreviewNotes.Clear();
+        foreach (CeSmartListPreviewRow row in smartListRows)
+        {
+            if (row.ImportedName != row.SourceName)
+                SmartListPreviewNotes.Add($"Name collision: “{row.SourceName}” will be imported as “{row.ImportedName}”.");
+            if (row.RefusedReason is not null)
+                SmartListPreviewNotes.Add(row.RefusedReason);
+            foreach (var warning in row.Warnings)
+                SmartListPreviewNotes.Add((warning with { ListName = row.ImportedName }).ToString());
+        }
 
         Conflicts.Clear();
         _mergeDecisions.Clear();
@@ -253,7 +279,7 @@ public partial class MigrationViewModel : ViewModelBase
         {
             using var context = PaperbunkrDb.CreateContext();
             var options = BuildMigrationOptions(context);
-            return new CeLibraryMigrator().Migrate(database, context, options);
+            return new CeLibraryMigrator().Migrate(database, context, options, _loadedSmartLists);
         });
 
         IsBusy = false;

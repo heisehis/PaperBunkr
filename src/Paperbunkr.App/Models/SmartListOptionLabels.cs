@@ -5,7 +5,7 @@ using Paperbunkr.Data.Entities;
 namespace Paperbunkr.App.Models;
 
 /// <summary>Display label for one picker option — used for both Field and Operator dropdowns.</summary>
-public readonly record struct FieldOption(SmartListField Field, string Label)
+public readonly record struct FieldOption(SmartListField Field, string Label, string? CustomValueName = null)
 {
     public override string ToString() => Label;
 }

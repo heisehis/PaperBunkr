@@ -62,6 +62,8 @@
                         <fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeSm}" />
                         <Button.Flyout>
                             <MenuFlyout>
+                                <MenuItem Header="Review lists…" Command="{Binding ReviewListsCommand}" />
+                                <MenuItem Header="Review history…" Command="{Binding ReviewHistoryCommand}" />
                                 <MenuItem Header="Import folder of .CBL…" Command="{Binding ImportFolderCommand}" />
                                 <MenuItem Header="Export this folder as .CBL…" Command="{Binding ExportFolderCommand}" CommandParameter="{x:Null}" IsVisible="{Binding IsInFolder}" />
                                 <MenuItem Header="Sort A–Z" Command="{Binding SortFolderCommand}" CommandParameter="{x:Null}" />

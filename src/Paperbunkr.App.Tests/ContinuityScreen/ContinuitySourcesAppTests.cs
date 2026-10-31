@@ -115,7 +115,21 @@ public class ContinuitySourcesAppTests : ContinuityScreenTestBase
         {
             foreach (var (id, rank) in new[] { (later, 1), (earlier, 2), (last, 3) })
             {
-                context.EventOrderEvidence.Add(new EventOrderEvidence { StoryEventId = id, Provider = EventOrderProvider.Cbro, SourceId = $"marvel:{rank}", ListKey = "marvel", Rank = rank });
+                var evidence = new EventOrderEvidence
+                {
+                    StoryEventId = id, Provider = EventOrderProvider.Cbro, SourceId = $"marvel:{rank}", ListKey = "marvel", Rank = rank,
+                    SourceName = id == later ? "Listed first, dated later" : id == earlier ? "Listed second, dated earlier" : "Listed last",
+                    SourceYear = id == later ? 1995 : id == earlier ? 1994 : 1996,
+                };
+                if (id == later)
+                {
+                    evidence.CbroOverlapNotes.Add(new EventOrderOverlapNote
+                    {
+                        OriginalText = "Occurs during the same time as Listed second, dated earlier.", TargetName = "Listed second, dated earlier",
+                    });
+                }
+
+                context.EventOrderEvidence.Add(evidence);
             }
 
             context.SaveChanges();
@@ -127,6 +141,8 @@ public class ContinuitySourcesAppTests : ContinuityScreenTestBase
 
         Assert.Equal(new[] { later, earlier, last }, source.Blocks.Where(b => b.EventId is not null).Select(b => b.EventId!.Value));
         Assert.All(data.Events, e => Assert.NotNull(e.SortKey));
+        Assert.Equal(1995, data.Events.Single(e => e.Id == later).CbroSourceYear);
+        Assert.Contains("Listed second, dated earlier", Assert.Single(source.Connectors.Where(c => c.Kind == EventMapConnectorKind.Overlap)).Tooltip);
     }
 
     [Fact]

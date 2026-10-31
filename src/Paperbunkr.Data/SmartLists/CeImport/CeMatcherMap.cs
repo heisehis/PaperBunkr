@@ -63,6 +63,10 @@ public static class CeMatcherMap
         ["SmartListSeriesMaxGapSizeMatcher"] = new(CeMatcherKind.Number, SmartListField.SeriesMaxGapSize),
 
         ["ComicBookPublishedMatcher"] = new(CeMatcherKind.Date, SmartListField.Published),
+        ["SmartListSeriesLastAddedTimeMatcher"] = new(CeMatcherKind.Date, SmartListField.SeriesLastAddedTime),
+        ["SmartListSeriesLastOpenedTimeMatcher"] = new(CeMatcherKind.Date, SmartListField.SeriesLastOpenedTime),
+        ["SmartListSeriesLastPublishedTimeMatcher"] = new(CeMatcherKind.Date, SmartListField.SeriesLastPublishedTime),
+        ["SmartListSeriesLastReleasedTimeMatcher"] = new(CeMatcherKind.Date, SmartListField.SeriesLastReleasedTime),
 
         ["ComicBookCustomValuesMatcher"] = new(CeMatcherKind.CustomValue, SmartListField.CustomValue),
         ["ComicBookDuplicateMatcher"] = new(CeMatcherKind.Duplicate, SmartListField.Duplicate),
@@ -108,7 +112,6 @@ public static class CeMatcherMap
         _ => null,
     };
 
-    /// <summary>The four date-valued series matchers CE has beyond the numeric ones: recognised so the warning can say what they are.</summary>
-    public static bool IsKnownUnsupportedSeriesDateMatcher(string type) =>
-        type is "SmartListSeriesLastAddedTimeMatcher" or "SmartListSeriesLastOpenedTimeMatcher" or "SmartListSeriesLastPublishedTimeMatcher" or "SmartListSeriesLastReleasedTimeMatcher";
+    /// <summary>Legacy recognizer retained for callers/tests; these types are now supported through <see cref="Entries"/>.</summary>
+    public static bool IsKnownUnsupportedSeriesDateMatcher(string type) => false;
 }

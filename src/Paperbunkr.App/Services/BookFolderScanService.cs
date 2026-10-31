@@ -182,20 +182,26 @@ public class BookFolderScanService
                     AddedTime = DateTime.UtcNow,
                 };
 
-                string? seriesName = source.Metadata.SeriesName;
-                if (!string.IsNullOrWhiteSpace(seriesName))
-                {
-                    if (!seriesByName.TryGetValue(seriesName, out var series))
+                // Series (only when the file declares one), index, publisher, language, ISBN, summary, rating and tags - fill-only,
+                // each recorded as File-sourced (docs/superpowers/specs/2026-10-26-books-slice1-data-foundation-design.md §4).
+                BookMetadataApplier.Apply(
+                    book,
+                    BookFieldValues.FromFile(source.Metadata),
+                    BookFieldSourceKind.File,
+                    sourceRef: null,
+                    DateTime.UtcNow,
+                    name =>
                     {
-                        series = new BookSeries { Name = seriesName };
-                        context.BookSeries.Add(series);
-                        seriesByName[seriesName] = series;
-                    }
+                        if (!seriesByName.TryGetValue(name, out var series))
+                        {
+                            series = new BookSeries { Name = name };
+                            context.BookSeries.Add(series);
+                            seriesByName[name] = series;
+                        }
 
-                    book.BookSeries = series;
-                    series.Books.Add(book);
-                    seriesTouched.Add(seriesName);
-                }
+                        seriesTouched.Add(name);
+                        return series;
+                    });
 
                 context.Books.Add(book);
                 addedBooks.Add(book);

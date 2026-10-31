@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Net.NetworkInformation;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
@@ -41,6 +42,11 @@ public sealed class TrackerAutoSyncService : ITrackerAutoSyncService
     private readonly object _lock = new();
     private readonly HashSet<int> _inFlight = new();
     private readonly HashSet<int> _dirty = new();
+    private readonly SemaphoreSlim _retryScanGate = new(1, 1);
+    private Timer? _retryTimer;
+    private bool _started;
+
+    public event Action? RetryQueueChanged;
 
     public TrackerAutoSyncService(
         IActivityService activity,
@@ -64,6 +70,167 @@ public sealed class TrackerAutoSyncService : ITrackerAutoSyncService
     /// 90 requests/minute, so ~700 ms; a conservative 1 s for the rest.</summary>
     public static TimeSpan MinSpacing(TrackingService service) =>
         service == TrackingService.AniList ? TimeSpan.FromMilliseconds(700) : TimeSpan.FromSeconds(1);
+
+    public void Start()
+    {
+        lock (_lock)
+        {
+            if (_started) return;
+            _started = true;
+            _retryTimer = new Timer(_ => _ = ProcessDueRetriesAsync(), null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
+            NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
+        }
+    }
+
+    public void Stop()
+    {
+        lock (_lock)
+        {
+            if (!_started) return;
+            _started = false;
+            _retryTimer?.Dispose();
+            _retryTimer = null;
+            NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
+        }
+    }
+
+    private void OnNetworkAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs e)
+    {
+        if (e.IsAvailable) _ = ProcessDueRetriesAsync();
+    }
+
+    public IReadOnlyList<TrackerRetryQueueItem> GetRetryQueue()
+    {
+        try
+        {
+            using var context = _contextFactory();
+            return TrackerPushRetryStore.LoadAll(context)
+                .Where(r => r.TrackingLink?.Series is not null)
+                .Select(r => new TrackerRetryQueueItem(r.Id, r.TrackingLink!.Series!.Name, r.TrackingLink.Service.ToString(),
+                    r.HighestChapter, r.State, r.NextAttemptUtc, r.LastError)).ToList();
+        }
+        catch
+        {
+            return Array.Empty<TrackerRetryQueueItem>();
+        }
+    }
+
+    public async Task RetryNowAsync(int retryId) => await RunQueuedRetryAsync(retryId, scheduled: false).ConfigureAwait(false);
+
+    public void DismissRetry(int retryId)
+    {
+        using var context = _contextFactory();
+        TrackerPushRetryStore.Dismiss(context, retryId);
+        RetryQueueChanged?.Invoke();
+    }
+
+    private async Task ProcessDueRetriesAsync()
+    {
+        if (!await _retryScanGate.WaitAsync(0).ConfigureAwait(false)) return;
+        try
+        {
+            List<int> due;
+            using (var context = _contextFactory())
+                due = TrackerPushRetryStore.LoadDue(context, _utcNow()).Select(r => r.Id).ToList();
+            foreach (int retryId in due)
+                await RunQueuedRetryAsync(retryId, scheduled: true).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            RaiseUnexpectedFailure(ex);
+        }
+        finally
+        {
+            _retryScanGate.Release();
+        }
+    }
+
+    private async Task RunQueuedRetryAsync(int retryId, bool scheduled)
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            using var context = _contextFactory();
+            var row = context.TrackerPushRetries.Include(r => r.TrackingLink).ThenInclude(l => l!.Series).FirstOrDefault(r => r.Id == retryId);
+            if (row?.TrackingLink?.Series is not { } series) return;
+            var link = row.TrackingLink;
+            if (!string.Equals(row.TargetExternalId, link.ExternalId, StringComparison.Ordinal))
+            {
+                TrackerPushRetryStore.Clear(context, link.Id);
+                RetryQueueChanged?.Invoke();
+                return;
+            }
+
+            var settings = context.GetOrCreateAppSettings();
+            if (!(settings.TrackerUpdateAfterReading || settings.TrackerUpdateOnMarkRead != TrackerAutoUpdateMode.Never)
+                || !_isConnected(context, link.Service)) return;
+            var adapter = _adapterFactory(link.Service);
+            if (adapter is null) return;
+
+            DateTime now = _utcNow();
+            using var job = _activity.StartJob(ActivityJobKind.TrackerFetch, "Retrying tracker progress", cancellable: false, toastPolicy: ActivityToastPolicy.Never);
+            await PaceAsync(link.Service).ConfigureAwait(false);
+            var lookup = await adapter.GetEntryOutcomeAsync(context, link, CancellationToken.None).ConfigureAwait(false);
+            if (lookup.Succeeded && lookup.Value is { } remote
+                && TrackerSyncResolver.RemoteWins(row.HighestChapter, row.DesiredStatus, remote))
+            {
+                TrackerPushRetryStore.Clear(context, link.Id);
+                job.Succeed($"Remote progress is already ahead on {link.Service}.");
+                RetryQueueChanged?.Invoke();
+                return;
+            }
+
+            if (!lookup.Succeeded)
+            {
+                HandleRetryOutcome(context, row, lookup.IsRetryable, lookup.ErrorDetail ?? "Could not verify remote progress.", lookup.RetryAfterUtc, now, scheduled);
+                job.Fail("Tracker lookup failed.");
+                return;
+            }
+
+            await PaceAsync(link.Service).ConfigureAwait(false);
+            var payload = new TrackerPushPayload(row.DesiredStatus, row.HighestChapter);
+            var push = await TrackerAdapterFactory.PushClassifiedAsync(adapter, context, link, payload, CancellationToken.None).ConfigureAwait(false);
+            if (push.Succeeded)
+            {
+                TrackerPushRetryStore.Clear(context, link.Id);
+                link.LastSyncedAt = now;
+                context.SaveChanges();
+                job.Succeed($"Synced {series.Name} to {link.Service}.");
+                RetryQueueChanged?.Invoke();
+                return;
+            }
+
+            HandleRetryOutcome(context, row, push.IsRetryable, push.ErrorDetail ?? "Push failed.", push.RetryAfterUtc, now, scheduled);
+            job.Fail("Tracker retry failed.");
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private void HandleRetryOutcome(PaperbunkrDbContext context, TrackerPushRetry row, bool retryable, string error, DateTimeOffset? retryAfter, DateTime nowUtc, bool scheduled)
+    {
+        if (!retryable)
+        {
+            TrackerPushRetryStore.Exhaust(context, row, error, nowUtc);
+        }
+        else if (scheduled)
+        {
+            TrackerPushRetryStore.RecordScheduledFailure(context, row, error, nowUtc, retryAfter?.UtcDateTime);
+        }
+        else
+        {
+            var current = context.TrackerPushRetries.SingleOrDefault(r => r.Id == row.Id);
+            if (current is not null)
+            {
+                current.LastError = error;
+                current.LastAttemptUtc = nowUtc;
+                context.SaveChanges();
+            }
+        }
+        RetryQueueChanged?.Invoke();
+    }
 
     // ---- Hooks ----
 
@@ -253,32 +420,43 @@ public sealed class TrackerAutoSyncService : ITrackerAutoSyncService
                     }
 
                     await PaceAsync(link.Service).ConfigureAwait(false);
-                    var remote = await adapter.GetEntryAsync(context, link, CancellationToken.None).ConfigureAwait(false);
-                    if (remote is null)
+                    var lookup = await adapter.GetEntryOutcomeAsync(context, link, CancellationToken.None).ConfigureAwait(false);
+                    if (!lookup.Succeeded || lookup.Value is not { } remote)
                     {
-                        // The legacy adapter contract cannot distinguish absent from unavailable.
-                        // An unattended write cannot safely assume that the remote entry is empty.
-                        failures.Add((series.Id, series.Name, link.Service, "Could not verify remote progress. Open the tracker panel to retry or create the entry manually."));
+                        string error = lookup.ErrorDetail ?? "Could not verify remote progress. Open the tracker panel to retry or create the entry manually.";
+                        if (lookup.IsRetryable)
+                        {
+                            TrackerPushRetryStore.EnqueueTransientFailure(context, link, series.ReadingStatus, chapter, error, _utcNow(), lookup.RetryAfterUtc?.UtcDateTime);
+                            RetryQueueChanged?.Invoke();
+                        }
+                        failures.Add((series.Id, series.Name, link.Service, error));
                         continue;
                     }
-                    if (remote is not null && TrackerSyncResolver.RemoteWins(chapter, series.ReadingStatus, remote))
+                    if (TrackerSyncResolver.RemoteWins(chapter, series.ReadingStatus, remote))
                     {
                         continue; // remote already ahead: forward-only, and pulling is a separate setting
                     }
 
                     await PaceAsync(link.Service).ConfigureAwait(false);
                     var payload = new TrackerPushPayload(series.ReadingStatus, chapter);
-                    var (ok, error) = await TrackerAdapterFactory.PushDetailedAsync(adapter, context, link, payload, CancellationToken.None).ConfigureAwait(false);
-                    if (ok)
+                    var push = await TrackerAdapterFactory.PushClassifiedAsync(adapter, context, link, payload, CancellationToken.None).ConfigureAwait(false);
+                    if (push.Succeeded)
                     {
                         link.LastSyncedAt = _utcNow();
+                        TrackerPushRetryStore.Clear(context, link.Id);
                         landed.Add(link.Service);
                         pushed.Add(link.Service.ToString());
                         lastChapter = chapter;
                     }
                     else
                     {
-                        failures.Add((series.Id, series.Name, link.Service, error ?? "Unknown error"));
+                        string error = push.ErrorDetail ?? "Unknown error";
+                        if (push.IsRetryable)
+                        {
+                            TrackerPushRetryStore.EnqueueTransientFailure(context, link, series.ReadingStatus, chapter, error, _utcNow(), push.RetryAfterUtc?.UtcDateTime);
+                            RetryQueueChanged?.Invoke();
+                        }
+                        failures.Add((series.Id, series.Name, link.Service, error));
                     }
                 }
 

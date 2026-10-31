@@ -198,7 +198,7 @@ public static class EventMapLayout
         foreach (var block in source.Blocks)
         {
             int first = columnLabels.Count;
-            if (block.Kind == EventMapBlockKind.Event)
+            if (block.Kind is EventMapBlockKind.Event or EventMapBlockKind.Unplaced)
             {
                 for (int r = block.FirstRow; r <= block.LastRow; r++)
                 {
@@ -245,7 +245,7 @@ public static class EventMapLayout
         foreach (var block in source.Blocks)
         {
             var inBlock = cells.Skip(block.FirstRow).Take(block.LastRow - block.FirstRow + 1).ToList();
-            if (block.Kind == EventMapBlockKind.Event)
+            if (block.Kind is EventMapBlockKind.Event or EventMapBlockKind.Unplaced)
             {
                 for (int i = 1; i < inBlock.Count; i++)
                 {

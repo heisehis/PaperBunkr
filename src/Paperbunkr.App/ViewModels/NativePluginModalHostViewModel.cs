@@ -119,12 +119,15 @@ public sealed partial class NativePluginModalHostViewModel : ViewModelBase
     {
         if (!Dispatcher.UIThread.CheckAccess())
         {
-            var onUiThread = new TaskCompletionSource<TResult>();
+            var onUiThread = new TaskCompletionSource<TResult>(TaskCreationOptions.RunContinuationsAsynchronously);
             Dispatcher.UIThread.Post(() => ShowOnUiThread(contentFactory, onUiThread));
             return onUiThread.Task;
         }
 
-        var completion = new TaskCompletionSource<TResult>();
+        // Asynchronous continuations: the resolve callback runs inside the dialog button's Click on the UI thread, and the scrape/organize
+        // orchestrators await this with ConfigureAwait(false), so an inline continuation would run the rest of their work (database writes,
+        // the next book's lookups, file moves) inside that click and freeze the window until their next real await.
+        var completion = new TaskCompletionSource<TResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         ShowOnUiThread(contentFactory, completion);
         return completion.Task;
     }

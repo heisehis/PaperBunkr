@@ -5,6 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Paperbunkr.App.Plugins;
+using Paperbunkr.Plugins;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
@@ -48,7 +50,7 @@ public partial class CoverPickerViewModel : ViewModelBase
         SeriesCandidates = new ObservableCollection<CoverPickerCandidate>();
         ReadingListCandidates = new ObservableCollection<CoverPickerCandidate>();
         ExternalProviderCandidates = new ObservableCollection<CoverCandidate>();
-        HasExternalProviderTab = externalProviderCoverContext is not null;
+        HasExternalProviderTab = externalProviderCoverContext is not null || PluginProviderRegistry.Shared.CoverProviders.Count > 0;
         Load(seriesId);
 
         if (externalProviderCoverContext is { } context)
@@ -56,6 +58,8 @@ public partial class CoverPickerViewModel : ViewModelBase
             SelectedTabIndex = 3;
             _ = LoadExternalProviderCandidatesAsync(context);
         }
+
+        _ = LoadPluginCandidatesAsync(PluginProviderRegistry.Shared);
     }
 
     public CoverPickerViewModel(int targetSeriesId, Action onApplied, (ExternalMetadataProvider Provider, string ExternalId)? externalProviderCoverContext = null)
@@ -66,12 +70,58 @@ public partial class CoverPickerViewModel : ViewModelBase
         SeriesCandidates = new ObservableCollection<CoverPickerCandidate>();
         ReadingListCandidates = new ObservableCollection<CoverPickerCandidate>();
         ExternalProviderCandidates = new ObservableCollection<CoverCandidate>();
-        HasExternalProviderTab = externalProviderCoverContext is not null;
+        HasExternalProviderTab = externalProviderCoverContext is not null || PluginProviderRegistry.Shared.CoverProviders.Count > 0;
         Load(targetSeriesId);
         if (externalProviderCoverContext is { } context)
         {
             SelectedTabIndex = 3;
             _ = LoadExternalProviderCandidatesAsync(context);
+        }
+
+        _ = LoadPluginCandidatesAsync(PluginProviderRegistry.Shared);
+    }
+
+    /// <summary>
+    /// Plugin cover sources (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §C) add their
+    /// covers to the External tab, each labelled with its source. A source that fails or times out simply adds nothing (its plugin's log
+    /// says why). Internal so a test can pass its own registry.
+    /// </summary>
+    internal async Task LoadPluginCandidatesAsync(PluginProviderRegistry registry)
+    {
+        var providers = registry.CoverProviders;
+        if (providers.Count == 0)
+        {
+            return;
+        }
+
+        PluginCoverRequest request;
+        using (var db = PaperbunkrDb.CreateContext())
+        {
+            var issue = _targetIssueId == 0 ? null : db.Issues.Find(_targetIssueId);
+            int? seriesId = _targetSeriesId ?? issue?.SeriesId;
+            var series = seriesId is int sid ? db.Series.Find(sid) : null;
+            request = new PluginCoverRequest(series?.Name ?? string.Empty, issue?.EffectiveNumber(), issue?.EffectiveYear(), issue?.Id, seriesId);
+        }
+
+        IsLoadingExternalProviderCandidates = true;
+        try
+        {
+            foreach (var provider in providers)
+            {
+                var covers = await registry.CallAsync(provider.PluginKey, $"{provider.DisplayName} covers", ct => provider.GetCovers(request, ct));
+                foreach (var cover in covers ?? Array.Empty<PluginCover>())
+                {
+                    string source = cover.Label is { Length: > 0 } label ? $"{provider.DisplayName} - {label}" : provider.DisplayName;
+                    ExternalProviderCandidates.Add(new CoverCandidate(cover.ThumbnailUrl, cover.FullUrl, cover.Label ?? "Cover", source));
+                }
+            }
+
+            OnPropertyChanged(nameof(HasExternalProviderCandidates));
+            OnPropertyChanged(nameof(ShowNoExternalProviderCandidatesMessage));
+        }
+        finally
+        {
+            IsLoadingExternalProviderCandidates = false;
         }
     }
 

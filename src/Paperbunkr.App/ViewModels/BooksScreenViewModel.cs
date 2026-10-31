@@ -276,7 +276,17 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
     [ObservableProperty]
     private string _searchQuery = string.Empty;
 
-    partial void OnSearchQueryChanged(string value) => Rebuild();
+    partial void OnSearchQueryChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasSearch));
+        OnPropertyChanged(nameof(NoMatchesMessage));
+        Rebuild();
+    }
+
+    public bool HasSearch => !string.IsNullOrWhiteSpace(SearchQuery);
+
+    /// <summary>"No books match “x”." while searching, otherwise the tab-specific line.</summary>
+    public string NoMatchesMessage => HasSearch ? $"No books match “{SearchQuery.Trim()}”." : EmptyTabMessage;
 
     [ObservableProperty]
     private BooksSortField _sortField = BooksSortField.Title;
@@ -305,6 +315,7 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
     {
         OnPropertyChanged(nameof(IsGrouped));
         OnPropertyChanged(nameof(GroupLabel));
+        RaiseLayoutFlags();
         SaveBooksSettings();
         Rebuild();
     }
@@ -314,6 +325,11 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
         BooksSortField.Author => "Author",
         BooksSortField.RecentlyAdded => "Recently added",
         BooksSortField.LastOpened => "Last opened",
+        BooksSortField.Rating => "Rating",
+        BooksSortField.Progress => "Progress",
+        BooksSortField.Publisher => "Publisher",
+        BooksSortField.Published => "Published",
+        BooksSortField.SeriesOrder => "Series order",
         _ => "Title",
     };
 
@@ -323,8 +339,282 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
     {
         BooksGroupField.Series => "Series",
         BooksGroupField.Author => "Author",
+        BooksGroupField.Status => "Status",
+        BooksGroupField.Publisher => "Publisher",
+        BooksGroupField.Language => "Language",
+        BooksGroupField.Genre => "Genre",
         _ => "None",
     };
+
+    // --- status tabs, author filter, shelf, view mode (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md) ---
+
+    public ObservableCollection<BooksStatusTabItem> StatusTabs { get; } = new(new[]
+    {
+        new BooksStatusTabItem(BooksStatusTab.All, "All"),
+        new BooksStatusTabItem(BooksStatusTab.Reading, "Reading"),
+        new BooksStatusTabItem(BooksStatusTab.WantToRead, "Want to read"),
+        new BooksStatusTabItem(BooksStatusTab.Unread, "Unread"),
+        new BooksStatusTabItem(BooksStatusTab.Finished, "Finished"),
+        new BooksStatusTabItem(BooksStatusTab.Abandoned, "Abandoned"),
+    });
+
+    [ObservableProperty]
+    private BooksStatusTab _activeStatusTab = BooksStatusTab.All;
+
+    partial void OnActiveStatusTabChanged(BooksStatusTab value)
+    {
+        OnPropertyChanged(nameof(EmptyTabMessage));
+        OnPropertyChanged(nameof(NoMatchesMessage));
+        SaveBrowseViewSettings();
+        Rebuild();
+    }
+
+    [RelayCommand]
+    private void SetStatusTab(BooksStatusTab tab) => ActiveStatusTab = tab;
+
+    private void RefreshStatusTabs()
+    {
+        var counts = BooksBrowseQuery.TabCounts(_allCards);
+        foreach (var item in StatusTabs)
+        {
+            item.Count = counts.GetValueOrDefault(item.Tab);
+            item.IsActive = item.Tab == ActiveStatusTab;
+        }
+    }
+
+    /// <summary>The one-line reason the list is empty under the current tab/filters (the "no matches" state).</summary>
+    public string EmptyTabMessage => ActiveStatusTab switch
+    {
+        BooksStatusTab.All => "No books match your search or filters.",
+        BooksStatusTab.Reading => "Nothing is marked as Reading right now.",
+        BooksStatusTab.WantToRead => "No books on your Want to read list.",
+        BooksStatusTab.Unread => "No unread books match.",
+        BooksStatusTab.Finished => "No finished books match.",
+        _ => "No abandoned books match.",
+    };
+
+    /// <summary>"Author: X" chip, set when Book Detail's author link opens the grid (docs/superpowers/specs/2026-10-27-books-slice2b-detail-design.md §7).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAuthorFilter), nameof(AuthorFilterLabel))]
+    private string? _authorFilter;
+
+    public bool HasAuthorFilter => !string.IsNullOrWhiteSpace(AuthorFilter);
+
+    public string AuthorFilterLabel => $"Author: {AuthorFilter}";
+
+    partial void OnAuthorFilterChanged(string? value) => Rebuild();
+
+    /// <summary>"7 books · 3 finished" for the chosen author, over everything they have in the library (not narrowed by the tab or search).</summary>
+    [ObservableProperty]
+    private string _authorSummary = string.Empty;
+
+    /// <summary>0-1: finished books over all of the author's books, for the thin bar.</summary>
+    [ObservableProperty]
+    private double _authorFinishedFraction;
+
+    private void RefreshAuthorSummary()
+    {
+        if (string.IsNullOrWhiteSpace(AuthorFilter))
+        {
+            AuthorSummary = string.Empty;
+            AuthorFinishedFraction = 0;
+            return;
+        }
+
+        var mine = _allCards.Where(c => !c.IsGhost && string.Equals(c.Author?.Trim(), AuthorFilter.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        int finished = mine.Count(c => c.Status == BookReadingStatus.Finished);
+        AuthorSummary = $"{mine.Count} book{(mine.Count == 1 ? string.Empty : "s")} · {finished} finished";
+        AuthorFinishedFraction = mine.Count == 0 ? 0 : (double)finished / mine.Count;
+    }
+
+    [RelayCommand]
+    private void ClearAuthorFilter() => AuthorFilter = null;
+
+    /// <summary>Book ids allowed by the chosen shelf; null = no shelf. Session-only.</summary>
+    private IReadOnlySet<int>? _shelfIds;
+
+    // --- Shelves menu (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §4) ---
+
+    /// <summary>Test seam; production uses the real database.</summary>
+    internal BookShelfService ShelfService { get; set; } = new();
+
+    public ObservableCollection<BookShelfRow> BuiltInShelves { get; } = new();
+
+    public ObservableCollection<BookShelfRow> SmartShelves { get; } = new();
+
+    public ObservableCollection<BookShelfRow> CollectionShelves { get; } = new();
+
+    public bool HasSmartShelves => SmartShelves.Count > 0;
+
+    public bool HasCollectionShelves => CollectionShelves.Count > 0;
+
+    private BookShelf? _activeShelf;
+
+    public bool HasActiveShelf => _activeShelf is not null;
+
+    /// <summary>"Shelves" while none is chosen, otherwise "Shelf: Favorites".</summary>
+    public string ShelfButtonLabel => _activeShelf is null ? "Shelves" : $"Shelf: {_activeShelf.Name}";
+
+    public bool IsShelvesOpen => ActiveDropdown == "shelves";
+
+    // "Add books" menu: ways to bring books in beyond the scanned folders (Slice 4).
+    public bool IsAddMenuOpen => ActiveDropdown == "add";
+
+    /// <summary>Set by MainViewModel: opens the Import from Calibre dialog.</summary>
+    public Action? GoCalibreImport { get; set; }
+
+    /// <summary>Set by MainViewModel: opens the OPDS catalog browser.</summary>
+    public Action? GoCatalogs { get; set; }
+
+    [RelayCommand]
+    private void BrowseCatalogs()
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => ActiveDropdown = null);
+        GoCatalogs?.Invoke();
+    }
+
+    [RelayCommand]
+    private void ToggleAddMenu() => ActiveDropdown = ActiveDropdown == "add" ? null : "add";
+
+    [RelayCommand]
+    private void ImportFromCalibre()
+    {
+        // Deferred: this runs from a menu row Button.Click still routing through the popup that closing it would detach.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => ActiveDropdown = null);
+        GoCalibreImport?.Invoke();
+    }
+
+    [RelayCommand]
+    private void ToggleShelves()
+    {
+        if (ActiveDropdown != "shelves")
+        {
+            RefreshShelves();
+        }
+
+        ActiveDropdown = ActiveDropdown == "shelves" ? null : "shelves";
+    }
+
+    /// <summary>Rebuilds the three shelf lists from the database (new smart lists / collections appear without a restart) and keeps the choice if it still exists.</summary>
+    private void RefreshShelves()
+    {
+        BuiltInShelves.Clear();
+        SmartShelves.Clear();
+        CollectionShelves.Clear();
+
+        var shelves = ShelfService.List();
+        foreach (var shelf in shelves)
+        {
+            var row = new BookShelfRow(shelf) { IsActive = _activeShelf?.Key == shelf.Key };
+            (shelf.Kind switch
+            {
+                BookShelfKind.SmartList => SmartShelves,
+                BookShelfKind.Collection => CollectionShelves,
+                _ => BuiltInShelves,
+            }).Add(row);
+        }
+
+        if (_activeShelf is not null && shelves.All(s => s.Key != _activeShelf.Key))
+        {
+            SetShelf(null);
+        }
+
+        OnPropertyChanged(nameof(HasSmartShelves));
+        OnPropertyChanged(nameof(HasCollectionShelves));
+    }
+
+    [RelayCommand]
+    private void SelectShelf(BookShelfRow? row)
+    {
+        // The row's own button raised this click; closing the popup (which detaches that button) is deferred a tick (CLAUDE.md: don't detach a control from inside the event it is raising).
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => ActiveDropdown = null);
+        SetShelf(row?.Shelf);
+    }
+
+    [RelayCommand]
+    private void ClearShelf() => SetShelf(null);
+
+    private void SetShelf(BookShelf? shelf)
+    {
+        _activeShelf = shelf;
+        _shelfIds = shelf is null ? null : ShelfService.Resolve(shelf);
+
+        foreach (var row in BuiltInShelves.Concat(SmartShelves).Concat(CollectionShelves))
+        {
+            row.IsActive = shelf is not null && row.Shelf.Key == shelf.Key;
+        }
+
+        OnPropertyChanged(nameof(HasActiveShelf));
+        OnPropertyChanged(nameof(ShelfButtonLabel));
+        Rebuild();
+    }
+
+    [ObservableProperty]
+    private BooksViewMode _viewMode = BooksViewMode.Grid;
+
+    partial void OnViewModeChanged(BooksViewMode value)
+    {
+        OnPropertyChanged(nameof(IsBookshelfView));
+        OnPropertyChanged(nameof(IsGridView));
+        RaiseLayoutFlags();
+        RefreshAlphabetIndex();
+        SaveBrowseViewSettings();
+    }
+
+    public bool IsBookshelfView => ViewMode == BooksViewMode.Bookshelf;
+
+    // The four content layouts: covers or spines, flat or grouped.
+    public bool IsGridUngrouped => IsGridView && !IsGrouped;
+    public bool IsGridGrouped => IsGridView && IsGrouped;
+    public bool IsShelfUngrouped => IsBookshelfView && !IsGrouped;
+    public bool IsShelfGrouped => IsBookshelfView && IsGrouped;
+
+    // --- A-Z jump rail (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §7) ---
+
+    /// <summary>The rail's 27 letters, dimmed where nothing in the current view starts with them.</summary>
+    [ObservableProperty]
+    private IReadOnlyList<AlphabetIndexEntry> _alphabetIndex = System.Array.Empty<AlphabetIndexEntry>();
+
+    /// <summary>Both views (books redesign §3.4: the rail jumps with ScrollIntoView, which a virtualized list supports), a flat Title/Author
+    /// sort or any grouping but Status.</summary>
+    [ObservableProperty]
+    private bool _showAlphabetIndex;
+
+    private void RefreshAlphabetIndex()
+    {
+        ShowAlphabetIndex = HasBooks && BooksAlphabet.Applies(IsGrouped, GroupField, SortField);
+        AlphabetIndex = ShowAlphabetIndex ? BooksAlphabet.Build(Books, Groups, IsGrouped, SortField) : System.Array.Empty<AlphabetIndexEntry>();
+    }
+
+    private void RaiseLayoutFlags()
+    {
+        OnPropertyChanged(nameof(IsGridUngrouped));
+        OnPropertyChanged(nameof(IsGridGrouped));
+        OnPropertyChanged(nameof(IsShelfUngrouped));
+        OnPropertyChanged(nameof(IsShelfGrouped));
+    }
+
+    public bool IsGridView => ViewMode == BooksViewMode.Grid;
+
+    [RelayCommand]
+    private void SetViewMode(BooksViewMode mode) => ViewMode = mode;
+
+    /// <summary>Persists the tab and view mode on their own: they are not part of a workspace, so they must not reset the workspace label the way a sort change does.</summary>
+    private void SaveBrowseViewSettings()
+    {
+        if (_loadingBrowseViewSettings)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var settings = context.GetOrCreateAppSettings();
+        settings.BooksActiveStatusTab = ActiveStatusTab;
+        settings.BooksViewMode = ViewMode;
+        context.SaveChanges();
+    }
+
+    private bool _loadingBrowseViewSettings;
 
     [ObservableProperty]
     private string? _activeDropdown;
@@ -336,7 +626,11 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
     {
         OnPropertyChanged(nameof(IsSortOpen));
         OnPropertyChanged(nameof(IsGroupOpen));
+        OnPropertyChanged(nameof(IsShelvesOpen));
+        OnPropertyChanged(nameof(IsAddMenuOpen));
         OnPropertyChanged(nameof(IsWorkspaceOpen));
+        OnPropertyChanged(nameof(IsSelectionStatusOpen));
+        OnPropertyChanged(nameof(IsSelectionRateOpen));
     }
 
     [RelayCommand] private void ToggleSort() => ActiveDropdown = ActiveDropdown == "sort" ? null : "sort";
@@ -537,13 +831,31 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
 
         var books = context.Books
             .Include(b => b.BookSeries)
+            .Include(b => b.Tags)
             .ToList();
 
+        // Time left for the Reading books' card captions (redesign §2): one read of their sessions, then Slice 2b's pace per book.
+        var readingIds = books.Where(b => b.Status == BookReadingStatus.Reading).Select(b => b.Id).ToHashSet();
+        var sessionsByBook = readingIds.Count == 0
+            ? new Dictionary<int, List<ReadingEvent>>()
+            : context.ReadingEvents.AsNoTracking()
+                .Where(e => e.ItemType == ReadingItemType.Novel && readingIds.Contains(e.ItemId))
+                .ToList()
+                .GroupBy(e => e.ItemId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
         _allCards.Clear();
-        _allCards.AddRange(books.Select(BookCardSample.FromBook));
+        _allCards.AddRange(books.Select(b => BookCardSample.FromBook(b, sessionsByBook.TryGetValue(b.Id, out var sessions)
+            ? Paperbunkr.Data.Books.BookReadingStatsResolver.Compute(sessions, b.CharacterCount, Paperbunkr.Data.Books.BookProgress.Compute(b), finished: false).TimeLeft
+            : null)));
 
         Selection.Clear();
         RaiseSelectionChanged();
+
+        if (_activeShelf is not null)
+        {
+            _shelfIds = ShelfService.Resolve(_activeShelf);
+        }
 
         // Read-only list for the tile context menu's "Add to Collection ▸" submenu - this screen
         // doesn't manage collections (no create/rename/delete UI here, that's the Library sidebar),
@@ -554,6 +866,7 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
             Collections.Add(new CollectionSummary { Id = collection.Id, Name = collection.Name, Count = collection.Items.Count, AccentColor = collection.AccentColor });
         }
 
+        RefreshSpread();
         Rebuild();
     }
 
@@ -627,27 +940,32 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
     [ObservableProperty]
     private bool _playEntranceAnimation;
 
+    /// <summary>The options <see cref="BooksBrowseQuery"/> runs with: tab, search, shelf and author filters plus the sort/group state.</summary>
+    private BooksBrowseOptions BrowseOptions => new(ActiveStatusTab, SearchQuery, _shelfIds, AuthorFilter, SortField, SortDirection, GroupField);
+
     private void Rebuild()
     {
         PlayEntranceAnimation = false; // pulse: a one-shot entrance opens on a real false -> true change (Motion v2 D, Q19)
         PlayEntranceAnimation = true;
+        OnPropertyChanged(nameof(ShowSpread)); // every tab, search, shelf and author change funnels through here
+        RaiseChromeLabels();
 
-        IEnumerable<BookCardSample> cards = _allCards;
-
-        string query = SearchQuery.Trim();
-        if (query.Length > 0)
-        {
-            cards = cards.Where(c =>
-                Contains(c.Title, query) || Contains(c.Author, query) || Contains(c.SeriesName, query));
-        }
-
-        var sorted = Sort(cards).ToList();
+        var options = BrowseOptions;
+        var sorted = BooksBrowseQuery.Sort(BooksBrowseQuery.Filter(_allCards, options), options.Sort, options.Direction);
 
         Books.Clear();
         Groups.Clear();
         if (IsGrouped)
         {
-            foreach (var group in GroupCards(sorted))
+            var groups = BooksBrowseQuery.Group(sorted, GroupField, SortField);
+            // A ghost says "you do not own this", so it is only shown when nothing hides books (no tab, shelf, author or search).
+            if (GroupField == BooksGroupField.Series && options.Tab == BooksStatusTab.All && options.ShelfIds is null
+                && string.IsNullOrWhiteSpace(options.Author) && string.IsNullOrWhiteSpace(options.Search))
+            {
+                BooksBrowseQuery.AddGhosts(groups, _allCards, SortField, SortDirection);
+            }
+
+            foreach (var group in groups)
             {
                 Groups.Add(group);
             }
@@ -668,74 +986,13 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
             card.IsSelected = Selection.IsSelected(card.BookId);
         }
 
+        RefreshStatusTabs();
+        RefreshAuthorSummary();
         OnPropertyChanged(nameof(HasBooks));
+        RefreshAlphabetIndex();
         OnPropertyChanged(nameof(ShowEmptyLibrary));
         OnPropertyChanged(nameof(ShowNoMatches));
     }
-
-    private IEnumerable<BookCardSample> Sort(IEnumerable<BookCardSample> cards)
-    {
-        IOrderedEnumerable<BookCardSample> ordered = SortField switch
-        {
-            BooksSortField.Author => cards.OrderBy(c => c.Author ?? string.Empty, StringComparer.OrdinalIgnoreCase),
-            BooksSortField.RecentlyAdded => cards.OrderBy(c => c.AddedTime),
-            BooksSortField.LastOpened => cards.OrderBy(c => c.LastOpenedTime ?? DateTime.MinValue),
-            _ => cards.OrderBy(c => c.Title, StringComparer.OrdinalIgnoreCase),
-        };
-
-        // Stable secondary key so equal primaries (e.g. two books with no author) don't shuffle.
-        ordered = ordered.ThenBy(c => c.Title, StringComparer.OrdinalIgnoreCase);
-
-        return SortDirection == SortDirection.Descending ? ordered.Reverse() : ordered;
-    }
-
-    private IEnumerable<BookCardGroup> GroupCards(List<BookCardSample> sorted)
-    {
-        const string standalone = "Standalone";
-        const string unknownAuthor = "Unknown author";
-
-        string KeyFor(BookCardSample c) => GroupField == BooksGroupField.Series
-            ? (string.IsNullOrWhiteSpace(c.SeriesName) ? standalone : c.SeriesName!)
-            : (string.IsNullOrWhiteSpace(c.Author) ? unknownAuthor : c.Author!);
-
-        bool IsFallback(string key) => key is standalone or unknownAuthor;
-
-        // Group order: the "Standalone"/"Unknown" bucket always last; the rest alphabetically for a
-        // name sort, or by the group's newest book for a time sort (so the grouped view still reads
-        // "most recent first" top-to-bottom). Books within each group keep the flat sort order that
-        // GroupBy preserves.
-        var groups = sorted.GroupBy(KeyFor).ToList();
-
-        IEnumerable<IGrouping<string, BookCardSample>> ordered = SortField switch
-        {
-            BooksSortField.RecentlyAdded => groups
-                .OrderBy(g => IsFallback(g.Key))
-                .ThenByDescending(g => g.Max(c => c.AddedTime)),
-            BooksSortField.LastOpened => groups
-                .OrderBy(g => IsFallback(g.Key))
-                .ThenByDescending(g => g.Max(c => c.LastOpenedTime ?? DateTime.MinValue)),
-            _ => groups
-                .OrderBy(g => IsFallback(g.Key))
-                .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase),
-        };
-
-        foreach (var g in ordered)
-        {
-            yield return new BookCardGroup
-            {
-                Header = g.Key,
-                // Only a real Series section carries an id the header can navigate to - the
-                // "Standalone" bucket and every Author group stay inert.
-                BookSeriesId = GroupField == BooksGroupField.Series && !IsFallback(g.Key)
-                    ? g.Select(c => c.BookSeriesId).FirstOrDefault(id => id is not null)
-                    : null,
-                Items = new ObservableCollection<BookCardSample>(g),
-            };
-        }
-    }
-
-    private static bool Contains(string? value, string query) =>
-        !string.IsNullOrEmpty(value) && value.Contains(query, StringComparison.OrdinalIgnoreCase);
 
     // --- persistence (mirrors LibraryScreenViewModel.LoadLibrarySettings / SaveLibrarySettings) ---
 
@@ -748,6 +1005,8 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
         _sortDirection = settings.BooksSortDirection;
         _groupField = settings.BooksGroupField;
         _activeWorkspaceId = settings.BooksActiveWorkspaceId;
+        _activeStatusTab = settings.BooksActiveStatusTab;
+        _viewMode = settings.BooksViewMode;
 #pragma warning restore MVVMTK0034
     }
 
@@ -788,7 +1047,7 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
     [RelayCommand]
     private void CardClick(BookCardSample? book)
     {
-        if (book is null)
+        if (book is null || book.IsGhost)
         {
             return;
         }
@@ -821,6 +1080,45 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider,
     /// (docs/superpowers/specs/2026-08-27-book-properties-editor-design.md).</summary>
     [RelayCommand]
     private void EditBook(int bookId) => _goEditBook(bookId);
+
+    /// <summary>Set by MainViewModel: opens the single-book "Match metadata" dialog.</summary>
+    public Action<int>? GoMatchBook { get; set; }
+
+    /// <summary>Set by MainViewModel: runs the bulk match as an Activity Center job.</summary>
+    public Action<IReadOnlyList<int>>? RunBulkMatch { get; set; }
+
+    [RelayCommand]
+    private void MatchBook(int bookId) => GoMatchBook?.Invoke(bookId);
+
+    [RelayCommand]
+    private void MatchSelection()
+    {
+        var ids = Selection.SelectedIds.ToList();
+        if (ids.Count > 0)
+        {
+            RunBulkMatch?.Invoke(ids);
+        }
+    }
+
+    /// <summary>Tile context menu's "Set status ▸ {status}". Parameter is <c>(bookId, status)</c>.</summary>
+    [RelayCommand]
+    private void SetBookStatus((int BookId, BookReadingStatus Status) target)
+    {
+        if (new BookQuickEditService().SetStatus(new[] { target.BookId }, target.Status))
+        {
+            LoadFromDatabase();
+        }
+    }
+
+    /// <summary>Tile context menu's "Rate ▸ {stars}". Parameter is <c>(bookId, rating)</c>; a null or 0 rating clears it.</summary>
+    [RelayCommand]
+    private void RateBook((int BookId, float? Rating) target)
+    {
+        if (new BookQuickEditService().SetRating(new[] { target.BookId }, target.Rating))
+        {
+            LoadFromDatabase();
+        }
+    }
 
     /// <summary>Grouped-by-Series section header context menu's "Edit series…" - opens the
     /// BookSeries properties overlay (docs/superpowers/specs/2026-08-27-books-bulk-series-editing-

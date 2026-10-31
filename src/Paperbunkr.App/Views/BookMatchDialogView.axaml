@@ -1,0 +1,89 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="560"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             x:Class="Paperbunkr.App.Views.BookMatchDialogView"
+             x:DataType="vm:BookMatchDialogViewModel">
+
+    <controls:DialogCard Title="{Binding HeaderLabel}" Subtitle="Look this book up on Open Library and Google Books, then choose what to take." Size="Large">
+        <StackPanel Spacing="16">
+
+            <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="12">
+                <StackPanel Grid.Column="0">
+                    <TextBlock Classes="fieldLabel" Text="TITLE" />
+                    <TextBox Text="{Binding SearchTitle}" AutomationProperties.AutomationId="BookMatchTitle" />
+                </StackPanel>
+                <StackPanel Grid.Column="1">
+                    <TextBlock Classes="fieldLabel" Text="AUTHOR" />
+                    <TextBox Text="{Binding SearchAuthor}" AutomationProperties.AutomationId="BookMatchAuthor" />
+                </StackPanel>
+                <Button Grid.Column="2" Classes="secondary" Content="Search" VerticalAlignment="Bottom"
+                        Command="{Binding SearchCommand}" AutomationProperties.AutomationId="BookMatchSearch" />
+            </Grid>
+
+            <TextBlock Classes="pbTextMeta" Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource PbTextMutedBrush}" />
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                <StackPanel Grid.Column="0" Spacing="8">
+                    <TextBlock Classes="fieldLabel" Text="MATCHES" />
+                    <ItemsControl ItemsSource="{Binding Candidates}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BookMatchCandidateRow">
+                                <Button Classes="clickCard" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Margin="0,0,0,8"
+                                        Command="{Binding $parent[UserControl].((vm:BookMatchDialogViewModel)DataContext).SelectCandidateCommand}"
+                                        CommandParameter="{Binding}">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Classes="pbTextBody" Text="{Binding Title}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                                            <TextBlock Classes="pbTextMeta" Text="{Binding Detail}" TextWrapping="Wrap" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Classes="countPill" VerticalAlignment="Top" Margin="8,0,0,0">
+                                            <TextBlock Text="{Binding ScoreText}" />
+                                        </Border>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Spacing="8" IsVisible="{Binding HasSelection}">
+                    <TextBlock Classes="fieldLabel" Text="TAKE THESE" />
+                    <ItemsControl ItemsSource="{Binding DiffRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BookMatchDiffRow">
+                                <CheckBox IsChecked="{Binding IsChecked}" Margin="0,0,0,8">
+                                    <StackPanel>
+                                        <TextBlock Classes="pbTextBody" Text="{Binding Label}" FontWeight="SemiBold" />
+                                        <TextBlock Classes="pbTextMeta" Text="{Binding Current, StringFormat='Now: {0}'}" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource PbTextMutedBrush}" MaxWidth="320" />
+                                        <TextBlock Classes="pbTextMeta" Text="{Binding Proposed, StringFormat='New: {0}'}" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource PbTextBrush}" MaxWidth="320" />
+                                    </StackPanel>
+                                </CheckBox>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <CheckBox Content="Replace the cover with this one" IsChecked="{Binding ApplyCover}" IsVisible="{Binding HasCover}" />
+                </StackPanel>
+            </Grid>
+
+        </StackPanel>
+        <controls:DialogCard.FooterStart>
+            <Button Classes="ghost" Content="{Binding SkipLabel}" Command="{Binding ToggleSkipCommand}"
+                    AutomationProperties.AutomationId="BookMatchSkip" />
+        </controls:DialogCard.FooterStart>
+        <controls:DialogCard.Footer>
+            <StackPanel>
+                <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" />
+                <Button Classes="primary" Content="Apply" Command="{Binding ApplyCommand}" IsEnabled="{Binding HasSelection}"
+                        AutomationProperties.AutomationId="BookMatchApply" />
+            </StackPanel>
+        </controls:DialogCard.Footer>
+    </controls:DialogCard>
+</UserControl>

@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:reader="using:Paperbunkr.App.Views.Reader"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -39,24 +40,35 @@
             </Border>
         </Grid>
 
-        <!-- Chrome (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md) -
-             Mode="AlwaysVisible": PDF's chrome never hides (page number/zoom/theme are reference info
-             glanced at continuously, per the design's show/hide decision), unlike EPUB's tap-to-hide.
-             Previous/Next bind straight to GoLeft/GoRightCommand - no WebView-scroll-first indirection
-             needed here, so PreviousRequested/NextRequested aren't used for this screen. -->
-        <views:ReaderChrome Mode="AlwaysVisible" Title="{Binding BookTitle}"
-                             ChromeBackground="{Binding Theme, Converter={x:Static views:ReaderChromeBackgroundConverter.Instance}}"
-                             ChromeForeground="{Binding Theme, Converter={x:Static views:ReaderChromeForegroundConverter.Instance}}"
-                             CapturesCommand="{Binding OpenCapturesCommand}"
-                             CaptureToggleCommand="{Binding ToggleCaptureModeCommand}" IsCaptureMode="{Binding IsCaptureMode}"
-                             FontThemeCommand="{Binding OpenFontThemeCommand}"
-                             CloseCommand="{Binding CloseCommand}"
-                             PreviousCommand="{Binding GoLeftCommand}" NextCommand="{Binding GoRightCommand}"
-                             ProgressFraction="{Binding ProgressFraction}" ProgressLabel="{Binding ProgressLabel}" />
+        <!-- Page edges either side of the page (books redesign §5.5), sized from the share of the book read before and after it. -->
+        <reader:PageEdges x:Name="PageEdgesControl" IsHitTestVisible="False" IsVisible="{Binding !HasError}"
+                          Fraction="{Binding ProgressFraction}" PageColor="{Binding Theme, Converter={x:Static reader:ReaderPanelBackgroundConverter.Instance}}"
+                          InkColor="{Binding Theme, Converter={x:Static views:ReaderChromeForegroundConverter.Instance}}" />
+
+        <!-- The same three clusters as the EPUB reader (books redesign §5.5), drawn in-window: no native page to stay above here. Always
+             visible, as the PDF reader's chrome always was (page number and zoom are glanced at continuously). -->
+        <reader:ReaderCluster Part="Navigate" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8"
+                              ClusterBackground="{Binding Theme, Converter={x:Static views:ReaderChromeBackgroundConverter.Instance}}"
+                              ClusterForeground="{Binding Theme, Converter={x:Static views:ReaderChromeForegroundConverter.Instance}}"
+                              ClusterBorder="{DynamicResource PbBorderBrush}"
+                              Title="{Binding BookTitle}" BackCommand="{Binding CloseCommand}" />
+        <reader:ReaderCluster Part="Actions" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8"
+                              ClusterBackground="{Binding Theme, Converter={x:Static views:ReaderChromeBackgroundConverter.Instance}}"
+                              ClusterForeground="{Binding Theme, Converter={x:Static views:ReaderChromeForegroundConverter.Instance}}"
+                              ClusterBorder="{DynamicResource PbBorderBrush}"
+                              CapturesCommand="{Binding OpenCapturesCommand}"
+                              CaptureToggleCommand="{Binding ToggleCaptureModeCommand}" IsCaptureMode="{Binding IsCaptureMode}"
+                              SettingsCommand="{Binding OpenFontThemeCommand}" />
+        <reader:ReaderCluster Part="Page" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="8"
+                              ClusterBackground="{Binding Theme, Converter={x:Static views:ReaderChromeBackgroundConverter.Instance}}"
+                              ClusterForeground="{Binding Theme, Converter={x:Static views:ReaderChromeForegroundConverter.Instance}}"
+                              ClusterBorder="{DynamicResource PbBorderBrush}"
+                              ProgressFraction="{Binding ProgressFraction}" LeftLabel="{Binding ProgressLabel}"
+                              PreviousRequested="OnClusterPrevious" NextRequested="OnClusterNext" />
 
         <!-- Captures drawer - ReaderListDrawer (left, matching every other list drawer in both
              readers now - it used to open from the right, an inconsistency this redesign resolves). -->
-        <views:ReaderListDrawer IsOpen="{Binding IsCapturesOpen}" HeaderText="Captures" OverlayReference="{Binding #RootGrid}" ScrimPressed="OnCapturesScrimPointerPressed">
+        <views:ReaderListDrawer PanelBackground="{Binding Theme, Converter={x:Static reader:ReaderPanelBackgroundConverter.Instance}}" PanelForeground="{Binding Theme, Converter={x:Static views:ReaderChromeForegroundConverter.Instance}}" IsOpen="{Binding IsCapturesOpen}" HeaderText="Captures" OverlayReference="{Binding #RootGrid}" ScrimPressed="OnCapturesScrimPointerPressed">
             <views:ReaderListDrawer.DrawerContent>
                 <ScrollViewer>
                     <ItemsControl ItemsSource="{Binding AnnotationImages}" Margin="8,0,8,16">

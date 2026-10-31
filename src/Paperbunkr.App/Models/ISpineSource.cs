@@ -15,4 +15,8 @@ public interface ISpineSource
 
     /// <summary>Small cap at the foot of the spine (issue number, or a series' issue count); null for none.</summary>
     string? SpineNumber { get; }
+
+    /// <summary>A placeholder for a missing book (the Books "#3 missing" ghost): drawn as a dashed outline, not a spine
+    /// (docs/superpowers/specs/2026-10-27-books-section-redesign-design.md §2).</summary>
+    bool IsSpineGhost => false;
 }

@@ -132,7 +132,7 @@ public class FocusStatesPaintTests : IDisposable
 
             // The second card: its left edge has a neighbour's gutter, not the screen edge, to spread into.
             var card = screen.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("card") && b.IsEffectivelyVisible).ElementAt(1);
-            var cover = card.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("bookCover"));
+            var cover = card.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("bookArt"));
             var origin = cover.TranslatePoint(default, window)!.Value;
             // A strip just outside the cover's left edge: nothing is drawn there until the ring shows.
             var strip = new Rect(origin.X - 3, origin.Y + 20, 2, cover.Bounds.Height - 40);
@@ -169,7 +169,7 @@ public class FocusStatesPaintTests : IDisposable
             RunLayout(window);
 
             var card = screen.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("card") && b.IsEffectivelyVisible).ElementAt(1);
-            var cover = card.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("bookCover"));
+            var cover = card.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("bookArt"));
             var origin = cover.TranslatePoint(default, window)!.Value;
             var strip = new Rect(origin.X - 3, origin.Y + 20, 2, cover.Bounds.Height - 40);
 

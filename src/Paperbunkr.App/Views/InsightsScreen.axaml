@@ -7,6 +7,7 @@
              xmlns:sp="using:ScottPlot.Avalonia"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:plugins="using:Paperbunkr.App.Plugins"
              xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:insights="using:Paperbunkr.App.Views.Insights"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -450,6 +451,26 @@
                         </ItemsControl>
                     </StackPanel>
                 </Border>
+
+                <!-- Native plugins' cards (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §E):
+                     the host draws the card and its title; the plugin supplies only the content. -->
+                <ItemsControl ItemsSource="{Binding PluginWidgets}" IsVisible="{Binding HasPluginWidgets}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="16" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="plugins:PluginView">
+                            <Border Classes="card">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Classes="pbTextTitle" Text="{Binding PluginName}" />
+                                    <ContentControl Content="{Binding View}" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
             </StackPanel>
         </ScrollViewer>
@@ -983,6 +1004,59 @@
                         </ItemsControl>
                         <TextBlock Classes="sub" TextWrapping="Wrap" IsVisible="{Binding Stats.AffinityRowsEmpty}"
                                    Text="Nothing to rank yet. A creator or publisher needs at least 3 series and 3 rated issues." />
+                    </StackPanel>
+                </Border>
+
+                <!-- You vs Community (docs/superpowers/specs/2026-10-26-you-vs-community-and-chapter-alignment-design.md Part 2) -->
+                <Border Classes="card" IsVisible="{Binding Stats.IsTopListsGroupSelected}">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel>
+                                <TextBlock Classes="panelTitle" Text="You vs Community" Margin="0,0,0,2" />
+                                <TextBlock Classes="sub" Text="Your rating of each series against the community's, both out of 100. Above the line you rate it higher than they do." TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Classes="ghost" VerticalAlignment="Top" Command="{Binding Stats.FetchCommunityRatingsCommand}" AutomationProperties.AutomationId="FetchCommunityRatingsButton">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" />
+                                    <TextBlock Text="{Binding Stats.FetchCommunityLabel}" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <sp:AvaPlot x:Name="CommunityChart" Height="300" IsVisible="{Binding Stats.HasCommunityChart}" />
+                        <TextBlock Classes="sub" TextWrapping="Wrap" IsVisible="{Binding Stats.CommunityIsEmpty}" Text="{Binding Stats.CommunityEmptyText}" />
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="24" IsVisible="{Binding Stats.HasCommunityChart}">
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Classes="sub" Text="YOU RATE HIGHER" FontWeight="SemiBold" />
+                                <ItemsControl ItemsSource="{Binding Stats.CommunityHigherRows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:CommunityDisagreementRow">
+                                            <Button Classes="filterRow" Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.OpenCommunitySeriesCommand}" CommandParameter="{Binding}">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,2">
+                                                    <TextBlock Grid.Column="0" Text="{Binding Name}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Text}" Classes="sub" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock Classes="sub" Text="YOU RATE LOWER" FontWeight="SemiBold" />
+                                <ItemsControl ItemsSource="{Binding Stats.CommunityLowerRows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:CommunityDisagreementRow">
+                                            <Button Classes="filterRow" Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.OpenCommunitySeriesCommand}" CommandParameter="{Binding}">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,2">
+                                                    <TextBlock Grid.Column="0" Text="{Binding Name}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Text}" Classes="sub" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Classes="sub" TextWrapping="Wrap" Text="{Binding Stats.CommunityCoverageText}" />
                     </StackPanel>
                 </Border>
 

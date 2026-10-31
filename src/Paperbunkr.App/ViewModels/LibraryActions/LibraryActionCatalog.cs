@@ -540,9 +540,10 @@ public sealed class LibraryActionCatalog
 
         yield return new("plugins", local, c => ContextMenuEntry.SubMenu(
             "Plugins",
-            _vm.LibraryPluginCommands.Select(p => ContextMenuEntry.Item(p.Name, _vm.RunLibraryPluginOnTargetCommand, (c.Target, p), inputGesture: Hint(Paperbunkr.App.Services.Input.PluginInputActions.IdFor(p)))),
+            _vm.LibraryPluginCommands.Where(p => p.ShowsInMenu(Paperbunkr.Plugins.Command.MenuNames.Library))
+                .Select(p => ContextMenuEntry.Item(p.Name, _vm.RunLibraryPluginOnTargetCommand, (c.Target, p), inputGesture: Hint(Paperbunkr.App.Services.Input.PluginInputActions.IdFor(p)))),
             Symbol.PuzzlePiece,
-            isVisible: _vm.HasLibraryPluginCommands));
+            isVisible: _vm.LibraryPluginCommands.Any(p => p.ShowsInMenu(Paperbunkr.Plugins.Command.MenuNames.Library))));
 
         yield return new("select-all", local | LibraryActionTargets.RemoteIssue | LibraryActionTargets.RemoteSeries, c => c.IsMenu
             ? ContextMenuEntry.Item("Select All", c.IsSeries ? _vm.SelectAllVisibleSeriesCommand : _vm.SelectAllVisibleIssuesCommand, icon: Symbol.SelectAllOn, inputGesture: Hint(InputActionIds.LibrarySelectAll))

@@ -85,7 +85,11 @@ public class ReworkBookPositionAnchorMigrationTests : IDisposable
 
             Assert.Empty(context.BookBookmarks);
 
-            var book = context.Books.Single(b => b.Id == bookId);
+            // Only the columns this migration owns: loading the whole entity would select columns added by later migrations
+            // (Books slice 1's Rating, Status ...), which do not exist at this pinned schema.
+            var book = context.Books.Where(b => b.Id == bookId)
+                .Select(b => new { b.LastChapterIndex, b.LastBlockId, b.LastProgressionFraction })
+                .Single();
             Assert.Equal(0, book.LastChapterIndex);
             Assert.Null(book.LastBlockId);
             Assert.Null(book.LastProgressionFraction);

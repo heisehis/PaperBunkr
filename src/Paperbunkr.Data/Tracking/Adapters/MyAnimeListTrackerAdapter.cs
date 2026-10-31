@@ -239,10 +239,16 @@ public sealed class MyAnimeListTrackerAdapter : ITrackerSearchProvider, ITracker
     /// sub-fields (e.g. <c>start_date</c>) a caller's <c>fields=</c> selector also asked for.</summary>
     public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
     {
+        var result = await GetEntryOutcomeAsync(context, link, cancellationToken).ConfigureAwait(false);
+        return result.Succeeded ? result.Value : null;
+    }
+
+    public async Task<TrackerOperationResult<TrackerRemoteEntry>> GetEntryOutcomeAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
         string? accessToken = CredentialStore.Get(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthAccessToken);
         if (string.IsNullOrEmpty(accessToken))
         {
-            return null;
+            return TrackerOperationResult<TrackerRemoteEntry>.Permanent("MyAnimeList is not connected.");
         }
 
         var request = new HttpRequestMessage(HttpMethod.Get,
@@ -254,20 +260,21 @@ public sealed class MyAnimeListTrackerAdapter : ITrackerSearchProvider, ITracker
         {
             response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return null;
+            return TrackerOperationClassifier.FromNetworkFailure<TrackerRemoteEntry>(ex);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return null;
+            return TrackerOperationClassifier.Timeout<TrackerRemoteEntry>();
         }
 
         using (response)
         {
             if (!response.IsSuccessStatusCode)
             {
-                return null;
+                string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return TrackerOperationClassifier.FromHttpFailure<TrackerRemoteEntry>(response, body, notFoundMeansMissing: true);
             }
 
             MalListItemDto? parsed;
@@ -277,19 +284,19 @@ public sealed class MyAnimeListTrackerAdapter : ITrackerSearchProvider, ITracker
             }
             catch (JsonException)
             {
-                return null;
+                return TrackerOperationResult<TrackerRemoteEntry>.Permanent("MyAnimeList returned an invalid lookup response.");
             }
 
             var status = parsed?.MyListStatus;
             if (status is null)
             {
-                return null;
+                return TrackerOperationResult<TrackerRemoteEntry>.Missing();
             }
 
             var readingStatus = status.IsRereading ? ReadingStatus.ReReading : MyAnimeListStatusMapper.FromListStatus(status.Status);
             decimal? score = status.Score is int malScore and > 0 ? malScore / 2m : null;
             DateOnly? finishDate = DateOnly.TryParse(status.FinishDate, out var parsedDate) ? parsedDate : null;
-            return new TrackerRemoteEntry(readingStatus, (int?)status.NumChaptersRead, score, finishDate);
+            return TrackerOperationResult<TrackerRemoteEntry>.Success(new TrackerRemoteEntry(readingStatus, (int?)status.NumChaptersRead, score, finishDate));
         }
     }
 }

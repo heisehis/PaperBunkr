@@ -26,6 +26,11 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class ReadingGalleryViewModel : ViewModelBase
 {
+    public Func<PreparedImport, Task>? RequestImportReview { get; set; }
+    public Func<Task>? RequestReviewLists { get; set; }
+    public Func<Task>? RequestReviewHistory { get; set; }
+    [RelayCommand] private Task ReviewLists() => RequestReviewLists?.Invoke() ?? Task.CompletedTask;
+    [RelayCommand] private Task ReviewHistory() => RequestReviewHistory?.Invoke() ?? Task.CompletedTask;
     public const int MaxTagChips = 12;
 
     private readonly IFilePickerService _filePicker;
@@ -649,6 +654,12 @@ public partial class ReadingGalleryViewModel : ViewModelBase
 
     public async Task ImportFolderTreeAsync(string directory)
     {
+        if (RequestImportReview is not null)
+        {
+            var input = await Task.Run(() => ReadingListImportReview.PrepareFolder(directory));
+            await RequestImportReview(input);
+            return;
+        }
         using var job = _activity.StartJob(ActivityJobKind.Import, $"Importing reading lists from {Path.GetFileName(directory)}");
         int? parent = CurrentFolderId;
         try

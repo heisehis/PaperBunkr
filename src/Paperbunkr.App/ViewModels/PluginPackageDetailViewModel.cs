@@ -65,6 +65,8 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
 
         LoadError = loadError;
         HasConfigure = hasConfigure;
+        LogPane = host.DeveloperMode ? new PluginLogPaneViewModel(package.Key, host.LogFiles, filePicker) : null;
+        NetworkText = PluginNetworkHosts.Describe(host.Engine.NetworkHosts.GetValueOrDefault(package.Key));
         RequiresApiText = string.IsNullOrWhiteSpace(requiresApi) ? null : $"Requires API {requiresApi.Trim()}";
     }
 
@@ -75,6 +77,17 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
     public string? RequiresApiText { get; }
 
     public bool HasRequiresApi => RequiresApiText is not null;
+
+    /// <summary>"Declared network access: …" or "No network access declared" (Plugin API 4.5 §F) - what the plugin says, not a guarantee.</summary>
+    public string NetworkText { get; }
+
+    /// <summary>The live log, shown only in developer mode (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §A2).</summary>
+    public PluginLogPaneViewModel? LogPane { get; }
+
+    public bool HasLogPane => LogPane is not null;
+
+    /// <summary>Shown in developer mode on a native plugin: its code can't be swapped while the app runs.</summary>
+    public bool ShowNativeReloadNote => LogPane is not null && IsNativeTier;
 
     /// <summary>The correlation key this detail pane was built for - lets <see cref="PluginScreenViewModel.Refresh"/> re-select the same package across a rebuild (e.g. after Reload/master-toggle) without holding a reference to a stale <see cref="PackageManager.Package"/> instance.</summary>
     public string PackageKey => _package.Key;

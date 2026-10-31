@@ -78,6 +78,9 @@ public partial class PageCanvas
     private ZoomPanTween? _tween;
     private long _tweenStartTimestamp;
     private bool _tweenFrameRequested;
+    private PendingSmartDoubleClick? _pendingSmartDoubleClick;
+
+    private sealed record PendingSmartDoubleClick(object Page, Point Position, double Zoom, double PanX, double PanY, bool Guided);
 
     /// <summary>Guided view is only meaningful for one page in paged mode: not in a continuous mode and not while a double-page spread is showing.</summary>
     private bool GuidedActive => GuidedView && !IsContinuous && SecondaryPage is null && Page is not null;
@@ -115,6 +118,7 @@ public partial class PageCanvas
             _panelIndex = -1;
             _viewDirty = false;
             _smartRestore = null;
+            _pendingSmartDoubleClick = null;
             _landingPending = GuidedView && !IsContinuous && SecondaryPage is null;
             _landingForward = _lastTurnReadingForward;
             _lastTurnReadingForward = true;
@@ -127,11 +131,23 @@ public partial class PageCanvas
         }
         else if (change.Property == PanelsProperty)
         {
-            TryApplyPendingLanding();
+            if (_pendingSmartDoubleClick is null)
+            {
+                TryApplyPendingLanding();
+            }
+            else
+            {
+                // A user's queued double-click is more specific than the automatic first-panel
+                // landing that also waits for this result.
+                _landingPending = false;
+            }
+
             UpdatePartLabel();
+            CompletePendingSmartDoubleClick();
         }
         else if (change.Property == GuidedViewProperty)
         {
+            _pendingSmartDoubleClick = null;
             _panelIndex = -1;
             _viewDirty = false;
             if (GuidedView)
@@ -153,6 +169,7 @@ public partial class PageCanvas
             // Someone other than a panel step moved the view (drag, wheel, pinch, slider, keys): stop any tween and remember that the current panel is no longer what is centred. A zoom glide
             // (PageCanvas.Smooth.cs) moves the view itself, so only a change from elsewhere ends it.
             _tween = null;
+            _pendingSmartDoubleClick = null;
             _viewDirty = true;
             if (!_zoomApplying)
             {
@@ -423,9 +440,24 @@ public partial class PageCanvas
 
         if (Panels is null)
         {
-            EnsurePanelsCommand?.Execute(null);
+            if (EnsurePanelsCommand is null)
+            {
+                return false;
+            }
+
+            // The result arrives through PanelsProperty. Keep the click, but do not let detection
+            // hold the pointer event (or immediately fall through to the plain zoom).
+            _pendingSmartDoubleClick = new(Page, canvasPoint, ZoomLevel, PanOffsetX, PanOffsetY, GuidedView);
+            _landingPending = false;
+            EnsurePanelsCommand.Execute(null);
+            return true;
         }
 
+        return ApplySmartDoubleClickWithPanels(canvasPoint);
+    }
+
+    private bool ApplySmartDoubleClickWithPanels(Point canvasPoint)
+    {
         if (Panels is not { Confident: true })
         {
             return false;
@@ -468,6 +500,27 @@ public partial class PageCanvas
         _smartRestore = (ZoomLevel, PanOffsetX, PanOffsetY);
         TweenTo(zoom, panX, panY);
         return true;
+    }
+
+    private void CompletePendingSmartDoubleClick()
+    {
+        if (_pendingSmartDoubleClick is not { } pending || Panels is null)
+        {
+            return;
+        }
+
+        _pendingSmartDoubleClick = null;
+        if (!ReferenceEquals(Page, pending.Page) || GuidedView != pending.Guided || ZoomLevel != pending.Zoom || PanOffsetX != pending.PanX || PanOffsetY != pending.PanY)
+        {
+            return;
+        }
+
+        if (!ApplySmartDoubleClickWithPanels(pending.Position))
+        {
+            // Preserve the existing behavior when detection is unconfident or the click landed in
+            // a gutter: use the ordinary 200%-at-pointer zoom after the async result arrives.
+            ToggleZoom(pending.Position);
+        }
     }
 
     /// <summary>The page's rectangle on the canvas in the current view (for overlays drawn over the page).</summary>

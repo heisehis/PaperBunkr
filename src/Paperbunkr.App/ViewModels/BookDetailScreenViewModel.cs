@@ -14,9 +14,11 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Reader;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Books;
 using Paperbunkr.Data.Entities;
+using cYo.Projects.ComicRack.Engine.IO.Provider.Books;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -200,6 +202,58 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
 
     partial void OnIsFinishedChanged(bool value) => OnPropertyChanged(nameof(FinishedToggleLabel));
 
+    // --- book mode: Books slice 1 metadata (docs/superpowers/specs/2026-10-26-books-slice1-data-foundation-design.md §6) ---
+
+    /// <summary>True while <see cref="LoadBook"/> is filling the metadata properties, so showing a value is never mistaken for the user editing it.</summary>
+    private bool _fillingMetadata;
+
+    /// <summary>"My rating" in half stars (the <c>StarRating</c> control); changing it writes at once.</summary>
+    [ObservableProperty]
+    private double? _rating;
+
+    partial void OnRatingChanged(double? value)
+    {
+        if (!_fillingMetadata && !IsSeriesMode)
+        {
+            new BookQuickEditService().SetRating(new[] { _bookId }, (float?)value);
+        }
+    }
+
+    /// <summary>Reading status label (the closed Status drop-down); changing it writes at once.</summary>
+    [ObservableProperty]
+    private string _statusLabel = BookStatusLabels.ToLabel(BookReadingStatus.Unread);
+
+    partial void OnStatusLabelChanged(string value)
+    {
+        if (_fillingMetadata || IsSeriesMode || !BookStatusLabels.TryParse(value, out var status))
+        {
+            return;
+        }
+
+        if (new BookQuickEditService().SetStatus(new[] { _bookId }, status))
+        {
+            ReloadCurrentBook();
+        }
+    }
+
+    public IReadOnlyList<string> StatusOptions => BookStatusLabels.All;
+
+    /// <summary>"Ace Books · English · 978…" - whichever of publisher / language / ISBN the book has.</summary>
+    [ObservableProperty]
+    private string _infoLine = string.Empty;
+
+    public bool HasInfoLine => !string.IsNullOrEmpty(InfoLine);
+
+    partial void OnInfoLineChanged(string value) => OnPropertyChanged(nameof(HasInfoLine));
+
+    /// <summary>Genre then Tags values as chips.</summary>
+    [ObservableProperty]
+    private IReadOnlyList<string> _tagChips = Array.Empty<string>();
+
+    public bool HasTagChips => TagChips.Count > 0;
+
+    partial void OnTagChipsChanged(IReadOnlyList<string> value) => OnPropertyChanged(nameof(HasTagChips));
+
     // --- book mode: summary ---
 
     [ObservableProperty]
@@ -250,6 +304,9 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
         var book = context.Books
             .Include(b => b.BookSeries)
             .Include(b => b.Bookmarks)
+            .Include(b => b.Highlights)
+            .Include(b => b.AnnotationImages)
+            .Include(b => b.Tags)
             .FirstOrDefault(b => b.Id == bookId);
         if (book is null)
         {
@@ -284,6 +341,25 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
         FilePath = book.FilePath;
 
         IsFinished = book.Finished;
+        _fillingMetadata = true;
+        try
+        {
+            Rating = book.Rating;
+            StatusLabel = BookStatusLabels.ToLabel(book.Status);
+        }
+        finally
+        {
+            _fillingMetadata = false;
+        }
+
+        InfoLine = string.Join("  ·  ", new[]
+        {
+            book.Publisher,
+            LanguageName(book.LanguageISO),
+            string.IsNullOrWhiteSpace(book.ISBN) ? null : "ISBN " + book.ISBN,
+            book.SeriesIndex is float idx && book.BookSeries is not null ? $"#{idx:0.###} in {book.BookSeries.Name}" : null,
+        }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        TagChips = book.Tags.OrderBy(t => t.Field).ThenBy(t => t.Value, StringComparer.OrdinalIgnoreCase).Select(t => t.Value).ToList();
         bool started = book.LastOpenedTime is not null;
         LastOpenedLabel = book.LastOpenedTime is { } opened
             ? $"Last opened {opened.ToLocalTime():MMM d, yyyy}"
@@ -306,12 +382,13 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
             : !started
                 ? "Start reading"
                 : HasChapterProgress
-                    ? $"Continue — Chapter {book.LastChapterIndex + 1}"
+                    ? $"Continue — Ch. {book.LastChapterIndex + 1} · {(int)Math.Round(BookProgress.Compute(book) * 100)}%"
                     : "Continue reading";
 
-        Summary = string.IsNullOrWhiteSpace(book.Summary) ? "No summary available." : book.Summary!;
+        string synopsis = Services.Books.SynopsisText.Clean(book.Summary);
+        Summary = synopsis.Length == 0 ? "No summary available." : synopsis;
         IsSynopsisExpanded = false;
-        IsSynopsisToggleVisible = !string.IsNullOrWhiteSpace(book.Summary) && book.Summary!.Length > SynopsisCollapseThreshold;
+        IsSynopsisToggleVisible = synopsis.Length > SynopsisCollapseThreshold;
 
         MetaLine = string.Join("  ·  ", new[]
         {
@@ -366,15 +443,38 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
                 using var source = BookTextSourceFactory.Create(book.Format, book.FilePath);
                 chapterTitles = source.Chapters.Select(c => c.Title).ToArray();
 
-                if (chapterTitles.Length > 1)
+                // One row per contents entry of the book, not per file: a book can pack many chapters into one file (docs/superpowers/specs/2026-10-27-books-slice2b-detail-design.md §5).
+                var entries = BookTocBuilder.Build(source.Chapters);
+
+                // The reading unit the reader stopped in (docs/superpowers/specs/2026-10-27-books-reader-paged-scroll-modes-design.md §7): the same units the reader
+                // shows, so "Ch. n of m" and the current row count contents entries, not files. Ids are the reader's, so inject them to match the saved block.
+                var injected = source.Chapters.Select(c => c.Html is null ? null : BlockIdInjector.Inject(c.Html)).ToArray();
+                var units = BookUnitSlicer.Build(entries, injected);
+                int lastChapter = Math.Clamp(book.LastChapterIndex, 0, Math.Max(0, source.Chapters.Count - 1));
+                int unit = source.Chapters.Count > 0 ? units.UnitOf(lastChapter, injected[lastChapter], book.LastBlockId) : 0;
+                ApplyUnitProgress(book, unit, units.Units.Count);
+
+                if (entries.Count > 1)
                 {
-                    for (int i = 0; i < chapterTitles.Length; i++)
+                    double longest = Math.Max(1, entries.Max(e => e.Length));
+                    bool finished = book.Status == BookReadingStatus.Finished;
+                    int active = units.RowOf(unit);
+
+                    for (int i = 0; i < entries.Count; i++)
                     {
+                        var state = finished || i < active
+                            ? BookChapterState.Read
+                            : i == active && book.LastOpenedTime is not null ? BookChapterState.Current : BookChapterState.Unread;
+
                         Chapters.Add(new BookChapterSummary
                         {
-                            Index = i,
-                            Title = string.IsNullOrWhiteSpace(chapterTitles[i]) ? $"Chapter {i + 1}" : chapterTitles[i],
-                            IsActive = i == book.LastChapterIndex,
+                            Index = entries[i].ChapterIndex,
+                            Title = string.IsNullOrWhiteSpace(entries[i].Title) ? $"Chapter {i + 1}" : entries[i].Title,
+                            Fragment = entries[i].Fragment,
+                            IsActive = i == active,
+                            State = state,
+                            LengthFraction = entries[i].Length / longest,
+                            CurrentFraction = state == BookChapterState.Current ? Math.Clamp(book.LastProgressionFraction ?? 0d, 0d, 1d) : 0d,
                         });
                     }
                 }
@@ -405,6 +505,24 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
 
         HasChapters = Chapters.Count > 0;
         HasBookmarks = Bookmarks.Count > 0;
+
+        LoadTabData(book, chapterTitles);
+    }
+
+    /// <summary>"Chapter n of m" and "Continue — Ch. n" in contents entries once the file has been read (the first pass counts files, from the stored index).</summary>
+    private void ApplyUnitProgress(Book book, int unit, int unitCount)
+    {
+        if (!HasChapterProgress || unitCount <= 0)
+        {
+            return;
+        }
+
+        ProgressFraction = Math.Clamp((double)unit / Math.Max(1, unitCount - 1), 0, 1);
+        ProgressLabel = $"Chapter {unit + 1} of {unitCount}";
+        if (!book.Finished && book.LastOpenedTime is not null)
+        {
+            ContinueLabel = $"Continue — Ch. {unit + 1} · {(int)Math.Round(BookProgress.Compute(book) * 100)}%";
+        }
     }
 
     /// <summary>Loads a book series into Series mode.</summary>
@@ -439,13 +557,27 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
 
         // EF relationship fixup already back-populates each book.BookSeries from the Include above,
         // so BookCardSample.FromBook's series line resolves without a second query.
+        // Series order (numbered books first, in number order), then the rest by title; holes between owned numbers get a "#3 missing" ghost.
+        var cards = series.Books
+            .OrderBy(b => b.SeriesIndex is null)
+            .ThenBy(b => b.SeriesIndex)
+            .ThenBy(b => b.Title, StringComparer.OrdinalIgnoreCase)
+            .Select(b => BookCardSample.FromBook(b))
+            .ToList();
+        var ghosts = BooksBrowseQuery.GhostsFor(cards);
         SeriesBooks.Clear();
-        foreach (var book in series.Books.OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase))
+        foreach (var card in cards)
         {
-            SeriesBooks.Add(BookCardSample.FromBook(book));
+            foreach (var ghost in ghosts.Where(g => g.SeriesIndex < card.SeriesIndex && !SeriesBooks.Contains(g)))
+            {
+                SeriesBooks.Add(ghost);
+            }
+
+            SeriesBooks.Add(card);
         }
 
         BackLabel = "Books";
+        LoadSeriesJacket();
         Mode = BookDetailMode.Series;
     }
 
@@ -497,7 +629,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
     {
         if (chapter is not null)
         {
-            _goReaderForBook(_bookId, _format, new BookPosition(chapter.Index));
+            _goReaderForBook(_bookId, _format, new BookPosition(chapter.Index, chapter.Fragment));
         }
     }
 
@@ -544,7 +676,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
     [RelayCommand]
     private void OpenBookFromSeries(BookCardSample? card)
     {
-        if (card is not null)
+        if (card is not null && !card.IsGhost)
         {
             LoadBook(card.BookId, _bookSeriesId);
         }
@@ -566,7 +698,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
     [RelayCommand]
     private void EditAllSeriesBooks()
     {
-        var ids = SeriesBooks.Select(c => c.BookId).ToList();
+        var ids = SeriesBooks.Where(c => !c.IsGhost).Select(c => c.BookId).ToList();
         if (ids.Count > 0)
         {
             _goBulkEdit(ids);
@@ -633,6 +765,30 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
         }
     }
 
+    /// <summary>Set by MainViewModel: opens the "Match metadata" dialog for a book.</summary>
+    public Action<int>? GoMatchBook { get; set; }
+
+    [RelayCommand]
+    private void MatchMetadata() => GoMatchBook?.Invoke(_bookId);
+
+    /// <summary>"en" becomes "English"; unknown codes show as written.</summary>
+    private static string? LanguageName(string? iso)
+    {
+        if (string.IsNullOrWhiteSpace(iso))
+        {
+            return null;
+        }
+
+        try
+        {
+            return System.Globalization.CultureInfo.GetCultureInfo(iso.Trim()).EnglishName;
+        }
+        catch (System.Globalization.CultureNotFoundException)
+        {
+            return iso.Trim();
+        }
+    }
+
     [RelayCommand]
     private void ToggleSynopsis() => IsSynopsisExpanded = !IsSynopsisExpanded;
 
@@ -651,7 +807,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
 
         if (book.Finished)
         {
-            book.Finished = false;
+            book.Status = BookReadingStatus.Unread;
             book.LastChapterIndex = 0;
             book.LastBlockId = null;
             book.LastProgressionFraction = null;

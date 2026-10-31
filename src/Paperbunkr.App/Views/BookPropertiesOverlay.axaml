@@ -38,6 +38,35 @@
                     <TextBlock Classes="fieldLabel" Text="PUBLISHED" />
                     <DatePicker SelectedDate="{Binding PublishedDate}" HorizontalAlignment="Stretch" />
                 </StackPanel>
+                <StackPanel Classes="field">
+                    <TextBlock Classes="fieldLabel" Text="SUBTITLE" />
+                    <TextBox Text="{Binding Subtitle}" AutomationProperties.AutomationId="BookPropertiesSubtitle" />
+                </StackPanel>
+                <StackPanel Classes="field">
+                    <TextBlock Classes="fieldLabel" Text="PUBLISHER" />
+                    <controls:SuggestBox Text="{Binding Publisher}" Suggestions="{Binding Vocabulary.Publishers}" HorizontalAlignment="Stretch"
+                                         AutomationProperties.AutomationId="BookPropertiesPublisher" />
+                </StackPanel>
+                <StackPanel Classes="field">
+                    <TextBlock Classes="fieldLabel" Text="LANGUAGE" />
+                    <controls:SuggestBox Text="{Binding LanguageIso}" Suggestions="{Binding Vocabulary.Languages}" HorizontalAlignment="Stretch" />
+                </StackPanel>
+                <StackPanel Classes="field">
+                    <TextBlock Classes="fieldLabel" Text="ISBN" />
+                    <TextBox Text="{Binding Isbn}" AutomationProperties.AutomationId="BookPropertiesIsbn" />
+                </StackPanel>
+                <StackPanel Classes="field">
+                    <TextBlock Classes="fieldLabel" Text="READING STATUS" />
+                    <controls:SuggestBox Text="{Binding StatusLabel}" Suggestions="{Binding StatusOptions}" IsStrict="True" HorizontalAlignment="Stretch"
+                                         AutomationProperties.AutomationId="BookPropertiesStatus" />
+                </StackPanel>
+                <StackPanel Classes="field">
+                    <TextBlock Classes="fieldLabel" Text="MY RATING" />
+                    <controls:StarRating Value="{Binding Rating, Mode=TwoWay}" StarSize="20" HorizontalAlignment="Left"
+                                         AutomationProperties.Name="My rating" AutomationProperties.AutomationId="BookPropertiesRating" />
+                    <TextBlock Classes="pbTextCaption" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,4,0,0"
+                               Text="Click a star twice (or press Delete) to clear." />
+                </StackPanel>
             </WrapPanel>
 
             <Border Classes="card" Padding="0" Margin="0,0,0,16">
@@ -60,6 +89,22 @@
                         <TextBlock Classes="fieldLabel" Text="SERIES NAME" />
                         <TextBox Text="{Binding SeriesName}" PlaceholderText="Leave blank for a standalone book"
                                  Margin="0,0,0,12" AutomationProperties.AutomationId="BookPropertiesSeriesName" />
+                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,12" IsVisible="{Binding HasSuggestedSeries}">
+                            <TextBlock Grid.Column="0" Classes="pbTextMeta" VerticalAlignment="Center" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource PbTextMutedBrush}">
+                                <Run Text="Looks like part of" />
+                                <Run Text="{Binding SuggestedSeriesText}" FontWeight="SemiBold" />
+                            </TextBlock>
+                            <Button Grid.Column="1" Classes="secondary sm" Content="Use" Margin="8,0,0,0" Command="{Binding AcceptSuggestedSeriesCommand}" />
+                            <Button Grid.Column="2" Classes="ghost sm" Content="Dismiss" Margin="4,0,0,0" Command="{Binding DismissSuggestedSeriesCommand}" />
+                        </Grid>
+                        <WrapPanel>
+                            <StackPanel Classes="field">
+                                <TextBlock Classes="fieldLabel" Text="NUMBER IN SERIES" />
+                                <TextBox Text="{Binding SeriesIndexText}" PlaceholderText="e.g. 2 or 2.5" IsEnabled="{Binding HasSeriesName}"
+                                         AutomationProperties.AutomationId="BookPropertiesSeriesIndex" />
+                            </StackPanel>
+                        </WrapPanel>
                         <WrapPanel>
                             <StackPanel Classes="field">
                                 <TextBlock Classes="fieldLabel" Text="SERIES AUTHOR" />
@@ -73,6 +118,42 @@
                         <TextBlock Classes="fieldLabel" TextWrapping="Wrap" Margin="0,2,0,0"
                                    Text="Series author and sort name apply to every book in this series." />
                     </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card" Padding="0" Margin="0,0,0,16">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Genres &amp; tags" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14">
+                        <TextBlock Classes="fieldLabel" Text="GENRES" />
+                        <controls:SuggestBox Text="{Binding Genres}" Suggestions="{Binding Vocabulary.Genres}" IsMultiValue="True"
+                                             HorizontalAlignment="Stretch" Margin="0,0,0,12" AutomationProperties.AutomationId="BookPropertiesGenres" />
+                        <TextBlock Classes="fieldLabel" Text="TAGS" />
+                        <controls:SuggestBox Text="{Binding Tags}" Suggestions="{Binding Vocabulary.Tags}" IsMultiValue="True"
+                                             HorizontalAlignment="Stretch" AutomationProperties.AutomationId="BookPropertiesTags" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card" Padding="0" Margin="0,0,0,16" IsVisible="{Binding HasSourceChips}">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Where values came from" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <ItemsControl ItemsSource="{Binding SourceChips}" Margin="14">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BookSourceChip">
+                                <Border Classes="pbChip" Margin="0,0,8,8"><TextBlock Text="{Binding Text}" /></Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </Border>
 

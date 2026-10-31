@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:books="using:Paperbunkr.App.Controls.Books"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             x:Class="Paperbunkr.App.Controls.Books.ChapterRibbon"
+             x:Name="Root" ClipToBounds="False">
+
+    <!-- Progress through a book chapter by chapter, or a series book by book (docs/superpowers/specs/2026-10-27-books-section-redesign-design.md §2).
+         Each segment is a button: it opens that chapter (or that book); the keyboard moves between them with the arrow keys. -->
+    <UserControl.Styles>
+        <Style Selector="Button.ribbonSegment">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Height" Value="12" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.ribbonSegment:pointerover books|RibbonSegmentFill">
+            <Setter Property="Opacity" Value="0.8" />
+        </Style>
+        <Style Selector="Button.ribbonSegment.missing">
+            <Setter Property="Cursor" Value="Arrow" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Spacing="4" ClipToBounds="False">
+        <TextBlock Classes="pbTextOverline" Text="{Binding #Root.Caption}"
+                   IsVisible="{Binding #Root.Caption, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+        <ItemsControl ItemsSource="{Binding #Root.Segments}" ClipToBounds="False" Padding="0,4">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><books:RibbonPanel /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="models:RibbonSegment">
+                    <Button Classes="ribbonSegment" Classes.missing="{Binding IsGhost}"
+                            Focusable="{Binding CanOpen}" IsHitTestVisible="{Binding CanOpen}"
+                            Command="{Binding $parent[books:ChapterRibbon].OpenCommand}" CommandParameter="{Binding Tag}"
+                            ToolTip.Tip="{Binding Label}" AutomationProperties.Name="{Binding Label}">
+                        <books:RibbonSegmentFill Fill="{Binding Fill}" IsGhost="{Binding IsGhost}" />
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

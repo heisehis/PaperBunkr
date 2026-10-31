@@ -208,9 +208,14 @@ Both review dialogs (`ComicVineMatchReviewDialogViewModel`/`ComicVineIssueCandid
 next/prev navigation across every cover URL a candidate has (CE's `issuecoverpanel.py` alt-cover
 list), with the user's non-default pick remembered for the remainder of that scrape session (CE's
 `session_data_map`, in-memory only, not persisted across app restarts — matching CE's own scope).
-ComicVine's issue-detail response would need to actually expose alternate cover URLs for this to have
-data to cycle through — confirm during implementation whether `cvdb.py`'s alt-cover source (verify the
-exact field) is already fetched by `ComicVineClient` or needs adding to the field_list.
+ComicVine exposes alternates as `associated_images[].original_url` on issue detail responses. The
+field and URL shape were confirmed in a live authenticated request on 2026-10-26, and the same field
+is available on the issue-list response used to populate review candidates. Both endpoints request
+the field and parse valid HTTP(S) URLs, deduplicated against one another and the main cover. The issue
+review starts on the main cover. The series review preserves the configured volume-art default while
+including the matched issue's main and associated covers in its carousel. A URL choice is shared by
+provider + issue ID across review dialogs for one interactive scrape run; it is in-memory only and
+does not change the comic's stored cover.
 
 ### 4.3 Ctrl-held "permanent skip"
 Both review dialogs' Skip action checks for the Ctrl modifier at click time (CE's pattern across

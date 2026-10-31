@@ -63,6 +63,45 @@ public class ReadingListMemberContextMenuBuilderTests
         Assert.Equal("Mark as Read", entries!.First(e => e.Command == row.ToggleReadCommand).Header);
     }
 
+    // ---- Plugin API 4.5 (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §E) ----
+
+    private static Paperbunkr.Plugins.CSharpCommand PluginCommand(string name) => new()
+    {
+        PluginKey = "p",
+        Hook = Paperbunkr.Plugins.Hooks.PluginHooks.Library,
+        Key = "p." + name,
+        Name = name,
+        Menus = "readinglist",
+        ScriptPath = "x.csx",
+    };
+
+    [Fact]
+    public async Task Plugin_commands_that_opt_in_appear_above_remove_and_run_on_the_rows_issue()
+    {
+        var issue = new Issue { Id = 7 };
+        var row = MakeRow(new ReadingListItem { Issue = issue });
+        var ran = new List<(string, int)>();
+        var builder = new ReadingListMemberContextMenuBuilder(
+            () => new[] { PluginCommand("Scrobble") },
+            (command, target) => { ran.Add((command.Name, target.Id)); return Task.CompletedTask; });
+
+        var entries = builder.Build(row)!;
+        var plugins = entries.Single(e => e.Header == "Plugins");
+        var item = Assert.Single(plugins.Children!);
+        await ((CommunityToolkit.Mvvm.Input.IAsyncRelayCommand)item!.Command!).ExecuteAsync(null);
+
+        Assert.Equal(entries.Count - 3, entries.ToList().IndexOf(plugins));   // before the separator and "Remove from List"
+        Assert.Equal(new[] { ("Scrobble", 7) }, ran);
+    }
+
+    [Fact]
+    public void A_placeholder_row_with_no_issue_gets_no_plugin_submenu()
+    {
+        var builder = new ReadingListMemberContextMenuBuilder(() => new[] { PluginCommand("Scrobble") }, (_, _) => Task.CompletedTask);
+
+        Assert.DoesNotContain(builder.Build(MakeRow())!, e => e.Header == "Plugins");
+    }
+
     [Fact]
     public void Build_UnrecognizedTarget_ReturnsNull()
     {

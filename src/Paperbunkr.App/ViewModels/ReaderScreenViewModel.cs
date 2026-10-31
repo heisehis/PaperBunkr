@@ -18,6 +18,7 @@ using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.Services.Input;
 using Paperbunkr.App.Services.Reader;
+using Paperbunkr.App.Services.Reader.Panels;
 using Paperbunkr.App.Views;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
@@ -986,6 +987,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         RefreshClockAndBattery();
         StartSessionTimer();
 
+        _panelDetectionQueue?.SetCurrent(null);
         _decoder?.Dispose();
         _decoder = null;
 
@@ -2288,6 +2290,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         CurrentPagePanels = null;
         if (IsContinuousMode || _decoder is null)
         {
+            _panelDetectionQueue?.SetCurrent(null);
             CurrentPage = null;
             CurrentPageSecondary = null;
             return;
@@ -2322,6 +2325,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         }
 
         CurrentPageSecondary = TryDecodePairedPage(_currentPageIndex, CurrentPage.PixelSize);
+        _panelDetectionQueue?.SetCurrent(new PagePanelDetectionKey(_loadedIssueId ?? 0, _currentPageIndex, PanelsRightToLeft));
         RequestPanels();
     }
 

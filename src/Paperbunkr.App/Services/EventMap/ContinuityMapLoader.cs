@@ -13,7 +13,8 @@ namespace Paperbunkr.App.Services.EventMap;
 /// <summary>One story event touching the continuity: its date span and its members as map rows, in the event's own order.</summary>
 public sealed record ContinuityEventData(int Id, string Name, int? Start, int? End, IReadOnlyList<EventMapRow> Members, int? SortKey = null, int? Rank = null,
     string? Description = null, string? CoverImageUrl = null, StoryEventCoverSource CoverSource = StoryEventCoverSource.None,
-    IReadOnlyList<ContinuityEventTagData>? Tags = null)
+    IReadOnlyList<ContinuityEventTagData>? Tags = null, string? CbroListKey = null, string? CbroSourceName = null, int? CbroSourceYear = null,
+    IReadOnlyList<CbroOverlapNoteData>? CbroOverlapNotes = null)
 {
     /// <summary>The event as <see cref="EventChronology"/> orders it: its span plus where an outside reading order placed it.</summary>
     public EventSpan Span => new(Id, Name, Start, End, SortKey, Rank);
@@ -105,6 +106,10 @@ public static class ContinuityMapLoader
         var gcdDates = gcd?.DateKeysFor(memberships.Select(m => m.Issue?.GcdIssueId).Concat(looseIssues.Select(i => i.GcdIssueId)).OfType<int>());
 
         var eventNames = spans.ToDictionary(kv => kv.Key, kv => kv.Value.Name);
+        var cbroEvidence = context.EventOrderEvidence.AsNoTracking()
+            .Where(e => eventIds.Contains(e.StoryEventId) && e.Provider == EventOrderProvider.Cbro)
+            .Include(e => e.CbroOverlapNotes)
+            .ToDictionary(e => e.StoryEventId);
         var eventsByIssue = memberships
             .GroupBy(m => m.IssueId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<EventMapEventRef>)g.Select(m => m.StoryEventId).Distinct()
@@ -121,7 +126,11 @@ public static class ContinuityMapLoader
                 context.StoryEvents.AsNoTracking().Where(e => e.Id == id).Select(e => e.Description).FirstOrDefault(),
                 context.StoryEvents.AsNoTracking().Where(e => e.Id == id).Select(e => e.CoverImageUrl).FirstOrDefault(),
                 context.StoryEvents.AsNoTracking().Where(e => e.Id == id).Select(e => e.CoverSource).FirstOrDefault(),
-                EventTags(context, id, memberships.Where(m => m.StoryEventId == id).Select(m => m.Issue).OfType<Issue>()).ToList()))
+                EventTags(context, id, memberships.Where(m => m.StoryEventId == id).Select(m => m.Issue).OfType<Issue>()).ToList(),
+                cbroEvidence.GetValueOrDefault(id)?.ListKey,
+                cbroEvidence.GetValueOrDefault(id)?.SourceName,
+                cbroEvidence.GetValueOrDefault(id)?.SourceYear,
+                cbroEvidence.GetValueOrDefault(id)?.CbroOverlapNotes.Select(n => new CbroOverlapNoteData(n.OriginalText, n.TargetName, n.TargetYear)).ToList()))
             .ToList();
 
         var relations = context.EventRelations.AsNoTracking()
@@ -250,6 +259,7 @@ public static class ContinuityMapBuilder
         var blocks = new List<EventMapBlock>();
         var placed = new HashSet<int>();
         var eventBlock = new Dictionary<int, int>();
+        var allEventsById = data.Events.ToDictionary(e => e.Id);
 
         void AddBlock(EventMapBlockKind kind, string label, int? eventId, IReadOnlyList<EventMapRow> blockRows)
         {
@@ -266,7 +276,10 @@ public static class ContinuityMapBuilder
                 rows.Add(row with
                 {
                     OwnerEventId = eventId,
-                    OwnerEventName = eventId is null ? null : label,
+                    OwnerEventName = eventId is int ownerId ? allEventsById.GetValueOrDefault(ownerId)?.Name ?? label : null,
+                    OwnerEventCbroNotes = eventId is int noteOwner && allEventsById.GetValueOrDefault(noteOwner)?.CbroOverlapNotes is { } notes
+                        ? notes.Select(n => n.OriginalText).ToList()
+                        : null,
                     AlsoIn = others is { Count: > 0 } ? others : null,
                     BlockIndex = index,
                 });
@@ -280,7 +293,16 @@ public static class ContinuityMapBuilder
             }
         }
 
-        var visible = data.Events.Where(e => !options.HiddenEventIds.Contains(e.Id)).ToList();
+        var directionalEventIds = data.Relations
+            .Where(r => EventChronology.Direction(r.SourceId, r.TargetId, r.Type) is not null)
+            .SelectMany(r => new[] { r.SourceId, r.TargetId })
+            .ToHashSet();
+        var unplaced = data.Events.Where(e => e.Start is null && e.End is null && e.SortKey is null && e.Rank is null
+                && !directionalEventIds.Contains(e.Id) && !options.HiddenEventIds.Contains(e.Id))
+            .OrderBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(e => e.Id)
+            .ToList();
+        var unplacedIds = unplaced.Select(e => e.Id).ToHashSet();
+        var visible = data.Events.Where(e => !options.HiddenEventIds.Contains(e.Id) && !unplacedIds.Contains(e.Id)).ToList();
         bool publicationOrder = data.Events.Count == 0;
         int looseShown = 0;
 
@@ -330,6 +352,15 @@ public static class ContinuityMapBuilder
                 AddBlock(EventMapBlockKind.Between, BetweenLabel(rest), null, rest);
                 looseShown += rest.Count;
             }
+
+            foreach (var e in unplaced)
+            {
+                var members = e.Members
+                    .Where(m => !placed.Contains(m.IssueId))
+                    .Where(m => !options.HideOptional || m.Role != EventMembershipRole.Optional)
+                    .ToList();
+                AddBlock(EventMapBlockKind.Unplaced, $"Unplaced · {e.Name}", e.Id, members);
+            }
         }
 
         // Lanes with rows: member series in the continuity's order, then outside series by first appearance.
@@ -362,6 +393,52 @@ public static class ContinuityMapBuilder
             {
                 connectors.Add(new EventMapConnector(Math.Min(sourceBlock, targetBlock), Math.Max(sourceBlock, targetBlock),
                     typeLabel, IsOrdered: false, r.IsYours, tooltip));
+            }
+        }
+
+        var overlapPairs = new HashSet<(int Low, int High)>();
+        foreach (var sourceEvent in visible.Concat(unplaced))
+        {
+            if (string.IsNullOrWhiteSpace(sourceEvent.CbroListKey))
+            {
+                continue;
+            }
+
+            foreach (var note in sourceEvent.CbroOverlapNotes ?? Array.Empty<CbroOverlapNoteData>())
+            {
+                string targetKey = EventNameKeys.Key(note.TargetName);
+                if (targetKey.Length == 0)
+                {
+                    continue;
+                }
+
+                var matches = data.Events.Where(candidate => candidate.Id != sourceEvent.Id
+                    && string.Equals(candidate.CbroListKey, sourceEvent.CbroListKey, StringComparison.OrdinalIgnoreCase)
+                    && EventNameKeys.Key(candidate.CbroSourceName ?? string.Empty) == targetKey
+                    && (note.TargetYear is null || candidate.CbroSourceYear == note.TargetYear))
+                    .ToList();
+                if (matches.Count != 1 || !eventBlock.TryGetValue(sourceEvent.Id, out int sourceBlock)
+                    || !eventBlock.TryGetValue(matches[0].Id, out int targetBlock) || sourceBlock == targetBlock)
+                {
+                    continue;
+                }
+
+                var pair = sourceBlock < targetBlock ? (sourceBlock, targetBlock) : (targetBlock, sourceBlock);
+                if (!overlapPairs.Add(pair))
+                {
+                    int existingIndex = connectors.FindIndex(c => c.Kind == EventMapConnectorKind.Overlap
+                        && c.FromBlock == pair.Item1 && c.ToBlock == pair.Item2);
+                    if (existingIndex >= 0)
+                    {
+                        var existing = connectors[existingIndex];
+                        connectors[existingIndex] = existing with { Tooltip = existing.Tooltip + Environment.NewLine + note.OriginalText };
+                    }
+
+                    continue;
+                }
+
+                connectors.Add(new EventMapConnector(pair.Item1, pair.Item2, "Occurs during", IsOrdered: false, IsYours: false,
+                    $"Occurs during · CBRO · {sourceEvent.Name}: {note.OriginalText}", EventMapConnectorKind.Overlap));
             }
         }
 
@@ -402,6 +479,8 @@ public static class ContinuityMapBuilder
         RelationType.Sequel => "Sequel",
         RelationType.Continuation => "Continuation",
         RelationType.Crossover => "Crossover",
+        RelationType.TieIn => "Tie-in",
+        RelationType.MainEventSeries => "Main event",
         _ => type.ToString(),
     };
 }

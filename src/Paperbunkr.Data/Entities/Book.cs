@@ -46,10 +46,67 @@ public class Book
     /// <summary>Coarse fallback (0-1, scroll/page fraction) for when <see cref="LastBlockId"/> can't be resolved on reload - see that property's own doc comment.</summary>
     public double? LastProgressionFraction { get; set; }
 
+    /// <summary>The words where the reader last stopped, for the Books spread's pull quote (docs/superpowers/specs/2026-10-27-books-section-
+    /// redesign-design.md §6.1): the text of the <see cref="LastBlockId"/> block, cut by <c>QuoteExcerpt</c>. Written with the position;
+    /// null for PDFs and for books not opened since the column was added (the spread falls back to a highlight, then the synopsis).</summary>
+    [System.ComponentModel.DataAnnotations.MaxLength(200)]
+    public string? LastExcerpt { get; set; }
+
     /// <summary>Read to the end at least once (docs/superpowers/specs/2026-08-27-books-screen-chrome-
     /// and-home-strip-design.md). Set by the reader when paging past the last chapter; cleared when
-    /// the book is reopened for reading. Drops the book off Home's "Continue Reading — Books" row.</summary>
-    public bool Finished { get; set; }
+    /// the book is reopened for reading. Drops the book off Home's "Continue Reading — Books" row.
+    /// Since the Books slice 1 migration this is a view over <see cref="Status"/> (docs/superpowers/specs/
+    /// 2026-10-26-books-slice1-data-foundation-design.md §3.1): the old <c>Finished</c> column stays in the table, unmapped
+    /// and unused. LINQ queries must test <c>Status == BookReadingStatus.Finished</c> - this property cannot be translated.</summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public bool Finished
+    {
+        get => Status == BookReadingStatus.Finished;
+        set
+        {
+            if (value)
+            {
+                Status = BookReadingStatus.Finished;
+            }
+            else if (Status == BookReadingStatus.Finished)
+            {
+                Status = BookReadingStatus.Reading;
+            }
+        }
+    }
+
+    /// <summary>Personal reading state (docs/superpowers/specs/2026-10-26-books-slice1-data-foundation-design.md §3.2).
+    /// The reader moves Unread/WantToRead → Reading on open and → Finished at the end; WantToRead and Abandoned are manual.</summary>
+    public BookReadingStatus Status { get; set; } = BookReadingStatus.Unread;
+
+    // --- Descriptive metadata (Books slice 1). Every field is null until a file, a provider or the user sets it;
+    // BookFieldSource records which. ---
+
+    public string? Subtitle { get; set; }
+
+    public string? Publisher { get; set; }
+
+    /// <summary>ISO 639 language code as the file declares it (e.g. "en", "pt-BR").</summary>
+    public string? LanguageISO { get; set; }
+
+    public string? ISBN { get; set; }
+
+    /// <summary>Position within <see cref="BookSeries"/> (float so 2.5 works). Null when unnumbered.</summary>
+    public float? SeriesIndex { get; set; }
+
+    /// <summary>CE parity (<c>ComicBook.Rating</c>): "My rating", 0-5 in 0.5 steps, null = unrated. Favorites = rating above 3, no separate flag.</summary>
+    public float? Rating { get; set; }
+
+    public float? CommunityRating { get; set; }
+
+    public int? CommunityRatingCount { get; set; }
+
+    /// <summary>Excludes the book from every metadata-match run, interactive or bulk (CE <c>skip_forever</c>).</summary>
+    public bool SkipMetadataMatch { get; set; }
+
+    public List<BookTag> Tags { get; set; } = new();
+
+    public List<BookFieldSource> FieldSources { get; set; } = new();
 
     /// <summary>Total chapter count from the parsed source, populated lazily the first time the book
     /// is opened in the reader (0 until then). Feeds Home's rough progress bar
@@ -85,6 +142,16 @@ public class Book
     public double? ParagraphSpacingOverride { get; set; }
 
     public double? PageMarginOverride { get; set; }
+
+    /// <summary>The book's id inside the Calibre library it was imported from (docs/superpowers/specs/2026-10-27-books-slice4a-calibre-import-design.md §4); null for books that did not come from Calibre.</summary>
+    public int? CalibreBookId { get; set; }
+
+    /// <summary>The <c>library_id.uuid</c> of that Calibre library, so two libraries with overlapping ids never collide.</summary>
+    public string? CalibreLibraryId { get; set; }
+
+    public bool? JustifyOverride { get; set; }
+
+    public bool? HyphenateOverride { get; set; }
 
     public BookTheme? ThemeOverride { get; set; }
 

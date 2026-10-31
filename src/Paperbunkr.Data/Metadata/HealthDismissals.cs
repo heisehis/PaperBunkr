@@ -12,6 +12,9 @@ public static class HealthDismissals
     /// <summary>A hole in a series' run of issue numbers; key = series id + the missing numbers.</summary>
     public const string CollectionGap = "gap";
 
+    /// <summary>A manga series whose chapters differ from MangaDex's; key = series id + the missing chapter numbers.</summary>
+    public const string ChapterAlignment = "chapter-alignment";
+
     /// <summary>A metadata-consistency finding; key = series id + check name.</summary>
     public const string Consistency = "consistency";
 

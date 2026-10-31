@@ -113,11 +113,11 @@ internal static class SmartListLeafEvaluator
         return c.Operator switch
         {
             SmartListOperator.Is => DateTime.TryParse(c.Value, out var eq) && dt.Date == eq.Date,
-            SmartListOperator.IsAfter => DateTime.TryParse(c.Value, out var after) && dt > after,
-            SmartListOperator.IsBefore => DateTime.TryParse(c.Value, out var before) && dt < before,
-            SmartListOperator.WithinLastDays => int.TryParse(c.Value, out var days) && dt >= DateTime.Now.AddDays(-days),
+            SmartListOperator.IsAfter => DateTime.TryParse(c.Value, out var after) && dt.Date > after.Date,
+            SmartListOperator.IsBefore => DateTime.TryParse(c.Value, out var before) && dt.Date < before.Date,
+            SmartListOperator.WithinLastDays => int.TryParse(c.Value, out var days) && dt.Date >= DateTime.Today.AddDays(-days),
             SmartListOperator.DateInRange => DateTime.TryParse(c.Value, out var start)
-                && DateTime.TryParse(c.Value2, out var end) && dt >= start && dt <= end,
+                && DateTime.TryParse(c.Value2, out var end) && dt.Date >= start.Date && dt.Date <= end.Date,
             _ => false,
         };
     }

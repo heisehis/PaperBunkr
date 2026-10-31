@@ -25,6 +25,18 @@ namespace Paperbunkr.App.Plugins;
 /// </summary>
 public sealed class PaperbunkrMetadataWriter : IMetadataWriter
 {
+    /// <summary>
+    /// Shows a write batch's preview (Plugin API 4.5 §D2): the host wires it to the shared confirm dialog, marshalled to the UI thread.
+    /// Null (no UI, e.g. a test that doesn't set it) means a batch can't be confirmed and applies nothing.
+    /// </summary>
+    public Func<Paperbunkr.App.Services.ConfirmDialogRequest, System.Threading.Tasks.Task<int>>? ShowDialog { get; init; }
+
+    /// <summary>Where a batch reads and writes. Tests point it at their own database.</summary>
+    public Func<Paperbunkr.Data.PaperbunkrDbContext> CreateContext { get; init; } = PaperbunkrDb.CreateContext;
+
+    public IMetadataWriteBatch BeginBatch() =>
+        new PaperbunkrMetadataWriteBatch(CreateContext(), ShowDialog ?? (_ => System.Threading.Tasks.Task.FromResult(-1)));
+
     public bool SetFormat(Issue issue, string? value) =>
         Write(issue.Id, "Format", q => q, i => i.Format = value);
 

@@ -1,14 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
+using cYo.Projects.ComicRack.Engine.IO.Provider.Books;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Books;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels;
@@ -31,6 +34,7 @@ public partial class BookPropertiesScreenViewModel : ViewModelBase
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private readonly Action<string, string>? _notify;
     private readonly MetadataEditHistoryService _history;
+    private readonly Func<int, Task>? _writeBack;
 
     private int _bookId;
     private BookFormat _format;
@@ -47,13 +51,14 @@ public partial class BookPropertiesScreenViewModel : ViewModelBase
     private string _loadSignature = string.Empty;
 
     public BookPropertiesScreenViewModel(Action goBack, Action<string, string>? notify = null, MetadataEditHistoryService? history = null)
-        : this(goBack, PaperbunkrDb.CreateContext, notify, history)
+        : this(goBack, PaperbunkrDb.CreateContext, notify, history, id => new BookFileWriteBackService().AutoWriteAsync(new[] { id }))
     {
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database).</summary>
-    internal BookPropertiesScreenViewModel(Action goBack, Func<PaperbunkrDbContext> contextFactory, Action<string, string>? notify = null, MetadataEditHistoryService? history = null)
+    internal BookPropertiesScreenViewModel(Action goBack, Func<PaperbunkrDbContext> contextFactory, Action<string, string>? notify = null, MetadataEditHistoryService? history = null, Func<int, Task>? writeBack = null)
     {
+        _writeBack = writeBack;
         _goBack = goBack;
         _contextFactory = contextFactory;
         _notify = notify;
@@ -88,6 +93,63 @@ public partial class BookPropertiesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private string _seriesSortName = string.Empty;
 
+    // --- Books slice 1 fields (docs/superpowers/specs/2026-10-26-books-slice1-data-foundation-design.md §6) ---
+
+    [ObservableProperty]
+    private string _subtitle = string.Empty;
+
+    [ObservableProperty]
+    private string _publisher = string.Empty;
+
+    [ObservableProperty]
+    private string _languageIso = string.Empty;
+
+    [ObservableProperty]
+    private string _isbn = string.Empty;
+
+    /// <summary>Position within the series, typed as text so "2.5" and blank both work. Only meaningful with a series name.</summary>
+    [ObservableProperty]
+    private string _seriesIndexText = string.Empty;
+
+    /// <summary>0-5 in half steps (the <c>StarRating</c> control's value); null = unrated.</summary>
+    [ObservableProperty]
+    private double? _rating;
+
+    [ObservableProperty]
+    private string _statusLabel = BookStatusLabels.ToLabel(BookReadingStatus.Unread);
+
+    /// <summary>Comma-separated, edited by a multi-value SuggestBox.</summary>
+    [ObservableProperty]
+    private string _genres = string.Empty;
+
+    [ObservableProperty]
+    private string _tags = string.Empty;
+
+    public IReadOnlyList<string> StatusOptions => BookStatusLabels.All;
+
+    [ObservableProperty]
+    private BookVocabulary _vocabulary = BookVocabulary.Empty;
+
+    /// <summary>"Dune Chronicles #2" when the title looks like it belongs to a series the book is not in yet; never applied until accepted.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSuggestedSeries))]
+    private string? _suggestedSeriesText;
+
+    private BookSeriesSuggestion? _suggestedSeries;
+
+    public bool HasSuggestedSeries => !string.IsNullOrEmpty(SuggestedSeriesText);
+
+    /// <summary>Where each recorded value came from, for the read-only provenance chips.</summary>
+    [ObservableProperty]
+    private IReadOnlyList<BookSourceChip> _sourceChips = Array.Empty<BookSourceChip>();
+
+    public bool HasSourceChips => SourceChips.Count > 0;
+
+    partial void OnSourceChipsChanged(IReadOnlyList<BookSourceChip> value) => OnPropertyChanged(nameof(HasSourceChips));
+
+    /// <summary>The loaded values as text, per <see cref="BookFields"/> key - compared with the saved ones to find which fields the user changed (those become Manual).</summary>
+    private Dictionary<string, string> _loadedFieldValues = new();
+
     /// <summary>Live preview only - the pending local pick (once chosen), the book's cached cover, or null after a Reset. Nothing is written until Save.</summary>
     [ObservableProperty]
     private Bitmap? _coverPreview;
@@ -99,7 +161,7 @@ public partial class BookPropertiesScreenViewModel : ViewModelBase
         _resetCoverRequested = false;
 
         using var context = _contextFactory();
-        var book = context.Books.Include(b => b.BookSeries).FirstOrDefault(b => b.Id == bookId);
+        var book = context.Books.Include(b => b.BookSeries).Include(b => b.Tags).Include(b => b.FieldSources).FirstOrDefault(b => b.Id == bookId);
         if (book is null)
         {
             _goBack();
@@ -118,9 +180,25 @@ public partial class BookPropertiesScreenViewModel : ViewModelBase
         SeriesAuthor = book.BookSeries?.Author ?? string.Empty;
         SeriesSortName = book.BookSeries?.SortName ?? string.Empty;
 
+        Subtitle = book.Subtitle ?? string.Empty;
+        Publisher = book.Publisher ?? string.Empty;
+        LanguageIso = book.LanguageISO ?? string.Empty;
+        Isbn = book.ISBN ?? string.Empty;
+        SeriesIndexText = book.SeriesIndex?.ToString("0.###", CultureInfo.InvariantCulture) ?? string.Empty;
+        Rating = book.Rating;
+        StatusLabel = BookStatusLabels.ToLabel(book.Status);
+        Genres = BookTagText.For(book, BookTagField.Genre);
+        Tags = BookTagText.For(book, BookTagField.Tags);
+
+        Vocabulary = BookVocabulary.Load(context);
+        _suggestedSeries = book.BookSeriesId is null ? BookSeriesSuggester.Suggest(book.Title, Vocabulary.SeriesNames) : null;
+        SuggestedSeriesText = _suggestedSeries is { } s ? (s.Index is float i ? $"{s.SeriesName} #{i.ToString("0.###", CultureInfo.InvariantCulture)}" : s.SeriesName) : null;
+        SourceChips = book.FieldSources.OrderBy(f => f.Field).Select(f => new BookSourceChip(FieldLabel(f.Field), OriginLabel(f.Source))).ToList();
+
         CoverPreview = BookCoverImageCache.Get(bookId, book.FilePath);
 
         _beforeSnapshot = BookMetadataSnapshot.Capture(book);
+        _loadedFieldValues = FieldValues();
         _loadSignature = BufferSignature();
     }
 
@@ -131,7 +209,68 @@ public partial class BookPropertiesScreenViewModel : ViewModelBase
         '␟',
         Title, Author, Summary,
         PublishedDate?.UtcDateTime.ToString("O") ?? string.Empty,
-        SeriesName, SeriesAuthor, SeriesSortName);
+        SeriesName, SeriesAuthor, SeriesSortName,
+        Subtitle, Publisher, LanguageIso, Isbn, SeriesIndexText,
+        Rating?.ToString(CultureInfo.InvariantCulture) ?? string.Empty, StatusLabel, Genres, Tags);
+
+    /// <summary>The descriptive fields as comparable text, keyed by <see cref="BookFields"/>.</summary>
+    private Dictionary<string, string> FieldValues() => new()
+    {
+        [BookFields.Subtitle] = Subtitle.Trim(),
+        [BookFields.Publisher] = Publisher.Trim(),
+        [BookFields.Language] = LanguageIso.Trim(),
+        [BookFields.Isbn] = Isbn.Trim(),
+        [BookFields.Summary] = Summary.Trim(),
+        [BookFields.Series] = SeriesName.Trim(),
+        [BookFields.SeriesIndex] = SeriesIndexText.Trim(),
+        [BookFields.Rating] = Rating?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+        [BookFields.Genre] = BookTagText.Join(BookTagText.Split(Genres)),
+        [BookFields.Tags] = BookTagText.Join(BookTagText.Split(Tags)),
+    };
+
+    private static string FieldLabel(string field) => field switch
+    {
+        BookFields.Language => "Language",
+        BookFields.Series => "Series",
+        BookFields.SeriesIndex => "Series #",
+        BookFields.Isbn => "ISBN",
+        _ => field,
+    };
+
+    private static string OriginLabel(BookFieldSourceKind source) => source switch
+    {
+        BookFieldSourceKind.File => "file",
+        BookFieldSourceKind.OpenLibrary => "Open Library",
+        BookFieldSourceKind.GoogleBooks => "Google Books",
+        BookFieldSourceKind.Calibre => "Calibre",
+        BookFieldSourceKind.Opds => "OPDS catalog",
+        _ => "you",
+    };
+
+    [RelayCommand]
+    private void AcceptSuggestedSeries()
+    {
+        if (_suggestedSeries is not { } suggestion)
+        {
+            return;
+        }
+
+        SeriesName = suggestion.SeriesName;
+        if (suggestion.Index is float index)
+        {
+            SeriesIndexText = index.ToString("0.###", CultureInfo.InvariantCulture);
+        }
+
+        _suggestedSeries = null;
+        SuggestedSeriesText = null;
+    }
+
+    [RelayCommand]
+    private void DismissSuggestedSeries()
+    {
+        _suggestedSeries = null;
+        SuggestedSeriesText = null;
+    }
 
     [RelayCommand]
     private async Task ChangeCoverAsync()
@@ -171,8 +310,25 @@ public partial class BookPropertiesScreenViewModel : ViewModelBase
             return;
         }
 
+        float? seriesIndex = null;
+        if (!string.IsNullOrWhiteSpace(SeriesIndexText))
+        {
+            seriesIndex = BookMetadataParsing.ParseIndex(SeriesIndexText);
+            if (seriesIndex is null)
+            {
+                _notify?.Invoke("Can't save", "Series number must be a number such as 2 or 2.5.");
+                return;
+            }
+        }
+
+        if (!BookStatusLabels.TryParse(StatusLabel, out var status))
+        {
+            _notify?.Invoke("Can't save", $"“{StatusLabel}” isn't a reading status.");
+            return;
+        }
+
         using var context = _contextFactory();
-        var book = context.Books.Include(b => b.BookSeries).FirstOrDefault(b => b.Id == _bookId);
+        var book = context.Books.Include(b => b.BookSeries).Include(b => b.Tags).Include(b => b.FieldSources).FirstOrDefault(b => b.Id == _bookId);
         if (book is null)
         {
             _goBack();
@@ -185,12 +341,29 @@ public partial class BookPropertiesScreenViewModel : ViewModelBase
         book.Author = NullIfEmpty(Author);
         book.Summary = NullIfEmpty(Summary);
         book.PublishedDate = PublishedDate?.UtcDateTime;
+        book.Subtitle = NullIfEmpty(Subtitle);
+        book.Publisher = NullIfEmpty(Publisher);
+        book.LanguageISO = NullIfEmpty(LanguageIso);
+        book.ISBN = NullIfEmpty(Isbn);
+        book.Rating = BookRating.Normalize((float?)Rating);
+        book.Status = status;
+        BookTagText.Set(book, BookTagField.Genre, BookTagText.Split(Genres));
+        BookTagText.Set(book, BookTagField.Tags, BookTagText.Split(Tags));
 
         ResolveSeries(context, book);
+        book.SeriesIndex = book.BookSeries is null ? null : seriesIndex;
+
+        // Whatever the user changed is theirs from now on: no file refresh or provider match will overwrite it.
+        var after = FieldValues();
+        BookMetadataApplier.MarkManual(book, after.Where(kv => _loadedFieldValues.GetValueOrDefault(kv.Key) != kv.Value).Select(kv => kv.Key), DateTime.UtcNow);
 
         context.SaveChanges();
 
         _history.RecordBookEdit($"Edited “{book.Title}”", _bookId, _beforeSnapshot, BookMetadataSnapshot.Capture(book));
+        if (_writeBack is not null)
+        {
+            _ = _writeBack(_bookId);
+        }
 
         // Detaching or reassigning may have emptied the old series
         // (docs/superpowers/specs/2026-08-27-books-bulk-series-editing-design.md, component d).
@@ -255,4 +428,10 @@ public partial class BookPropertiesScreenViewModel : ViewModelBase
     private void Cancel() => _goBack();
 
     private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}
+
+/// <summary>One read-only "Publisher · file" provenance chip in Book Properties.</summary>
+public sealed record BookSourceChip(string Field, string Origin)
+{
+    public string Text => $"{Field} · {Origin}";
 }

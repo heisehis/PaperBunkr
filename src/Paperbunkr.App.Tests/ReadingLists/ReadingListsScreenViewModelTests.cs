@@ -368,7 +368,7 @@ public class ReadingListsScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void StartLinkThenAddIssue_RelinksTheTargetedRow_InsteadOfAppending()
+    public async Task StartLinkThenReview_RelinksTheTargetedRow_InsteadOfAppending()
     {
         int placeholderId = SeedPlaceholderIssue("Kilo Station", "1");
         int realIssueId = SeedIssue("Kilo Station", "1 (owned copy)");
@@ -385,18 +385,12 @@ public class ReadingListsScreenViewModelTests : IDisposable
         vm.LoadReadingList(listId);
         var row = vm.List.Rows[0];
 
-        row.LinkCommand.Execute(null);
-        Assert.True(vm.List.IsLinking);
-        // Real bug found 2026-09-16: StartLink set IsLinking (showing the LinkingBannerText) but
-        // never opened the search panel itself (gated on the separate IsAddIssuesOpen flag) - the
-        // "Find & link" button did nothing observable on screen. The rest of this test drove
-        // SearchCommand/AddIssueCommand directly, which still passed since it never checked whether
-        // the panel a real user would need to click into was actually visible.
-        Assert.True(vm.List.IsDrawerOpen);
-
-        vm.List.SearchQuery = "1 (owned copy)";
-        vm.List.SearchCommand.Execute(null);
-        vm.List.AddIssueCommand.Execute(vm.List.SearchResults[0]);
+        await vm.List.RequestReview!(row.Item.Id);
+        Assert.True(vm.IsReviewMode);
+        vm.Review.SearchQuery = "1 (owned copy)";
+        await vm.Review.SearchCommand.ExecuteAsync(null);
+        vm.Review.ChooseCommand.Execute(Assert.Single(vm.Review.Candidates));
+        await vm.Review.ApplyCommand.ExecuteAsync(null);
 
         Assert.False(vm.List.IsLinking);
         using var verify = PaperbunkrDb.CreateContext();
@@ -408,7 +402,7 @@ public class ReadingListsScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void CancelLink_LeavesTheListUnmodified()
+    public async Task CancelLink_LeavesTheListUnmodified()
     {
         int placeholderId = SeedPlaceholderIssue("Kilo Station", "1");
         var vm = new ReadingListsScreenViewModel(_filePicker, (_, _) => { });
@@ -421,11 +415,12 @@ public class ReadingListsScreenViewModelTests : IDisposable
             context.SaveChanges();
         }
         vm.LoadReadingList(listId);
-        vm.List.Rows[0].LinkCommand.Execute(null);
-
-        vm.List.CancelLinkCommand.Execute(null);
+        await vm.List.RequestReview!(vm.List.Rows[0].Item.Id);
+        Assert.True(vm.IsReviewMode);
+        await vm.Review.DiscardCommand.ExecuteAsync(null);
 
         Assert.False(vm.List.IsLinking);
+        Assert.False(vm.IsReviewMode);
         using var verify = PaperbunkrDb.CreateContext();
         Assert.Equal(placeholderId, verify.ReadingListItems.Single(i => i.ReadingListId == listId).IssueId);
     }

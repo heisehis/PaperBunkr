@@ -16,7 +16,7 @@ namespace Paperbunkr.App.Tests;
 internal static class MobiFixture
 {
     /// <summary>Builds a valid file with real EXTH title/author, a cover image record, and enough text across 2+ PalmDOC records to prove multi-record reassembly.</summary>
-    public static string Create(string path, string title = "Test Novel", string author = "Ada Author", bool compressed = true, string? htmlBody = null)
+    public static string Create(string path, string title = "Test Novel", string author = "Ada Author", bool compressed = true, string? htmlBody = null, IReadOnlyList<(int Type, string Value)>? extraExth = null)
     {
         string html = htmlBody ?? "<html><body>"
             + "<h1>The Beginning</h1>"
@@ -32,7 +32,7 @@ internal static class MobiFixture
 
         byte[] coverBytes = { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00 };
 
-        byte[] record0 = BuildRecord0(title, author, textBytes.Length, textRecords.Count, compressed ? 2 : 1, encryptionType: 0, coverRecordIndex: 1 + textRecords.Count);
+        byte[] record0 = BuildRecord0(title, author, textBytes.Length, textRecords.Count, compressed ? 2 : 1, encryptionType: 0, coverRecordIndex: 1 + textRecords.Count, extraExth);
 
         var allRecords = new List<byte[]> { record0 };
         allRecords.AddRange(textRecords);
@@ -98,7 +98,7 @@ internal static class MobiFixture
         return compressed;
     }
 
-    private static byte[] BuildRecord0(string title, string author, int textLength, int textRecordCount, int compressionType, int encryptionType, int? coverRecordIndex)
+    private static byte[] BuildRecord0(string title, string author, int textLength, int textRecordCount, int compressionType, int encryptionType, int? coverRecordIndex, IReadOnlyList<(int Type, string Value)>? extraExth = null)
     {
         byte[] titleBytes = Encoding.UTF8.GetBytes(title);
         byte[] authorBytes = Encoding.UTF8.GetBytes(author);
@@ -112,6 +112,14 @@ internal static class MobiFixture
             (100, authorBytes),
             (503, titleBytes),
         };
+
+        if (extraExth is not null)
+        {
+            foreach (var (type, value) in extraExth)
+            {
+                exthRecords.Add((type, Encoding.UTF8.GetBytes(value)));
+            }
+        }
 
         if (coverRecordIndex is { } coverIndex)
         {

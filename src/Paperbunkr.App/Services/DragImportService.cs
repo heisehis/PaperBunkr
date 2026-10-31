@@ -29,7 +29,8 @@ public record DragImportResult(
     IReadOnlyList<int> IssueIds,
     int SmartListsImported = 0,
     IReadOnlyList<string>? ImportNotes = null,
-    int ProfilesImported = 0);
+    int ProfilesImported = 0,
+    PreparedImport? PendingReadingLists = null);
 
 /// <summary>
 /// Shared entry point for the drag-and-drop file/folder import both the Library and Reading List
@@ -56,17 +57,20 @@ public class DragImportService
 {
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private readonly LibraryFolderScanner _scanner;
+    private readonly bool _previewReadingLists;
 
-    public DragImportService()
+    public DragImportService(bool previewReadingLists = false)
         : this(PaperbunkrDb.CreateContext, new LibraryFolderScanner())
     {
+        _previewReadingLists = previewReadingLists;
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database).</summary>
-    internal DragImportService(Func<PaperbunkrDbContext> contextFactory, LibraryFolderScanner scanner)
+    internal DragImportService(Func<PaperbunkrDbContext> contextFactory, LibraryFolderScanner scanner, bool previewReadingLists = false)
     {
         _contextFactory = contextFactory;
         _scanner = scanner;
+        _previewReadingLists = previewReadingLists;
     }
 
     public Task<DragImportResult> ImportAsync(IReadOnlyList<string> paths, CancellationToken ct = default)
@@ -145,6 +149,7 @@ public class DragImportService
         int smartListsImported = 0;
         int profilesImported = 0;
         var importNotes = new List<string>();
+        var preparedLists = new List<PreparedReadingList>();
         foreach (string file in readingListFiles)
         {
             ct.ThrowIfCancellationRequested();
@@ -161,6 +166,13 @@ public class DragImportService
                 }
 
                 using var context = _contextFactory();
+                if (_previewReadingLists && (!Path.GetExtension(file).Equals(".cbl", StringComparison.OrdinalIgnoreCase)
+                    || CblFile.Detect(file) == CblFileKind.ReadingList))
+                {
+                    preparedLists.Add(Path.GetExtension(file).Equals(".csv", StringComparison.OrdinalIgnoreCase)
+                        ? CsvReadingListIO.Prepare(file) : CblReadingListIO.Prepare(file));
+                    continue;
+                }
                 if (Path.GetExtension(file).Equals(".cbl", StringComparison.OrdinalIgnoreCase))
                 {
                     // A .cbl is either a reading list or a ComicRack smart list; ImportAny tells them apart by content.
@@ -185,9 +197,10 @@ public class DragImportService
                 CsvReadingListIO.Import(context, file);
                 readingListsImported++;
             }
-            catch
+            catch (Exception ex)
             {
                 // Malformed reading-list file - skipped, not counted as imported, doesn't stop the batch.
+                importNotes.Add($"{Path.GetFileName(file)}: {ex.Message}");
             }
         }
 
@@ -211,7 +224,8 @@ public class DragImportService
         // nowhere, matching LibraryFolderScanner's own silent per-file skip.
         int alreadyInLibrary = Math.Max(0, issueIds.Count - imported);
 
-        return new DragImportResult(imported, alreadyInLibrary, skippedUnsupported, readingListsImported, issueIds, smartListsImported, importNotes, profilesImported);
+        return new DragImportResult(imported, alreadyInLibrary, skippedUnsupported, readingListsImported, issueIds, smartListsImported, importNotes, profilesImported,
+            preparedLists.Count == 0 ? null : new PreparedImport(preparedLists, importNotes));
     }
 
     private static IEnumerable<string> EnumerateComicFiles(string folder, HashSet<string> supportedExtensions)

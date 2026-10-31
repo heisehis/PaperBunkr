@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System;
 using System.Threading.Tasks;
 
 namespace Paperbunkr.App.Services;
@@ -12,6 +13,12 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public interface ITrackerAutoSyncService
 {
+    event System.Action? RetryQueueChanged;
+    void Start();
+    void Stop();
+    IReadOnlyList<TrackerRetryQueueItem> GetRetryQueue();
+    Task RetryNowAsync(int retryId);
+    void DismissRetry(int retryId);
     /// <summary>The comic reader crossed its "finished" line for an issue in <paramref name="seriesId"/>
     /// (setting: update progress after reading).</summary>
     Task OnIssueFinishedInReaderAsync(int seriesId);
@@ -39,9 +46,25 @@ public sealed class NoOpTrackerAutoSyncService : ITrackerAutoSyncService
 {
     public static readonly NoOpTrackerAutoSyncService Instance = new();
 
+    public event System.Action? RetryQueueChanged { add { } remove { } }
+    public void Start() { }
+    public void Stop() { }
+    public IReadOnlyList<TrackerRetryQueueItem> GetRetryQueue() => System.Array.Empty<TrackerRetryQueueItem>();
+    public Task RetryNowAsync(int retryId) => Task.CompletedTask;
+    public void DismissRetry(int retryId) { }
+
     public Task OnIssueFinishedInReaderAsync(int seriesId) => Task.CompletedTask;
 
     public Task OnIssuesMarkedReadAsync(IReadOnlyCollection<int> seriesIds) => Task.CompletedTask;
 
     public Task<TrackerPullResult> PullSeriesAsync(int seriesId) => Task.FromResult(TrackerPullResult.None);
 }
+
+public sealed record TrackerRetryQueueItem(
+    int Id,
+    string SeriesName,
+    string TrackerName,
+    int? Chapter,
+    Paperbunkr.Data.Entities.TrackerPushRetryState State,
+    DateTime NextAttemptUtc,
+    string? LastError);

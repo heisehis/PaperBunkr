@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Reusable plugin test harness (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §A4): fake
+    environments, a recording logger and activity reporter, and PluginScriptRunner. No test-framework dependency, so any xUnit /
+    NUnit / MSTest project can reference it. Paperbunkr.Plugins.Tests uses it for its own ~230 tests, which keeps it exercised.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Paperbunkr.Plugins\Paperbunkr.Plugins.csproj" />
+  </ItemGroup>
+
+</Project>

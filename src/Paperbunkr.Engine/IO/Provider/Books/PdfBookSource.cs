@@ -48,6 +48,8 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 					Title = FirstNonEmpty(GetMetaText(document, "Title"), Path.GetFileNameWithoutExtension(filePath)),
 					Author = GetMetaText(document, "Author"),
 					SeriesName = null, // No PDF equivalent of EPUB's calibre:series convention.
+					Description = GetMetaText(document, "Subject"),
+					Tags = BookMetadataParsing.SplitKeywords(GetMetaText(document, "Keywords")),
 					CoverImageBytes = null, // Cover comes from rendering page 0 via the existing comic-PDF pipeline, not this text-extraction path.
 				};
 

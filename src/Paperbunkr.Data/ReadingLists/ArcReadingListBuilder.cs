@@ -11,6 +11,12 @@ public sealed record ArcRefreshResult(ReadingList List, int AddedCount, int Repl
 {
     /// <summary>What became of every entry the source returned (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.7).</summary>
     public ImportReport? Report { get; init; }
+
+    public int RetainedLocalCount { get; init; }
+
+    public int RemovedCount { get; init; }
+
+    public int RelinkedCount { get; init; }
 }
 
 /// <summary>A list just built from a source, and what became of every entry.</summary>
@@ -22,6 +28,18 @@ public sealed record ArcCreateResult(ReadingList List, ImportReport Report);
 /// </summary>
 public static class ArcReadingListBuilder
 {
+    public static async Task<PreparedReadingList> PrepareAsync(IReadingListSource source, ArcSearchResult arc, CancellationToken cancellationToken)
+    {
+        var fetched = await source.GetArcEntriesAsync(arc.Id, cancellationToken).ConfigureAwait(false);
+        if (fetched.Issues.Count == 0) throw new InvalidOperationException($"'{arc.Name}' has no indexed issues on {source.DisplayName}.");
+        var overview = await TryGetOverviewAsync(source, arc.Id, cancellationToken).ConfigureAwait(false);
+        return new PreparedReadingList(arc.Name, fetched.Issues.Select(a => a.ToReference(source.SourceKey)).ToList())
+        {
+            Source = source.SourceKey, ArcId = arc.Id, ArcName = arc.Name, Description = overview?.Description, CoverImageUrl = overview?.CoverImageUrl,
+            ArcIssues = fetched.Issues, Skipped = fetched.SkippedLines, Reported = fetched.ReportedCount,
+        };
+    }
+
     public static async Task<ReadingList> CreateFromArcAsync(
         PaperbunkrDbContext context, IReadingListSource source, ArcSearchResult arc, CancellationToken cancellationToken) =>
         (await CreateFromArcWithReportAsync(context, source, arc, cancellationToken).ConfigureAwait(false)).List;
@@ -88,60 +106,74 @@ public static class ArcReadingListBuilder
             throw new InvalidOperationException("This reading list isn't linked to an external source.");
         }
 
-        var source = sourceOverride ?? ReadingListSourceRegistry.Get(context, list.Source)
-            ?? throw new InvalidOperationException($"'{list.Source}' is unavailable - check its credentials in Preferences.");
+        string sourceKey = list.Source;
+        string arcId = list.ArcId;
+        var source = sourceOverride ?? ReadingListSourceRegistry.Get(context, sourceKey)
+            ?? throw new InvalidOperationException($"'{sourceKey}' is unavailable - check its credentials in Preferences.");
 
-        var fetched = await source.GetArcEntriesAsync(list.ArcId, cancellationToken).ConfigureAwait(false);
-        var overview = await TryGetOverviewAsync(source, list.ArcId, cancellationToken).ConfigureAwait(false);
+        var fetched = await source.GetArcEntriesAsync(arcId, cancellationToken).ConfigureAwait(false);
+        if (fetched.SkippedLines.Count > 0 || (fetched.ReportedCount is int reported && reported > fetched.Issues.Count))
+        {
+            string count = fetched.ReportedCount is int expected ? $"The source reported {expected} entries but returned {fetched.Issues.Count}. " : string.Empty;
+            string skipped = fetched.SkippedLines.Count > 0 ? $"{fetched.SkippedLines.Count} source entr{(fetched.SkippedLines.Count == 1 ? "y was" : "ies were")} skipped. " : string.Empty;
+            throw new InvalidOperationException($"Refresh stopped because the source response was incomplete. {count}{skipped}The reading list was left unchanged.");
+        }
 
-        // Placeholders whose comic has arrived are relinked in place first, so they keep their role and notes; left to the reconciler
-        // below they would be removed and re-added as new items (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.9).
-        int healed = ReadingListHealer.RecheckList(context, list.Id).Relinked;
+        var overview = await TryGetOverviewAsync(source, arcId, cancellationToken).ConfigureAwait(false);
 
-        // Two arc entries can resolve to the same local Issue (e.g. a punctuation-variant series name both folding to the same
-        // series) - the first occurrence wins, in the resolver and for role detection alike; the later one is reported as a duplicate.
+        // No network work is done while holding the database write transaction. Drop the pre-fetch
+        // snapshot and reload inside the transaction so changes made during the fetch are not lost.
+        context.ChangeTracker.Clear();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var current = await context.ReadingLists
+            .Include(r => r.Items).ThenInclude(i => i.Issue)
+            .Include(r => r.Items).ThenInclude(i => i.Source)
+            .FirstOrDefaultAsync(r => r.Id == readingListId, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("This reading list was deleted while its source was refreshing. No changes were made.");
+        if (!string.Equals(current.Source, sourceKey, StringComparison.Ordinal)
+            || !string.Equals(current.ArcId, arcId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("This reading list's source changed while it was refreshing. No changes were made; try again.");
+        }
+
+        // The existing conservative healer joins this transaction. Entries still waiting for a comic
+        // are rechecked before the provider's latest order is resolved.
+        int healed = ReadingListHealer.RecheckList(context, current.Id).Relinked;
+
+        // Two arc entries can resolve to the same local Issue (e.g. a punctuation-variant series name
+        // folding to the same series) - the first wins and later entries are reported as duplicates.
         var (resolution, resolved) = Resolve(context, source.SourceKey, fetched.Issues);
-        context.SaveChanges();      // new placeholders need their ids before the order can be reconciled
+        context.SaveChanges(); // allocate IDs for new placeholders while still inside the transaction
 
-        // Reorder/add/remove/orphaned-placeholder cleanup is shared with a continuity list's Rebuild; Role/Notes/GroupLabel are
-        // never touched by refresh.
-        var reconciled = ReadingListReconciler.Reconcile(context, list, resolved.Select(r => r.Entry.Issue.Id).ToList());
+        var planned = ArcReadingListRefreshPlanner.Apply(context, current, resolved);
+        context.SaveChanges(); // persist the complete new order before checking whether old placeholders are orphaned
 
-        var detectable = new List<(ArcIssue Arc, Issue Issue, ReadingListItem Item)>();
-        foreach (var (arcIssue, entry) in resolved)
+        foreach (int placeholderId in planned.FreedPlaceholderIds.Distinct())
         {
-            var item = reconciled.ItemsByIssue[entry.Issue.Id];
-
-            // A new entry gets its source record; an existing one keeps what it was first asked for (and a link the user made).
-            item.Source ??= entry.Source;
-            detectable.Add((arcIssue, entry.Issue, item));
+            ReadingListItemLinker.DeleteIfUnreferencedPlaceholder(context, placeholderId);
         }
 
-        // Refresh never overwrites a role the user set: detection only fills an empty/automatic slot, otherwise it leaves a suggestion.
-        var roles = DetectRoles(detectable);
+        var roles = DetectRoles(planned.Members);
+        if (!string.IsNullOrEmpty(overview?.Description)) current.Description = overview.Description;
+        if (!string.IsNullOrEmpty(overview?.CoverImageUrl)) current.CoverImageUrl = overview.CoverImageUrl;
 
-        if (!string.IsNullOrEmpty(overview?.Description))
-        {
-            list.Description = overview.Description;
-        }
-        if (!string.IsNullOrEmpty(overview?.CoverImageUrl))
-        {
-            list.CoverImageUrl = overview.CoverImageUrl;
-        }
-
-        // What this refresh actually changed, announced once as a single compound change
-        // (docs/superpowers/specs/2026-09-20-plugin-api-4-1-design.md §5.4).
-        ReadingListManager.Record(context, list, reconciled.Kind, reconciled.AddedIssueIds, reconciled.RemovedIssueIds);
-
+        var changeKind = (planned.AddedIssueIds.Count > 0 ? ReadingListChangeKind.Added : ReadingListChangeKind.None)
+            | (planned.RemovedIssueIds.Count > 0 ? ReadingListChangeKind.Removed : ReadingListChangeKind.None)
+            | (planned.Reordered ? ReadingListChangeKind.Reordered : ReadingListChangeKind.None);
+        ReadingListManager.Record(context, current, changeKind, planned.AddedIssueIds, planned.RemovedIssueIds);
         context.SaveChanges();
 
-        int stillMissingCount = context.ReadingListItems
+        int stillMissingCount = await context.ReadingListItems
             .Include(i => i.Issue)
-            .Count(i => i.ReadingListId == list.Id && i.Issue!.IsPlaceholder);
+            .CountAsync(i => i.ReadingListId == current.Id && i.Issue!.IsPlaceholder, cancellationToken).ConfigureAwait(false);
 
-        return new ArcRefreshResult(list, reconciled.AddedIssueIds.Count, reconciled.ReplacedPlaceholderCount + healed, stillMissingCount, roles)
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return new ArcRefreshResult(current, planned.AddedRowCount, planned.ReplacedPlaceholderCount + healed, stillMissingCount, roles)
         {
             Report = resolution.Report(fetched.SkippedLines, fetched.ReportedCount),
+            RetainedLocalCount = planned.RetainedLocalCount,
+            RemovedCount = planned.RemovedRowCount,
+            RelinkedCount = planned.RelinkedCount + healed,
         };
     }
 
@@ -155,7 +187,7 @@ public static class ArcReadingListBuilder
         return (resolution, kept.Zip(items, (arc, entry) => (arc, entry)).ToList());
     }
 
-    private static RoleDetectionSummary DetectRoles(IReadOnlyList<(ArcIssue Arc, Issue Issue, ReadingListItem Item)> members)
+    internal static RoleDetectionSummary DetectRoles(IReadOnlyList<(ArcIssue Arc, Issue Issue, ReadingListItem Item)> members)
     {
         string? dominant = MemberRoleDetector.DominantSeries(members.Select(m => m.Arc.Series));
         var summary = RoleDetectionSummary.Empty;

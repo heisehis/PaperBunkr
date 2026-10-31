@@ -22,6 +22,54 @@ namespace Paperbunkr.App.Tests;
 [Collection(nameof(AvaloniaTestCollection))]
 public class RealWindowKeyboardTests : IDisposable
 {
+    [Fact]
+    public async Task ReadingListReview_SearchAndCandidateArrowsWorkInTheRealWindow()
+    {
+        int listId;
+        using (var db = PaperbunkrDb.CreateContext())
+        {
+            var series = new Series { Name = "Avengers" };
+            var placeholder = new Issue { Series = series, Number = "1", IsPlaceholder = true, FileIsMissing = true };
+            var list = new ReadingList { Name = "Review keyboard", Items = { new ReadingListItem { Issue = placeholder,
+                Source = Paperbunkr.Data.ReadingLists.Matching.ReadingListResolver.NewSource(new("Avengers", "1"), MatchMethod.None, MatchState.NeedsChoice, null) } } };
+            db.ReadingLists.Add(list);
+            db.Issues.AddRange(new Issue { Series = series, Number = "1", Year = 1963, FilePath = "first.cbz" },
+                new Issue { Series = series, Number = "1", Year = 1996, FilePath = "second.cbz" });
+            db.SaveChanges(); listId = list.Id;
+        }
+        var vm = PinnedThread.Run(() => new MainViewModel());
+        await vm.Reading.OpenReviewAsync([listId]);
+        await vm.Reading.Review.SearchCommand.ExecuteAsync(null);
+        PinnedThread.Run(() =>
+        {
+            WithThemeAndTokens(() =>
+            {
+                using var styles = AppStyles(); using var tokens = AppResources();
+                var previous = InputServiceLocator.Current;
+                InputServiceLocator.Current = new InputService(InputActionCatalog.CreateWithCoreActions(), new MemoryKeymapStore());
+                try
+                {
+                    var window = new MainWindow { DataContext = vm, Width = 1400, Height = 900 };
+                    window.Show(); vm.GoReadingCommand.Execute(null); RunLayout(window);
+                    var review = window.GetVisualDescendants().OfType<ReadingListReviewView>().Single();
+                    var search = review.FindControl<TextBox>("ReviewSearch")!;
+                    FocusReclaimer.FocusFirstButton(review);
+                    window.KeyPress(Key.F, RawInputModifiers.Control, PhysicalKey.F, null); TestDispatcher.Drain(); RunLayout(window);
+                    Assert.Same(search, window.FocusManager!.GetFocusedElement());
+                    var candidates = review.FindControl<ListBox>("CandidateList")!;
+                    var buttons = candidates.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("menuRow")).ToList();
+                    Assert.Equal(2, buttons.Count);
+                    buttons[0].Focus(NavigationMethod.Directional);
+                    Press(window, Key.Down); TestDispatcher.Drain(); RunLayout(window);
+                    Assert.Same(buttons[1], window.FocusManager.GetFocusedElement());
+                    window.Close();
+                }
+                finally { InputServiceLocator.Current = previous; }
+            });
+            return 0;
+        });
+    }
+
     private readonly string? _original;
     private readonly string _db;
     private readonly CoverCacheTestRedirect _cover;

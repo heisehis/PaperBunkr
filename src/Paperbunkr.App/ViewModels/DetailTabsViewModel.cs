@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -87,12 +87,10 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         ContinuityChips = new ObservableCollection<ContinuityChip>();
         SameCollection = new ObservableCollection<RelatedGroupSeriesSample>();
         CollectionChips = new ObservableCollection<CollectionChip>();
-        SameEvent = new ObservableCollection<RelatedGroupSeriesSample>();
         ExternalLinks = new ObservableCollection<ExternalLinkSample>();
         MetadataSearchResults = new ObservableCollection<AniListMatchSample>();
         RelatedRail = new ObservableCollection<PosterRailItem>();
         ContinuityRail = new ObservableCollection<PosterRailItem>();
-        EventRail = new ObservableCollection<PosterRailItem>();
         MoreLikeThisRail = new ObservableCollection<PosterRailItem>();
         Activity = new ObservableCollection<ActivitySample>();
     }
@@ -382,16 +380,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
     /// <summary>The loaded series' own <see cref="Data.Entities.Collection"/> memberships, shown as removable chips.</summary>
     public ObservableCollection<CollectionChip> CollectionChips { get; }
 
-    /// <summary>
-    /// Real data as of docs/superpowers/specs/2026-08-17-metadata-model-phase4b-story-events-
-    /// design.md - other series sharing at least one <see cref="Data.Entities.StoryEvent"/> with
-    /// the loaded series, populated by <see cref="LoadSeries"/> via
-    /// <see cref="EventMembershipResolver.GetOtherSeriesInSharedEvents"/>. Additive alongside
-    /// <see cref="Related"/>/<see cref="SameContinuity"/>.
-    /// </summary>
-    public ObservableCollection<RelatedGroupSeriesSample> SameEvent { get; }
 
-    public bool HasSameEvent => SameEvent.Count > 0;
 
     public ObservableCollection<RelationSearchResult> RelationSearchResults { get; } = new();
 
@@ -529,7 +518,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
             RefreshRelated(context, series.Id);
             RefreshContinuity(context, series.Id);
             RefreshCollections(context, series.Id);
-            RefreshSameEvent(context, series.Id);
+            RefreshEventRows(series.Id);
             RefreshMoreLikeThis(series.Id);
             RefreshExternalLinks(context, series.Id);
             RefreshTrackerLinks(context, series.Id);
@@ -861,12 +850,20 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
     {
         Related.Clear();
         RelatedRail.Clear();
-        var endpoints = MediaRelationResolver.GetRelatedFromSeries(context, seriesId).ToList();
+        // Tie-ins live in their event's row, not here (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §6.2).
+        var endpoints = MediaRelationResolver.GetRelatedFromSeries(context, seriesId)
+            .Where(e => e.DisplayType is not (RelationType.TieIn or RelationType.MainEventSeries))
+            .ToList();
         var relationIds = endpoints.Select(e => e.MediaRelationId).ToList();
-        var fromGcd = context.RelationEvidence
-            .Where(e => e.Provider == RelationEvidenceProvider.Gcd && relationIds.Contains(e.MediaRelationId))
-            .Select(e => e.MediaRelationId)
-            .ToHashSet();
+        var evidenceByRelation = context.RelationEvidence.AsNoTracking()
+            .Where(e => relationIds.Contains(e.MediaRelationId))
+            .ToList()
+            .GroupBy(e => e.MediaRelationId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyCollection<RelationEvidence>)g.ToList());
+        var sourceByRelation = context.MediaRelations.AsNoTracking()
+            .Where(m => relationIds.Contains(m.Id))
+            .Select(m => new { m.Id, m.SourceSeriesId })
+            .ToDictionary(m => m.Id, m => m.SourceSeriesId);
         foreach (var endpoint in endpoints)
         {
             RelatedSeriesSample sample;
@@ -878,7 +875,10 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
                 {
                     Title = otherSeries.Name,
                     Name = otherSeries.Name,
-                    Note = RelationTypeOption.FormatLabel(endpoint.DisplayType) + (fromGcd.Contains(endpoint.MediaRelationId) ? " · GCD" : string.Empty),
+                    Note = RelatedRelationLabels.For(
+                        endpoint.DisplayType,
+                        evidenceByRelation.GetValueOrDefault(endpoint.MediaRelationId) ?? Array.Empty<RelationEvidence>(),
+                        cardIsSource: sourceByRelation.GetValueOrDefault(endpoint.MediaRelationId) == otherSeries.Id),
                     CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
                     Kind = MediaRelationEndpointKind.Series,
                     RelatedSeriesId = otherSeries.Id,
@@ -952,6 +952,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         OnPropertyChanged(nameof(HasRelated));
         OnPropertyChanged(nameof(HasAnyRelatedRail));
         OnPropertyChanged(nameof(HasExternalRelationPlaceholders));
+        RefreshSuggestions(seriesId);
     }
 
     /// <summary>
@@ -1084,17 +1085,34 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         RefreshRelated(context, currentSeriesId);
     }
 
+    /// <summary>
+    /// The Related rail's per-card ✕: deletes a relation (an automatic one is also dismissed, so no sweep brings it back) or dismisses a
+    /// suggestion (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §6.1, §6.3). Deferred one dispatcher tick: the ✕ sits
+    /// inside the row the refresh removes (CLAUDE.md, "don't remove/detach a control from inside a routed event it's still raising").
+    /// </summary>
     [RelayCommand]
-    private void RemoveRelation(RelatedSeriesSample? sample)
+    private void RemoveRelation(object? payload)
     {
-        if (sample is null || _seriesId is not int currentSeriesId)
+        if (payload is RelationSuggestionPayload suggestion)
+        {
+            DismissSuggestion(suggestion);
+            return;
+        }
+
+        if (payload is not RelatedSeriesSample sample || _seriesId is not int currentSeriesId)
         {
             return;
         }
 
-        using var context = _contextFactory();
-        MediaRelationResolver.Remove(context, sample.MediaRelationId);
-        RefreshRelated(context, currentSeriesId);
+        Dispatcher.UIThread.Post(() =>
+        {
+            using var context = _contextFactory();
+            MediaRelationResolver.Remove(context, sample.MediaRelationId);
+            if (_seriesId == currentSeriesId)
+            {
+                RefreshRelated(context, currentSeriesId);
+            }
+        });
     }
 
     // --- Related tab: Continuity membership (docs/superpowers/specs/2026-08-17-metadata-model-
@@ -1375,38 +1393,6 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         RefreshCollections(context, currentSeriesId);
     }
 
-    // --- Related tab: Same Event (docs/superpowers/specs/2026-08-17-metadata-model-phase4b-
-    // story-events-design.md) - read-only, populated from EventMembership, no creation UI here
-    // (that lives on the Events screen). ---
-
-    private void RefreshSameEvent(PaperbunkrDbContext context, int seriesId)
-    {
-        SameEvent.Clear();
-        EventRail.Clear();
-        foreach (var otherSeries in EventMembershipResolver.GetOtherSeriesInSharedEvents(context, seriesId))
-        {
-            SameEvent.Add(new RelatedGroupSeriesSample
-            {
-                Title = otherSeries.Name,
-                Name = otherSeries.Name,
-                Note = "Same event",
-                CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
-                SeriesId = otherSeries.Id,
-            });
-            EventRail.Add(new PosterRailItem
-            {
-                Id = otherSeries.Id,
-                Name = otherSeries.Name,
-                CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
-                CoverImage = RailCoverFor(context, otherSeries.Id),
-                Payload = otherSeries.Id,
-            });
-        }
-
-        OnPropertyChanged(nameof(HasSameEvent));
-        OnPropertyChanged(nameof(HasAnyRelatedRail));
-    }
-
     // --- Details tab: external metadata provider links (docs/superpowers/specs/2026-08-19-
     // metadata-model-anilist-search-and-link-design.md) - completes the search/match UI Phase 5b's
     // own spec explicitly deferred ("nothing in Paperbunkr.App calls this yet"). ---
@@ -1557,6 +1543,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
             if (_pluginHost is not null)
             {
                 options.AddRange(_pluginHost.GetNetSearchCommands().Select(MetadataSearchProviderOption.For));
+                options.AddRange(_pluginHost.Providers.MetadataProviders.Select(MetadataSearchProviderOption.For));
             }
 
             return options;
@@ -1641,6 +1628,12 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         IsMetadataSearchInProgress = true;
         try
         {
+            if (SelectedMetadataProvider.PluginProvider is { } pluginProvider)
+            {
+                await SearchViaPluginProviderAsync(pluginProvider, cts.Token);
+                return;
+            }
+
             if (SelectedMetadataProvider.IsPlugin)
             {
                 await SearchViaPluginAsync(SelectedMetadataProvider.PluginCommand!, cts.Token);
@@ -1731,11 +1724,78 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         }
     }
 
+    /// <summary>Plugin metadata provider search (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §C).</summary>
+    private async Task SearchViaPluginProviderAsync(PluginMetadataProvider provider, CancellationToken ct)
+    {
+        if (_pluginHost is null)
+        {
+            return;
+        }
+
+        string query = MetadataSearchQuery;
+        var matches = await _pluginHost.Providers.CallAsync(provider.PluginKey, $"{provider.DisplayName} search", token => provider.Search(query, token), ct).ConfigureAwait(true);
+        if (ct.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (matches is null)
+        {
+            MetadataSearchError = $"{provider.DisplayName} is unavailable right now (the plugin's log says why).";
+            return;
+        }
+
+        foreach (var match in matches)
+        {
+            MetadataSearchResults.Add(new AniListMatchSample
+            {
+                ExternalId = match.Id,
+                Title = match.Title,
+                Url = match.Url,
+                Confidence = 0,
+                Tier = MatchTier.NeedsReview,   // a plugin's match is never auto-preselected
+            });
+        }
+
+        if (matches.Count == 0)
+        {
+            MetadataSearchError = "No matches found.";
+        }
+    }
+
+    /// <summary>A plugin provider's chosen match becomes pending proposals (Plugin API 4.5 §C) - nothing is applied or stored as a link.</summary>
+    private async Task ProposeFromPluginProviderAsync(PluginMetadataProvider provider, string externalId, int seriesId)
+    {
+        if (_pluginHost is null)
+        {
+            return;
+        }
+
+        var metadata = await _pluginHost.Providers.CallAsync(provider.PluginKey, $"{provider.DisplayName} details", token => provider.Get(externalId, token)).ConfigureAwait(true);
+        if (metadata is null)
+        {
+            MetadataSearchError = $"Couldn't get that match from {provider.DisplayName} (the plugin's log says why).";
+            return;
+        }
+
+        using var context = _contextFactory();
+        int proposed = PluginMetadataProposals.Create(context, seriesId, metadata);
+        MetadataSearchError = proposed == 0
+            ? $"{provider.DisplayName} had nothing new for this series."
+            : $"{proposed} {(proposed == 1 ? "change" : "changes")} from {provider.DisplayName} added to Needs Review - nothing is applied until you accept {(proposed == 1 ? "it" : "them")}.";
+    }
+
     [RelayCommand]
     private async Task LinkMetadataAsync(AniListMatchSample? candidate)
     {
         if (candidate is null || _seriesId is not int currentSeriesId)
         {
+            return;
+        }
+
+        if (_searchedProvider?.PluginProvider is { } pluginProvider)
+        {
+            await ProposeFromPluginProviderAsync(pluginProvider, candidate.ExternalId, currentSeriesId);
             return;
         }
 
@@ -2355,6 +2415,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
             if (remote is not null && TrackerSyncResolver.RemoteWins(TrackerProgressCalculator.ComputeChapterProgress(series.Issues), series.ReadingStatus, remote))
             {
                 var newlyRead = TrackerSyncResolver.ApplyRemote(series, remote);
+                TrackerPushRetryStore.Clear(context, link.Id);
                 foreach (var issue in newlyRead)
                 {
                     SwapReadStateTile(Issues, issue);
@@ -2373,6 +2434,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
             if (ok)
             {
                 pushed.Add(link.Service.ToString());
+                TrackerPushRetryStore.Clear(context, link.Id);
             }
             else
             {
@@ -2727,7 +2789,10 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
     /// </summary>
     public int? FocusedIssueId => SelectedIssueIds.Count == 1 ? SelectedIssueIds.Single() : null;
 
-    public bool HasComicInfoPluginCommands => _pluginHost?.GetComicInfoCommands().Any() == true;
+    public bool HasComicInfoPluginCommands => _pluginHost?.GetComicInfoCommands().Any() == true || _pluginHost?.HasIssueDetailExtensions == true;
+
+    /// <summary>Native plugins' panels for the focused issue (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §E).</summary>
+    public ObservableCollection<Paperbunkr.App.Plugins.PluginView> IssuePluginViews { get; } = new();
 
     /// <summary>Library-hook commands (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5)
     /// for the issue-tile "Plugins ▸" context-menu submenu - same shape/source as
@@ -2744,13 +2809,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
     private async Task RefreshComicInfoPanelsAsync()
     {
         ComicInfoPanels.Clear();
+        IssuePluginViews.Clear();
         if (_pluginHost is null || FocusedIssueId is not int issueId)
-        {
-            return;
-        }
-
-        var commands = _pluginHost.GetComicInfoCommands().ToList();
-        if (commands.Count == 0)
         {
             return;
         }
@@ -2758,6 +2818,17 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         using var context = _contextFactory();
         var issue = context.Issues.Find(issueId);
         if (issue is null)
+        {
+            return;
+        }
+
+        foreach (var view in _pluginHost.GetIssueDetailExtensions(issue))
+        {
+            IssuePluginViews.Add(view);
+        }
+
+        var commands = _pluginHost.GetComicInfoCommands().ToList();
+        if (commands.Count == 0)
         {
             return;
         }
@@ -3123,9 +3194,6 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
     /// <summary>Same Continuity as rail cards (read-only). Mirrors <see cref="SameContinuity"/>.</summary>
     public ObservableCollection<PosterRailItem> ContinuityRail { get; }
 
-    /// <summary>Same Event as rail cards (read-only). Mirrors <see cref="SameEvent"/>.</summary>
-    public ObservableCollection<PosterRailItem> EventRail { get; }
-
     /// <summary>Same Collection as rail cards (read-only). Mirrors <see cref="SameCollection"/> - see its own doc comment on why both exist (this is what the View actually renders; the other feeds <see cref="HasAnyRelatedRail"/>).</summary>
     public ObservableCollection<PosterRailItem> CollectionRail { get; } = new();
 
@@ -3135,7 +3203,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
     public bool HasMoreLikeThis => MoreLikeThisRail.Count > 0;
 
     /// <summary>Any related-media rail has content - drives the Related tab's empty-state.</summary>
-    public bool HasAnyRelatedRail => Related.Count > 0 || SameContinuity.Count > 0 || SameCollection.Count > 0 || SameEvent.Count > 0 || MoreLikeThisRail.Count > 0;
+    public bool HasAnyRelatedRail => Related.Count > 0 || SameContinuity.Count > 0 || SameCollection.Count > 0 || EventRows.Count > 0 || OtherEventsRail.Count > 0 || MoreLikeThisRail.Count > 0;
 
     // Bumped by every load, so a rail computed for a series the user has already left is dropped.
     private int _moreLikeThisGeneration;
@@ -3234,6 +3302,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
             int seriesId => seriesId,
             RelatedSeriesSample s => s.RelatedSeriesId,
             RelatedGroupSeriesSample g => g.SeriesId,
+            RelationSuggestionPayload suggestion => suggestion.OtherSeriesId,
             PosterRailItem item => item.Id,
             _ => null,
         };

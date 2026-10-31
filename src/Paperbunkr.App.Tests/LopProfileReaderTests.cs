@@ -135,12 +135,22 @@ public class LopProfileReaderTests
     }
 
     [Fact]
-    public void APre20File_IsNotSupported()
+    public void APre20File_IsConvertedIntoAProfile()
     {
         var result = ReadXml("<Settings><Setting Name=\"Old\" /></Settings>");
 
-        Assert.Contains("pre-2.0", result.FileError);
-        Assert.Empty(result.Profiles);
+        Assert.Null(result.FileError);
+        Assert.Equal("Old", Assert.Single(result.Profiles).Profile.Name);
+    }
+
+    [Fact]
+    public void APre20Setting_ConvertsModeAndLegacyEmptyDataNames_AndReportsOldVersionLimit()
+    {
+        var imported = Only(ReadXml("<Settings Version=\"1.6\"><Setting Name=\"Legacy\"><Mode>Test</Mode><EmptyData><Item Name=\"Series\" Value=\"Unknown\" /></EmptyData></Setting></Settings>"));
+
+        Assert.Equal(OrganizerMode.Simulate, imported.Profile.Mode);
+        Assert.Equal("Unknown", imported.Profile.EmptyData["ShadowSeries"]);
+        Assert.Contains(imported.Notes, n => n.Contains("1.6 or earlier"));
     }
 
     [Theory]

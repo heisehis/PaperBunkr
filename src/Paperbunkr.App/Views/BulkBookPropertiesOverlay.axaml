@@ -41,6 +41,49 @@
                 <DatePicker SelectedDate="{Binding PublishedDate}" HorizontalAlignment="Left" Margin="0,4,0,0" />
             </StackPanel>
 
+            <StackPanel>
+                <CheckBox Content="Reading status" IsChecked="{Binding ApplyStatus}" FontWeight="SemiBold" />
+                <controls:SuggestBox Text="{Binding StatusLabel}" Suggestions="{Binding StatusOptions}" IsStrict="True"
+                                     HorizontalAlignment="Left" Width="248" Margin="0,4,0,0" AutomationProperties.AutomationId="BulkBookStatus" />
+            </StackPanel>
+
+            <StackPanel>
+                <CheckBox Content="My rating (ticked with no stars clears it)" IsChecked="{Binding ApplyRating}" FontWeight="SemiBold" />
+                <controls:StarRating Value="{Binding Rating, Mode=TwoWay}" StarSize="20" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                     AutomationProperties.Name="My rating" AutomationProperties.AutomationId="BulkBookRating" />
+            </StackPanel>
+
+            <WrapPanel>
+                <StackPanel Width="230" Margin="0,0,16,0">
+                    <CheckBox Content="Publisher" IsChecked="{Binding ApplyPublisher}" FontWeight="SemiBold" />
+                    <controls:SuggestBox Text="{Binding Publisher}" Suggestions="{Binding Vocabulary.Publishers}" HorizontalAlignment="Stretch" Margin="0,4,0,0" />
+                </StackPanel>
+                <StackPanel Width="230">
+                    <CheckBox Content="Language" IsChecked="{Binding ApplyLanguage}" FontWeight="SemiBold" />
+                    <controls:SuggestBox Text="{Binding LanguageIso}" Suggestions="{Binding Vocabulary.Languages}" HorizontalAlignment="Stretch" Margin="0,4,0,0" />
+                </StackPanel>
+            </WrapPanel>
+
+            <Border Classes="card" Padding="0">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Genres &amp; tags" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14">
+                        <TextBlock Classes="fieldLabel" Text="ADD GENRES" />
+                        <controls:SuggestBox Text="{Binding AddGenres}" Suggestions="{Binding Vocabulary.Genres}" IsMultiValue="True"
+                                             HorizontalAlignment="Stretch" Margin="0,0,0,12" />
+                        <TextBlock Classes="fieldLabel" Text="ADD TAGS" />
+                        <controls:SuggestBox Text="{Binding AddTags}" Suggestions="{Binding Vocabulary.Tags}" IsMultiValue="True"
+                                             HorizontalAlignment="Stretch" Margin="0,0,0,12" />
+                        <TextBlock Classes="fieldLabel" Text="REMOVE FROM GENRES AND TAGS" />
+                        <controls:SuggestBox Text="{Binding RemoveTags}" Suggestions="{Binding Vocabulary.Tags}" IsMultiValue="True" HorizontalAlignment="Stretch" />
+                        <TextBlock Classes="applyHint" TextWrapping="Wrap" Margin="0,8,0,0"
+                                   Text="Tags are added to and removed from each book; nothing else on a book's tag list changes." />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <Border Classes="card" Padding="0">
                 <StackPanel>
                     <Border Classes="groupHeader">

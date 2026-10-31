@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.Media;
 
 namespace Paperbunkr.App.Views;
 
@@ -39,6 +40,30 @@ public partial class ReaderListDrawer : UserControl
         {
             _overlayController.SetOpen(change.GetNewValue<bool>());
         }
+        else if (change.Property == PanelBackgroundProperty || change.Property == PanelForegroundProperty)
+        {
+            Reader.BookThemePanelResources.Apply(PanelCard.Resources, PanelBackground, PanelForeground);
+        }
+    }
+
+    /// <summary>The book theme's page colour: the panel is a card of the page (books redesign §5.3). Null keeps the app's chrome colours.</summary>
+    public static readonly StyledProperty<IBrush?> PanelBackgroundProperty =
+        AvaloniaProperty.Register<ReaderListDrawer, IBrush?>(nameof(PanelBackground));
+
+    /// <summary>The book theme's text colour; with <see cref="PanelBackground"/> it re-tints every text, border and surface token inside the panel.</summary>
+    public static readonly StyledProperty<IBrush?> PanelForegroundProperty =
+        AvaloniaProperty.Register<ReaderListDrawer, IBrush?>(nameof(PanelForeground));
+
+    public IBrush? PanelBackground
+    {
+        get => GetValue(PanelBackgroundProperty);
+        set => SetValue(PanelBackgroundProperty, value);
+    }
+
+    public IBrush? PanelForeground
+    {
+        get => GetValue(PanelForegroundProperty);
+        set => SetValue(PanelForegroundProperty, value);
     }
 
     /// <summary>Belt-and-braces: if this control is ever torn out of the visual tree (screen

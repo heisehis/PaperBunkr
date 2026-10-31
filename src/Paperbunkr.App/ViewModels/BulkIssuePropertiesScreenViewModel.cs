@@ -297,6 +297,7 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
         // diffing, duplicating rows and losing any Category/Weight already set.
         var issues = context.Issues.Include(i => i.Series).Include(i => i.Tags).Include(i => i.FieldOverrides).Where(i => _issueIds.Contains(i.Id)).ToList();
         var stagedFields = AllFields.Where(f => f.IsStaged).ToList();
+        var identityBefore = ReadingListHealingCoordinator.Capture(context, issues.Select(i => i.Id));
 
         // File metadata write-back (docs/superpowers/specs/2026-09-03-file-metadata-write-back-
         // design.md) - snapshot every file-mapped field per issue now, compare after Save, enqueue a
@@ -350,6 +351,10 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
         }
 
         context.SaveChanges();
+
+        var identityAfter = ReadingListHealingCoordinator.Capture(context, issues.Select(i => i.Id));
+        var healed = ReadingListHealingCoordinator.Recheck(_contextFactory, ReadingListHealingCoordinator.Changed(identityBefore, identityAfter));
+        ReadingListHealingCoordinator.Report(healed);
 
         // Re-derive the Character index for every edited issue (docs/superpowers/specs/2026-08-27-
         // metadata-model-phase4g-age-progression-design.md) - cheap no-op unless Characters changed.

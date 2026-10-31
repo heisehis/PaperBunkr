@@ -155,24 +155,37 @@ public static class MangaProviderApply
     /// <summary>The provider's own 0-100 score, kept as one external rating per provider (never mixed into the user's rating).</summary>
     private static void ApplyRating(PaperbunkrDbContext context, Series series, ExternalMediaMetadata metadata, ExternalMetadataProvider provider, MangaApplyResult report)
     {
+        if (StoreRating(context, series.Id, metadata, provider))
+        {
+            report.Applied.Add($"rating {Math.Round(metadata.Rating!.Value, 1)}/100");
+        }
+    }
+
+    /// <summary>
+    /// Upserts the provider's score for a series as its <see cref="ExternalRating"/> (the caller saves). False when the provider has no score
+    /// (null or not above 0), in which case nothing is written. Also used by <see cref="CommunityRatingBackfillService"/>.
+    /// </summary>
+    public static bool StoreRating(PaperbunkrDbContext context, int seriesId, ExternalMediaMetadata metadata, ExternalMetadataProvider provider)
+    {
         if (metadata.Rating is not double score || score <= 0)
         {
-            return;
+            return false;
         }
 
-        var existing = context.ExternalRatings.FirstOrDefault(r => r.SeriesId == series.Id && r.Provider == provider);
+        var existing = context.ExternalRatings.FirstOrDefault(r => r.SeriesId == seriesId && r.Provider == provider);
         if (existing is null)
         {
-            context.ExternalRatings.Add(new ExternalRating { SeriesId = series.Id, Provider = provider, Value = (decimal)Math.Round(score, 2), Scale = 100, RetrievedAt = DateTime.UtcNow });
+            context.ExternalRatings.Add(new ExternalRating { SeriesId = seriesId, Provider = provider, Value = (decimal)Math.Round(score, 2), Scale = 100, VoteCount = metadata.RatingVoteCount, RetrievedAt = DateTime.UtcNow });
         }
         else
         {
             existing.Value = (decimal)Math.Round(score, 2);
             existing.Scale = 100;
+            existing.VoteCount = metadata.RatingVoteCount ?? existing.VoteCount;
             existing.RetrievedAt = DateTime.UtcNow;
         }
 
-        report.Applied.Add($"rating {Math.Round(score, 1)}/100");
+        return true;
     }
 
     private static void AddAlternateTitles(Series series, ExternalMediaMetadata metadata, MangaApplyResult report)

@@ -61,6 +61,12 @@ public static class TrackerAdapterFactory
     /// <see cref="ITrackerAdapter.PushEntryAsync"/>.</summary>
     public static async Task<(bool Success, string? ErrorDetail)> PushDetailedAsync(ITrackerAdapter adapter, PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
     {
+        if (adapter is ITrackerClassifiedPush classified)
+        {
+            var result = await classified.PushEntryClassifiedAsync(context, link, payload, cancellationToken).ConfigureAwait(false);
+            return (result.Succeeded, result.ErrorDetail);
+        }
+
         if (adapter is ITrackerDetailedPush detailed)
         {
             return await detailed.PushEntryDetailedAsync(context, link, payload, cancellationToken).ConfigureAwait(false);
@@ -68,5 +74,16 @@ public static class TrackerAdapterFactory
 
         bool ok = await adapter.PushEntryAsync(context, link, payload, cancellationToken).ConfigureAwait(false);
         return (ok, ok ? null : "Push failed.");
+    }
+
+    public static async Task<TrackerOperationResult<bool>> PushClassifiedAsync(ITrackerAdapter adapter, PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
+    {
+        if (adapter is ITrackerClassifiedPush classified)
+        {
+            return await classified.PushEntryClassifiedAsync(context, link, payload, cancellationToken).ConfigureAwait(false);
+        }
+
+        var (success, error) = await PushDetailedAsync(adapter, context, link, payload, cancellationToken).ConfigureAwait(false);
+        return success ? TrackerOperationResult<bool>.Success(true) : TrackerOperationResult<bool>.Permanent(error ?? "Push failed.");
     }
 }

@@ -36,6 +36,41 @@ public abstract class Command
     /// </summary>
     public bool ConfirmWrites { get; init; }
 
+    /// <summary>The manifest's <c>menus</c> attribute as written (Plugin API 4.5 §E), or null; see <see cref="ShowsInMenu"/>.</summary>
+    public string? Menus { get; init; }
+
+    /// <summary>The manifest's <c>toolbar</c> attribute (Plugin API 4.5 §E): listed under the Library toolbar's Plugins button.</summary>
+    public bool Toolbar { get; init; }
+
+    /// <summary>Right-click menus a command can be shown in (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §E).</summary>
+    public static class MenuNames
+    {
+        public const string Library = "library";
+        public const string Detail = "detail";
+        public const string ReadingList = "readinglist";
+        public const string Books = "books";
+    }
+
+    /// <summary>
+    /// True when this command belongs in <paramref name="menu"/>. With no <see cref="Menus"/> declared the old placement holds: a
+    /// Library command in the Library and Detail menus, a Books command in the Books menu, and nothing else anywhere.
+    /// </summary>
+    public bool ShowsInMenu(string menu)
+    {
+        if (string.IsNullOrWhiteSpace(Menus))
+        {
+            return Hook switch
+            {
+                PluginHooks.Library => menu is MenuNames.Library or MenuNames.Detail,
+                PluginHooks.Books => menu == MenuNames.Books,
+                _ => false,
+            };
+        }
+
+        return Menus.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(m => string.Equals(m, menu, StringComparison.OrdinalIgnoreCase));
+    }
+
     public bool Enabled { get; set; } = true;
 
     /// <summary>Per-command clone of the environment, with <see cref="IPluginEnvironment.CommandPath"/> set to this command's plugin folder. Set by <see cref="Initialize"/>.</summary>

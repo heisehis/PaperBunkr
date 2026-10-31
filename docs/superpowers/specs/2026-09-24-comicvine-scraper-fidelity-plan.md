@@ -27,10 +27,9 @@ explicitly rather than guessed at implementation time:
    fallthrough: compute `chosen` from the top-ranked candidate, run the gate, and on failure treat the
    book as if `AutoChooseTopMatch` were off *for that one book* (falls into whichever of
    interactive-review/skip-and-log the `isInteractive` flag already selects).
-5. **No alt-cover data exists anywhere in the type system** — not just missing UI. `ComicVineIssueDetails`
-   and `ComicVineIssueSummary`/`ComicVineVolumeSearchResult` all carry exactly one `ImageUrl`. Cover
-   cycling (design §4.2) needs a new ComicVine field request (`associated_images` — unconfirmed against
-   a live response, same caution as the design doc) and new DTO members before any ViewModel work.
+5. **Alt-cover data was not in the type system when this plan was written.** `ComicVineIssueDetails`
+   and `ComicVineIssueSummary` carried exactly one `ImageUrl`. Step 17 below adds `associated_images`
+   after the live API response confirmed its shape on 2026-10-26.
 6. **`ScrapeAsync` returns a single `int applied`** — no scraped/skipped/no-match/failed breakdown
    exists anywhere to build §4.1's summary from. This needs a richer return type, which also changes
    `ScrapeCoordinator.cs`'s consumption of it.
@@ -314,24 +313,18 @@ convention).
 
 ### Step 17: Cover-image cycling with alt-cover memory
 **Files:** edit `src/Paperbunkr.Data/ComicVine/ComicVineClient.cs` (request `associated_images` in
-`IssueDetailFields`, parse into a new DTO field — confirm the real field name against a live response
-first, per the design doc's own caution), `src/Paperbunkr.Data/ComicVine/Scraping/ScrapeComicVine.cs`
-(`ComicVineIssueSummary`/`ComicVineVolumeSearchResult` gain an alt-cover URL list, or a follow-up detail
-fetch supplies it — decide based on what the confirmed field actually returns and at which endpoint),
+issue-list and issue-detail fields, parse the confirmed `original_url` shape into DTOs),
+`src/Paperbunkr.Data/ComicVine/Scraping/ScrapeComicVine.cs` (carry alternates into issue summaries),
 `src/Paperbunkr.App/Scraper/ComicVineMatchReviewDialogViewModel.cs` and
-`ComicVineIssueReviewDialogViewModel.cs` (candidate ViewModels gain `NextCover`/`PreviousCover` commands
-and an index into the alt-cover list; a per-dialog-session `Dictionary<candidateKey, int>` remembers a
-non-default pick, matching CE's in-memory-only `session_data_map` scope), the `.axaml` views (next/prev
-buttons around the cover `Image`)
-**What:** Largest remaining item — genuinely new data (server field), new DTO surface, and new
-interactive UI. Confirm the ComicVine field name and response shape against a live call or ComicVine's
-public API docs before writing the parser (this is exactly the kind of external-API fact this project's
-standing rule says to verify, not assume).
+`ComicVineIssueReviewDialogViewModel.cs` (candidate view models gain carousel commands; a scrape-run
+dictionary keyed by provider + issue ID remembers a selected URL across both dialogs), the `.axaml`
+views (accessible next/previous buttons and position text below the cover)
+**What:** Adds issue cover alternatives to the interactive review UI. A live authenticated response
+confirmed the `associated_images` array and `original_url` field on 2026-10-26 before implementation.
 **Depends on:** none, but do last — most likely to need a follow-up correction once the real field shape
 is confirmed.
-**Verify:** DTO parsing test once the field is confirmed; ViewModel test for cycling forward/backward and
-wraparound; session-memory test (pick a non-default cover, reload the same candidate within the same
-dialog session, confirm the pick persisted; a new dialog session starts fresh).
+**Verify:** Live response confirmed the field and URL shape. The main Debug App build succeeded on
+2026-10-26. The unit-test plan remains available for a later test run.
 
 ---
 

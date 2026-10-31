@@ -1,0 +1,162 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="640"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             x:Class="Paperbunkr.App.Views.OpdsCatalogsView"
+             x:DataType="vm:OpdsCatalogsViewModel">
+
+    <!-- OPDS catalog browser (docs/superpowers/specs/2026-10-27-books-slice4c-opds-design.md section 4). -->
+    <controls:DialogCard Title="Catalogs" Subtitle="Browse and download from OPDS catalogs such as Calibre's content server, Calibre-Web or Komga." Size="XLarge">
+        <Grid ColumnDefinitions="240,*" ColumnSpacing="20" Height="460">
+
+            <!-- Catalog list -->
+            <DockPanel Grid.Column="0" LastChildFill="True">
+                <Button DockPanel.Dock="Top" Classes="secondary" Content="Add catalog" Command="{Binding AddCatalogCommand}"
+                        HorizontalAlignment="Stretch" Margin="0,0,0,12" AutomationProperties.AutomationId="OpdsAddCatalog" />
+                <TextBlock DockPanel.Dock="Top" Classes="pbTextMeta" Text="No catalogs yet. Add one with its address." TextWrapping="Wrap"
+                           IsVisible="{Binding HasNoCatalogs}" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Catalogs}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="entities:OpdsCatalog">
+                                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,4">
+                                    <Button Grid.Column="0" Classes="menuRow" HorizontalContentAlignment="Left"
+                                            Command="{Binding $parent[UserControl].((vm:OpdsCatalogsViewModel)DataContext).SelectCatalogCommand}"
+                                            CommandParameter="{Binding}">
+                                        <StackPanel>
+                                            <TextBlock Classes="pbTextBody" Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Classes="pbTextMeta" Text="{Binding Url}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="1" Classes="iconButton sm" AutomationProperties.Name="Edit catalog"
+                                            Command="{Binding $parent[UserControl].((vm:OpdsCatalogsViewModel)DataContext).EditCatalogCommand}"
+                                            CommandParameter="{Binding}">
+                                        <fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeXs}" />
+                                    </Button>
+                                    <Button Grid.Column="2" Classes="iconButton sm" AutomationProperties.Name="Remove catalog"
+                                            Command="{Binding $parent[UserControl].((vm:OpdsCatalogsViewModel)DataContext).RemoveCatalogCommand}"
+                                            CommandParameter="{Binding}">
+                                        <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" />
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </DockPanel>
+
+            <!-- Add / edit form -->
+            <StackPanel Grid.Column="1" Spacing="12" IsVisible="{Binding IsEditing}">
+                <TextBlock Classes="fieldLabel" Text="CATALOG" />
+                <TextBox Text="{Binding EditName}" Watermark="Name, e.g. Home library" AutomationProperties.AutomationId="OpdsEditName" />
+                <TextBox Text="{Binding EditUrl}" Watermark="Address, e.g. http://192.168.1.5:8080/opds" AutomationProperties.AutomationId="OpdsEditUrl" />
+                <TextBlock Classes="pbTextMeta" TextWrapping="Wrap" IsVisible="{Binding ShowHttpWarning}" Foreground="{DynamicResource PbTextMutedBrush}"
+                           Text="This address is not encrypted (http). A password saved for it would be sent in the clear on your network." />
+                <TextBox Text="{Binding EditUsername}" Watermark="Username (optional)" />
+                <TextBox Text="{Binding EditPassword}" PasswordChar="•" Watermark="Password (leave empty to keep the saved one)" />
+                <TextBlock Classes="pbTextMeta" Text="{Binding EditMessage}" IsVisible="{Binding HasEditMessage}" TextWrapping="Wrap" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="primary" Content="Save" Command="{Binding SaveCatalogCommand}" AutomationProperties.AutomationId="OpdsEditSave" />
+                    <Button Classes="ghost" Content="Cancel" Command="{Binding CancelEditCommand}" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Browser -->
+            <DockPanel Grid.Column="1" IsVisible="{Binding IsNotEditing}" LastChildFill="True">
+                <TextBlock DockPanel.Dock="Top" Classes="pbTextBody" Text="Choose a catalog on the left, or add one." IsVisible="{Binding !HasSelectedCatalog}"
+                           Foreground="{DynamicResource PbTextMutedBrush}" />
+
+                <StackPanel DockPanel.Dock="Top" Spacing="8" IsVisible="{Binding HasSelectedCatalog}" Margin="0,0,0,12">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                        <Button Grid.Column="0" Classes="iconButton" Command="{Binding UpCommand}" AutomationProperties.Name="Up one level">
+                            <fi:SymbolIcon Symbol="ArrowUp" FontSize="{StaticResource PbIconSizeXs}" />
+                        </Button>
+                        <ItemsControl Grid.Column="1" ItemsSource="{Binding Breadcrumb}" VerticalAlignment="Center">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="4" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:OpdsCrumb">
+                                    <Button Classes="ghost" Content="{Binding Title}"
+                                            Command="{Binding $parent[UserControl].((vm:OpdsCatalogsViewModel)DataContext).GoToCrumbCommand}"
+                                            CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBox Grid.Column="2" Width="220" Text="{Binding SearchText}" Watermark="Search this catalog" IsVisible="{Binding CanSearch}"
+                                 AutomationProperties.AutomationId="OpdsSearch">
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                        <Button Grid.Column="3" Classes="iconButton" Command="{Binding RefreshCommand}" AutomationProperties.Name="Reload">
+                            <fi:SymbolIcon Symbol="ArrowClockwise" FontSize="{StaticResource PbIconSizeXs}" />
+                        </Button>
+                    </Grid>
+                    <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsLoading}" />
+                    <TextBlock Classes="pbTextMeta" Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" Foreground="{DynamicResource PbTextMutedBrush}" />
+                </StackPanel>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="8">
+                        <ItemsControl ItemsSource="{Binding Entries}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:OpdsEntryRow">
+                                    <Border Classes="card" Margin="0,0,0,8">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                            <Border Grid.Column="0" Width="48" Height="72" ClipToBounds="True" CornerRadius="{DynamicResource PbRadiusSm}"
+                                                    Background="{DynamicResource PbSurface2Brush}" IsVisible="{Binding IsBook}">
+                                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                            </Border>
+                                            <Border Grid.Column="0" Width="48" Height="48" IsVisible="{Binding IsFolder}">
+                                                <fi:SymbolIcon Symbol="Folder" FontSize="{StaticResource PbIconSizeLg}" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                <TextBlock Classes="pbTextBody" Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                <TextBlock Classes="pbTextMeta" Text="{Binding Author}" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                           IsVisible="{Binding Author, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                                <TextBlock Classes="pbTextMeta" Text="{Binding SeriesLine}" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                           IsVisible="{Binding SeriesLine, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                                <TextBlock Classes="pbTextMeta" Text="{Binding Summary}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                                           Foreground="{DynamicResource PbTextMutedBrush}"
+                                                           IsVisible="{Binding Summary, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                                <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" IsVisible="{Binding IsDownloading}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2" Spacing="6" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                <Button Classes="secondary" Content="Open" IsVisible="{Binding IsFolder}"
+                                                        Command="{Binding $parent[UserControl].((vm:OpdsCatalogsViewModel)DataContext).OpenEntryCommand}"
+                                                        CommandParameter="{Binding}" />
+                                                <Button Classes="primary" IsVisible="{Binding CanDownloadNow}"
+                                                        Command="{Binding $parent[UserControl].((vm:OpdsCatalogsViewModel)DataContext).DownloadCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <TextBlock Text="{Binding FormatLabel, StringFormat='Download {0}'}" />
+                                                </Button>
+                                                <TextBlock Classes="pbTextMeta" Text="{Binding Status}" HorizontalAlignment="Right"
+                                                           Foreground="{DynamicResource PbTextMutedBrush}"
+                                                           IsVisible="{Binding Status, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Classes="secondary" Content="Load more" Command="{Binding LoadMoreCommand}" IsVisible="{Binding HasMore}" HorizontalAlignment="Center" />
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Grid>
+        <controls:DialogCard.Footer>
+            <StackPanel>
+                <Button Classes="ghost" Content="Close" Command="{Binding CloseCommand}" />
+            </StackPanel>
+        </controls:DialogCard.Footer>
+    </controls:DialogCard>
+</UserControl>

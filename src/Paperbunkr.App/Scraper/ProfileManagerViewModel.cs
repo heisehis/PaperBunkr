@@ -614,13 +614,13 @@ public sealed partial class ProfileManagerViewModel : ObservableObject
             return;
         }
 
-        string? path = await _filePicker.PickOpenFileAsync("Import Library Organizer profiles", "lop", "Library Organizer profiles (.lop)");
-        if (path is null)
+        IReadOnlyList<string> paths = await _filePicker.PickOpenFilesAsync("Import Library Organizer profiles", "lop", "Library Organizer profiles (.lop)");
+        if (paths.Count == 0)
         {
             return;
         }
 
-        Paperbunkr.App.Scraper.Import.LopImportSummary summary = Paperbunkr.App.Scraper.Import.LopProfileImporter.Import(_store, path);
+        Paperbunkr.App.Scraper.Import.LopImportSummary summary = Paperbunkr.App.Scraper.Import.LopProfileImporter.Import(_store, paths);
         Refresh();
         if (summary.Saved.Count > 0)
         {
@@ -636,9 +636,13 @@ public sealed partial class ProfileManagerViewModel : ObservableObject
         OnPropertyChanged(nameof(HasImportNotes));
         ImportStatusMessage = summary.Failed
             ? "Nothing was imported."
-            : summary.Rejected == 0
-                ? $"Imported {summary.Saved.Count} profile{(summary.Saved.Count == 1 ? "" : "s")}."
-                : $"Imported {summary.Saved.Count}; {summary.Rejected} not imported (see the notes).";
+            : summary.FilesFailed == 0
+                ? summary.Rejected == 0
+                    ? $"Imported {summary.Saved.Count} profile{(summary.Saved.Count == 1 ? "" : "s")}."
+                    : $"Imported {summary.Saved.Count}; {summary.Rejected} not imported (see the notes)."
+                : $"Imported {summary.Saved.Count} profile{(summary.Saved.Count == 1 ? "" : "s")}" +
+                  (summary.Rejected > 0 ? $"; {summary.Rejected} not imported" : "") +
+                  $"; {summary.FilesFailed} file{(summary.FilesFailed == 1 ? " failed" : "s failed")} (see the notes).";
     }
 
     [RelayCommand]

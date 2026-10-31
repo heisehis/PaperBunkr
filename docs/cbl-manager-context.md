@@ -1,5 +1,10 @@
 # Paperbunkr CBL Manager: how it works today
 
+> Historical context from before the October 13 matching-core implementation. For current matching behavior see
+> `superpowers/specs/2026-10-13-cbl-smart-match-core-design.md` (especially As built); for review/import previews and undo see
+> `superpowers/specs/2026-10-25-cbl-smart-match-review-design.md`. The matching, import feedback and healing descriptions below are historical.
+> Current healing triggers and arc-refresh behavior are specified in `superpowers/specs/2026-10-25-cbl-smart-match-healing-refresh-design.md`.
+
 Context for brainstorming improvements. Written 2026-10-13 from the current code, not from the design docs.
 Paperbunkr is a ComicRack-inspired comic library and reader (C#, .NET, Avalonia, EF Core on SQLite).
 "CBL Manager" is the name for everything that builds, imports, matches, refreshes and exports reading lists.
@@ -41,7 +46,7 @@ A .cbl is ComicRack's XML: `<ReadingList><Name/><Books><Book Series= Number= Vol
 - `CblFile.Detect` reads the XML first. Matchers and no books means it is a ComicRack **smart list**, which is routed to the Smart List importer instead. Books (or both) means a reading list.
 - The reading-list path deserializes with the ported CE classes and, for each `<Book>` in file order, calls the matcher with
   Series, Number, Volume, Year, Format. Volume or Year of -1 means "not given".
-- Nothing else from the file is used. `FileName` is ignored on import (CE ignores it too), and any provider ids a `<Book>` carries are not read.
+- In this historical implementation nothing else from the file was used. `FileName` was ignored on import (CE actually does use it as an import matching fallback). Provider ids were not read until the October 13 matching-core implementation.
 - The list name is the file's `<Name>`, else the file name. The list is created as a plain `User` list with no `Source`, so it cannot be refreshed.
 - The only feedback is "Imported 'X' with N issues". There is no preview, no owned/missing count, and no report of which entries became placeholders.
 - It runs synchronously on the calling thread, one entry at a time.

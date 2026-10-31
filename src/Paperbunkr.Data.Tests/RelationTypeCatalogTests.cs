@@ -49,6 +49,8 @@ public class RelationTypeCatalogTests
     [InlineData(RelationType.SourceMaterial, RelationType.Adaptation)]
     [InlineData(RelationType.Contains, RelationType.CollectedFrom)]
     [InlineData(RelationType.CollectedFrom, RelationType.Contains)]
+    [InlineData(RelationType.TieIn, RelationType.MainEventSeries)]
+    [InlineData(RelationType.MainEventSeries, RelationType.TieIn)]
     public void NamedInversePairs_AreDirectional_AndCrossReferenceCorrectly(RelationType stored, RelationType expectedInverse)
     {
         var info = RelationTypeCatalog.All[stored];

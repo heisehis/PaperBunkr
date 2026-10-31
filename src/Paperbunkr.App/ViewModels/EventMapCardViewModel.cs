@@ -39,6 +39,7 @@ public sealed partial class EventMapCardViewModel : ObservableObject
         Track = cell.Track;
         OwnerEventId = row.OwnerEventId;
         OwnerEventName = row.OwnerEventName;
+        CbroOverlapNotes = row.OwnerEventCbroNotes ?? Array.Empty<string>();
         AlsoIn = row.AlsoIn ?? Array.Empty<EventMapEventRef>();
         IsOutsideContinuity = row.OutsideContinuity;
         _readState = row.ReadState;
@@ -48,6 +49,10 @@ public sealed partial class EventMapCardViewModel : ObservableObject
     public int? OwnerEventId { get; }
 
     public string? OwnerEventName { get; }
+
+    public IReadOnlyList<string> CbroOverlapNotes { get; }
+
+    public bool HasCbroOverlapNotes => CbroOverlapNotes.Count > 0;
 
     /// <summary>Continuity map: other events that also contain this issue (it appears once, in the first).</summary>
     public IReadOnlyList<EventMapEventRef> AlsoIn { get; }

@@ -16,7 +16,16 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 		BookMetadata Metadata { get; }
 
 		IReadOnlyList<BookChapter> Chapters { get; }
+
+		/// <summary>
+		/// The printed edition's page markers when the file carries them (an EPUB page-list or NCX pageList), in reading order; empty otherwise,
+		/// which is most books (docs/superpowers/specs/2026-10-27-books-reader-paged-scroll-modes-design.md §6.2).
+		/// </summary>
+		IReadOnlyList<BookPrintPage> PrintPages => Array.Empty<BookPrintPage>();
 	}
+
+	/// <summary>One printed page marker: its label as printed ("214", "xii"), the chapter file it is in and the element id it points at (null = the file's start).</summary>
+	public sealed record BookPrintPage(string Label, int ChapterIndex, string? Fragment);
 
 	/// <summary>Title/author/series/cover extracted from the source file, independent of chapter content.</summary>
 	public sealed class BookMetadata
@@ -26,6 +35,33 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 		public string? Author { get; init; }
 
 		public string? SeriesName { get; init; }
+
+		// Descriptive metadata (docs/superpowers/specs/2026-10-26-books-slice1-data-foundation-design.md §4). Every value is
+		// null / empty when the file does not declare it - never guessed.
+
+		public string? Subtitle { get; init; }
+
+		public string? Publisher { get; init; }
+
+		/// <summary>Language code exactly as the file declares it (e.g. "en", "pt-BR").</summary>
+		public string? LanguageISO { get; init; }
+
+		/// <summary>Bare ISBN digits (10 or 13), hyphens/spaces/"urn:isbn:" stripped.</summary>
+		public string? ISBN { get; init; }
+
+		/// <summary>Position within <see cref="SeriesName"/>, from calibre:series_index / EPUB3 group-position / FB2 sequence number.</summary>
+		public float? SeriesIndex { get; init; }
+
+		public string? Description { get; init; }
+
+		/// <summary>The file's own star rating on a 0-5 scale (calibre:rating is 0-10 and is halved on read).</summary>
+		public float? Rating { get; init; }
+
+		/// <summary>Subjects / genres the file declares, trimmed and de-duplicated.</summary>
+		public IReadOnlyList<string> Genres { get; init; } = Array.Empty<string>();
+
+		/// <summary>Keywords the file declares (PDF Keywords), distinct from <see cref="Genres"/>.</summary>
+		public IReadOnlyList<string> Tags { get; init; } = Array.Empty<string>();
 
 		/// <summary>Raw cover image bytes (whatever format the source embeds it as), or null if none found.</summary>
 		public byte[]? CoverImageBytes { get; init; }
@@ -57,6 +93,22 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 		/// scope limit, not an oversight.
 		/// </summary>
 		public string? PartTitle { get; set; }
+
+		/// <summary>
+		/// The source's own table-of-contents entries that point into this chapter's file, in nav order. A book that packs many chapters into few files (a real EPUB can have 26
+		/// chapters in 6 spine files) lists each chapter here with the element id to jump to; empty when the file has no entries of its own (the TOC then shows the file as one row).
+		/// </summary>
+		public IReadOnlyList<BookSection> Sections { get; set; } = Array.Empty<BookSection>();
+	}
+
+	/// <summary>One table-of-contents entry inside a <see cref="BookChapter"/>'s file: its title, the element id it points at (null = the file's start) and its part heading.</summary>
+	public sealed class BookSection
+	{
+		public string Title { get; init; } = string.Empty;
+
+		public string? Fragment { get; init; }
+
+		public string? PartTitle { get; init; }
 	}
 
 	public sealed class BookParagraph

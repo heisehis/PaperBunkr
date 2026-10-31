@@ -33,9 +33,9 @@ public class HomePitchHelpersTests
         Assert.Equal(new[]
         {
             HomeSectionKey.Spotlight, HomeSectionKey.NeedsAttention, HomeSectionKey.ContinueReading, HomeSectionKey.UpNext, HomeSectionKey.ReadingList,
-            HomeSectionKey.Collections, HomeSectionKey.BecauseYouRead, HomeSectionKey.RecentlyAdded,
+            HomeSectionKey.BookUpNext, HomeSectionKey.BookRecentlyAdded, HomeSectionKey.Collections, HomeSectionKey.BecauseYouRead, HomeSectionKey.RecentlyAdded,
         }, layout.Order);
-        Assert.Equal(8, layout.Order.Distinct().Count());
+        Assert.Equal(10, layout.Order.Distinct().Count());
     }
 
     [Fact]

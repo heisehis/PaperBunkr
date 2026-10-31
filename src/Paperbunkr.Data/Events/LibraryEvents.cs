@@ -62,6 +62,26 @@ public enum CompletedCollectionKind
 public sealed record CollectionCompletedEvent(CompletedCollectionKind Kind, int Id, string Name, int IssueCount, DateTime CompletedAtUtc);
 
 /// <summary>
+/// A scrape finished and applied metadata to at least one issue (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §5.2).
+/// <paramref name="SeriesIds"/> are the series of the applied issues.
+/// </summary>
+public sealed record ScrapeCompletedEvent(IReadOnlyList<int> SeriesIds);
+
+/// <summary>How a scheduled task's run ended.</summary>
+public enum ScheduledTaskOutcome
+{
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+
+/// <summary>
+/// A scheduled task finished a run, on its schedule or from "Run now" (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-
+/// design.md §B). <paramref name="Message"/> is the task's own summary, or the error for a failed run.
+/// </summary>
+public sealed record ScheduledTaskRanEvent(string TaskId, string TaskName, DateTime StartedUtc, TimeSpan Duration, ScheduledTaskOutcome Outcome, string? Message);
+
+/// <summary>
 /// The app-wide feed of library-level domain events (docs/superpowers/specs/2026-09-20-plugin-api-4-1-
 /// design.md §5). Producers (the folder scanner, Library Health, <c>ReadingListManager</c>) raise
 /// here and stay unaware of plugins; <c>PluginHostService</c> subscribes and dispatches the matching
@@ -97,6 +117,14 @@ public sealed class LibraryEvents
     public void Raise(SeriesStatusChangedEvent e) => Invoke(SeriesStatusChanged, e);
 
     public void Raise(CollectionCompletedEvent e) => Invoke(CollectionCompleted, e);
+
+    public event Action<ScheduledTaskRanEvent>? ScheduledTaskRan;
+
+    public void Raise(ScheduledTaskRanEvent e) => Invoke(ScheduledTaskRan, e);
+
+    public event Action<ScrapeCompletedEvent>? ScrapeCompleted;
+
+    public void Raise(ScrapeCompletedEvent e) => Invoke(ScrapeCompleted, e);
 
     public void Raise(LibraryScanCompletedEvent e) => Invoke(LibraryScanCompleted, e);
 

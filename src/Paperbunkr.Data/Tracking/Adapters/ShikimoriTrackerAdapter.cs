@@ -214,20 +214,65 @@ public sealed class ShikimoriTrackerAdapter : ITrackerSearchProvider, ITrackerAd
 
     public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
     {
+        var outcome = await GetEntryOutcomeAsync(context, link, cancellationToken).ConfigureAwait(false);
+        return outcome.Succeeded ? outcome.Value : null;
+    }
+
+    public async Task<TrackerOperationResult<TrackerRemoteEntry>> GetEntryOutcomeAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
         string? accessToken = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken);
         if (string.IsNullOrEmpty(accessToken))
         {
-            return null;
+            return TrackerOperationResult<TrackerRemoteEntry>.Permanent("Shikimori is not connected.");
         }
 
-        var rate = await FindExistingRateAsync(accessToken, link.ExternalId, cancellationToken).ConfigureAwait(false);
-        if (rate is null)
+        var outcome = await FindExistingRateOutcomeAsync(accessToken, link.ExternalId, cancellationToken).ConfigureAwait(false);
+        if (!outcome.Succeeded || outcome.Value is not { } rate)
         {
-            return null;
+            return new TrackerOperationResult<TrackerRemoteEntry>(outcome.Kind, default, outcome.ErrorDetail, outcome.RetryAfterUtc);
         }
 
         decimal? score = rate.Score is int s and > 0 ? s / 2m : null;
-        return new TrackerRemoteEntry(ShikimoriStatusMapper.FromUserRateStatus(rate.Status), rate.Chapters, score);
+        return TrackerOperationResult<TrackerRemoteEntry>.Success(new TrackerRemoteEntry(ShikimoriStatusMapper.FromUserRateStatus(rate.Status), rate.Chapters, score));
+    }
+
+    private async Task<TrackerOperationResult<ShikimoriUserRateDto>> FindExistingRateOutcomeAsync(string accessToken, string targetExternalId, CancellationToken cancellationToken)
+    {
+        var whoamiRequest = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/users/whoami");
+        whoamiRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+        string? userId;
+        try
+        {
+            using var response = await _httpClient.SendAsync(whoamiRequest, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return TrackerOperationClassifier.FromHttpFailure<ShikimoriUserRateDto>(response, body);
+            }
+            var whoami = await response.Content.ReadFromJsonAsync<ShikimoriWhoamiDto>(cancellationToken: cancellationToken).ConfigureAwait(false);
+            userId = whoami?.Id.ToString();
+        }
+        catch (HttpRequestException ex) { return TrackerOperationClassifier.FromNetworkFailure<ShikimoriUserRateDto>(ex); }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { return TrackerOperationClassifier.Timeout<ShikimoriUserRateDto>(); }
+        catch (JsonException) { return TrackerOperationResult<ShikimoriUserRateDto>.Permanent("Shikimori returned an invalid account response."); }
+        if (string.IsNullOrEmpty(userId)) return TrackerOperationResult<ShikimoriUserRateDto>.Permanent("Shikimori did not identify the connected account.");
+
+        try
+        {
+            using var response = await _httpClient.GetAsync($"{ApiBase}/v2/user_rates?user_id={userId}&target_id={targetExternalId}&target_type=Manga", cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return TrackerOperationClassifier.FromHttpFailure<ShikimoriUserRateDto>(response, body);
+            }
+            var rates = await response.Content.ReadFromJsonAsync<List<ShikimoriUserRateDto>>(cancellationToken: cancellationToken).ConfigureAwait(false);
+            return rates?.FirstOrDefault() is { } rate
+                ? TrackerOperationResult<ShikimoriUserRateDto>.Success(rate)
+                : TrackerOperationResult<ShikimoriUserRateDto>.Missing();
+        }
+        catch (HttpRequestException ex) { return TrackerOperationClassifier.FromNetworkFailure<ShikimoriUserRateDto>(ex); }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { return TrackerOperationClassifier.Timeout<ShikimoriUserRateDto>(); }
+        catch (JsonException) { return TrackerOperationResult<ShikimoriUserRateDto>.Permanent("Shikimori returned an invalid tracker entry response."); }
     }
 
     /// <summary>Looks up the existing <c>user_rate</c> for this manga, if any - <see cref="PushEntryAsync"/>

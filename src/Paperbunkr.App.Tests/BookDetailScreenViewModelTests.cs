@@ -137,7 +137,7 @@ public class BookDetailScreenViewModelTests : IDisposable
         Assert.True(vm.HasChapterProgress);
         Assert.Equal(3d / 9d, vm.ProgressFraction, 3);
         Assert.Equal("Chapter 4 of 10", vm.ProgressLabel);
-        Assert.Equal("Continue — Chapter 4", vm.ContinueLabel);
+        Assert.Equal("Continue — Ch. 4 · 30%", vm.ContinueLabel);
     }
 
     [Fact]

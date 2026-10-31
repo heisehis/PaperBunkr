@@ -2698,7 +2698,14 @@ public class ReaderScreenViewModelTests : IDisposable
 
     private sealed class RecordingTrackerSync : Paperbunkr.App.Services.ITrackerAutoSyncService
     {
+        public event System.Action? RetryQueueChanged { add { } remove { } }
         public readonly System.Collections.Generic.List<int> Finished = new();
+
+        public void Start() { }
+        public void Stop() { }
+        public System.Collections.Generic.IReadOnlyList<Paperbunkr.App.Services.TrackerRetryQueueItem> GetRetryQueue() => System.Array.Empty<Paperbunkr.App.Services.TrackerRetryQueueItem>();
+        public System.Threading.Tasks.Task RetryNowAsync(int retryId) => System.Threading.Tasks.Task.CompletedTask;
+        public void DismissRetry(int retryId) { }
 
         public System.Threading.Tasks.Task OnIssueFinishedInReaderAsync(int seriesId)
         {

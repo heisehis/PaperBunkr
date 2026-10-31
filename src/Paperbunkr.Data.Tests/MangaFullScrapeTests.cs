@@ -130,12 +130,13 @@ public class MangaFullScrapeTests : IDisposable
         string? language = "ja",
         double? rating = 80.5,
         IReadOnlyList<string>? alternateTitles = null,
-        string? mergedWith = null) =>
+        string? mergedWith = null,
+        int? ratingVotes = null) =>
         new(id, "Test Manga", "https://example.test/" + id, description, "Completed", 10, 2,
             Authors: authors ?? new[] { "Pat Author" }, Artists: artists ?? new[] { "Sam Artist" },
             Publishers: publishers ?? new[] { new ProviderPublisher("Shueisha", "ja", "Original"), new ProviderPublisher("VIZ Media", "en", "English") },
             ContentRating: contentRating, WeightedTags: tags, PublicationFormat: type, OriginalLanguage: language, Rating: rating,
-            AlternateTitles: alternateTitles, MergedWithId: mergedWith);
+            AlternateTitles: alternateTitles, MergedWithId: mergedWith, RatingVoteCount: ratingVotes);
 
     private static ProviderTag Tag(string name, IssueTagWeight weight, bool genre = false, bool spoiler = false, string category = "Themes") => new(name, category, weight, genre, spoiler);
 
@@ -446,6 +447,27 @@ public class MangaFullScrapeTests : IDisposable
         await Refresh(id, provider);   // a second refresh updates, never duplicates
         using var again = _db.CreateContext();
         Assert.Single(again.ExternalRatings);
+    }
+
+    [Fact]
+    public async Task TheRatingsVoteCount_IsStored_AndKeptWhenALaterRefreshHasNone()
+    {
+        int id = Confirmed(2);
+        var provider = new FakeProvider();
+        provider.ById["42"] = Rich(rating: 76.24, ratingVotes: 1200);
+        await Refresh(id, provider);
+
+        using (var context = _db.CreateContext())
+        {
+            Assert.Equal(1200, context.ExternalRatings.Single().VoteCount);
+        }
+
+        provider.ById["42"] = Rich(rating: 70, ratingVotes: null);
+        await Refresh(id, provider);
+
+        using var again = _db.CreateContext();
+        Assert.Equal(1200, again.ExternalRatings.Single().VoteCount);
+        Assert.Equal(70m, again.ExternalRatings.Single().Value);
     }
 
     [Fact]

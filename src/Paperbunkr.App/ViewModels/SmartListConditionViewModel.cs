@@ -46,6 +46,9 @@ public partial class SmartListConditionViewModel : ViewModelBase
             .Append(new FieldOption(SmartListField.HasProposedValue, "Has Proposed Value"))
             .Append(new FieldOption(SmartListField.SameXDifferentY, "Same X, Different Y"))
             .Append(new FieldOption(SmartListField.VirtualTag, "Virtual Tag"))
+            // Plugin smart fields (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §D1):
+            // a typed custom value, listed by its label after the built-in fields.
+            .Concat(PluginFieldTypeRegistry.All.Select(f => new FieldOption(SmartListField.CustomValue, f.Label, f.StorageName)))
             .ToList(),
     };
 
@@ -90,12 +93,23 @@ public partial class SmartListConditionViewModel : ViewModelBase
 
     public FieldOption SelectedField
     {
-        get => FieldOptions.FirstOrDefault(f => f.Field == _condition.Field);
+        get => IsPluginField
+            ? FieldOptions.FirstOrDefault(f => f.CustomValueName == _condition.CustomValueName)
+            : FieldOptions.FirstOrDefault(f => f.Field == _condition.Field && f.CustomValueName is null);
         set
         {
-            if (_condition.Field == value.Field)
+            if (_condition.Field == value.Field && (value.CustomValueName is null ? !IsPluginField : _condition.CustomValueName == value.CustomValueName))
             {
                 return;
+            }
+
+            if (value.CustomValueName is not null)
+            {
+                _condition.CustomValueName = value.CustomValueName;
+            }
+            else if (IsPluginField)
+            {
+                _condition.CustomValueName = null;   // from a plugin field back to a plain custom value: the name box starts empty
             }
 
             _condition.Field = value.Field;
@@ -112,6 +126,8 @@ public partial class SmartListConditionViewModel : ViewModelBase
             OnPropertyChanged(nameof(SelectedOperator));
             OnPropertyChanged(nameof(SelectedOperatorText));
             OnPropertyChanged(nameof(IsCustomValueField));
+            OnPropertyChanged(nameof(IsPluginField));
+            OnPropertyChanged(nameof(CustomValueName));
             OnPropertyChanged(nameof(IsVirtualTagField));
             OnPropertyChanged(nameof(IsAllPropertiesField));
             OnPropertyChanged(nameof(IsProposedValueField));
@@ -129,7 +145,14 @@ public partial class SmartListConditionViewModel : ViewModelBase
         }
     }
 
-    public bool IsCustomValueField => _condition.Field == SmartListField.CustomValue;
+    /// <summary>A plain custom value - the user types its name. A plugin field is a custom value too, but its name is fixed.</summary>
+    public bool IsCustomValueField => _condition.Field == SmartListField.CustomValue && !IsPluginField;
+
+    /// <summary>A plugin smart field (Plugin API 4.5 §D1): compared as its declared type, its name hidden.</summary>
+    public bool IsPluginField => _condition.Field == SmartListField.CustomValue && PluginFieldTypeRegistry.TryGet(_condition.CustomValueName, out _);
+
+    private SmartListDataType? PluginFieldType =>
+        IsPluginField && PluginFieldTypeRegistry.TryGet(_condition.CustomValueName, out var pluginField) ? pluginField.Type : null;
 
     public bool IsDuplicateField => _condition.Field == SmartListField.Duplicate;
 
@@ -152,6 +175,7 @@ public partial class SmartListConditionViewModel : ViewModelBase
 
     /// <summary>The condition ultimately routes through <c>SmartListQueryBuilder.EvaluateText</c> — Text fields plus the Custom Value / Virtual Tag / All Properties special fields, but not Duplicate (toggle-only).</summary>
     private bool IsTextLike =>
+        PluginFieldType == SmartListDataType.Text ||
         IsCustomValueField || IsVirtualTagField || IsAllPropertiesField ||
         (TryGetDefinition(_targetKind, _condition.Field, out var def) && def.DataType == SmartListDataType.Text);
 
@@ -165,7 +189,9 @@ public partial class SmartListConditionViewModel : ViewModelBase
             var dataType = TryGetDefinition(_targetKind, _condition.Field, out var def)
                 ? def.DataType
                 : SmartListDataType.Toggle; // CustomValue/VirtualTag/AllProperties behave text-like but Duplicate is toggle-only
-            var operators = IsCustomValueField || IsVirtualTagField || IsAllPropertiesField
+            var operators = PluginFieldType is SmartListDataType pluginType
+                ? SmartListOperatorLabels.For(pluginType)
+                : IsCustomValueField || IsVirtualTagField || IsAllPropertiesField
                 ? SmartListOperatorLabels.For(SmartListDataType.Text)
                 : IsDuplicateField || IsProposedValueField || IsSameXDifferentYField
                     ? SmartListOperatorLabels.For(SmartListDataType.Toggle)

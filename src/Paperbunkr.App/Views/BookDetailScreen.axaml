@@ -5,224 +5,509 @@
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:books="using:Paperbunkr.App.Controls.Books"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="850"
+             mc:Ignorable="d" d:DesignWidth="1310" d:DesignHeight="768"
              x:Class="Paperbunkr.App.Views.BookDetailScreen"
              x:DataType="vm:BookDetailScreenViewModel"
              controls:ContextMenuHost.Provider="{Binding}">
 
-    <!--
-        Book detail, rebuilt on the shared DetailHero / DetailBand controls for UI rework Phase 5
-        (docs/superpowers/specs/2026-08-28-detail-screens-streaming-redesign-design.md). Book mode:
-        hero + "lite" band (inline meta + synopsis, no metadata groups) + stacked section cards, no
-        tab strip. Series mode: hero + poster grid of member books.
-    -->
+    <!-- Book Detail as a book jacket (docs/superpowers/specs/2026-10-27-books-section-redesign-design.md §4): a colour wash in the book's spine
+         colour behind a flat cover with its spine edge, the serif title, flap copy, Continue / Edit / ⋯, the chapter ribbon and the series as
+         spines; then four tabs. A compact title bar pins once the jacket scrolls away. Series mode: a fanned stack, a per-book ribbon, the books. -->
     <UserControl.Styles>
-        <Style Selector="Border.card">
-            <Setter Property="Margin" Value="0,16,0,0" />
-        </Style>
-        <Style Selector="TextBlock.sectionTitle">
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="Margin" Value="0,0,0,10" />
-        </Style>
         <Style Selector="Button.listRow">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="8,8" />
+            <Setter Property="Padding" Value="8" />
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
         <Style Selector="Button.listRow:pointerover">
             <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
         </Style>
-        <Style Selector="Button.card">
+        <Style Selector="Button.plainHit">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Button.spine">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusAdorner" Value="{x:Null}" />
         </Style>
-        <Style Selector="Border.bookCover">
+        <!-- Show more / Show less: a down chevron that flips to point up while the synopsis is open, on the shared chevron motion. -->
+        <Style Selector="fi|SymbolIcon.synopsisChevron">
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <Setter Property="RenderTransform" Value="none" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionAcknowledgeMove}" Easing="{StaticResource PbMotionMoveEase}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="fi|SymbolIcon.synopsisChevron.open">
+            <Setter Property="RenderTransform" Value="rotate(180deg)" />
+        </Style>
+        <!-- The jacket's cover: flat, with a darker strip down its left edge for the spine. -->
+        <Style Selector="Border.jacketCover">
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="ClipToBounds" Value="True" />
-            <!-- Gutter for the ring, and no clipping while it shows: see BooksScreen.axaml's Border.bookCover. -->
-            <Setter Property="Margin" Value="4,10,4,4" />
-        </Style>
-        <Style Selector="Button.card:pointerover Border.bookCover, Button.card:focus-visible Border.bookCover">
-            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
-            <Setter Property="ClipToBounds" Value="False" />
         </Style>
     </UserControl.Styles>
 
-    <ScrollViewer>
+    <Grid>
+    <ScrollViewer x:Name="DetailScroller">
         <Grid>
 
             <!-- ================= BOOK MODE ================= -->
-            <StackPanel Margin="0,0,0,50" IsVisible="{Binding IsBookMode}">
-                <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="24,20,24,12">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding BackLabel}" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
-
-                <views:DetailHero DataContext="{Binding}" />
-                <views:DetailBand DataContext="{Binding Band}" />
-
-                <StackPanel Margin="24,0,24,0">
-                    <!-- Reading progress -->
-                    <Border Classes="card" Padding="16,14" Margin="0,18,0,0">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,10">
-                                <fi:SymbolIcon Symbol="BookClock" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                <TextBlock Classes="sectionTitle" Text="READING PROGRESS" Margin="0" />
+            <StackPanel Margin="0,0,0,48" IsVisible="{Binding IsBookMode}">
+                <books:CoverWash x:Name="Jacket" CoverKey="{Binding JacketCoverKey}" Padding="24,20,24,24">
+                    <StackPanel Spacing="16">
+                        <Button Classes="backLink" Command="{Binding GoBackCommand}" HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding BackLabel}" VerticalAlignment="Center" />
                             </StackPanel>
-                            <TextBlock Text="{Binding ProgressLabel}" Classes="pbTextBody" IsVisible="{Binding HasChapterProgress}"
-                                       Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,8" />
-                            <ProgressBar Minimum="0" Maximum="1" Value="{Binding ProgressFraction}" Height="6"
-                                         IsVisible="{Binding HasChapterProgress}" Margin="0,0,0,12" />
-                            <Button Classes="detailAction ghost" HorizontalAlignment="Left" Command="{Binding ToggleFinishedCommand}">
-                                <StackPanel Orientation="Horizontal" Spacing="7">
-                                    <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
-                                    <TextBlock Text="{Binding FinishedToggleLabel}" VerticalAlignment="Center" />
+                        </Button>
+
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="40">
+                            <!-- Cover with a spine edge -->
+                            <Panel Grid.Column="0" VerticalAlignment="Top">
+                                <Border Classes="jacketCover" Width="220" Height="330" Background="{Binding CoverBrush}"
+                                        controls:SharedElement.Key="{Binding JacketFlightKey}" controls:SharedElement.ImageSource="{Binding CoverImage}">
+                                    <Panel>
+                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                        <Border Width="8" HorizontalAlignment="Left" Background="{DynamicResource PbCoverShadeBrush}" />
+                                    </Panel>
+                                </Border>
+                            </Panel>
+
+                            <StackPanel Grid.Column="1" Spacing="8" MaxWidth="760" HorizontalAlignment="Left">
+                                <TextBlock Classes="pbTextOverline" Text="{Binding Overline}" />
+                                <TextBlock Classes="pbTextHero bookTitle" Text="{Binding Title}" TextWrapping="Wrap" MaxLines="3" TextTrimming="WordEllipsis" />
+                                <WrapPanel>
+                                    <TextBlock Classes="pbTextBody" Text="by " Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" IsVisible="{Binding HasAuthor}" />
+                                    <Button Classes="plainHit" Command="{Binding OpenAuthorCommand}" IsVisible="{Binding HasAuthor}"
+                                            ToolTip.Tip="Show this author's books" AutomationProperties.AutomationId="BookDetailMoreByAuthor">
+                                        <TextBlock Classes="pbTextBody" Text="{Binding Author}" Foreground="{DynamicResource PbAccentTextBrush}" />
+                                    </Button>
+                                    <TextBlock Classes="pbTextBody" Text="  ·  " Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding HasSeries}" />
+                                    <Button Classes="plainHit" Command="{Binding OpenSeriesFromLinkCommand}" IsVisible="{Binding HasSeries}"
+                                            ToolTip.Tip="Open this series">
+                                        <TextBlock Classes="pbTextBody" Text="{Binding SeriesPart}" FontStyle="Italic" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    </Button>
+                                </WrapPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0">
+                                    <controls:StarRating Value="{Binding Rating, Mode=TwoWay}" StarSize="20" VerticalAlignment="Center"
+                                                         AutomationProperties.Name="My rating" AutomationProperties.AutomationId="BookDetailRating" />
+                                    <controls:SuggestBox Width="180" Text="{Binding StatusLabel}" Suggestions="{Binding StatusOptions}" IsStrict="True"
+                                                         AutomationProperties.Name="Reading status" AutomationProperties.AutomationId="BookDetailStatus" />
                                 </StackPanel>
+
+                                <!-- Flap copy -->
+                                <TextBlock Classes="pbTextBody" Text="{Binding Summary}" Foreground="{DynamicResource PbTextMutedBrush}"
+                                           FontFamily="{DynamicResource PbBookTitleFontFamily}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                           MaxLines="4" TextTrimming="WordEllipsis" IsVisible="{Binding !IsSynopsisExpanded}" />
+                                <TextBlock Classes="pbTextBody" Text="{Binding Summary}" Foreground="{DynamicResource PbTextMutedBrush}"
+                                           FontFamily="{DynamicResource PbBookTitleFontFamily}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                           IsVisible="{Binding IsSynopsisExpanded}" />
+                                <Button Classes="ghost sm" HorizontalAlignment="Left" Command="{Binding ToggleSynopsisCommand}" IsVisible="{Binding IsSynopsisToggleVisible}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding IsSynopsisExpanded, Converter={x:Static views:BookDetailLabels.SynopsisToggle}}" VerticalAlignment="Center" />
+                                        <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" Width="{StaticResource PbIconSizeXs}" Height="{StaticResource PbIconSizeXs}"
+                                                       VerticalAlignment="Center" Classes="synopsisChevron" Classes.open="{Binding IsSynopsisExpanded}" />
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Actions -->
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                                    <Button Classes="primary" Command="{Binding ContinueCommand}" AutomationProperties.AutomationId="BookDetailContinue">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <fi:SymbolIcon Symbol="Play" FontSize="{StaticResource PbIconSizeSm}" />
+                                            <TextBlock Text="{Binding ContinueLabel}" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Classes="secondary" Command="{Binding EditCommand}" AutomationProperties.AutomationId="BookDetailEdit">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeSm}" />
+                                            <TextBlock Text="Edit" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button x:Name="MoreButton" Classes="iconButton" Command="{Binding ToggleMoreMenuCommand}"
+                                            AutomationProperties.Name="More actions" AutomationProperties.AutomationId="BookDetailMore">
+                                        <fi:SymbolIcon Symbol="MoreHorizontal" />
+                                    </Button>
+                                    <Popup PlacementTarget="{Binding #MoreButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+                                           IsOpen="{Binding IsMoreMenuOpen, Mode=TwoWay}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
+                                        <Border Classes="dropdown" Width="240"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                            <StackPanel Spacing="1">
+                                                <Button Classes="menuRow" Content="Match metadata…" Command="{Binding MenuMatchMetadataCommand}"
+                                                        AutomationProperties.AutomationId="BookDetailMatchMetadata" />
+                                                <Button Classes="menuRow" Content="Reveal in Explorer" Command="{Binding MenuRevealCommand}" />
+                                                <Button Classes="menuRow" Content="{Binding FinishedToggleLabel}" Command="{Binding MenuToggleFinishedCommand}" />
+                                                <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,4" />
+                                                <Button Classes="menuRow" Content="Delete book…" Command="{Binding AskDeleteCommand}" IsVisible="{Binding !IsDeleteConfirmOpen}"
+                                                        Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.AutomationId="BookDetailDelete" />
+                                                <StackPanel Spacing="8" Margin="12,4,12,8" IsVisible="{Binding IsDeleteConfirmOpen}">
+                                                    <TextBlock Classes="pbTextCaption" TextWrapping="Wrap"
+                                                               Text="Move this book's file to the Recycle Bin and remove it from the library?" />
+                                                    <Button Classes="danger sm" HorizontalAlignment="Left" Content="Yes, delete this book" Command="{Binding ConfirmDeleteCommand}"
+                                                            AutomationProperties.AutomationId="BookDetailDeleteConfirm" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </ScrollViewer></Border>
+                                    </Popup>
+                                </StackPanel>
+
+                                <!-- The chapter ribbon, with the series standing as spines beside it. -->
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="32" Margin="0,16,0,0">
+                                    <books:ChapterRibbon Grid.Column="0" MaxWidth="520" HorizontalAlignment="Left" Width="520" VerticalAlignment="Bottom"
+                                                         Segments="{Binding RibbonSegments}" Caption="{Binding RibbonCaption}"
+                                                         OpenCommand="{Binding OpenRibbonSegmentCommand}" IsVisible="{Binding HasRibbon}" />
+                                    <StackPanel Grid.Column="1" Spacing="8" IsVisible="{Binding HasSeriesSpines}" VerticalAlignment="Bottom">
+                                        <TextBlock Classes="pbTextOverline" Text="{Binding SeriesName, Converter={x:Static views:BookDetailLabels.Upper}}" />
+                                        <StackPanel>
+                                            <ItemsControl ItemsSource="{Binding SeriesSpines}" Height="80">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="models:BookCardSample">
+                                                        <Button Classes="spine" Width="22" Height="80" IsHitTestVisible="{Binding !IsGhost}" Focusable="{Binding !IsGhost}"
+                                                                Command="{Binding $parent[UserControl].((vm:BookDetailScreenViewModel)DataContext).OpenOtherBookCommand}"
+                                                                CommandParameter="{Binding}" ToolTip.Tip="{Binding Title}" AutomationProperties.Name="{Binding Title}">
+                                                            <views:SpineTile />
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <Border Height="6" CornerRadius="{DynamicResource PbRadiusSm}" Background="{DynamicResource PbSurface3Brush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </books:CoverWash>
+
+                <StackPanel Margin="24,8,24,0">
+                    <!-- Tabs (redesign §4.1). One StackPanel on purpose: TabStrip.Step groups a strip by visual parent. -->
+                    <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
+                        <StackPanel Orientation="Horizontal" Spacing="20">
+                            <Button Classes="tab" Classes.active="{Binding IsOverviewTab}" Content="Overview"
+                                    Command="{Binding SetTabCommand}" CommandParameter="{x:Static models:BookDetailTab.Overview}"
+                                    AutomationProperties.AutomationId="BookDetailTab_Overview" />
+                            <Button Classes="tab" Classes.active="{Binding IsChaptersTab}" IsVisible="{Binding ShowChaptersTab}"
+                                    Command="{Binding SetTabCommand}" CommandParameter="{x:Static models:BookDetailTab.Chapters}"
+                                    AutomationProperties.AutomationId="BookDetailTab_Chapters">
+                                <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="Contents" /><Border Classes="countPill"><TextBlock Text="{Binding Chapters.Count}" /></Border></StackPanel>
                             </Button>
+                            <Button Classes="tab" Classes.active="{Binding IsNotesTab}" IsVisible="{Binding ShowNotesTab}"
+                                    Command="{Binding SetTabCommand}" CommandParameter="{x:Static models:BookDetailTab.Notes}"
+                                    AutomationProperties.AutomationId="BookDetailTab_Notes">
+                                <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="Notes" /><Border Classes="countPill"><TextBlock Text="{Binding Notes.Count}" /></Border></StackPanel>
+                            </Button>
+                            <Button Classes="tab" Classes.active="{Binding IsYourReadingTab}" Content="Your reading" IsVisible="{Binding HasStats}"
+                                    Command="{Binding SetTabCommand}" CommandParameter="{x:Static models:BookDetailTab.YourReading}"
+                                    AutomationProperties.AutomationId="BookDetailTab_YourReading" />
                         </StackPanel>
                     </Border>
 
-                    <!-- Chapters -->
-                    <Border Classes="card" Padding="16,14" IsVisible="{Binding HasChapters}">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,10">
-                                <fi:SymbolIcon Symbol="TextBulletList" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                <TextBlock Classes="sectionTitle" Text="CHAPTERS" Margin="0" />
-                            </StackPanel>
-                            <ItemsControl ItemsSource="{Binding Chapters}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="models:BookChapterSummary">
-                                        <Button Classes="listRow" KeyDown="OnRowKeyDown"
-                                                Command="{Binding $parent[ItemsControl].((vm:BookDetailScreenViewModel)DataContext).OpenChapterCommand}"
-                                                CommandParameter="{Binding}">
-                                            <DockPanel LastChildFill="True">
-                                                <TextBlock DockPanel.Dock="Left" Text="{Binding Index, StringFormat='{}{0}.'}"
-                                                           Classes="pbTextCaption" Width="34" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Title}" Foreground="{DynamicResource PbTextBrush}"
-                                                           FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                            </DockPanel>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
+                    <!-- ===== Overview ===== -->
+                    <StackPanel IsVisible="{Binding IsOverviewTab}" controls:Replace.On="{Binding IsOverviewTab}" Spacing="16" Margin="0,16,0,0">
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                            <Border Grid.Column="0" Classes="card">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Classes="pbTextOverline" Text="ABOUT THIS EDITION" />
+                                    <ItemsControl ItemsSource="{Binding EditionFacts}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:EditionFact">
+                                                <Grid ColumnDefinitions="112,*" Margin="0,0,0,8">
+                                                    <TextBlock Grid.Column="0" Classes="pbTextMeta" Text="{Binding Label}" />
+                                                    <TextBlock Grid.Column="1" Classes="pbTextBody" Text="{Binding Value}" TextWrapping="Wrap" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Classes="card">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Classes="pbTextOverline" Text="GENRES AND TAGS" IsVisible="{Binding HasTagChips}" />
+                                    <ItemsControl ItemsSource="{Binding TagChips}" IsVisible="{Binding HasTagChips}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <Border Classes="pbChip" Margin="0,0,8,8"><TextBlock Text="{Binding}" /></Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Classes="pbTextOverline" Text="{Binding MoreByOverline}" IsVisible="{Binding HasMoreByAuthor}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding HasMoreByAuthor}">
+                                        <ItemsControl ItemsSource="{Binding MoreByAuthor}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="12" /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="models:BookCardSample">
+                                                    <books:BookCoverCard CoverWidth="56" ShowCaptions="False" ToolTip.Tip="{Binding Title}"
+                                                                         ClickCommand="{Binding $parent[UserControl].((vm:BookDetailScreenViewModel)DataContext).OpenOtherBookCommand}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Button Classes="ghost sm" VerticalAlignment="Center" Content="{Binding MoreByAuthorAllLabel}" Command="{Binding OpenAuthorCommand}"
+                                                IsVisible="{Binding MoreByAuthorAllLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                    </StackPanel>
+                                    <TextBlock Classes="pbTextCaption" Text="No genres or tags yet. Match metadata or edit the book to add some."
+                                               TextWrapping="Wrap" IsVisible="{Binding !HasTagChips}" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
 
-                    <Border Classes="card" Padding="16,14" IsVisible="{Binding ChaptersUnavailable}">
-                        <TextBlock Classes="pbTextCaption" TextWrapping="Wrap"
-                                   Text="Chapter list unavailable — the file may be missing or damaged." />
-                    </Border>
-
-                    <!-- Bookmarks -->
-                    <Border Classes="card" Padding="16,14" IsVisible="{Binding HasBookmarks}">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,10">
-                                <fi:SymbolIcon Symbol="Bookmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                <TextBlock Classes="sectionTitle" Text="BOOKMARKS" Margin="0" />
+                        <Border Classes="card" IsVisible="{Binding HasLatestHighlight}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="pbTextOverline" Text="{Binding LatestHighlight.ChapterTitle, StringFormat='YOUR LATEST HIGHLIGHT · {0}'}" />
+                                <Border Padding="12,0,0,0" BorderThickness="3,0,0,0"
+                                        BorderBrush="{Binding LatestHighlight.Color, Converter={x:Static views:HighlightColorConverter.Instance}}">
+                                    <TextBlock Classes="bookQuote" Text="{Binding LatestHighlight.Excerpt, StringFormat='“{0}”'}" MaxLines="4" TextTrimming="WordEllipsis" />
+                                </Border>
+                                <Button Classes="ghost sm" HorizontalAlignment="Left" Command="{Binding ShowNotesCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="{Binding NotesCountLabel, StringFormat='{}{0} · see all in Notes'}" />
+                                        <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" />
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
-                            <ItemsControl ItemsSource="{Binding Bookmarks}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="models:BookBookmarkSummary">
-                                        <Button Classes="listRow" KeyDown="OnRowKeyDown"
-                                                Command="{Binding $parent[ItemsControl].((vm:BookDetailScreenViewModel)DataContext).OpenBookmarkCommand}"
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ===== Contents ===== -->
+                    <StackPanel IsVisible="{Binding IsChaptersTab}" controls:Replace.On="{Binding IsChaptersTab}" Margin="0,16,0,0">
+                        <ItemsControl ItemsSource="{Binding ChapterGroups}" IsVisible="{Binding HasChapters}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:BookTocGroup">
+                                    <StackPanel Margin="0,0,0,16">
+                                        <TextBlock Classes="pbTextOverline" Text="{Binding PartTitle, Converter={x:Static views:BookDetailLabels.Upper}}" Margin="8,0,0,8"
+                                                   IsVisible="{Binding PartTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                        <ItemsControl ItemsSource="{Binding Chapters}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="models:BookChapterSummary">
+                                                    <Button Classes="listRow" KeyDown="OnRowKeyDown"
+                                                            Command="{Binding $parent[UserControl].((vm:BookDetailScreenViewModel)DataContext).OpenChapterCommand}"
+                                                            CommandParameter="{Binding}">
+                                                        <Grid ColumnDefinitions="Auto,36,*,Auto" ColumnSpacing="4">
+                                                            <Panel Grid.Column="0" Width="20" VerticalAlignment="Center" AutomationProperties.Name="{Binding State}">
+                                                                <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsRead}" Foreground="{DynamicResource PbSuccessBrush}" />
+                                                                <fi:SymbolIcon Symbol="Play" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsCurrent}" Foreground="{DynamicResource PbAccentBrush}" />
+                                                                <fi:SymbolIcon Symbol="Circle" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsUnread}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                            </Panel>
+                                                            <TextBlock Grid.Column="1" Text="{Binding Index, StringFormat='{}{0}.'}" Classes="pbTextCaption" VerticalAlignment="Center" />
+                                                            <TextBlock Grid.Column="2" Text="{Binding Title}" Classes="pbTextBody bookTitle" FontWeight="Normal"
+                                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding CurrentFraction, StringFormat='{}{0:P0}'}" Classes="pbTextCaption" IsVisible="{Binding IsCurrent}" />
+                                                                <ProgressBar Minimum="0" Maximum="1" Value="{Binding LengthFraction}" Width="64" Height="4" ToolTip.Tip="Length relative to the longest chapter" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Border Classes="card" IsVisible="{Binding ChaptersUnavailable}">
+                            <TextBlock Classes="pbTextCaption" TextWrapping="Wrap" Text="Chapter list unavailable — the file may be missing or damaged." />
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ===== Notes ===== the only place Export lives. -->
+                    <StackPanel IsVisible="{Binding IsNotesTab}" controls:Replace.On="{Binding IsNotesTab}" Margin="0,16,0,0" Spacing="12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasNotes}" VerticalAlignment="Center">
+                                <Button Classes="filterChip" Classes.on="{Binding IsKindAll}" Content="All"
+                                        Command="{Binding SetNoteKindFilterCommand}" CommandParameter="{x:Static models:BookNoteKindFilter.All}" />
+                                <Button Classes="filterChip" Classes.on="{Binding IsKindHighlights}" Content="Highlights"
+                                        Command="{Binding SetNoteKindFilterCommand}" CommandParameter="{x:Static models:BookNoteKindFilter.Highlights}" />
+                                <Button Classes="filterChip" Classes.on="{Binding IsKindBookmarks}" Content="Bookmarks"
+                                        Command="{Binding SetNoteKindFilterCommand}" CommandParameter="{x:Static models:BookNoteKindFilter.Bookmarks}" />
+                                <Button Classes="filterChip" Classes.on="{Binding IsKindRegions}" Content="Regions"
+                                        Command="{Binding SetNoteKindFilterCommand}" CommandParameter="{x:Static models:BookNoteKindFilter.Regions}" />
+                                <StackPanel Orientation="Horizontal" Spacing="4" Margin="12,0,0,0" IsVisible="{Binding HasHighlights}">
+                                    <Button Classes="iconButton sm" Classes.on="{Binding IsColorYellow}" AutomationProperties.Name="Yellow highlights"
+                                            Command="{Binding ToggleNoteColorCommand}" CommandParameter="{x:Static entities:BookHighlightColor.Yellow}">
+                                        <Ellipse Width="12" Height="12" Fill="{Binding Source={x:Static entities:BookHighlightColor.Yellow}, Converter={x:Static views:HighlightColorConverter.Instance}}" />
+                                    </Button>
+                                    <Button Classes="iconButton sm" Classes.on="{Binding IsColorGreen}" AutomationProperties.Name="Green highlights"
+                                            Command="{Binding ToggleNoteColorCommand}" CommandParameter="{x:Static entities:BookHighlightColor.Green}">
+                                        <Ellipse Width="12" Height="12" Fill="{Binding Source={x:Static entities:BookHighlightColor.Green}, Converter={x:Static views:HighlightColorConverter.Instance}}" />
+                                    </Button>
+                                    <Button Classes="iconButton sm" Classes.on="{Binding IsColorBlue}" AutomationProperties.Name="Blue highlights"
+                                            Command="{Binding ToggleNoteColorCommand}" CommandParameter="{x:Static entities:BookHighlightColor.Blue}">
+                                        <Ellipse Width="12" Height="12" Fill="{Binding Source={x:Static entities:BookHighlightColor.Blue}, Converter={x:Static views:HighlightColorConverter.Instance}}" />
+                                    </Button>
+                                    <Button Classes="iconButton sm" Classes.on="{Binding IsColorPink}" AutomationProperties.Name="Pink highlights"
+                                            Command="{Binding ToggleNoteColorCommand}" CommandParameter="{x:Static entities:BookHighlightColor.Pink}">
+                                        <Ellipse Width="12" Height="12" Fill="{Binding Source={x:Static entities:BookHighlightColor.Pink}, Converter={x:Static views:HighlightColorConverter.Instance}}" />
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+                            <Button Grid.Column="1" Classes="secondary sm" Content="Export…" Command="{Binding ExportAnnotationsCommand}" IsVisible="{Binding HasNotes}"
+                                    AutomationProperties.AutomationId="BookDetailNotesExport" />
+                        </Grid>
+
+                        <TextBlock Classes="pbTextCaption" TextWrapping="Wrap" IsVisible="{Binding ShowNoNotes}"
+                                   Text="Highlights, bookmarks and captured regions you make while reading will be listed here." />
+                        <TextBlock Classes="pbTextCaption" TextWrapping="Wrap" IsVisible="{Binding ShowNoNoteMatches}" Text="Nothing matches these filters." />
+
+                        <ItemsControl ItemsSource="{Binding Notes}" AutomationProperties.AutomationId="BookDetailNotes">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:BookNoteEntry">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Button Grid.Column="0" Classes="listRow" KeyDown="OnRowKeyDown"
+                                                Command="{Binding $parent[UserControl].((vm:BookDetailScreenViewModel)DataContext).OpenNoteCommand}"
                                                 CommandParameter="{Binding}">
                                             <Grid ColumnDefinitions="Auto,*">
-                                                <fi:SymbolIcon Grid.Column="0" Symbol="Bookmark" FontSize="{StaticResource PbIconSizeXs}"
-                                                               Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Top" Margin="0,2,8,0" />
-                                                <StackPanel Grid.Column="1" Spacing="3">
-                                                    <TextBlock Text="{Binding Excerpt}" Foreground="{DynamicResource PbTextBrush}"
-                                                               FontSize="13" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                                <Panel Grid.Column="0" Width="20" VerticalAlignment="Top" Margin="0,4,8,0">
+                                                    <Ellipse Width="10" Height="10" IsVisible="{Binding IsHighlight}"
+                                                             Fill="{Binding Color, Converter={x:Static views:HighlightColorConverter.Instance}}" />
+                                                    <fi:SymbolIcon Symbol="Bookmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                                   IsVisible="{Binding !IsHighlight}" />
+                                                </Panel>
+                                                <StackPanel Grid.Column="1" Spacing="4">
+                                                    <TextBlock Text="{Binding Excerpt}" Classes="pbTextBody" FontFamily="{DynamicResource PbBookTitleFontFamily}"
+                                                               TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Note}" Classes="pbTextMeta" FontStyle="Italic" TextWrapping="Wrap" IsVisible="{Binding HasNote}" />
                                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                                        <TextBlock Text="{Binding ChapterTitle}" Classes="pbTextCaption" />
-                                                        <TextBlock Text="{Binding CreatedTime, StringFormat='{}{0:MMM d, yyyy}'}" Classes="pbTextCaption" />
+                                                        <TextBlock Text="{Binding KindLabel}" Classes="pbTextCaption" />
+                                                        <TextBlock Text="{Binding Where}" Classes="pbTextCaption" />
+                                                        <TextBlock Text="{Binding CreatedLabel}" Classes="pbTextCaption" />
                                                     </StackPanel>
                                                 </StackPanel>
                                             </Grid>
                                         </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
+                                        <Button Grid.Column="1" Classes="iconButton sm" VerticalAlignment="Top" AutomationProperties.Name="Delete note"
+                                                Command="{Binding $parent[UserControl].((vm:BookDetailScreenViewModel)DataContext).DeleteNoteCommand}" CommandParameter="{Binding}">
+                                            <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" />
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
 
-                    <Button Classes="detailAction ghost" HorizontalAlignment="Left" Margin="0,20,0,0" Foreground="#E06060">
-                        <Button.Content>
-                            <StackPanel Orientation="Horizontal" Spacing="7">
-                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeMd}" Foreground="#E06060" />
-                                <TextBlock Text="Delete Book" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button.Content>
-                        <Button.Flyout>
-                            <Flyout>
-                                <StackPanel Spacing="8" Width="220">
-                                    <TextBlock Classes="pbTextCaption" TextWrapping="Wrap"
-                                               Text="Move this book's file to the Recycle Bin and remove it from the library?" />
-                                    <Button Classes="detailAction ghost" HorizontalAlignment="Left" Foreground="#E06060"
-                                            Content="Yes, delete this book" Command="{Binding DeleteBookCommand}" />
-                                </StackPanel>
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
+                    <!-- ===== Your reading ===== -->
+                    <StackPanel IsVisible="{Binding IsYourReadingTab}" controls:Replace.On="{Binding IsYourReadingTab}" Margin="0,16,0,0">
+                        <ItemsControl ItemsSource="{Binding StatTiles}" AutomationProperties.AutomationId="BookDetailStats" IsVisible="{Binding ShowStats}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:BookStatTile">
+                                    <Border Classes="card" Margin="0,0,16,16" MinWidth="180">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="{Binding Value}" Classes="pbTextTitle" />
+                                            <TextBlock Text="{Binding Label}" Classes="pbTextCaption" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </StackPanel>
             </StackPanel>
 
             <!-- ================= SERIES MODE ================= -->
-            <StackPanel Margin="0,0,0,50" IsVisible="{Binding IsSeriesMode}">
-                <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="24,20,24,12">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding BackLabel}" VerticalAlignment="Center" />
+            <StackPanel Margin="0,0,0,48" IsVisible="{Binding IsSeriesMode}">
+                <books:CoverWash CoverKey="{Binding JacketCoverKey}" Padding="24,20,24,24">
+                    <StackPanel Spacing="16">
+                        <Button Classes="backLink" Command="{Binding GoBackCommand}" HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding BackLabel}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="40">
+                            <!-- The fanned stack: up to three covers, the first in front. -->
+                            <ItemsControl Grid.Column="0" ItemsSource="{Binding SeriesStack}" Width="240" Height="300" VerticalAlignment="Top">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><books:FannedStackPanel /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:BookCardSample">
+                                        <Border Classes="jacketCover" Width="180" Height="270" Background="{Binding CoverBrush}">
+                                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <StackPanel Grid.Column="1" Spacing="8" MaxWidth="760" HorizontalAlignment="Left">
+                                <TextBlock Classes="pbTextOverline" Text="{Binding SeriesOverline}" />
+                                <TextBlock Classes="pbTextHero bookTitle" Text="{Binding SeriesName}" TextWrapping="Wrap" MaxLines="2" TextTrimming="WordEllipsis" />
+                                <TextBlock Classes="pbTextBody" Text="{Binding SeriesAuthor, StringFormat='by {0}'}" Foreground="{DynamicResource PbTextMutedBrush}"
+                                           IsVisible="{Binding HasSeriesAuthor}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+                                    <Button Classes="primary" Command="{Binding ContinueSeriesCommand}" IsVisible="{Binding HasSeriesContinue}"
+                                            AutomationProperties.AutomationId="BookSeriesContinue">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <fi:SymbolIcon Symbol="Play" FontSize="{StaticResource PbIconSizeSm}" />
+                                            <TextBlock Text="{Binding SeriesContinueLabel}" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Classes="secondary" Content="Edit series" Command="{Binding EditSeriesCommand}" />
+                                    <Button Classes="ghost" Content="Edit all books" Command="{Binding EditAllSeriesBooksCommand}" />
+                                </StackPanel>
+                                <books:ChapterRibbon MaxWidth="520" HorizontalAlignment="Left" Width="520" Margin="0,16,0,0"
+                                                     Segments="{Binding RibbonSegments}" Caption="{Binding RibbonCaption}"
+                                                     OpenCommand="{Binding OpenRibbonSegmentCommand}" IsVisible="{Binding HasRibbon}" />
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
-                </Button>
+                </books:CoverWash>
 
-                <views:DetailHero DataContext="{Binding}" />
-
-                <ItemsControl ItemsSource="{Binding SeriesBooks}" Margin="24,22,24,0">
+                <ItemsControl ItemsSource="{Binding SeriesBooks}" Margin="24,16,24,0">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:BookCardSample">
-                            <Button Classes="card" Width="160" Margin="0,0,16,16"
-                                    Command="{Binding $parent[ItemsControl].((vm:BookDetailScreenViewModel)DataContext).OpenBookFromSeriesCommand}"
-                                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
-                                <StackPanel Spacing="8">
-                                    <Border Classes="bookCover" Background="{Binding CoverBrush}" Height="216">
-                                        <Grid>
-                                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                                            <Border Classes="posterScrim" />
-                                        </Grid>
-                                    </Border>
-                                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap"
-                                               MaxLines="2" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{Binding Author}" Classes="pbTextCaption" TextTrimming="CharacterEllipsis"
-                                               IsVisible="{Binding Author, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                                </StackPanel>
-                            </Button>
+                            <books:BookCoverCard Margin="0,0,16,16" KeyDown="OnCardKeyDown"
+                                                 ClickCommand="{Binding $parent[UserControl].((vm:BookDetailScreenViewModel)DataContext).OpenBookFromSeriesCommand}" />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </StackPanel>
-
         </Grid>
     </ScrollViewer>
+
+    <!-- Compact title bar (redesign §4.1): pins once the jacket has scrolled away, so Continue stays one click away. -->
+    <Border x:Name="CompactBar" IsVisible="False" VerticalAlignment="Top" Padding="24,8"
+            Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+            <Border Grid.Column="0" Width="24" Height="36" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" Background="{Binding CoverBrush}">
+                <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+            </Border>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <TextBlock Classes="pbTextSection bookTitle" Text="{Binding HeaderTitle}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <TextBlock Classes="pbTextCaption" Text="{Binding RibbonCaption}" VerticalAlignment="Center" />
+            </StackPanel>
+            <Button Grid.Column="2" Classes="primary" Content="{Binding ContinueLabel}" Command="{Binding ContinueCommand}" IsVisible="{Binding IsBookMode}" />
+        </Grid>
+    </Border>
+    </Grid>
 </UserControl>

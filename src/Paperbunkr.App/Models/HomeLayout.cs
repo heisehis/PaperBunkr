@@ -21,10 +21,16 @@ public static class HomeSectionKey
     /// <summary>The ranked "what to read next" list (docs/superpowers/specs/2026-10-06-smart-features-design.md §4.4).</summary>
     public const string UpNext = "upNext";
 
+    /// <summary>The next book in a series you are working through (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §9).</summary>
+    public const string BookUpNext = "bookUpNext";
+
+    /// <summary>Books added in the last 30 days that have not been opened.</summary>
+    public const string BookRecentlyAdded = "bookRecentlyAdded";
+
     /// <summary>Default order - Needs Attention under the spotlight, Up Next right after Continue Reading.</summary>
     public static IReadOnlyList<string> Default { get; } = new[]
     {
-        Spotlight, NeedsAttention, ContinueReading, UpNext, RecentlyAdded, Collections, BecauseYouRead, ReadingList,
+        Spotlight, NeedsAttention, ContinueReading, UpNext, RecentlyAdded, BookUpNext, BookRecentlyAdded, Collections, BecauseYouRead, ReadingList,
     };
 
     public static string DisplayName(string key) => key switch
@@ -34,6 +40,8 @@ public static class HomeSectionKey
         ContinueReading => "Continue reading",
         UpNext => "Up next",
         RecentlyAdded => "Recently added",
+        BookUpNext => "Next in your book series",
+        BookRecentlyAdded => "New books",
         Collections => "Collections",
         BecauseYouRead => "Because you read",
         ReadingList => "Try this reading list",

@@ -7,6 +7,7 @@ using Avalonia.VisualTree;
 using Paperbunkr.App.ViewModels;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Paperbunkr.App.Services.Input;
 
 namespace Paperbunkr.App.Views;
@@ -42,6 +43,17 @@ public partial class BookDetailScreen : UserControl
         KeyDown += (_, e) => e.Handled = FocusReclaimer.TryMoveDirectionally(this, e);
         DataContextChanged += (_, _) => Subscribe();
         AttachedToVisualTree += (_, _) => _focus.Reclaim();
+        // Redesign §4.1: the compact title bar pins once the jacket has scrolled out of view (book mode only).
+        DetailScroller.ScrollChanged += (_, _) => UpdateCompactBar();
+    }
+
+    private void UpdateCompactBar()
+    {
+        bool show = _viewModel is { IsBookMode: true } && Jacket.Bounds.Height > 0 && DetailScroller.Offset.Y > Jacket.Bounds.Height - 44;
+        if (CompactBar.IsVisible != show)
+        {
+            CompactBar.IsVisible = show;
+        }
     }
 
     private void Subscribe()
@@ -89,8 +101,10 @@ public partial class BookDetailScreen : UserControl
     /// <c>LibraryScreen.axaml.cs</c>'s own <c>OnCardKeyDown</c>.</summary>
     private void OnCardKeyDown(object? sender, KeyEventArgs e)
     {
-        if (sender is not Button { DataContext: not null } button ||
-            button.FindAncestorOfType<ItemsControl>() is not { } itemsControl)
+        // A series card is the shared BookCoverCard; the key bubbled up from its inner card Button.
+        var button = sender as Button
+            ?? (sender as Control)?.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Classes.Contains("card"));
+        if (button is not { DataContext: not null } || button.FindAncestorOfType<ItemsControl>() is not { } itemsControl)
         {
             return;
         }

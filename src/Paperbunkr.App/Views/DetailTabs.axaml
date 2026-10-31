@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:pbc="using:Paperbunkr.App.Controls"
@@ -8,6 +8,7 @@
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:plugins="using:Paperbunkr.App.Plugins"
              xmlns:beh="using:Paperbunkr.App.Behaviors"
              xmlns:services="using:Paperbunkr.App.Services"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -558,11 +559,16 @@
             <TextBlock IsVisible="{Binding !HasAnyRelatedRail}" Text="No related series yet." FontSize="13"
                        Foreground="{DynamicResource PbTextMutedBrush}" />
 
+            <!-- Runs the series connector now (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §5.2). -->
+            <Button Classes="ghost sm" HorizontalAlignment="Right" Content="Find relations"
+                    Command="{Binding FindRelationsCommand}" ToolTip.Tip="Link volumes, annuals, team-ups and event tie-ins, and ask Metron" />
+
             <Border Classes="card">
                 <views:PosterRail Title="Related" ContextLabel="{Binding Related.Count, StringFormat='{}{0} · manage'}"
                                   ItemsSource="{Binding RelatedRail}" ShowAddCard="True"
                                   AddCommand="{Binding ToggleAddRelationCommand}"
                                   RemoveCommand="{Binding RemoveRelationCommand}"
+                                  AcceptCommand="{Binding AcceptSuggestionCommand}"
                                   ClickCommand="{Binding OpenRelatedSeriesCommand}" />
             </Border>
 
@@ -610,9 +616,29 @@
                                   ClickCommand="{Binding OpenRelatedSeriesCommand}" />
             </Border>
 
-            <Border Classes="card" IsVisible="{Binding HasSameEvent}">
-                <views:PosterRail Title="Same Event" ItemsSource="{Binding EventRail}"
-                                  ClickCommand="{Binding OpenRelatedSeriesCommand}" />
+            <!-- One row per story event with a main series: the main series, then its tie-ins with their issue ranges
+                 (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §6.2). Replaces the flat Same Event rail. -->
+            <ItemsControl ItemsSource="{Binding VisibleEventRows}" IsVisible="{Binding HasEventRows}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><StackPanel Spacing="12" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:EventRelationRow">
+                        <Border Classes="card">
+                            <views:PosterRail Title="{Binding Title}" ContextLabel="{Binding ContextLabel}" ItemsSource="{Binding Items}"
+                                              ContextCommand="{Binding #Root.((vm:DetailTabsViewModel)DataContext).OpenEventCommand}"
+                                              ContextCommandParameter="{Binding StoryEventId}"
+                                              ClickCommand="{Binding #Root.((vm:DetailTabsViewModel)DataContext).OpenRelatedSeriesCommand}" />
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button Classes="ghost sm" HorizontalAlignment="Left" IsVisible="{Binding HasHiddenEventRows}"
+                    Content="{Binding ShowAllEventsLabel}" Command="{Binding ShowAllEventRowsCommand}" />
+
+            <Border Classes="card" IsVisible="{Binding HasOtherEvents}">
+                <views:PosterRail Title="Other events" ContextLabel="no main series" ItemsSource="{Binding OtherEventsRail}"
+                                  ClickCommand="{Binding OpenEventCommand}" />
             </Border>
 
             <Border Classes="card" IsVisible="{Binding HasMoreLikeThis}">
@@ -1059,6 +1085,20 @@
                             <StackPanel Spacing="4">
                                 <TextBlock Text="{Binding CommandName}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
                                 <TextBlock Text="{Binding Text}" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Native plugins' issue panels (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §E). -->
+            <ItemsControl ItemsSource="{Binding IssuePluginViews}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="plugins:PluginView">
+                        <Border Classes="card" Margin="0,0,0,8">
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="pbTextSection" Text="{Binding PluginName}" />
+                                <ContentControl Content="{Binding View}" />
                             </StackPanel>
                         </Border>
                     </DataTemplate>

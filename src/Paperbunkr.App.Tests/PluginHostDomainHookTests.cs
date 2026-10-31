@@ -133,6 +133,38 @@ public sealed class PluginHostDomainHookTests : IDisposable
         Assert.Equal(new[] { "Novel:9999:noissue:nobook::" }, AlertTitles);
     }
 
+    // ---- Plugin API 4.5 (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §B) ----
+
+    [Fact]
+    public async Task A_series_status_change_reaches_a_SeriesStatusChanged_plugin()
+    {
+        WritePlugin("watcher", PluginHooks.SeriesStatusChanged, """
+            Environment.Activity.RaiseAlert(PluginAlertSeverity.Info, $"{SeriesId}:{SeriesName}:{OldStatus}->{NewStatus}");
+            return null;
+            """);
+        Attach();
+
+        _events.Raise(new SeriesStatusChangedEvent(5, "Kilo Station", SeriesStatus.Ongoing, SeriesStatus.Completed));
+        await Settle();
+
+        Assert.Equal(new[] { "5:Kilo Station:Ongoing->Completed" }, AlertTitles);
+    }
+
+    [Fact]
+    public async Task A_finished_scheduled_task_reaches_a_ScheduledTaskRan_plugin()
+    {
+        WritePlugin("ops", PluginHooks.ScheduledTaskRan, """
+            Environment.Activity.RaiseAlert(PluginAlertSeverity.Info, $"{TaskId}:{TaskName}:{Outcome}:{Message}:{Duration.TotalSeconds}");
+            return null;
+            """);
+        Attach();
+
+        _events.Raise(new ScheduledTaskRanEvent("backup", "Back up library", DateTime.UtcNow, TimeSpan.FromSeconds(2), ScheduledTaskOutcome.Failed, "disk full"));
+        await Settle();
+
+        Assert.Equal(new[] { "backup:Back up library:Failed:disk full:2" }, AlertTitles);
+    }
+
     [Fact]
     public async Task BookRead_carries_the_finish_time_from_the_saved_row()
     {

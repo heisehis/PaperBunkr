@@ -210,6 +210,44 @@ public sealed class KitsuTrackerAdapter : ITrackerSearchProvider, ITrackerAdapte
         return new TrackerRemoteEntry(KitsuStatusMapper.FromStatus(entry.Status), (int?)entry.Progress, score, finishDate);
     }
 
+    public async Task<TrackerOperationResult<TrackerRemoteEntry>> GetEntryOutcomeAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
+        string? token = CredentialStore.Get(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken);
+        if (string.IsNullOrEmpty(token)) return TrackerOperationResult<TrackerRemoteEntry>.Permanent("Kitsu is not connected.");
+        const string query = """
+            query Query($id: ID!) {
+              findMangaById(id: $id) { myLibraryEntry { id status progress rating finishedAt } }
+            }
+            """;
+        var request = new HttpRequestMessage(HttpMethod.Post, GraphQlEndpoint)
+        {
+            Content = JsonContent.Create(new { query, variables = new { id = link.ExternalId } }),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        HttpResponseMessage response;
+        try { response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false); }
+        catch (HttpRequestException ex) { return TrackerOperationClassifier.FromNetworkFailure<TrackerRemoteEntry>(ex); }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { return TrackerOperationClassifier.Timeout<TrackerRemoteEntry>(); }
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return TrackerOperationClassifier.FromHttpFailure<TrackerRemoteEntry>(response, body);
+            }
+            KitsuGraphQlEnvelope<KitsuFindByIdData>? envelope;
+            try { envelope = await response.Content.ReadFromJsonAsync<KitsuGraphQlEnvelope<KitsuFindByIdData>>(cancellationToken: cancellationToken).ConfigureAwait(false); }
+            catch (JsonException) { return TrackerOperationResult<TrackerRemoteEntry>.Permanent("Kitsu returned an invalid lookup response."); }
+            if (envelope is null || HasTransportErrors(envelope))
+                return TrackerOperationResult<TrackerRemoteEntry>.Permanent("Kitsu rejected the tracker lookup.");
+            var entry = envelope.Data?.FindMangaById?.MyLibraryEntry;
+            if (entry is null) return TrackerOperationResult<TrackerRemoteEntry>.Missing();
+            decimal? score = entry.Rating is long rating and > 0 ? rating / 4m : null;
+            DateOnly? finishDate = DateOnly.TryParse(entry.FinishedAt, out var parsedDate) ? parsedDate : null;
+            return TrackerOperationResult<TrackerRemoteEntry>.Success(new TrackerRemoteEntry(KitsuStatusMapper.FromStatus(entry.Status), (int?)entry.Progress, score, finishDate));
+        }
+    }
+
     /// <summary>Looks up this series' existing Kitsu library entry, if any - <see cref="PushEntryDetailedAsync"/>
     /// uses just its id (to decide create vs. update), <see cref="GetEntryAsync"/> uses its status/
     /// progress/rating/date too. One shared query serves both, same "one lookup, not two round trips"

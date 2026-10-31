@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
@@ -43,6 +44,12 @@ public partial class ReaderSettingsSheet : UserControl
         {
             _overlayController.SetOpen(change.GetNewValue<bool>());
         }
+        else if (change.Property == SheetBackgroundProperty || change.Property == SheetForegroundProperty)
+        {
+            // Books redesign §5.3: the sheet is a card of the page; its tokens follow the book theme (opaque page colour, not the chrome tint).
+            var opaque = SheetBackground is ISolidColorBrush tint ? new SolidColorBrush(Color.FromRgb(tint.Color.R, tint.Color.G, tint.Color.B)) : null;
+            Reader.BookThemePanelResources.Apply(SheetCard.Resources, opaque, SheetForeground);
+        }
     }
 
     /// <summary>Belt-and-braces: see ReaderListDrawer's identical override for why.</summary>
@@ -58,6 +65,12 @@ public partial class ReaderSettingsSheet : UserControl
         BookTheme.Light, BookTheme.Dark, BookTheme.Sepia,
         BookTheme.MatchAppSkin, BookTheme.OledBlack, BookTheme.HighContrast,
     };
+
+    private static IReadOnlyList<string>? s_installedFonts;
+
+    /// <summary>The families installed on this machine, for the "Font from this machine" box (computed on first use; the font manager needs a running app).</summary>
+    public static IReadOnlyList<string> InstalledFonts =>
+        s_installedFonts ??= FontManager.Current.SystemFonts.Select(f => f.Name).Distinct().OrderBy(n => n, StringComparer.CurrentCultureIgnoreCase).ToList();
 
     /// <summary>PDF's theme set (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md) - no MatchAppSkin/OledBlack/HighContrast, since those were designed around EPUB's reflowable content theming.</summary>
     public static readonly IEnumerable<BookTheme> PdfThemes = new[] { BookTheme.Light, BookTheme.Dark, BookTheme.Sepia };
@@ -153,6 +166,99 @@ public partial class ReaderSettingsSheet : UserControl
     {
         get => GetValue(AutoHideToggleProperty);
         set => SetValue(AutoHideToggleProperty, value);
+    }
+
+    /// <summary>EPUB-family reflow reader only - the line ruler and auto-scroll act on the reading page, which the PDF reader does not have (docs/superpowers/specs/2026-10-27-books-slice3b-reader-typography-aids-design.md §4).</summary>
+    public static readonly StyledProperty<bool> HasReadingAidsProperty =
+        AvaloniaProperty.Register<ReaderSettingsSheet, bool>(nameof(HasReadingAids));
+
+    public bool HasReadingAids
+    {
+        get => GetValue(HasReadingAidsProperty);
+        set => SetValue(HasReadingAidsProperty, value);
+    }
+
+    public static readonly StyledProperty<bool> RulerOnProperty =
+        AvaloniaProperty.Register<ReaderSettingsSheet, bool>(nameof(RulerOn), defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
+
+    public bool RulerOn
+    {
+        get => GetValue(RulerOnProperty);
+        set => SetValue(RulerOnProperty, value);
+    }
+
+    /// <summary>False hides the read-aloud card (no speech voices on this machine).</summary>
+    public static readonly StyledProperty<bool> HasSpeechProperty =
+        AvaloniaProperty.Register<ReaderSettingsSheet, bool>(nameof(HasSpeech));
+
+    public bool HasSpeech
+    {
+        get => GetValue(HasSpeechProperty);
+        set => SetValue(HasSpeechProperty, value);
+    }
+
+    public static readonly StyledProperty<bool> SpeakOnProperty =
+        AvaloniaProperty.Register<ReaderSettingsSheet, bool>(nameof(SpeakOn), defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
+
+    public bool SpeakOn
+    {
+        get => GetValue(SpeakOnProperty);
+        set => SetValue(SpeakOnProperty, value);
+    }
+
+    public static readonly StyledProperty<string?> SpeechVoiceProperty =
+        AvaloniaProperty.Register<ReaderSettingsSheet, string?>(nameof(SpeechVoice), defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
+
+    public string? SpeechVoice
+    {
+        get => GetValue(SpeechVoiceProperty);
+        set => SetValue(SpeechVoiceProperty, value);
+    }
+
+    public static readonly StyledProperty<IEnumerable<string>?> SpeechVoicesProperty =
+        AvaloniaProperty.Register<ReaderSettingsSheet, IEnumerable<string>?>(nameof(SpeechVoices));
+
+    public IEnumerable<string>? SpeechVoices
+    {
+        get => GetValue(SpeechVoicesProperty);
+        set => SetValue(SpeechVoicesProperty, value);
+    }
+
+    public static readonly StyledProperty<bool> LookUpOnlineProperty =
+        AvaloniaProperty.Register<ReaderSettingsSheet, bool>(nameof(LookUpOnline), defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
+
+    public bool LookUpOnline
+    {
+        get => GetValue(LookUpOnlineProperty);
+        set => SetValue(LookUpOnlineProperty, value);
+    }
+
+    /// <summary>True while the reader pages (paged/scroll spec §5); picks the active segment and disables auto-scroll.</summary>
+    public static readonly StyledProperty<bool> LayoutPagedProperty =
+        AvaloniaProperty.Register<ReaderSettingsSheet, bool>(nameof(LayoutPaged));
+
+    public bool LayoutPaged
+    {
+        get => GetValue(LayoutPagedProperty);
+        set => SetValue(LayoutPagedProperty, value);
+    }
+
+    public static readonly StyledProperty<ICommand?> SetLayoutCommandProperty =
+        AvaloniaProperty.Register<ReaderSettingsSheet, ICommand?>(nameof(SetLayoutCommand));
+
+    public ICommand? SetLayoutCommand
+    {
+        get => GetValue(SetLayoutCommandProperty);
+        set => SetValue(SetLayoutCommandProperty, value);
+    }
+
+    public static readonly StyledProperty<bool> AutoScrollOnProperty =
+        AvaloniaProperty.Register<ReaderSettingsSheet, bool>(nameof(AutoScrollOn), defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
+
+    public bool AutoScrollOn
+    {
+        get => GetValue(AutoScrollOnProperty);
+        set => SetValue(AutoScrollOnProperty, value);
     }
 
     public static readonly StyledProperty<IBrush?> SheetBackgroundProperty =

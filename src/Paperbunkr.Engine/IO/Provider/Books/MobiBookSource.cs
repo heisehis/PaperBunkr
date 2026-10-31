@@ -76,6 +76,11 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 				Title = string.IsNullOrWhiteSpace(header.Title) ? Path.GetFileNameWithoutExtension(filePath) : header.Title,
 				Author = header.Author,
 				SeriesName = null,
+				Publisher = header.Publisher,
+				LanguageISO = header.Language,
+				ISBN = BookMetadataParsing.ExtractIsbn(header.Isbn),
+				Description = header.Description,
+				Genres = BookMetadataParsing.CleanList(header.Subjects),
 				CoverImageBytes = header.CoverRecordIndex is { } coverIndex && coverIndex >= 0 && coverIndex < pdb.Records.Count
 					? pdb.Records[coverIndex]
 					: null,

@@ -179,6 +179,9 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     /// the data source; this is the view projection, rebuilt whenever <see cref="RenderChapters"/> runs.</summary>
     public ObservableCollection<ChapterVolumeGroup> ChapterGroups { get; }
 
+    /// <summary>The "Missing chapters" card (docs/superpowers/specs/2026-10-26-you-vs-community-and-chapter-alignment-design.md Part 1): MangaDex's chapters this library lacks.</summary>
+    public MissingChaptersViewModel MissingChapters { get; } = new();
+
     // --- IDetailHeaderSource ---
 
     [ObservableProperty]
@@ -581,6 +584,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         };
 
         Tabs.LoadSeries(series);
+        MissingChapters.Load(seriesId);
         Band.LoadSeries(series, enabledVirtualTags);
         Band.StatusText = StatusLabel;
         Band.PublisherText = string.IsNullOrWhiteSpace(series.Publisher) ? string.Empty : series.Publisher!;

@@ -111,6 +111,55 @@ public class ComicVineRateLimitHandlerTests
     }
 
     [Fact]
+    public async Task LowPriority_HoldsBackWhileForegroundWorkIsRunning()
+    {
+        // 2026-10-28: on Metron's 18-a-minute window the background account sync took 14 of every 18 slots during a scrape.
+        var clock = new FakeClock();
+        var inner = new RecordingInner(clock);
+        var options = new ComicVineRateLimitHandler.Options
+        {
+            Now = () => clock.Now,
+            Delay = (t, _) => { clock.Advance(t); return Task.CompletedTask; },
+            MinSpacing = TimeSpan.Zero,
+            ForegroundQuietPeriod = TimeSpan.FromSeconds(15),
+        };
+        using var invoker = new HttpMessageInvoker(new ComicVineRateLimitHandler(inner, options));
+
+        using (await invoker.SendAsync(Req("scrape"), CancellationToken.None))
+        {
+        }
+
+        var afterHigh = clock.Now;
+        using (await invoker.SendAsync(Req("sync", ComicVineRequestPriority.Low), CancellationToken.None))
+        {
+        }
+
+        Assert.True(clock.Now - afterHigh >= TimeSpan.FromSeconds(15));
+    }
+
+    [Fact]
+    public async Task LowPriority_GoesStraightThrough_WhenNothingInTheForegroundHasRun()
+    {
+        var clock = new FakeClock();
+        var inner = new RecordingInner(clock);
+        var options = new ComicVineRateLimitHandler.Options
+        {
+            Now = () => clock.Now,
+            Delay = (t, _) => { clock.Advance(t); return Task.CompletedTask; },
+            MinSpacing = TimeSpan.Zero,
+            ForegroundQuietPeriod = TimeSpan.FromSeconds(15),
+        };
+        using var invoker = new HttpMessageInvoker(new ComicVineRateLimitHandler(inner, options));
+        var start = clock.Now;
+
+        using (await invoker.SendAsync(Req("sync", ComicVineRequestPriority.Low), CancellationToken.None))
+        {
+        }
+
+        Assert.Equal(start, clock.Now);
+    }
+
+    [Fact]
     public async Task LowPriority_IsCappedBelowTheHourlyLimit_WhileHighKeepsGoing()
     {
         var clock = new FakeClock();

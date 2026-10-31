@@ -15,6 +15,9 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public static class SpineColorCache
 {
+    /// <summary>Prefix of a Books cover key (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §5).</summary>
+    public const string BookKeyPrefix = "book:";
+
     private static readonly ConcurrentDictionary<string, Color?> s_colors = new();
     private static readonly ConcurrentDictionary<string, bool> s_inflight = new();
     private static readonly SemaphoreSlim s_gate = new(2);
@@ -36,7 +39,10 @@ public static class SpineColorCache
             await s_gate.WaitAsync().ConfigureAwait(false);
             try
             {
-                using var bitmap = CoverImageCache.DecodeFromDisk(coverKey);
+                // A book's key is "book:{id}" so it never reads the comic cover that happens to share its number.
+                using var bitmap = coverKey.StartsWith(BookKeyPrefix, StringComparison.Ordinal)
+                    ? BookCoverImageCache.DecodeFromDisk(coverKey[BookKeyPrefix.Length..])
+                    : CoverImageCache.DecodeFromDisk(coverKey);
                 var palette = CoverPalette.FromBitmap(bitmap);
                 result = palette.Count > 0 ? palette.First() : null;
             }

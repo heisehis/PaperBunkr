@@ -186,8 +186,9 @@ internal static class MediaRelationResolver
 
     /// <summary>
     /// Removes a <see cref="MediaRelation"/> (and cascades to its <see cref="RelationEvidence"/>) - a no-op if it no longer exists. A
-    /// series relation that came from a Grand Comics Database bond also leaves a <see cref="SeriesRelationDismissal"/>, so the bond
-    /// sync doesn't recreate it (docs/superpowers/specs/2026-09-27-gcd-data-design.md §4).
+    /// series relation that something automatic made - a Grand Comics Database bond (docs/superpowers/specs/2026-09-27-gcd-data-design.md §4),
+    /// the series connector or Metron's associated series (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §3.5) -
+    /// also leaves a <see cref="SeriesRelationDismissal"/>, so no sweep recreates it.
     /// </summary>
     public static void Remove(PaperbunkrDbContext context, int mediaRelationId)
     {
@@ -195,17 +196,42 @@ internal static class MediaRelationResolver
         if (relation is not null)
         {
             if (relation.SourceSeriesId is int a && relation.TargetSeriesId is int b && a != b
-                && context.RelationEvidence.Any(e => e.MediaRelationId == relation.Id && e.Provider == RelationEvidenceProvider.Gcd))
+                && context.RelationEvidence.Any(e => e.MediaRelationId == relation.Id && AutomaticProviders.Contains(e.Provider)))
             {
-                int lower = Math.Min(a, b), higher = Math.Max(a, b);
-                if (!context.SeriesRelationDismissals.Any(d => d.LowerSeriesId == lower && d.HigherSeriesId == higher))
-                {
-                    context.SeriesRelationDismissals.Add(new SeriesRelationDismissal { LowerSeriesId = lower, HigherSeriesId = higher });
-                }
+                AddDismissal(context, a, b);
             }
 
             context.MediaRelations.Remove(relation);
             context.SaveChanges();
+        }
+    }
+
+    /// <summary>Evidence providers a sweep writes; a relation backed by any of them is dismissed when you delete it.</summary>
+    private static readonly RelationEvidenceProvider[] AutomaticProviders =
+        { RelationEvidenceProvider.Gcd, RelationEvidenceProvider.Inferred, RelationEvidenceProvider.Metron, RelationEvidenceProvider.Wikidata };
+
+    /// <summary>
+    /// "Don't relate these two series" without a relation to delete - a dismissed related-series suggestion
+    /// (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §6.3). Idempotent.
+    /// </summary>
+    public static void DismissSeriesPair(PaperbunkrDbContext context, int seriesA, int seriesB)
+    {
+        if (seriesA == seriesB)
+        {
+            return;
+        }
+
+        AddDismissal(context, seriesA, seriesB);
+        context.SaveChanges();
+    }
+
+    private static void AddDismissal(PaperbunkrDbContext context, int a, int b)
+    {
+        int lower = Math.Min(a, b), higher = Math.Max(a, b);
+        if (!context.SeriesRelationDismissals.Any(d => d.LowerSeriesId == lower && d.HigherSeriesId == higher)
+            && !context.SeriesRelationDismissals.Local.Any(d => d.LowerSeriesId == lower && d.HigherSeriesId == higher))
+        {
+            context.SeriesRelationDismissals.Add(new SeriesRelationDismissal { LowerSeriesId = lower, HigherSeriesId = higher });
         }
     }
 }

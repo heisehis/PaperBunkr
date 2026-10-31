@@ -78,7 +78,7 @@ public partial class ReadingListPageViewModel
             var result = await ArcReadingListBuilder.RefreshAsync(context, listId, CancellationToken.None);
             LoadReadingList(listId);
             StatusMessage = WithDetails(
-                $"Added {result.AddedCount}, replaced {result.ReplacedPlaceholderCount} placeholder(s), {result.StillMissingCount} still missing.", result.Report);
+                $"Added {result.AddedCount}, removed {result.RemovedCount}, relinked {result.RelinkedCount}, retained {result.RetainedLocalCount} local entr{(result.RetainedLocalCount == 1 ? "y" : "ies")}, replaced {result.ReplacedPlaceholderCount} placeholder(s), {result.StillMissingCount} still missing.", result.Report);
         }
         catch (Exception ex) when (ex is ReadingListSourceException or InvalidOperationException)
         {
@@ -292,6 +292,16 @@ public partial class ReadingListPageViewModel
             return;
         }
 
+        if (RequestImportReview is not null && CblFile.Detect(path) == CblFileKind.ReadingList)
+        {
+            try
+            {
+                var prepared = await Task.Run(() => CblReadingListIO.Prepare(path));
+                await RequestImportReview(new PreparedImport(new[] { prepared }, Array.Empty<string>()));
+            }
+            catch (Exception ex) { StatusMessage = ex.Message; }
+            return;
+        }
         using var context = PaperbunkrDb.CreateContext();
         CblImportResult imported = CblImport.ImportAny(context, path);
         if (imported.Kind == CblFileKind.SmartList)
@@ -327,6 +337,16 @@ public partial class ReadingListPageViewModel
             return;
         }
 
+        if (RequestImportReview is not null)
+        {
+            try
+            {
+                var prepared = await Task.Run(() => CsvReadingListIO.Prepare(path));
+                await RequestImportReview(new PreparedImport(new[] { prepared }, Array.Empty<string>()));
+            }
+            catch (Exception ex) { StatusMessage = ex.Message; }
+            return;
+        }
         using var context = PaperbunkrDb.CreateContext();
         var result = CsvReadingListIO.Import(context, path);
         PlaceInThisFolder(result.List.Id);

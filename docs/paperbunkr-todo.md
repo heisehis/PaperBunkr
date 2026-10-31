@@ -26,6 +26,23 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **2026-10-31 — v0.8.2-beta release preparation (source `1d94298`, PR #107):** committed the
+> accumulated Books, CBL review/refresh, tracker retry, Plugin API 4.5, series connector and related
+> source/test/documentation changes. This supersedes the older "uncommitted" labels as Git status
+> only; their visual/accessibility and rollback caveats still apply. Per the user's request, set
+> the assembly to `0.8.2.0` from unpublished development version `0.8.3.0`; latest published version
+> before this release was `0.8.0-beta`. Installer verification passed all 16 PowerShell/build checks
+> and native helper checks. App and compiled XAML built successfully; 70 focused App tests and all
+> 393 distinct slow cases passed. The slow selection was run in 18 fresh-process batches to bound
+> memory after deliberately stopping the initial growing host. Data selection: 118/119 passed,
+> then all 4 foundation migration tests passed after pinning its Down/Up test to its own migration
+> and checking historical settings defaults with SQL (later intentional orphan-column migrations
+> cannot be rolled back as a chain). This covers all 119 selected cases across the runs. Plugins:
+> 268/271 passed together; all 3 resource-pressure failures passed in separate fresh processes,
+> including the Roslyn out-of-memory case. No complete fast-suite or manual visual sign-off is
+> claimed. Packaging uses the existing tag-triggered
+> workflow and repository secrets for the external Six Labors licence and signed appcast.
+
 > **2026-10-28 — Plugin API 4.5: the rest of the 2026-09-20 plugin pitch (items 1–14) implemented (working tree, uncommitted):**
 > spec/plan `docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-{design,plan}.md`. Developer mode (script plugins reload on save,
 > live log pane), New plugin… scaffolds (C#/Python/native), `src/Paperbunkr.Plugins.Testing` (fakes + `PluginScriptRunner`); hooks

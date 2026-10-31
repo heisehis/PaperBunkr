@@ -13,6 +13,7 @@ namespace Paperbunkr.Data.Tests;
 public class AddBookMetadataFoundationMigrationTests : IDisposable
 {
     private const string PriorMigration = "20261026124041_AddCollectionContent";
+    private const string ThisMigration = "20261026203325_AddBookMetadataFoundation";
     private readonly string _dbPath;
 
     public AddBookMetadataFoundationMigrationTests()
@@ -134,11 +135,15 @@ public class AddBookMetadataFoundationMigrationTests : IDisposable
     {
         using (var context = CreateContext())
         {
-            context.Database.Migrate();
-            var settings = context.GetOrCreateAppSettings();
-            Assert.True(settings.BookMetadataOpenLibraryEnabled);
-            Assert.True(settings.BookMetadataGoogleBooksEnabled);
-            Assert.False(settings.BookMetadataBackfillDone);
+            // Exercise this migration's Down/Up pair, not later migrations whose deliberate orphan
+            // columns make rolling the entire current schema backwards unsupported. The current EF
+            // settings model also contains later columns, so inspect this schema's defaults directly.
+            context.GetService<IMigrator>().Migrate(ThisMigration);
+            string ColumnDefault(string name) => context.Database.SqlQueryRaw<string>(
+                "SELECT dflt_value AS Value FROM pragma_table_info('AppSettings') WHERE name = {0}", name).Single();
+            Assert.Equal("1", ColumnDefault("BookMetadataOpenLibraryEnabled"));
+            Assert.Equal("1", ColumnDefault("BookMetadataGoogleBooksEnabled"));
+            Assert.Equal("0", ColumnDefault("BookMetadataBackfillDone"));
         }
 
         using (var context = CreateContext())
@@ -152,8 +157,8 @@ public class AddBookMetadataFoundationMigrationTests : IDisposable
 
         using (var context = CreateContext())
         {
-            context.Database.Migrate();
-            Assert.Empty(context.BookTags);
+            context.GetService<IMigrator>().Migrate(ThisMigration);
+            Assert.Equal(0, context.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM BookTags").Single());
         }
     }
 }

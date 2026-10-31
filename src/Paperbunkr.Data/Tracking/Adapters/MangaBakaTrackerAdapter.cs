@@ -138,10 +138,16 @@ public sealed class MangaBakaTrackerAdapter : ITrackerAdapter, ITrackerDetailedP
     /// `PUT`-upsert assumption already carries.</summary>
     public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
     {
+        var result = await GetEntryOutcomeAsync(context, link, cancellationToken).ConfigureAwait(false);
+        return result.Succeeded ? result.Value : null;
+    }
+
+    public async Task<TrackerOperationResult<TrackerRemoteEntry>> GetEntryOutcomeAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
         string? token = CredentialStore.Get(context, nameof(TrackingService.MangaBaka), CredentialKind.ApiKey);
         if (string.IsNullOrEmpty(token))
         {
-            return null;
+            return TrackerOperationResult<TrackerRemoteEntry>.Permanent("MangaBaka is not connected.");
         }
 
         var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/my/library/{link.ExternalId}");
@@ -152,20 +158,21 @@ public sealed class MangaBakaTrackerAdapter : ITrackerAdapter, ITrackerDetailedP
         {
             response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return null;
+            return TrackerOperationClassifier.FromNetworkFailure<TrackerRemoteEntry>(ex);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return null;
+            return TrackerOperationClassifier.Timeout<TrackerRemoteEntry>();
         }
 
         using (response)
         {
             if (!response.IsSuccessStatusCode)
             {
-                return null;
+                string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return TrackerOperationClassifier.FromHttpFailure<TrackerRemoteEntry>(response, body, notFoundMeansMissing: true);
             }
 
             MangaBakaLibraryEntryResponse? parsed;
@@ -175,18 +182,18 @@ public sealed class MangaBakaTrackerAdapter : ITrackerAdapter, ITrackerDetailedP
             }
             catch (JsonException)
             {
-                return null;
+                return TrackerOperationResult<TrackerRemoteEntry>.Permanent("MangaBaka returned an invalid lookup response.");
             }
 
             var entry = parsed?.Data;
             if (entry?.State is null)
             {
-                return null;
+                return TrackerOperationResult<TrackerRemoteEntry>.Missing();
             }
 
             decimal? score = entry.Rating is int rating and > 0 ? rating / 20m : null;
             DateOnly? finishDate = DateOnly.TryParse(entry.FinishDate, out var parsedDate) ? parsedDate : null;
-            return new TrackerRemoteEntry(MangaBakaLibraryStateMapper.FromState(entry.State), entry.ProgressChapter, score, finishDate);
+            return TrackerOperationResult<TrackerRemoteEntry>.Success(new TrackerRemoteEntry(MangaBakaLibraryStateMapper.FromState(entry.State), entry.ProgressChapter, score, finishDate));
         }
     }
 }

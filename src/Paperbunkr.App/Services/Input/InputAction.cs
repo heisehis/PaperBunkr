@@ -211,6 +211,26 @@ public static class InputActionIds
     /// <summary>Speaks the chapter and position (docs/superpowers/specs/2026-09-01-books-reader-screen-reader-accessibility-design.md); deliberately not Thorium's Ctrl+F10, which has no meaning here.</summary>
     public const string BookAnnouncePosition = "BookReader.AnnouncePosition";
 
+    /// <summary>Back to where the reader was before a TOC / search / bookmark / highlight jump; handles only while the jump-back chip shows (docs/superpowers/specs/2026-10-27-books-slice3a-reader-jumpback-session-design.md).</summary>
+    public const string BookJumpBack = "BookReader.JumpBack";
+
+    // Reading aids (docs/superpowers/specs/2026-10-27-books-slice3b-reader-typography-aids-design.md §4): the line ruler and auto-scroll.
+    /// <summary>Looks up the word the highlight popup is open for (docs/superpowers/specs/2026-10-27-books-slice4b-dictionary-design.md §4); declines when there is none.</summary>
+    public const string BookLookUp = "BookReader.LookUp";
+
+    // Read aloud (docs/superpowers/specs/2026-10-27-books-slice4d-read-aloud-design.md §4).
+    public const string BookSpeakToggle = "BookReader.SpeakToggle";
+    public const string BookSpeakPause = "BookReader.SpeakPause";
+    public const string BookSpeakFaster = "BookReader.SpeakFaster";
+    public const string BookSpeakSlower = "BookReader.SpeakSlower";
+
+    public const string BookRulerToggle = "BookReader.RulerToggle";
+    public const string BookRulerLineUp = "BookReader.RulerLineUp";
+    public const string BookRulerLineDown = "BookReader.RulerLineDown";
+    public const string BookAutoScrollToggle = "BookReader.AutoScrollToggle";
+    public const string BookAutoScrollFaster = "BookReader.AutoScrollFaster";
+    public const string BookAutoScrollSlower = "BookReader.AutoScrollSlower";
+
     // --- Compare screen (two versions of an issue side by side) ---
 
     public const string CompareNextPage = "Compare.NextPage";

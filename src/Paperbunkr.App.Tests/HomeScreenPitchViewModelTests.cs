@@ -89,6 +89,40 @@ public class HomeScreenPitchViewModelTests : IDisposable
         context.SaveChanges();
     }
 
+    // --- Books slice 2a: the two book rows ---
+
+    [Fact]
+    public void BookRows_AppearOnlyWithBooks_AndOpenTheBookInTheReader()
+    {
+        Assert.DoesNotContain(Make().Sections, s => s.Key is HomeSectionKey.BookUpNext or HomeSectionKey.BookRecentlyAdded);
+
+        int seriesId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var series = new BookSeries { Name = "Dune" };
+            context.BookSeries.Add(series);
+            context.SaveChanges();
+            seriesId = series.Id;
+            context.Books.AddRange(
+                new Book { Title = "Dune 1", BookSeriesId = seriesId, SeriesIndex = 1, Status = BookReadingStatus.Finished, LastOpenedTime = DateTime.UtcNow.AddDays(-3), Format = BookFormat.Epub, FilePath = @"C:\d1.epub", AddedTime = DateTime.UtcNow.AddDays(-90) },
+                new Book { Title = "Dune 2", BookSeriesId = seriesId, SeriesIndex = 2, Format = BookFormat.Epub, FilePath = @"C:\d2.epub", AddedTime = DateTime.UtcNow.AddDays(-90) },
+                new Book { Title = "Just added", Format = BookFormat.Epub, FilePath = @"C:
+ew.epub", AddedTime = DateTime.UtcNow.AddDays(-1) });
+            context.SaveChanges();
+        }
+
+        int opened = -1;
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (id, _) => opened = id);
+
+        Assert.Equal(new[] { "Dune 2" }, vm.BookUpNext.Select(c => c.Title));
+        Assert.Equal(new[] { "Just added" }, vm.BookRecentlyAdded.Select(c => c.Title));
+        Assert.Contains(vm.Sections, s => s.Key == HomeSectionKey.BookUpNext);
+        Assert.Contains(vm.Sections, s => s.Key == HomeSectionKey.BookRecentlyAdded);
+
+        vm.OpenBookRowCommand.Execute(vm.BookUpNext[0]);
+        Assert.Equal(vm.BookUpNext[0].Book!.BookId, opened);
+    }
+
     // --- I1: sections ---
 
     [Fact]
@@ -96,8 +130,10 @@ public class HomeScreenPitchViewModelTests : IDisposable
     {
         var vm = Make();
 
-        // Needs Attention and Up Next both leave the list when they have nothing to show.
-        Assert.Equal(HomeSectionKey.Default.Where(k => k is not (HomeSectionKey.NeedsAttention or HomeSectionKey.UpNext)), vm.Sections.Select(s => s.Key));
+        // Needs Attention, Up Next and the two book rows all leave the list when they have nothing to show.
+        Assert.Equal(
+            HomeSectionKey.Default.Where(k => k is not (HomeSectionKey.NeedsAttention or HomeSectionKey.UpNext or HomeSectionKey.BookUpNext or HomeSectionKey.BookRecentlyAdded)),
+            vm.Sections.Select(s => s.Key));
         Assert.False(vm.AllSectionsHidden);
     }
 

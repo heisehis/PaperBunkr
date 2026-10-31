@@ -1,0 +1,153 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:books="using:Paperbunkr.App.Controls.Books"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             x:Class="Paperbunkr.App.Controls.Books.BookCoverCard"
+             x:DataType="models:BookCardSample"
+             VerticalAlignment="Top" HorizontalAlignment="Left">
+
+    <!-- One book cover for every Books surface (docs/superpowers/specs/2026-10-27-books-section-redesign-design.md §2): the grid, Detail's
+         Series mode and "More by", the nightstand. The host binds ClickCommand / SelectCommand / ForceSelectionVisible; the card's DataContext
+         is the BookCardSample. The inner Button keeps the class "card" and AutomationId "BookCard": the focus code and tests find cards by them. -->
+    <UserControl.Styles>
+        <Style Selector="Button.card">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+        </Style>
+
+        <!-- The cover art. A 4,8,4,4 gutter inside the Button leaves room for the glow ring, which the Button would otherwise clip. -->
+        <Style Selector="Border.bookArt">
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="Margin" Value="4,8,4,4" />
+            <Setter Property="RenderTransform" Value="none" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionHoverMove}" Easing="{StaticResource PbMotionSpring}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <!-- Hover lift on the artwork only (Motion v2 §3.3); the hit-tested Button stays put. The ring is a spread-only BoxShadow, never transitioned. -->
+        <Style Selector="Button.card:pointerover Border.bookArt">
+            <Setter Property="RenderTransform" Value="translateY(-3px) scale(1.02)" />
+        </Style>
+        <Style Selector="Window.motionReduced Button.card:pointerover Border.bookArt">
+            <Setter Property="RenderTransform" Value="none" />
+        </Style>
+        <Style Selector="Button.card:pointerover Border.bookArt, Button.card:focus-visible Border.bookArt">
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
+            <Setter Property="ClipToBounds" Value="False" />
+        </Style>
+        <Style Selector="Button.card.selected Border.bookArt">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+
+        <!-- Rating and the select box show on hover (the one-badge rule keeps the resting cover clean). -->
+        <Style Selector="controls|StarRating.cardRating, CheckBox.cardSelect">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Transitions">
+                <Transitions><DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionHoverFade}" Easing="{StaticResource PbMotionEase}" /></Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.card:pointerover controls|StarRating.cardRating, Button.card:focus-visible controls|StarRating.cardRating, Button.card:pointerover CheckBox.cardSelect, CheckBox.cardSelect.forceVisible">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <!-- A mouse affordance: the keyboard selects with Shift+arrows, and a focusable box inside a card is a neighbour for the arrow keys. -->
+        <Style Selector="CheckBox.cardSelect">
+            <Setter Property="Focusable" Value="False" />
+        </Style>
+
+        <!-- Corner status badge: one coloured square with an icon. -->
+        <Style Selector="Border.statusCorner">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="8" />
+        </Style>
+
+        <!-- The "#3 missing" placeholder: an outline, not a card. -->
+        <Style Selector="Border.ghostArt">
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Margin" Value="4,8,4,4" />
+            <Setter Property="Opacity" Value="0.7" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel>
+        <Button x:Name="CardButton" Classes="card" IsVisible="{Binding !IsGhost}"
+                Classes.selected="{Binding IsSelected}"
+                Command="{Binding $parent[books:BookCoverCard].ClickCommand}" CommandParameter="{Binding}"
+                AutomationProperties.AutomationId="BookCard" AutomationProperties.Name="{Binding Title}">
+            <StackPanel Spacing="4">
+                <Border x:Name="Art" Classes="bookArt" Background="{Binding CoverBrush}"
+                        Width="{Binding $parent[books:BookCoverCard].CoverWidth}" Height="{Binding $parent[books:BookCoverCard].CoverHeight}"
+                        controls:SharedElement.Key="{Binding BookId, StringFormat='book-cover:{0}'}"
+                        controls:SharedElement.ImageSource="{Binding CoverImage}">
+                    <Grid>
+                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                        <Border Classes="posterScrim" />
+
+                        <!-- One badge at most: the progress bar while reading, otherwise a single status corner. -->
+                        <ProgressBar Classes="coverProgress" Value="{Binding Progress}" Minimum="0" Maximum="1" Height="4" MinHeight="4"
+                                     VerticalAlignment="Bottom" CornerRadius="0" IsVisible="{Binding ShowProgressBar}"
+                                     Foreground="{DynamicResource PbAccentBrush}" Background="{DynamicResource PbCoverShadeBrush}" />
+                        <Border Classes="statusCorner" Background="{DynamicResource PbSuccessBrush}" IsVisible="{Binding IsFinishedBadge}">
+                            <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbCoverShadeBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <Border Classes="statusCorner" Background="{DynamicResource PbBadgeBrush}" IsVisible="{Binding IsWantToReadBadge}">
+                            <fi:SymbolIcon Symbol="Bookmark" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbBadgeTextBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <Border Classes="statusCorner" Background="{DynamicResource PbSurface3Brush}" IsVisible="{Binding IsAbandonedBadge}">
+                            <fi:SymbolIcon Symbol="Pause" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+
+                        <controls:StarRating Classes="cardRating" Value="{Binding RatingValue}" IsReadOnly="True" IsHitTestVisible="False" Focusable="False"
+                                             StarSize="12" Spacing="1" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8,8,8,12"
+                                             IsVisible="{Binding HasRating}" />
+                        <CheckBox Classes="cardSelect" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="4"
+                                  IsVisible="{Binding $parent[books:BookCoverCard].SelectCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                                  Classes.forceVisible="{Binding $parent[books:BookCoverCard].ForceSelectionVisible}"
+                                  IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                  Command="{Binding $parent[books:BookCoverCard].SelectCommand}" CommandParameter="{Binding}" />
+                    </Grid>
+                </Border>
+
+                <StackPanel Spacing="0" Margin="4,4,4,0" IsVisible="{Binding $parent[books:BookCoverCard].ShowCaptions}"
+                            Width="{Binding $parent[books:BookCoverCard].CoverWidth}" HorizontalAlignment="Left">
+                    <TextBlock Classes="pbTextBody bookTitle" Text="{Binding Title}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding Title}" />
+                    <TextBlock Classes="pbTextCaption" Text="{Binding Author}" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"
+                               IsVisible="{Binding Author, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                    <TextBlock Classes="pbTextCaption" Text="{Binding StatusCaption}" TextTrimming="CharacterEllipsis"
+                               IsVisible="{Binding HasStatusCaption}" />
+                </StackPanel>
+            </StackPanel>
+        </Button>
+
+        <Border Classes="ghostArt" IsVisible="{Binding IsGhost}" IsHitTestVisible="False" Focusable="False"
+                Width="{Binding $parent[books:BookCoverCard].CoverWidth}" Height="{Binding $parent[books:BookCoverCard].CoverHeight}"
+                VerticalAlignment="Top" HorizontalAlignment="Left" AutomationProperties.Name="{Binding Title}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="4">
+                <TextBlock Text="{Binding GhostLabel}" Classes="pbTextTitle" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <TextBlock Text="missing" Classes="pbTextCaption" HorizontalAlignment="Center" />
+            </StackPanel>
+        </Border>
+    </Panel>
+</UserControl>

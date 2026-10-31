@@ -24,6 +24,7 @@
                 <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/ContinueReadingSection.axaml" />
                 <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/UpNextSection.axaml" />
                 <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/RecentlyAddedSection.axaml" />
+                <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/BookRowsSection.axaml" />
                 <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/CollectionsSection.axaml" />
                 <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/BecauseYouReadSection.axaml" />
                 <ResourceInclude Source="avares://Paperbunkr.App/Views/Home/ReadingListSection.axaml" />

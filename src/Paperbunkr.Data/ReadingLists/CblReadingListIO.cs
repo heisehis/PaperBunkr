@@ -27,6 +27,21 @@ public static class CblReadingListIO
     /// </summary>
     public static (ReadingList List, ImportReport Report) ImportWithReport(PaperbunkrDbContext context, string filePath)
     {
+        var prepared = Prepare(filePath);
+        var resolution = ReadingListResolver.Resolve(context, prepared.References);
+        var list = prepared.CreateList();
+        int sortOrder = 0;
+        foreach (var resolved in ReadingListResolver.Materialize(context, resolution))
+            list.Items.Add(new ReadingListItem { Issue = resolved.Issue, SortOrder = sortOrder++, Source = resolved.Source });
+        context.ReadingLists.Add(list);
+        ReadingListFolders.PlaceNewList(context, list, null);
+        ReadingListManager.RecordCreatedWithItems(context, list);
+        context.SaveChanges();
+        return (list, resolution.Report(reported: prepared.Reported));
+    }
+
+    public static PreparedReadingList Prepare(string filePath)
+    {
         var container = ComicReadingListContainer.Deserialize(filePath)
             ?? throw new InvalidDataException($"'{filePath}' is not a valid CBL reading list.");
 
@@ -53,19 +68,7 @@ public static class CblReadingListIO
                 MetronSeriesId: ids?[index].MetronSeries))
             .ToList();
 
-        var resolution = ReadingListResolver.Resolve(context, references);
-        int sortOrder = 0;
-        foreach (var resolved in ReadingListResolver.Materialize(context, resolution))
-        {
-            list.Items.Add(new ReadingListItem { Issue = resolved.Issue, SortOrder = sortOrder++, Source = resolved.Source });
-        }
-
-        context.ReadingLists.Add(list);
-        // Lands at the end of the top level; the Reading screen moves it into the folder the user has selected (docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md §2).
-        ReadingListFolders.PlaceNewList(context, list, null);
-        ReadingListManager.RecordCreatedWithItems(context, list);
-        context.SaveChanges();
-        return (list, resolution.Report(reported: reported));
+        return new PreparedReadingList(list.Name, references) { Reported = reported };
     }
 
     /// <summary>

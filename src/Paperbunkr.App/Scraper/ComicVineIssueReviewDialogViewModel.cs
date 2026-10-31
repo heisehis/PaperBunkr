@@ -21,6 +21,8 @@ public sealed partial class ComicVineIssueCandidateViewModel : ObservableObject
 
     public ComicVineIssueSummary Issue { get; }
 
+    public ComicVineCoverCarouselViewModel CoverCarousel { get; }
+
     [ObservableProperty]
     private bool _isSelected;
 
@@ -58,10 +60,13 @@ public sealed partial class ComicVineIssueCandidateViewModel : ObservableObject
         }
     }
 
-    public ComicVineIssueCandidateViewModel(ComicVineIssueSummary issue, Action<ComicVineIssueCandidateViewModel> select)
+    public ComicVineIssueCandidateViewModel(ComicVineIssueSummary issue, Action<ComicVineIssueCandidateViewModel> select,
+        IDictionary<string, string>? coverSelectionMemory = null, string coverMemoryScope = "ComicVine")
     {
         Issue = issue;
         _select = select;
+        CoverCarousel = new ComicVineCoverCarouselViewModel(coverSelectionMemory);
+        CoverCarousel.SetCovers(new[] { issue.ImageUrl }.Concat(issue.AlternateCoverUrls), $"{coverMemoryScope}:issue:{issue.Id}");
     }
 
     [RelayCommand]
@@ -87,6 +92,8 @@ public sealed partial class ComicVineIssueReviewDialogViewModel : ObservableObje
 {
     private readonly Action<ComicVineIssueReviewResult> _resolve;
     private readonly Action? _markPermanentlySkipped;
+    private readonly IDictionary<string, string> _coverSelectionMemory;
+    private readonly string _coverMemoryScope;
 
     public string BookLabel { get; }
 
@@ -95,6 +102,8 @@ public sealed partial class ComicVineIssueReviewDialogViewModel : ObservableObje
     /// <summary>Docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md Phase 3 - hides
     /// the cover pane in this dialog too (the same setting as the series match dialog).</summary>
     public bool ShowCovers { get; }
+
+    public bool ShowCoverCarousel => ShowCovers && SelectedCandidate?.CoverCarousel.HasAlternates == true;
 
     /// <summary>Code-behind toggles this while Ctrl is held over the Skip button (CE's own visual
     /// affordance, <c>seriesform.py</c>/<c>issueform.py</c>, verified) - the view binds the Skip
@@ -118,18 +127,22 @@ public sealed partial class ComicVineIssueReviewDialogViewModel : ObservableObje
         bool readOnlyPeek,
         Action<ComicVineIssueReviewResult> resolve,
         bool showCovers = true,
-        Action? markPermanentlySkipped = null)
+        Action? markPermanentlySkipped = null,
+        IDictionary<string, string>? coverSelectionMemory = null,
+        string coverMemoryScope = "ComicVine")
     {
         BookLabel = bookLabel;
         ReadOnlyPeek = readOnlyPeek;
         ShowCovers = showCovers;
         _resolve = resolve;
         _markPermanentlySkipped = markPermanentlySkipped;
+        _coverSelectionMemory = coverSelectionMemory ?? new Dictionary<string, string>(StringComparer.Ordinal);
+        _coverMemoryScope = coverMemoryScope;
 
         ComicVineIssueCandidateViewModel? toSelect = null;
         foreach (ComicVineIssueSummary issue in issues.OrderBy(i => NaturalKey(i.IssueNumber), NaturalKeyComparer.Instance))
         {
-            var vm = new ComicVineIssueCandidateViewModel(issue, Select);
+            var vm = new ComicVineIssueCandidateViewModel(issue, Select, _coverSelectionMemory, _coverMemoryScope);
             Candidates.Add(vm);
             if (preSelected is not null && issue.Id == preSelected.Id)
             {
@@ -154,6 +167,8 @@ public sealed partial class ComicVineIssueReviewDialogViewModel : ObservableObje
         {
             c.IsSelected = ReferenceEquals(c, newValue);
         }
+
+        OnPropertyChanged(nameof(ShowCoverCarousel));
     }
 
     private bool CanConfirm() => SelectedCandidate is not null;

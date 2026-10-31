@@ -7,7 +7,10 @@ public sealed record ComicVineVolumeSearchResult(int Id, string Name, string? St
 
 public sealed record ComicVineVolumeDetails(int Id, string Name, string? StartYear, string? Publisher, int? CountOfIssues, string? ImageUrl, string? Status = null, string? Description = null);
 
-public sealed record ComicVineIssueSummary(int Id, string? IssueNumber, string? Name, string? ImageUrl, string? CoverHash = null);
+public sealed record ComicVineIssueSummary(int Id, string? IssueNumber, string? Name, string? ImageUrl, string? CoverHash = null)
+{
+    public IReadOnlyList<string> AlternateCoverUrls { get; init; } = Array.Empty<string>();
+}
 
 /// <summary>How the issue-match dialog resolved: a plain "chosen issue or null" can't tell Skip (apply volume-level fields only) from Go Back (re-show the series dialog).</summary>
 public enum ComicVineIssueReviewOutcome
@@ -285,16 +288,20 @@ public sealed class ScrapeComicVineAdapter(IComicVineClient client, IComicVineIs
             return Array.Empty<ComicVineIssueSummary>();
         }
 
-        return await CachedAsync<List<ComicVineIssueSummary>>(Caching.ProviderCacheKind.VolumeIssueList, volumeId.ToString(System.Globalization.CultureInfo.InvariantCulture), async () =>
+        // The key version invalidates pre-alternate-cover cache rows, which only stored ImageUrl.
+        return await CachedAsync<List<ComicVineIssueSummary>>(Caching.ProviderCacheKind.VolumeIssueList, $"covers-v1|{volumeId}", async () =>
         {
             var issues = await client.GetVolumeIssuesAsync(volumeId, cancellationToken).ConfigureAwait(false);
-            return issues.Select(i => new ComicVineIssueSummary(i.Id, i.IssueNumber, i.Name, i.ImageUrl, i.CoverHash)).ToList();
+            return issues.Select(i => new ComicVineIssueSummary(i.Id, i.IssueNumber, i.Name, i.ImageUrl, i.CoverHash)
+            {
+                AlternateCoverUrls = i.AlternateCoverUrls,
+            }).ToList();
         }).ConfigureAwait(false);
     }
 
     public async Task<ComicVineIssueDetails?> GetIssueDetailsAsync(int issueId, CancellationToken cancellationToken = default)
     {
-        var found = await CachedAsync<ComicVineIssueDetails[]>(Caching.ProviderCacheKind.IssueDetails, issueId.ToString(System.Globalization.CultureInfo.InvariantCulture), async () =>
+        var found = await CachedAsync<ComicVineIssueDetails[]>(Caching.ProviderCacheKind.IssueDetails, $"covers-v1|{issueId}", async () =>
         {
             var d = await details.GetIssueDetailsAsync(issueId, cancellationToken).ConfigureAwait(false);
             return d is null ? Array.Empty<ComicVineIssueDetails>() : new[] { d };

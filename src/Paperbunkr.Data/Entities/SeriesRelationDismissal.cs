@@ -2,7 +2,9 @@ namespace Paperbunkr.Data.Entities;
 
 /// <summary>
 /// "Don't relate these two series again" (docs/superpowers/specs/2026-09-27-gcd-data-design.md §4): written when you delete a series
-/// relation that came from a Grand Comics Database bond, so the weekly bond sync doesn't put it back. Stored in id order.
+/// relation that something automatic made (a Grand Comics Database bond, the series connector, Metron's associated series) or dismiss
+/// a related-series suggestion (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §3.5), so no sweep puts it back.
+/// Blocks every automatic relation and suggestion for the pair; your own relations are unaffected. Stored in id order.
 /// </summary>
 public class SeriesRelationDismissal
 {

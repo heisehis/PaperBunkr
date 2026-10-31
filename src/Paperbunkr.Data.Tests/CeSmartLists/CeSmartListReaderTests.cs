@@ -372,11 +372,12 @@ public class CeSmartListReaderTests
     }
 
     [Fact]
-    public void ASeriesDateMatcher_IsRecognisedByName()
+    public void ASeriesDateMatcher_ImportsAsDateCondition()
     {
         var draft = ReadXml(Leaf("SmartListSeriesLastAddedTimeMatcher", "2020-01-01", 1) + Leaf("ComicBookFormatMatcher", "y"));
 
-        Assert.Contains("series date matcher", Assert.Single(draft.Warnings).Detail);
+        Assert.Empty(draft.Warnings);
+        Assert.Contains(draft.List.RootGroup.Conditions, c => c.Field == SmartListField.SeriesLastAddedTime && c.Operator == SmartListOperator.IsAfter);
     }
 
     [Fact]

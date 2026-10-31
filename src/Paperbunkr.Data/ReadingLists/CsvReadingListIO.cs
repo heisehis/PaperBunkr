@@ -19,6 +19,24 @@ public static class CsvReadingListIO
 
     public static CsvImportResult Import(PaperbunkrDbContext context, string filePath, string? listName = null)
     {
+        var prepared = Prepare(filePath, listName);
+        var resolution = ReadingListResolver.Resolve(context, prepared.References);
+        var list = prepared.CreateList();
+        int order = 0, missing = 0;
+        foreach (var resolved in ReadingListResolver.Materialize(context, resolution))
+        {
+            if (resolved.Issue.IsPlaceholder) missing++;
+            list.Items.Add(new ReadingListItem { Issue = resolved.Issue, SortOrder = order++, Source = resolved.Source });
+        }
+        context.ReadingLists.Add(list);
+        ReadingListFolders.PlaceNewList(context, list, null);
+        ReadingListManager.RecordCreatedWithItems(context, list);
+        context.SaveChanges();
+        return new CsvImportResult(list, list.Items.Count - missing, missing, prepared.Skipped.ToList()) { Report = resolution.Report(prepared.Skipped) };
+    }
+
+    public static PreparedReadingList Prepare(string filePath, string? listName = null)
+    {
         var lines = File.ReadAllLines(filePath);
         if (lines.Length == 0)
         {
@@ -66,26 +84,7 @@ public static class CsvReadingListIO
             references.Add(new ComicReference(series, number, volume, year, format, SourceKey: SourceKey));
         }
 
-        // One read of the library for the whole file (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.6).
-        var resolution = ReadingListResolver.Resolve(context, references);
-        int sortOrder = 0;
-        int placeholderCount = 0;
-        foreach (var resolved in ReadingListResolver.Materialize(context, resolution))
-        {
-            if (resolved.Issue.IsPlaceholder)
-            {
-                placeholderCount++;
-            }
-
-            list.Items.Add(new ReadingListItem { Issue = resolved.Issue, SortOrder = sortOrder++, Source = resolved.Source });
-        }
-
-        context.ReadingLists.Add(list);
-        // Lands at the end of the top level; the Reading screen moves it into the folder the user has selected (docs/superpowers/specs/2026-09-28-reading-lists-organize-and-track-design.md §2).
-        ReadingListFolders.PlaceNewList(context, list, null);
-        ReadingListManager.RecordCreatedWithItems(context, list);
-        context.SaveChanges();
-        return new CsvImportResult(list, list.Items.Count - placeholderCount, placeholderCount, skippedRows) { Report = resolution.Report(skippedRows) };
+        return new PreparedReadingList(list.Name, references) { Skipped = skippedRows };
     }
 
     /// <summary>

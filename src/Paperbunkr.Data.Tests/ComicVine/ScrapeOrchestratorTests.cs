@@ -825,6 +825,32 @@ public sealed class ScrapeOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task MaxSearchResults_keeps_the_best_scoring_candidates_not_the_first_to_arrive()
+    {
+        // 2026-10-29: the cap ran before scoring, on searches joined in arrival order, so "X-Men" (the right series, arriving last) was always
+        // cut and only "Astonishing X-Men"-style near-misses were offered.
+        const string json = """
+            {"status_code":1,"error":"OK","results":[
+                {"id":7,"name":"Batman Beyond","start_year":"2010","publisher":{"name":"DC Comics"},"count_of_issues":50,"image":null},
+                {"id":2,"name":"Batman","start_year":"2011","publisher":{"name":"DC Comics"},"count_of_issues":50,"image":null}
+            ]}
+            """;
+        var issue = MakeIssue();
+        Seed(issue);
+        var comicVine = Cv(new FakeHttpMessageHandler(json));
+        var settings = new ScrapeSettings { AutoChooseTopMatch = false, MaxSearchResults = 1 };
+        var orchestrator = new ScrapeOrchestrator(comicVine, new ComicVineMatchMemory(CreateDbContext), settings);
+        IReadOnlyList<(ComicVineVolumeSearchResult Volume, double Score)>? seen = null;
+
+        await orchestrator.ScrapeAsync(
+            new[] { issue }, isInteractive: true,
+            (_, _, candidates, _, _) => { seen = candidates; return Task.FromResult<ComicVineVolumeSearchResult?>(null); },
+            CreateDbContext);
+
+        Assert.Equal(2, Assert.Single(seen!).Volume.Id);
+    }
+
+    [Fact]
     public async Task Full_field_apply_writes_every_per_issue_field_from_the_matched_issue()
     {
         var issue = MakeIssue();

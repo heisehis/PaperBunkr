@@ -60,6 +60,9 @@ public sealed record ComicVineIssueDetails(
 
     public IReadOnlyList<ComicVineVariantCover> Variants { get; init; } = Variants ?? Array.Empty<ComicVineVariantCover>();
 
+    /// <summary>ComicVine's <c>associated_images[].original_url</c> cover variants, verified against a live issue-detail response.</summary>
+    public IReadOnlyList<string> AlternateCoverUrls { get; init; } = Array.Empty<string>();
+
     /// <summary>ComicVine's concept_credits (names): thematic tags such as "Time Travel". Empty for Metron.</summary>
     public IReadOnlyList<string> Concepts { get; init; } = Array.Empty<string>();
 

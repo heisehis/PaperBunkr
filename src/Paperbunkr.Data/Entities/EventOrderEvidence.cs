@@ -37,11 +37,33 @@ public class EventOrderEvidence
     /// <summary>CBRO only: 1-based position in that timeline.</summary>
     public int? Rank { get; set; }
 
+    /// <summary>CBRO only: the matched entry's story year, when the timeline supplies one.</summary>
+    public int? SourceYear { get; set; }
+
     /// <summary>Metron only: the reading list that comes before this one.</summary>
     public string? PreviousName { get; set; }
 
     /// <summary>Metron only: the reading list that comes after this one.</summary>
     public string? NextName { get; set; }
 
+    /// <summary>CBRO's source-authored notes that place this event during another event.</summary>
+    public List<EventOrderOverlapNote> CbroOverlapNotes { get; set; } = new();
+
     public DateTime CheckedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A same-time annotation from a CBRO timeline entry. Target identity is resolved against current local evidence at map load.</summary>
+public class EventOrderOverlapNote
+{
+    public int Id { get; set; }
+
+    public int EventOrderEvidenceId { get; set; }
+
+    public EventOrderEvidence? EventOrderEvidence { get; set; }
+
+    public string OriginalText { get; set; } = string.Empty;
+
+    public string TargetName { get; set; } = string.Empty;
+
+    public int? TargetYear { get; set; }
 }

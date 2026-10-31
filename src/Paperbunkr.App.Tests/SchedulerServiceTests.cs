@@ -79,6 +79,31 @@ public class SchedulerServiceTests : IDisposable
     }
 
     [Fact]
+    public void Every_finished_run_is_announced_for_the_ScheduledTaskRan_hook()
+    {
+        // Plugin API 4.5 (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §B): success, failure and
+        // cancellation each announce once, with the task's own summary or error.
+        var catalog = new[]
+        {
+            Task("good", 1, SchedulerResourceClass.Db, () => System.Threading.Tasks.Task.FromResult("3 covers rebuilt")),
+            Task("bad", 2, SchedulerResourceClass.DiskCpu, () => throw new InvalidOperationException("disk full")),
+            Task("stopped", 3, SchedulerResourceClass.Network, () => throw new OperationCanceledException()),
+        };
+        var (scheduler, _) = Build(catalog);
+        var events = new Paperbunkr.Data.Events.LibraryEvents();
+        var heard = new List<Paperbunkr.Data.Events.ScheduledTaskRanEvent>();
+        events.ScheduledTaskRan += heard.Add;
+        scheduler.Events = events;
+
+        scheduler.RunStartupPassForTest();
+
+        Assert.Equal(
+            new[] { ("good", "Succeeded", "3 covers rebuilt"), ("bad", "Failed", "disk full"), ("stopped", "Cancelled", (string?)null) },
+            heard.Select(e => (e.TaskId, e.Outcome.ToString(), e.Message)).ToArray());
+        Assert.All(heard, e => Assert.Equal(_now.UtcDateTime, e.StartedUtc));
+    }
+
+    [Fact]
     public void TwoDbTasks_DoNotOverlap_ButDbPlusDiskCpuDo()
     {
         int concurrent = 0;

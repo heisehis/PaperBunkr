@@ -197,4 +197,20 @@ public enum SmartListField
     /// <see cref="SmartLists.SmartListQueryBuilder"/> like <see cref="Duplicate"/>; the operator Is = flagged, IsNot = not.
     /// </summary>
     SameXDifferentY,
+
+    /// <summary>CE's library-wide series date matchers, grouped by series name and effective volume.</summary>
+    SeriesLastAddedTime,
+    SeriesLastOpenedTime,
+    SeriesLastPublishedTime,
+    SeriesLastReleasedTime,
+
+    // Novel-target fields added by Books slice 2a (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §4). Stored by name,
+    // so appending needs no migration.
+    NovelRating,
+    NovelStatus,
+    NovelTag,
+    NovelPublisher,
+    NovelLanguage,
+    NovelSeriesIndex,
+    NovelProgress,
 }

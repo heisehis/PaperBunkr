@@ -241,6 +241,25 @@ public class CeLibraryMigratorTests : IDisposable
         Assert.Equal(1, result.SeriesWithGuessedContentType);
     }
 
+    [Fact]
+    public void ComicDbSmartLists_ArePreviewedAndCommittedWithLibraryMigration()
+    {
+        string fixturePath = Path.Combine(AppContext.BaseDirectory, "TestData", "SampleComicDb.xml");
+        var loaded = CeLibraryMigrator.LoadFromXmlWithSmartLists(fixturePath);
+        Assert.NotEmpty(loaded.SmartLists);
+
+        using var context = new PaperbunkrDbContext(BuildContextOptions(_dbPath));
+        context.Database.EnsureCreated();
+        var migrator = new CeLibraryMigrator();
+        var preview = migrator.Preview(loaded.Database, context, loaded.SmartLists);
+        Assert.Equal(loaded.SmartLists.Count(d => !d.IsEmpty), preview.SmartLists!.Count(r => r.WillImport));
+
+        var result = migrator.Migrate(loaded.Database, context, smartLists: loaded.SmartLists);
+
+        Assert.Equal(result.SmartListsCreated, context.SmartLists.Count());
+        Assert.Equal(loaded.SmartLists.Count(d => !d.IsEmpty), result.SmartListsCreated);
+    }
+
     // ===================== Embedded-vs-cached precedence (docs/superpowers/specs/2026-08-31-ce-
     // migration-embedded-metadata-precedence-design.md) - uses the internal Func<string, ComicInfo?>
     // seam rather than a real archive, so these are fast and don't touch the filesystem. =====================

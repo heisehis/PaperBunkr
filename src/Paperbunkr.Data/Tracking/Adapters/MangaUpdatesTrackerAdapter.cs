@@ -229,20 +229,49 @@ public sealed class MangaUpdatesTrackerAdapter : ITrackerSearchProvider, ITracke
 
     public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
     {
+        var outcome = await GetEntryOutcomeAsync(context, link, cancellationToken).ConfigureAwait(false);
+        return outcome.Succeeded ? outcome.Value : null;
+    }
+
+    public async Task<TrackerOperationResult<TrackerRemoteEntry>> GetEntryOutcomeAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
         string? token = CredentialStore.Get(context, nameof(TrackingService.MangaUpdates), CredentialKind.OAuthAccessToken);
         if (string.IsNullOrEmpty(token) || !long.TryParse(link.ExternalId, out long seriesId))
         {
-            return null;
+            return TrackerOperationResult<TrackerRemoteEntry>.Permanent("MangaUpdates is not connected or the series id is invalid.");
         }
 
-        var entry = await FindListEntryAsync(token, seriesId, cancellationToken).ConfigureAwait(false);
-        if (entry?.ListId is not long listId)
+        var entryResult = await FindListEntryOutcomeAsync(token, seriesId, cancellationToken).ConfigureAwait(false);
+        if (!entryResult.Succeeded || entryResult.Value?.ListId is not long listId)
         {
-            return null;
+            if (entryResult.Succeeded) return TrackerOperationResult<TrackerRemoteEntry>.Missing();
+            return new TrackerOperationResult<TrackerRemoteEntry>(entryResult.Kind, default, entryResult.ErrorDetail, entryResult.RetryAfterUtc);
         }
 
         decimal? score = await FetchRatingAsync(seriesId, token, cancellationToken).ConfigureAwait(false);
-        return new TrackerRemoteEntry(MangaUpdatesListMapper.FromListId(listId), entry.Status?.Chapter, score);
+        return TrackerOperationResult<TrackerRemoteEntry>.Success(new TrackerRemoteEntry(MangaUpdatesListMapper.FromListId(listId), entryResult.Value.Status?.Chapter, score));
+    }
+
+    private async Task<TrackerOperationResult<MangaUpdatesListItemDto>> FindListEntryOutcomeAsync(string token, long seriesId, CancellationToken cancellationToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/lists/series/{seriesId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return TrackerOperationClassifier.FromHttpFailure<MangaUpdatesListItemDto>(response, body, notFoundMeansMissing: true);
+            }
+            var item = await response.Content.ReadFromJsonAsync<MangaUpdatesListItemDto>(cancellationToken: cancellationToken).ConfigureAwait(false);
+            return item is null
+                ? TrackerOperationResult<MangaUpdatesListItemDto>.Missing()
+                : TrackerOperationResult<MangaUpdatesListItemDto>.Success(item);
+        }
+        catch (HttpRequestException ex) { return TrackerOperationClassifier.FromNetworkFailure<MangaUpdatesListItemDto>(ex); }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { return TrackerOperationClassifier.Timeout<MangaUpdatesListItemDto>(); }
+        catch (JsonException) { return TrackerOperationResult<MangaUpdatesListItemDto>.Permanent("MangaUpdates returned an invalid tracker entry response."); }
     }
 
     private async Task<decimal?> FetchRatingAsync(long seriesId, string token, CancellationToken cancellationToken)

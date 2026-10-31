@@ -48,7 +48,7 @@ public sealed class PluginActivityTests : IDisposable
     [Fact]
     public void The_api_version_is_4_4_now_that_there_is_a_ContinuityCompleted_hook()
     {
-        Assert.Equal(new Version(4, 4), PluginApi.Current);
+        Assert.Equal(new Version(4, 5), PluginApi.Current);
     }
 
     [Fact]

@@ -24,6 +24,12 @@ public sealed class ComicBookReadingOrdersSource : IReadingListSource, Paperbunk
 
     private static readonly HttpClient Http = CreateClient();
 
+    private const string OverlapNotePhrases = @"takes\s+place\s+during|takes\s+place\s+simultaneously\s+with|occurs\s+during\s+the\s+same\s+time\s+as";
+
+    private static readonly Regex OverlapNotePattern = new(
+        $@"(?<original>(?:{OverlapNotePhrases})\s+(?<target>.+?)(?:\s+\((?<year>(?:19|20)\d{{2}})\))?[.!?]?(?=\s*(?:{OverlapNotePhrases}|\z)))",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     // The site's robots.txt asks for "crawl-delay: 5" (checked 2026-10-12); a 500 ms pace was well under that.
     private static readonly TimeSpan MinRequestInterval = TimeSpan.FromSeconds(5);
 
@@ -88,9 +94,19 @@ public sealed class ComicBookReadingOrdersSource : IReadingListSource, Paperbunk
             }
 
             var href = Regex.Match(inner, @"href=""(?<url>https://comicbookreadingorders\.com/[^""]*/events/[^""]+)""", RegexOptions.IgnoreCase);
+            var notes = OverlapNotePattern.Matches(text).Cast<Match>()
+                .Select(noteMatch =>
+                {
+                    string target = noteMatch.Groups["target"].Value.Trim().TrimEnd('.', '!', '?', ' ', '\u00a0');
+                    return target.Length == 0 ? null : new Paperbunkr.Data.Metadata.CbroTimelineOverlapNote(
+                        noteMatch.Groups["original"].Value.Trim(), target,
+                        int.TryParse(noteMatch.Groups["year"].Value, out int targetYear) ? targetYear : null);
+                })
+                .OfType<Paperbunkr.Data.Metadata.CbroTimelineOverlapNote>()
+                .ToList();
             entries.Add(new Paperbunkr.Data.Metadata.CbroTimelineEntry(
                 listKey, entries.Count + 1, name, int.Parse(match.Groups["year"].Value, System.Globalization.CultureInfo.InvariantCulture),
-                href.Success ? WebUtility.HtmlDecode(href.Groups["url"].Value) : null));
+                href.Success ? WebUtility.HtmlDecode(href.Groups["url"].Value) : null, notes));
         }
 
         return entries;

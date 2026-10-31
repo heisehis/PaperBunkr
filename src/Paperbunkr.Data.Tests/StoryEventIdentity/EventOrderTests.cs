@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.ComicVine;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
@@ -62,6 +63,28 @@ public class EventOrderTests : IdentityTestDb
     {
         Assert.Single(ComicBookReadingOrdersSource.ParseTimeline("<p><a href=\"https://comicbookreadingorders.com/dc/events/x-reading-order/\">X</a> (2001)</p>", "dc"));
         Assert.Empty(ComicBookReadingOrdersSource.ParseTimeline("<html><body>maintenance</body></html>", "dc"));
+    }
+
+    [Fact]
+    public void ParseTimeline_RetainsAllSupportedSameTimeNotePhrasingsAndTargets()
+    {
+        const string page = """
+            <h2>Event Order</h2>
+            <p>Bloodlines (1993) – <span style="color: #0000ff;">Takes place during Reign &amp; Fall</span></p>
+            <p>Trial of Superman (1995) – <span style="color: #0000ff;">Takes place simultaneously with Underworld Unleashed.</span></p>
+            <p>Underworld Unleashed (1995) – <span style="color: #0000ff;">Occurs during the same time as Trial of Superman (1995).</span></p>
+            <p>Civil War (2006)<br/><span style="color: #0000ff;">Occurs during the same time as Secret Wars II. Takes place during another event.</span></p>
+            """;
+
+        var entries = ComicBookReadingOrdersSource.ParseTimeline(page, "dc");
+
+        Assert.Equal(new[] { "Bloodlines", "Trial of Superman", "Underworld Unleashed", "Civil War" }, entries.Select(e => e.Name));
+        var bloodlinesNote = Assert.Single(entries[0].OverlapNotes!);
+        Assert.Equal(("Takes place during Reign & Fall", "Reign & Fall", (int?)null),
+            (bloodlinesNote.OriginalText, bloodlinesNote.TargetName, bloodlinesNote.TargetYear));
+        Assert.Equal("Underworld Unleashed", Assert.Single(entries[1].OverlapNotes!).TargetName);
+        Assert.Equal(("Trial of Superman", (int?)1995), (Assert.Single(entries[2].OverlapNotes!).TargetName, entries[2].OverlapNotes![0].TargetYear));
+        Assert.Equal(new[] { "Secret Wars II", "another event" }, entries[3].OverlapNotes!.Select(n => n.TargetName));
     }
 
     // ---------- fitting a reading order to dates ----------
@@ -246,6 +269,14 @@ public class EventOrderTests : IdentityTestDb
         return context.EventOrderEvidence.SingleOrDefault(e => e.StoryEventId == eventId && e.Provider == provider);
     }
 
+    private IReadOnlyList<EventOrderOverlapNote> OverlapNotes(int eventId)
+    {
+        using var context = NewContext();
+        return context.EventOrderEvidence.Include(e => e.CbroOverlapNotes)
+            .Single(e => e.StoryEventId == eventId && e.Provider == EventOrderProvider.Cbro)
+            .CbroOverlapNotes.ToList();
+    }
+
     [Fact]
     public async Task Cbro_MatchesEventsByName_StoringTheRankAndList_AndRecordsTheOthersAsNotFound()
     {
@@ -259,10 +290,38 @@ public class EventOrderTests : IdentityTestDb
         Assert.Equal((2, 1), (summary.CbroChecked, summary.CbroMatched));
         var row = Evidence(civil, EventOrderProvider.Cbro)!;
         Assert.Equal(("marvel", 5, "Civil War"), (row.ListKey, row.Rank, row.SourceName));
+        Assert.Equal(2006, row.SourceYear);
         Assert.Equal("https://comicbookreadingorders.com/marvel/events/civil-war-reading-order/", row.SourceId);
         var none = Evidence(mine, EventOrderProvider.Cbro)!;
         Assert.Null(none.SourceId);
         Assert.Null(none.Rank);
+    }
+
+    [Fact]
+    public async Task Cbro_RefreshReplacesOverlapNotes_WithoutTouchingMetronEvidence()
+    {
+        int civil = AddEvent("Civil War", StoryEventOrigin.Provider, AddSeries("Civil War", ("1", 2006, 7)));
+        var cbro = new FakeCbro();
+        cbro.Entries.Add(new CbroTimelineEntry("marvel", 1, "Civil War", 2006, null,
+            new[] { new CbroTimelineOverlapNote("Occurs during the same time as Secret Wars II.", "Secret Wars II") }));
+        using (var context = NewContext())
+        {
+            context.EventOrderEvidence.Add(new EventOrderEvidence
+            {
+                StoryEventId = civil, Provider = EventOrderProvider.MetronList, SourceId = "77", SourceName = "Civil War",
+            });
+            context.SaveChanges();
+        }
+
+        await Run(cbro, null);
+        Assert.Equal("Secret Wars II", Assert.Single(OverlapNotes(civil)).TargetName);
+
+        cbro.Entries.Clear();
+        cbro.Entries.Add(new CbroTimelineEntry("marvel", 1, "Civil War", 2006, null));
+        await Run(cbro, null, at: Now.AddDays(8));
+
+        Assert.Empty(OverlapNotes(civil));
+        Assert.Equal("77", Evidence(civil, EventOrderProvider.MetronList)!.SourceId);
     }
 
     [Fact]

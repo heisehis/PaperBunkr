@@ -25,9 +25,22 @@ public static class ReadingListSourceRegistry
         ("ReadThingsRight", "ReadThingsRight", false, true),
     };
 
+    /// <summary>
+    /// Sources added by plugins (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §C), keyed
+    /// <c>plugin:&lt;pluginKey&gt;</c>. Set by the app's plugin host; this project can't see plugins itself.
+    /// </summary>
+    public static Func<IReadOnlyList<(string Key, string DisplayName, bool RequiresCredentials, bool HasBrowsableCatalog)>>? ExtraSources { get; set; }
+
+    /// <summary>Resolves an extra source's key to the source (set by the plugin host). Null when the key isn't one it knows.</summary>
+    public static Func<string, IReadingListSource?>? ResolveExtra { get; set; }
+
+    /// <summary>The built-in sources followed by any a plugin has added - what a source picker should offer.</summary>
+    public static IReadOnlyList<(string Key, string DisplayName, bool RequiresCredentials, bool HasBrowsableCatalog)> Available =>
+        All.Concat(ExtraSources?.Invoke() ?? Array.Empty<(string, string, bool, bool)>()).ToList();
+
     /// <summary>Human-readable name for a stored <c>ReadingList.Source</c> key, for display - falls back to the raw key itself if it's ever unrecognized (e.g. a source removed in a future version) rather than showing nothing.</summary>
     public static string GetDisplayName(string sourceKey) =>
-        All.FirstOrDefault(s => s.Key == sourceKey).DisplayName ?? sourceKey;
+        Available.FirstOrDefault(s => s.Key == sourceKey).DisplayName ?? sourceKey;
 
     /// <summary>Existing bundled service-mark identity, or null until a real source asset is available.</summary>
     public static string? GetMarkKey(string? sourceKey) => sourceKey switch
@@ -68,7 +81,7 @@ public static class ReadingListSourceRegistry
                 return new ReadThingsRightSource();
 
             default:
-                return null;
+                return ResolveExtra?.Invoke(sourceKey);
         }
     }
 }

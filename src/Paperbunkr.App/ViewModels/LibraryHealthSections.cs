@@ -51,15 +51,18 @@ public sealed class LibraryHealthSections
         ReadingLists = new("readingLists", LibraryHealthTab.Review, "library.healthReadingLists");
         CollectionGaps = new("collectionGaps", LibraryHealthTab.Review, "library.healthCollectionGaps");
         MetadataConsistency = new("metadataConsistency", LibraryHealthTab.Review, "library.healthMetadataConsistency");
+        ChapterAlignment = new("chapterAlignment", LibraryHealthTab.Review, "library.healthChapterAlignment");
+        BookDuplicates = new("bookDuplicates", LibraryHealthTab.Review, "library.healthBookDuplicates");
         Missing = new("missing", LibraryHealthTab.Files, "library.healthMissing");
         EmptyRows = new("emptyRows", LibraryHealthTab.Files, "library.healthEmptyRows");
         RecentlyRemoved = new("recentlyRemoved", LibraryHealthTab.Files, "library.healthRecentlyRemoved");
         LeftoverFiles = new("leftoverFiles", LibraryHealthTab.Files, "library.healthLeftoverFiles");
         All = new[]
         {
-            Duplicates, SeriesConflicts, ContentType, Proposals, AdPages, ReportedPages, SimilarSeries, Publishers, ReadingLists, CollectionGaps, MetadataConsistency,
+            Duplicates, SeriesConflicts, ContentType, Proposals, AdPages, ReportedPages, SimilarSeries, Publishers, ReadingLists, CollectionGaps, MetadataConsistency, ChapterAlignment, BookDuplicates,
             Missing, EmptyRows, RecentlyRemoved, LeftoverFiles,
         };
+        ChapterAlignmentDismissed = new("chapterAlignmentDismissed", LibraryHealthTab.Review, ChapterAlignment.Anchor);
         MissingDismissed = new("missingDismissed", LibraryHealthTab.Files, Missing.Anchor);
         EmptyRowsDismissed = new("emptyRowsDismissed", LibraryHealthTab.Files, EmptyRows.Anchor);
         CollectionGapsDismissed = new("collectionGapsDismissed", LibraryHealthTab.Review, CollectionGaps.Anchor);
@@ -71,6 +74,14 @@ public sealed class LibraryHealthSections
 
     /// <summary>Issues whose year, publisher or age rating disagrees with the rest of their series (same spec, §3.4).</summary>
     public LibraryHealthSectionState MetadataConsistency { get; }
+
+    /// <summary>Manga series whose chapters differ from MangaDex's (docs/superpowers/specs/2026-10-26-you-vs-community-and-chapter-alignment-design.md Part 1).</summary>
+    public LibraryHealthSectionState ChapterAlignment { get; }
+
+    /// <summary>The same book held as several files (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §8).</summary>
+    public LibraryHealthSectionState BookDuplicates { get; }
+
+    public LibraryHealthSectionState ChapterAlignmentDismissed { get; }
 
     /// <summary>The collapsed "Dismissed" sub-groups of the two sections above; like the other dismissed sub-groups, not in <see cref="All"/>.</summary>
     public LibraryHealthSectionState CollectionGapsDismissed { get; }

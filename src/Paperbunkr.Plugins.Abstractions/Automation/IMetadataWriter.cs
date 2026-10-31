@@ -30,4 +30,11 @@ public interface IMetadataWriter
     bool AddTag(Issue issue, string tag);
 
     bool RemoveTag(Issue issue, string tag);
+
+    /// <summary>
+    /// Starts a batch whose changes are shown to the user before anything is written (Plugin API 4.5). Applying a batch counts as
+    /// the user having agreed, so a <c>confirmWrites="true"</c> command doesn't need its own <c>AskQuestion</c> first. Hosts that
+    /// predate 4.5 throw <see cref="NotSupportedException"/>.
+    /// </summary>
+    IMetadataWriteBatch BeginBatch() => throw new NotSupportedException("Write batches need Plugin API 4.5.");
 }

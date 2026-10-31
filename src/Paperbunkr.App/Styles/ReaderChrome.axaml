@@ -22,7 +22,7 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
     <Style Selector="Button.chromeIcon:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="#22FFFFFF" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
     </Style>
     <Style Selector="Button.chromeIcon.active">
         <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
@@ -60,7 +60,7 @@
         <Setter Property="Cursor" Value="Hand" />
     </Style>
     <Style Selector="Button.tocGroupHeader:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="#14FFFFFF" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
     </Style>
 
     <Style Selector="Button.resultRow">
@@ -85,7 +85,7 @@
         <Setter Property="Cursor" Value="Hand" />
     </Style>
     <Style Selector="Button.deleteRow:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="#22FFFFFF" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
     </Style>
 
 

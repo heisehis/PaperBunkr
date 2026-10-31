@@ -55,11 +55,9 @@ public class ScraperTests : IDisposable
         Assert.True(vm.ConfirmIssueMatch);
         Assert.False(vm.AutoChooseTopMatch);
         Assert.Equal("100", vm.MaxSearchResults);
-        // CommunityRating is excluded from CE's own default-enabled field set (docs/superpowers/specs/
-        // 2026-09-24-comicvine-scraper-fidelity-design.md Phase 1, verified against configuration.py's
-        // real __DEFAULT_SCRAPE_FLAGS) - every other field defaults on.
-        Assert.All(vm.FieldToggles.Where(t => t.Field != ScrapeField.CommunityRating), t => Assert.True(t.IsEnabled));
-        Assert.False(vm.FieldToggles.Single(t => t.Field == ScrapeField.CommunityRating).IsEnabled);
+        // CE leaves CommunityRating off by default, Paperbunkr turns it on (docs/superpowers/specs/
+        // 2026-10-26-you-vs-community-and-chapter-alignment-design.md) - so every field defaults on.
+        Assert.All(vm.FieldToggles, t => Assert.True(t.IsEnabled));
 
         vm.AutoChooseTopMatch = true;
         vm.IgnoreBlankValues = true;

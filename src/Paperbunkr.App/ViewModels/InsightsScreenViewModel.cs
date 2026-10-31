@@ -64,6 +64,7 @@ public partial class InsightsScreenViewModel : ViewModelBase
         History.Preferences = preferences;
         Stats.OpenDuplicateReview = openDuplicateReview;
         Stats.GoDetailForSeries = goDetailForSeries;
+        Stats.Activity = activity;
 
         if (readingEventRecorder is not null)
         {
@@ -180,7 +181,18 @@ public partial class InsightsScreenViewModel : ViewModelBase
         IsTrendsTabSelected = false;
         IsHistoryTabSelected = false;
         IsRecapTabSelected = false;
+        _pluginWidgets = null;   // rebuilt on the way in, so a plugin's card shows current numbers
+        OnPropertyChanged(nameof(PluginWidgets));
+        OnPropertyChanged(nameof(HasPluginWidgets));
     }
+
+    private IReadOnlyList<Paperbunkr.App.Plugins.PluginView>? _pluginWidgets;
+
+    /// <summary>Native plugins' Insights cards (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §E), shown at the bottom of Today.</summary>
+    public IReadOnlyList<Paperbunkr.App.Plugins.PluginView> PluginWidgets =>
+        _pluginWidgets ??= Paperbunkr.App.Plugins.PluginHostService.Current?.GetInsightsWidgets() ?? Array.Empty<Paperbunkr.App.Plugins.PluginView>();
+
+    public bool HasPluginWidgets => PluginWidgets.Count > 0;
 
     [RelayCommand]
     private void SelectTrendsTab() => IsTrendsTabSelected = true;

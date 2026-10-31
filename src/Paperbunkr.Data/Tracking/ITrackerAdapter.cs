@@ -21,14 +21,21 @@ public interface ITrackerAdapter
     /// this codebase.</summary>
     Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken);
 
-    /// <summary>Reads <paramref name="link"/>'s current remote entry. Null covers every "nothing to
-    /// compare against" case uniformly - not connected, not yet tracked on the remote service, or the
-    /// call failed - matching this codebase's blanket "unavailable, not exceptional" idiom for read
-    /// paths. Callers (<see cref="TrackerSyncResolver"/>) treat null the same as "remote has no
-    /// opinion, local wins by default," so collapsing "doesn't exist" and "couldn't check" is safe:
-    /// the worst case is a sync pass that pushes local state to a service that was actually just
-    /// temporarily unreachable, which self-corrects the next time sync runs successfully.</summary>
+    /// <summary>Reads <paramref name="link"/>'s current remote entry and distinguishes a confirmed
+    /// absent entry from a transient or permanent failure. Automatic pushes must not proceed when
+    /// the lookup failed transiently because remote progress could not be checked.</summary>
     Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken);
+
+    /// <summary>Classified lookup used by unattended retry execution. The default is deliberately
+    /// permanent for legacy adapters: a nullable result cannot safely distinguish absence from an
+    /// unavailable lookup. Real adapters should override this contract as they gain typed handling.</summary>
+    async Task<TrackerOperationResult<TrackerRemoteEntry>> GetEntryOutcomeAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
+        var entry = await GetEntryAsync(context, link, cancellationToken).ConfigureAwait(false);
+        return entry is null
+            ? TrackerOperationResult<TrackerRemoteEntry>.Permanent("Could not verify remote progress.")
+            : TrackerOperationResult<TrackerRemoteEntry>.Success(entry);
+    }
 }
 
 /// <summary>What one <see cref="ITrackerAdapter.PushEntryAsync"/> call pushes. Chapter progress

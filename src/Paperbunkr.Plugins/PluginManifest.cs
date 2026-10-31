@@ -54,6 +54,37 @@ public sealed class PluginManifest
     [XmlArray("Settings")]
     [XmlArrayItem("Setting")]
     public List<SettingManifestEntry>? Settings { get; set; }
+
+    /// <summary>Plugin smart fields (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §D1). Null when absent.</summary>
+    [XmlArray("Fields")]
+    [XmlArrayItem("Field")]
+    public List<FieldManifestEntry>? Fields { get; set; }
+
+    /// <summary>Hosts the plugin declares it talks to (Plugin API 4.5 §F). Null when absent.</summary>
+    [XmlArray("Network")]
+    [XmlArrayItem("Host")]
+    public List<NetworkHostManifestEntry>? Network { get; set; }
+}
+
+/// <summary>One <c>&lt;Field key label type/&gt;</c>; raw strings, validated by <see cref="PluginFieldSchema.Parse"/>.</summary>
+public sealed class FieldManifestEntry
+{
+    [XmlAttribute("key")]
+    public string? Key { get; set; }
+
+    [XmlAttribute("label")]
+    public string? Label { get; set; }
+
+    /// <summary><c>number</c>, <c>text</c>, <c>date</c> or <c>toggle</c> (case-insensitive).</summary>
+    [XmlAttribute("type")]
+    public string? Type { get; set; }
+}
+
+/// <summary>One <c>&lt;Host name/&gt;</c> under <c>&lt;Network&gt;</c>: an exact host or a <c>*.example.com</c> wildcard.</summary>
+public sealed class NetworkHostManifestEntry
+{
+    [XmlAttribute("name")]
+    public string? Name { get; set; }
 }
 
 /// <summary>One <c>&lt;Setting&gt;</c> in a manifest's <c>&lt;Settings&gt;</c>. Everything is a raw string here; <see cref="PluginSettingsSchema.Parse"/> validates it.</summary>
@@ -126,6 +157,18 @@ public sealed class CommandManifestEntry
     /// </summary>
     [XmlAttribute("shortcut")]
     public string? Shortcut { get; set; }
+
+    /// <summary>
+    /// Which right-click menus show this command (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md
+    /// §E): a comma list of <c>library</c>, <c>detail</c>, <c>readinglist</c>, <c>books</c>. Absent keeps the old behaviour - a Library
+    /// command shows in the Library and Detail menus, a Books command in the Books menu.
+    /// </summary>
+    [XmlAttribute("menus")]
+    public string? Menus { get; set; }
+
+    /// <summary><c>true</c> to list a Library command under the Library toolbar's Plugins button (Plugin API 4.5 §E).</summary>
+    [XmlAttribute("toolbar")]
+    public bool Toolbar { get; set; }
 
     /// <summary>
     /// docs/superpowers/specs/2026-08-28-plugin-api-v3-data-manager-design.md §5 - when true, this

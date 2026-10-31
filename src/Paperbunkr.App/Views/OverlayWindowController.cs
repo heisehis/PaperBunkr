@@ -18,6 +18,7 @@ internal sealed class OverlayWindowController
     private readonly Control _content;
     private readonly Func<Layoutable?> _getOverlayReference;
     private OverlayHostWindow? _window;
+    private UserControl? _host;
     private Layoutable? _trackedReference;
 
     public OverlayWindowController(Control content, Func<Layoutable?> getOverlayReference)
@@ -61,7 +62,10 @@ internal sealed class OverlayWindowController
         _trackedReference.LayoutUpdated += OnReferenceLayoutUpdated;
         owner.PositionChanged += OnOwnerPositionChanged;
 
-        var window = new OverlayHostWindow { Content = _content };
+        // The content's bindings (a drawer's list, its commands via $parent[UserControl]) resolve against the host screen's DataContext through the visual tree, which a separate
+        // window does not inherit. A UserControl wrapper carrying the reference's DataContext restores both the DataContext and the UserControl ancestor those bindings use.
+        _host = new UserControl { Content = _content, DataContext = reference.DataContext };
+        var window = new OverlayHostWindow { Content = _host };
         _window = window;
         SyncBounds();
         window.Show(owner);
@@ -83,6 +87,12 @@ internal sealed class OverlayWindowController
         {
             // Detach the shared content before closing so Close() doesn't dispose/orphan it -
             // the same Grid gets reused (reparented back in) the next time this opens.
+            if (_host is not null)
+            {
+                _host.Content = null;
+                _host = null;
+            }
+
             _window.Content = null;
             _window.Close();
             _window = null;

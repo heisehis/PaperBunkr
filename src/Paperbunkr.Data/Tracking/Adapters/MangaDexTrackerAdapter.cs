@@ -293,33 +293,64 @@ public sealed class MangaDexTrackerAdapter : ITrackerSearchProvider, ITrackerAda
     /// and-retry as <see cref="PushEntryDetailedAsync"/>.</summary>
     public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
     {
+        var result = await GetEntryOutcomeAsync(context, link, cancellationToken).ConfigureAwait(false);
+        return result.Succeeded ? result.Value : null;
+    }
+
+    public async Task<TrackerOperationResult<TrackerRemoteEntry>> GetEntryOutcomeAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
         string? token = CredentialStore.Get(context, nameof(TrackingService.MangaDex), CredentialKind.OAuthAccessToken);
         if (string.IsNullOrEmpty(token))
         {
-            return null;
+            return TrackerOperationResult<TrackerRemoteEntry>.Permanent("MangaDex is not connected.");
         }
 
-        var (entry, unauthorized) = await TryGetOnceAsync(link, token, cancellationToken).ConfigureAwait(false);
+        var (result, unauthorized) = await TryGetOnceOutcomeAsync(link, token, cancellationToken).ConfigureAwait(false);
         if (unauthorized)
         {
             string? refreshed = await TryRefreshAccessTokenAsync(context, cancellationToken).ConfigureAwait(false);
             if (refreshed is null)
             {
-                return null;
+                return TrackerOperationResult<TrackerRemoteEntry>.Permanent("MangaDex authorization expired; reconnect the tracker.");
             }
 
             CredentialStore.Set(context, nameof(TrackingService.MangaDex), CredentialKind.OAuthAccessToken, refreshed);
             token = refreshed;
-            (entry, _) = await TryGetOnceAsync(link, refreshed, cancellationToken).ConfigureAwait(false);
+            (result, _) = await TryGetOnceOutcomeAsync(link, refreshed, cancellationToken).ConfigureAwait(false);
         }
 
-        if (entry is null)
+        if (!result.Succeeded || result.Value is not { } entry)
         {
-            return null;
+            return result;
         }
 
         decimal? score = await FetchRatingAsync(link, token, cancellationToken).ConfigureAwait(false);
-        return entry with { Score = score };
+        return TrackerOperationResult<TrackerRemoteEntry>.Success(entry with { Score = score });
+    }
+
+    private async Task<(TrackerOperationResult<TrackerRemoteEntry> Result, bool Unauthorized)> TryGetOnceOutcomeAsync(TrackingLink link, string accessToken, CancellationToken cancellationToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/manga/{link.ExternalId}/status");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Headers.UserAgent.ParseAdd(UserAgent);
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+                return (TrackerOperationResult<TrackerRemoteEntry>.Permanent("MangaDex access token expired."), true);
+            if (!response.IsSuccessStatusCode)
+            {
+                string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return (TrackerOperationClassifier.FromHttpFailure<TrackerRemoteEntry>(response, body, notFoundMeansMissing: true), false);
+            }
+            var parsed = await response.Content.ReadFromJsonAsync<MangaDexStatusResponse>(cancellationToken: cancellationToken).ConfigureAwait(false);
+            return parsed?.Status is null
+                ? (TrackerOperationResult<TrackerRemoteEntry>.Missing(), false)
+                : (TrackerOperationResult<TrackerRemoteEntry>.Success(new TrackerRemoteEntry(MangaDexStatusMapper.FromStatus(parsed.Status), ChapterProgress: null)), false);
+        }
+        catch (HttpRequestException ex) { return (TrackerOperationClassifier.FromNetworkFailure<TrackerRemoteEntry>(ex), false); }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { return (TrackerOperationClassifier.Timeout<TrackerRemoteEntry>(), false); }
+        catch (JsonException) { return (TrackerOperationResult<TrackerRemoteEntry>.Permanent("MangaDex returned an invalid tracker entry response."), false); }
     }
 
     private async Task<decimal?> FetchRatingAsync(TrackingLink link, string accessToken, CancellationToken cancellationToken)

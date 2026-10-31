@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:beh="using:Paperbunkr.App.Behaviors"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
@@ -63,6 +63,22 @@
                                 Command="{Binding $parent[controls:VirtualList].((vm:CollectionGapsViewModel)DataContext).OpenCommand}" CommandParameter="{Binding}" />
                         <Button Classes="ghost" Content="Not a gap" ToolTip.Tip="Stop listing this series until a new gap appears"
                                 Command="{Binding $parent[controls:VirtualList].((vm:CollectionGapsViewModel)DataContext).NotAGapCommand}" CommandParameter="{Binding}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Chapter alignment (docs/superpowers/specs/2026-10-26-you-vs-community-and-chapter-alignment-design.md Part 1): one row per manga series whose chapters differ from MangaDex's. -->
+        <DataTemplate x:Key="AlignmentRowTemplate" x:DataType="meta:AlignmentRow">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="12,8" Margin="0,0,0,6">
+                <Grid ColumnDefinitions="2*,3*,220" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Text="{Binding SeriesName}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SeriesName}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Summary}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Summary}" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                        <Button Classes="ghost" Content="Open series"
+                                Command="{Binding $parent[controls:VirtualList].((vm:ChapterAlignmentViewModel)DataContext).OpenCommand}" CommandParameter="{Binding}" />
+                        <Button Classes="ghost" Content="Not a problem" ToolTip.Tip="Stop listing this series until a different chapter goes missing"
+                                Command="{Binding $parent[controls:VirtualList].((vm:ChapterAlignmentViewModel)DataContext).NotAProblemCommand}" CommandParameter="{Binding}" />
                     </StackPanel>
                 </Grid>
             </Border>
@@ -1315,6 +1331,132 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Duplicate books (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §8): the same book held as several files. Report-only:
+                             Reveal, and a two-step Delete to the Recycle Bin. -->
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,4" Tag="library.healthBookDuplicates">
+                            <StackPanel Spacing="8" DataContext="{Binding BookDuplicates}" x:DataType="vm:BookDuplicatesViewModel">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Button Grid.Column="0" Classes="sideItemButton" HorizontalContentAlignment="Stretch"
+                                            Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.BookDuplicates.ToggleCommand}"
+                                            AutomationProperties.AutomationId="LibraryHealthToggleBookDuplicates">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <fi:SymbolIcon Symbol="Book" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                            <TextBlock Text="Duplicate books" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding HeaderDetail}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="1" Classes="ghost" Command="{Binding ScanCommand}" AutomationProperties.AutomationId="RescanBookDuplicatesButton">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" />
+                                            <TextBlock Text="Rescan" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+
+                                <StackPanel Spacing="8" IsVisible="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.BookDuplicates.IsOpen}">
+                                    <TextBlock Text="Books you hold as more than one file: the same ISBN, or the same title and author (case and punctuation ignored). Nothing is hidden or merged - Reveal a file, or delete the copy you do not want."
+                                               FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                    <TextBlock Text="No duplicates: every book is one file." IsVisible="{Binding IsClean}"
+                                               FontSize="12" Foreground="{DynamicResource PbSuccessBrush}" TextWrapping="Wrap" />
+                                    <ItemsControl ItemsSource="{Binding Rows}" IsVisible="{Binding HasRows}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:BookDuplicateGroupRow">
+                                                <StackPanel Margin="0,0,0,12" Spacing="4">
+                                                    <TextBlock Text="{Binding Label}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Reason}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                    <ItemsControl ItemsSource="{Binding Entries}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="vm:BookDuplicateEntryRow">
+                                                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,2" ColumnSpacing="10">
+                                                                    <Border Grid.Column="0" Classes="pbChip" VerticalAlignment="Center"><TextBlock Text="{Binding FormatLabel}" /></Border>
+                                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                                        <TextBlock Text="{Binding Path}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+                                                                        <TextBlock Text="{Binding SizeLabel}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                                    </StackPanel>
+                                                                    <Button Grid.Column="2" Classes="ghost" Content="Reveal"
+                                                                            Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).BookDuplicates.RevealCommand}" CommandParameter="{Binding}" />
+                                                                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                                        <Button Classes="danger" Content="Delete" IsVisible="{Binding !IsConfirmingDelete}"
+                                                                                Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).BookDuplicates.AskDeleteCommand}" CommandParameter="{Binding}" />
+                                                                        <TextBlock Text="Delete this file?" FontSize="12" VerticalAlignment="Center" IsVisible="{Binding IsConfirmingDelete}" Foreground="{DynamicResource PbTextBrush}" />
+                                                                        <Button Classes="danger" Content="Yes" IsVisible="{Binding IsConfirmingDelete}"
+                                                                                Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).BookDuplicates.ConfirmDeleteCommand}" CommandParameter="{Binding}" />
+                                                                        <Button Classes="ghost" Content="No" IsVisible="{Binding IsConfirmingDelete}"
+                                                                                Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).BookDuplicates.CancelDeleteCommand}" CommandParameter="{Binding}" />
+                                                                    </StackPanel>
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Chapter alignment (docs/superpowers/specs/2026-10-26-you-vs-community-and-chapter-alignment-design.md Part 1): manga series whose
+                             chapters differ from MangaDex's list. Opening reads the cached lists; "Check now" fetches the missing ones. Report-only. -->
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,4" Tag="library.healthChapterAlignment">
+                            <StackPanel Spacing="8" DataContext="{Binding ChapterAlignment}" x:DataType="vm:ChapterAlignmentViewModel">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Button Grid.Column="0" Classes="sideItemButton" HorizontalContentAlignment="Stretch"
+                                            Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.ChapterAlignment.ToggleCommand}"
+                                            AutomationProperties.AutomationId="LibraryHealthToggleChapterAlignment">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <fi:SymbolIcon Symbol="BookNumber" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                            <TextBlock Text="Chapter alignment" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding HeaderDetail}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="1" Classes="ghost" Command="{Binding CheckNowCommand}" IsEnabled="{Binding CanCheck}" AutomationProperties.AutomationId="CheckChapterAlignmentButton">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" />
+                                            <TextBlock Text="Check now" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+
+                                <StackPanel Spacing="8" IsVisible="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.ChapterAlignment.IsOpen}">
+                                    <TextBlock Text="Manga series linked to MangaDex whose chapters differ from its list: chapters it has that you don't, and numbers you have that it lacks. Nothing is changed; a volume that disagrees is only noted, since MangaDex's volume numbers come from uploaders."
+                                               FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasStatus}">
+                                        <TextBlock Text="{Binding StatusText}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCheckCommand}" IsVisible="{Binding IsChecking}" />
+                                    </StackPanel>
+                                    <TextBlock Text="No differences found in the lists checked so far. Use Check now to fetch MangaDex's list for series not checked yet."
+                                               IsVisible="{Binding IsClean}" FontSize="12" Foreground="{DynamicResource PbSuccessBrush}" TextWrapping="Wrap" />
+
+                                    <Grid ColumnDefinitions="2*,3*,220" Margin="12,0" IsVisible="{Binding HasRows}">
+                                        <TextBlock Grid.Column="0" Text="SERIES" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        <TextBlock Grid.Column="1" Text="DIFFERENCES" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    </Grid>
+                                    <controls:VirtualList ItemsSource="{Binding Rows}" IsVisible="{Binding HasRows}" ItemTemplate="{StaticResource AlignmentRowTemplate}" />
+
+                                    <StackPanel Spacing="8" IsVisible="{Binding HasDismissed}">
+                                        <Button Classes="sideItemButton" HorizontalContentAlignment="Stretch"
+                                                Command="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.ChapterAlignmentDismissed.ToggleCommand}"
+                                                AutomationProperties.AutomationId="LibraryHealthToggleChapterAlignmentDismissed">
+                                            <TextBlock Text="{Binding DismissedHeader}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        </Button>
+                                        <controls:VirtualList ItemsSource="{Binding Dismissed}" MaxListHeight="220"
+                                                              IsVisible="{Binding $parent[UserControl].((vm:PreferencesScreenViewModel)DataContext).LibraryHealthSections.ChapterAlignmentDismissed.IsOpen}">
+                                            <controls:VirtualList.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:DismissedFindingRow">
+                                                    <Grid ColumnDefinitions="*,Auto" Margin="12,2">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                        <Button Grid.Column="1" Classes="ghost" Content="Restore" ToolTip.Tip="Put this back in the list above"
+                                                                Command="{Binding $parent[controls:VirtualList].((vm:ChapterAlignmentViewModel)DataContext).RestoreCommand}" CommandParameter="{Binding}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </controls:VirtualList.ItemTemplate>
+                                        </controls:VirtualList>
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Metadata consistency (same spec, §3.4): issues whose year, publisher or age rating disagrees with the rest of their series.
                              Report-only; each outlier opens in the issue editor. -->
                         <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,4" Tag="library.healthMetadataConsistency">
@@ -1554,6 +1696,27 @@
                         </Border>
                     </StackPanel>
 
+                </StackPanel>
+            </Border>
+
+            <!-- Related series (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §6.4) -->
+            <Border Classes="card" Padding="0" Tag="library.relatedSeries">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <StackPanel>
+                            <TextBlock Text="Related series" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="What fills each series' Related tab on its own" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Border>
+                    <StackPanel Margin="14" Spacing="4">
+                        <pref:SettingsRow Icon="Link" Title="Find related series automatically"
+                                           Description="Links later volumes, annuals, team-ups and event tie-ins, and suggests other related series. Relations you made yourself are never changed.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding FindRelatedSeriesAutomatically}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                              AutomationProperties.AutomationId="FindRelatedSeriesAutomaticallyToggle" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

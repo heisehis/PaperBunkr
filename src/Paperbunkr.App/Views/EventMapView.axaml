@@ -336,6 +336,16 @@
                             </StackPanel>
                             <TextBlock Text="Outside this continuity: its series isn't a member." FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                        TextWrapping="Wrap" IsVisible="{Binding SelectedCard.IsOutsideContinuity}" />
+                            <StackPanel Spacing="{DynamicResource PbSpacingUnit}" IsVisible="{Binding SelectedCard.HasCbroOverlapNotes}">
+                                <TextBlock Text="CBRO timeline notes" FontSize="{DynamicResource PbFontSizeCaption}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <ItemsControl ItemsSource="{Binding SelectedCard.CbroOverlapNotes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" FontSize="{DynamicResource PbFontSizeMeta}" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                             <TextBlock Text="{Binding SelectedCard.Summary}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
                                        MaxLines="6" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SelectedCard.Summary}"
                                        IsVisible="{Binding SelectedCard.HasSummary}" />

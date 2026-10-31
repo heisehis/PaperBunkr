@@ -1,0 +1,124 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:reader="using:Paperbunkr.App.Views.Reader"
+             x:Class="Paperbunkr.App.Views.Reader.ReaderCluster"
+             x:Name="Root">
+
+    <!-- One floating reader cluster (docs/superpowers/specs/2026-10-27-books-section-redesign-design.md §5.2), in the comic reader's places:
+         Navigate top-left (back, contents, book > chapter), Actions top-right (search, bookmark, notes, captures, Aa), Page bottom-centre
+         (previous, page, progress with part ticks, time left, next). Coloured from the book theme, not the app theme; a button with no command
+         hides itself, so the EPUB and PDF readers share the control. No view-model type is assumed: every binding targets this control. -->
+    <UserControl.Styles>
+        <Style Selector="Button.clusterButton">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{Binding $parent[reader:ReaderCluster].ClusterForeground}" />
+        </Style>
+        <Style Selector="Button.clusterButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{Binding $parent[reader:ReaderCluster].HoverBrush}" />
+            <Setter Property="Foreground" Value="{Binding $parent[reader:ReaderCluster].ClusterForeground}" />
+        </Style>
+        <Style Selector="Button.clusterButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{Binding $parent[reader:ReaderCluster].HoverBrush}" />
+        </Style>
+        <Style Selector="Button.clusterButton.on /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+        <Style Selector="Button.clusterButton:disabled">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+        <Style Selector="TextBlock.clusterText">
+            <Setter Property="Foreground" Value="{Binding $parent[reader:ReaderCluster].ClusterForeground}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- 8 px around the card leaves the owned window room for the card's shadow. -->
+    <Border Margin="8" Padding="4" CornerRadius="{DynamicResource PbRadiusLg}"
+            Background="{Binding #Root.ClusterBackground}" BorderBrush="{Binding #Root.ClusterBorder}" BorderThickness="1"
+            BoxShadow="{StaticResource PbElevationShadow}">
+        <Panel>
+            <!-- Navigate -->
+            <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding #Root.IsNavigate}">
+                <Button Classes="clusterButton" Command="{Binding #Root.BackCommand}"
+                        IsVisible="{Binding #Root.BackCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Back" AutomationProperties.Name="Back" AutomationProperties.AutomationId="CloseReaderButton">
+                    <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeMd}" />
+                </Button>
+                <Button Classes="clusterButton" Command="{Binding #Root.ContentsCommand}"
+                        IsVisible="{Binding #Root.ContentsCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Contents" AutomationProperties.Name="Contents" AutomationProperties.AutomationId="TocToggleButton">
+                    <fi:SymbolIcon Symbol="List" FontSize="{StaticResource PbIconSizeMd}" />
+                </Button>
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0,12,0" MaxWidth="460">
+                    <TextBlock Classes="clusterText pbTextMeta bookTitle" Text="{Binding #Root.Title}" TextTrimming="CharacterEllipsis" MaxWidth="260" />
+                    <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" Foreground="{Binding #Root.ClusterForeground}" Opacity="0.6"
+                                   IsVisible="{Binding #Root.Subtitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" VerticalAlignment="Center" />
+                    <TextBlock Classes="clusterText pbTextMeta" Text="{Binding #Root.Subtitle}" TextTrimming="CharacterEllipsis" MaxWidth="200" Opacity="0.8" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Actions -->
+            <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding #Root.IsActions}">
+                <Button Classes="clusterButton" Command="{Binding #Root.SearchCommand}"
+                        IsVisible="{Binding #Root.SearchCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Search this book" AutomationProperties.Name="Search this book" AutomationProperties.AutomationId="SearchToggleButton">
+                    <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeMd}" />
+                </Button>
+                <Button Classes="clusterButton" Classes.on="{Binding #Root.IsBookmarked}" Command="{Binding #Root.BookmarkCommand}"
+                        IsVisible="{Binding #Root.BookmarkCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Bookmark this page" AutomationProperties.Name="Bookmark this page" AutomationProperties.AutomationId="ToggleBookmarkButton">
+                    <fi:SymbolIcon Symbol="Bookmark" FontSize="{StaticResource PbIconSizeMd}" />
+                </Button>
+                <Button Classes="clusterButton" Command="{Binding #Root.NotesCommand}"
+                        IsVisible="{Binding #Root.NotesCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Notes: highlights and bookmarks" AutomationProperties.Name="Notes" AutomationProperties.AutomationId="NotesToggleButton">
+                    <fi:SymbolIcon Symbol="Note" FontSize="{StaticResource PbIconSizeMd}" />
+                </Button>
+                <Button Classes="clusterButton" Command="{Binding #Root.CapturesCommand}"
+                        IsVisible="{Binding #Root.CapturesCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Captures" AutomationProperties.Name="Captures" AutomationProperties.AutomationId="CapturesToggleButton">
+                    <fi:SymbolIcon Symbol="Image" FontSize="{StaticResource PbIconSizeMd}" />
+                </Button>
+                <Button Classes="clusterButton" Classes.on="{Binding #Root.IsCaptureMode}" Command="{Binding #Root.CaptureToggleCommand}"
+                        IsVisible="{Binding #Root.CaptureToggleCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Capture a region of this page" AutomationProperties.Name="Capture region" AutomationProperties.AutomationId="CaptureRegionToggleButton">
+                    <fi:SymbolIcon Symbol="Crop" FontSize="{StaticResource PbIconSizeMd}" />
+                </Button>
+                <Button Classes="clusterButton" Command="{Binding #Root.SettingsCommand}"
+                        IsVisible="{Binding #Root.SettingsCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Text and theme" AutomationProperties.Name="Text and theme" AutomationProperties.AutomationId="FontSheetToggleButton">
+                    <fi:SymbolIcon Symbol="TextFont" FontSize="{StaticResource PbIconSizeMd}" />
+                </Button>
+            </StackPanel>
+
+            <!-- Page -->
+            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding #Root.IsPage}">
+                <Button Classes="clusterButton" Click="OnPreviousClick" IsEnabled="{Binding #Root.IsPreviousEnabled}"
+                        ToolTip.Tip="Previous page" AutomationProperties.Name="Previous page" AutomationProperties.AutomationId="PreviousPageButton">
+                    <fi:SymbolIcon Symbol="ChevronLeft" FontSize="{StaticResource PbIconSizeMd}" />
+                </Button>
+                <TextBlock Classes="clusterText pbTextCaption" Text="{Binding #Root.LeftLabel}" MinWidth="48" TextAlignment="Right" />
+                <reader:ClusterProgress Width="360" Height="12" VerticalAlignment="Center"
+                                        Fraction="{Binding #Root.ProgressFraction}" Ticks="{Binding #Root.PartTicks}"
+                                        TrackBrush="{Binding #Root.HoverBrush}" FillBrush="{DynamicResource PbAccentBrush}"
+                                        TickBrush="{Binding #Root.ClusterForeground}" />
+                <TextBlock Classes="clusterText pbTextCaption" Text="{Binding #Root.RightLabel}" MinWidth="48" />
+                <Button Classes="clusterButton" Click="OnNextClick"
+                        ToolTip.Tip="Next page" AutomationProperties.Name="Next page" AutomationProperties.AutomationId="NextPageButton">
+                    <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeMd}" />
+                </Button>
+            </StackPanel>
+        </Panel>
+    </Border>
+</UserControl>

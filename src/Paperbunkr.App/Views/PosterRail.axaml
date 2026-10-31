@@ -1,4 +1,4 @@
-<UserControl xmlns:fi="using:FluentIcons.Avalonia" xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns:fi="using:FluentIcons.Avalonia" xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:views="using:Paperbunkr.App.Views"
@@ -54,6 +54,14 @@
         <Style Selector="Button.railCard:pointerover Button.railRemove">
             <Setter Property="Opacity" Value="1" />
         </Style>
+        <!-- Reachable from the keyboard too, not only on mouse hover (the suggestion's Accept lives here). -->
+        <Style Selector="Button.railRemove:focus-visible">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <!-- A related-series suggestion (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §6.3): dimmed until accepted. -->
+        <Style Selector="Button.railCard.dimmed Border.railCover">
+            <Setter Property="Opacity" Value="0.6" />
+        </Style>
     </UserControl.Styles>
 
     <StackPanel Margin="0,0,0,16">
@@ -62,7 +70,18 @@
                     IsVisible="{Binding #u.Title, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
             <TextBlock Text="{Binding #u.Title}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding #u.ContextLabel}" FontSize="10" Foreground="{DynamicResource PbAccentTextBrush}"
-                       VerticalAlignment="Center" IsVisible="{Binding #u.ContextLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                       VerticalAlignment="Center">
+                <TextBlock.IsVisible>
+                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding Path="#u.ContextLabel" Converter="{x:Static conv:StringConverters.IsNotNullOrEmpty}" />
+                        <Binding Path="#u.ContextCommand" Converter="{x:Static conv:ObjectConverters.IsNull}" />
+                    </MultiBinding>
+                </TextBlock.IsVisible>
+            </TextBlock>
+            <!-- An event row's "12 series · open event" (same spec §6.2). -->
+            <Button Classes="ghost sm" Content="{Binding #u.ContextLabel}" VerticalAlignment="Center"
+                    Command="{Binding #u.ContextCommand}" CommandParameter="{Binding #u.ContextCommandParameter}"
+                    IsVisible="{Binding #u.ContextCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
         </StackPanel>
 
         <!-- The scroller reaches 8px past the rail and its content steps back in, so the first/last card's focus ring has room inside the
@@ -75,7 +94,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:PosterRailItem">
-                            <Button Classes="railCard" AutomationProperties.Name="{Binding Name}" Command="{Binding #u.ClickCommand}" CommandParameter="{Binding Payload}">
+                            <Button Classes="railCard" Classes.dimmed="{Binding IsSuggestion}" AutomationProperties.Name="{Binding Name}" Command="{Binding #u.ClickCommand}" CommandParameter="{Binding Payload}">
                                 <StackPanel Spacing="4">
                                     <Panel>
                                         <Border Classes="railCover" Background="{Binding CoverBrush}">
@@ -88,10 +107,17 @@
                                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0" IsVisible="{Binding IsRead}" />
                                             </Panel>
                                         </Border>
-                                        <Button Classes="railRemove"
-                                                Command="{Binding #u.RemoveCommand}" CommandParameter="{Binding Payload}"
-                                                IsVisible="{Binding #u.RemoveCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
-                                                ToolTip.Tip="Remove" AutomationProperties.Name="{Binding Name, StringFormat='Remove {0}'}"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                                            <Button Classes="railRemove"
+                                                    Command="{Binding #u.AcceptCommand}" CommandParameter="{Binding Payload}"
+                                                    IsVisible="{Binding IsSuggestion}"
+                                                    ToolTip.Tip="Add as related" AutomationProperties.Name="{Binding Name, StringFormat='Accept {0}'}"><fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                                            <Button Classes="railRemove"
+                                                    Command="{Binding #u.RemoveCommand}" CommandParameter="{Binding Payload}"
+                                                    IsVisible="{Binding #u.RemoveCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                                                    ToolTip.Tip="{Binding IsSuggestion, Converter={x:Static views:PosterRail.RemoveTipConverter}}"
+                                                    AutomationProperties.Name="{Binding Name, StringFormat='Remove {0}'}"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                                        </StackPanel>
                                     </Panel>
                                     <TextBlock Text="{Binding Name}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
                                                TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />

@@ -27,13 +27,7 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 		{
 			_book = EpubReader.ReadBook(filePath);
 
-			Metadata = new BookMetadata
-			{
-				Title = string.IsNullOrWhiteSpace(_book.Title) ? Path.GetFileNameWithoutExtension(filePath) : _book.Title,
-				Author = _book.Author,
-				SeriesName = FindCalibreSeriesName(_book),
-				CoverImageBytes = _book.CoverImage,
-			};
+			Metadata = BuildMetadata(_book, filePath);
 
 			var navigationTitlesByPath = FlattenNavigationTitles(_book.Navigation);
 			var navigationPartsByPath = FlattenNavigationParts(_book.Navigation);
@@ -59,7 +53,175 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 				});
 			}
 
+			var spinePaths = _book.ReadingOrder.Select(c => c.FilePath).ToList();
+			AttachSections(chapters, spinePaths, _book.Navigation);
 			Chapters = chapters;
+			PrintPages = ReadPrintPages(filePath, spinePaths);
+		}
+
+		public IReadOnlyList<BookPrintPage> PrintPages { get; }
+
+		private static readonly Regex s_pageListNav = new Regex(
+			"""<nav\b[^>]*epub:type\s*=\s*["'][^"']*\bpage-list\b[^"']*["'][^>]*>(.*?)</nav>""",
+			RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+		private static readonly Regex s_navAnchor = new Regex(
+			"""<a\b[^>]*\bhref\s*=\s*(["'])(.*?)\1[^>]*>(.*?)</a>""",
+			RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+		private static readonly Regex s_ncxPageTarget = new Regex(
+			"""<pageTarget\b.*?<text>(.*?)</text>.*?<content\b[^>]*\bsrc\s*=\s*(["'])(.*?)\2""",
+			RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+		private static readonly Regex s_tags = new Regex("<[^>]+>", RegexOptions.Compiled);
+
+		/// <summary>
+		/// Reads the printed edition's page list straight from the archive: the EPUB 3 nav document's <c>page-list</c> first, else the EPUB 2
+		/// NCX <c>pageList</c>. Read as markup rather than through VersOne's navigation (which only exposes the table of contents). Never throws:
+		/// a file without a list, or one that cannot be read, simply has no print pages.
+		/// </summary>
+		private static IReadOnlyList<BookPrintPage> ReadPrintPages(string filePath, List<string> spinePaths)
+		{
+			try
+			{
+				using var zip = System.IO.Compression.ZipFile.OpenRead(filePath);
+				var indexByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+				for (int i = 0; i < spinePaths.Count; i++)
+				{
+					indexByPath.TryAdd(spinePaths[i].TrimStart('/'), i);
+				}
+
+				string Read(System.IO.Compression.ZipArchiveEntry entry)
+				{
+					using var reader = new StreamReader(entry.Open());
+					return reader.ReadToEnd();
+				}
+
+				List<BookPrintPage> Resolve(string documentPath, IEnumerable<(string Label, string Href)> targets)
+				{
+					var pages = new List<BookPrintPage>();
+					foreach (var (label, href) in targets)
+					{
+						string decoded = System.Net.WebUtility.HtmlDecode(href);
+						int hash = decoded.IndexOf('#');
+						string path = hash >= 0 ? decoded[..hash] : decoded;
+						string? fragment = hash >= 0 ? Uri.UnescapeDataString(decoded[(hash + 1)..]) : null;
+						string resolved = path.Length == 0 ? documentPath : ResolveEpubPath(documentPath, Uri.UnescapeDataString(path));
+						string text = System.Net.WebUtility.HtmlDecode(s_tags.Replace(label, string.Empty)).Trim();
+						if (text.Length > 0 && indexByPath.TryGetValue(resolved, out int chapter))
+						{
+							pages.Add(new BookPrintPage(text, chapter, string.IsNullOrEmpty(fragment) ? null : fragment));
+						}
+					}
+
+					return pages;
+				}
+
+				var documents = zip.Entries.Where(e => e.FullName.EndsWith(".xhtml", StringComparison.OrdinalIgnoreCase)
+					|| e.FullName.EndsWith(".html", StringComparison.OrdinalIgnoreCase) || e.FullName.EndsWith(".htm", StringComparison.OrdinalIgnoreCase));
+				foreach (var entry in documents)
+				{
+					string html = Read(entry);
+					if (html.IndexOf("page-list", StringComparison.OrdinalIgnoreCase) < 0)
+					{
+						continue;
+					}
+
+					var nav = s_pageListNav.Match(html);
+					if (nav.Success)
+					{
+						var pages = Resolve(entry.FullName, s_navAnchor.Matches(nav.Groups[1].Value).Select(m => (m.Groups[3].Value, m.Groups[2].Value)));
+						if (pages.Count > 0)
+						{
+							return pages;
+						}
+					}
+				}
+
+				foreach (var entry in zip.Entries.Where(e => e.FullName.EndsWith(".ncx", StringComparison.OrdinalIgnoreCase)))
+				{
+					var pages = Resolve(entry.FullName, s_ncxPageTarget.Matches(Read(entry)).Select(m => (m.Groups[1].Value, m.Groups[3].Value)));
+					if (pages.Count > 0)
+					{
+						return pages;
+					}
+				}
+			}
+			catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+			{
+			}
+
+			return Array.Empty<BookPrintPage>();
+		}
+
+		/// <summary>Hands each spine file the nav entries that point into it (several per file when a book packs chapters together), ordered by where their target sits in the file.</summary>
+		private static void AttachSections(List<BookChapter> chapters, List<string> spinePaths, IReadOnlyList<EpubNavigationItem>? navigation)
+		{
+			if (navigation is null || chapters.Count == 0)
+			{
+				return;
+			}
+
+			var indexByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+			for (int i = 0; i < spinePaths.Count; i++)
+			{
+				indexByPath.TryAdd(spinePaths[i], i);
+			}
+
+			var found = new List<(int Chapter, int Order, BookSection Section)>();
+			int order = 0;
+
+			void Walk(IReadOnlyList<EpubNavigationItem> level, string? currentPart)
+			{
+				foreach (var item in level)
+				{
+					bool hasChildren = item.NestedItems is { Count: > 0 };
+					string? path = item.Link?.ContentFilePath;
+					if (!string.IsNullOrWhiteSpace(path) && !string.IsNullOrWhiteSpace(item.Title) && indexByPath.TryGetValue(path, out int chapter))
+					{
+						string? anchor = string.IsNullOrWhiteSpace(item.Link?.Anchor) ? null : Uri.UnescapeDataString(item.Link!.Anchor!.TrimStart('#'));
+						found.Add((chapter, order++, new BookSection
+						{
+							Title = item.Title.Trim(),
+							Fragment = anchor,
+							PartTitle = hasChildren ? item.Title : currentPart,
+						}));
+					}
+
+					if (hasChildren)
+					{
+						Walk(item.NestedItems, item.Title);
+					}
+				}
+			}
+
+			Walk(navigation, null);
+
+			foreach (var group in found.GroupBy(f => f.Chapter))
+			{
+				string html = chapters[group.Key].Html ?? string.Empty;
+				chapters[group.Key].Sections = group
+					.OrderBy(f => f.Section.Fragment is null ? 0 : Math.Max(0, OffsetOf(html, f.Section.Fragment)))
+					.ThenBy(f => f.Order)
+					.Select(f => f.Section)
+					.ToList();
+			}
+		}
+
+		/// <summary>Where the element with this id (or legacy anchor name) starts in the markup; -1 when it is not there.</summary>
+		public static int OffsetOf(string html, string id)
+		{
+			int best = -1;
+			foreach (string pattern in new[] { $"id=\"{id}\"", $"id='{id}'", $"name=\"{id}\"", $"name='{id}'" })
+			{
+				int at = html.IndexOf(pattern, StringComparison.Ordinal);
+				if (at >= 0 && (best < 0 || at < best))
+				{
+					best = at;
+				}
+			}
+
+			return best;
 		}
 
 		private static readonly Regex s_imgSrcAttribute = new Regex(
@@ -172,6 +334,64 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 		/// belongs-to-collection/role=series mechanism, and much simpler to read reliably. Falls
 		/// back to no series (design spec §4) rather than attempting the EPUB3 collections path.
 		/// </summary>
+		private static BookMetadata BuildMetadata(EpubBook book, string filePath)
+		{
+			var package = book.Schema?.Package?.Metadata;
+			var metaItems = package?.MetaItems;
+
+			string? FindMeta(string name) => metaItems?
+				.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(m.Content))?.Content;
+
+			// EPUB3: <meta property="belongs-to-collection" id="c1">Name</meta> refined by <meta refines="#c1" property="group-position">2</meta>.
+			var collection = metaItems?.FirstOrDefault(m =>
+				string.Equals(m.Property, "belongs-to-collection", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(m.Content));
+			string? epub3Series = collection?.Content?.Trim();
+			string? epub3Position = null;
+			if (collection is not null && !string.IsNullOrEmpty(collection.Id))
+			{
+				string refines = "#" + collection.Id;
+				epub3Position = metaItems!.FirstOrDefault(m =>
+					string.Equals(m.Property, "group-position", StringComparison.OrdinalIgnoreCase)
+					&& string.Equals(m.Refines, refines, StringComparison.Ordinal))?.Content;
+			}
+
+			string? seriesName = FindCalibreSeriesName(book) ?? BookMetadataParsing.NullIfBlank(epub3Series);
+			float? seriesIndex = BookMetadataParsing.ParseIndex(FindMeta("calibre:series_index"))
+				?? BookMetadataParsing.ParseIndex(epub3Position);
+
+			string? isbn = null;
+			if (package?.Identifiers is not null)
+			{
+				foreach (var identifier in package.Identifiers)
+				{
+					isbn = BookMetadataParsing.ExtractIsbn(identifier.Identifier);
+					if (isbn is not null)
+					{
+						break;
+					}
+				}
+			}
+
+			// EPUB3 subtitle: <meta property="title-type" refines="#t1">subtitle</meta>; rare enough that only the dc:title text is used elsewhere.
+			string? subtitle = null;
+
+			return new BookMetadata
+			{
+				Title = string.IsNullOrWhiteSpace(book.Title) ? Path.GetFileNameWithoutExtension(filePath) : book.Title,
+				Author = book.Author,
+				SeriesName = seriesName,
+				SeriesIndex = seriesName is null ? null : seriesIndex,
+				Subtitle = subtitle,
+				Publisher = BookMetadataParsing.NullIfBlank(package?.Publishers?.FirstOrDefault()?.Publisher),
+				LanguageISO = BookMetadataParsing.NullIfBlank(package?.Languages?.FirstOrDefault()?.Language),
+				ISBN = isbn,
+				Description = BookMetadataParsing.NullIfBlank(book.Description ?? package?.Descriptions?.FirstOrDefault()?.Description),
+				Rating = BookMetadataParsing.FromCalibreRating(FindMeta("calibre:rating")),
+				Genres = BookMetadataParsing.CleanList(package?.Subjects?.Select(s => s.Subject)),
+				CoverImageBytes = book.CoverImage,
+			};
+		}
+
 		private static string? FindCalibreSeriesName(EpubBook book)
 		{
 			var metaItems = book.Schema?.Package?.Metadata?.MetaItems;

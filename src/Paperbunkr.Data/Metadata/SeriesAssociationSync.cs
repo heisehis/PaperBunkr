@@ -10,10 +10,9 @@ namespace Paperbunkr.Data.Metadata;
 /// (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md). Idempotent - re-running with
 /// the same data changes nothing.
 ///
-/// <b>Scope note:</b> like <see cref="ComicVine.Scraping.ComicProviderAdopt"/>, this is a real, tested
-/// building block with no automatic trigger wired to it in this pass - <c>MetronClient.GetAssociatedSeriesAsync</c>
-/// is a separate call from the ordinary issue-detail scrape, and wiring "refresh associated series"
-/// into a scheduled task or the series-refresh flow is a smaller follow-up, not attempted here.
+/// Called by the series connector's weekly fetch (<see cref="SeriesConnector.MetronAssociationFetch"/>;
+/// docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §5). Rows that stay are updated in place, so the
+/// ComicVine/GCD ids the connector looked up for them survive a re-sync.
 /// </summary>
 public static class SeriesAssociationSync
 {

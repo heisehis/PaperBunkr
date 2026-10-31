@@ -11,7 +11,7 @@ namespace Paperbunkr.App.Tests;
 /// </summary>
 internal static class EpubFixture
 {
-    public static string Create(string path, string title = "Test Novel", string author = "Ada Author", string? seriesName = null, bool firstChapterEmpty = false, bool firstChapterCoverImageOnly = false, bool withParts = false)
+    public static string Create(string path, string title = "Test Novel", string author = "Ada Author", string? seriesName = null, bool firstChapterEmpty = false, bool firstChapterCoverImageOnly = false, bool withParts = false, string? extraMetadataXml = null, bool packedChapter2 = false, string? printPageList = null)
     {
         using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
 
@@ -56,7 +56,7 @@ internal static class EpubFixture
                 <dc:title>{title}</dc:title>
                 <dc:creator>{author}</dc:creator>
                 <dc:language>en</dc:language>
-            {seriesMeta}  </metadata>
+            {seriesMeta}{extraMetadataXml}  </metadata>
               <manifest>
                 <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
                 <item id="chap1" href="chap1.xhtml" media-type="application/xhtml+xml"/>
@@ -68,6 +68,13 @@ internal static class EpubFixture
             {chap3SpineItem}  </spine>
             </package>
             """);
+
+        string chap2NavItems = packedChapter2
+            ? "      <li><a href=\"chap2.xhtml#c2a\">The End</a></li>\n      <li><a href=\"chap2.xhtml#c2b\">Epilogue</a></li>"
+            : "      <li><a href=\"chap2.xhtml\">The End</a></li>";
+        string navPageList = printPageList == "nav"
+            ? "  <nav epub:type=\"page-list\" hidden=\"\"><ol><li><a href=\"chap1.xhtml\">1</a></li><li><a href=\"chap2.xhtml#pg2\">2</a></li></ol></nav>"
+            : string.Empty;
 
         WriteEntry(zip, "OEBPS/nav.xhtml", withParts ? """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -87,7 +94,7 @@ internal static class EpubFixture
               </nav>
             </body>
             </html>
-            """ : """
+            """ : $$"""
             <?xml version="1.0" encoding="UTF-8"?>
             <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
             <head><title>Table of Contents</title></head>
@@ -95,9 +102,10 @@ internal static class EpubFixture
               <nav epub:type="toc">
                 <ol>
                   <li><a href="chap1.xhtml">The Beginning</a></li>
-                  <li><a href="chap2.xhtml">The End</a></li>
+            {{chap2NavItems}}
                 </ol>
               </nav>
+            {{navPageList}}
             </body>
             </html>
             """);
@@ -127,7 +135,19 @@ internal static class EpubFixture
             </html>
             """);
 
-        WriteEntry(zip, "OEBPS/chap2.xhtml", """
+        WriteEntry(zip, "OEBPS/chap2.xhtml", packedChapter2 ? """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+            <head><title>The End</title></head>
+            <body>
+              <h1 id="c2a">The End</h1>
+              <p>And so it ended, quietly.</p>
+              <span epub:type="pagebreak" id="pg2" title="2"></span>
+              <h1 id="c2b">Epilogue</h1>
+              <p>Years later, someone remembered.</p>
+            </body>
+            </html>
+            """ : """
             <?xml version="1.0" encoding="UTF-8"?>
             <html xmlns="http://www.w3.org/1999/xhtml">
             <head><title>The End</title></head>
@@ -137,6 +157,22 @@ internal static class EpubFixture
             </body>
             </html>
             """);
+
+        // A printed edition's page list (docs/superpowers/specs/2026-10-27-books-reader-paged-scroll-modes-design.md §6.2): "nav" puts it in
+        // the EPUB 3 nav document, "ncx" in an EPUB 2 toc.ncx only.
+        if (printPageList == "ncx")
+        {
+            WriteEntry(zip, "OEBPS/toc.ncx", """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+                  <navMap><navPoint id="n1"><navLabel><text>The Beginning</text></navLabel><content src="chap1.xhtml"/></navPoint></navMap>
+                  <pageList>
+                    <pageTarget id="p1" type="normal" value="1"><navLabel><text>1</text></navLabel><content src="chap1.xhtml"/></pageTarget>
+                    <pageTarget id="p2" type="normal" value="2"><navLabel><text>2</text></navLabel><content src="chap2.xhtml#pg2"/></pageTarget>
+                  </pageList>
+                </ncx>
+                """);
+        }
 
         if (withParts)
         {

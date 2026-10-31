@@ -11,4 +11,11 @@ public enum BooksSortField
     Author,
     RecentlyAdded,
     LastOpened,
+
+    // Books slice 2a (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §3). Stored by name; books without a value sort last.
+    Rating,
+    Progress,
+    Publisher,
+    Published,
+    SeriesOrder,
 }

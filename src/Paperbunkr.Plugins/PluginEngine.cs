@@ -74,6 +74,23 @@ public sealed class PluginEngine
     public IReadOnlyDictionary<string, PluginApiInfo> PackageApiInfo => _packageApi;
 
     private readonly Dictionary<string, string> _packageNames = new();
+    private readonly Dictionary<string, string> _packageFolders = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Plugin key → the folder its <c>plugin.xml</c> lives in, for every manifest that parsed (either tier). Lets the host map a
+    /// changed file back to the plugin that owns it (dev-mode reload, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-
+    /// completion-design.md §A1).
+    /// </summary>
+    public IReadOnlyDictionary<string, string> PackageFolders => _packageFolders;
+
+    private readonly Dictionary<string, PluginFieldSchema> _fieldSchemas = new();
+    private readonly Dictionary<string, IReadOnlyList<string>> _networkHosts = new();
+
+    /// <summary>Plugin key → its validated <c>&lt;Fields&gt;</c> (Plugin API 4.5 §D1), for every plugin that declared any and wasn't blocked.</summary>
+    public IReadOnlyDictionary<string, PluginFieldSchema> FieldSchemas => _fieldSchemas;
+
+    /// <summary>Plugin key → the hosts its <c>&lt;Network&gt;</c> declares (Plugin API 4.5 §F); empty for a plugin that declares none.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> NetworkHosts => _networkHosts;
     private readonly Dictionary<string, PluginSettingsSchema> _settingsSchemas = new();
 
     /// <summary>
@@ -95,6 +112,7 @@ public sealed class PluginEngine
     {
         _commands.RemoveAll(c => c.PluginKey == pluginKey);
         _settingsSchemas.Remove(pluginKey);
+        _fieldSchemas.Remove(pluginKey);
         if (_nativeLoadResults.TryGetValue(pluginKey, out NativePluginLoadResult? existing))
         {
             (existing.Module as IDisposable)?.Dispose();
@@ -211,7 +229,10 @@ public sealed class PluginEngine
         _nativeLoadResults.Clear();
         _packageApi.Clear();
         _packageNames.Clear();
+        _packageFolders.Clear();
         _settingsSchemas.Clear();
+        _fieldSchemas.Clear();
+        _networkHosts.Clear();
         if (!Directory.Exists(pluginsRoot))
         {
             return;
@@ -256,15 +277,45 @@ public sealed class PluginEngine
                 }
             }
 
+            // Plugin API 4.5 (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §D1/§F): smart fields and
+            // declared network hosts are checked at the same gate, so a malformed declaration blocks with its reason.
+            PluginFieldSchema? fieldSchema = null;
+            IReadOnlyList<string>? networkHosts = null;
+            if (manifest is not null && blockedReason is null)
+            {
+                string declaredKey = string.IsNullOrWhiteSpace(manifest.Key) ? Path.GetFileName(pluginDir) : manifest.Key;
+                fieldSchema = PluginFieldSchema.Parse(declaredKey, manifest, out string? fieldError);
+                if (fieldError is not null)
+                {
+                    blockedReason = $"invalid <Fields>: {fieldError}";
+                    fieldSchema = null;
+                }
+
+                networkHosts = PluginNetworkHosts.Parse(manifest, out string? networkError);
+                if (networkError is not null)
+                {
+                    blockedReason ??= $"invalid <Network>: {networkError}";
+                    networkHosts = null;
+                }
+            }
+
             if (manifest is not null)
             {
                 string apiKey = string.IsNullOrWhiteSpace(manifest.Key) ? Path.GetFileName(pluginDir) : manifest.Key;
                 _packageApi[apiKey] = new PluginApiInfo(manifest.RequiresApi, compat.Declared, blockedReason);
                 _packageNames[apiKey] = string.IsNullOrWhiteSpace(manifest.Name) ? apiKey : manifest.Name;
+                _packageFolders[apiKey] = pluginDir;
                 if (schema is not null)
                 {
                     _settingsSchemas[apiKey] = schema;
                 }
+
+                if (fieldSchema is not null)
+                {
+                    _fieldSchemas[apiKey] = fieldSchema;
+                }
+
+                _networkHosts[apiKey] = networkHosts ?? Array.Empty<string>();
             }
 
             if (manifest is not null && string.Equals(manifest.Tier, "Native", StringComparison.OrdinalIgnoreCase))

@@ -11,7 +11,7 @@ namespace Paperbunkr.App.Scraper.Import;
 /// worded for display ("&lt;profile&gt;: …" for what a saved profile could not carry over, "&lt;profile&gt; was not imported: …" for a refused one, the file name and
 /// problem for an unreadable file).
 /// </summary>
-public sealed record LopImportSummary(IReadOnlyList<OrganizerProfile> Saved, IReadOnlyList<string> Notes, int Rejected, string? FileError)
+public sealed record LopImportSummary(IReadOnlyList<OrganizerProfile> Saved, IReadOnlyList<string> Notes, int Rejected, string? FileError, int FilesFailed = 0)
 {
     public bool Failed => FileError is not null;
 }
@@ -22,6 +22,26 @@ public sealed record LopImportSummary(IReadOnlyList<OrganizerProfile> Saved, IRe
 /// </summary>
 public static class LopProfileImporter
 {
+    public static LopImportSummary Import(OrganizerProfileStore store, IEnumerable<string> paths)
+    {
+        var saved = new List<OrganizerProfile>();
+        var notes = new List<string>();
+        int rejected = 0, filesFailed = 0;
+        foreach (string path in paths)
+        {
+            LopImportSummary result = Import(store, path);
+            saved.AddRange(result.Saved);
+            string sourceName = Path.GetFileName(path);
+            notes.AddRange(result.Notes.Select(note => note.StartsWith(sourceName + ":", StringComparison.OrdinalIgnoreCase)
+                ? note
+                : $"{sourceName}: {note}"));
+            rejected += result.Rejected;
+            if (result.Failed) filesFailed++;
+        }
+        string? error = filesFailed > 0 && saved.Count == 0 && rejected == 0 ? $"{filesFailed} file(s) could not be imported." : null;
+        return new LopImportSummary(saved, notes, rejected, error, filesFailed);
+    }
+
     public static LopImportSummary Import(OrganizerProfileStore store, string path)
     {
         try

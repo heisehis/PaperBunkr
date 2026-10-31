@@ -250,7 +250,8 @@ public sealed class EventMapRuler : Control
             }
 
             var label = new FormattedText(block.Label, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-                block.Kind == EventMapBlockKind.Event ? bold : typeface, 10.5, block.Kind == EventMapBlockKind.Event ? accent : muted)
+                block.Kind is EventMapBlockKind.Event or EventMapBlockKind.Unplaced ? bold : typeface,
+                10.5, block.Kind == EventMapBlockKind.Event ? accent : muted)
             {
                 MaxTextWidth = visibleRight - visibleLeft,
                 Trimming = TextTrimming.CharacterEllipsis,

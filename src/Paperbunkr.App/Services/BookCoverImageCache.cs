@@ -43,6 +43,25 @@ public static class BookCoverImageCache
         }
     }
 
+    /// <summary>Decodes the on-disk cover with no cache interaction, safe off the UI thread (the bookshelf's spine-colour lookup). Null when there is none.</summary>
+    public static Bitmap? DecodeFromDisk(string idKey)
+    {
+        string path = ResolveFile(idKey);
+        if (path.Length == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            return new Bitmap(path);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     /// <summary>Convenience overload - the file-path argument is ignored (see <see cref="CoverFingerprint"/>).</summary>
     public static Bitmap? Get(int bookId, string? filePath) =>
         Get(bookId.ToString(CultureInfo.InvariantCulture));

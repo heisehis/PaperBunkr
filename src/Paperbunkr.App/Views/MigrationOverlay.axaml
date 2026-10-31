@@ -125,6 +125,12 @@
                             <TextBlock Classes="statLabel" Text="Guessed content type" />
                         </StackPanel>
                     </StackPanel>
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="ComicRack smart lists" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                        <TextBlock Text="{Binding Migration.SmartListImportableLabel, StringFormat='Will import: {0}'}" Foreground="{DynamicResource PbTextMutedBrush}" FontSize="13" />
+                        <TextBlock Text="{Binding Migration.SmartListSkippedLabel, StringFormat='Skipped: {0}'}" Foreground="{DynamicResource PbTextMutedBrush}" FontSize="13" />
+                        <ItemsControl ItemsSource="{Binding Migration.SmartListPreviewNotes}" />
+                    </StackPanel>
                     <TextBlock Text="Possible duplicate series names were found - you'll review them next."
                                Foreground="{DynamicResource PbTextMutedBrush}" FontSize="13" TextWrapping="Wrap"
                                IsVisible="{Binding Migration.HasConflicts}" />

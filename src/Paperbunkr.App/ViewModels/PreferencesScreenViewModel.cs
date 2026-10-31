@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -839,6 +839,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private int _pageTransitionDurationMs = 250;
 
+    /// <summary>Book page word range (docs/superpowers/specs/2026-10-27-books-reader-paged-scroll-modes-design.md §6.4); max always stays 20 above min.</summary>
+    [ObservableProperty]
+    private int _bookPageWordsMin = 250;
+
+    [ObservableProperty]
+    private int _bookPageWordsMax = 300;
+
     /// <summary>Global default live-adjustment values (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §9), additive with each Issue's own override - see ReaderScreenViewModel.Brightness's own doc comment for the split. -100..100, CE's exact PreferencesDialog trackbar range.</summary>
     [ObservableProperty]
     private double _defaultBrightness;
@@ -1130,6 +1137,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         PageTransitionStyle = settings.PageTransitionStyle;
         ReaderPageFrameStyle = settings.ReaderPageFrameStyle;
         PageTransitionDurationMs = settings.PageTransitionDurationMs;
+        BookPageWordsMin = settings.BookPageWordsMin;
+        BookPageWordsMax = settings.BookPageWordsMax;
         DefaultBrightness = settings.DefaultBrightness;
         DefaultContrast = settings.DefaultContrast;
         DefaultSaturation = settings.DefaultSaturation;
@@ -1146,6 +1155,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         WriteNativeSidecar = settings.WriteNativeSidecar;
         WriteMetronInfo = settings.WriteMetronInfo;
         AutoRemoveMissingOnScan = settings.AutoRemoveMissingOnScan;
+        FindRelatedSeriesAutomatically = settings.FindRelatedSeriesAutomatically;
         DontReimportRemovedFiles = settings.DontReimportRemovedFiles;
         ExportedListsContainFilenames = settings.ExportedListsContainFilenames;
         LibraryHealthConfirmedMissingThreshold = settings.LibraryHealthConfirmedMissingThreshold;
@@ -1605,6 +1615,40 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ReaderDisplaySettingsChanged?.Invoke();
     }
 
+    partial void OnBookPageWordsMinChanged(int value)
+    {
+        int clamped = Math.Clamp(value, 100, 580);
+        if (clamped != value)
+        {
+            BookPageWordsMin = clamped;
+            return;
+        }
+
+        if (BookPageWordsMax < value + 20)
+        {
+            BookPageWordsMax = value + 20;
+        }
+
+        PersistBehaviorSetting(s => s.BookPageWordsMin = value);
+    }
+
+    partial void OnBookPageWordsMaxChanged(int value)
+    {
+        int clamped = Math.Clamp(value, 120, 600);
+        if (clamped != value)
+        {
+            BookPageWordsMax = clamped;
+            return;
+        }
+
+        if (BookPageWordsMin > value - 20)
+        {
+            BookPageWordsMin = value - 20;
+        }
+
+        PersistBehaviorSetting(s => s.BookPageWordsMax = value);
+    }
+
     partial void OnPageTransitionDurationMsChanged(int value)
     {
         PersistBehaviorSetting(s => s.PageTransitionDurationMs = value);
@@ -1973,6 +2017,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public TwoStepConfirm ClearRemovedFilesListConfirm { get; }
 
     partial void OnAutoRemoveMissingOnScanChanged(bool value) => PersistBehaviorSetting(s => s.AutoRemoveMissingOnScan = value);
+
+    /// <summary>The series connector's switch (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §6.4) - see
+    /// <see cref="AppSettings.FindRelatedSeriesAutomatically"/>. No CE equivalent: CE has no series relations.</summary>
+    [ObservableProperty]
+    private bool _findRelatedSeriesAutomatically = true;
+
+    partial void OnFindRelatedSeriesAutomaticallyChanged(bool value) => PersistBehaviorSetting(s => s.FindRelatedSeriesAutomatically = value);
 
     partial void OnDontReimportRemovedFilesChanged(bool value) => PersistBehaviorSetting(s => s.DontReimportRemovedFiles = value);
 
@@ -4366,8 +4417,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 return;
             }
 
+            var identityBefore = ReadingListHealingCoordinator.Capture(context,
+                context.Issues.Where(i => i.SeriesId == sourceId || i.SeriesId == targetId).Select(i => i.Id).ToList(),
+                includeSeriesIssues: true);
             SeriesMergeHelper.MergeInto(context, source, target);
             context.SaveChanges();
+            var identityAfter = ReadingListHealingCoordinator.Capture(context, identityBefore.Keys);
+            var changed = ReadingListHealingCoordinator.Changed(identityBefore, identityAfter);
+            ReadingListHealingCoordinator.Report(ReadingListHealingCoordinator.Recheck(_contextFactory, changed));
         }
         catch (DbUpdateException ex)
         {

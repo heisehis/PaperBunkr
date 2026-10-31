@@ -12,6 +12,43 @@ public partial class PdfPageReaderScreen : UserControl
     public PdfPageReaderScreen()
     {
         InitializeComponent();
+        // Books redesign §5.5: the page edges follow wherever (and however large) the page is drawn.
+        PageCanvasControl.LayoutUpdated += (_, _) => SyncPageEdges();
+        PageCanvasControl.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == PageCanvas.PageProperty || e.Property == PageCanvas.ZoomLevelProperty
+                || e.Property == PageCanvas.PanOffsetXProperty || e.Property == PageCanvas.PanOffsetYProperty)
+            {
+                Dispatcher.UIThread.Post(SyncPageEdges, DispatcherPriority.Render);
+            }
+        };
+    }
+
+    private void SyncPageEdges()
+    {
+        var bounds = PageCanvasControl.GetCurrentImageBounds();
+        var origin = PageCanvasControl.TranslatePoint(default, PageEdgesControl) ?? default;
+        var rect = new Rect(bounds.X + origin.X, bounds.Y + origin.Y, bounds.Width, bounds.Height);
+        if (PageEdgesControl.PageBounds != rect)
+        {
+            PageEdgesControl.PageBounds = rect;
+        }
+    }
+
+    private void OnClusterPrevious(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is PdfPageReaderScreenViewModel vm && vm.GoLeftCommand.CanExecute(null))
+        {
+            vm.GoLeftCommand.Execute(null);
+        }
+    }
+
+    private void OnClusterNext(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (DataContext is PdfPageReaderScreenViewModel vm && vm.GoRightCommand.CanExecute(null))
+        {
+            vm.GoRightCommand.Execute(null);
+        }
     }
 
     /// <summary>

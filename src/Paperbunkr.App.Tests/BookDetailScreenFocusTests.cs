@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.VisualTree;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
@@ -117,7 +118,12 @@ public class BookDetailScreenFocusTests : IDisposable
         {
             using var tokens = AppResources();
             int id = AddBook("Dune", realEpub: true);
-            var (window, screen, _, _) = Show(vm => vm.LoadBook(id));
+            // The chapter rows live on the Chapters tab since the Detail tabs (Books Slice 2b); Overview is the default.
+            var (window, screen, _, _) = Show(vm =>
+            {
+                vm.LoadBook(id);
+                vm.ActiveTab = BookDetailTab.Chapters;
+            });
             var rows = Visible(screen, "listRow");
             Assert.True(rows.Count >= 2, $"expected chapter rows, found {rows.Count}");
             rows[0].Focus(NavigationMethod.Directional);

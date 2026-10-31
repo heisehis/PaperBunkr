@@ -53,6 +53,9 @@ public partial class LibraryScreenViewModel
                 return;
             }
 
+            var identityBefore = ReadingListHealingCoordinator.Capture(context,
+                context.Issues.Where(i => sourceIds.Contains(i.SeriesId) || i.SeriesId == targetId).Select(i => i.Id).ToList(),
+                includeSeriesIssues: true);
             targetName = target.Name;
             foreach (var source in context.Series.Include(s => s.Issues).Where(s => sourceIds.Contains(s.Id)).ToList())
             {
@@ -60,6 +63,9 @@ public partial class LibraryScreenViewModel
             }
 
             context.SaveChanges();
+            var identityAfter = ReadingListHealingCoordinator.Capture(context, identityBefore.Keys);
+            var changed = ReadingListHealingCoordinator.Changed(identityBefore, identityAfter);
+            ReadingListHealingCoordinator.Report(ReadingListHealingCoordinator.Recheck(PaperbunkrDb.CreateContext, changed));
         }
         catch (DbUpdateException ex)
         {

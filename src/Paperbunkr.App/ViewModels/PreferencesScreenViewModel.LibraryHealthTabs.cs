@@ -50,11 +50,26 @@ public partial class PreferencesScreenViewModel
     public MetadataConsistencyViewModel MetadataConsistency =>
         _metadataConsistency ??= new MetadataConsistencyViewModel(_contextFactory) { OpenSeries = _openSeries, OpenIssueEditor = _openIssueEditor };
 
+    private BookDuplicatesViewModel? _bookDuplicates;
+
+    /// <summary>The "Duplicate books" section's own view model.</summary>
+    public BookDuplicatesViewModel BookDuplicates => _bookDuplicates ??= new BookDuplicatesViewModel(_contextFactory);
+
+    private ChapterAlignmentViewModel? _chapterAlignment;
+
+    /// <summary>The "Chapter alignment" section's own view model (manga chapters against MangaDex's list).</summary>
+    public ChapterAlignmentViewModel ChapterAlignment => _chapterAlignment ??= new ChapterAlignmentViewModel(_contextFactory) { OpenSeries = _openSeries };
+
     /// <summary>Gives Library Health's rows somewhere to go: a series' Detail page and the issue editor. Called once by the shell.</summary>
     public void AttachNavigation(Action<int> openSeries, Action<int> openIssueEditor)
     {
         _openSeries = openSeries;
         _openIssueEditor = openIssueEditor;
+        if (_chapterAlignment is not null)
+        {
+            _chapterAlignment.OpenSeries = openSeries;
+        }
+
         if (_collectionGaps is not null)
         {
             _collectionGaps.OpenSeries = openSeries;
@@ -85,6 +100,20 @@ public partial class PreferencesScreenViewModel
             if (e.PropertyName == nameof(LibraryHealthSectionState.IsOpen) && LibraryHealthSections.CollectionGaps.IsOpen)
             {
                 CollectionGaps.EnsureScanned();
+            }
+        };
+        LibraryHealthSections.BookDuplicates.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(LibraryHealthSectionState.IsOpen) && LibraryHealthSections.BookDuplicates.IsOpen)
+            {
+                BookDuplicates.EnsureScanned();
+            }
+        };
+        LibraryHealthSections.ChapterAlignment.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(LibraryHealthSectionState.IsOpen) && LibraryHealthSections.ChapterAlignment.IsOpen)
+            {
+                ChapterAlignment.EnsureScanned();
             }
         };
         LibraryHealthSections.MetadataConsistency.PropertyChanged += (_, e) =>

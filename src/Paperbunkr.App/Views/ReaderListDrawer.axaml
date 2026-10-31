@@ -27,12 +27,15 @@
          scrim oversized whenever the window wasn't maximized, visibly extending past the window's
          own edges into the desktop. -->
     <Grid x:Name="OverlayRoot" Width="{Binding #Root.OverlayReference.Bounds.Width}" Height="{Binding #Root.OverlayReference.Bounds.Height}">
-        <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
-        <Border Width="{Binding #Root.DrawerWidth}" HorizontalAlignment="Left" Background="{DynamicResource PbChromeBrush}"
-                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
+        <Border Background="{DynamicResource PbReaderScrimBrush}" PointerPressed="OnScrimPointerPressed" />
+        <!-- A floating card under the navigate cluster (books redesign §5.3), in the book theme's colours: PanelCard's own resources are
+             re-tinted from PanelBackground/PanelForeground by the code-behind, so every token inside reads on the page colour. -->
+        <Border x:Name="PanelCard" Width="{Binding #Root.DrawerWidth}" HorizontalAlignment="Left" Margin="16,72,0,16"
+                Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                CornerRadius="{DynamicResource PbRadiusLg}" BoxShadow="{StaticResource PbElevationShadow}">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Top" Text="{Binding #Root.HeaderText}" FontSize="15" FontWeight="Bold"
-                           Foreground="{DynamicResource PbTextBrush}" Margin="16,18,16,10"
+                <TextBlock DockPanel.Dock="Top" Text="{Binding #Root.HeaderText}" Classes="pbTextTitle bookTitle"
+                           Foreground="{DynamicResource PbTextBrush}" Margin="16,16,16,12"
                            IsVisible="{Binding #Root.HasSearchBox, Converter={x:Static conv:BoolConverters.Not}}" />
                 <TextBox DockPanel.Dock="Top" Classes="searchBox" PlaceholderText="{Binding #Root.SearchBoxWatermark}"
                          Text="{Binding #Root.SearchBoxText, Mode=TwoWay}" Margin="16,16,16,10"

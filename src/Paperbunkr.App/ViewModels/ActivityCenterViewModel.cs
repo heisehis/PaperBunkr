@@ -8,8 +8,8 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Models;
-using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.App.Services;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -36,16 +36,18 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
     private readonly IActivityService _activity;
     private readonly Action<ActivityLink> _followLink;
     private readonly Action<Action> _dispatch;
+    private readonly ITrackerAutoSyncService? _trackerSync;
     private int _historyLoaded;
     private CancellationTokenSource? _historyCts;
 
     /// <param name="dispatch">Marshals the projection rebuild onto the UI thread. Defaults to a <c>Dispatcher.UIThread</c>-aware post; tests pass <c>a =&gt; a()</c>.</param>
     private Services.Scheduling.ISchedulerService? _scheduler;
 
-    public ActivityCenterViewModel(IActivityService activity, Action<ActivityLink> followLink, Services.Scheduling.ISchedulerService? scheduler = null, Action<Action>? dispatch = null)
+    public ActivityCenterViewModel(IActivityService activity, Action<ActivityLink> followLink, Services.Scheduling.ISchedulerService? scheduler = null, Action<Action>? dispatch = null, ITrackerAutoSyncService? trackerSync = null)
     {
         _activity = activity;
         _followLink = followLink;
+        _trackerSync = trackerSync;
         _scheduler = scheduler;
         _dispatch = dispatch ?? (a =>
         {
@@ -59,6 +61,11 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
             }
         });
         _activity.Changed += (_, _) => _dispatch(RebuildProjections);
+        if (_trackerSync is not null)
+        {
+            _trackerSync.RetryQueueChanged += () => _dispatch(RebuildTrackerRetries);
+            RebuildTrackerRetries();
+        }
         RebuildProjections();
         if (scheduler is not null)
         {
@@ -68,6 +75,20 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
 
     /// <summary>The scheduler's enabled tasks, soonest-first - the read-only "Scheduled" drawer tab.</summary>
     public ObservableCollection<UpcomingTaskRow> UpcomingTasks { get; } = new();
+
+    public ObservableCollection<TrackerRetryRow> TrackerRetries { get; } = new();
+    public bool HasTrackerRetries => TrackerRetries.Count > 0;
+
+    private void RebuildTrackerRetries()
+    {
+        TrackerRetries.Clear();
+        if (_trackerSync is null) return;
+        foreach (var item in _trackerSync.GetRetryQueue())
+        {
+            TrackerRetries.Add(new TrackerRetryRow(item, () => _ = _trackerSync.RetryNowAsync(item.Id), () => _trackerSync.DismissRetry(item.Id)));
+        }
+        OnPropertyChanged(nameof(HasTrackerRetries));
+    }
 
     public void AttachScheduler(Services.Scheduling.ISchedulerService scheduler)
     {
@@ -455,6 +476,30 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
             Dispatcher.UIThread.Post(Close);
         }
     }
+}
+
+public sealed class TrackerRetryRow
+{
+    public TrackerRetryRow(TrackerRetryQueueItem item, Action retry, Action dismiss)
+    {
+        SeriesName = item.SeriesName;
+        TrackerName = item.TrackerName;
+        Chapter = item.Chapter is int chapter ? $"Chapter {chapter}" : "Latest progress";
+        State = item.State == TrackerPushRetryState.Exhausted ? "Retries exhausted" : $"Retry due {item.NextAttemptUtc.ToLocalTime():g}";
+        Error = item.LastError ?? string.Empty;
+        IsExhausted = item.State == TrackerPushRetryState.Exhausted;
+        RetryCommand = new RelayCommand(retry);
+        DismissCommand = new RelayCommand(dismiss);
+    }
+
+    public string SeriesName { get; }
+    public string TrackerName { get; }
+    public string Chapter { get; }
+    public string State { get; }
+    public string Error { get; }
+    public bool IsExhausted { get; }
+    public System.Windows.Input.ICommand RetryCommand { get; }
+    public System.Windows.Input.ICommand DismissCommand { get; }
 }
 
 /// <summary>History "type" filter options - values line up with <see cref="ActivityJobKind"/> plus an "All" sentinel of -1.</summary>

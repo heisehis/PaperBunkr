@@ -1,4 +1,6 @@
+using System;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace Paperbunkr.App.Services;
 
@@ -12,6 +14,13 @@ public interface IFilePickerService
 {
     /// <summary>Returns the picked file's local path, or null if the user cancelled.</summary>
     Task<string?> PickOpenFileAsync(string title, string extension, string extensionLabel);
+
+    /// <summary>Returns multiple selected local paths. The default keeps existing picker fakes source-compatible.</summary>
+    async Task<IReadOnlyList<string>> PickOpenFilesAsync(string title, string extension, string extensionLabel)
+    {
+        string? path = await PickOpenFileAsync(title, extension, extensionLabel);
+        return path is null ? Array.Empty<string>() : new[] { path };
+    }
 
     /// <summary>
     /// Plugin-package picker accepting both `.pbplugin` (canonical going forward, implementation plan

@@ -145,8 +145,26 @@ internal sealed class BlockedMetadataReferenceResolver : MetadataReferenceResolv
     public override PortableExecutableReference? ResolveMissingAssembly(MetadataReference definition, AssemblyIdentity referenceIdentity) =>
         PluginSandboxDenylist.IsDenied(referenceIdentity.Name) ? null : _inner.ResolveMissingAssembly(definition, referenceIdentity);
 
-    public override ImmutableArray<PortableExecutableReference> ResolveReference(string reference, string? baseFilePath, MetadataReferenceProperties properties) =>
-        ImmutableArray<PortableExecutableReference>.Empty;
+    /// <summary>
+    /// Every <c>#r</c> resolves to nothing - except one naming an assembly the script is <em>already</em> given (the plugin API and the
+    /// data model), which resolves to that same assembly. That is what lets a scaffolded <c>.csx</c> carry <c>#r</c> lines for an
+    /// editor's IntelliSense (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §A3) without a "metadata file
+    /// not found" error; it can't widen access, because only an already-referenced assembly is ever returned, whatever path was written.
+    /// </summary>
+    public override ImmutableArray<PortableExecutableReference> ResolveReference(string reference, string? baseFilePath, MetadataReferenceProperties properties)
+    {
+        string name = System.IO.Path.GetFileNameWithoutExtension(reference.Trim());
+        System.Reflection.Assembly? already = name switch
+        {
+            "Paperbunkr.Plugins.Abstractions" => typeof(IPluginEnvironment).Assembly,
+            "Paperbunkr.Data" => typeof(Paperbunkr.Data.Entities.Issue).Assembly,
+            _ => null,
+        };
+
+        return already is null || string.IsNullOrEmpty(already.Location)
+            ? ImmutableArray<PortableExecutableReference>.Empty
+            : ImmutableArray.Create(MetadataReference.CreateFromFile(already.Location, properties));
+    }
 
     public override bool Equals(object? other) => other is BlockedMetadataReferenceResolver;
 

@@ -1,6 +1,8 @@
 #nullable enable annotations
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books.Mobi
@@ -55,6 +57,21 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books.Mobi
 		/// <summary>EXTH tag 121 ("KF8 Boundary") - the PDB record index where the KF8 part of a combined MOBI6+KF8 file begins, or null for a MOBI6-only file. Consumed by the (separate, time-boxed) KF8 skeleton reconstruction spike.</summary>
 		public int? Kf8BoundaryRecordIndex { get; }
 
+		/// <summary>EXTH 101 (publisher).</summary>
+		public string? Publisher { get; }
+
+		/// <summary>EXTH 103 (description / blurb).</summary>
+		public string? Description { get; }
+
+		/// <summary>EXTH 104 (ISBN) raw text; callers normalise it.</summary>
+		public string? Isbn { get; }
+
+		/// <summary>EXTH 524 (language).</summary>
+		public string? Language { get; }
+
+		/// <summary>EXTH 105 (subjects), one entry per record.</summary>
+		public IReadOnlyList<string> Subjects { get; }
+
 		public MobiHeaderReader(byte[] record0)
 		{
 			if (record0.Length < 16)
@@ -71,6 +88,11 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books.Mobi
 			string? author = null;
 			int? coverIndex = null;
 			int? kf8Boundary = null;
+			string? publisher = null;
+			string? description = null;
+			string? isbn = null;
+			string? language = null;
+			var subjects = new List<string>();
 
 			bool hasMobiHeader = record0.Length >= MobiIdentifierOffset + 4
 				&& Encoding.ASCII.GetString(record0, MobiIdentifierOffset, 4) == "MOBI";
@@ -131,6 +153,26 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books.Mobi
 									author = author is null ? a : $"{author}; {a}";
 									break;
 
+								case 101: // EXTH_PUBLISHER
+									publisher = Encoding.UTF8.GetString(record0, pos + 8, dataLength).Trim();
+									break;
+
+								case 103: // EXTH_DESCRIPTION
+									description = Encoding.UTF8.GetString(record0, pos + 8, dataLength).Trim();
+									break;
+
+								case 104: // EXTH_ISBN
+									isbn = Encoding.UTF8.GetString(record0, pos + 8, dataLength).Trim();
+									break;
+
+								case 105: // EXTH_SUBJECT - can repeat.
+									subjects.Add(Encoding.UTF8.GetString(record0, pos + 8, dataLength).Trim());
+									break;
+
+								case 524: // EXTH_LANGUAGE
+									language = Encoding.UTF8.GetString(record0, pos + 8, dataLength).Trim();
+									break;
+
 								case 503: // EXTH_UPDATEDTITLE - overrides the PalmDOC full name when present.
 									title = Encoding.UTF8.GetString(record0, pos + 8, dataLength);
 									break;
@@ -155,6 +197,11 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books.Mobi
 			Title = title;
 			Author = author;
 			Kf8BoundaryRecordIndex = kf8Boundary;
+			Publisher = string.IsNullOrWhiteSpace(publisher) ? null : publisher;
+			Description = string.IsNullOrWhiteSpace(description) ? null : description;
+			Isbn = string.IsNullOrWhiteSpace(isbn) ? null : isbn;
+			Language = string.IsNullOrWhiteSpace(language) ? null : language;
+			Subjects = subjects.Where(s => s.Length > 0).ToList();
 		}
 	}
 }

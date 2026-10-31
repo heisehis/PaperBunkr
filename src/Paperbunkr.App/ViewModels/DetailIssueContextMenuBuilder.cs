@@ -48,7 +48,7 @@ public sealed class DetailIssueContextMenuBuilder
                 "Plugins",
                 LibraryPluginChildren(issue),
                 Symbol.Apps,
-                isVisible: _vm.HasLibraryPluginCommands),
+                isVisible: _vm.LibraryPluginCommands.Any(c => c.ShowsInMenu(Paperbunkr.Plugins.Command.MenuNames.Detail))),
         }),
         _ => null,
     };
@@ -56,5 +56,6 @@ public sealed class DetailIssueContextMenuBuilder
     /// <summary>One row per enabled Library-hook plugin command - mirrors
     /// <c>LibraryContextMenuBuilder.LibraryPluginChildren</c>'s own shape (same hook, same host).</summary>
     private IEnumerable<ContextMenuEntry?> LibraryPluginChildren(IssueCardSample issue) =>
-        _vm.LibraryPluginCommands.Select(c => ContextMenuEntry.Item(c.Name, _vm.RunLibraryPluginCommand, (issue, c)));
+        _vm.LibraryPluginCommands.Where(c => c.ShowsInMenu(Paperbunkr.Plugins.Command.MenuNames.Detail))
+            .Select(c => ContextMenuEntry.Item(c.Name, _vm.RunLibraryPluginCommand, (issue, c)));
 }

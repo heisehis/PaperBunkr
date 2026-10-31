@@ -1,8 +1,12 @@
 namespace Paperbunkr.Data.Metadata;
 
-/// <summary>One entry in a Comic Book Reading Orders event timeline: its 1-based position in that list, name, start year and page.</summary>
+/// <summary>A same-time note attached to an entry in a Comic Book Reading Orders event timeline.</summary>
+public sealed record CbroTimelineOverlapNote(string OriginalText, string TargetName, int? TargetYear = null);
+
+/// <summary>One entry in a Comic Book Reading Orders event timeline: its 1-based position in that list, name, start year, page, and source annotations.</summary>
 /// <param name="ListKey">"marvel" or "dc": ranks only compare within one list.</param>
-public sealed record CbroTimelineEntry(string ListKey, int Rank, string Name, int? Year, string? Url);
+public sealed record CbroTimelineEntry(string ListKey, int Rank, string Name, int? Year, string? Url,
+    IReadOnlyList<CbroTimelineOverlapNote>? OverlapNotes = null);
 
 /// <summary>The Comic Book Reading Orders event timelines (docs/superpowers/specs/2026-10-12-continuity-sources-design.md §4.4).</summary>
 public interface ICbroTimeline

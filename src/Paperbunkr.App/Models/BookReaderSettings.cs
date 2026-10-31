@@ -57,8 +57,26 @@ public sealed partial class BookReaderSettings : ObservableObject
     [ObservableProperty]
     private double _pageMargin = 40;
 
+    /// <summary>Justified text (global default + per-book override).</summary>
+    [ObservableProperty]
+    private bool _justify;
+
+    /// <summary>Automatic hyphenation (global default + per-book override).</summary>
+    [ObservableProperty]
+    private bool _hyphenate;
+
+    /// <summary>Stop forcing the reader's own font, size and spacing so the book's own styling shows. Global only.</summary>
+    [ObservableProperty]
+    private bool _usePublisherStyles;
+
+    /// <summary>The installed font used when <see cref="FontFamilyOption"/> is <see cref="BookFontFamilyOption.Custom"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ResolvedFontFamily))]
+    private string? _customFont;
+
     public FontFamily ResolvedFontFamily => FontFamilyOption switch
     {
+        BookFontFamilyOption.Custom when !string.IsNullOrWhiteSpace(CustomFont) => FontFamily.Parse($"{CustomFont},Georgia,Cambria,serif"),
         BookFontFamilyOption.Sans => FontFamily.Parse("Segoe UI,Arial,sans-serif"),
         BookFontFamilyOption.Mono => FontFamily.Parse("Consolas,monospace"),
         BookFontFamilyOption.OpenDyslexic => FontFamily.Parse("OpenDyslexic,Georgia,Cambria,serif"),

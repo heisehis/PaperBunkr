@@ -184,7 +184,7 @@ public class LibraryFolderScanner
         {
             using var context = _contextFactory();
             var healed = Paperbunkr.Data.ReadingLists.Matching.ReadingListHealer.RecheckFor(context, addedIssueIds);
-            if (healed.Relinked > 0)
+            if (healed.Relinked > 0 || healed.NeedChoice > 0 || healed.StillMissing > 0 || healed.AlreadyInList.Count > 0)
             {
                 ReadingListsHealed?.Invoke(healed);
             }
@@ -690,6 +690,7 @@ public class LibraryFolderScanner
         int done = 0;
         int issuesUpdated = 0;
         int lastId = 0;
+        var identityChangedIds = new HashSet<int>();
         progress.Report((0, total));
 
         while (true)
@@ -714,6 +715,8 @@ public class LibraryFolderScanner
                 {
                     break;
                 }
+
+                var identityBefore = ReadingListHealingCoordinator.Capture(context, issues.Select(i => i.Id));
 
                 foreach (var issue in issues)
                 {
@@ -741,6 +744,8 @@ public class LibraryFolderScanner
                 lastId = issues[^1].Id;
                 issuesUpdated += context.ChangeTracker.Entries<Issue>().Count(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Modified);
                 context.SaveChanges();
+                var identityAfter = ReadingListHealingCoordinator.Capture(context, issues.Select(i => i.Id));
+                identityChangedIds.UnionWith(ReadingListHealingCoordinator.Changed(identityBefore, identityAfter));
             }
 
             if (pageCount < PageSize)
@@ -751,6 +756,7 @@ public class LibraryFolderScanner
             SweepPaging.PauseBetweenPages(ct);
         }
 
+        ReadingListHealingCoordinator.Report(ReadingListHealingCoordinator.Recheck(_contextFactory, identityChangedIds.ToList()));
         return new LibraryMetadataSyncResult(issuesUpdated);
     }
 
@@ -787,6 +793,7 @@ public class LibraryFolderScanner
         int done = 0;
         int reassigned = 0;
         int lastId = 0;
+        var identityChangedIds = new HashSet<int>();
         progress.Report((0, total));
 
         while (true)
@@ -809,6 +816,7 @@ public class LibraryFolderScanner
                 }
 
                 lastId = issues[^1].Id;
+                var identityBefore = ReadingListHealingCoordinator.Capture(context, issues.Select(i => i.Id), includeSeriesIssues: true);
                 foreach (var issue in issues)
                 {
                     ct.ThrowIfCancellationRequested();
@@ -834,6 +842,9 @@ public class LibraryFolderScanner
 
                     progress.Report((++done, total));
                 }
+
+                var identityAfter = ReadingListHealingCoordinator.Capture(context, identityBefore.Keys);
+                identityChangedIds.UnionWith(ReadingListHealingCoordinator.Changed(identityBefore, identityAfter));
             }
 
             if (pageCount < PageSize)
@@ -844,6 +855,7 @@ public class LibraryFolderScanner
             SweepPaging.PauseBetweenPages(ct);
         }
 
+        ReadingListHealingCoordinator.Report(ReadingListHealingCoordinator.Recheck(_contextFactory, identityChangedIds.ToList()));
         return new LibrarySeriesResyncResult(reassigned);
     }
 

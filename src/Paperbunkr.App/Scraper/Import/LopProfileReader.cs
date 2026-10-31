@@ -31,6 +31,19 @@ public sealed record LopReadResult(IReadOnlyList<ImportedProfile> Profiles, IRea
 /// </remarks>
 public static class LopProfileReader
 {
+    private static readonly IReadOnlyDictionary<string, string> LegacyEmptyDataNames = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["Language"] = "LanguageISO", ["Format"] = "ShadowFormat", ["Count"] = "ShadowCount",
+        ["Number"] = "ShadowNumber", ["Series"] = "ShadowSeries", ["Title"] = "ShadowTitle", ["Volume"] = "ShadowVolume", ["Year"] = "ShadowYear",
+    };
+
+    private static readonly IReadOnlyDictionary<string, string> LegacyTokenNames = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["SeriesComplete"] = "Series Complete", ["Read"] = "Read Percentage", ["FirstLetter"] = "First Letter",
+        ["AgeRating"] = "Age Rating", ["AlternateSeriesMulti"] = "Alternate Series Multi", ["MonthNumber"] = "Month Number",
+        ["AlternateNumber"] = "Alternate Number", ["StartMonth"] = "Start Month", ["AlternateSeries"] = "Alternate Series",
+        ["ScanInformation"] = "Scan Information", ["StartYear"] = "Start Year", ["AlternateCount"] = "Alternate Count",
+    };
     // The plugin's own illegal-character table (losettings.py:68); Paperbunkr's Sanitizer uses exactly these.
     private static readonly Dictionary<string, string> DefaultIllegalCharacters = new()
     {
@@ -60,8 +73,13 @@ public static class LopProfileReader
             case "Profiles":
                 nodes = root.Elements("Profile");
                 break;
-            case "Settings" or "Setting":
-                return FileError("This is a pre-2.0 Library Organizer profile file, which isn't supported. Open it in Library Organizer 2.x and export it again.");
+            case "Settings":
+                nodes = root.Elements().Where(e => e.Name.LocalName == "Setting")
+                    .Select(e => ConvertLegacyProfile(e, (string?)root.Attribute("Version"))).ToArray();
+                break;
+            case "Setting":
+                nodes = [ConvertLegacyProfile(root)];
+                break;
             default:
                 return FileError("Not a Library Organizer profile file.");
         }
@@ -76,6 +94,11 @@ public static class LopProfileReader
                 (ImportedProfile? profile, string? reason) = ReadProfile(node, name);
                 if (profile is not null)
                 {
+                    if (node.Attribute("LegacyVersion")?.Value is string oldVersion && Version.TryParse(oldVersion, out Version? parsed)
+                        && (parsed.Major < 1 || parsed.Major == 1 && parsed.Minor <= 6))
+                    {
+                        profile = profile with { Notes = profile.Notes.Append("This profile is from Library Organizer 1.6 or earlier; the original plugin documented these versions as only partially supported. Review its converted settings before use.").ToArray() };
+                    }
                     profiles.Add(profile);
                 }
                 else
@@ -93,6 +116,29 @@ public static class LopProfileReader
     }
 
     private static LopReadResult FileError(string message) => new(Array.Empty<ImportedProfile>(), Array.Empty<RejectedProfile>(), message);
+
+    private static XElement ConvertLegacyProfile(XElement source, string? inheritedVersion = null)
+    {
+        XElement profile = new("Profile", source.Attributes().Where(a => a.Name.LocalName != "Version"));
+        foreach (XElement child in source.Elements()) profile.Add(new XElement(child));
+        string versionText = (string?)source.Attribute("Version") ?? inheritedVersion ?? "1.0";
+        profile.SetAttributeValue("LegacyVersion", versionText);
+
+        // The plugin's pre-2.0 update() path renamed metadata tokens and normalized Test mode.
+        if (Text(profile, "Mode") is "Test") profile.Element("Mode")!.Value = "Simulate";
+        foreach (XElement item in profile.Element("EmptyData")?.Elements("Item") ?? Enumerable.Empty<XElement>())
+        {
+            string? oldName = (string?)item.Attribute("Name");
+            if (oldName is not null && LegacyEmptyDataNames.TryGetValue(oldName, out string? converted)) item.SetAttributeValue("Name", converted);
+        }
+        foreach (string section in new[] { "Prefix", "Postfix", "Seperator", "TextBox" })
+        foreach (XElement item in profile.Element(section)?.Elements("Item") ?? Enumerable.Empty<XElement>())
+        {
+            string? oldName = (string?)item.Attribute("Name");
+            if (oldName is not null && LegacyTokenNames.TryGetValue(oldName, out string? converted)) item.SetAttributeValue("Name", converted);
+        }
+        return profile;
+    }
 
     private static (ImportedProfile? Profile, string? RejectedBecause) ReadProfile(XElement node, string name)
     {

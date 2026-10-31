@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:plugins="using:Paperbunkr.App.Plugins"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="400"
+             x:Class="Paperbunkr.App.Views.NewPluginDialogView"
+             x:DataType="vm:NewPluginDialogViewModel">
+
+    <!-- docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §A3 -->
+    <controls:DialogCard Title="New plugin" Subtitle="Creates a starter plugin in your plugins folder." Size="Medium"
+                         CloseCommand="{Binding CancelCommand}">
+        <StackPanel Spacing="16">
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                <StackPanel Grid.Column="0">
+                    <TextBlock Classes="fieldLabel" Text="NAME" />
+                    <TextBox Text="{Binding Name}" AutomationProperties.Name="Plugin name" AutomationProperties.AutomationId="NewPluginName" />
+                </StackPanel>
+                <StackPanel Grid.Column="1">
+                    <TextBlock Classes="fieldLabel" Text="KEY" />
+                    <TextBox Text="{Binding Key}" AutomationProperties.Name="Plugin key" AutomationProperties.AutomationId="NewPluginKey" />
+                </StackPanel>
+            </Grid>
+
+            <StackPanel Spacing="8">
+                <TextBlock Classes="fieldLabel" Text="TEMPLATE" />
+                <Border Classes="segGroup" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Classes="segItem" Classes.active="{Binding IsScriptCSharp}" Content="C# script"
+                                Command="{Binding ChooseTemplateCommand}" CommandParameter="{x:Static plugins:PluginTemplate.ScriptCSharp}" />
+                        <Button Classes="segItem" Classes.active="{Binding IsScriptPython}" Content="Python script"
+                                Command="{Binding ChooseTemplateCommand}" CommandParameter="{x:Static plugins:PluginTemplate.ScriptPython}" />
+                        <Button Classes="segItem" Classes.active="{Binding IsNative}" Content="Native"
+                                Command="{Binding ChooseTemplateCommand}" CommandParameter="{x:Static plugins:PluginTemplate.Native}" />
+                    </StackPanel>
+                </Border>
+                <TextBlock Classes="pbTextMeta" Text="{Binding TemplateNote}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource PbTextMutedBrush}" />
+            </StackPanel>
+
+            <TextBlock Classes="pbTextMeta" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
+        </StackPanel>
+
+        <controls:DialogCard.Footer>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" />
+                <Button Classes="primary" Content="Create" Command="{Binding CreateCommand}" AutomationProperties.AutomationId="NewPluginCreate" />
+            </StackPanel>
+        </controls:DialogCard.Footer>
+    </controls:DialogCard>
+</UserControl>

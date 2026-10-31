@@ -6,351 +6,645 @@
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:books="using:Paperbunkr.App.Controls.Books"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:sys="using:System"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
+             mc:Ignorable="d" d:DesignWidth="1310" d:DesignHeight="768"
              x:Class="Paperbunkr.App.Views.BooksScreen"
              x:DataType="vm:BooksScreenViewModel"
              controls:ContextMenuHost.Provider="{Binding}">
 
+    <!-- The Books screen, "Reading Room with shelves" (docs/superpowers/specs/2026-10-27-books-section-redesign-design.md §3):
+         header (title, count, search, Add books) / tabs row (status tabs + Shelves, Group, Sort, Workspace, view switch; the selection bar
+         replaces it) / scrolling content: the "Now reading" spread + nightstand on the All tab, then the cover grid or the bookshelf.
+         The tabs row sits outside the scroll area so it is always reachable (the spec's "pinned" row, without a duplicate copy). -->
     <UserControl.Styles>
-        <Style Selector="Button.card">
+        <Style Selector="Button.menuRow">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <!-- A-Z rail letters: dim when nothing is filed under them. A mouse shortcut, out of keyboard focus: the keyboard jumps by type-ahead,
+             and a focusable rail sat beside the grid as the arrow keys' nearest neighbour (Up from the first row landed on a letter). -->
+        <Style Selector="Button.alphaLetter">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="4,1" />
+            <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMicro}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Button.alphaLetter.empty">
+            <Setter Property="Opacity" Value="0.3" />
+            <Setter Property="Cursor" Value="Arrow" />
+        </Style>
+        <!-- One book spine: the shared SpineTile draws it; the Button carries click, keyboard and focus. A ghost spine is not a book. -->
+        <Style Selector="Button.spine">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="FocusAdorner" Value="{x:Null}" />
         </Style>
-
-        <!-- Cover treatment shared with Library's 4a poster tiles: token radius + scrim + amber
-             glow ring on hover / keyboard focus. -->
-        <Style Selector="Border.bookCover">
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="ClipToBounds" Value="True" />
-            <!-- A permanent gutter inside the card Button, as LibraryScreen's Border.posterCover has: the Button clips its content to its
-                 bounds, so a ring drawn outside the cover with no room to spread showed as nothing (the cover was flush with the card's edge).
-                 BoxShadow is never transitioned: animating it tears the ring mid-animation (see Primitives.axaml's posterCover note). -->
-            <Setter Property="Margin" Value="4,10,4,4" />
-        </Style>
-        <!-- The ring is a spread-only BoxShadow, which ClipToBounds clips away entirely, so clipping is dropped while it shows (same tradeoff as the Library). -->
-        <Style Selector="Button.card:pointerover Border.bookCover, Button.card:focus-visible Border.bookCover">
-            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
-            <Setter Property="ClipToBounds" Value="False" />
-        </Style>
-
-        <!-- Chrome pills / popups - own copy of the Library toolbar's classes (same per-UserControl
-             precedent LibraryScreen keeps). -->
-        <Style Selector="Button.menuRow">
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-        </Style>
-
-        <!-- Selection checkbox - hidden until hover, forced visible once anything's selected
-             (own copy of LibraryScreen's tileSelect, same per-UserControl precedent). -->
-        <Style Selector="CheckBox.tileSelect">
-            <!-- A mouse affordance: the keyboard selects with Shift+arrows. As a tab stop it also sat "above" the neighbouring card for the arrow keys, so Up from a card landed on the next card's checkbox. -->
-            <Setter Property="Focusable" Value="False" />
-            <Setter Property="Opacity" Value="0" />
-            <Setter Property="Transitions">
-                <Transitions><DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" /></Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Button.card:pointerover CheckBox.tileSelect">
-            <Setter Property="Opacity" Value="1" />
-        </Style>
-        <Style Selector="CheckBox.tileSelect.forceVisible">
-            <Setter Property="Opacity" Value="1" />
-        </Style>
-
-        <Style Selector="Button.selectionAction">
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-        </Style>
-        <Style Selector="Button.bookScanButton">
+        <!-- A bare hit target around content that draws itself (the spread cover, a group header, the "This week" line): not a family button,
+             so it carries no padding, fill or border of its own; the shared focus ring still applies. -->
+        <Style Selector="Button.plainHit">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="8" />
-            <Setter Property="MinWidth" Value="36" />
-            <Setter Property="MinHeight" Value="36" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Padding" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <!-- Toolbar labels shed in narrow windows (code-behind sets .narrow under 1100 px of screen width, .compact under 900). -->
+        <Style Selector=":is(UserControl).narrow TextBlock.toolLabel">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector=":is(UserControl).compact Border.nightstand">
+            <Setter Property="IsVisible" Value="False" />
         </Style>
     </UserControl.Styles>
 
     <UserControl.Resources>
         <DataTemplate x:Key="BookCardTemplate" x:DataType="models:BookCardSample">
-            <Button Classes="card" Width="160" Margin="0,0,16,16"
+            <books:BookCoverCard KeyDown="OnCardKeyDown"
+                                 ClickCommand="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).CardClickCommand}"
+                                 SelectCommand="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).ToggleBookSelectionCheckboxCommand}"
+                                 ForceSelectionVisible="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).HasSelection}" />
+        </DataTemplate>
+
+        <DataTemplate x:Key="BookSpineTemplate" x:DataType="models:BookCardSample">
+            <Button Classes="spine card" Margin="0" Width="{Binding SpineWidth}" VerticalContentAlignment="Stretch" VerticalAlignment="Stretch"
+                    IsHitTestVisible="{Binding !IsGhost}" Focusable="{Binding !IsGhost}"
                     Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).CardClickCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown"
-                    AutomationProperties.AutomationId="BookCard" AutomationProperties.Name="{Binding Title}">
-                <StackPanel Spacing="8">
-                    <Border Classes="bookCover" Background="{Binding CoverBrush}" Height="216">
-                        <Grid>
-                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                            <Border Classes="posterScrim" />
-                            <CheckBox Classes="tileSelect" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="6"
-                                      Classes.forceVisible="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).HasSelection}"
-                                      IsChecked="{Binding IsSelected, Mode=OneWay}"
-                                      Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).ToggleBookSelectionCheckboxCommand}"
-                                      CommandParameter="{Binding}" />
-                        </Grid>
-                    </Border>
-                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
-                               Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap"
-                               MaxLines="2" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{Binding Author}" Classes="pbTextCaption"
-                               TextTrimming="CharacterEllipsis" IsVisible="{Binding Author, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                    <TextBlock Text="{Binding SeriesName}" Classes="pbTextCaption" FontStyle="Italic"
-                               TextTrimming="CharacterEllipsis" IsVisible="{Binding HasSeries}" />
-                </StackPanel>
+                    AutomationProperties.AutomationId="BookSpine" AutomationProperties.Name="{Binding Title}">
+                <ToolTip.Tip>
+                    <StackPanel MaxWidth="260">
+                        <TextBlock Text="{Binding Title}" Classes="pbTextBody bookTitle" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Author}" Classes="pbTextCaption" IsVisible="{Binding Author, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                        <TextBlock Text="{Binding StatusCaption}" Classes="pbTextCaption" IsVisible="{Binding HasStatusCaption}" />
+                    </StackPanel>
+                </ToolTip.Tip>
+                <views:SpineTile />
             </Button>
+        </DataTemplate>
+
+        <!-- A group's header, the same in both views (redesign §3.4): serif title, count, hairline. A series header opens Series mode. -->
+        <DataTemplate x:Key="GroupHeaderTemplate" x:DataType="models:BookCardGroup">
+            <Panel Margin="0,0,0,12">
+                <Button Classes="plainHit" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                        IsVisible="{Binding IsSeries}" ToolTip.Tip="Open this series"
+                        Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).OpenSeriesCommand}"
+                        CommandParameter="{Binding BookSeriesId}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextSection bookTitle" VerticalAlignment="Center" />
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding CountLabel}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        <Border Height="1" VerticalAlignment="Center" Margin="16,0,0,0" Background="{DynamicResource PbBorderBrush}" />
+                    </DockPanel>
+                </Button>
+                <DockPanel IsVisible="{Binding !IsSeries}">
+                    <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextSection bookTitle" VerticalAlignment="Center" />
+                    <TextBlock DockPanel.Dock="Left" Text="{Binding CountLabel}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    <Border Height="1" VerticalAlignment="Center" Margin="16,0,0,0" Background="{DynamicResource PbBorderBrush}" />
+                </DockPanel>
+            </Panel>
         </DataTemplate>
     </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,Auto,*">
 
-        <Border Grid.Row="0" Padding="24,20,24,14" Background="{DynamicResource PbSurface1Brush}">
-            <StackPanel>
-                <TextBlock Text="Books" Classes="pbTextHeading" />
-                <TextBlock Text="Novels — EPUB and PDF" Classes="pbTextCaption" Margin="0,4,0,0" />
+        <!-- ============ Header ============ -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12" Margin="24,20,24,0">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <TextBlock Text="Books" Classes="pbTextHeading" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding HeaderSummary}" Classes="pbTextCaption" VerticalAlignment="Center" Margin="0,4,0,0" />
+            </StackPanel>
+            <TextBox Grid.Column="2" Classes="searchBox" Width="260" Text="{Binding SearchQuery}" PlaceholderText="Search title, author, series…"
+                     AutomationProperties.AutomationId="BooksSearchBox" AutomationProperties.Name="Search books" />
+            <Button Grid.Column="3" x:Name="AddBooksButton" Classes="secondary" Classes.open="{Binding IsAddMenuOpen}"
+                    Command="{Binding ToggleAddMenuCommand}" AutomationProperties.AutomationId="BooksAddButton">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeSm}" />
+                    <TextBlock Text="Add books" VerticalAlignment="Center" />
+                    <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" />
+                </StackPanel>
+            </Button>
+            <!-- Add books: the folder scan plus every other way books come in (Scan left the selection bar and the toolbar). -->
+            <Popup Grid.Column="3" PlacementTarget="{Binding #AddBooksButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+                   IsOpen="{Binding IsAddMenuOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
+                <Border Classes="dropdown" Width="240"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="1">
+                        <Button Classes="menuRow" Command="{Binding ScanBooksCommand}" IsEnabled="{Binding !IsBookFolderOperationRunning}"
+                                AutomationProperties.AutomationId="BooksScanFoldersButton" AutomationProperties.Name="Scan books">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <fi:SymbolIcon Symbol="FolderSearch" FontSize="{StaticResource PbIconSizeSm}" />
+                                <TextBlock Text="Scan book folders now" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="menuRow" Content="Manage folders…" Command="{Binding ManageFoldersCommand}"
+                                AutomationProperties.AutomationId="BooksAddMenu_Folders" />
+                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,4" />
+                        <Button Classes="menuRow" Content="Import from Calibre…" Command="{Binding ImportFromCalibreCommand}"
+                                AutomationProperties.AutomationId="BooksAddMenu_Calibre" />
+                        <Button Classes="menuRow" Content="Browse catalogs…" Command="{Binding BrowseCatalogsCommand}"
+                                AutomationProperties.AutomationId="BooksAddMenu_Catalogs" />
+                    </StackPanel>
+                </ScrollViewer></Border>
+            </Popup>
+        </Grid>
+
+        <!-- ============ Tabs row / selection bar ============
+             The six tab buttons share one StackPanel on purpose: TabStrip.Step groups a strip by visual parent. -->
+        <Panel Grid.Row="1" Margin="24,8,24,0" MinHeight="44">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" IsVisible="{Binding !HasSelection}">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="20" VerticalAlignment="Bottom">
+                        <Button Classes="tab" Classes.active="{Binding StatusTabs[0].IsActive}" Command="{Binding SetStatusTabCommand}"
+                                CommandParameter="{x:Static entities:BooksStatusTab.All}" AutomationProperties.AutomationId="BooksTab_All">
+                            <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="{Binding StatusTabs[0].Label}" /><Border Classes="countPill"><TextBlock Text="{Binding StatusTabs[0].Count}" /></Border></StackPanel>
+                        </Button>
+                        <Button Classes="tab" Classes.active="{Binding StatusTabs[1].IsActive}" Command="{Binding SetStatusTabCommand}"
+                                CommandParameter="{x:Static entities:BooksStatusTab.Reading}" AutomationProperties.AutomationId="BooksTab_Reading">
+                            <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="{Binding StatusTabs[1].Label}" /><Border Classes="countPill"><TextBlock Text="{Binding StatusTabs[1].Count}" /></Border></StackPanel>
+                        </Button>
+                        <Button Classes="tab" Classes.active="{Binding StatusTabs[2].IsActive}" Command="{Binding SetStatusTabCommand}"
+                                CommandParameter="{x:Static entities:BooksStatusTab.WantToRead}" AutomationProperties.AutomationId="BooksTab_WantToRead">
+                            <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="{Binding StatusTabs[2].Label}" /><Border Classes="countPill"><TextBlock Text="{Binding StatusTabs[2].Count}" /></Border></StackPanel>
+                        </Button>
+                        <Button Classes="tab" Classes.active="{Binding StatusTabs[3].IsActive}" Command="{Binding SetStatusTabCommand}"
+                                CommandParameter="{x:Static entities:BooksStatusTab.Unread}" AutomationProperties.AutomationId="BooksTab_Unread">
+                            <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="{Binding StatusTabs[3].Label}" /><Border Classes="countPill"><TextBlock Text="{Binding StatusTabs[3].Count}" /></Border></StackPanel>
+                        </Button>
+                        <Button Classes="tab" Classes.active="{Binding StatusTabs[4].IsActive}" Command="{Binding SetStatusTabCommand}"
+                                CommandParameter="{x:Static entities:BooksStatusTab.Finished}" AutomationProperties.AutomationId="BooksTab_Finished">
+                            <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="{Binding StatusTabs[4].Label}" /><Border Classes="countPill"><TextBlock Text="{Binding StatusTabs[4].Count}" /></Border></StackPanel>
+                        </Button>
+                        <Button Classes="tab" Classes.active="{Binding StatusTabs[5].IsActive}" Command="{Binding SetStatusTabCommand}"
+                                CommandParameter="{x:Static entities:BooksStatusTab.Abandoned}" AutomationProperties.AutomationId="BooksTab_Abandoned">
+                            <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="{Binding StatusTabs[5].Label}" /><Border Classes="countPill"><TextBlock Text="{Binding StatusTabs[5].Count}" /></Border></StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- "Author: X" chip, set from Book Detail's author link. -->
+                    <Border Grid.Column="1" Classes="pbChip" VerticalAlignment="Center" IsVisible="{Binding HasAuthorFilter}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding AuthorFilterLabel}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding AuthorSummary}" Classes="pbTextCaption" VerticalAlignment="Center" />
+                            <ProgressBar Minimum="0" Maximum="1" Value="{Binding AuthorFinishedFraction}" Width="56" Height="4" VerticalAlignment="Center" />
+                            <Button Classes="iconButton sm" Command="{Binding ClearAuthorFilterCommand}" AutomationProperties.Name="Clear author filter"
+                                    AutomationProperties.AutomationId="BooksClearAuthorFilter">
+                                <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <!-- Shelves: built-ins, novel smart lists, collections. A chosen shelf narrows the grid until cleared. -->
+                        <Button x:Name="ShelvesButton" Classes="ghost" Classes.open="{Binding IsShelvesOpen}"
+                                Command="{Binding ToggleShelvesCommand}" AutomationProperties.AutomationId="BooksShelvesButton"
+                                AutomationProperties.Name="{Binding ShelfButtonLabel}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="Library" FontSize="{StaticResource PbIconSizeSm}" />
+                                <TextBlock Classes="toolLabel" Text="{Binding ShelfButtonLabel}" VerticalAlignment="Center" />
+                                <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="iconButton" Command="{Binding ClearShelfCommand}" IsVisible="{Binding HasActiveShelf}"
+                                AutomationProperties.Name="Clear shelf" AutomationProperties.AutomationId="BooksClearShelf">
+                            <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                        </Button>
+                        <Button x:Name="GroupButton" Classes="ghost" Classes.open="{Binding IsGroupOpen}"
+                                Command="{Binding ToggleGroupCommand}" AutomationProperties.AutomationId="BooksGroupButton"
+                                AutomationProperties.Name="{Binding GroupButtonLabel}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="TextBulletList" FontSize="{StaticResource PbIconSizeSm}" />
+                                <TextBlock Classes="toolLabel" Text="{Binding GroupButtonLabel}" VerticalAlignment="Center" />
+                                <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="SortButton" Classes="ghost" Classes.open="{Binding IsSortOpen}"
+                                Command="{Binding ToggleSortCommand}" AutomationProperties.AutomationId="BooksSortButton"
+                                AutomationProperties.Name="{Binding SortButtonLabel}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="ArrowSort" FontSize="{StaticResource PbIconSizeSm}" />
+                                <TextBlock Classes="toolLabel" Text="{Binding SortButtonLabel}" VerticalAlignment="Center" />
+                                <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="WorkspaceButton" Classes="iconButton" Classes.open="{Binding IsWorkspaceOpen}"
+                                Command="{Binding ToggleWorkspaceCommand}" ToolTip.Tip="{Binding ActiveWorkspaceLabel, StringFormat='Workspace: {0}'}"
+                                AutomationProperties.AutomationId="BooksWorkspaceButton" AutomationProperties.Name="Workspaces and list layouts">
+                            <fi:SymbolIcon Symbol="Options" />
+                        </Button>
+                        <Border Classes="segGroup" VerticalAlignment="Center" Margin="4,0,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <Button Classes="segItem" Classes.on="{Binding IsGridView}" ToolTip.Tip="Covers"
+                                        Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:BooksViewMode.Grid}"
+                                        AutomationProperties.AutomationId="BooksViewSwitch_Grid" AutomationProperties.Name="Covers view">
+                                    <fi:SymbolIcon Symbol="Grid" />
+                                </Button>
+                                <Button Classes="segItem" Classes.on="{Binding IsBookshelfView}" ToolTip.Tip="Bookshelf"
+                                        Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:BooksViewMode.Bookshelf}"
+                                        AutomationProperties.AutomationId="BooksViewSwitch_Bookshelf" AutomationProperties.Name="Bookshelf view">
+                                    <fi:SymbolIcon Symbol="Library" />
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Selection bar (redesign §3.2): replaces the tabs row while books are selected, as the Library's does. -->
+            <Border IsVisible="{Binding HasSelection}" Background="{DynamicResource PbAccentSoftBrush}" CornerRadius="{DynamicResource PbRadius}"
+                    BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="0,0,0,1" Padding="12,0">
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Classes="pbTextBody" FontWeight="SemiBold" Text="{Binding SelectionCountLabel}" VerticalAlignment="Center" />
+                        <TextBlock Classes="pbTextCaption" Text="{Binding SelectionOfLabel}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="16,0,0,0" VerticalAlignment="Center">
+                        <Button x:Name="SelectionStatusButton" Classes="ghost" Classes.open="{Binding IsSelectionStatusOpen}"
+                                Command="{Binding ToggleSelectionStatusCommand}" AutomationProperties.AutomationId="BooksSelectionStatus">
+                            <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="Set status" VerticalAlignment="Center" /><fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" /></StackPanel>
+                        </Button>
+                        <Popup PlacementTarget="{Binding #SelectionStatusButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+                               IsOpen="{Binding IsSelectionStatusOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
+                            <Border Classes="dropdown" Width="180"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                <StackPanel Spacing="1">
+                                    <Button Classes="menuRow" Content="Reading" Command="{Binding SetSelectionStatusCommand}" CommandParameter="{x:Static entities:BookReadingStatus.Reading}" />
+                                    <Button Classes="menuRow" Content="Want to read" Command="{Binding SetSelectionStatusCommand}" CommandParameter="{x:Static entities:BookReadingStatus.WantToRead}" />
+                                    <Button Classes="menuRow" Content="Unread" Command="{Binding SetSelectionStatusCommand}" CommandParameter="{x:Static entities:BookReadingStatus.Unread}" />
+                                    <Button Classes="menuRow" Content="Finished" Command="{Binding SetSelectionStatusCommand}" CommandParameter="{x:Static entities:BookReadingStatus.Finished}" />
+                                    <Button Classes="menuRow" Content="Abandoned" Command="{Binding SetSelectionStatusCommand}" CommandParameter="{x:Static entities:BookReadingStatus.Abandoned}" />
+                                </StackPanel>
+                            </ScrollViewer></Border>
+                        </Popup>
+                        <Button x:Name="SelectionRateButton" Classes="ghost" Classes.open="{Binding IsSelectionRateOpen}"
+                                Command="{Binding ToggleSelectionRateCommand}" AutomationProperties.AutomationId="BooksSelectionRate">
+                            <StackPanel Orientation="Horizontal" Spacing="6"><TextBlock Text="Rate" VerticalAlignment="Center" /><fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" /></StackPanel>
+                        </Button>
+                        <Popup PlacementTarget="{Binding #SelectionRateButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+                               IsOpen="{Binding IsSelectionRateOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
+                            <Border Classes="dropdown" Width="160"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                <StackPanel Spacing="1">
+                                    <Button Classes="menuRow" Content="5 stars" Command="{Binding RateSelectionCommand}"><Button.CommandParameter><sys:Single>5</sys:Single></Button.CommandParameter></Button>
+                                    <Button Classes="menuRow" Content="4 stars" Command="{Binding RateSelectionCommand}"><Button.CommandParameter><sys:Single>4</sys:Single></Button.CommandParameter></Button>
+                                    <Button Classes="menuRow" Content="3 stars" Command="{Binding RateSelectionCommand}"><Button.CommandParameter><sys:Single>3</sys:Single></Button.CommandParameter></Button>
+                                    <Button Classes="menuRow" Content="2 stars" Command="{Binding RateSelectionCommand}"><Button.CommandParameter><sys:Single>2</sys:Single></Button.CommandParameter></Button>
+                                    <Button Classes="menuRow" Content="1 star" Command="{Binding RateSelectionCommand}"><Button.CommandParameter><sys:Single>1</sys:Single></Button.CommandParameter></Button>
+                                    <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,4" />
+                                    <Button Classes="menuRow" Content="Clear rating" Command="{Binding RateSelectionCommand}" CommandParameter="{x:Null}" />
+                                </StackPanel>
+                            </ScrollViewer></Border>
+                        </Popup>
+                        <Button Classes="ghost" Content="Match metadata" Command="{Binding MatchSelectionCommand}" AutomationProperties.AutomationId="BooksSelectionMatch" />
+                        <Button Classes="ghost" Content="Edit…" Command="{Binding EditSelectionCommand}" AutomationProperties.AutomationId="BooksSelectionEdit" />
+                    </StackPanel>
+                    <Button Grid.Column="3" Classes="danger" Content="Delete…" Command="{Binding DeleteSelectionCommand}" VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="BooksSelectionDelete" />
+                    <Button Grid.Column="4" Classes="iconButton" Command="{Binding ClearSelectionCommand}" VerticalAlignment="Center"
+                            AutomationProperties.Name="Clear selection" AutomationProperties.AutomationId="BooksSelectionClear">
+                        <fi:SymbolIcon Symbol="Dismiss" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- The toolbar's dropdowns, anchored to their buttons. -->
+            <Popup PlacementTarget="{Binding #WorkspaceButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+                   IsOpen="{Binding IsWorkspaceOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
+                <Border Classes="dropdown" Width="270"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="1">
+                        <TextBlock Classes="pbTextOverline" Text="WORKSPACES" Margin="12,4,12,4" />
+                        <ItemsControl ItemsSource="{Binding Workspaces}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:WorkspaceRow">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Button Grid.Column="0" Classes="menuRow" Classes.active="{Binding IsActive}"
+                                                Content="{Binding Name}"
+                                                Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).ApplyWorkspaceCommand}"
+                                                CommandParameter="{Binding Id}"
+                                                AutomationProperties.AutomationId="{Binding Name, StringFormat='BooksWorkspaceRow_{0}'}" />
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding !IsBuiltIn}">
+                                            <Button AutomationProperties.Name="Move up" Classes="iconButton sm"
+                                                    Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).MoveWorkspaceUpCommand}" CommandParameter="{Binding Id}"><fi:SymbolIcon Symbol="ChevronUp" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                                            <Button AutomationProperties.Name="Move down" Classes="iconButton sm"
+                                                    Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).MoveWorkspaceDownCommand}" CommandParameter="{Binding Id}"><fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                                            <Button AutomationProperties.Name="Rename" Classes="iconButton sm"
+                                                    Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).RenameWorkspaceCommand}" CommandParameter="{Binding Id}"><fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                                            <Button AutomationProperties.Name="Remove" Classes="iconButton sm"
+                                                    Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).DeleteWorkspaceCommand}" CommandParameter="{Binding Id}"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,4" />
+                        <Button Classes="menuRow" Content="Save current view as…" Command="{Binding SaveWorkspaceAsCommand}"
+                                AutomationProperties.AutomationId="BooksWorkspaceSaveAs" />
+                        <Button Classes="menuRow" Content="Reset to default view" Command="{Binding ResetToDefaultViewCommand}"
+                                AutomationProperties.AutomationId="BooksWorkspaceReset" />
+                        <!-- List layouts (docs/superpowers/specs/2026-10-04-list-layouts-design.md): CE's Edit List Layout / Save List Layout /
+                             Edit Layouts / "Set 'X' Layout" items. Applying one copies it onto the list now on screen. -->
+                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,4" />
+                        <TextBlock Classes="pbTextOverline" Text="LIST LAYOUTS" Margin="12,4,12,4" />
+                        <ItemsControl ItemsSource="{Binding ListLayouts.Layouts}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ListLayoutRow">
+                                    <Button Classes="menuRow" Content="{Binding Name}"
+                                            Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).ListLayouts.ApplyLayoutCommand}"
+                                            CommandParameter="{Binding Id}"
+                                            ToolTip.Tip="Use this layout for the current list"
+                                            AutomationProperties.AutomationId="{Binding Name, StringFormat='BooksListLayoutRow_{0}'}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Classes="menuRow" Content="List options…" Command="{Binding ListLayouts.ShowListOptionsCommand}"
+                                AutomationProperties.AutomationId="BooksListOptions" />
+                        <Button Classes="menuRow" Content="Save list layout…" Command="{Binding ListLayouts.SaveLayoutAsCommand}"
+                                AutomationProperties.AutomationId="BooksSaveListLayout" />
+                        <Button Classes="menuRow" Content="Edit layouts…" Command="{Binding ListLayouts.ShowEditLayoutsCommand}"
+                                AutomationProperties.AutomationId="BooksEditLayouts" />
+                        <Button Classes="menuRow" Content="Default layout for this list" Command="{Binding ListLayouts.ResetToDefaultCommand}"
+                                ToolTip.Tip="Forget this list's own layout"
+                                AutomationProperties.AutomationId="BooksDefaultListLayout" />
+                    </StackPanel>
+                </ScrollViewer></Border>
+            </Popup>
+
+            <Popup PlacementTarget="{Binding #GroupButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+                   IsOpen="{Binding IsGroupOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
+                <Border Classes="dropdown" Width="180"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="1">
+                        <Button Classes="menuRow" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.None}}"
+                                Content="None" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.None}" AutomationProperties.AutomationId="BooksGroupOption_None" />
+                        <Button Classes="menuRow" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.Series}}"
+                                Content="Series" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.Series}" AutomationProperties.AutomationId="BooksGroupOption_Series" />
+                        <Button Classes="menuRow" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.Author}}"
+                                Content="Author" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.Author}" AutomationProperties.AutomationId="BooksGroupOption_Author" />
+                        <Button Classes="menuRow" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.Status}}"
+                                Content="Status" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.Status}" AutomationProperties.AutomationId="BooksGroupOption_Status" />
+                        <Button Classes="menuRow" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.Publisher}}"
+                                Content="Publisher" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.Publisher}" AutomationProperties.AutomationId="BooksGroupOption_Publisher" />
+                        <Button Classes="menuRow" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.Language}}"
+                                Content="Language" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.Language}" AutomationProperties.AutomationId="BooksGroupOption_Language" />
+                        <Button Classes="menuRow" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.Genre}}"
+                                Content="Genre" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.Genre}" AutomationProperties.AutomationId="BooksGroupOption_Genre" />
+                    </StackPanel>
+                </ScrollViewer></Border>
+            </Popup>
+
+            <Popup PlacementTarget="{Binding #SortButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+                   IsOpen="{Binding IsSortOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
+                <Border Classes="dropdown" Width="190"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="1">
+                        <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.Title}}"
+                                Content="Title" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.Title}" AutomationProperties.AutomationId="BooksSortOption_Title" />
+                        <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.Author}}"
+                                Content="Author" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.Author}" AutomationProperties.AutomationId="BooksSortOption_Author" />
+                        <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.RecentlyAdded}}"
+                                Content="Recently added" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.RecentlyAdded}" AutomationProperties.AutomationId="BooksSortOption_RecentlyAdded" />
+                        <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.LastOpened}}"
+                                Content="Last opened" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.LastOpened}" AutomationProperties.AutomationId="BooksSortOption_LastOpened" />
+                        <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.Rating}}"
+                                Content="Rating" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.Rating}" AutomationProperties.AutomationId="BooksSortOption_Rating" />
+                        <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.Progress}}"
+                                Content="Progress" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.Progress}" AutomationProperties.AutomationId="BooksSortOption_Progress" />
+                        <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.Publisher}}"
+                                Content="Publisher" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.Publisher}" AutomationProperties.AutomationId="BooksSortOption_Publisher" />
+                        <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.Published}}"
+                                Content="Published" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.Published}" AutomationProperties.AutomationId="BooksSortOption_Published" />
+                        <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.SeriesOrder}}"
+                                Content="Series order" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.SeriesOrder}" AutomationProperties.AutomationId="BooksSortOption_SeriesOrder" />
+                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
+                        <Button Classes="menuRow" Classes.active="{Binding SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Ascending}}"
+                                Command="{Binding ToggleSortDirectionCommand}" AutomationProperties.AutomationId="BooksSortAscending">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><fi:SymbolIcon Symbol="ArrowUp" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Ascending" /></StackPanel>
+                        </Button>
+                        <Button Classes="menuRow" Classes.active="{Binding SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Descending}}"
+                                Command="{Binding ToggleSortDirectionCommand}" AutomationProperties.AutomationId="BooksSortDescending">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><fi:SymbolIcon Symbol="ArrowDown" FontSize="{StaticResource PbIconSizeXs}" /><TextBlock Text="Descending" /></StackPanel>
+                        </Button>
+                    </StackPanel>
+                </ScrollViewer></Border>
+            </Popup>
+
+            <Popup PlacementTarget="{Binding #ShelvesButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+                   IsOpen="{Binding IsShelvesOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
+                <Border Classes="dropdown" Width="240"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="1">
+                        <ItemsControl ItemsSource="{Binding BuiltInShelves}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:BookShelfRow">
+                                    <Button Classes="menuRow" Classes.active="{Binding IsActive}" Content="{Binding Name}"
+                                            Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).SelectShelfCommand}"
+                                            CommandParameter="{Binding}" AutomationProperties.AutomationId="{Binding Name, StringFormat='BooksShelf_{0}'}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel IsVisible="{Binding HasSmartShelves}">
+                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,4" />
+                            <TextBlock Classes="pbTextOverline" Text="SMART SHELVES" Margin="12,4,12,4" />
+                            <ItemsControl ItemsSource="{Binding SmartShelves}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:BookShelfRow">
+                                        <Button Classes="menuRow" Classes.active="{Binding IsActive}" Content="{Binding Name}"
+                                                Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).SelectShelfCommand}"
+                                                CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                        <StackPanel IsVisible="{Binding HasCollectionShelves}">
+                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,4" />
+                            <TextBlock Classes="pbTextOverline" Text="COLLECTIONS" Margin="12,4,12,4" />
+                            <ItemsControl ItemsSource="{Binding CollectionShelves}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:BookShelfRow">
+                                        <Button Classes="menuRow" Classes.active="{Binding IsActive}" Content="{Binding Name}"
+                                                Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).SelectShelfCommand}"
+                                                CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer></Border>
+            </Popup>
+        </Panel>
+
+        <!-- ============ Content ============ -->
+        <ScrollViewer Grid.Row="2" x:Name="ContentScroller">
+            <StackPanel Margin="24,20,24,40" Spacing="24">
+
+                <!-- The "Now reading" spread + nightstand (redesign §3.1). All tab only, nothing narrowing the list. -->
+                <Grid IsVisible="{Binding ShowSpread}" ColumnDefinitions="*,Auto" ColumnSpacing="24">
+                    <books:CoverWash Grid.Column="0" CoverKey="{Binding Spread.Card.CoverKey}" CornerRadius="{DynamicResource PbRadiusLg}"
+                                     BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" Padding="20">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="24">
+                            <Button Grid.Column="0" Classes="plainHit" VerticalAlignment="Top" Command="{Binding OpenSpreadBookCommand}"
+                                    AutomationProperties.AutomationId="BooksSpreadCover" AutomationProperties.Name="{Binding Spread.Card.Title, StringFormat='Open {0}'}">
+                                <Border Width="120" Height="180" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
+                                        Background="{Binding Spread.Card.CoverBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                        controls:SharedElement.Key="{Binding Spread.Card.BookId, StringFormat='book-cover:{0}'}"
+                                        controls:SharedElement.ImageSource="{Binding Spread.Card.CoverImage}">
+                                    <Image Source="{Binding Spread.Card.CoverImage}" Stretch="UniformToFill" />
+                                </Border>
+                            </Button>
+                            <DockPanel Grid.Column="1" MinHeight="180">
+                                <StackPanel DockPanel.Dock="Top" Spacing="4">
+                                    <TextBlock Classes="pbTextOverline" Text="{Binding Spread.Overline}" Foreground="{DynamicResource PbAccentTextBrush}" />
+                                    <TextBlock Classes="pbTextHeading bookTitle" Text="{Binding Spread.Card.Title}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Classes="pbTextMeta" Text="{Binding Spread.Byline}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="12" Margin="0,12,0,0">
+                                    <Button Classes="primary" Content="{Binding Spread.ActionLabel}" Command="{Binding ContinueSpreadCommand}"
+                                            AutomationProperties.AutomationId="BooksSpreadContinue" />
+                                    <TextBlock Classes="pbTextMeta" Text="{Binding Spread.MetaLine}" VerticalAlignment="Center"
+                                               IsVisible="{Binding Spread.HasMetaLine}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <Border Margin="0,12,0,0" Padding="12,0,0,0" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="2,0,0,0"
+                                        VerticalAlignment="Top" IsVisible="{Binding Spread.HasQuote}">
+                                    <TextBlock Classes="bookQuote" Text="{Binding Spread.Quote, StringFormat='“{0}”'}" MaxLines="3" TextTrimming="WordEllipsis" />
+                                </Border>
+                            </DockPanel>
+                        </Grid>
+                    </books:CoverWash>
+
+                    <!-- The nightstand: other books in progress on a little board, and the week's reading. -->
+                    <Border Grid.Column="1" Classes="nightstand" Width="300" VerticalAlignment="Top">
+                        <StackPanel Spacing="8">
+                            <TextBlock Classes="pbTextOverline" Text="ON YOUR NIGHTSTAND" IsVisible="{Binding HasNightstand}" />
+                            <StackPanel IsVisible="{Binding HasNightstand}">
+                                <ItemsControl x:Name="NightstandList" ItemsSource="{Binding Nightstand}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="12" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:BookCardSample">
+                                            <books:BookCoverCard CoverWidth="72" ShowCaptions="False" ToolTip.Tip="{Binding Title}"
+                                                                 ClickCommand="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).OpenSpreadBookCommand}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Border Height="8" CornerRadius="{DynamicResource PbRadiusSm}" Background="{DynamicResource PbSurface3Brush}" />
+                            </StackPanel>
+                            <Button Classes="plainHit" HorizontalAlignment="Left" Command="{Binding OpenInsightsCommand}"
+                                    IsVisible="{Binding HasThisWeek}" ToolTip.Tip="Open Insights" AutomationProperties.AutomationId="BooksThisWeek">
+                                <TextBlock Classes="pbTextCaption" Text="{Binding ThisWeekLine}" TextWrapping="Wrap" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Grid x:Name="ContentGrid">
+                    <!-- ============ Covers ============ -->
+                    <ItemsControl x:Name="FlatGrid" ItemsSource="{Binding Books}" IsVisible="{Binding IsGridUngrouped}"
+                                  controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
+                                  ItemTemplate="{StaticResource BookCardTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel PrefetchDecodeWidth="136" ItemWidth="136" ItemHeight="284" ItemSpacing="16" LineSpacing="16" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+
+                    <ItemsControl x:Name="GroupedGrid" ItemsSource="{Binding Groups}" IsVisible="{Binding IsGridGrouped}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:BookCardGroup">
+                                <StackPanel Margin="0,0,0,24">
+                                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource GroupHeaderTemplate}" />
+                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource BookCardTemplate}"
+                                                  controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).PlayEntranceAnimation}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel PrefetchDecodeWidth="136" ItemWidth="136" ItemHeight="284" ItemSpacing="16" LineSpacing="16" /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- ============ Bookshelf ============ The Library's spines on shelf boards, packed by width. -->
+                    <Grid IsVisible="{Binding IsShelfUngrouped}">
+                        <views:ShelfBoards />
+                        <ItemsControl x:Name="FlatShelf" ItemsSource="{Binding Books}" ItemTemplate="{StaticResource BookSpineTemplate}"
+                                      controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel UseSpineWidths="True" ItemHeight="236" ItemSpacing="3" LineSpacing="0" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </Grid>
+
+                    <ItemsControl x:Name="GroupedShelf" IsVisible="{Binding IsShelfGrouped}" ItemsSource="{Binding Groups}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:BookCardGroup">
+                                <StackPanel Margin="0,0,0,24">
+                                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource GroupHeaderTemplate}" />
+                                    <Grid>
+                                        <views:ShelfBoards />
+                                        <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource BookSpineTemplate}"
+                                                      controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).PlayEntranceAnimation}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel UseSpineWidths="True" ItemHeight="236" ItemSpacing="3" LineSpacing="0" /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
+                                    </Grid>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- ============ Empty states ============ -->
+                    <StackPanel IsVisible="{Binding ShowEmptyLibrary}" Spacing="12" MaxWidth="360" Margin="0,80,0,0"
+                                HorizontalAlignment="Center" VerticalAlignment="Top">
+                        <fi:SymbolIcon FontSize="{StaticResource PbIconSizeXl}" HorizontalAlignment="Center"
+                                       Symbol="Book" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Classes="pbTextBody" Text="No books yet." TextAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <TextBlock Classes="pbTextCaption" TextWrapping="Wrap" TextAlignment="Center"
+                                   Text="Add a book folder in Preferences › Libraries, then scan for novels and non-fiction: EPUB, PDF, FB2, MOBI." />
+                        <Button Classes="secondary" HorizontalAlignment="Center" Content="Open Library settings"
+                                Command="{Binding OpenLibrarySettingsCommand}" AutomationProperties.AutomationId="BooksEmptyStateSettings" />
+                    </StackPanel>
+
+                    <StackPanel IsVisible="{Binding ShowNoMatches}" Spacing="12" MaxWidth="360" Margin="0,80,0,0"
+                                HorizontalAlignment="Center" VerticalAlignment="Top">
+                        <fi:SymbolIcon FontSize="{StaticResource PbIconSizeXl}" HorizontalAlignment="Center"
+                                       Symbol="Search" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Classes="pbTextBody" TextAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}"
+                                   Text="{Binding NoMatchesMessage}" TextWrapping="Wrap" />
+                        <Button Classes="secondary" HorizontalAlignment="Center" Content="Clear search" IsVisible="{Binding HasSearch}"
+                                Command="{Binding ClearSearchCommand}" AutomationProperties.AutomationId="BooksClearSearch" />
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Pinned group header (redesign §3.3, the Library's pattern): the group whose header has scrolled under the top edge. -->
+        <Border x:Name="PinnedGroupHeader" Grid.Row="2" IsVisible="False" IsHitTestVisible="False" VerticalAlignment="Top"
+                Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1"
+                Padding="24,8">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock x:Name="PinnedGroupHeaderText" Classes="pbTextSection bookTitle" VerticalAlignment="Center" />
+                <TextBlock x:Name="PinnedGroupHeaderCount" Classes="pbTextCaption" VerticalAlignment="Center" />
             </StackPanel>
         </Border>
 
-        <!-- ============ Chrome ============ -->
-        <Border Grid.Row="1" Padding="24,10" Background="{DynamicResource PbSurface2Brush}"
-                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,1">
-          <Panel>
-            <!-- Selection action bar - replaces the search/sort/group row while books are selected. -->
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="10" IsVisible="{Binding HasSelection}">
-                <TextBlock Grid.Column="0" Text="{Binding SelectionCountLabel}" VerticalAlignment="Center"
-                           FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                <Button Grid.Column="2" Classes="bookScanButton" Command="{Binding ScanBooksCommand}"
-                        IsEnabled="{Binding !IsBookFolderOperationRunning}"
-                        ToolTip.Tip="Scan configured EPUB and PDF folders"
-                        AutomationProperties.AutomationId="BooksScanFoldersButton" AutomationProperties.Name="Scan books">
-                    <fi:SymbolIcon Symbol="FolderSearch" />
-                </Button>
-                <Button Grid.Column="3" Classes="selectionAction" Content="Edit…" Command="{Binding EditSelectionCommand}"
-                        AutomationProperties.AutomationId="BooksSelectionEdit" />
-                <Button Grid.Column="4" Classes="selectionAction" Content="Delete" Foreground="#E06060"
-                        Command="{Binding DeleteSelectionCommand}" AutomationProperties.AutomationId="BooksSelectionDelete" />
-                <Button Grid.Column="5" Classes="selectionAction" Content="Clear" Command="{Binding ClearSelectionCommand}"
-                        AutomationProperties.AutomationId="BooksSelectionClear" />
-            </Grid>
-
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="10" IsVisible="{Binding !HasSelection}">
-                <Border Grid.Column="0" Background="{DynamicResource PbSurface1Brush}" CornerRadius="{DynamicResource PbRadius}"
-                        BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" Padding="10,0" MaxWidth="360" HorizontalAlignment="Left">
-                    <DockPanel LastChildFill="True">
-                        <fi:SymbolIcon DockPanel.Dock="Left" Symbol="Search" VerticalAlignment="Center" Margin="0,0,8,0" />
-                        <TextBox Classes="bare" Text="{Binding SearchQuery}" PlaceholderText="Search books…" FontSize="13"
-                                 Background="Transparent" BorderThickness="0" VerticalAlignment="Center"
-                                 AutomationProperties.AutomationId="BooksSearchBox" />
-                    </DockPanel>
-                </Border>
-
-                <Button Grid.Column="1" x:Name="WorkspaceButton" Classes="secondary" Classes.open="{Binding IsWorkspaceOpen}"
-                        Command="{Binding ToggleWorkspaceCommand}" VerticalAlignment="Center"
-                        Content="{Binding ActiveWorkspaceLabel, StringFormat='Workspace: {0}'}"
-                        AutomationProperties.AutomationId="BooksWorkspaceButton" />
-                <Button Grid.Column="2" x:Name="GroupButton" Classes="secondary" Classes.open="{Binding IsGroupOpen}"
-                        Command="{Binding ToggleGroupCommand}" VerticalAlignment="Center"
-                        Content="{Binding GroupLabel, StringFormat='Group: {0}'}"
-                        AutomationProperties.AutomationId="BooksGroupButton" />
-                <Button Grid.Column="3" x:Name="SortButton" Classes="secondary" Classes.open="{Binding IsSortOpen}"
-                        Command="{Binding ToggleSortCommand}" VerticalAlignment="Center"
-                        Content="{Binding SortLabel, StringFormat='Sort: {0}'}"
-                        AutomationProperties.AutomationId="BooksSortButton" />
-                <Button Grid.Column="4" Classes="bookScanButton" Command="{Binding ScanBooksCommand}"
-                        IsEnabled="{Binding !IsBookFolderOperationRunning}"
-                        ToolTip.Tip="Scan configured EPUB and PDF folders"
-                        AutomationProperties.AutomationId="BooksScanFoldersButton" AutomationProperties.Name="Scan books">
-                    <fi:SymbolIcon Symbol="FolderSearch" />
-                </Button>
-
-                <Popup PlacementTarget="{Binding #WorkspaceButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
-                       IsOpen="{Binding IsWorkspaceOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
-                    <Border Classes="dropdown" Width="270"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="1">
-                            <ItemsControl ItemsSource="{Binding Workspaces}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="models:WorkspaceRow">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <Button Grid.Column="0" Classes="menuRow" Classes.active="{Binding IsActive}"
-                                                    Content="{Binding Name}"
-                                                    Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).ApplyWorkspaceCommand}"
-                                                    CommandParameter="{Binding Id}"
-                                                    AutomationProperties.AutomationId="{Binding Name, StringFormat='BooksWorkspaceRow_{0}'}" />
-                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding !IsBuiltIn}">
-                                                <Button AutomationProperties.Name="Move up" Classes="iconButton sm"
-                                                        Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).MoveWorkspaceUpCommand}" CommandParameter="{Binding Id}"><fi:SymbolIcon Symbol="ChevronUp" FontSize="{StaticResource PbIconSizeXs}" /></Button>
-                                                <Button AutomationProperties.Name="Move down" Classes="iconButton sm"
-                                                        Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).MoveWorkspaceDownCommand}" CommandParameter="{Binding Id}"><fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" /></Button>
-                                                <Button AutomationProperties.Name="Rename" Classes="iconButton sm"
-                                                        Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).RenameWorkspaceCommand}" CommandParameter="{Binding Id}"><fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeXs}" /></Button>
-                                                <Button AutomationProperties.Name="Remove" Classes="iconButton sm"
-                                                        Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).DeleteWorkspaceCommand}" CommandParameter="{Binding Id}"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
-                                            </StackPanel>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,6" />
-                            <Button Classes="menuRow" Content="Save current view as…" Command="{Binding SaveWorkspaceAsCommand}"
-                                    AutomationProperties.AutomationId="BooksWorkspaceSaveAs" />
-                            <Button Classes="menuRow" Content="Reset to default view" Command="{Binding ResetToDefaultViewCommand}"
-                                    AutomationProperties.AutomationId="BooksWorkspaceReset" />
-                            <!-- List layouts (docs/superpowers/specs/2026-10-04-list-layouts-design.md): CE's Edit List Layout /
-                                 Save List Layout / Edit Layouts / "Set 'X' Layout" items, nested here because this button is on
-                                 both Library and Books. Applying one copies it onto the list now on screen. -->
-                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,6" />
-                            <TextBlock Classes="dropdownRow" Text="List layouts" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
-                            <ItemsControl ItemsSource="{Binding ListLayouts.Layouts}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:ListLayoutRow">
-                                        <Button Classes="menuRow" Content="{Binding Name}"
-                                                Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).ListLayouts.ApplyLayoutCommand}"
-                                                CommandParameter="{Binding Id}"
-                                                ToolTip.Tip="Use this layout for the current list"
-                                                AutomationProperties.AutomationId="{Binding Name, StringFormat='BooksListLayoutRow_{0}'}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <Button Classes="menuRow" Content="List options…" Command="{Binding ListLayouts.ShowListOptionsCommand}"
-                                    AutomationProperties.AutomationId="BooksListOptions" />
-                            <Button Classes="menuRow" Content="Save list layout…" Command="{Binding ListLayouts.SaveLayoutAsCommand}"
-                                    AutomationProperties.AutomationId="BooksSaveListLayout" />
-                            <Button Classes="menuRow" Content="Edit layouts…" Command="{Binding ListLayouts.ShowEditLayoutsCommand}"
-                                    AutomationProperties.AutomationId="BooksEditLayouts" />
-                            <Button Classes="menuRow" Content="Default layout for this list" Command="{Binding ListLayouts.ResetToDefaultCommand}"
-                                    ToolTip.Tip="Forget this list's own layout"
-                                    AutomationProperties.AutomationId="BooksDefaultListLayout" />
-                        </StackPanel>
-</ScrollViewer>
-                    </Border>
-                </Popup>
-
-                <Popup PlacementTarget="{Binding #GroupButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
-                       IsOpen="{Binding IsGroupOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
-                    <Border Classes="dropdown" Width="170"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="1">
-                            <Button Classes="menuRow" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.None}}"
-                                    Content="None" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.None}" AutomationProperties.AutomationId="BooksGroupOption_None" />
-                            <Button Classes="menuRow" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.Series}}"
-                                    Content="Series" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.Series}" AutomationProperties.AutomationId="BooksGroupOption_Series" />
-                            <Button Classes="menuRow" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.Author}}"
-                                    Content="Author" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.Author}" AutomationProperties.AutomationId="BooksGroupOption_Author" />
-                        </StackPanel>
-</ScrollViewer>
-                    </Border>
-                </Popup>
-
-                <Popup PlacementTarget="{Binding #SortButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
-                       IsOpen="{Binding IsSortOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
-                    <Border Classes="dropdown" Width="180"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="1">
-                            <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.Title}}"
-                                    Content="Title" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.Title}" AutomationProperties.AutomationId="BooksSortOption_Title" />
-                            <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.Author}}"
-                                    Content="Author" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.Author}" AutomationProperties.AutomationId="BooksSortOption_Author" />
-                            <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.RecentlyAdded}}"
-                                    Content="Recently added" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.RecentlyAdded}" AutomationProperties.AutomationId="BooksSortOption_RecentlyAdded" />
-                            <Button Classes="menuRow" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.LastOpened}}"
-                                    Content="Last opened" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.LastOpened}" AutomationProperties.AutomationId="BooksSortOption_LastOpened" />
-                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
-                            <Button Classes="menuRow" Classes.active="{Binding SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Ascending}}"
-                                    Content="↑ Ascending" Command="{Binding ToggleSortDirectionCommand}" AutomationProperties.AutomationId="BooksSortAscending" />
-                            <Button Classes="menuRow" Classes.active="{Binding SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Descending}}"
-                                    Content="↓ Descending" Command="{Binding ToggleSortDirectionCommand}" AutomationProperties.AutomationId="BooksSortDescending" />
-                        </StackPanel>
-</ScrollViewer>
-                    </Border>
-                </Popup>
-            </Grid>
-          </Panel>
+        <!-- A-Z jump rail: a letter scrolls to the first book (or group) filed under it. Both views. -->
+        <Border Grid.Row="2" IsVisible="{Binding ShowAlphabetIndex}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="4,8">
+            <ItemsControl x:Name="AlphabetRail" ItemsSource="{Binding AlphabetIndex}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><StackPanel Orientation="Vertical" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:AlphabetIndexEntry">
+                        <Button Classes="alphaLetter" Classes.empty="{Binding !HasItems}"
+                                Content="{Binding Letter}" Click="OnAlphabetIndexLetterClick" Tag="{Binding Letter}"
+                                AutomationProperties.Name="{Binding Letter, StringFormat='Jump to {0}'}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </Border>
-
-        <!-- ============ Content ============ -->
-        <ScrollViewer Grid.Row="2">
-            <Grid x:Name="ContentGrid">
-                <ItemsControl ItemsSource="{Binding Books}" Margin="24,22,24,40" IsVisible="{Binding !IsGrouped}"
-                              controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
-                              ItemTemplate="{StaticResource BookCardTemplate}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
-
-                <ItemsControl ItemsSource="{Binding Groups}" Margin="24,22,24,40" IsVisible="{Binding IsGrouped}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:BookCardGroup">
-                            <StackPanel Margin="0,0,0,18">
-                                <!-- Series section: a clickable header that opens that series' Book Details view.
-                                     Author groups and the "Standalone" bucket (BookSeriesId == null) render the
-                                     same row as an inert DockPanel instead. -->
-                                <Button Margin="0,0,0,12" Padding="0" Background="Transparent" BorderThickness="0"
-                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Cursor="Hand"
-                                        IsVisible="{Binding BookSeriesId, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
-                                        Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).OpenSeriesCommand}"
-                                        CommandParameter="{Binding BookSeriesId}"
-                                        ToolTip.Tip="Open this series">
-                                    <DockPanel>
-                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" />
-                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
-                                        <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
-                                    </DockPanel>
-                                </Button>
-                                <DockPanel Margin="0,0,0,12"
-                                           IsVisible="{Binding BookSeriesId, Converter={x:Static conv:ObjectConverters.IsNull}}">
-                                    <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" />
-                                    <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
-                                    <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
-                                </DockPanel>
-                                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource BookCardTemplate}"
-                                              controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).PlayEntranceAnimation}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                </ItemsControl>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <StackPanel IsVisible="{Binding ShowEmptyLibrary}" Spacing="12" MaxWidth="340"
-                            HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <fi:SymbolIcon FontSize="{StaticResource PbIconSizeXl}" HorizontalAlignment="Center"
-                          Symbol="Book" Foreground="{DynamicResource PbTextFaintBrush}" />
-                    <TextBlock Classes="pbTextBody" Text="No books yet." TextAlignment="Center"
-                               Foreground="{DynamicResource PbTextMutedBrush}" />
-                    <TextBlock Classes="pbTextCaption" TextWrapping="Wrap" TextAlignment="Center"
-                               Text="Add a book folder in Preferences → Libraries, then scan for EPUB and PDF novels." />
-                    <Button Classes="secondary" HorizontalAlignment="Center" Content="Open Library settings"
-                            Command="{Binding OpenLibrarySettingsCommand}"
-                            AutomationProperties.AutomationId="BooksEmptyStateSettings" />
-                </StackPanel>
-
-                <StackPanel IsVisible="{Binding ShowNoMatches}" Spacing="12" MaxWidth="340"
-                            HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <fi:SymbolIcon FontSize="{StaticResource PbIconSizeXl}" HorizontalAlignment="Center"
-                          Symbol="Search" Foreground="{DynamicResource PbTextFaintBrush}" />
-                    <TextBlock Classes="pbTextBody" TextAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}"
-                               Text="{Binding SearchQuery, StringFormat='No books match “{0}”.'}" />
-                    <Button Classes="secondary" HorizontalAlignment="Center" Content="Clear search"
-                            Command="{Binding ClearSearchCommand}" AutomationProperties.AutomationId="BooksClearSearch" />
-                </StackPanel>
-            </Grid>
-        </ScrollViewer>
-
     </Grid>
 </UserControl>

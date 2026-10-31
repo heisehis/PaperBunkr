@@ -14,10 +14,10 @@ public class ScrapeStateTests : AcquisitionTestBase
         Assert.False(settings.AutoChooseTopMatch);
         Assert.True(settings.ConfirmIssueMatch);
         Assert.Equal(100, settings.MaxSearchResults);
-        // CE's update_rating_b defaults off (configuration.py:62, verified) - docs/superpowers/specs/
-        // 2026-09-24-comicvine-scraper-fidelity-design.md §1.3. Every other field defaults on.
-        Assert.Equal(Enum.GetValues<ScrapeField>().Length - 1, settings.EnabledScrapeFields.Count);
-        Assert.DoesNotContain(ScrapeField.CommunityRating, settings.EnabledScrapeFields);
+        // CE's update_rating_b defaults off (configuration.py:62), but Paperbunkr turns it on on purpose: the Insights
+        // "You vs Community" card needs the stored rating (docs/superpowers/specs/2026-10-26-you-vs-community-and-chapter-alignment-design.md).
+        Assert.Equal(Enum.GetValues<ScrapeField>().Length, settings.EnabledScrapeFields.Count);
+        Assert.Contains(ScrapeField.CommunityRating, settings.EnabledScrapeFields);
     }
 
     [Fact]

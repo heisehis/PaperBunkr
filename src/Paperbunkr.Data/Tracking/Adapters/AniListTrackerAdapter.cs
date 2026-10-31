@@ -205,10 +205,16 @@ public sealed class AniListTrackerAdapter : ITrackerAdapter, ITrackerDetailedPus
 
     public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
     {
+        var result = await GetEntryOutcomeAsync(context, link, cancellationToken).ConfigureAwait(false);
+        return result.Succeeded ? result.Value : null;
+    }
+
+    public async Task<TrackerOperationResult<TrackerRemoteEntry>> GetEntryOutcomeAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
         string? accessToken = CredentialStore.Get(context, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken);
         if (string.IsNullOrEmpty(accessToken) || !int.TryParse(link.ExternalId, out int mediaId))
         {
-            return null;
+            return TrackerOperationResult<TrackerRemoteEntry>.Permanent("AniList is not connected or the media id is invalid.");
         }
 
         var request = new HttpRequestMessage(HttpMethod.Post, Endpoint)
@@ -222,20 +228,21 @@ public sealed class AniListTrackerAdapter : ITrackerAdapter, ITrackerDetailedPus
         {
             response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return null;
+            return TrackerOperationClassifier.FromNetworkFailure<TrackerRemoteEntry>(ex);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return null;
+            return TrackerOperationClassifier.Timeout<TrackerRemoteEntry>();
         }
 
         using (response)
         {
             if (!response.IsSuccessStatusCode)
             {
-                return null;
+                string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                return TrackerOperationClassifier.FromHttpFailure<TrackerRemoteEntry>(response, body);
             }
 
             AniListMediaListEntryResponse? parsed;
@@ -247,18 +254,18 @@ public sealed class AniListTrackerAdapter : ITrackerAdapter, ITrackerDetailedPus
             }
             catch (System.Text.Json.JsonException)
             {
-                return null;
+                return TrackerOperationResult<TrackerRemoteEntry>.Permanent("AniList returned an invalid lookup response.");
             }
 
             if (parsed?.Errors is { Count: > 0 })
             {
-                return null;
+                return TrackerOperationResult<TrackerRemoteEntry>.Permanent("AniList rejected the lookup request.");
             }
 
             var entry = parsed?.Data?.Media?.MediaListEntry;
             if (entry is null)
             {
-                return null;
+                return TrackerOperationResult<TrackerRemoteEntry>.Missing();
             }
 
             decimal? score = null;
@@ -270,7 +277,7 @@ public sealed class AniListTrackerAdapter : ITrackerAdapter, ITrackerDetailedPus
 
             DateOnly? finishDate = entry.CompletedAt is { Year: int y, Month: int m, Day: int d } ? new DateOnly(y, m, d) : null;
 
-            return new TrackerRemoteEntry(AniListStatusMapper.FromMediaListStatus(entry.Status), entry.Progress, score, finishDate);
+            return TrackerOperationResult<TrackerRemoteEntry>.Success(new TrackerRemoteEntry(AniListStatusMapper.FromMediaListStatus(entry.Status), entry.Progress, score, finishDate));
         }
     }
 }

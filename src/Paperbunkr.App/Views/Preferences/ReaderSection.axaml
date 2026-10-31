@@ -106,6 +106,26 @@
                         </pref:SettingsRow>
                     </StackPanel>
 
+                    <!-- Books (docs/superpowers/specs/2026-10-27-books-reader-paged-scroll-modes-design.md §6.4): book pages are numbered by word count, so
+                         "p. 214 of 640" stays the same at any font size. A book whose file carries the printed page list uses those numbers instead. -->
+                    <StackPanel Tag="reader.books">
+                        <TextBlock Classes="settingsGroupCaption" Text="BOOKS" />
+                        <pref:SettingsRow Icon="DocumentText" Title="{Binding BookPageWordsMin, StringFormat='Words per book page: at least {0}'}"
+                                          Description="A page ends at the first paragraph end once it has this many words. Applies the next time a book opens.">
+                            <pref:SettingsRow.SettingsContent>
+                                <Slider Minimum="100" Maximum="580" TickFrequency="10" IsSnapToTickEnabled="True"
+                                        Value="{Binding BookPageWordsMin}" Width="220" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="DocumentText" Title="{Binding BookPageWordsMax, StringFormat='Words per book page: at most {0}'}"
+                                          Description="A page never runs past this, except to finish a sentence longer than the page.">
+                            <pref:SettingsRow.SettingsContent>
+                                <Slider Minimum="120" Maximum="600" TickFrequency="10" IsSnapToTickEnabled="True"
+                                        Value="{Binding BookPageWordsMax}" Width="220" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
                 </StackPanel>
             </ScrollViewer>
 

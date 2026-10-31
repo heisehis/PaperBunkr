@@ -156,7 +156,7 @@ public sealed class EventMapEdgeLayer : Control
             int eventOrdinal = 0;
             foreach (var block in layout.Blocks)
             {
-                if (block.Kind != EventMapBlockKind.Event)
+                if (block.Kind is not (EventMapBlockKind.Event or EventMapBlockKind.Unplaced))
                 {
                     continue;
                 }

@@ -100,6 +100,7 @@ public partial class LibraryScreenViewModel
         using (var context = PaperbunkrDb.CreateContext())
         {
             var issues = context.Issues.Include(i => i.Series).Include(i => i.Tags).Where(i => local.Contains(i.Id)).ToList();
+            var identityBefore = ReadingListHealingCoordinator.Capture(context, issues.Select(i => i.Id));
             var fileBefore = new Dictionary<int, MetadataFileFieldSnapshot>();
             foreach (var issue in issues)
             {
@@ -118,6 +119,11 @@ public partial class LibraryScreenViewModel
                     writeBack.Add(issue.Id);
                 }
             }
+
+            var identityAfter = ReadingListHealingCoordinator.Capture(context, issues.Select(i => i.Id));
+            var changedIdentityIds = ReadingListHealingCoordinator.Changed(identityBefore, identityAfter);
+            var healed = ReadingListHealingCoordinator.Recheck(PaperbunkrDb.CreateContext, changedIdentityIds);
+            ReadingListHealingCoordinator.Report(healed);
         }
 
         if (before.Count == 0)

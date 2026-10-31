@@ -272,7 +272,8 @@ public partial class MainWindow : Window
         // Confirm-before-close (on-screen feedback) - only reached once minimize-to-tray has already
         // had first refusal above, so this only ever fires for a close that would actually quit the
         // app; confirming an action that just hides to the tray instead would be pure friction.
-        if (IsConfirmBeforeCloseEnabled())
+        if (IsConfirmBeforeCloseEnabled() || DataContext is MainViewModel { Reading.Review.HasDraft: true }
+            || DataContext is MainViewModel { Reading.Review.IsBusy: true })
         {
             e.Cancel = true;
             _ = ConfirmCloseAndExitAsync();
@@ -290,7 +291,8 @@ public partial class MainWindow : Window
     /// cref="ExitFromTray"/> already uses for the tray's own Exit path.</summary>
     private async Task ConfirmCloseAndExitAsync()
     {
-        bool confirmed = DataContext is MainViewModel vm
+        if (DataContext is MainViewModel reviewVm && !await reviewVm.Reading.Review.ConfirmExitAsync()) return;
+        bool confirmed = IsConfirmBeforeCloseEnabled() && DataContext is MainViewModel vm
             ? await vm.Dialogs.ConfirmAsync("Are you sure you wanna go? (｡•́︿•̀｡)", title: "Confirm Close", confirmLabel: "Close", cancelLabel: "Cancel")
             : true;
 
@@ -332,8 +334,9 @@ public partial class MainWindow : Window
         Activate();
     }
 
-    private void ExitFromTray()
+    private async void ExitFromTray()
     {
+        if (DataContext is MainViewModel vm && !await vm.Reading.Review.ConfirmExitAsync()) return;
         _allowRealClose = true;
         _trayIconService.IsVisible = false;
         if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)

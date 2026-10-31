@@ -1,6 +1,6 @@
 # Tracker auto-push offline and retry queue
 
-Date: 2026-10-25. Status: approved design; written spec awaiting user review.
+Date: 2026-10-25. Status: approved and implemented in the working tree.
 
 Roadmap item 2: persist failed automatic tracker progress pushes and retry safely while PaperBunkr is running. The existing behavior (Activity Center warning plus manual Sync) remains the fallback for failures that are not safe to retry.
 
@@ -95,3 +95,11 @@ Finish with focused Data/App verification, the main `Paperbunkr.App` Debug build
 - Confirmed-missing and permanent lookup errors are distinct from transient lookup failures, resolving the existing nullable lookup contract's offline ambiguity.
 - Retry schedule counts mean five retries after one initial automatic attempt; a manual Retry now does not consume that budget.
 - Persisted queue records, not transient `ActivityAlert` objects, are the source of truth for Activity Center retry status.
+
+## 8. As built (2026-10-25)
+
+- Added `TrackerPushRetry`, its unique per-link table/index, cascade deletion, store operations, target snapshot validation, and target-change cleanup.
+- Added typed lookup and push outcomes across the eight supported adapters. Automatic pushes persist retryable transient lookup/push failures; confirmed missing and permanent failures stay out of scheduled retry work.
+- `TrackerAutoSyncService` now coalesces progress, checks remote state before every retry, resumes due work on launch/network availability/30-second scans, pauses while settings or credentials are unavailable, and owns Retry now/Dismiss actions.
+- Manual two-way sync keeps its existing conflict rules and clears a queued row only after a successful push or pull for that link. The Activity Center Active tab projects queue records with Retry now and exhausted-only Dismiss.
+- Verification: `dotnet build src/Paperbunkr.App/Paperbunkr.App.csproj -c Debug --no-restore` succeeded with 0 errors. Existing ImageSharp license notices and a pre-existing nullable warning remain. `git diff --check` reported no whitespace errors (only existing LF/CRLF notices). Tests and native screen-reader/responsive visual review were not run in this delivery.

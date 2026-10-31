@@ -23,8 +23,12 @@ namespace Paperbunkr.App.ViewModels;
 public partial class ReaderScreenViewModel
 {
     private readonly PagePanelCache _panelCache = new();
-    private int _panelRequestId;
+    private PagePanelDetectionQueue? _panelDetectionQueue;
     private bool? _configuredGuidedView;
+
+    private PagePanelDetectionQueue PanelDetectionQueue => _panelDetectionQueue ??= new(
+        (page, rtl) => PanelAnalyzer(page, rtl),
+        ms => Services.Reader.ReaderPerfStats.Current.RecordPanelDetectionMs(ms));
 
     /// <summary>Detection seam (default: <see cref="PagePanelAnalyzer.Analyze(Bitmap, bool)"/>); tests substitute a fast fake.</summary>
     internal Func<Bitmap, bool, PagePanels> PanelAnalyzer { get; set; } = PagePanelAnalyzer.Analyze;
@@ -76,8 +80,7 @@ public partial class ReaderScreenViewModel
     }
 
     /// <summary>
-    /// Finds the panels of the page on screen in the background (guided view only; the smart double-click asks for them itself). A page seen recently comes from the cache at once. A result that arrives after the page
-    /// changed again is dropped.
+    /// Finds panels for the current page in the background. A page seen recently comes from the cache at once; duplicate requests share one serialized analysis.
     /// </summary>
     private void RequestPanels()
     {
@@ -88,49 +91,61 @@ public partial class ReaderScreenViewModel
 
         int pageIndex = _currentPageIndex;
         bool rtl = PanelsRightToLeft;
+        PanelDetectionQueue.SetCurrent(new PagePanelDetectionKey(issueId, pageIndex, rtl));
         if (_panelCache.TryGet(issueId, pageIndex, rtl, out var cached))
         {
             CurrentPagePanels = cached;
             return;
         }
 
-        int requestId = ++_panelRequestId;
-        var analyzer = PanelAnalyzer;
-        Task.Run(() => analyzer(page, rtl)).ContinueWith(task =>
-        {
-            var panels = task.IsCompletedSuccessfully ? task.Result : PagePanels.Whole;
-            Dispatcher.UIThread.Post(() =>
-            {
-                _panelCache.Set(issueId, pageIndex, rtl, panels);
-                if (requestId == _panelRequestId && _currentPageIndex == pageIndex && IsGuidedView)
-                {
-                    CurrentPagePanels = panels;
-                }
-            });
-        });
+        _ = ResolveAndApplyPanelsAsync(page, issueId, pageIndex, rtl, guidedOnly: true);
     }
 
-    /// <summary>
-    /// Makes <see cref="CurrentPagePanels"/> available now, detecting on the calling thread if it is not cached: the smart double-click when guided view is off. With the ONNX model that is a few
-    /// hundred milliseconds on a cold page (about 150 ms for a webtoon strip), a visible hitch; moving it off the UI thread is part of the deferred performance pass.
-    /// </summary>
+    /// <summary>Requests the current page's panels without blocking the canvas input event.</summary>
     [RelayCommand]
-    private void EnsurePanels()
+    private async Task EnsurePanelsAsync()
     {
         if (CurrentPagePanels is not null || CurrentPage is not { } page || _loadedIssueId is not int issueId)
         {
             return;
         }
 
-        bool rtl = PanelsRightToLeft;
-        if (!_panelCache.TryGet(issueId, _currentPageIndex, rtl, out var panels))
+        await ResolveAndApplyPanelsAsync(page, issueId, _currentPageIndex, PanelsRightToLeft, guidedOnly: false);
+    }
+
+    private async Task<PagePanels?> ResolvePanelsAsync(Bitmap page, int issueId, int pageIndex, bool rtl, bool keepWhenStale = false)
+    {
+        if (_panelCache.TryGet(issueId, pageIndex, rtl, out var cached))
         {
-            panels = PanelAnalyzer(page, rtl);
-            _panelCache.Set(issueId, _currentPageIndex, rtl, panels);
+            return cached;
         }
 
-        CurrentPagePanels = panels;
+        var key = new PagePanelDetectionKey(issueId, pageIndex, rtl);
+        PanelDetectionQueue.SetCurrent(CurrentPage is not null && _loadedIssueId is int currentIssue
+            ? new PagePanelDetectionKey(currentIssue, _currentPageIndex, PanelsRightToLeft)
+            : null);
+        var panels = await PanelDetectionQueue.RequestAsync(key, page, keepWhenStale);
+        // A late interactive/guided result may have been produced from a bitmap the reader disposed
+        // while moving quickly. Only cache while that exact page remains active.
+        if (panels is not null && IsSamePanelPage(page, issueId, pageIndex, rtl))
+        {
+            _panelCache.Set(issueId, pageIndex, rtl, panels);
+        }
+
+        return panels;
     }
+
+    private async Task ResolveAndApplyPanelsAsync(Bitmap page, int issueId, int pageIndex, bool rtl, bool guidedOnly)
+    {
+        var panels = await ResolvePanelsAsync(page, issueId, pageIndex, rtl);
+        if (panels is not null && IsSamePanelPage(page, issueId, pageIndex, rtl) && (!guidedOnly || IsGuidedView))
+        {
+            CurrentPagePanels = panels;
+        }
+    }
+
+    private bool IsSamePanelPage(Bitmap page, int issueId, int pageIndex, bool rtl) =>
+        ReferenceEquals(CurrentPage, page) && _loadedIssueId == issueId && _currentPageIndex == pageIndex && PanelsRightToLeft == rtl;
 
     // ===================== "Show detected panels" tuning overlay (design section 5) =====================
 
@@ -143,7 +158,7 @@ public partial class ReaderScreenViewModel
 
     /// <summary>Detects the panels of the page on screen (if not known) and shows them over the page for about three seconds, so a user can see what guided view and smart zoom would use.</summary>
     [RelayCommand]
-    private void ShowDetectedPanels()
+    private async Task ShowDetectedPanelsAsync()
     {
         if (IsContinuousMode)
         {
@@ -157,12 +172,21 @@ public partial class ReaderScreenViewModel
             return;
         }
 
-        EnsurePanels();
-        if (CurrentPagePanels is null)
+        if (CurrentPage is not { } page || _loadedIssueId is not int issueId)
         {
             return;
         }
 
+        int pageIndex = _currentPageIndex;
+        bool rtl = PanelsRightToLeft;
+        ToastRequested?.Invoke(new ToastRequest("Finding panels…"));
+        var panels = await ResolvePanelsAsync(page, issueId, pageIndex, rtl);
+        if (panels is null || !IsSamePanelPage(page, issueId, pageIndex, rtl))
+        {
+            return;
+        }
+
+        CurrentPagePanels = panels;
         IsPanelFlashVisible = true;
         if (_panelFlashTimer is null)
         {
@@ -182,39 +206,74 @@ public partial class ReaderScreenViewModel
     /// Two files in a new timestamped subfolder: <c>page.png</c> and <c>detection.json</c> (panel rectangles as fractions of the page, in reading order). Nothing leaves the computer.
     /// </summary>
     [RelayCommand]
-    private void ReportBadPanels()
+    private async Task ReportBadPanelsAsync()
     {
         if (CurrentPage is not { } page || _loadedIssueId is not int issueId)
         {
             return;
         }
 
-        EnsurePanels();
-        var panels = CurrentPagePanels ?? PagePanels.Whole;
+        int pageIndex = _currentPageIndex;
+        bool rtl = PanelsRightToLeft;
+        Bitmap reportPage;
         try
         {
-            string folder = Path.Combine(PanelReportFolder(), $"{DateTime.Now:yyyyMMdd-HHmmss}-issue{issueId}-page{_currentPageIndex + 1}");
-            Directory.CreateDirectory(folder);
-            using (var file = File.Create(Path.Combine(folder, "page.png")))
-            {
-                page.Save(file, PngBitmapEncoderOptions.Default);
-            }
-
-            var json = JsonSerializer.Serialize(new
-            {
-                issueId,
-                pageNumber = _currentPageIndex + 1,
-                rightToLeft = PanelsRightToLeft,
-                confident = panels.Confident,
-                modelAvailable = PanelDetectionService.OnnxAvailable,
-                panels = panels.Rects.Select(r => new { r.X, r.Y, r.Width, r.Height }),
-            }, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(Path.Combine(folder, "detection.json"), json);
-            ToastRequested?.Invoke(new ToastRequest("Page saved for panel tuning", folder));
+            // Own the image before leaving the page; the reader may release its decoder bitmap while
+            // inference and PNG writing are still running.
+            reportPage = page.CreateScaledBitmap(page.PixelSize, BitmapInterpolationMode.MediumQuality);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ObjectDisposedException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ObjectDisposedException or InvalidOperationException or ArgumentException)
         {
             ToastRequested?.Invoke(new ToastRequest("Couldn't save the page", ex.Message));
+            return;
+        }
+
+        ToastRequested?.Invoke(new ToastRequest("Preparing panel report…"));
+        try
+        {
+            var panels = await ResolvePanelsAsync(reportPage, issueId, pageIndex, rtl, keepWhenStale: true) ?? PagePanels.Whole;
+            string? folder = null;
+            try
+            {
+                await Task.Run(() =>
+                {
+                    string destination = Path.Combine(PanelReportFolder(), $"{DateTime.Now:yyyyMMdd-HHmmss}-issue{issueId}-page{pageIndex + 1}");
+                    folder = destination;
+                    Directory.CreateDirectory(destination);
+                    using (var file = File.Create(Path.Combine(destination, "page.png")))
+                    {
+                        reportPage.Save(file, PngBitmapEncoderOptions.Default);
+                    }
+
+                    var json = JsonSerializer.Serialize(new
+                    {
+                        issueId,
+                        pageNumber = pageIndex + 1,
+                        rightToLeft = rtl,
+                        confident = panels.Confident,
+                        modelAvailable = PanelDetectionService.OnnxAvailable,
+                        panels = panels.Rects.Select(r => new { r.X, r.Y, r.Width, r.Height }),
+                    }, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(Path.Combine(destination, "detection.json"), json);
+                });
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ObjectDisposedException or InvalidOperationException or ArgumentException)
+            {
+                if (folder is not null)
+                {
+                    try { Directory.Delete(folder, recursive: true); }
+                    catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
+                }
+
+                ToastRequested?.Invoke(new ToastRequest("Couldn't save the page", ex.Message));
+                return;
+            }
+
+            ToastRequested?.Invoke(new ToastRequest("Page saved for panel tuning", folder));
+        }
+        finally
+        {
+            reportPage.Dispose();
         }
     }
 

@@ -121,7 +121,8 @@ public sealed record ExternalMediaMetadata(
     ProviderPublicationDate? PublicationStart = null,
     ProviderPublicationDate? PublicationEnd = null,
     int? Popularity = null,
-    IReadOnlyDictionary<string, string>? AdditionalIdentifiers = null);
+    IReadOnlyDictionary<string, string>? AdditionalIdentifiers = null,
+    int? RatingVoteCount = null);
 
 /// <summary>A provider's partial publication date. Missing components stay unknown rather than becoming January 1.</summary>
 public sealed record ProviderPublicationDate(int? Year, int? Month = null, int? Day = null);

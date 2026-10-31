@@ -16,11 +16,11 @@ internal static class Fb2Fixture
     /// <summary>A trivial 1x1 GIF's bytes, reused only as "some real base64 payload" - the test suite never decodes it as an actual image.</summary>
     private static readonly byte[] s_coverBytes = { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00 };
 
-    public static string Create(string path, string title = "Test Novel", string author = "Ada Author", string? seriesName = null, bool zipWrapped = false, bool malformed = false)
+    public static string Create(string path, string title = "Test Novel", string author = "Ada Author", string? seriesName = null, bool zipWrapped = false, bool malformed = false, string? extraTitleInfo = null, string? publishInfoXml = null)
     {
         string xml = malformed
             ? "<FictionBook><this is not valid xml"
-            : BuildXml(title, author, seriesName);
+            : BuildXml(title, author, seriesName, extraTitleInfo, publishInfoXml);
 
         if (!zipWrapped)
         {
@@ -36,7 +36,7 @@ internal static class Fb2Fixture
         return path;
     }
 
-    private static string BuildXml(string title, string author, string? seriesName)
+    private static string BuildXml(string title, string author, string? seriesName, string? extraTitleInfo = null, string? publishInfoXml = null)
     {
         string[] authorParts = author.Split(' ', 2);
         string firstName = authorParts[0];
@@ -59,10 +59,11 @@ internal static class Fb2Fixture
                     <first-name>{firstName}</first-name>
                     <last-name>{lastName}</last-name>
                   </author>
-            {sequenceMeta}      <coverpage>
+            {sequenceMeta}{extraTitleInfo}      <coverpage>
                     <image l:href="#cover.jpg"/>
                   </coverpage>
                 </title-info>
+            {publishInfoXml}
               </description>
               <body>
                 <section>

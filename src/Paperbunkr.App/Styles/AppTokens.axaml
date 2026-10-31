@@ -77,6 +77,24 @@
     <Color x:Key="PbHeroScrimColor">#59000000</Color>
     <!-- The shade over a Home spotlight sliver: darker than the hero scrim, and dark in every theme because it sits on cover art. -->
     <Color x:Key="PbCoverShadeColor">#8C000000</Color>
+    <!-- Brush form, for the Books cover card's progress track and badge glyphs (books redesign §2): the same fixed shade on every theme. -->
+    <SolidColorBrush x:Key="PbCoverShadeBrush" Color="{StaticResource PbCoverShadeColor}" />
+    <!-- Book reader highlight colours (books redesign §5.1): one place for the popup swatches, the Notes lists and the page's own highlight CSS
+         (which takes them at 55% alpha so text stays readable). Fixed on every theme, like the highlighter pens they stand for. -->
+    <Color x:Key="PbHighlightYellowColor">#FFD54F</Color>
+    <Color x:Key="PbHighlightGreenColor">#81C784</Color>
+    <Color x:Key="PbHighlightBlueColor">#64B5F6</Color>
+    <Color x:Key="PbHighlightPinkColor">#F06292</Color>
+    <SolidColorBrush x:Key="PbHighlightYellowBrush" Color="{StaticResource PbHighlightYellowColor}" />
+    <SolidColorBrush x:Key="PbHighlightGreenBrush" Color="{StaticResource PbHighlightGreenColor}" />
+    <SolidColorBrush x:Key="PbHighlightBlueBrush" Color="{StaticResource PbHighlightBlueColor}" />
+    <SolidColorBrush x:Key="PbHighlightPinkBrush" Color="{StaticResource PbHighlightPinkColor}" />
+    <!-- The dim behind the book reader's panels; lighter than a dialog scrim so the page stays legible behind a floating panel. -->
+    <Color x:Key="PbReaderScrimColor">#66000000</Color>
+    <SolidColorBrush x:Key="PbReaderScrimBrush" Color="{StaticResource PbReaderScrimColor}" />
+
+    <!-- Books CoverWash (books redesign §2): how far the wash pulls a cover's colour toward the accent, 0 (the cover's own colour) to 1 (accent only). -->
+    <x:Double x:Key="PbCoverWashAccentMix">0</x:Double>
     <Color x:Key="PbSkyMorningTopColor">#BFE0FF</Color>
     <Color x:Key="PbSkyMorningBottomColor">#FFE7C9</Color>
     <Color x:Key="PbSkyAfternoonTopColor">#8FC3F2</Color>
@@ -231,6 +249,11 @@
          ApplyFontResource sets that live (it's what "no override" now resolves to; see that
          file's DefaultFontFamily field for why it's set in code, not XAML). -->
     <FontFamily x:Key="PbDisplayFontFamily">avares://Paperbunkr.App/Assets/Fonts/#Bebas Neue</FontFamily>
+
+    <!-- Book titles across the Books section (docs/superpowers/specs/2026-10-27-books-section-redesign-design.md §1). Fixed like
+         PbDisplayFontFamily: ThemeService's body-font override (PbFontFamily) never touches it, so a book title stays serif
+         whatever font the user reads the UI in. Used through the TextBlock.bookTitle modifier class in Styles/Typography.axaml. -->
+    <FontFamily x:Key="PbBookTitleFontFamily">avares://Paperbunkr.App/Assets/Fonts/#Source Serif 4, Georgia, serif</FontFamily>
 
     <!-- Theme typography roles (docs/superpowers/specs/2026-10-12-theme-system-v2-gap-analysis-and-plan.md, phase 3). ThemeService writes
          live values for all of these from the active theme; what is here is only the look before the first apply (and in headless tests

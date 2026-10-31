@@ -195,7 +195,7 @@ public sealed partial class EventMapViewModel
             return $"{source.Rows.Count:N0} issue{(source.Rows.Count == 1 ? "" : "s")} · publication order";
         }
 
-        int events = source.Blocks.Count(b => b.Kind == Services.EventMap.EventMapBlockKind.Event);
+        int events = source.Blocks.Count(b => b.Kind is Services.EventMap.EventMapBlockKind.Event or Services.EventMap.EventMapBlockKind.Unplaced);
         return $"{source.EventIssueCount:N0} issue{(source.EventIssueCount == 1 ? "" : "s")} in {events} event{(events == 1 ? "" : "s")} · "
                + $"{source.LooseIssueCount:N0} outside events";
     }

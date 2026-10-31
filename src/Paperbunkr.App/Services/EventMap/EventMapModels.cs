@@ -37,7 +37,8 @@ public sealed record EventMapRow(
     IReadOnlyList<EventMapEventRef>? AlsoIn = null,
     bool OutsideContinuity = false,
     int BlockIndex = 0,
-    int? SortDate = null);
+    int? SortDate = null,
+    IReadOnlyList<string>? OwnerEventCbroNotes = null);
 
 /// <summary>An event named on a continuity-map card ("Event", "Also in") or in the Events picker.</summary>
 public sealed record EventMapEventRef(int Id, string Name);
@@ -53,6 +54,9 @@ public enum EventMapBlockKind
 
     /// <summary>Publication order (a continuity with no events): one calendar year, or "Undated".</summary>
     Year,
+
+    /// <summary>An event with no usable date/rank and no directional relation; these blocks follow the ordered chronology.</summary>
+    Unplaced,
 }
 
 /// <summary>A run of consecutive rows/columns on a continuity map, labelled on the ruler's band row.</summary>
@@ -62,7 +66,16 @@ public sealed record EventMapBlock(int Index, EventMapBlockKind Kind, string Lab
 /// A relation drawn between two event bands on the ruler (§4). <see cref="IsOrdered"/> connectors run earlier → later with an arrow;
 /// Crossovers are unordered and drawn as a bracket. <see cref="IsYours"/> draws solid, otherwise dashed (inferred or Wikidata).
 /// </summary>
-public sealed record EventMapConnector(int FromBlock, int ToBlock, string Label, bool IsOrdered, bool IsYours, string Tooltip);
+public enum EventMapConnectorKind
+{
+    Relation,
+    Overlap,
+}
+
+public sealed record EventMapConnector(int FromBlock, int ToBlock, string Label, bool IsOrdered, bool IsYours, string Tooltip,
+    EventMapConnectorKind Kind = EventMapConnectorKind.Relation);
+
+public sealed record CbroOverlapNoteData(string OriginalText, string TargetName, int? TargetYear = null);
 
 /// <summary>
 /// A continuity-map lane: a series, flagged when it isn't a member of the continuity. <see cref="ContinuesAs"/> names the lane right below

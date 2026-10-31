@@ -330,6 +330,7 @@ public partial class StatsScreenViewModel
         {
             _ = LoadSlotAsync(_affinitySlot, () => { using var c = PaperbunkrDb.CreateContext(); return AffinityResolver.Build(c); },
                 v => Affinity = v);
+            LoadCommunity();
         }
     }
 
@@ -366,6 +367,8 @@ public partial class StatsScreenViewModel
         _dropOffSlot.Generation++;
         _affinitySlot.Loaded = false;
         _affinitySlot.Generation++;
+        _communitySlot.Loaded = false;
+        _communitySlot.Generation++;
     }
 
     /// <summary>The library changed (scan, import, delete): storage totals and duplicate savings are stale.</summary>

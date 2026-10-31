@@ -4,6 +4,8 @@
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:reader="using:Paperbunkr.App.Views.Reader"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="600"
@@ -40,12 +42,32 @@
                 <Setter Property="Margin" Value="0,0,0,12" />
             </Style>
         </Grid.Styles>
-        <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
-            <Border HorizontalAlignment="Left" Width="340" Background="{Binding #Root.SheetBackground}"
-                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
-                    Padding="16,18">
+        <Border Background="{DynamicResource PbReaderScrimBrush}" PointerPressed="OnScrimPointerPressed" />
+            <!-- A floating card under the actions cluster (books redesign §5.3), its tokens re-tinted from the book theme in code-behind. -->
+            <Border x:Name="SheetCard" HorizontalAlignment="Right" Width="360" Margin="0,72,16,16" Background="{DynamicResource PbChromeBrush}"
+                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusLg}"
+                    BoxShadow="{StaticResource PbElevationShadow}" Padding="16">
                 <ScrollViewer>
                 <StackPanel Spacing="14">
+
+                    <!-- Paged or scroll (docs/superpowers/specs/2026-10-27-books-reader-paged-scroll-modes-design.md §5): app-wide, remembered. -->
+                    <Border Classes="card" IsVisible="{Binding #Root.HasReadingAids}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Classes="cardTitle" Text="LAYOUT" Foreground="{Binding #Root.SheetForeground}" />
+                            <Border Classes="segGroup" HorizontalAlignment="Stretch">
+                                <UniformGrid Rows="1" ColumnSpacing="2">
+                                    <Button Classes="segItem" Classes.on="{Binding #Root.LayoutPaged}" Content="Paged" HorizontalAlignment="Stretch"
+                                            Command="{Binding #Root.SetLayoutCommand}" CommandParameter="{x:Static entities:BookReaderLayout.Paged}"
+                                            AutomationProperties.AutomationId="BookReaderLayout_Paged" />
+                                    <Button Classes="segItem" Classes.on="{Binding !#Root.LayoutPaged}" Content="Scroll" HorizontalAlignment="Stretch"
+                                            Command="{Binding #Root.SetLayoutCommand}" CommandParameter="{x:Static entities:BookReaderLayout.Scroll}"
+                                            AutomationProperties.AutomationId="BookReaderLayout_Scroll" />
+                                </UniformGrid>
+                            </Border>
+                            <TextBlock Classes="fieldLabel" TextWrapping="Wrap" Foreground="{Binding #Root.SheetForeground}"
+                                       Text="Paged shows one screen at a time and starts every chapter on a new page. Scroll shows a chapter as one long page." />
+                        </StackPanel>
+                    </Border>
 
                     <Border Classes="card" IsVisible="{Binding #Root.HasTypographyControls}">
                         <StackPanel Spacing="14">
@@ -93,6 +115,71 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Slice 3b (docs/superpowers/specs/2026-10-27-books-slice3b-reader-typography-aids-design.md §3). Justify and
+                         hyphenation are per-book (global default + override); the book's-own-styling switch and the installed font are global. -->
+                    <Border Classes="card" IsVisible="{Binding #Root.HasTypographyControls}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Classes="cardTitle" Text="TEXT" Foreground="{Binding #Root.SheetForeground}" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Justify text" VerticalAlignment="Center" Foreground="{Binding #Root.SheetForeground}" Margin="0,0,8,0" />
+                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding #Root.Settings.Justify}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Hyphenate" VerticalAlignment="Center" Foreground="{Binding #Root.SheetForeground}" Margin="0,0,8,0" />
+                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding #Root.Settings.Hyphenate}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Use the book's own styling" VerticalAlignment="Center" Foreground="{Binding #Root.SheetForeground}" Margin="0,0,8,0" />
+                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding #Root.Settings.UsePublisherStyles}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </Grid>
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="fieldLabel" Text="Font from this machine" Foreground="{Binding #Root.SheetForeground}" />
+                                <controls:SuggestBox IsStrict="True" Watermark="Choose an installed font"
+                                                     Text="{Binding #Root.Settings.CustomFont}"
+                                                     Suggestions="{x:Static views:ReaderSettingsSheet.InstalledFonts}" />
+                            </StackPanel>
+                            <TextBlock Classes="fieldLabel" TextWrapping="Wrap" Foreground="{Binding #Root.SheetForeground}"
+                                       Text="Justify and hyphenation can differ per book. The styling switch and the font are global. The book's own styling covers what is written inside its chapters; a separate stylesheet file is not loaded." />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="card" IsVisible="{Binding #Root.HasReadingAids}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Classes="cardTitle" Text="READING AIDS" Foreground="{Binding #Root.SheetForeground}" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Line ruler" VerticalAlignment="Center" Foreground="{Binding #Root.SheetForeground}" Margin="0,0,8,0" />
+                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding #Root.RulerOn}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Auto-scroll" VerticalAlignment="Center" Foreground="{Binding #Root.SheetForeground}" Margin="0,0,8,0"
+                                           ToolTip.Tip="Scroll layout only: paged reading turns pages instead." />
+                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding #Root.AutoScrollOn}" IsEnabled="{Binding !#Root.LayoutPaged}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Look up unknown words online" VerticalAlignment="Center" Foreground="{Binding #Root.SheetForeground}" Margin="0,0,8,0"
+                                           ToolTip.Tip="Sends the selected word to dictionaryapi.dev when the offline dictionary has no entry." />
+                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding #Root.LookUpOnline}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="card" IsVisible="{Binding #Root.HasSpeech}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Classes="cardTitle" Text="READ ALOUD" Foreground="{Binding #Root.SheetForeground}" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Read this chapter aloud" VerticalAlignment="Center" Foreground="{Binding #Root.SheetForeground}" Margin="0,0,8,0" />
+                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding #Root.SpeakOn}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </Grid>
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="fieldLabel" Text="Voice" Foreground="{Binding #Root.SheetForeground}" />
+                                <controls:SuggestBox IsStrict="True" Watermark="System default" Text="{Binding #Root.SpeechVoice}"
+                                                     Suggestions="{Binding #Root.SpeechVoices}" />
+                            </StackPanel>
+                            <TextBlock Classes="fieldLabel" TextWrapping="Wrap" Foreground="{Binding #Root.SheetForeground}"
+                                       Text="Reads from the top of the page, one paragraph at a time, and stops at the end of the chapter. Speed: Ctrl+Up / Ctrl+Down while reading." />
+                        </StackPanel>
+                    </Border>
+
                     <Border Classes="card" IsVisible="{Binding #Root.HasTypographyControls}">
                         <StackPanel Spacing="14">
                             <TextBlock Classes="cardTitle" Text="SPACING &amp; MARGINS" Foreground="{Binding #Root.SheetForeground}" />
@@ -118,12 +205,9 @@
                     <Border Classes="card">
                         <StackPanel Spacing="14">
                             <TextBlock Classes="cardTitle" Text="THEME" Foreground="{Binding #Root.SheetForeground}" />
-                            <!-- Active-swatch ring omitted here (a real, disclosed simplification): a
-                                 generic ItemsControl over ThemeOptions can't cleanly compare each item
-                                 against #Root.Settings.Theme without a MultiBinding/converter pair this
-                                 pass didn't add - clicking still sets the theme via SetThemeCommand,
-                                 only the "which one is active" ring is missing. -->
-                            <ItemsControl ItemsSource="{Binding #Root.ThemeOptions}">
+                            <!-- The active theme's swatch carries an accent ring (books redesign §5.3). -->
+                            <!-- Tag carries the sheet: the content is moved into its own window when open, so the template cannot find the sheet as an ancestor. -->
+                            <ItemsControl ItemsSource="{Binding #Root.ThemeOptions}" Tag="{Binding #Root}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
                                         <StackPanel Orientation="Horizontal" Spacing="10" />
@@ -131,18 +215,27 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="entities:BookTheme">
-                                        <Button Classes="chromeIcon" Width="44" Height="44" Padding="0"
-                                                Command="{Binding #Root.SetThemeCommand}" CommandParameter="{Binding}"
+                                        <Button Classes="chromeIcon" Width="44" Height="44" Padding="0" x:CompileBindings="False"
+                                                Command="{Binding Tag.SetThemeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"
                                                 AutomationProperties.Name="{Binding}">
-                                            <Border Classes="themeSwatch" Background="{Binding Converter={x:Static views:BookThemeSwatchConverter.Instance}}" />
+                                            <Border CornerRadius="{DynamicResource PbRadius}" BorderThickness="2" Padding="2">
+                                                <Border.BorderBrush>
+                                                    <MultiBinding Converter="{x:Static reader:ActiveSwatchRingConverter.Instance}">
+                                                        <Binding />
+                                                        <Binding Path="Tag.Settings.Theme" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                    </MultiBinding>
+                                                </Border.BorderBrush>
+                                                <Border Classes="themeSwatch" Background="{Binding Converter={x:Static views:BookThemeSwatchConverter.Instance}}" />
+                                            </Border>
                                         </Button>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
                             <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding #Root.HasAutoHideToggle}">
-                                <TextBlock Grid.Column="0" Text="Auto-hide toolbar when idle" VerticalAlignment="Center" Foreground="{Binding #Root.SheetForeground}" Margin="0,0,8,0" />
-                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding #Root.AutoHideToggle}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                                <TextBlock Grid.Column="0" Text="Keep toolbar visible" VerticalAlignment="Center" Foreground="{Binding #Root.SheetForeground}" Margin="0,0,8,0" />
+                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding #Root.AutoHideToggle, Converter={x:Static reader:InvertBoolConverter.Instance}, Mode=TwoWay}"
+                                              OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.Name="Keep toolbar visible" />
                             </Grid>
                         </StackPanel>
                     </Border>

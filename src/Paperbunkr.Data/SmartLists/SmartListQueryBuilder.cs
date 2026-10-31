@@ -50,7 +50,8 @@ internal static class SmartListQueryBuilder
 
     /// <summary>The four CE "Series: …" fields, which read figures computed over the whole library rather than one issue.</summary>
     private static bool IsSeriesStatField(SmartListField field) =>
-        field is SmartListField.SeriesLastNumber or SmartListField.SeriesMaxYear or SmartListField.SeriesMaxCount or SmartListField.SeriesMaxGapSize;
+        field is SmartListField.SeriesLastNumber or SmartListField.SeriesMaxYear or SmartListField.SeriesMaxCount or SmartListField.SeriesMaxGapSize
+            or SmartListField.SeriesLastAddedTime or SmartListField.SeriesLastOpenedTime or SmartListField.SeriesLastPublishedTime or SmartListField.SeriesLastReleasedTime;
 
     /// <summary>
     /// Loads the issue set plus the derived data any of <paramref name="conditions"/> reference.
@@ -209,6 +210,8 @@ internal static class SmartListQueryBuilder
 
         if (IsSeriesStatField(condition.Field))
         {
+            if (condition.Field is SmartListField.SeriesLastAddedTime or SmartListField.SeriesLastOpenedTime or SmartListField.SeriesLastPublishedTime or SmartListField.SeriesLastReleasedTime)
+                return SmartListLeafEvaluator.EvaluateDate(SeriesDateValue(issue, condition.Field, ctx.SeriesStats), condition);
             return SmartListLeafEvaluator.EvaluateNumber(SeriesStatValue(issue, condition.Field, ctx.SeriesStats), condition);
         }
 
@@ -269,6 +272,23 @@ internal static class SmartListQueryBuilder
     private static bool EvaluateCustomValue(Issue issue, SmartListCondition c)
     {
         var match = issue.CustomValues.FirstOrDefault(cv => cv.Name == c.CustomValueName);
+
+        // A plugin smart field (Plugin API 4.5, docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §D1) compares
+        // as its declared type. Unlike text, a missing or unreadable number/date/toggle has nothing to compare and never matches.
+        if (PluginFieldTypeRegistry.TryGet(c.CustomValueName, out var pluginField) && pluginField.Type != SmartListDataType.Text)
+        {
+            string? raw = match?.Value;
+            return pluginField.Type switch
+            {
+                SmartListDataType.Number => float.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float n)
+                                            && SmartListLeafEvaluator.EvaluateNumber(n, c),
+                SmartListDataType.Date => DateTime.TryParseExact(raw, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime d)
+                                          && SmartListLeafEvaluator.EvaluateDate(d, c),
+                SmartListDataType.Toggle => bool.TryParse(raw, out bool b) && SmartListLeafEvaluator.EvaluateToggle(b, c),
+                _ => false,
+            };
+        }
+
         return SmartListLeafEvaluator.EvaluateText(match?.Value ?? string.Empty, c);
     }
 
@@ -286,6 +306,18 @@ internal static class SmartListQueryBuilder
             SmartListField.SeriesMaxYear => s.MaxYear,
             SmartListField.SeriesMaxCount => s.MaxCount,
             _ => s.MaxGapSize,
+        };
+    }
+
+    private static DateTime? SeriesDateValue(Issue issue, SmartListField field, Dictionary<SeriesStatistics.Key, SeriesStatistics.Stats>? stats)
+    {
+        if (stats is null || !stats.TryGetValue(SeriesStatistics.KeyOf(issue), out var s)) return null;
+        return field switch
+        {
+            SmartListField.SeriesLastAddedTime => s.LastAdded,
+            SmartListField.SeriesLastOpenedTime => s.LastOpened,
+            SmartListField.SeriesLastPublishedTime => s.LastPublished,
+            _ => s.LastReleased,
         };
     }
 

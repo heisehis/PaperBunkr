@@ -56,6 +56,26 @@ public sealed class PaperbunkrPluginEnvironment : IPluginEnvironment
     /// <summary>Built per access for the same reason as <see cref="Activity"/>: only <see cref="PluginKey"/> differs between the per-command clones.</summary>
     public IPluginLogger Log => new PluginLogger(LogFiles, PluginKey);
 
+    // ---- Plugin API 4.5 (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md) - built per access, like Log ----
+
+    /// <summary>The plugin's declared <c>&lt;Fields&gt;</c>; the host wires it to the engine's discovery.</summary>
+    public Func<string, PluginFieldSchema?> FieldSchemaFor { get; init; } = _ => null;
+
+    /// <summary>The plugin's declared <c>&lt;Network&gt;</c> hosts; the host wires it to the engine's discovery.</summary>
+    public Func<string, IReadOnlyList<string>> NetworkHostsFor { get; init; } = _ => Array.Empty<string>();
+
+    /// <summary>Where <c>Environment.Providers</c> registrations land.</summary>
+    public PluginProviderRegistry ProviderRegistry { get; init; } = PluginProviderRegistry.Shared;
+
+    /// <summary>Where field values are stored. Tests point it at their own database.</summary>
+    public Func<Paperbunkr.Data.PaperbunkrDbContext> CreateContext { get; init; } = PaperbunkrDb.CreateContext;
+
+    public IPluginFields Fields => new PluginFieldsAdapter(CreateContext, FieldSchemaFor(PluginKey), PluginKey, Log);
+
+    public IPluginProviders Providers => ProviderRegistry.ForPlugin(PluginKey);
+
+    public IPluginHttp Http => new PluginHttp(NetworkHostsFor(PluginKey), PluginKey, Log);
+
     public string CommandPath { get; set; } = string.Empty;
 
     public string PluginKey { get; set; } = string.Empty;

@@ -14,6 +14,7 @@ using Paperbunkr.Data.ComicVine;
 using Paperbunkr.Data.ComicVine.Scraping;
 using Paperbunkr.Data.Credentials;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Events;
 using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Scraper;
@@ -65,12 +66,26 @@ public sealed class ScrapeCoordinator(
     public async Task<string> ScrapeIssuesAsync(IReadOnlyList<int> issueIds, bool isInteractive = true, CancellationToken cancellationToken = default, IActivityJobHandle? existingJob = null,
         string jobKind = "Selection", ScrapeJobRecord? resuming = null)
     {
-        List<Issue> books;
-        ScrapeSettings settings;
-        using (var context = createContext())
+        // Off the UI thread: SQLite's "async" calls complete synchronously, so this (and the orchestrator below) would otherwise run inside
+        // the click that started the scrape. A plain await, so the rest of the method still resumes on the UI thread (BeginBatch needs it).
+        var (books, settings, identityBefore) = await Task.Run(() =>
         {
-            books = context.Issues.Include(i => i.Series).Where(i => issueIds.Contains(i.Id)).ToList();
-            settings = ScrapeSettings.Load(context);
+            using var context = createContext();
+            var loaded = context.Issues.Include(i => i.Series).Where(i => issueIds.Contains(i.Id)).ToList();
+            return (loaded, ScrapeSettings.Load(context), ReadingListHealingCoordinator.Capture(context, loaded.Select(i => i.Id), includeSeriesIssues: true));
+        }, cancellationToken);
+
+        string? RecheckChangedIdentities()
+        {
+            using var context = createContext();
+            var identityAfter = ReadingListHealingCoordinator.Capture(context, identityBefore.Keys);
+            var changed = ReadingListHealingCoordinator.Changed(identityBefore, identityAfter);
+            if (changed.Count == 0)
+            {
+                return null;
+            }
+
+            return ReadingListHealingCoordinator.Summary(ReadingListHealingCoordinator.Recheck(createContext, changed));
         }
 
         // Starts on the source most of these comics were last scraped from (an id from one source means nothing on the other), else the default from
@@ -94,7 +109,7 @@ public sealed class ScrapeCoordinator(
             getCoverPath: _getCoverPath)
         {
             // The other source's copy of each issue, for per-field source choices and Metron's blanks (spec C section 4).
-            SecondaryDetails = CreateSecondaryDetails(settings),
+            SecondaryDetails = CreateSecondaryDetails(settings, priority),
         };
         // A scheduled task already has its own Activity Center job; it lends it here so one run is one job, and settles it itself.
         string? jobTitle = existingJob is null && books.Count == 1
@@ -129,6 +144,9 @@ public sealed class ScrapeCoordinator(
         }
 
         var bookOrder = books.Select(b => b.Id).ToList();
+        // What earlier sessions of a resumed job finished. Read once: `record` is that same object, so adding to its own Done on every progress
+        // report compounded (an import job read "3870 of 111").
+        int doneBefore = resuming?.Done ?? 0;
         bool preview = isInteractive && settings.PreviewChanges && books.Count > 1;
 
         // "Undo this batch" (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 3): the before picture,
@@ -150,7 +168,7 @@ public sealed class ScrapeCoordinator(
 
             int finished = Math.Clamp(index - 1, 0, bookOrder.Count);
             record.Pending = bookOrder.Skip(finished).ToList();
-            record.Done = (resuming?.Done ?? 0) + finished;
+            record.Done = Math.Min(doneBefore + finished, record.Total);
             if (finished % 5 == 0)
             {
                 jobStore.Save(record);
@@ -167,25 +185,28 @@ public sealed class ScrapeCoordinator(
 
             if (!isInteractive)
             {
-                result = await orchestrator.ScrapeAsync(books, isInteractive: false, interactiveReview: null, createContext, linked.Token,
+                result = await Task.Run(() => orchestrator.ScrapeAsync(books, isInteractive: false, interactiveReview: null, createContext, linked.Token,
                     onProgress: (phase, total, index, issue, bookLabel) =>
                     {
                         NoteProgress(phase, index);
                         job.Report(index, total, bookLabel);
-                    }).ConfigureAwait(false);
+                    }), linked.Token).ConfigureAwait(false);
             }
             else
             {
                 // Preview (docs/superpowers/specs/2026-10-21-scraper-organizer-c-automation-ux-design.md section 3): every match is worked out
                 // without writing; the changes are shown at the end and only the comics the user keeps are applied.
                 orchestrator.DryRun = preview;
+                var coverSelectionMemory = new Dictionary<string, string>(StringComparer.Ordinal);
                 var header = new ScrapeBatchHeaderViewModel(books.Count, linked.Cancel);
                 using (var batch = modalHost.BeginBatch(new ScrapeBatchHeaderView { DataContext = header }))
                 {
-                    result = await orchestrator.ScrapeAsync(
+                    // On the pool: the orchestrator's first stretch (database reads, cover thumbnail generation for the progress header) is
+                    // synchronous, and a dialog's resolve used to continue it inside the button click.
+                    result = await Task.Run(() => orchestrator.ScrapeAsync(
                         books,
                         isInteractive: true,
-                        (label, query, candidates, search, ct) => ShowMatchReviewAsync(orchestrator, settings, label, query, candidates, search),
+                        (label, query, candidates, search, ct) => ShowMatchReviewAsync(orchestrator, settings, label, query, candidates, search, coverSelectionMemory),
                         createContext,
                         linked.Token,
                         onProgress: (phase, total, index, issue, bookLabel) =>
@@ -194,7 +215,7 @@ public sealed class ScrapeCoordinator(
                             header.ReportProgress(phase, total, index, bookLabel, ThumbnailBytes(issue));
                             job.Report(index, total, bookLabel);
                         },
-                        interactiveIssueReview: (label, volume, issues, autoMatched, ct) => ShowIssueReviewAsync(orchestrator, settings, label, issues, autoMatched)).ConfigureAwait(false);
+                        interactiveIssueReview: (label, volume, issues, autoMatched, ct) => ShowIssueReviewAsync(orchestrator, settings, label, issues, autoMatched, coverSelectionMemory)), linked.Token).ConfigureAwait(false);
                 }
 
             }
@@ -202,7 +223,7 @@ public sealed class ScrapeCoordinator(
             // ComicVine last (docs/superpowers/specs/2026-10-21-scraper-organizer-b-speed-core-design.md section 1): what Metron found nothing for
             // gets one unattended, cover-checked try on ComicVine before the run ends.
             ScrapeOrchestrator? fallback;
-            (result, fallback) = await FallBackToComicVineAsync(result, books, orchestrator.Provider, settings, preview, linked.Token).ConfigureAwait(false);
+            (result, fallback) = await FallBackToComicVineAsync(result, books, orchestrator.Provider, settings, preview, priority, linked.Token).ConfigureAwait(false);
 
             if (preview)
             {
@@ -227,7 +248,8 @@ public sealed class ScrapeCoordinator(
                 jobStore!.Save(record);
             }
 
-            string refused = $"{ex.Message} The scrape stopped; nothing more was changed.";
+            string? healing = RecheckChangedIdentities();
+            string refused = $"{ex.Message} The scrape stopped; nothing more was changed." + (healing is null ? string.Empty : $" {healing}");
             owned?.Fail(refused, new ActivityLink(ActivityLinkKind.Preferences, "Connections"));
             return refused;
         }
@@ -244,8 +266,11 @@ public sealed class ScrapeCoordinator(
                 ScrapeUndoStore.Shared!.Save(undo, bookOrder);
             }
 
-            owned?.Fail(record is null ? "Scrape cancelled." : $"Scrape cancelled - {record.Pending.Count} comics left, resume it from Preferences → Organize & Scrape.");
-            return "Scrape cancelled.";
+            string? healing = RecheckChangedIdentities();
+            string cancelled = (record is null ? "Scrape cancelled." : $"Scrape cancelled - {record.Pending.Count} comics left, resume it from Preferences → Organize & Scrape.")
+                + (healing is null ? string.Empty : $" {healing}");
+            owned?.Fail(cancelled);
+            return cancelled;
         }
 
         if (record is not null)
@@ -260,9 +285,18 @@ public sealed class ScrapeCoordinator(
             ScrapeUndoStore.Shared!.Save(undo, result.Outcomes.Where(o => o.Kind == ScrapeOutcomeKind.Applied).Select(o => o.IssueId));
         }
 
+        string? healingSummary = RecheckChangedIdentities();
+
         foreach (var id in books.Select(b => b.Id))
         {
             enqueueWriteBack(id);
+        }
+
+        // New names, years and event memberships may connect series (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §5.2).
+        var appliedIds = result.Outcomes.Where(o => o.Kind == ScrapeOutcomeKind.Applied).Select(o => o.IssueId).ToHashSet();
+        if (appliedIds.Count > 0)
+        {
+            LibraryEvents.Default.Raise(new ScrapeCompletedEvent(books.Where(b => appliedIds.Contains(b.Id)).Select(b => b.SeriesId).Distinct().ToList()));
         }
 
         // The real breakdown (docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md
@@ -292,6 +326,11 @@ public sealed class ScrapeCoordinator(
             }
         }
 
+        if (healingSummary is not null)
+        {
+            parts.Add(healingSummary);
+        }
+
         var summary = string.Join(" ", parts);
         owned?.Succeed(summary, itemsProcessed: result.Applied, itemsFailed: result.Failed);
         return summary;
@@ -302,7 +341,7 @@ public sealed class ScrapeCoordinator(
     /// saved. Their outcomes replace the Metron ones; everything else is returned as it was.
     /// </summary>
     private async Task<(ScrapeBatchResult Result, ScrapeOrchestrator? Fallback)> FallBackToComicVineAsync(ScrapeBatchResult result, IReadOnlyList<Issue> books, ComicProvider provider,
-        ScrapeSettings settings, bool dryRun, CancellationToken cancellationToken)
+        ScrapeSettings settings, bool dryRun, ComicVineRequestPriority priority, CancellationToken cancellationToken)
     {
         if (provider != ComicProvider.Metron || !settings.FallBackToComicVine)
         {
@@ -313,7 +352,9 @@ public sealed class ScrapeCoordinator(
             .Where(o => o.Kind == ScrapeOutcomeKind.NoMatchFound && o.Reason is not ("Permanently skipped" or "No series name on file"))
             .Select(o => o.IssueId)
             .ToHashSet();
-        if (retry.Count == 0 || _createComicVine(ComicProvider.ComicVine, ComicVineRequestPriority.Low) is not { } comicVine)
+        // The run's own priority: a fallback inside a scrape the user is watching is foreground work, and the ComicVine limiter caps background calls at
+        // 150 an hour - at Low a big interactive batch sat out the rest of the hour after its 150th call, with no dialog left open to say so.
+        if (retry.Count == 0 || _createComicVine(ComicProvider.ComicVine, priority) is not { } comicVine)
         {
             return (result, null);
         }
@@ -342,7 +383,8 @@ public sealed class ScrapeCoordinator(
     /// Finds a matched issue on the other source through the cross-reference id the two keep: a Metron issue names its ComicVine id
     /// (<c>cv_id</c>); a ComicVine issue is looked up on Metron by that id. Null when nothing needs the other source, or it has no saved credential.
     /// </summary>
-    private Func<ComicProvider, ComicVineIssueDetails, CancellationToken, Task<ComicVineIssueDetails?>>? CreateSecondaryDetails(ScrapeSettings settings)
+    private Func<ComicProvider, ComicVineIssueDetails, CancellationToken, Task<ComicVineIssueDetails?>>? CreateSecondaryDetails(ScrapeSettings settings,
+        ComicVineRequestPriority priority)
     {
         bool anyPreference = settings.FieldSourcePreference.Count > 0;
         if (!anyPreference && !settings.FillBlanksFromComicVine)
@@ -350,24 +392,48 @@ public sealed class ScrapeCoordinator(
             return null;
         }
 
-        var comicVine = _createComicVine(ComicProvider.ComicVine, ComicVineRequestPriority.Low);
-        var metron = anyPreference ? _createComicVine(ComicProvider.Metron, ComicVineRequestPriority.Low) : null;
+        var comicVine = _createComicVine(ComicProvider.ComicVine, priority);
+        var metron = anyPreference ? _createComicVine(ComicProvider.Metron, priority) : null;
+        bool gaveUp = false;
         return async (primary, details, ct) =>
         {
-            if (primary == ComicProvider.Metron)
-            {
-                return comicVine is not null && details.ComicVineId is int cvId ? await comicVine.GetIssueDetailsAsync(cvId, ct).ConfigureAwait(false) : null;
-            }
-
-            if (metron is not IComicIssueLookup lookup)
+            // One lookup that ran out of patience means the other source is throttled for a while: the rest of this run skips it rather than
+            // spending the same wait on every comic.
+            if (gaveUp || (primary == ComicProvider.Metron && ComicVineHttp.Handler.PausedUntil is not null))
             {
                 return null;
             }
 
-            var hits = await lookup.FindIssuesByComicVineIdAsync(details.Id, ct).ConfigureAwait(false);
-            return hits.Count == 1 ? await metron.GetIssueDetailsAsync(hits[0].IssueId, ct).ConfigureAwait(false) : null;
+            // Optional extra values: never worth holding the batch for. When the other source's limiter would keep this comic waiting (its hourly
+            // share spent, a "slow down" pause), the matched source's values stand and the run moves on (reported 2026-10-28: a bulk scrape with
+            // "fill blanks from ComicVine" on stopped dead at book 100 of 105).
+            using var patience = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            patience.CancelAfter(SecondaryLookupPatience);
+            try
+            {
+                if (primary == ComicProvider.Metron)
+                {
+                    return comicVine is not null && details.ComicVineId is int cvId ? await comicVine.GetIssueDetailsAsync(cvId, patience.Token).ConfigureAwait(false) : null;
+                }
+
+                if (metron is not IComicIssueLookup lookup)
+                {
+                    return null;
+                }
+
+                var hits = await lookup.FindIssuesByComicVineIdAsync(details.Id, patience.Token).ConfigureAwait(false);
+                return hits.Count == 1 ? await metron.GetIssueDetailsAsync(hits[0].IssueId, patience.Token).ConfigureAwait(false) : null;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                gaveUp = true;
+                return null;
+            }
         };
     }
+
+    /// <summary>How long one optional other-source lookup may wait (queue plus request) before it is skipped.</summary>
+    internal static TimeSpan SecondaryLookupPatience { get; set; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// The end of a previewed run: shows every proposed change, applies the comics the user keeps (with the decisions already made), and
@@ -381,12 +447,13 @@ public sealed class ScrapeCoordinator(
             : (await modalHost.ShowAsync<IReadOnlyCollection<int>?>(resolve => new ScrapePreviewDialogView
             {
                 DataContext = new ScrapePreviewDialogViewModel(proposals, resolve),
-            }).ConfigureAwait(true))?.ToHashSet() ?? new HashSet<int>();
+            }).ConfigureAwait(false))?.ToHashSet() ?? new HashSet<int>();
 
-        var applied = new HashSet<int>(await primary.ApplyProposalsAsync(primary.Proposals.Where(p => keep.Contains(p.IssueId)), createContext, cancellationToken).ConfigureAwait(true));
+        // Writing every kept proposal is database work for the whole batch; never on the UI thread.
+        var applied = new HashSet<int>(await Task.Run(() => primary.ApplyProposalsAsync(primary.Proposals.Where(p => keep.Contains(p.IssueId)), createContext, cancellationToken), cancellationToken).ConfigureAwait(false));
         if (fallback is not null)
         {
-            applied.UnionWith(await fallback.ApplyProposalsAsync(fallback.Proposals.Where(p => keep.Contains(p.IssueId)), createContext, cancellationToken).ConfigureAwait(true));
+            applied.UnionWith(await Task.Run(() => fallback.ApplyProposalsAsync(fallback.Proposals.Where(p => keep.Contains(p.IssueId)), createContext, cancellationToken), cancellationToken).ConfigureAwait(false));
         }
 
         return new ScrapeBatchResult(result.Outcomes
@@ -464,9 +531,20 @@ public sealed class ScrapeCoordinator(
     public string UndoBatch(ScrapeUndoBatch batch)
     {
         IReadOnlyList<int> restored;
+        IReadOnlyDictionary<int, ReadingListIssueIdentity> identityBefore;
         using (var context = createContext())
         {
+            identityBefore = ReadingListHealingCoordinator.Capture(context, batch.Before.Keys, includeSeriesIssues: true);
             restored = ScrapeUndoStore.Shared?.Undo(context, batch) ?? Array.Empty<int>();
+        }
+
+        string? healing = null;
+        if (restored.Count > 0)
+        {
+            using var context = createContext();
+            var identityAfter = ReadingListHealingCoordinator.Capture(context, identityBefore.Keys);
+            var changed = ReadingListHealingCoordinator.Changed(identityBefore, identityAfter);
+            healing = ReadingListHealingCoordinator.Summary(ReadingListHealingCoordinator.Recheck(createContext, changed));
         }
 
         foreach (var id in restored)
@@ -474,7 +552,8 @@ public sealed class ScrapeCoordinator(
             enqueueWriteBack(id);
         }
 
-        return restored.Count == 0 ? "Nothing to undo." : $"Put {restored.Count} comic{(restored.Count == 1 ? "" : "s")} back as they were before that scrape.";
+        string message = restored.Count == 0 ? "Nothing to undo." : $"Put {restored.Count} comic{(restored.Count == 1 ? "" : "s")} back as they were before that scrape.";
+        return healing is null ? message : $"{message} {healing}";
     }
 
     /// <summary>
@@ -574,20 +653,23 @@ public sealed class ScrapeCoordinator(
         string bookLabel,
         string initialQuery,
         IReadOnlyList<(ComicVineVolumeSearchResult Volume, double Score)> initialCandidates,
-        ScrapeOrchestrator.SearchAndRankDelegate search) =>
+        ScrapeOrchestrator.SearchAndRankDelegate search,
+        IDictionary<string, string> coverSelectionMemory) =>
         modalHost.ShowAsync<ComicVineVolumeSearchResult?>(resolve => new ComicVineMatchReviewDialogView
         {
             DataContext = new ComicVineMatchReviewDialogViewModel(bookLabel, initialQuery, initialCandidates, search, resolve, loadIssues: volumeId => orchestrator.LoadIssuesAsync(volumeId),
                 provider: orchestrator.Provider, switchProvider: orchestrator.TrySwitchProvider,
-                forceSeriesArt: settings.ForceSeriesArt, showCovers: settings.ShowCovers, findIssueCoverUrl: orchestrator.FindIssueCoverUrlAsync,
-                markPermanentlySkipped: () => MarkPermanentlySkipped(orchestrator.CurrentIssueId)),
+                forceSeriesArt: settings.ForceSeriesArt, showCovers: settings.ShowCovers, findIssueCover: orchestrator.FindIssueSummaryAsync,
+                markPermanentlySkipped: () => MarkPermanentlySkipped(orchestrator.CurrentIssueId), coverSelectionMemory: coverSelectionMemory),
         });
 
-    private Task<ComicVineIssueReviewResult> ShowIssueReviewAsync(ScrapeOrchestrator orchestrator, ScrapeSettings settings, string bookLabel, IReadOnlyList<ComicVineIssueSummary> issues, ComicVineIssueSummary? autoMatched) =>
+    private Task<ComicVineIssueReviewResult> ShowIssueReviewAsync(ScrapeOrchestrator orchestrator, ScrapeSettings settings, string bookLabel, IReadOnlyList<ComicVineIssueSummary> issues, ComicVineIssueSummary? autoMatched,
+        IDictionary<string, string> coverSelectionMemory) =>
         modalHost.ShowAsync<ComicVineIssueReviewResult>(resolve => new ComicVineIssueReviewDialogView
         {
             DataContext = new ComicVineIssueReviewDialogViewModel(bookLabel, issues, autoMatched, readOnlyPeek: false, resolve, settings.ShowCovers,
-                markPermanentlySkipped: () => MarkPermanentlySkipped(orchestrator.CurrentIssueId)),
+                markPermanentlySkipped: () => MarkPermanentlySkipped(orchestrator.CurrentIssueId),
+                coverSelectionMemory: coverSelectionMemory, coverMemoryScope: orchestrator.Provider.ToString()),
         });
 
     private Task<bool> ShowBatchSummaryAsync(ScrapeBatchResult result) =>

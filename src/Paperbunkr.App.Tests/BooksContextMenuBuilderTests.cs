@@ -83,7 +83,7 @@ public class BooksContextMenuBuilderTests : IDisposable
 
         var headers = Menu(vm, card).Where(e => !e.IsSeparator).Select(e => e.Header).ToList();
 
-        Assert.Equal(new[] { "Edit…", "Add to Collection", "Delete Book…" }, headers);
+        Assert.Equal(new[] { "Edit…", "Match metadata…", "Set status", "Rate", "Add to Collection", "Delete Book…" }, headers);
     }
 
     [Fact]

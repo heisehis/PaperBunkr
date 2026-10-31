@@ -1069,6 +1069,36 @@
         </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
+    <!-- ============ Book metadata match dialog (docs/superpowers/specs/2026-10-26-books-slice1-data-foundation-design.md §5) ============ -->
+    <controls:OverlayShell IsOpen="{Binding IsBookMatchOverlayOpen}" CloseCommand="{Binding CloseBookMatchOverlayCommand}"
+                            CloseButtonAutomationId="BookMatchOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:BookMatchDialogView DataContext="{Binding BookMatch}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
+    </controls:OverlayShell>
+
+    <!-- ============ Import from Calibre (docs/superpowers/specs/2026-10-27-books-slice4a-calibre-import-design.md section 5) ============ -->
+    <controls:OverlayShell IsOpen="{Binding IsCalibreImportOverlayOpen}" CloseCommand="{Binding CloseCalibreImportOverlayCommand}"
+                            CloseButtonAutomationId="CalibreImportOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:CalibreImportDialogView DataContext="{Binding CalibreImport}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
+    </controls:OverlayShell>
+
+    <!-- ============ OPDS catalogs (docs/superpowers/specs/2026-10-27-books-slice4c-opds-design.md section 4) ============ -->
+    <controls:OverlayShell IsOpen="{Binding IsOpdsCatalogsOverlayOpen}" CloseCommand="{Binding CloseOpdsCatalogsOverlayCommand}"
+                            CloseButtonAutomationId="OpdsCatalogsOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:OpdsCatalogsView DataContext="{Binding OpdsCatalogs}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
+    </controls:OverlayShell>
+
     <!-- ============ Bulk book properties overlay (docs/superpowers/specs/2026-08-27-books-bulk-
          series-editing-design.md, component b) ============ -->
     <controls:OverlayShell IsOpen="{Binding IsBulkBookPropertiesOverlayOpen}" CloseCommand="{Binding CloseBulkBookPropertiesOverlayCommand}"

@@ -1,0 +1,71 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:fi="using:FluentIcons.Avalonia"
+                    xmlns:vm="using:Paperbunkr.App.ViewModels"
+                    xmlns:home="using:Paperbunkr.App.ViewModels.Home"
+                    xmlns:models="using:Paperbunkr.App.Models"
+                    xmlns:views="using:Paperbunkr.App.Views"
+                    xmlns:controls="using:Paperbunkr.App.Controls">
+
+    <!-- The two book rows (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §9). Each section leaves Home while its list is empty,
+         so a comics-only library never sees them. They reuse the Continue Reading card (HomeResumeCard) and open Book Details. -->
+    <DataTemplate x:Key="HomeSection.bookUpNext" DataType="home:BookUpNextSectionViewModel">
+        <StackPanel Spacing="12" controls:ScrollReveal.Enabled="True">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <fi:SymbolIcon Classes="sectionIcon" Symbol="{Binding Icon}" />
+                <controls:SplitText Classes="heading" Text="{Binding Title}" AutomationProperties.AutomationId="{Binding HeaderAutomationId}" />
+            </StackPanel>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8,-12,-8,0">
+                <ItemsControl ItemsSource="{Binding Home.BookUpNext}" Margin="2,2,2,6" AutomationProperties.AutomationId="HomeBookUpNextList"
+                              controls:EntranceAnimation.Enabled="{Binding Home.PlayEntranceAnimation}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:HomeResumeCard">
+                            <views:PosterTile
+                                CoverSource="{Binding CoverImage}"
+                                TitleText="{Binding Title}"
+                                MetaText="{Binding Meta}"
+                                ShowBookGlyph="True"
+                                ShowProgress="{Binding ShowProgress}"
+                                ProgressFraction="{Binding ProgressFraction}"
+                                Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenBookRowCommand}"
+                                CommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="HomeSection.bookRecentlyAdded" DataType="home:BookRecentlyAddedSectionViewModel">
+        <StackPanel Spacing="12" controls:ScrollReveal.Enabled="True">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <fi:SymbolIcon Classes="sectionIcon" Symbol="{Binding Icon}" />
+                <controls:SplitText Classes="heading" Text="{Binding Title}" AutomationProperties.AutomationId="{Binding HeaderAutomationId}" />
+            </StackPanel>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8,-12,-8,0">
+                <ItemsControl ItemsSource="{Binding Home.BookRecentlyAdded}" Margin="2,2,2,6" AutomationProperties.AutomationId="HomeBookRecentlyAddedList"
+                              controls:EntranceAnimation.Enabled="{Binding Home.PlayEntranceAnimation}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:HomeResumeCard">
+                            <views:PosterTile
+                                CoverSource="{Binding CoverImage}"
+                                TitleText="{Binding Title}"
+                                MetaText="{Binding Meta}"
+                                ShowBookGlyph="True"
+                                ShowProgress="{Binding ShowProgress}"
+                                ProgressFraction="{Binding ProgressFraction}"
+                                Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenBookRowCommand}"
+                                CommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </StackPanel>
+    </DataTemplate>
+</ResourceDictionary>

@@ -42,6 +42,10 @@ public static class RelationTypeCatalog
         [RelationType.Contains] = new(RelationDirectionality.Directional, RelationType.CollectedFrom),
         [RelationType.CollectedFrom] = new(RelationDirectionality.Directional, RelationType.Contains),
 
+        // Directional, named inverse pair - event tie-ins (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §4).
+        [RelationType.TieIn] = new(RelationDirectionality.Directional, RelationType.MainEventSeries),
+        [RelationType.MainEventSeries] = new(RelationDirectionality.Directional, RelationType.TieIn),
+
         // Directional, no named inverse in the source doc - same label shown from both sides
         // rather than inventing new vocabulary (this project's extension, not the source doc's).
         [RelationType.SideStory] = new(RelationDirectionality.Directional, RelationType.SideStory),

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -134,7 +134,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // durability-design.md, Part 1) - App.axaml.cs calls Start()/Stop() once the window exists.
         Scheduler = new Services.Scheduling.SchedulerService(Activity);
 
-        ActivityCenter = new ActivityCenterViewModel(Activity, ResolveActivityLink, Scheduler);
+        ActivityCenter = new ActivityCenterViewModel(Activity, ResolveActivityLink, Scheduler, trackerSync: TrackerAutoSync);
 
         // Comic acquisition daemon (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md). Built here, started in
         // App.OnFrameworkInitializationCompleted next to the scheduler. The daemon only publishes events; the bridge is the one
@@ -217,7 +217,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         OnThemeAppliedForMatrixRain(); // initialize from whatever ApplyPersistedSettings already applied at startup, before this subscription existed
         OnMatrixRainEnabledChanged();
         Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection, themeService, loadOnConstruction: false,
-            toastHost: new DispatcherToastHost(ShowToast, CloseToast), goInsights: GoInsights, goPreferencesAnchor: GoPreferencesAnchor);
+            toastHost: new DispatcherToastHost(ShowToast, CloseToast), goInsights: GoInsights, goPreferencesAnchor: GoPreferencesAnchor, goBookDetail: GoBookDetailForBook);
         Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook, promptForName: PromptWorkspaceName, enqueueMetadataWriteBack: EnqueueMetadataWriteBack, activity: Activity, loadOnConstruction: false, trackerAutoSync: TrackerAutoSync);
         // Debounced, off-UI-thread search/filter/sort rebuilds (docs/superpowers/specs/2026-09-19-
         // library-search-perf-design.md §1). Set after construction, not passed through the ctor: the
@@ -228,13 +228,29 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         WireListLayouts(Books.ListLayouts, Books.CreateListOptions);
         BookDetail = new BookDetailScreenViewModel(NavigateBack, GoBookReaderForBook, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries);
         BookProperties = new BookPropertiesScreenViewModel(CloseBookPropertiesOverlay, ShowToast);
+        BookMatch = new BookMatchDialogViewModel(CloseBookMatchOverlay, ShowToast);
+        CalibreImport = new CalibreImportDialogViewModel(CloseCalibreImportOverlay, ShowToast);
+        Books.GoCalibreImport = GoCalibreImport;
+        OpdsCatalogs = new OpdsCatalogsViewModel(CloseOpdsCatalogsOverlay, ShowToast);
+        Books.GoCatalogs = GoOpdsCatalogs;
+        Books.GoMatchBook = GoBookMatchForBook;
+        Books.GoReaderForBook = GoBookReaderForBook; // the spread's Continue / Start reading (books redesign §3.1)
+        Books.GoInsights = GoInsights;               // the nightstand's "This week" line
+        Books.RunBulkMatch = RunBookMetadataMatch;
+        BookDetail.GoMatchBook = GoBookMatchForBook;
+        BookDetail.GoBooksForAuthor = GoBooksForAuthor;
+        BookDetail.GoBookDetailForOther = GoBookDetailForBook; // series spines and "More by" covers
         BulkBookProperties = new BulkBookPropertiesScreenViewModel(CloseBulkBookPropertiesOverlay, ShowToast);
         BookSeriesProperties = new BookSeriesPropertiesScreenViewModel(CloseBookSeriesPropertiesOverlay, ShowToast);
         MangaSeriesEditor = new MangaSeriesEditorViewModel(CloseMangaSeriesEditorOverlayAndReload, ShowToast, id => EnqueueMetadataWriteBack(id), () => EmbeddedSync);
-        BookReader = new BookReaderScreenViewModel(NavigateBack, ReadingEvents);
+        BookReader = new BookReaderScreenViewModel(NavigateBack, ReadingEvents) { ShowToast = ShowToast };
         PdfReader = new PdfPageReaderScreenViewModel(NavigateBack, ReadingEvents);
         Detail = new DetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
         MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync, GoMangaSeriesEditorForSeries);
+        // The Related tab's event rows open the event (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §6.2).
+        Detail.Tabs.OpenStoryEvent = GoStoryEvent;
+        MangaDetail.Tabs.OpenStoryEvent = GoStoryEvent;
+
         Detail.Tabs.InitializeListLayouts(listLayoutService);
         MangaDetail.InitializeListLayouts(listLayoutService);
         WireDetailListLayouts(Detail.Tabs.ListLayouts, Detail.Tabs.CreateDetailListOptions);
@@ -294,6 +310,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         BulkSeriesProperties = new BulkSeriesPropertiesScreenViewModel(CloseBulkSeriesPropertiesOverlayAndReload, id => EnqueueMetadataWriteBack(id));
         Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook, loadOnConstruction: false, filePicker: new FilePickerService(), activity: Activity);
         Reading = new ReadingListsScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, activity: Activity, loadOnConstruction: false, trackerAutoSync: TrackerAutoSync, dialogs: Dialogs);
+        Library.RequestReadingListImportReview = async input =>
+        {
+            GoReadingCommand.Execute(null);
+            await Reading.OpenImportReviewAsync(input, null);
+        };
         // "from <continuity>" on a continuity-built list (docs/superpowers/specs/2026-09-28-reading-lists-build-from-events-design.md §2).
         Reading.OpenContinuity = id =>
         {
@@ -332,6 +353,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         ReadingListProperties = new ReadingListPropertiesScreenViewModel(CloseReadingListPropertiesOverlay);
         CollectionProperties = new CollectionPropertiesScreenViewModel(CloseCollectionPropertiesOverlay);
         NewReadingList = new NewReadingListViewModel(new FilePickerService(), OnNewReadingListCreated, CloseNewReadingListDialog, Activity);
+        NewReadingList.RequestImportReview = async input =>
+        {
+            await Task.Yield();
+            CloseNewReadingListDialog();
+            GoReadingCommand.Execute(null);
+            await Reading.OpenImportReviewAsync(input, Reading.IsListMode ? Reading.List.FolderId : Reading.Gallery.CurrentFolderId);
+        };
         NewEventOrContinuity = new NewEventOrContinuityViewModel(OnEventOrContinuityCreated, CloseNewEventDialog);
         GoalEditor = new GoalEditorViewModel(OnGoalCreated, CloseNewGoalDialog);
         Insights.Goals.RenewRequested = OpenRenewGoalDialog;
@@ -649,6 +677,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public BooksScreenViewModel Books { get; }
     public BookDetailScreenViewModel BookDetail { get; }
     public BookPropertiesScreenViewModel BookProperties { get; }
+    public BookMatchDialogViewModel BookMatch { get; }
     public BulkBookPropertiesScreenViewModel BulkBookProperties { get; }
     public BookSeriesPropertiesScreenViewModel BookSeriesProperties { get; }
 
@@ -920,6 +949,47 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private bool _isBookPropertiesOverlayOpen;
 
     partial void OnIsBookPropertiesOverlayOpenChanged(bool value) => OnPropertyChanged(nameof(IsBookProperties));
+
+    [ObservableProperty]
+    private bool _isBookMatchOverlayOpen;
+
+    [ObservableProperty]
+    private bool _isCalibreImportOverlayOpen;
+
+    public CalibreImportDialogViewModel CalibreImport { get; }
+
+    [ObservableProperty]
+    private bool _isOpdsCatalogsOverlayOpen;
+
+    public OpdsCatalogsViewModel OpdsCatalogs { get; }
+
+    /// <summary>"Browse catalogs…" on the Books screen (docs/superpowers/specs/2026-10-27-books-slice4c-opds-design.md §4).</summary>
+    private void GoOpdsCatalogs()
+    {
+        OpdsCatalogs.Prepare();
+        IsOpdsCatalogsOverlayOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseOpdsCatalogsOverlay()
+    {
+        IsOpdsCatalogsOverlayOpen = false;
+        ReloadBooksSurfaceUnderneath();
+    }
+
+    /// <summary>"Import from Calibre…" on the Books screen (docs/superpowers/specs/2026-10-27-books-slice4a-calibre-import-design.md).</summary>
+    private void GoCalibreImport()
+    {
+        CalibreImport.Prepare();
+        IsCalibreImportOverlayOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseCalibreImportOverlay()
+    {
+        IsCalibreImportOverlayOpen = false;
+        ReloadBooksSurfaceUnderneath();
+    }
 
     [ObservableProperty]
     private bool _isBulkBookPropertiesOverlayOpen;
@@ -1382,7 +1452,18 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void GoBooks() => TryLeaveCurrentEditor(() =>
     {
+        Books.AuthorFilter = null; // an author chip only lives for the visit that asked for it
         Books.LoadFromDatabase();
+        CurrentScreen = "books";
+        ResetHistoryRoot("books");
+    });
+
+    /// <summary>Book Detail's author link (docs/superpowers/specs/2026-10-27-books-slice2b-detail-design.md §7): the Books grid with an "Author: X" chip, on the All tab so nothing hides that author's books.</summary>
+    private void GoBooksForAuthor(string author) => TryLeaveCurrentEditor(() =>
+    {
+        Books.ActiveStatusTab = Paperbunkr.Data.Entities.BooksStatusTab.All;
+        Books.LoadFromDatabase();
+        Books.AuthorFilter = author;
         CurrentScreen = "books";
         ResetHistoryRoot("books");
     });
@@ -1438,6 +1519,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         Reading.LoadReadingList(readingListId, triggerEntrance: true);
         CurrentScreen = "reading";
         ResetHistoryRoot("reading");
+    }
+
+    /// <summary>Opens one story event's page (the Related tab's event rows; same steps as Quick Open's story-event entry).</summary>
+    private void GoStoryEvent(int storyEventId)
+    {
+        GoEventsCommand.Execute(null);
+        Events.LoadEvent(storyEventId);
     }
 
     [RelayCommand]
@@ -1724,7 +1812,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Any editor / dialog overlay that owns focus - Ctrl+P must not open the palette on top of one.</summary>
     private bool IsEditorOverlayOpen =>
         IsIssuePropertiesOverlayOpen || IsBulkIssuePropertiesOverlayOpen || IsBulkSeriesPropertiesOverlayOpen
-        || IsBookPropertiesOverlayOpen || IsBulkBookPropertiesOverlayOpen || IsBookSeriesPropertiesOverlayOpen || IsMangaSeriesEditorOverlayOpen
+        || IsBookPropertiesOverlayOpen || IsBookMatchOverlayOpen || IsCalibreImportOverlayOpen || IsOpdsCatalogsOverlayOpen || IsBulkBookPropertiesOverlayOpen || IsBookSeriesPropertiesOverlayOpen || IsMangaSeriesEditorOverlayOpen
         || IsReadingListPropertiesOverlayOpen || IsCollectionPropertiesOverlayOpen || IsWorkspaceNameOverlayOpen
         || IsNewReadingListDialogOpen || IsNewEventDialogOpen || IsNewGoalDialogOpen || IsListOptionsOverlayOpen || IsDetailListOptionsOverlayOpen || IsEditLayoutsOverlayOpen || IsMigrationOverlayOpen || IsQuickRateOverlayOpen
         || IsPasteDataOverlayOpen || IsMergeSeriesOverlayOpen
@@ -2036,6 +2124,67 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         ReloadBooksSurfaceUnderneath();
     }
 
+    /// <summary>"Match metadata…" for one book (docs/superpowers/specs/2026-10-26-books-slice1-data-foundation-design.md §5) - Book Detail and the Books grid menu.</summary>
+    private void GoBookMatchForBook(int bookId)
+    {
+        string title;
+        string? author;
+        bool skipped;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var book = Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.AsNoTracking(context.Books).FirstOrDefault(b => b.Id == bookId);
+            if (book is null)
+            {
+                return;
+            }
+
+            (title, author, skipped) = (book.Title, book.Author, book.SkipMetadataMatch);
+        }
+
+        IsBookMatchOverlayOpen = true;
+        _ = BookMatch.LoadAsync(bookId, title, author, skipped);
+    }
+
+    [RelayCommand]
+    private void CloseBookMatchOverlay()
+    {
+        IsBookMatchOverlayOpen = false;
+        ReloadBooksSurfaceUnderneath();
+    }
+
+    /// <summary>Bulk "Match metadata" over the selected books: one Activity Center job; ambiguous books are counted and left for the per-book dialog.</summary>
+    private void RunBookMetadataMatch(IReadOnlyList<int> bookIds)
+    {
+        if (bookIds.Count == 0)
+        {
+            return;
+        }
+
+        var job = Activity.StartJob(ActivityJobKind.SyncMetadata, $"Matching {bookIds.Count} book{(bookIds.Count == 1 ? string.Empty : "s")}", cancellable: true);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var progress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"Matched {p.Done} of {p.Total}"));
+                var result = await new Paperbunkr.App.Services.BookMetadataMatchService().RunBulkAsync(bookIds, progress, job.CancellationToken);
+                job.Succeed(result.Describe(), itemsProcessed: bookIds.Count, itemsFailed: result.Failed);
+            }
+            catch (OperationCanceledException)
+            {
+                // Disposing without Succeed/Fail records the job as cancelled.
+            }
+            catch (Exception ex)
+            {
+                job.Fail("Matching stopped: " + ex.Message, ex: ex);
+            }
+            finally
+            {
+                job.Dispose();
+                Avalonia.Threading.Dispatcher.UIThread.Post(ReloadBooksSurfaceUnderneath);
+            }
+        });
+    }
+
     /// <summary>Bulk book editor entry point (docs/superpowers/specs/2026-08-27-books-bulk-series-
     /// editing-design.md) - from the Books grid selection bar or Book Details Series mode.</summary>
     private void GoBulkBookPropertiesForBooks(IReadOnlyList<int> bookIds)
@@ -2116,7 +2265,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     {
         string? description = _history.Undo(PaperbunkrDb.CreateContext);
         RefreshAfterHistoryChange();
-        ShowToast(description is null ? "Nothing to undo" : "Undone", description ?? "There's no metadata edit left to undo.");
+        string detail = description ?? "There's no metadata edit left to undo.";
+        if (description is not null && Services.ReadingListHealingCoordinator.Summary(_history.LastHealingResult) is { } healing)
+        {
+            detail += $" {healing}";
+        }
+
+        ShowToast(description is null ? "Nothing to undo" : "Undone", detail);
     }
 
     [RelayCommand]
@@ -2124,7 +2279,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     {
         string? description = _history.Redo(PaperbunkrDb.CreateContext);
         RefreshAfterHistoryChange();
-        ShowToast(description is null ? "Nothing to redo" : "Redone", description ?? "There's no undone edit left to redo.");
+        string detail = description ?? "There's no undone edit left to redo.";
+        if (description is not null && Services.ReadingListHealingCoordinator.Summary(_history.LastHealingResult) is { } healing)
+        {
+            detail += $" {healing}";
+        }
+
+        ShowToast(description is null ? "Nothing to redo" : "Redone", detail);
     }
 
     private void RefreshAfterHistoryChange()
@@ -2439,7 +2600,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>Book Details entry point (docs/superpowers/specs/2026-08-27-book-details-screen-
     /// design.md) - the Books grid card click lands here now, not straight in the reader.</summary>
-    private void GoBookDetailForBook(int bookId) => RunDrill(DrillTransitionKind.Push, sharedKey: null, () =>
+    // The cover flies from the Books grid / spread to the Detail jacket (books redesign §7.2): both register "book-cover:{id}".
+    private void GoBookDetailForBook(int bookId) => RunDrill(DrillTransitionKind.Push, sharedKey: $"book-cover:{bookId}", () =>
     {
         NavigateToBookDetailCore(bookId);
         PushHistory(new NavigationEntry("bookDetail", NavigationEntryKind.Book, bookId, BookDetail.HeaderTitle));
@@ -2851,8 +3013,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         job.Succeed("Update downloaded", new ActivityLink(ActivityLinkKind.UpdateChangelog));
 
         ToastRequest? readyToast = null;
-        var restartCommand = new RelayCommand(() =>
+        var restartCommand = new AsyncRelayCommand(async () =>
         {
+            if (!await Reading.Review.ConfirmExitAsync()) return;
             if (_updateService.ApplyUpdatesAndRestart(item, downloadPath) is string failure)
             {
                 Activity.RaiseAlert(new ActivityAlert
@@ -3431,6 +3594,18 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         else if (IsBookProperties)
         {
             BookProperties.CancelCommand.Execute(null);
+        }
+        else if (IsBookMatchOverlayOpen)
+        {
+            BookMatch.CancelCommand.Execute(null);
+        }
+        else if (IsCalibreImportOverlayOpen)
+        {
+            CloseCalibreImportOverlay();
+        }
+        else if (IsOpdsCatalogsOverlayOpen)
+        {
+            CloseOpdsCatalogsOverlay();
         }
         else if (IsBulkBookProperties)
         {

@@ -179,6 +179,12 @@ public sealed class SpineTile : Control
         double y = Bounds.Height - SpineMetrics.BoardHeight - height - ((_hover || _focused) ? Lift : 0);
         var rect = new Rect(x, y, width, height);
 
+        if (spine.IsSpineGhost)
+        {
+            RenderGhost(context, spine, new Rect(x, Bounds.Height - SpineMetrics.BoardHeight - height, width, height));
+            return;
+        }
+
         var known = KnownColor();
         Color body;
         bool neutral = known is null;
@@ -261,6 +267,25 @@ public sealed class SpineTile : Control
         if (_selected)
         {
             context.DrawRectangle(null, new Pen(Resolve("PbAccentBrush", Color.FromRgb(0x5B, 0x8D, 0xEF)), 2), rect.Inflate(1), Radius, Radius);
+        }
+    }
+
+    /// <summary>A missing book in a series: a dashed outline in the faint ink with its number at the foot. No fill, no lift, no progress.</summary>
+    private void RenderGhost(DrawingContext context, ISpineSource spine, Rect rect)
+    {
+        var faint = Resolve("PbTextFaintBrush", Color.FromRgb(0x77, 0x72, 0x6A));
+        var dashed = new Pen(faint, 1, new ImmutableDashStyle([3, 3], 0));
+        context.DrawRectangle(null, dashed, rect.Deflate(0.5), Radius, Radius);
+
+        if (spine.SpineNumber is { } number && rect.Width >= 18)
+        {
+            var cap = new FormattedText(number, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, NumberFace, 9.5, faint)
+            {
+                MaxTextWidth = rect.Width - 2,
+                MaxLineCount = 1,
+                Trimming = TextTrimming.CharacterEllipsis,
+            };
+            context.DrawText(cap, new Point(rect.X + ((rect.Width - cap.Width) / 2), rect.Bottom - 22));
         }
     }
 }

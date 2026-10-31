@@ -196,7 +196,8 @@ public partial class ReadingListPageViewModel
         // still tracked in the Activity Center and its completion follows the normal toast-policy
         // path instead of an unconditional direct toast.
         using var job = _activity.StartJob(ActivityJobKind.Import, "Importing dropped files");
-        var result = await new DragImportService().ImportAsync(paths);
+        var result = await new DragImportService(previewReadingLists: RequestImportReview is not null).ImportAsync(paths);
+        if (result.PendingReadingLists is { } pending && RequestImportReview is not null) await RequestImportReview(pending);
 
         int added = 0;
         if (result.IssueIds.Count > 0)
@@ -343,6 +344,11 @@ public partial class ReadingListPageViewModel
 
     private void StartLink(ReadingListItemRowViewModel row)
     {
+        if (RequestReview is not null)
+        {
+            Dispatcher.UIThread.Post(async () => await RequestReview(row.Item.Id));
+            return;
+        }
         LinkingRow = row;
         // Real bug found 2026-09-16: without this, "Find & link" showed the LinkingBannerText
         // ("Linking X — pick a result below, or Cancel") but the actual search box/results panel
@@ -437,7 +443,8 @@ public partial class ReadingListPageViewModel
     // design.md §5): search a story arc across six sources, auto-build a matched ReadingList from
     // it, and refresh an arc-linked list later. ---
 
-    public static ArcSourceOption[] ArcSourceOptions { get; } = ReadingListSourceRegistry.All
+    // Read on each use, not cached: a plugin can add a source while the app runs (Plugin API 4.5 §C).
+    public static ArcSourceOption[] ArcSourceOptions => ReadingListSourceRegistry.Available
         .Select(s => new ArcSourceOption(s.Key, s.DisplayName, s.RequiresCredentials, s.HasBrowsableCatalog))
         .ToArray();
 
@@ -606,6 +613,12 @@ public partial class ReadingListPageViewModel
         using var context = PaperbunkrDb.CreateContext();
         try
         {
+            if (RequestImportReview is not null)
+            {
+                var prepared = await ArcReadingListBuilder.PrepareAsync(source, row.Result, CancellationToken.None);
+                await RequestImportReview(new PreparedImport(new[] { prepared }, Array.Empty<string>()));
+                return;
+            }
             var created = await ArcReadingListBuilder.CreateFromArcWithReportAsync(context, source, row.Result, CancellationToken.None);
             var list = created.List;
             PlaceInThisFolder(list.Id);

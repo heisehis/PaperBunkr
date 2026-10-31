@@ -117,6 +117,26 @@
         <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
     </Style>
 
+    <!-- Book-title modifier (docs/superpowers/specs/2026-10-27-books-section-redesign-design.md §1). Combine with a size class
+         (pbTextBody / pbTextSection / pbTextHeading / pbTextHero); it only swaps the family to the fixed serif and sets SemiBold.
+         It must stay after the size classes: equal specificity, so the later style wins. Hero and heading set LineHeight equal to
+         the size, which suits Bebas caps but clips a serif's descenders on a wrapped title, so those two get their line height back. -->
+    <Style Selector="TextBlock.bookTitle">
+        <Setter Property="FontFamily" Value="{DynamicResource PbBookTitleFontFamily}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.bookTitle.pbTextHero, TextBlock.bookTitle.pbTextHeading">
+        <Setter Property="LineHeight" Value="NaN" />
+    </Style>
+    <!-- A line quoted from a book (the Books spread's pull quote, a latest highlight): the fixed serif, italic, section size, muted. -->
+    <Style Selector="TextBlock.bookQuote">
+        <Setter Property="FontFamily" Value="{DynamicResource PbBookTitleFontFamily}" />
+        <Setter Property="FontStyle" Value="Italic" />
+        <Setter Property="FontSize" Value="{DynamicResource PbFontSizeSection}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
     <Style Selector="controls|SplitText.hero">
         <Setter Property="FontSize" Value="{DynamicResource PbFontSizeHero}" />
     </Style>

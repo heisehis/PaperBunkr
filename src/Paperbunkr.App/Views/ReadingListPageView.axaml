@@ -196,6 +196,8 @@
                                         <fi:SymbolIcon Symbol="MoreHorizontal" FontSize="{StaticResource PbIconSizeSm}" />
                                         <Button.Flyout>
                                             <MenuFlyout>
+                                                <MenuItem Header="Review unresolved…" Command="{Binding ReviewUnresolvedCommand}" />
+                                                <MenuItem Header="Review history…" Command="{Binding ReviewHistoryCommand}" />
                                                 <MenuItem Header="Import .CBL…" Command="{Binding ImportCblCommand}" />
                                                 <MenuItem Header="Import .CSV…" Command="{Binding ImportCsvCommand}" />
                                                 <MenuItem Header="Build from a story arc…" Command="{Binding ToggleArcSearchCommand}" />

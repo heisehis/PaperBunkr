@@ -125,6 +125,10 @@ public static class SmartListCatalog
             new(SmartListField.SeriesMaxYear, "Series: Last Year", SmartListDataType.Number),
             new(SmartListField.SeriesMaxCount, "Series: Highest Count", SmartListDataType.Number),
             new(SmartListField.SeriesMaxGapSize, "Series: Biggest Gap", SmartListDataType.Number),
+            new(SmartListField.SeriesLastAddedTime, "Series: Last Added", SmartListDataType.Date),
+            new(SmartListField.SeriesLastOpenedTime, "Series: Last Opened", SmartListDataType.Date),
+            new(SmartListField.SeriesLastPublishedTime, "Series: Last Published", SmartListDataType.Date),
+            new(SmartListField.SeriesLastReleasedTime, "Series: Last Released", SmartListDataType.Date),
         }.ToDictionary(d => d.Field);
 
     /// <summary>
@@ -255,6 +259,8 @@ public static class SmartListCatalog
 
             // CE's ComicBook.Published: built from Year/Month/Day, month and day clamped; unset (no positive year) never matches.
             [SmartListField.Published] = PublishedDate,
+            // CE's series matchers use the newest date over the series + volume group; the
+            // snapshot-aware evaluator supplies those values rather than a per-issue selector.
         };
 
     private static DateTime? PublishedDate(Issue issue)

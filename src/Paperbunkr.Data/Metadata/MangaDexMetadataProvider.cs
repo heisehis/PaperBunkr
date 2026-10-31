@@ -89,8 +89,11 @@ public sealed class MangaDexMetadataProvider : IMetadataProvider
 
         // The community score is a separate endpoint; a failure there costs only the score.
         var stats = await FetchAsync<MangaDexStatisticsResponse>($"statistics/manga/{Uri.EscapeDataString(externalId)}", cancellationToken).ConfigureAwait(false);
-        double? bayesian = stats?.Statistics is { } map && map.TryGetValue(response.Data.Id, out var entry) ? entry.Rating?.Bayesian : null;
-        return bayesian is > 0 ? metadata with { Rating = Math.Round(bayesian.Value * 10, 1) } : metadata;
+        MangaDexRatingDto? rating = stats?.Statistics is { } map && map.TryGetValue(response.Data.Id, out var entry) ? entry.Rating : null;
+        double? bayesian = rating?.Bayesian;
+        // The vote count is the sum of the 1-10 distribution (verified live 2026-10-26; the endpoint has no separate total).
+        int? votes = rating?.Distribution is { Count: > 0 } distribution ? distribution.Values.Sum() : null;
+        return bayesian is > 0 ? metadata with { Rating = Math.Round(bayesian.Value * 10, 1), RatingVoteCount = votes is > 0 ? votes : null } : metadata;
     }
 
     private async Task<T?> FetchAsync<T>(string relativeUrl, CancellationToken cancellationToken) where T : class
@@ -195,6 +198,10 @@ internal sealed class MangaDexRatingDto
     /// <summary>The bayesian average, 0-10.</summary>
     [JsonPropertyName("bayesian")]
     public double? Bayesian { get; set; }
+
+    /// <summary>Votes per score, "1" to "10".</summary>
+    [JsonPropertyName("distribution")]
+    public Dictionary<string, int>? Distribution { get; set; }
 }
 
 internal sealed class MangaDexGetResponse

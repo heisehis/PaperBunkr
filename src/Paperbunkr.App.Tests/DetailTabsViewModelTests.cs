@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
@@ -56,10 +56,17 @@ public class DetailTabsViewModelTests : IDisposable
 
     private sealed class RecordingTrackerAutoSync : Paperbunkr.App.Services.ITrackerAutoSyncService
     {
+        public event Action? RetryQueueChanged { add { } remove { } }
         public List<IReadOnlyCollection<int>> MarkedRead { get; } = new();
         public List<int> Finished { get; } = new();
         public List<int> Pulled { get; } = new();
         public IReadOnlyList<int> PullResultIds { get; set; } = Array.Empty<int>();
+
+        public void Start() { }
+        public void Stop() { }
+        public IReadOnlyList<Paperbunkr.App.Services.TrackerRetryQueueItem> GetRetryQueue() => Array.Empty<Paperbunkr.App.Services.TrackerRetryQueueItem>();
+        public Task RetryNowAsync(int retryId) => Task.CompletedTask;
+        public void DismissRetry(int retryId) { }
 
         public Task OnIssueFinishedInReaderAsync(int seriesId) { Finished.Add(seriesId); return Task.CompletedTask; }
 
@@ -1202,6 +1209,7 @@ public class DetailTabsViewModelTests : IDisposable
         var related = Assert.Single(vm.Related);
 
         vm.RemoveRelationCommand.Execute(related);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs(); // deferred a tick: the remove button is inside the row it removes
 
         Assert.Empty(vm.Related);
         Assert.False(vm.HasRelated);
@@ -1571,50 +1579,246 @@ public class DetailTabsViewModelTests : IDisposable
         Assert.False(vm.HasSameCollection);
     }
 
-    // --- Same Event (docs/superpowers/specs/2026-08-17-metadata-model-phase4b-story-events-
-    // design.md) - read-only derived section. ---
+    // --- Event rows, suggestions, automatic relations (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §6) ---
+
+    /// <summary>A story event over the given (series, issue number) members, in that order; returns its id.</summary>
+    private int AddEvent(string name, DateTime? start, params (int SeriesId, string Number)[] members)
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var storyEvent = new StoryEvent { Name = name, StartDate = start, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        context.StoryEvents.Add(storyEvent);
+        context.SaveChanges();
+        int position = 0;
+        foreach (var (seriesId, number) in members)
+        {
+            var issue = context.Issues.FirstOrDefault(i => i.SeriesId == seriesId && i.Number == number);
+            if (issue is null)
+            {
+                issue = new Issue { SeriesId = seriesId, Number = number };
+                context.Issues.Add(issue);
+                context.SaveChanges();
+            }
+
+            context.EventMemberships.Add(new EventMembership { StoryEventId = storyEvent.Id, IssueId = issue.Id, Position = position++, Role = EventMembershipRole.Core });
+        }
+
+        context.SaveChanges();
+        return storyEvent.Id;
+    }
+
+    private void RunConnector() =>
+        Paperbunkr.Data.Metadata.SeriesConnector.SeriesConnectorSweep.Run(() => new PaperbunkrDbContext(_dbOptions));
 
     [Fact]
-    public void LoadSeries_NoEventMembership_HasSameEventFalse()
+    public void LoadSeries_NoEventMembership_NoEventRows()
     {
         var vm = CreateViewModel();
 
         vm.LoadSeries(LoadSeriesEntity());
+        WaitFor(vm.EventRowsLoaded);
 
-        Assert.False(vm.HasSameEvent);
-        Assert.Empty(vm.SameEvent);
+        Assert.False(vm.HasEventRows);
+        Assert.False(vm.HasOtherEvents);
     }
 
     [Fact]
-    public void LoadSeries_SharedEventMembership_ShowsOtherSeriesUnderSameEvent()
+    public void EventRow_ShowsTheMainSeriesFirst_ThenTheOtherTieIns_WithIssueRanges_AndOpensTheEvent()
     {
-        int otherId = AddOtherSeries("Green Lantern Corps");
-        int currentIssueId;
-        int otherIssueId;
+        int main = AddOtherSeries("Dark Nights: Metal");
+        int nightwing = AddOtherSeries("Nightwing");
+        int eventId = AddEvent("Dark Nights: Metal", null, (main, "1"), (_seriesId, "1"), (nightwing, "29"), (_seriesId, "2"), (main, "2"));
+        RunConnector();
+        int? opened = null;
+        var vm = CreateViewModel();
+        vm.OpenStoryEvent = id => opened = id;
+
+        vm.LoadSeries(LoadSeriesEntity());
+        WaitFor(vm.EventRowsLoaded);
+
+        var row = Assert.Single(vm.VisibleEventRows);
+        Assert.Equal("Dark Nights: Metal", row.Title);
+        Assert.Equal("3 series · open event", row.ContextLabel);
+        Assert.Equal(new[] { (main, "Main event"), (nightwing, "#29") }, row.Items.Select(i => (i.Id, i.SubLabel!)));
+        Assert.DoesNotContain(vm.Related, r => r.RelatedSeriesId == main); // tie-ins live in the row, not the Related rail
+        vm.OpenEventCommand.Execute(row.StoryEventId);
+        Assert.Equal(eventId, opened);
+    }
+
+    [Fact]
+    public void EventRow_OnTheMainSeries_ListsItsTieIns()
+    {
+        int tieIn = AddOtherSeries("Batman");
         using (var context = new PaperbunkrDbContext(_dbOptions))
         {
-            currentIssueId = context.Issues.First(i => i.SeriesId == _seriesId).Id;
-            var otherIssue = new Issue { SeriesId = otherId, Number = "1" };
-            context.Issues.Add(otherIssue);
-            context.SaveChanges();
-            otherIssueId = otherIssue.Id;
-
-            var storyEvent = new StoryEvent { Name = "Rise of the Third Army", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
-            context.StoryEvents.Add(storyEvent);
-            context.SaveChanges();
-
-            context.EventMemberships.AddRange(
-                new EventMembership { StoryEventId = storyEvent.Id, IssueId = currentIssueId, Position = 0, Role = EventMembershipRole.Prologue },
-                new EventMembership { StoryEventId = storyEvent.Id, IssueId = otherIssueId, Position = 1, Role = EventMembershipRole.Core });
+            context.Series.Single(s => s.Id == _seriesId).Name = "Final Crisis";
             context.SaveChanges();
         }
 
+        AddEvent("Final Crisis", null, (_seriesId, "1"), (tieIn, "701"), (tieIn, "702"));
+        RunConnector();
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+        WaitFor(vm.EventRowsLoaded);
+
+        var card = Assert.Single(Assert.Single(vm.VisibleEventRows).Items);
+        Assert.Equal((tieIn, "#701–702"), (card.Id, card.SubLabel));
+    }
+
+    [Fact]
+    public void EventRows_ShowThreeNewestFirst_ThenShowAll()
+    {
+        var starts = new[] { 2001, 2004, 2002, 2003 };
+        foreach (int year in starts)
+        {
+            int main = AddOtherSeries($"Event {year}");
+            AddEvent($"Event {year}", new DateTime(year, 1, 1), (main, "1"), (_seriesId, year.ToString()));
+        }
+
+        RunConnector();
         var vm = CreateViewModel();
         vm.LoadSeries(LoadSeriesEntity());
+        WaitFor(vm.EventRowsLoaded);
 
-        var sameEvent = Assert.Single(vm.SameEvent);
-        Assert.Equal(otherId, sameEvent.SeriesId);
-        Assert.True(vm.HasSameEvent);
+        Assert.Equal(new[] { "Event 2004", "Event 2003", "Event 2002" }, vm.VisibleEventRows.Select(r => r.Title));
+        Assert.True(vm.HasHiddenEventRows);
+        Assert.Equal("Show all 4 events", vm.ShowAllEventsLabel);
+
+        vm.ShowAllEventRowsCommand.Execute(null);
+
+        Assert.Equal(4, vm.VisibleEventRows.Count);
+        Assert.False(vm.HasHiddenEventRows);
+    }
+
+    [Fact]
+    public void BigEventWithNoMainSeries_IsOneOtherEventsCard()
+    {
+        var others = Enumerable.Range(1, 3).Select(i => AddOtherSeries($"Tie-in Book {i}")).ToList();
+        int eventId = AddEvent("Convergence", null, new[] { (_seriesId, "1") }.Concat(others.Select(o => (o, "1"))).ToArray());
+        RunConnector();
+        int? opened = null;
+        var vm = CreateViewModel();
+        vm.OpenStoryEvent = id => opened = id;
+
+        vm.LoadSeries(LoadSeriesEntity());
+        WaitFor(vm.EventRowsLoaded);
+
+        Assert.False(vm.HasEventRows);
+        var card = Assert.Single(vm.OtherEventsRail);
+        Assert.Equal(("Convergence", "4 series"), (card.Name, card.SubLabel));
+        vm.OpenEventCommand.Execute(card.Payload);
+        Assert.Equal(eventId, opened);
+    }
+
+    [Fact]
+    public void AutomaticRelation_ShowsItsReason_FromEitherSide_AndRemovingItDismissesThePair()
+    {
+        int later = AddOtherSeries("Test Series (2020)");
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            foreach (var issue in context.Issues.Where(i => i.SeriesId == _seriesId))
+            {
+                issue.Year = 2012;
+            }
+
+            context.Issues.Add(new Issue { SeriesId = later, Number = "1", Year = 2020 });
+            context.SaveChanges();
+        }
+
+        RunConnector();
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        WaitFor(vm.EventRowsLoaded);
+        var card = Assert.Single(vm.Related);
+        Assert.Equal("Later volume", card.Note);
+
+        var fromLater = CreateViewModel();
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            fromLater.LoadSeries(context.Series.Include(s => s.Issues).First(s => s.Id == later));
+        }
+
+        Assert.Equal("Earlier volume", Assert.Single(fromLater.Related).Note);
+
+        vm.RemoveRelationCommand.Execute(card);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        RunConnector();
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(verify.MediaRelations);
+        Assert.Single(verify.SeriesRelationDismissals);
+    }
+
+    private (DetailTabsViewModel Vm, Paperbunkr.App.Models.PosterRailItem Suggestion) LoadWithASuggestion()
+    {
+        AddOtherSeries("Test Series Unlimited");
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        WaitForSuggestions(vm);
+        return (vm, Assert.Single(vm.RelatedRail, i => i.IsSuggestion));
+    }
+
+    private static void WaitForSuggestions(DetailTabsViewModel vm) => WaitFor(vm.SuggestionsLoaded);
+
+    /// <summary>The background loads continue on the UI thread, so pump it until the task is done.</summary>
+    private static void WaitFor(Task load)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!load.IsCompleted && DateTime.UtcNow < deadline)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+    }
+
+    [Fact]
+    public void Suggestion_ShowsAtTheEndOfTheRelatedRail_WithItsReason_AndAcceptSavesItAsYours()
+    {
+        var (vm, suggestion) = LoadWithASuggestion();
+        Assert.Equal("Similar title", suggestion.SubLabel);
+        Assert.Empty(vm.Related); // not counted as a relation until accepted
+
+        vm.AcceptSuggestionCommand.Execute(suggestion.Payload);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var relation = Assert.Single(context.MediaRelations.Include(m => m.Evidence));
+        Assert.Equal(RelationEvidenceProvider.User, Assert.Single(relation.Evidence).Provider);
+        Assert.Single(vm.Related);
+    }
+
+    [Fact]
+    public void Suggestion_Dismissed_IsRememberedAndGone()
+    {
+        var (vm, suggestion) = LoadWithASuggestion();
+
+        vm.RemoveRelationCommand.Execute(suggestion.Payload);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        WaitForSuggestions(vm);
+
+        Assert.DoesNotContain(vm.RelatedRail, i => i.IsSuggestion);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Single(context.SeriesRelationDismissals);
+        Assert.Empty(context.MediaRelations);
+    }
+
+    [Fact]
+    public void Suggestions_TurnedOff_NoneShow()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().FindRelatedSeriesAutomatically = false;
+            context.SaveChanges();
+        }
+
+        AddOtherSeries("Test Series Unlimited");
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        WaitForSuggestions(vm);
+
+        Assert.DoesNotContain(vm.RelatedRail, i => i.IsSuggestion);
     }
 
     // ===================== External Metadata (docs/superpowers/specs/2026-08-19-metadata-model-anilist-search-and-link-design.md) =====================

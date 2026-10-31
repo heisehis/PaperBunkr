@@ -67,6 +67,11 @@ public static class TrackerLinkResolver
         }
         else
         {
+            if (!string.Equals(existing.ExternalId, externalId, StringComparison.Ordinal))
+            {
+                var staleRetry = context.TrackerPushRetries.SingleOrDefault(x => x.TrackingLinkId == existing.Id);
+                if (staleRetry is not null) context.TrackerPushRetries.Remove(staleRetry);
+            }
             existing.ExternalId = externalId;
         }
 

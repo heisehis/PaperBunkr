@@ -31,6 +31,19 @@ public class FilePickerService : IFilePickerService
         return files.Count > 0 ? files[0].TryGetLocalPath() : null;
     }
 
+    public async Task<System.Collections.Generic.IReadOnlyList<string>> PickOpenFilesAsync(string title, string extension, string extensionLabel)
+    {
+        var topLevel = GetTopLevel();
+        if (topLevel is null) return System.Array.Empty<string>();
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = true,
+            FileTypeFilter = new[] { new FilePickerFileType(extensionLabel) { Patterns = new[] { $"*.{extension}" } } },
+        });
+        return files.Select(f => f.TryGetLocalPath()).Where(p => p is not null).Select(p => p!).ToArray();
+    }
+
     /// <summary>
     /// Multi-extension image filter for the cover-art override feature (docs/superpowers/specs/
     /// 2026-08-23-cover-art-override-design.md) - not on <see cref="IFilePickerService"/>, since

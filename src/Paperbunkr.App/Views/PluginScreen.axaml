@@ -51,8 +51,20 @@
                 </ItemsControl>
             </ScrollViewer>
 
-            <Button Grid.Row="2" Content="Install Package…" Command="{Binding InstallPackageCommand}" HorizontalAlignment="Stretch" Margin="0,10,0,0"
-                    ToolTip.Tip="Installs a plugin package (.pbplugin or .zip). A script package (plugin.xml + .csx scripts) takes effect immediately. A native package (a compiled plugin with full read/write access to your library database) takes effect after you restart Paperbunkr." />
+            <StackPanel Grid.Row="2" Spacing="8" Margin="0,12,0,0">
+                <Button Content="Install Package…" Command="{Binding InstallPackageCommand}" HorizontalAlignment="Stretch"
+                        ToolTip.Tip="Installs a plugin package (.pbplugin or .zip). A script package (plugin.xml + .csx scripts) takes effect immediately. A native package (a compiled plugin with full read/write access to your library database) takes effect after you restart Paperbunkr." />
+                <!-- Developer mode (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §A1/§A3) -->
+                <Button Classes="secondary" Content="New plugin…" Command="{Binding NewPluginCommand}" HorizontalAlignment="Stretch"
+                        IsVisible="{Binding DeveloperMode}" AutomationProperties.AutomationId="PluginNewPlugin"
+                        ToolTip.Tip="Creates a starter plugin (C# script, Python script or native) in your plugins folder." />
+                <Grid ColumnDefinitions="*,Auto"
+                      ToolTip.Tip="Reloads a script plugin whenever its files change, and shows each plugin's live log. Native plugins still need a restart.">
+                    <TextBlock Classes="pbTextMeta" Text="Developer mode" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                    <ToggleSwitch Grid.Column="1" IsChecked="{Binding DeveloperMode}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                  AutomationProperties.Name="Developer mode" AutomationProperties.AutomationId="PluginDeveloperMode" />
+                </Grid>
+            </StackPanel>
         </Grid>
 
         <!-- ============ Detail pane ============ -->
@@ -83,6 +95,8 @@
                                        IsVisible="{Binding Author, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                             <TextBlock Text="{Binding RequiresApiText}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                        IsVisible="{Binding HasRequiresApi}" />
+                            <TextBlock Classes="pbTextMeta" Text="{Binding NetworkText}" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                                       ToolTip.Tip="The hosts this plugin declares in its plugin.xml. Environment.Http only reaches these; Paperbunkr doesn't police other ways a plugin could connect." />
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Border IsVisible="{Binding IsNativeTier}" Background="#1E3A5A" CornerRadius="{DynamicResource PbRadiusSm}" Padding="6,2">
                                     <TextBlock Text="Native" FontSize="11" Foreground="#6EB4E8" />
@@ -172,6 +186,31 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                    </StackPanel>
+
+                    <!-- Developer mode: live log (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §A2) -->
+                    <StackPanel Spacing="8" IsVisible="{Binding HasLogPane}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Classes="pbTextSection" Text="Log" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                <Button Classes="ghost sm" Content="Copy" Command="{Binding LogPane.CopyCommand}" />
+                                <Button Classes="ghost sm" Content="Clear" Command="{Binding LogPane.ClearCommand}" />
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Classes="pbTextMeta" IsVisible="{Binding ShowNativeReloadNote}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource PbTextMutedBrush}"
+                                   Text="Native plugins reload on restart - changing their files while Paperbunkr runs has no effect until then." />
+                        <Border Classes="card" Padding="12">
+                            <Panel>
+                                <TextBlock Classes="pbTextMeta" Text="Nothing logged yet." IsVisible="{Binding LogPane.IsEmpty}"
+                                           Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                              IsVisible="{Binding !LogPane.IsEmpty}">
+                                    <SelectableTextBlock Classes="pbTextMeta" Text="{Binding LogPane.Text}" FontFamily="Cascadia Mono,Consolas,monospace"
+                                                         Foreground="{DynamicResource PbTextBrush}" />
+                                </ScrollViewer>
+                            </Panel>
+                        </Border>
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>

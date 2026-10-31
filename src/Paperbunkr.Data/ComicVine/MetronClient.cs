@@ -61,6 +61,7 @@ public static class MetronHttp
         Window = TimeSpan.FromMinutes(1),
         HourlyLimit = 18,                 // the option is named for ComicVine's hour; its window is set to a minute here
         LowPriorityLimit = 14,
+        ForegroundQuietPeriod = TimeSpan.FromSeconds(15), // the account sync never splits the minute with a scrape
     });
 
     public static HttpClient Client { get; } = new(Handler) { Timeout = Timeout.InfiniteTimeSpan };
@@ -71,7 +72,7 @@ public static class MetronHttp
 /// <c>series/?name=</c> (paged, 100 per page), <c>series/{id}/</c>, <c>series/{id}/issue_list/</c>, <c>issue/{id}/</c>; API token or legacy HTTP Basic login (<see cref="MetronAuth"/>).
 /// A Metron series has no cover image; its issues do.
 /// </summary>
-public sealed class MetronClient : IComicProvider, IIssueFirstSeriesSearch, IPullListSource, Scraping.IStoryArcSource, IComicIssueLookup, IComicSeriesLookup, ISeriesChangeSource, Metadata.IMetronEventLists, Metadata.IMetronUniverses
+public sealed class MetronClient : IComicProvider, IIssueFirstSeriesSearch, IPullListSource, Scraping.IStoryArcSource, IComicIssueLookup, IComicSeriesLookup, ISeriesChangeSource, Metadata.IMetronEventLists, Metadata.IMetronUniverses, Metadata.SeriesConnector.IMetronSeriesLinks
 {
     private const string BaseUrl = "https://metron.cloud/api";
     private const int MaxPages = 30;
@@ -496,9 +497,16 @@ public sealed class MetronClient : IComicProvider, IIssueFirstSeriesSearch, IPul
     public Task<IReadOnlyList<ComicIssueHit>> FindIssuesByUpcAsync(string upc, CancellationToken cancellationToken) =>
         FindIssuesAsync($"upc={Uri.EscapeDataString(upc.Trim())}", cancellationToken);
 
-    public async Task<IReadOnlyList<ComicSeriesHit>> FindSeriesByComicVineIdAsync(int comicVineSeriesId, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ComicSeriesHit>> FindSeriesByComicVineIdAsync(int comicVineSeriesId, CancellationToken cancellationToken) =>
+        FindSeriesAsync($"cv_id={comicVineSeriesId.ToString(CultureInfo.InvariantCulture)}", cancellationToken);
+
+    /// <summary>Metron's series list filters on <c>gcd_id</c> too (its <c>comicsdb/filters/series.py</c>; docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §3.1).</summary>
+    public Task<IReadOnlyList<ComicSeriesHit>> FindSeriesByGcdIdAsync(int gcdSeriesId, CancellationToken cancellationToken) =>
+        FindSeriesAsync($"gcd_id={gcdSeriesId.ToString(CultureInfo.InvariantCulture)}", cancellationToken);
+
+    private async Task<IReadOnlyList<ComicSeriesHit>> FindSeriesAsync(string filter, CancellationToken cancellationToken)
     {
-        var root = await GetAsync($"{BaseUrl}/series/?cv_id={comicVineSeriesId.ToString(CultureInfo.InvariantCulture)}", cancellationToken).ConfigureAwait(false);
+        var root = await GetAsync($"{BaseUrl}/series/?{filter}", cancellationToken).ConfigureAwait(false);
         var hits = new List<ComicSeriesHit>();
         foreach (var node in (root["results"] as JsonArray) ?? new JsonArray())
         {

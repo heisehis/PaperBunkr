@@ -43,5 +43,13 @@ public enum RelationType
     // Generic
     Related,
     Similar,
-    Other
+    Other,
+
+    // Story events (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §3.4) - appended so existing int values don't shift.
+
+    /// <summary>Source has issues in a story event whose main series is target.</summary>
+    TieIn,
+
+    /// <summary>Source is the main series of a story event target ties into. The inverse of <see cref="TieIn"/>.</summary>
+    MainEventSeries,
 }

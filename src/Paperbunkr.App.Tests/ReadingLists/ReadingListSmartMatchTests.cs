@@ -94,7 +94,7 @@ public class ReadingListSmartMatchTests : IDisposable
     }
 
     [Fact]
-    public void AmbiguousEntry_ReadsNeedsAChoice_AndFindAndLinkOffersTheCandidatesWithReasons()
+    public async Task AmbiguousEntry_ReadsNeedsAChoice_AndFindAndLinkOffersTheCandidatesWithReasons()
     {
         // The source gave a year no owned volume has: two candidates, neither confirmed.
         int listId = ImportCsv("Avengers,1,\n");
@@ -110,13 +110,13 @@ public class ReadingListSmartMatchTests : IDisposable
         Assert.Equal("needs a choice ·", row.MissingLabel);
         Assert.Equal("1 needs a choice.", vm.List.StatusMessage!.Replace("0 entries linked, ", string.Empty));
 
-        row.LinkCommand.Execute(null);
-        Assert.True(vm.List.HasSuggestedMatches);
-        Assert.Equal(new[] { first, second }, vm.List.SuggestedMatches.Select(s => s.IssueId).OrderBy(id => id));
-        Assert.All(vm.List.SuggestedMatches, s => Assert.Contains("same number", s.Reason));
-
-        vm.List.LinkSuggestionCommand.Execute(vm.List.SuggestedMatches.First(s => s.IssueId == second));
-        TestDispatcher.Drain();
+        await vm.List.RequestReview!(row.Item.Id);
+        await vm.Review.SearchCommand.ExecuteAsync(null);
+        Assert.True(vm.IsReviewMode);
+        Assert.Equal(new[] { first, second }, vm.Review.Candidates.Select(s => s.Issue.Id).OrderBy(id => id));
+        Assert.All(vm.Review.Candidates, s => Assert.Contains("same number", s.Reason));
+        vm.Review.ChooseCommand.Execute(vm.Review.Candidates.First(s => s.Issue.Id == second));
+        await vm.Review.ApplyCommand.ExecuteAsync(null);
 
         Assert.Equal(second, vm.List.Rows[0].Item.IssueId);
         Assert.False(vm.List.IsLinking);
@@ -127,7 +127,7 @@ public class ReadingListSmartMatchTests : IDisposable
     }
 
     [Fact]
-    public void LinkSuggestion_RefusesAComicTheListAlreadyHolds()
+    public async Task LinkSuggestion_RefusesAComicTheListAlreadyHolds()
     {
         int listId = ImportCsv("Avengers,1,1996\nAvengers,1,2030\n");     // the second matches nothing by year
         int owned = AddComic("Avengers", "1", 1996);
@@ -137,14 +137,15 @@ public class ReadingListSmartMatchTests : IDisposable
         TestDispatcher.Drain();
         Assert.Equal(owned, vm.List.Rows[0].Item.IssueId);
 
-        vm.List.Rows[1].LinkCommand.Execute(null);
-        var suggestion = Assert.Single(vm.List.SuggestedMatches);
+        await vm.List.RequestReview!(vm.List.Rows[1].Item.Id);
+        await vm.Review.SearchCommand.ExecuteAsync(null);
+        var suggestion = Assert.Single(vm.Review.Candidates);
         Assert.Contains("different year", suggestion.Reason);
 
-        vm.List.LinkSuggestionCommand.Execute(suggestion);
-        TestDispatcher.Drain();
+        vm.Review.ChooseCommand.Execute(suggestion);
+        await vm.Review.ApplyCommand.ExecuteAsync(null);
 
         Assert.True(vm.List.Rows[1].IsMissing);
-        Assert.Contains("already in this list", vm.List.StatusMessage);
+        Assert.Contains("already used in this list", vm.Review.Status);
     }
 }

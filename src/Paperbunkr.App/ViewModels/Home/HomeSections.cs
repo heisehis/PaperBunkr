@@ -62,6 +62,18 @@ public sealed class RecentlyAddedSectionViewModel : HomeSectionViewModel
         : base(home, HomeSectionKey.RecentlyAdded, Symbol.New, "HomeRecentlyAddedHeader") { }
 }
 
+public sealed class BookUpNextSectionViewModel : HomeSectionViewModel
+{
+    public BookUpNextSectionViewModel(HomeScreenViewModel home)
+        : base(home, HomeSectionKey.BookUpNext, Symbol.ArrowRight, "HomeBookUpNextHeader") { }
+}
+
+public sealed class BookRecentlyAddedSectionViewModel : HomeSectionViewModel
+{
+    public BookRecentlyAddedSectionViewModel(HomeScreenViewModel home)
+        : base(home, HomeSectionKey.BookRecentlyAdded, Symbol.New, "HomeBookRecentlyAddedHeader") { }
+}
+
 public sealed class CollectionsSectionViewModel : HomeSectionViewModel
 {
     public CollectionsSectionViewModel(HomeScreenViewModel home)

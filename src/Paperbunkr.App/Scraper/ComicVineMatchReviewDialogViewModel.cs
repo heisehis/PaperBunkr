@@ -7,6 +7,7 @@ using Paperbunkr.Data.ComicVine.Scraping;
 using Paperbunkr.Data.Entities;
 using System.Collections.ObjectModel;
 using System.Threading;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -22,6 +23,7 @@ public sealed partial class ComicVineMatchCandidateViewModel : ObservableObject
 
     public ComicVineVolumeSearchResult Volume { get; }
     public double Score { get; }
+    public ComicVineCoverCarouselViewModel CoverCarousel { get; }
 
     [ObservableProperty]
     private bool _isSelected;
@@ -35,11 +37,30 @@ public sealed partial class ComicVineMatchCandidateViewModel : ObservableObject
         null => string.Empty,
     };
 
-    public ComicVineMatchCandidateViewModel(ComicVineVolumeSearchResult volume, double score, Action<ComicVineMatchCandidateViewModel> select)
+    public ComicVineMatchCandidateViewModel(ComicVineVolumeSearchResult volume, double score, Action<ComicVineMatchCandidateViewModel> select,
+        IDictionary<string, string>? coverSelectionMemory = null, string coverMemoryScope = "ComicVine")
     {
         Volume = volume;
         Score = score;
         _select = select;
+        CoverCarousel = new ComicVineCoverCarouselViewModel(coverSelectionMemory);
+        CoverCarousel.SetCovers(new[] { volume.ImageUrl }, $"{coverMemoryScope}:volume:{volume.Id}");
+    }
+
+    public void SetIssueCoverPreview(ComicVineIssueSummary? issue, string provider, bool forceSeriesArt)
+    {
+        if (issue is null)
+        {
+            CoverCarousel.SetCovers(new[] { Volume.ImageUrl }, $"{provider}:volume:{Volume.Id}");
+            return;
+        }
+
+        IEnumerable<string?> issueCovers = new[] { issue.ImageUrl }.Concat(issue.AlternateCoverUrls);
+        IEnumerable<string?> allCovers = forceSeriesArt
+            ? new[] { Volume.ImageUrl }.Concat(issueCovers)
+            : issueCovers.Concat(new[] { Volume.ImageUrl });
+        string? defaultCover = forceSeriesArt ? Volume.ImageUrl : issue.ImageUrl ?? Volume.ImageUrl;
+        CoverCarousel.SetCovers(allCovers, $"{provider}:issue:{issue.Id}", defaultCover);
     }
 
     [RelayCommand]
@@ -68,9 +89,10 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
     private readonly Action<ComicVineVolumeSearchResult?> _resolve;
     private readonly ScrapeOrchestrator.SearchAndRankDelegate _search;
     private readonly Func<int, Task<IReadOnlyList<ComicVineIssueSummary>>>? _loadIssues;
+    private readonly Func<int, CancellationToken, Task<ComicVineIssueSummary?>>? _findIssueCover;
+    private readonly IDictionary<string, string> _coverSelectionMemory;
     private readonly Func<ComicProvider, bool>? _switchProvider;
     private readonly bool _forceSeriesArt;
-    private readonly Func<int, CancellationToken, Task<string?>>? _findIssueCoverUrl;
     private readonly Action? _markPermanentlySkipped;
     private CancellationTokenSource? _coverLookupCts;
     private bool _revertingProvider;
@@ -78,6 +100,8 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
     /// <summary>Docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md Phase 3 -
     /// hides the cover pane entirely (a real "scrape faster on a slow connection" toggle CE had).</summary>
     public bool ShowCovers { get; }
+
+    public bool ShowCoverCarousel => ShowCovers && SelectedCandidate?.CoverCarousel.HasAlternates == true;
 
     /// <summary>Code-behind toggles this while Ctrl is held over the Skip button (CE's own visual
     /// affordance, <c>seriesform.py</c>, verified) - the view binds the Skip button's own label to it.</summary>
@@ -92,8 +116,7 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
     /// (CE's real off-behavior, <c>seriesform.py</c>, verified) once an async lookup by the book's own
     /// number resolves. Starts each selection showing the volume art immediately (never a blank pane)
     /// and swaps to the issue-specific cover if/when the lookup finds one.</summary>
-    [ObservableProperty]
-    private string? _resolvedCoverImageUrl;
+    public string? ResolvedCoverImageUrl => SelectedCandidate?.CoverCarousel.CurrentCoverUrl;
 
     public static IReadOnlyList<string> ProviderNames { get; } = ComicProviderFactory.All.Select(ComicProviderFactory.DisplayName).ToList();
 
@@ -168,8 +191,9 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
         Func<ComicProvider, bool>? switchProvider = null,
         bool forceSeriesArt = true,
         bool showCovers = true,
-        Func<int, CancellationToken, Task<string?>>? findIssueCoverUrl = null,
-        Action? markPermanentlySkipped = null)
+        Func<int, CancellationToken, Task<ComicVineIssueSummary?>>? findIssueCover = null,
+        Action? markPermanentlySkipped = null,
+        IDictionary<string, string>? coverSelectionMemory = null)
     {
         BookLabel = bookLabel;
         _providerText = ComicProviderFactory.DisplayName(provider);
@@ -180,7 +204,8 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
         _loadIssues = loadIssues;
         _forceSeriesArt = forceSeriesArt;
         ShowCovers = showCovers;
-        _findIssueCoverUrl = findIssueCoverUrl;
+        _findIssueCover = findIssueCover;
+        _coverSelectionMemory = coverSelectionMemory ?? new Dictionary<string, string>(StringComparer.Ordinal);
         _markPermanentlySkipped = markPermanentlySkipped;
         SetCandidates(initialCandidates);
     }
@@ -191,7 +216,7 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
         SelectedCandidate = null;
         foreach (var candidate in ranked.OrderByDescending(c => c.Score))
         {
-            Candidates.Add(new ComicVineMatchCandidateViewModel(candidate.Volume, candidate.Score, Select));
+            Candidates.Add(new ComicVineMatchCandidateViewModel(candidate.Volume, candidate.Score, Select, _coverSelectionMemory, ProviderText));
         }
 
         // Pre-select the top match - CE's own series-choose dialog highlights its top row by default
@@ -214,6 +239,11 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
     /// review-tables-and-batch-summary-design.md §1.1) when the user clicks a row.</summary>
     partial void OnSelectedCandidateChanged(ComicVineMatchCandidateViewModel? oldValue, ComicVineMatchCandidateViewModel? newValue)
     {
+        if (oldValue is not null)
+        {
+            oldValue.CoverCarousel.PropertyChanged -= OnSelectedCoverChanged;
+        }
+
         foreach (ComicVineMatchCandidateViewModel c in Candidates)
         {
             c.IsSelected = ReferenceEquals(c, newValue);
@@ -221,11 +251,24 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
 
         if (newValue is not null)
         {
+            newValue.CoverCarousel.PropertyChanged += OnSelectedCoverChanged;
             _ = RefreshCoverAsync(newValue);
         }
-        else
+
+        OnPropertyChanged(nameof(ResolvedCoverImageUrl));
+        OnPropertyChanged(nameof(ShowCoverCarousel));
+    }
+
+    private void OnSelectedCoverChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ComicVineCoverCarouselViewModel.HasAlternates))
         {
-            ResolvedCoverImageUrl = null;
+            OnPropertyChanged(nameof(ShowCoverCarousel));
+        }
+
+        if (e.PropertyName == nameof(ComicVineCoverCarouselViewModel.CurrentCoverUrl))
+        {
+            OnPropertyChanged(nameof(ResolvedCoverImageUrl));
         }
     }
 
@@ -236,9 +279,10 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
     private async Task RefreshCoverAsync(ComicVineMatchCandidateViewModel candidate)
     {
         _coverLookupCts?.Cancel();
-        ResolvedCoverImageUrl = candidate.CoverImageUrl;
+        candidate.SetIssueCoverPreview(null, ProviderText, _forceSeriesArt);
+        OnPropertyChanged(nameof(ResolvedCoverImageUrl));
 
-        if (_forceSeriesArt || _findIssueCoverUrl is null)
+        if (_findIssueCover is null)
         {
             return;
         }
@@ -247,10 +291,11 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
         _coverLookupCts = cts;
         try
         {
-            string? issueCoverUrl = await _findIssueCoverUrl(candidate.Volume.Id, cts.Token).ConfigureAwait(true);
+            ComicVineIssueSummary? issue = await _findIssueCover(candidate.Volume.Id, cts.Token).ConfigureAwait(true);
             if (!cts.IsCancellationRequested)
             {
-                ResolvedCoverImageUrl = issueCoverUrl ?? candidate.CoverImageUrl;
+                candidate.SetIssueCoverPreview(issue, ProviderText, _forceSeriesArt);
+                OnPropertyChanged(nameof(ResolvedCoverImageUrl));
             }
         }
         catch (OperationCanceledException)
@@ -319,6 +364,7 @@ public sealed partial class ComicVineMatchReviewDialogViewModel : ObservableObje
     {
         IReadOnlyList<ComicVineIssueSummary> issues = await _loadIssues!(SelectedCandidate!.Volume.Id).ConfigureAwait(true);
         IssuePeek = new ComicVineIssueReviewDialogViewModel(
-            BookLabel, issues, preSelected: null, readOnlyPeek: true, _ => IssuePeek = null, ShowCovers);
+            BookLabel, issues, preSelected: null, readOnlyPeek: true, _ => IssuePeek = null, ShowCovers,
+            coverSelectionMemory: _coverSelectionMemory, coverMemoryScope: ProviderText);
     }
 }

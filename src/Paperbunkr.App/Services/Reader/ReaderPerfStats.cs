@@ -43,6 +43,7 @@ public sealed class ReaderPerfStats
     private readonly MetricRing _boundaryMs = new(MetricWindow);
     private readonly MetricRing _decodeLatencyMs = new(MetricWindow);
     private readonly MetricRing _positionSaveMs = new(MetricWindow);
+    private readonly MetricRing _panelDetectionMs = new(MetricWindow);
 
     private long _cacheHits;
     private long _cacheMisses;
@@ -81,6 +82,9 @@ public sealed class ReaderPerfStats
 
     /// <summary>How long the debounced reading-position save took (now off the UI thread, still worth watching).</summary>
     public void RecordPositionSaveMs(double ms) => _positionSaveMs.Add(ms);
+
+    /// <summary>Elapsed time for one cold panel-analysis request, including bitmap scaling and the detector.</summary>
+    public void RecordPanelDetectionMs(double ms) => _panelDetectionMs.Add(ms);
 
     /// <summary>One continuous-mode frame's count of on-screen pages that had no decoded bitmap yet (drawn as a gap). Only frames with a gap are counted.</summary>
     public void RecordBlankPages(int visibleBlankPages)
@@ -151,6 +155,7 @@ public sealed class ReaderPerfStats
         var (boundaryP50, boundaryP99, boundaryCount) = _boundaryMs.Percentiles();
         var (latencyP50, latencyP99, _) = _decodeLatencyMs.Percentiles();
         var (_, saveP99, _) = _positionSaveMs.Percentiles();
+        var (panelP50, panelP99, panelCount) = _panelDetectionMs.Percentiles();
 
         return new ReaderPerfSnapshot(
             FrameP50Ms: p50,
@@ -174,6 +179,9 @@ public sealed class ReaderPerfStats
             LayoutShiftEvents = Interlocked.Read(ref _layoutShiftEvents),
             MaxLayoutShiftPx = maxShift,
             PositionSaveP99Ms = saveP99,
+            PanelDetectionP50Ms = panelP50,
+            PanelDetectionP99Ms = panelP99,
+            PanelDetectionSamples = panelCount,
         };
     }
 
@@ -188,6 +196,7 @@ public sealed class ReaderPerfStats
         _boundaryMs.Clear();
         _decodeLatencyMs.Clear();
         _positionSaveMs.Clear();
+        _panelDetectionMs.Clear();
         Interlocked.Exchange(ref _cacheHits, 0);
         Interlocked.Exchange(ref _cacheMisses, 0);
         Interlocked.Exchange(ref _backgroundDecodes, 0);
@@ -265,12 +274,18 @@ public readonly record struct ReaderPerfSnapshot(
     public long LayoutShiftEvents { get; init; }
     public double MaxLayoutShiftPx { get; init; }
     public double PositionSaveP99Ms { get; init; }
+    public double PanelDetectionP50Ms { get; init; }
+    public double PanelDetectionP99Ms { get; init; }
+    public long PanelDetectionSamples { get; init; }
 
     public override string ToString() =>
         $"frame p50 {FrameP50Ms:F2}ms / p99 {FrameP99Ms:F2}ms ({FramesSampled}) · " +
         $"cache {CacheHitRatio:P0} ({CacheHits}/{CacheHits + CacheMisses}) · " +
         $"decode bg {BackgroundDecodes} sync {SynchronousDecodes} · " +
         $"read session {SessionReads} archive {ArchiveReads}" +
+        (PanelDetectionSamples > 0
+            ? $"\npanel detect p50 {PanelDetectionP50Ms:F0}ms / p99 {PanelDetectionP99Ms:F0}ms ({PanelDetectionSamples})"
+            : string.Empty) +
         (HasBoundaryMetrics
             ? $"\nboundary p50 {BoundaryP50Ms:F2}ms / p99 {BoundaryP99Ms:F2}ms ({BoundaryEvents}) · " +
               $"decode latency p50 {DecodeLatencyP50Ms:F0}ms / p99 {DecodeLatencyP99Ms:F0}ms · " +

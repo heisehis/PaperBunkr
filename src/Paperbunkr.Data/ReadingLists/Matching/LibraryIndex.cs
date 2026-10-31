@@ -67,6 +67,8 @@ public sealed class LibraryIndex
 
     public int Count => _byId.Count;
 
+    public IEnumerable<LibraryIssue> All => _byId.Values;
+
     public LibraryIssue? Find(int issueId) => _byId.GetValueOrDefault(issueId);
 
     public IReadOnlyList<LibraryIssue> WithProviderId(ComicProvider provider, string? externalId) =>

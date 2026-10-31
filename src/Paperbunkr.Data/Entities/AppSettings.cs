@@ -525,6 +525,12 @@ public class AppSettings
     /// <summary>See <see cref="BooksSortField"/>.</summary>
     public BooksGroupField BooksGroupField { get; set; } = BooksGroupField.None;
 
+    /// <summary>The Books screen's status tab (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §2). Stored by name.</summary>
+    public BooksStatusTab BooksActiveStatusTab { get; set; } = BooksStatusTab.All;
+
+    /// <summary>Books grid or Bookshelf spines (same spec, §5). Stored by name.</summary>
+    public BooksViewMode BooksViewMode { get; set; } = BooksViewMode.Grid;
+
     /// <summary>Books-screen counterpart to <see cref="LibraryActiveWorkspaceId"/> - same cosmetic-label-only role.</summary>
     public int? BooksActiveWorkspaceId { get; set; }
 
@@ -740,6 +746,47 @@ public class AppSettings
     /// <summary>Whether the reader's chrome (toolbar/progress bar) auto-fades after ~2.5s of no pointer movement while visible. Default true.</summary>
     public bool BookReaderAutoHideChrome { get; set; } = true;
 
+    // --- Book reader typography and reading aids (docs/superpowers/specs/2026-10-27-books-slice3b-reader-typography-aids-design.md §2) ---
+
+    /// <summary>Global default for justified text; a book can override it (<see cref="Book.JustifyOverride"/>).</summary>
+    public bool BookReaderJustify { get; set; }
+
+    /// <summary>Global default for automatic hyphenation; a book can override it (<see cref="Book.HyphenateOverride"/>).</summary>
+    public bool BookReaderHyphenate { get; set; }
+
+    /// <summary>Stop forcing the reader's own font, size and spacing on the chapter text so the book's own styling shows. Global only.</summary>
+    public bool BookReaderUsePublisherStyles { get; set; }
+
+    /// <summary>The installed font used when a book's family option is <see cref="BookFontFamilyOption.Custom"/>.</summary>
+    public string? BookReaderCustomFont { get; set; }
+
+    /// <summary>Ask dictionaryapi.dev for a word the offline dictionary does not have (docs/superpowers/specs/2026-10-27-books-slice4b-dictionary-design.md §3). Off by default: it sends the word over the network.</summary>
+    public bool BookReaderLookUpOnline { get; set; }
+
+    /// <summary>Read-aloud speed, -5 (slowest) to +5 (docs/superpowers/specs/2026-10-27-books-slice4d-read-aloud-design.md §4); 0 is the voice's normal speed.</summary>
+    public int BookReaderSpeechRate { get; set; }
+
+    /// <summary>The installed Windows voice used to read aloud; null keeps the system default.</summary>
+    public string? BookReaderSpeechVoice { get; set; }
+
+    /// <summary>Where books downloaded from OPDS catalogs are saved (docs/superpowers/specs/2026-10-27-books-slice4c-opds-design.md §5); null until the first download asks.</summary>
+    public string? OpdsDownloadFolder { get; set; }
+
+    /// <summary>Whether the line ruler is on when a book opens; remembered.</summary>
+    public bool BookReaderRulerEnabled { get; set; }
+
+    /// <summary>Auto-scroll speed 1-8, remembered. The scrolling itself always starts off.</summary>
+    public int BookReaderAutoScrollSpeed { get; set; } = 3;
+
+    /// <summary>Paged or scroll reading (docs/superpowers/specs/2026-10-27-books-reader-paged-scroll-modes-design.md §5), app-wide and remembered.</summary>
+    public BookReaderLayout BookReaderLayout { get; set; } = BookReaderLayout.Paged;
+
+    /// <summary>Book pages are numbered by word count (same spec §6.1): a page closes at the first paragraph end once it holds at least this many words.</summary>
+    public int BookPageWordsMin { get; set; } = 250;
+
+    /// <summary>A book page never passes this many words unless a single sentence does.</summary>
+    public int BookPageWordsMax { get; set; } = 300;
+
     // --- File metadata write-back (docs/superpowers/specs/2026-09-03-file-metadata-write-back-
     // design.md). Mirrors CE's three checkboxes (Settings.cs: updateComicFiles /
     // autoUpdateComicsFiles / updateComicBookFiles), all of which default false there too - nothing
@@ -751,6 +798,15 @@ public class AppSettings
     /// CE: <c>Settings.UpdateComicFiles</c> ("Allow writing of Book info into files"), default false.
     /// </summary>
     public bool WriteMetadataToFiles { get; set; }
+
+    /// <summary>The one-time "Refresh from files" book-metadata backfill has completed (docs/superpowers/specs/2026-10-26-books-slice1-data-foundation-design.md §4.1).</summary>
+    public bool BookMetadataBackfillDone { get; set; }
+
+    /// <summary>Open Library as a book-metadata source. Keyless. Default on.</summary>
+    public bool BookMetadataOpenLibraryEnabled { get; set; } = true;
+
+    /// <summary>Google Books as a book-metadata source. Works keyless (low quota). Default on.</summary>
+    public bool BookMetadataGoogleBooksEnabled { get; set; } = true;
 
     /// <summary>
     /// When <see cref="WriteMetadataToFiles"/> is on: whether a qualifying metadata edit triggers a
@@ -1053,4 +1109,11 @@ public class AppSettings
     /// greeting tint on a few calendar dates. Default false (opt-in, purely decorative).
     /// </summary>
     public bool HomeSeasonalFlourish { get; set; }
+
+    /// <summary>
+    /// The series connector (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §5.2): links later volumes, annuals,
+    /// team-ups and event tie-ins automatically and suggests other related series. Off stops new automatic relations and suggestions;
+    /// what's already saved is kept, and relations you made are never touched. Default true. CE has no series relations.
+    /// </summary>
+    public bool FindRelatedSeriesAutomatically { get; set; } = true;
 }

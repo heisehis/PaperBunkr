@@ -30,8 +30,9 @@
 
     <Panel>
         <views:ReadingGalleryView DataContext="{Binding Gallery}" Classes.hidden="{Binding $parent[views:ReadingListsScreen].((vm:ReadingListsScreenViewModel)DataContext).IsListMode}"
-                                  IsVisible="{Binding $parent[views:ReadingListsScreen].((vm:ReadingListsScreenViewModel)DataContext).IsGalleryMode}" />
+                                  IsVisible="{Binding $parent[views:ReadingListsScreen].((vm:ReadingListsScreenViewModel)DataContext).ShowGalleryView}" />
         <views:ReadingListPageView DataContext="{Binding List}" Classes.hidden="{Binding $parent[views:ReadingListsScreen].((vm:ReadingListsScreenViewModel)DataContext).IsGalleryMode}"
-                                   IsVisible="{Binding $parent[views:ReadingListsScreen].((vm:ReadingListsScreenViewModel)DataContext).IsListMode}" />
+                                   IsVisible="{Binding $parent[views:ReadingListsScreen].((vm:ReadingListsScreenViewModel)DataContext).ShowListView}" />
+        <views:ReadingListReviewView DataContext="{Binding Review}" IsVisible="{Binding $parent[views:ReadingListsScreen].((vm:ReadingListsScreenViewModel)DataContext).IsReviewMode}" />
     </Panel>
 </UserControl>

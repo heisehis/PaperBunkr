@@ -898,6 +898,8 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
             return;
         }
 
+        var identityBefore = ReadingListHealingCoordinator.Capture(context, [issueId]);
+
         // File metadata write-back (docs/superpowers/specs/2026-09-03-file-metadata-write-back-
         // design.md) - snapshot every file-mapped field now, compare after the save, only enqueue a
         // write if the file's content would actually change. Generalizes the former Genre/Tags-only
@@ -958,6 +960,10 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
 
         context.SaveChanges();
         _isDirty = false;
+
+        var identityAfter = ReadingListHealingCoordinator.Capture(context, [issueId]);
+        var healed = ReadingListHealingCoordinator.Recheck(_contextFactory, ReadingListHealingCoordinator.Changed(identityBefore, identityAfter));
+        ReadingListHealingCoordinator.Report(healed);
 
         // Re-derive this issue's Character index from its (possibly edited) Characters text
         // (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-progression-design.md).

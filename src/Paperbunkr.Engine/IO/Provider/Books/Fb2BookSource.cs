@@ -210,11 +210,22 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 				}
 			}
 
+			string? sequenceNumber = sequenceElement?.Attributes().FirstOrDefault(a => a.Name.LocalName == "number")?.Value;
+			XElement? publishInfo = description?.Elements().FirstOrDefault(e => e.Name.LocalName == "publish-info");
+			string? annotation = titleInfo?.Elements().FirstOrDefault(e => e.Name.LocalName == "annotation")?.Value;
+			var genres = titleInfo?.Elements().Where(e => e.Name.LocalName == "genre").Select(e => e.Value);
+
 			return new BookMetadata
 			{
 				Title = title,
 				Author = author,
 				SeriesName = seriesName,
+				SeriesIndex = seriesName is null ? null : BookMetadataParsing.ParseIndex(sequenceNumber),
+				Publisher = BookMetadataParsing.NullIfBlank(publishInfo?.Elements().FirstOrDefault(e => e.Name.LocalName == "publisher")?.Value),
+				LanguageISO = BookMetadataParsing.NullIfBlank(titleInfo?.Elements().FirstOrDefault(e => e.Name.LocalName == "lang")?.Value),
+				ISBN = BookMetadataParsing.ExtractIsbn(publishInfo?.Elements().FirstOrDefault(e => e.Name.LocalName == "isbn")?.Value),
+				Description = BookMetadataParsing.NullIfBlank(annotation is null ? null : System.Text.RegularExpressions.Regex.Replace(annotation, @"\s+", " ")),
+				Genres = BookMetadataParsing.CleanList(genres),
 				CoverImageBytes = coverBytes,
 			};
 		}

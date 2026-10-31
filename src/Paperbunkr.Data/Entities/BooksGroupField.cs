@@ -10,4 +10,10 @@ public enum BooksGroupField
     None,
     Series,
     Author,
+
+    // Books slice 2a. A book with several genres is grouped under its first genre only.
+    Status,
+    Publisher,
+    Language,
+    Genre,
 }

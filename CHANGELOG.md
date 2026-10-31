@@ -3,6 +3,27 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.2-beta] - 2026-10-31
+
+### Added
+
+- **Books library and reader.** Expanded browse shelves and detail pages, book metadata sources,
+  reading statistics, reader layouts and reading aids, dictionary lookup, speech, Calibre import,
+  OPDS catalogs, duplicate detection and missing-chapter tools.
+- **CBL Smart Match review.** Retained review screens, import previews, link history and undo,
+  unresolved-entry preservation, and safer source refresh and healing.
+- **Tracker retry queue.** Durable retries for failed automatic progress pushes, with backoff and
+  coalescing of newer reading progress.
+- **Plugin API 4.5.** Developer tools, plugin scaffolding and testing helpers, additional hooks,
+  typed smart-list fields, metadata sources, menu placement and declared network access.
+- **Series connections and insights.** Series relation discovery, chapter alignment and community
+  comparison tools, with additional continuity ordering and overlap information.
+
+### Changed
+
+- Improved guided-view performance, ComicRack imports, metadata handling and book-reader controls.
+- Set the release version to 0.8.2-beta from the unpublished development version 0.8.3.0.
+
 ## [0.8.0-beta] - 2026-10-24
 
 ### Added

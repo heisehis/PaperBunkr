@@ -16,7 +16,8 @@ internal static class SeriesStatistics
     public readonly record struct Key(string Series, string Volume);
 
     /// <summary>One group's figures. <see cref="LastNumber"/>/<see cref="MaxYear"/>/<see cref="MaxCount"/> are -1 when no comic of the group has a value (CE's invalid value).</summary>
-    public readonly record struct Stats(float LastNumber, int MaxYear, int MaxCount, int MaxGapSize);
+    public readonly record struct Stats(float LastNumber, int MaxYear, int MaxCount, int MaxGapSize,
+        DateTime? LastAdded, DateTime? LastOpened, DateTime? LastPublished, DateTime? LastReleased);
 
     public static Key KeyOf(Issue issue) => new(issue.Series?.Name ?? string.Empty, issue.EffectiveVolume() ?? string.Empty);
 
@@ -28,7 +29,25 @@ internal static class SeriesStatistics
         float lastNumber = group.Max(SafeNumber);
         int maxYear = group.Max(i => i.EffectiveYear() ?? -1);
         int maxCount = group.Max(i => i.Count ?? -1);
-        return new Stats(lastNumber, maxYear, maxCount, MaxGapSize(group));
+        return new Stats(lastNumber, maxYear, maxCount, MaxGapSize(group),
+            group.MaxDate(i => i.AddedTime), group.MaxDate(i => i.OpenedTime),
+            group.MaxDate(i => PublishedDate(i)), group.MaxDate(i => i.ReleasedTime));
+    }
+
+    private static DateTime? MaxDate(this IReadOnlyCollection<Issue> group, Func<Issue, DateTime?> selector)
+    {
+        DateTime[] values = group.Select(selector).Where(d => d.HasValue).Select(d => d!.Value).ToArray();
+        return values.Length == 0 ? null : values.Max();
+    }
+
+    private static DateTime? PublishedDate(Issue issue)
+    {
+        int year = issue.EffectiveYear() ?? 0;
+        if (year <= 0) return null;
+        year = Math.Clamp(year, 1, 9999);
+        int month = Math.Clamp(issue.Month ?? 1, 1, 12);
+        int day = Math.Clamp(issue.Day ?? 1, 1, DateTime.DaysInMonth(year, month));
+        return new DateTime(year, month, day);
     }
 
     /// <summary>

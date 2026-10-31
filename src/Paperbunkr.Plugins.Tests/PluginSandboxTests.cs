@@ -85,6 +85,29 @@ public sealed class PluginSandboxTests : IDisposable
     }
 
     [Fact]
+    public void Script_with_editor_hash_r_lines_for_the_api_assemblies_still_compiles()
+    {
+        // The scaffolded template's editor-help lines (Plugin API 4.5 §A3): any path, as long as it names an assembly the script is
+        // already given. A path that doesn't even exist still resolves to the host's own copy.
+        var cmd = Compile("""
+            #r "C:\nowhere\Paperbunkr.Plugins.Abstractions.dll"
+            #r "D:\also\nowhere\Paperbunkr.Data.dll"
+            return Environment.App.GetLibraryBooks().Count();
+            """);
+        Assert.False(cmd.IsBroken, cmd.CompileError);
+    }
+
+    [Fact]
+    public void Script_naming_a_denied_assembly_by_a_lookalike_path_still_fails()
+    {
+        var cmd = Compile("""
+            #r "C:\nowhere\Microsoft.EntityFrameworkCore.dll"
+            return typeof(Microsoft.EntityFrameworkCore.DbContext).Name;
+            """);
+        Assert.True(cmd.IsBroken);
+    }
+
+    [Fact]
     public void Script_UsingOnlyTheCuratedSurface_StillCompiles()
     {
         // The fence must not break a well-formed plugin: entities + IPluginEnvironment are fine.

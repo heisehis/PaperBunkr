@@ -38,12 +38,19 @@ public class LopImportUiTests : IDisposable
     private sealed class PickerReturning : IFilePickerService
     {
         public string? Path { get; set; }
+        public IReadOnlyList<string>? Paths { get; set; }
         public string? LastExtension { get; private set; }
 
         public Task<string?> PickOpenFileAsync(string title, string extension, string extensionLabel)
         {
             LastExtension = extension;
             return Task.FromResult(Path);
+        }
+
+        public Task<IReadOnlyList<string>> PickOpenFilesAsync(string title, string extension, string extensionLabel)
+        {
+            LastExtension = extension;
+            return Task.FromResult(Paths ?? (Path is null ? Array.Empty<string>() : new[] { Path }));
         }
 
         public Task<string?> PickSaveFileAsync(string title, string suggestedFileName, string extension, string extensionLabel) => Task.FromResult<string?>(null);
@@ -73,6 +80,28 @@ public class LopImportUiTests : IDisposable
     }
 
     [Fact]
+    public async Task Import_MultipleFiles_ContinuesAfterUnreadableFile_AndShowsOneCombinedResult()
+    {
+        string unreadable = Path.Combine(_root, "unreadable.lop");
+        File.WriteAllText(unreadable, "not xml");
+        string mixed = Path.Combine(_root, "mixed.lop");
+        File.WriteAllText(mixed,
+            "<Profiles><Profile Name=\"Bad\"><FileTemplate>{&lt;series&gt;}</FileTemplate><Mode>Copy</Mode>" +
+            "<ExcludeRules Operator=\"All\" ExcludeMode=\"Only\"><ExcludeRule Field=\"Start Year\" Operator=\"is\" Value=\"2000\" /></ExcludeRules></Profile>" +
+            "<Profile Name=\"Good\"><FileTemplate>{&lt;series&gt;}</FileTemplate><Mode>Copy</Mode><CopyMode>false</CopyMode></Profile></Profiles>");
+        _picker.Paths = new[] { mixed, unreadable };
+        var manager = Manager();
+
+        await manager.ImportProfilesCommand.ExecuteAsync(null);
+
+        Assert.Equal("lop", _picker.LastExtension);
+        Assert.Contains(manager.Profiles, p => p.Name == "Good");
+        Assert.Equal("Imported 1 profile; 1 not imported; 1 file failed (see the notes).", manager.ImportStatusMessage);
+        Assert.Contains(manager.ImportNotes, n => n.StartsWith("mixed.lop: Bad was not imported:"));
+        Assert.Contains(manager.ImportNotes, n => n.Contains("unreadable.lop"));
+    }
+
+    [Fact]
     public async Task Import_ARefusedProfile_IsListedInTheNotes_AndTheStatusSaysSo()
     {
         string path = Path.Combine(_root, "mixed.lop");
@@ -89,7 +118,7 @@ public class LopImportUiTests : IDisposable
 
         Assert.Equal("Good", manager.Selected!.Name);
         Assert.DoesNotContain(manager.Profiles, p => p.Name == "Bad");
-        Assert.Contains(manager.ImportNotes, n => n.StartsWith("Bad was not imported:"));
+        Assert.Contains(manager.ImportNotes, n => n.StartsWith("mixed.lop: Bad was not imported:"));
         Assert.Equal("Imported 1; 1 not imported (see the notes).", manager.ImportStatusMessage);
     }
 

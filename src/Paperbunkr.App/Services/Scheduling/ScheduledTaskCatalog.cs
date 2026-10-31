@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -23,6 +23,7 @@ public static class ScheduledTaskCatalog
     public const string LibraryScan = "library-scan";
     public const string BookScan = "book-scan";
     public const string SyncMetadata = "sync-metadata";
+    public const string BookMetadataRefresh = "book-metadata-refresh";
     public const string ContentTypeSweep = "content-type-sweep";
     public const string ContentTypeTrackerClassify = "content-type-tracker-classify";
     public const string VerifyCovers = "verify-covers";
@@ -41,6 +42,7 @@ public static class ScheduledTaskCatalog
     public const string GcdMatch = "gcd-match";
     public const string MetronSync = "metron-sync";
     public const string SynopsisGenreSuggest = "synopsis-genre-suggest";
+    public const string FindRelatedSeries = "find-related-series";
 
     public static IReadOnlyList<ScheduledTaskDescriptor> All { get; } = Build();
 
@@ -82,6 +84,19 @@ public static class ScheduledTaskCatalog
                 return result.BooksAdded == 0
                     ? "No new books found"
                     : $"Added {result.BooksAdded} book{Plural(result.BooksAdded)} across {result.SeriesTouched} series";
+            }),
+
+        // Books slice 1 (docs/superpowers/specs/2026-10-26-books-slice1-data-foundation-design.md §4.1): fills empty publisher / language / ISBN /
+        // series / tags / rating on existing books from their files. On by default so the migration's new columns fill themselves; never overwrites.
+        new ScheduledTaskDescriptor(
+            BookMetadataRefresh, "Refresh book metadata from files",
+            "Re-reads each book's file and fills blank publisher, language, ISBN, series, tags and rating. Never overwrites a value you set or cleared.",
+            ActivityJobKind.SyncMetadata, Priority: 24, SchedulerResourceClass.Db,
+            TimeSpan.FromDays(7), DefaultEnabled: true, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                var result = await new BookMetadataRefreshService().RunAsync(Adapt(handle, "books"), ct);
+                return result.Describe();
             }),
 
         new ScheduledTaskDescriptor(
@@ -424,6 +439,20 @@ public static class ScheduledTaskCatalog
             TimeSpan.FromDays(7), DefaultEnabled: true, ScheduleMode.Interval,
             static (handle, ct) => Task.Run(() => Paperbunkr.App.Services.Gcd.GcdMatching.RunAsync(() => PaperbunkrDb.CreateContext(), handle, ct), ct)),
 
+        // The series connector (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §5.2): local rules first (seconds), then
+        // Metron's associated series at low priority. Runs after GCD matching (18; 19-24 are taken) so new continued-series bonds are already in. Scans and
+        // scrapes run the local part on their own; this is the weekly pass plus the Metron half.
+        new ScheduledTaskDescriptor(
+            FindRelatedSeries, "Find related series",
+            "Links later volumes, annuals and specials, team-up titles and story-event tie-ins on each series' Related tab, and asks Metron " +
+            "which series go together when Metron is connected. Relations you made yourself are never changed, and ones you remove stay removed.",
+            ActivityJobKind.SyncMetadata, Priority: 25, SchedulerResourceClass.Network,
+            TimeSpan.FromDays(7), DefaultEnabled: true, ScheduleMode.Interval,
+            static (handle, ct) => SeriesConnectorRunner.RunFullAsync(() => PaperbunkrDb.CreateContext(), handle, ct),
+            // Seconds of local work, then up to an hour waiting on Metron's rate limit (the first run, 2026-10-29): like Metron sync, it must
+            // not hold the lane a scrape or scan waits on.
+            UsesHeavyJobLane: false),
+
         // docs/superpowers/specs/2026-10-05-metron-account-sync-design.md. Ships disabled: the "Sync with my Metron account" switch under
         // Preferences -> Connections turns this task on and off with it, so a library that never syncs has no hourly no-op run.
         new ScheduledTaskDescriptor(
@@ -432,7 +461,9 @@ public static class ScheduledTaskCatalog
             "Turned on and off by the account sync switch under Preferences → Connections.",
             ActivityJobKind.SyncMetadata, Priority: 19, SchedulerResourceClass.Network,
             TimeSpan.FromHours(1), DefaultEnabled: false, ScheduleMode.Interval,
-            static (handle, ct) => Task.Run(() => MetronAccountSyncRunner.RunScheduledAsync(() => PaperbunkrDb.CreateContext(), handle, ct), ct)),
+            static (handle, ct) => Task.Run(() => MetronAccountSyncRunner.RunScheduledAsync(() => PaperbunkrDb.CreateContext(), handle, ct), ct),
+            // Rate-limited network work at background priority (its requests already yield to a scrape's): it must not hold the lane a scrape waits on.
+            UsesHeavyJobLane: false),
 
         // Synopsis genre suggestions (docs/superpowers/specs/2026-10-06-smart-features-design.md §6.2): keyword matching over synopses the
         // library already holds - no network, no model. Off by default; every suggestion waits in Library Health > Review as a Pending

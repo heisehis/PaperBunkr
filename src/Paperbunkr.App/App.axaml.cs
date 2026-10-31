@@ -434,14 +434,14 @@ public partial class App : Application
         // Proactive scan alerts (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-
         // scan-alerts-design.md §4) - same "no natural attach point" reasoning as PluginHost above.
         LibraryFolderScanner.ScanAlertService = new PluginScanAlertService(pluginHost, mainViewModel.Activity);
-        // Reading-list entries a scan just filled in (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.9) - said once,
-        // quietly, and only when something was linked. Raised from the scan's background thread, so hop to the UI thread first.
+        // Reading-list entries rechecked after library/identity changes (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.9) -
+        // one summary per operation, and only when entries were linked or need a choice. Raised from background work, so hop to the UI thread first.
         LibraryFolderScanner.ReadingListsHealed = healed => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             mainViewModel.Activity.RaiseAlert(new ActivityAlert
             {
                 Severity = ActivityAlertSeverity.Info,
-                Title = "Reading lists filled in",
-                Detail = $"New comics matched entries that were waiting for them: {healed.Summary}",
+                Title = "Reading lists rechecked",
+                Detail = healed.Summary,
                 DedupeKey = "reading-lists-healed",
             }));
         // DrawThumbnailOverlay (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-
@@ -461,6 +461,8 @@ public partial class App : Application
         // can't miss an early scheduled job's hooks.
         mainViewModel.Scheduler.Start();
         desktop.Exit += (_, _) => mainViewModel.Scheduler.Stop();
+        mainViewModel.TrackerAutoSync.Start();
+        desktop.Exit += (_, _) => mainViewModel.TrackerAutoSync.Stop();
 
         // The app's own reactions to library events (docs/superpowers/specs/2026-10-06-smart-features-design.md §7.3, §7.4): finishing a
         // continuity or story event is announced, and a linked series marked completed has its provider data refreshed once. Started
@@ -480,6 +482,11 @@ public partial class App : Application
             Paperbunkr.App.Services.PaperbunkrDb.CreateContext,
             ids => mainViewModel.Scraper.ScrapeIssuesAsync(ids, isInteractive: false, jobKind: "Import"));
         desktop.Exit += (_, _) => scrapeOnImport.Dispose();
+
+        // Related series are re-linked after every scan and scrape (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §5.2).
+        var seriesConnectorReactions = new Paperbunkr.App.Services.SeriesConnectorReactions(
+            Paperbunkr.Data.Events.LibraryEvents.Default, mainViewModel.Activity);
+        desktop.Exit += (_, _) => seriesConnectorReactions.Dispose();
 
         // Comic acquisition daemon: the bridge drains its events into Activity Center, then the timer starts. On exit the
         // service is stopped with a short cap so a cycle stuck on the network can never hold the app open.

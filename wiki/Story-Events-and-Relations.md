@@ -18,6 +18,32 @@ With the [Grand Comics Database data](#grand-comics-database-data) installed, se
 renames, reboots) are linked for you and marked **GCD**. Continuations to series you don't have are listed under **Not in your
 library**, each with a link to its page on comics.org.
 
+#### Relations found for you
+
+PaperBunkr also links series on its own, and the small line under each card says why:
+
+- **Later volume / Earlier volume**: two series with the same title and publisher whose runs follow each other.
+- **Annual, Special, Rebirth, Giant-Size, …**: a companion title, linked to the volume of the main series it sits beside.
+- **Team-up title**: "Batman/Superman" or "Avengers/X-Men" is linked to each series it names.
+- **Crossover · *event***: a story event shared by two or three series that has no main series.
+- **Metron**: Metron lists the two series as belonging together. A series that has no Metron id yet is looked up by its
+  ComicVine or GCD id, so ComicVine-scraped series take part too.
+
+**Dimmed cards** at the end of the Related row are suggestions: series that share a lead character, a writer, or most of a title,
+or that look like a spin-off. **✓** saves the suggestion as your own relation, and **✕** hides it for good.
+
+Removing a relation PaperBunkr made (✕ on its card) also stops it from coming back. Relations you made yourself are never changed.
+This runs after every scan and scrape, and once a week as **Find related series** in Preferences → Automation (which also asks
+Metron). **Find relations** at the top of the tab runs it now. Turn it off under Preferences → Library → **Find related series
+automatically**.
+
+#### Event rows
+
+Each story event the series is part of gets its own row: the event's **main series** first, then the series that tie into it,
+each with the issues that do ("#33–34"). **open event** goes to the event's page. The three newest events show; **Show all**
+lists the rest. Big events with no main series (Convergence-style, with no series named after the event) are gathered under
+**Other events**, one card per event.
+
 ### Continuities
 
 **+ Add to Continuity** groups the series into a shared timeline / universe (e.g. a

@@ -1,6 +1,6 @@
 # CBL Smart Match, part 3: healing triggers and safe source refresh
 
-Date: 2026-10-25. Status: approved design; written spec awaiting user review.
+Date: 2026-10-25. Status: implemented in the working tree; approved design and as-built record.
 
 Part 3 of the October 13 Smart Match design. Part 1 (matching core) and part 2 (review tools) are complete. This delivery finishes item 1 of the current six-item sequence; items 2–6 remain separate.
 
@@ -77,6 +77,12 @@ For a refresh, the database context is opened for the operation, current list st
 Data tests cover post-change healing candidates, manual-link protection, ambiguous/no-match outcomes, provider identity changes, series rename/reassignment, and no-op identity updates. Arc refresh tests cover stable-ID and strict metadata identity reuse, source entry relinking while preserving row fields, hand-added rows/order, removed source rows, manually linked removed rows, duplicate incoming/local targets, orphan placeholder cleanup, incomplete and failed fetches with no mutations, and transaction rollback. Continuity reconciliation tests confirm its existing remove/reorder behavior is unchanged.
 
 App tests cover the scrape, edit, proposal-acceptance, series-change and undo/redo trigger points, once-per-operation reporting, and no duplicate rechecks. Finish with targeted Data/App tests, the main `Paperbunkr.App` Debug build, and `git diff --check`. Native on-screen review is recorded separately if interaction or visual layout changes are introduced.
+
+### As built (2026-10-25)
+
+- Added `ReadingListHealingCoordinator` identity snapshots and wired post-commit rechecks into scrapes, direct and bulk issue edits, generic metadata edits, accepted identity proposals, series merges/renames, scanner metadata sync, and metadata undo/redo. Results use existing operation feedback; unchanged identity does not recheck.
+- Added `ArcReadingListRefreshPlanner` and integrated it into arc refresh. The refresh rejects incomplete responses before local mutation, reloads list state after the fetch, then performs healing, matching, source-row reconciliation, placeholder cleanup, and change recording in one database transaction. Continuity's shared reconciler was not changed.
+- **Verified:** `dotnet build src/Paperbunkr.App/Paperbunkr.App.csproj -c Debug` succeeded with 0 errors (existing ImageSharp license warning). `git diff --check` passed. Focused tests were not run for this delivery. No new view or XAML was added.
 
 ## 7. Self-review
 

@@ -24,6 +24,13 @@ internal static class NovelSmartListCatalog
             [SmartListField.NovelAdded] = new(SmartListField.NovelAdded, "Added", SmartListDataType.Date),
             [SmartListField.NovelOpened] = new(SmartListField.NovelOpened, "Last Opened", SmartListDataType.Date),
             [SmartListField.NovelPublished] = new(SmartListField.NovelPublished, "Published", SmartListDataType.Date),
+            [SmartListField.NovelRating] = new(SmartListField.NovelRating, "My rating (0 = unrated)", SmartListDataType.Number),
+            [SmartListField.NovelStatus] = new(SmartListField.NovelStatus, "Reading status", SmartListDataType.Text),
+            [SmartListField.NovelTag] = new(SmartListField.NovelTag, "Genres and tags", SmartListDataType.Text),
+            [SmartListField.NovelPublisher] = new(SmartListField.NovelPublisher, "Publisher", SmartListDataType.Text),
+            [SmartListField.NovelLanguage] = new(SmartListField.NovelLanguage, "Language", SmartListDataType.Text),
+            [SmartListField.NovelSeriesIndex] = new(SmartListField.NovelSeriesIndex, "Number in series (0 = none)", SmartListDataType.Number),
+            [SmartListField.NovelProgress] = new(SmartListField.NovelProgress, "Progress (%)", SmartListDataType.Number),
         };
 
     public static readonly IReadOnlyDictionary<SmartListField, Func<Book, string>> TextSelectors =
@@ -34,6 +41,11 @@ internal static class NovelSmartListCatalog
             [SmartListField.NovelSeries] = b => b.BookSeries?.Name ?? string.Empty,
             [SmartListField.NovelFormat] = b => b.Format.ToString(),
             [SmartListField.NovelSummary] = b => b.Summary ?? string.Empty,
+            [SmartListField.NovelStatus] = b => b.Status == BookReadingStatus.WantToRead ? "Want to read" : b.Status.ToString(),
+            // Every Genre and Tags value in one string, so "contains" finds a single tag.
+            [SmartListField.NovelTag] = b => string.Join(", ", b.Tags.Select(t => t.Value)),
+            [SmartListField.NovelPublisher] = b => b.Publisher ?? string.Empty,
+            [SmartListField.NovelLanguage] = b => b.LanguageISO ?? string.Empty,
         };
 
     public static readonly IReadOnlyDictionary<SmartListField, Func<Book, bool>> ToggleSelectors =
@@ -46,6 +58,9 @@ internal static class NovelSmartListCatalog
         new Dictionary<SmartListField, Func<Book, float>>
         {
             [SmartListField.NovelChapterCount] = b => b.ChapterCount,
+            [SmartListField.NovelRating] = b => b.Rating ?? 0f,
+            [SmartListField.NovelSeriesIndex] = b => b.SeriesIndex ?? 0f,
+            [SmartListField.NovelProgress] = b => (float)Math.Round(Paperbunkr.Data.Books.BookProgress.Compute(b) * 100d, 1),
         };
 
     public static readonly IReadOnlyDictionary<SmartListField, Func<Book, DateTime?>> DateSelectors =

@@ -18,7 +18,7 @@ internal static class NovelSmartListQueryBuilder
     }
 
     public static NovelSnapshot LoadSnapshot(PaperbunkrDbContext ctx) =>
-        new() { Books = ctx.Books.Include(b => b.BookSeries).AsSplitQuery().ToList() };
+        new() { Books = ctx.Books.Include(b => b.BookSeries).Include(b => b.Tags).AsSplitQuery().ToList() };
 
     public static List<Book> Evaluate(NovelSnapshot snapshot, SmartList list) =>
         snapshot.Books.Where(b => EvaluateGroup(b, list.RootGroup)).ToList();

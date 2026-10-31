@@ -231,9 +231,58 @@ public static class HomeFeedResolver
         return context.Books
             .Include(b => b.BookSeries)
             .Where(b => b.LastOpenedTime != null
-                        && !b.Finished
+                        && b.Status != BookReadingStatus.Finished
                         && (b.LastChapterIndex > 0 || !string.IsNullOrEmpty(b.LastBlockId)))
             .OrderByDescending(b => b.LastOpenedTime)
+            .Take(limit)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The next book to pick up in each series the user has been working through (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §9):
+    /// the owned, unfinished book with the smallest series number above the highest <b>Finished</b> number in that series. Abandoned books are skipped,
+    /// a series with nothing Finished or with unnumbered books is left out (we cannot say what comes next), series whose finished book was read most recently come first.
+    /// </summary>
+    public static IReadOnlyList<Book> GetUpNextBooksInSeries(PaperbunkrDbContext context, int limit = 10)
+    {
+        var books = context.Books.AsNoTracking().Include(b => b.BookSeries).Where(b => b.BookSeriesId != null).ToList();
+        var picks = new List<(Book Book, DateTime LastFinished)>();
+
+        foreach (var series in books.GroupBy(b => b.BookSeriesId))
+        {
+            var members = series.ToList();
+            if (members.Any(b => b.SeriesIndex is null))
+            {
+                continue;
+            }
+
+            var finished = members.Where(b => b.Status == BookReadingStatus.Finished).ToList();
+            if (finished.Count == 0)
+            {
+                continue;
+            }
+
+            float highestFinished = finished.Max(b => b.SeriesIndex!.Value);
+            var next = members
+                .Where(b => b.Status != BookReadingStatus.Finished && b.Status != BookReadingStatus.Abandoned && b.SeriesIndex!.Value > highestFinished)
+                .OrderBy(b => b.SeriesIndex)
+                .FirstOrDefault();
+            if (next is not null)
+            {
+                picks.Add((next, finished.Max(b => b.LastOpenedTime ?? DateTime.MinValue)));
+            }
+        }
+
+        return picks.OrderByDescending(p => p.LastFinished).ThenBy(p => p.Book.Title, StringComparer.OrdinalIgnoreCase).Take(limit).Select(p => p.Book).ToList();
+    }
+
+    /// <summary>Books added in the last <paramref name="days"/> days that nobody has opened yet, newest first (same spec, §9).</summary>
+    public static IReadOnlyList<Book> GetRecentlyAddedBooks(PaperbunkrDbContext context, DateTime nowUtc, int limit = 10, int days = 30)
+    {
+        DateTime since = nowUtc.AddDays(-days);
+        return context.Books.AsNoTracking()
+            .Where(b => b.AddedTime >= since && b.LastOpenedTime == null && b.Status == BookReadingStatus.Unread)
+            .OrderByDescending(b => b.AddedTime)
             .Take(limit)
             .ToList();
     }

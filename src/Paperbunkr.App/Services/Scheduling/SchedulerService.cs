@@ -42,6 +42,9 @@ public sealed class SchedulerService : ISchedulerService, IDisposable
     {
     }
 
+    /// <summary>Where each finished run is announced (the plugin <c>ScheduledTaskRan</c> hook listens there). Tests supply their own.</summary>
+    internal Paperbunkr.Data.Events.LibraryEvents Events { get; set; } = Paperbunkr.Data.Events.LibraryEvents.Default;
+
     internal SchedulerService(
         IActivityService activity,
         IReadOnlyList<ScheduledTaskDescriptor> catalog,
@@ -256,18 +259,24 @@ public sealed class SchedulerService : ISchedulerService, IDisposable
         _launch(async () =>
         {
             bool ok = false;
+            DateTime startedUtc = _now().UtcDateTime;
+            var outcome = Paperbunkr.Data.Events.ScheduledTaskOutcome.Cancelled;
+            string? message = null;
             try
             {
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, handle.CancellationToken);
 
                 // One heavy job at a time across the whole app, behind anything the user started by hand
                 // (docs/superpowers/specs/2026-10-07-performance-and-memory-design.md §4.3). The job stays Queued while it waits.
-                using var laneSlot = HeavyJobLane.Activate(await HeavyJobLane.Shared.EnterAsync(isManual, linked.Token).ConfigureAwait(false));
+                using var laneSlot = descriptor.UsesHeavyJobLane
+                    ? HeavyJobLane.Activate(await HeavyJobLane.Shared.EnterAsync(isManual, linked.Token).ConfigureAwait(false))
+                    : null;
                 handle.Begin();
                 string summary = await descriptor.RunAsync(handle, linked.Token).ConfigureAwait(false);
                 handle.Succeed(summary);
                 _store.RecordRun(descriptor.Id, ScheduledRunStatus.Succeeded, _now().UtcDateTime);
                 ok = true;
+                (outcome, message) = (Paperbunkr.Data.Events.ScheduledTaskOutcome.Succeeded, summary);
             }
             catch (OperationCanceledException)
             {
@@ -278,9 +287,14 @@ public sealed class SchedulerService : ISchedulerService, IDisposable
                 handle.Fail($"{descriptor.DisplayName} failed", ex: ex);
                 _store.RecordRun(descriptor.Id, ScheduledRunStatus.Failed, _now().UtcDateTime);
                 RaiseFailureAlert(descriptor);
+                (outcome, message) = (Paperbunkr.Data.Events.ScheduledTaskOutcome.Failed, ex.Message);
             }
             finally
             {
+                // Plugin API 4.5 ScheduledTaskRan (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §B).
+                Events.Raise(new Paperbunkr.Data.Events.ScheduledTaskRanEvent(
+                    descriptor.Id, descriptor.DisplayName, startedUtc, _now().UtcDateTime - startedUtc, outcome, message));
+
                 lock (_gate)
                 {
                     _runningClasses.Remove(descriptor.Resource);

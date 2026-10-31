@@ -40,7 +40,8 @@ public static class ContinuityOverviewLoader
 
         var placeholders = gcd is null || gcdIds.Count == 0
             ? new List<OverviewPlaceholder>()
-            : Placeholders(context, gcd, gcdIds.ToDictionary(x => x.Gcd, x => x.Id));
+            // Grouped: two library series can share one GCD id (a wrong Metron gcd_id, a duplicated series row), as in GcdBondSync.
+            : Placeholders(context, gcd, gcdIds.GroupBy(x => x.Gcd).ToDictionary(g => g.Key, g => (IReadOnlyList<int>)g.Select(x => x.Id).ToList()));
 
         // "Connections worth confirming" were the smart connector's weak guesses; those were dropped on 2026-10-12 (a date order alone is
         // placement, not a link: docs/superpowers/specs/2026-10-12-continuity-sources-design.md §4.2), so there is nothing to offer here yet.
@@ -50,7 +51,7 @@ public static class ContinuityOverviewLoader
     }
 
     /// <summary>GCD continuation bonds (numbering continues) from a member series to a GCD series nobody in the library is matched to.</summary>
-    private static List<OverviewPlaceholder> Placeholders(PaperbunkrDbContext context, GcdDataStore gcd, IReadOnlyDictionary<int, int> ownedByGcd)
+    private static List<OverviewPlaceholder> Placeholders(PaperbunkrDbContext context, GcdDataStore gcd, IReadOnlyDictionary<int, IReadOnlyList<int>> ownedByGcd)
     {
         var bonds = gcd.BondsFor(ownedByGcd.Keys)
             .Where(b => GcdBondSync.RelationFor(b.BondType) == RelationType.Continuation)
@@ -73,9 +74,12 @@ public static class ContinuityOverviewLoader
             bool ownedIsOlder = ownedByGcd.ContainsKey(bond.OriginId);
             int owned = ownedIsOlder ? bond.OriginId : bond.TargetId;
             int other = ownedIsOlder ? bond.TargetId : bond.OriginId;
-            if (ownedByGcd.TryGetValue(owned, out int ownedSeriesId) && series.TryGetValue(other, out var s))
+            if (ownedByGcd.TryGetValue(owned, out var ownedSeriesIds) && series.TryGetValue(other, out var s))
             {
-                result.Add(new OverviewPlaceholder(other, s.Name, s.YearBegan, ownedSeriesId, ownedIsOlder));
+                foreach (int ownedSeriesId in ownedSeriesIds)
+                {
+                    result.Add(new OverviewPlaceholder(other, s.Name, s.YearBegan, ownedSeriesId, ownedIsOlder));
+                }
             }
         }
 

@@ -43,6 +43,13 @@ public sealed class ComicVineRateLimitHandler : DelegatingHandler
         /// <summary>Cool-off per consecutive violation (last entry repeats). Reset by any successful response.</summary>
         public IReadOnlyList<TimeSpan> CoolOffs { get; init; } =
             [TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(15), TimeSpan.FromHours(1)];
+        /// <summary>
+        /// How long after the last <see cref="ComicVineRequestPriority.High"/> request a Low one keeps waiting. Zero (the default) only orders the
+        /// queues. Set for the shared clients: on Metron's 18-a-minute window a background sync otherwise took 14 of every 18 slots while a scrape
+        /// was running, leaving the scrape about four requests a minute (reported 2026-10-28, "the scraper speed is extremely slow").
+        /// </summary>
+        public TimeSpan ForegroundQuietPeriod { get; init; } = TimeSpan.Zero;
+
         public Func<DateTimeOffset> Now { get; init; } = () => DateTimeOffset.UtcNow;
         public Func<TimeSpan, CancellationToken, Task> Delay { get; init; } = (t, ct) => Task.Delay(t, ct);
     }
@@ -58,6 +65,7 @@ public sealed class ComicVineRateLimitHandler : DelegatingHandler
     private readonly Queue<Waiter> _low = new();
     private readonly List<DateTimeOffset> _grants = new();
     private DateTimeOffset _lastGrant = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastHighGrant = DateTimeOffset.MinValue;
     private DateTimeOffset _pausedUntil = DateTimeOffset.MinValue;
     private int _consecutiveViolations;
     private bool _pumping;
@@ -182,7 +190,18 @@ public sealed class ComicVineRateLimitHandler : DelegatingHandler
                     wait = Max(wait, _options.MinSpacing - sinceLast);
                 }
 
-                int limit = ReferenceEquals(queue, _low) ? _options.LowPriorityLimit : _options.HourlyLimit;
+                bool isLow = ReferenceEquals(queue, _low);
+                if (isLow && _options.ForegroundQuietPeriod > TimeSpan.Zero && _lastHighGrant != DateTimeOffset.MinValue)
+                {
+                    // Foreground work is under way: background waits until it has been quiet for a moment.
+                    var sinceHigh = now - _lastHighGrant;
+                    if (sinceHigh < _options.ForegroundQuietPeriod)
+                    {
+                        wait = Max(wait, _options.ForegroundQuietPeriod - sinceHigh);
+                    }
+                }
+
+                int limit = isLow ? _options.LowPriorityLimit : _options.HourlyLimit;
                 if (_grants.Count >= limit)
                 {
                     var frees = _grants[_grants.Count - limit] + _options.Window;
@@ -194,6 +213,10 @@ public sealed class ComicVineRateLimitHandler : DelegatingHandler
                     granted = queue.Dequeue();
                     _grants.Add(now);
                     _lastGrant = now;
+                    if (!isLow)
+                    {
+                        _lastHighGrant = now;
+                    }
                 }
                 else
                 {

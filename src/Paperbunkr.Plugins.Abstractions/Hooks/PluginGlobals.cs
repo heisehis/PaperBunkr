@@ -217,6 +217,32 @@ public sealed class ContinuityCompletedHookGlobals : PluginGlobals
 }
 
 /// <summary>
+/// <see cref="PluginHooks.SeriesStatusChanged"/> (Plugin API 4.5) - a series' publication status changed. The statuses are the
+/// <c>SeriesStatus</c> names (<c>Unknown</c>, <c>Ongoing</c>, <c>Completed</c>, <c>Cancelled</c>, <c>Hiatus</c>).
+/// </summary>
+public sealed class SeriesStatusChangedHookGlobals : PluginGlobals
+{
+    public required int SeriesId { get; init; }
+    public required string SeriesName { get; init; }
+    public required string? OldStatus { get; init; }
+    public required string? NewStatus { get; init; }
+}
+
+/// <summary>
+/// <see cref="PluginHooks.ScheduledTaskRan"/> (Plugin API 4.5) - a scheduled task finished a run. <see cref="Outcome"/> is
+/// <c>Succeeded</c>, <c>Failed</c> or <c>Cancelled</c>; <see cref="Message"/> is the task's own summary or error.
+/// </summary>
+public sealed class ScheduledTaskRanHookGlobals : PluginGlobals
+{
+    public required string TaskId { get; init; }
+    public required string TaskName { get; init; }
+    public required DateTime StartedUtc { get; init; }
+    public required TimeSpan Duration { get; init; }
+    public required string Outcome { get; init; }
+    public required string? Message { get; init; }
+}
+
+/// <summary>
 /// <see cref="PluginHooks.ReadingListChanged"/> - one reading-list operation's net effect. Ids only: the
 /// items may already be gone. <see cref="Kind"/> is a flags value (an arc refresh can add, remove and
 /// reorder in one pass); creating, renaming or deleting a whole list is not an event.

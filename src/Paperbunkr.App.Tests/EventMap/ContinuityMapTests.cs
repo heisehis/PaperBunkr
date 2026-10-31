@@ -121,6 +121,66 @@ public class ContinuityMapTests
     }
 
     [Fact]
+    public void UnplacedEvents_AppearInATerminalAlphabeticalRegion_WhileDirectionalEventsStayInChronology()
+    {
+        var sample = Sample();
+        var linked = new ContinuityEventData(300, "Linked but undated", null, null, new[] { Row(3000, Hulk, "300", null, null) });
+        var zeta = new ContinuityEventData(301, "Zeta", null, null, new[] { Row(3001, Hulk, "301", null, null) });
+        var alpha = new ContinuityEventData(302, "Alpha", null, null, new[] { Row(3002, Hulk, "302", null, null) });
+        var data = sample with
+        {
+            Events = sample.Events.Concat(new[] { zeta, linked, alpha }).ToList(),
+            Relations = sample.Relations.Concat(new[] { new ContinuityRelationData(300, PlanetHulk, RelationType.Prequel, true, "yours") }).ToList(),
+            LooseIssues = Array.Empty<EventMapRow>(),
+        };
+
+        var map = Build(data);
+
+        Assert.Equal(new[] { "Alpha", "Zeta" }, map.Blocks.Where(b => b.Kind == EventMapBlockKind.Unplaced).Select(b => b.Label.Replace("Unplaced · ", "")));
+        Assert.Equal(new[] { 300, PlanetHulk, WorldWarHulk }, map.Blocks.Where(b => b.Kind == EventMapBlockKind.Event).Select(b => b.EventId!.Value));
+        Assert.Contains(map.Blocks, b => b.Kind == EventMapBlockKind.Unplaced && b.EventId == alpha.Id);
+        Assert.Contains(map.Blocks, b => b.Kind == EventMapBlockKind.Unplaced && b.EventId == zeta.Id);
+    }
+
+    [Fact]
+    public void CbroOverlapNotes_CreateOneNonDirectionalConnector_AndRequireUniqueSameListTargets()
+    {
+        var first = new ContinuityEventData(401, "Civil War", 200601, 200612,
+            new[] { Row(4010, Hulk, "1", 2006) }, CbroListKey: "marvel", CbroSourceName: "Civil War", CbroSourceYear: 2006,
+            CbroOverlapNotes: new[] { new CbroOverlapNoteData("Occurs during the same time as Secret Wars II.", "Secret Wars II") });
+        var second = new ContinuityEventData(402, "Secret Wars II", 198501, 198512,
+            new[] { Row(4020, Hulk, "2", 1985) }, CbroListKey: "marvel", CbroSourceName: "Secret Wars II", CbroSourceYear: 1985,
+            CbroOverlapNotes: new[] { new CbroOverlapNoteData("Takes place during Civil War.", "Civil War") });
+        var duplicate = second with { Id = 403, Name = "Secret Wars II duplicate", CbroSourceYear = 2015, Members = new[] { Row(4030, Hulk, "3", 1985) } };
+        var data = new ContinuityMapData(7, "Earth-616", new[] { new ContinuityLane(Hulk, "Hulk", false) },
+            new[] { first, second }, Array.Empty<ContinuityRelationData>(), Array.Empty<EventMapRow>(),
+            new Dictionary<int, IReadOnlyList<EventMapEventRef>>(), PendingDuplicatePairs: 0);
+
+        var map = Build(data);
+        var overlap = Assert.Single(map.Connectors);
+        Assert.Equal(EventMapConnectorKind.Overlap, overlap.Kind);
+        Assert.Equal(("Occurs during", false, false), (overlap.Label, overlap.IsOrdered, overlap.IsYours));
+        Assert.Contains("CBRO", overlap.Tooltip);
+
+        var ambiguous = Build(data with
+        {
+            Events = new[] { first, second with { CbroOverlapNotes = Array.Empty<CbroOverlapNoteData>() }, duplicate with { CbroOverlapNotes = Array.Empty<CbroOverlapNoteData>() } },
+        });
+        Assert.Empty(ambiguous.Connectors);
+
+        var yearQualified = Build(data with
+        {
+            Events = new[]
+            {
+                first with { CbroOverlapNotes = new[] { new CbroOverlapNoteData("Occurs during Secret Wars II (1985).", "Secret Wars II", 1985) } },
+                second with { CbroOverlapNotes = Array.Empty<CbroOverlapNoteData>() },
+                duplicate with { CbroOverlapNotes = Array.Empty<CbroOverlapNoteData>() },
+            },
+        });
+        Assert.Single(yearQualified.Connectors);
+    }
+
+    [Fact]
     public void HideOptional_DropsOptionalMembers()
     {
         var map = Build(Sample(), new ContinuityMapOptions(new HashSet<int>(), HideOptional: true, false));

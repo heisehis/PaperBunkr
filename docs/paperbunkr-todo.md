@@ -26,6 +26,40 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **2026-10-28 — Plugin API 4.5: the rest of the 2026-09-20 plugin pitch (items 1–14) implemented (working tree, uncommitted):**
+> spec/plan `docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-{design,plan}.md`. Developer mode (script plugins reload on save,
+> live log pane), New plugin… scaffolds (C#/Python/native), `src/Paperbunkr.Plugins.Testing` (fakes + `PluginScriptRunner`); hooks
+> `SeriesStatusChanged`, `ScheduledTaskRan`; plugin smart fields (`<Fields>`, typed in Smart Lists), write batches with a preview; plugin
+> metadata/cover/story-arc sources; `menus`/`toolbar` placement, reading-list menu, native issue panel and Insights card; `<Network>` +
+> install confirm + `Environment.Http`. Cut: scoped file system, plugin-to-plugin registry. `PluginApi.Current` = 4.5.
+> **Verified (headless):** Plugins.Tests full run 235/235 after slice A; the touched Plugins/Data/App classes since (manifests, sandbox `#r`,
+> runner, typed field queries, backstop, smart-list query builder, host hooks, scheduler, fields/batches/providers/http, menu builders,
+> Plugin screen) all pass; XAML lint passes for every new/changed view (the one lint failure is in two Scraper dialogs this work didn't touch).
+> **Not verified:** anything on screen; the cover picker's plugin path, native issue/Insights views from a real module, the toolbar button.
+
+> **2026-10-25 — CBL Smart Match review tools implemented (working tree; approved spec/plan `b2a2e04`):**
+> first delivery within the user's six-item backlog sequence. Dedicated retained review screen for Find & link, current-list and selected-list review;
+> read-only CBL/CSV/arc/folder previews (including new-list and dropped-list entry points); default-on preservation of unresolved entries;
+> explicit, strict cross-list choice application; atomic stale/duplicate guards; database-local 30-day link history with partial undo conflict previews,
+> placeholder recreation and preservation of later notes/roles/order. Import and cross-list changes share a transaction, while undo never deletes
+> the newly imported list. Drafts survive navigation; close, tray exit and update restart check unfinished choices.
+> **Verified:** 184 broader Data checks passed; the final 17 review tests passed after transaction/legacy-source changes, including migration round-trip,
+> mixed import/link rollback and shared-placeholder undo across visits. Final App selection: 45/45 passed (review workflows, updated single-link/cancel
+> assertions, real MainWindow search/candidate-arrow behavior, shared UI lint and six Default/Daylight/Matrix renders at 750/1100 px).
+> Final arc selection: 10/10 passed, including fetch-once preparation and preserving the source arc name when the user customizes the list title.
+> Earlier expanded App coverage exercised 121 tests; its obsolete drawer assertions and six checkbox-contrast failures were corrected and covered by
+> the final focused pass. Render inspection caught unthemed list backgrounds/selection and invisible Matrix checkbox text; tokens now govern them.
+> **2026-10-25 — CBL Smart Match healing and safe refresh implemented (working tree; approved spec):** identity-affecting saved operations now recheck unresolved entries once after commit, with summaries through existing feedback. Arc refresh blocks incomplete source responses, reconciles inside one transaction, uses strict source-entry identity, updates a still-present row to the current automatic match while preserving row annotations, and retains hand-added plus removed-but-user-linked rows after source order. Continuity reconciliation is unchanged. **Verified:** main `Paperbunkr.App` Debug build succeeded (0 errors; existing ImageSharp license warning); `git diff --check` passed. Focused tests were not run for this delivery. No new view/XAML was added.
+> **Item 1 complete.** Native on-screen/Narrator/high-contrast/DPI review for the first review-tools delivery remains pending; no full fast/slow suite pass is claimed. Specs/plans:
+> `docs/superpowers/specs/2026-10-25-cbl-smart-match-review-{design,plan}.md` and
+> `docs/superpowers/specs/2026-10-25-cbl-smart-match-healing-refresh-{design,plan}.md`.
+
+> **2026-10-25 — Item 2, tracker auto-push retry queue implemented in the working tree; design spec committed as `cff2fd2`.** Added typed lookup/push outcomes for all eight tracker adapters, a durable unique retry row per link with target snapshot and five backoff attempts (1/2/4/8/16 minutes), coalescing that never regresses chapter progress, start/network-recovery/periodic retry processing, pause/resume, manual-success/unlink/retarget cleanup, and Activity Center Retry now/exhausted Dismiss actions. Retry attempts re-read the remote entry; manual two-way conflict behavior remains intact. **Verified:** main `Paperbunkr.App` Debug build succeeded (0 errors; existing ImageSharp license notices and nullable warning); `git diff --check` had no whitespace errors. No test suite or native screen-reader/responsive visual review was run. Specs/plans: `docs/superpowers/specs/2026-10-25-tracker-auto-push-retry-queue-{design,plan}.md`.
+
+> **Item 5 — Guided View detection performance implemented in the working tree (2026-10-26; no commit).** Cold panel detection now runs through a per-reader single-flight queue, serializes inference, drops stale queued pages, and records p50/p99 analysis duration in the existing reader performance overlay. Smart double-click preserves its click while detection runs and applies it only if the page/view still matches; “Show detected panels” and “Report bad panel detection” use the async path, with reports keeping an owned page image across navigation. **Verified:** main `Paperbunkr.App` Debug build succeeded (0 errors; existing ImageSharp license warning); `git diff --check` passed. Test suites and native on-screen/accessibility review were not run. Specs/plans: `docs/superpowers/specs/2026-10-26-guided-view-performance-{design,plan}.md`.
+
+> **2026-10-26..28 — Books arc and Books section redesign built in the working tree (no commit); status lines in the design docs corrected 2026-10-28.** Source confirmed present for: Slice 1 data foundation (`AddBookMetadataFoundation`), 2a browse shelves (`AddBooksBrowseViews`, `BooksBrowseQuery`, `BookShelfService`), 2b Detail, 3a jump-back, 3b typography aids, 3c annotations, 4a Calibre import (`Paperbunkr.Data/Calibre/*`), 4b dictionary (`Services/Dictionary/*`), 4c OPDS (`Services/Opds/*`, `OpdsCatalog`), 4d read aloud (`Services/Speech/BookReadAloudPlan`), the paged/scroll reader modes (`BookPageMap`), and the three-slice section redesign (Reading Room + Shelf). Also built the same days: You-vs-Community + chapter alignment (spec "As built"), ComicRack import gaps, and continuity unplaced events + CBRO overlap notes (`AddEventOrderOverlapNotes`). **Verified:** the paged/scroll modes, popup, drawers, and the redesign's reader/Detail fixes were user-checked on screen; the rest has unit/headless tests only. New migrations (Books slices, tracker retry queue, event-order notes) are not yet applied to the user's dev database. Still not built: comic reader Slice H, Metadata Model Phase 7 (deferred), and the two Plugin API items cut by decision (7 scoped file system, 12 plugin-to-plugin registry). The rest of the 2026-09-20 plugin pitch, including the live log pane, was built as Plugin API 4.5 on 2026-10-28 (see the entry above).
+
 > **Release preparation (2026-10-24, v0.8.0-beta; source `0be8125`, focus-ring fix `a003b76`):**
 > the accumulated source, artwork, installer and documentation changes are committed on
 > `codex/release-v0.8.0` (PR #106). This supersedes earlier "uncommitted" labels as a statement about Git
@@ -134,13 +168,12 @@ this file itself already did once (see the note below).
 >   durable `Issue.ScrapePermanentlySkipped` marker (migration `AddScrapePermanentlySkipped`) that
 >   excludes the book from every future scrape attempt, interactive or unattended, with no search
 >   even attempted — CE's real `book.skip_forever()`, verified.
-> - **Step 17 (cover-image cycling + alt-cover memory) NOT done, deliberately:** CE's real field is
->   `associated_images.original_url` on the issue detail response (`cvdb.py`, verified directly), but
->   a live fetch of ComicVine's own current public API docs today shows **no `associated_images`
->   field on the Issue resource at all** — it may have been removed/renamed since CE's plugin was
->   written. Building the parser/UI around an unconfirmed field would be exactly the kind of
->   assumption this project's own standing rule says not to make; needs a real ComicVine API key and
->   a live call (or a maintainer of ComicVine's docs) to confirm before this step can be built.
+> - **Step 17 (cover-image cycling + alt-cover memory) completed 2026-10-26:** live authenticated
+>   issue-list and issue-detail responses confirmed `associated_images` entries with `original_url`.
+>   Both review dialogs now cycle unique covers; a selected URL is remembered by provider + issue ID
+>   for the current interactive scrape run only. The main Debug App build succeeded. See the
+>   implementation note in `docs/superpowers/specs/2026-09-24-comicvine-scraper-fidelity-design.md`
+>   §4.2.
 > **Verified this session:** `Paperbunkr.Data.Tests`' full `ComicVine` subset and
 > `Paperbunkr.App.Tests`' full `Scraper` subset both green after every step, plus two full-suite runs
 > (Data.Tests 1601/1602, App.Tests 3463/3464 — the lone failures in each were pre-existing/unrelated
@@ -336,7 +369,8 @@ this file itself already did once (see the note below).
 >   fallback). Ours compared against the series art (usually #1's cover), so any other issue failed the
 >   gate. Rebuilt to match `find_series_ref`: the TPB-vs-#1 guard now runs only for #1/unnumbered books and
 >   compares top vs 2nd/3rd series art (0.77); the issue lookup is cached per (volume, number) so gate and
->   apply share it. Not ported: checking an issue's alternate covers (needs `associated_images`).
+>   apply share it. Alternate-cover review, formerly deferred pending ComicVine's `associated_images`
+>   field confirmation, was implemented in Step 17 on 2026-10-26.
 > - **Fork fields ported (each its own toggle, on by default; a saved settings row gets them turned on
 >   once via `FieldSetVersion`):** Count (volume issue count - approved, not in CE or the fork),
 >   Main character/team, Series group, Tags from concepts (`concept_credits`), and Story arc order =
@@ -3423,9 +3457,9 @@ first-page-is-an-ad), D (scanner/noise lists) and F (generic Format presets) wer
   `DragImportServiceTests`, `SmartListSeriesFieldsTests`. The corpus test runs with `PAPERBUNKR_CE_SMARTLIST_CORPUS=<folder;folder>`.
 - **Not verified:** nothing on screen - the Smart screen's new Import button, the alert's look, a drag of a real `.cbl` onto the Library. The four series fields in the rule builder (they are
   Number fields in the existing picker, labelled "Series: ...").
-- **Follow-ups:** CE's four **date** series matchers (last added / opened / released / published time) are recognised but not imported; importing a whole `ComicDb.xml`'s smart lists (the CE
-  migrator still strips them). A CE "Number in range 0-1" imports as the numeric `NumberValue` field ("Number (numeric)" in the picker), not the text `Number`, so such a list reads differently
-  from one built by hand with "Number".
+- **Follow-ups completed 2026-10-25:** all four CE series-date matchers now import and evaluate over the full `(series, volume)` group. Every Smart List date operator now compares calendar days, matching CE's `IgnoreTime=true` behavior (including existing date fields).
+- **ComicDb migration completed 2026-10-25:** migration preview now reports importable/skipped smart lists, name suffix collisions, and matcher warnings. It recursively imports only `ComicSmartListItem`s, prefixes folder paths (`Marvel > New Releases`), and saves the lists with books/series in the existing migration commit. `<ComicLists>` is still parsed separately and stripped before CE book deserialization so unsupported plugin matchers cannot block the library. Static reading lists and ID lists remain excluded.
+- **Number caveat remains:** a CE "Number in range 0-1" imports as the numeric `NumberValue` field ("Number (numeric)" in the picker), not the text `Number`, so such a list reads differently from one built by hand with "Number".
 
 ### B. Library Organizer `.lop` profile import (built, tested, not seen on screen)
 - `LopProfileReader` reads a profile file (one `<Profile>` or several in `<Profiles>`) into `OrganizerProfile`s; `LopProfileImporter` saves them (clashing names get " (2)"; nothing is replaced);
@@ -3443,7 +3477,8 @@ first-page-is-an-ad), D (scanner/noise lists) and F (generic Format presets) wer
   dropped `.lop` files. Existing `OrganizerUiTests` still pass.
 - **Not verified:** nothing on screen (the Import button, the notes card, the Organize tab's layout with the new row). The folder and file templates the supplied profiles use were run through the
   existing template validator only; none was run against a real library.
-- **Follow-ups:** a multi-file picker (the picker is single-file, so several files arrive through drag and drop); pre-2.0 `Settings` profile files.
+- **Follow-ups completed 2026-10-25:** Preferences > Organize now accepts several `.lop` files in one picker operation and shows one combined summary with file-specific errors and rejected-profile reasons. Pre-2.0 `Settings`/`Setting` roots are converted using the plugin's legacy mode and metadata-token mappings; 1.6-and-earlier profiles carry the upstream partial-support warning, while behavior-changing unsupported rules remain rejected or called out.
+- **Verification 2026-10-26 (uncommitted working-tree changes; no commit ref yet):** focused Smart List/migration tests passed (154); focused `.lop` reader/import UI tests passed (54). Main-checkout `dotnet build src/Paperbunkr.App/Paperbunkr.App.csproj -c Debug --no-restore` succeeded with 0 errors. The migration and profile views compiled; interactive on-screen layout/theme review was not performed because desktop-app enumeration timed out.
 
 ## 2026-10-11 - The rest of the ComicRack preset audit: proposed values, same-X-different-Y, Complete count, first-page ad, scanner credits, format guess
 
@@ -3486,7 +3521,10 @@ against the real Metron** (written from Metron's source). Migration `AddEventOrd
 - **Corrected in build:** characters and teams already had provider ids (`ComicMetadataExternalId`); the fix was cleaning a pruned row's ids, not new columns.
 - **Verified:** Data tests 2602 of 2603 (the one failure is another session's `MilestoneResolver.cs` allowlist); continuity-related App tests 324 passed; Debug build succeeded. The full fast App run was cut off by a session end after two failures that look unrelated
   (`ReaderScreenPanelTests.DoubleClick_WithSmartZoomOff...`, `LiveFolderWatchServiceTests.RapidCreation...`) and was not re-run.
-- **Not built:** the universe-catalogue picker, a dedicated Unplaced lane, CBRO "occurs during the same time as X" notes.
+- **Follow-up completed 2026-10-25 (working tree; implementation not committed):** the Metron universe-catalogue picker was already delivered in the guided creation flow; this follow-up adds the terminal Unplaced region and CBRO overlap notes/connectors. See [the approved design](superpowers/specs/2026-10-25-continuity-unplaced-overlap-design.md) and migration `AddEventOrderOverlapNotes`.
+  - Unplaced events have no usable date, source rank, or directional relation; they appear alphabetically after the ordered chronology and continue to obey map filters. Undated events with a directional relation remain in the chronology.
+  - CBRO notes support “Takes place during,” “Takes place simultaneously with,” and “Occurs during the same time as.” Original notes remain visible in map details; only a unique same-list title/year match gets a deduplicated, non-directional “Occurs during” bracket. These connectors do not create or change Event relations or chronology.
+  - **Verified:** `EventOrderTests` (22 passed), `ContinuityMapTests` + `ContinuitySourcesAppTests` (23 passed), `ContinuityMapViewModelTests` (6 passed); `dotnet build src/Paperbunkr.App/Paperbunkr.App.csproj -c Debug --no-restore` succeeded with 0 errors. Launched `src/Paperbunkr.App/bin/Debug/net10.0/Paperbunkr.App.exe`; the Paperbunkr window appeared, but CUA could not bind to it for visual inspection, so narrow-width and theme rendering remain unverified.
 
 ## 2026-10-12 - Connections and Appearance redesign (Preferences)
 
@@ -4031,3 +4069,200 @@ Spec: `docs/superpowers/specs/2026-10-22-scrape-series-split-and-series-fields-d
   title. (3) A 2099 comic under "Secret Wars" searched "Secret Wars"; it now searches its file title when that extends the series name
   (`SearchName`). A lone comic joins the series already linked to its match; a new series whose name is taken gets its start year. Tests cover
   the 2099-first order.
+- **2026-10-28, "bulk scrape freezes, and again after a restart":** diagnosed from a live async dump (`dotnet-dump` + `dumpasync`), not guessed.
+  (1) The hourly Metron account sync (collection upload, 120 requests at 14/min, about 10 min a run) held the heavy-job lane, so a scrape the
+  user started queued behind it with nothing on screen; a sync cut off by closing the app is overdue at the next launch, hence "after restart".
+  `ScheduledTaskDescriptor.UsesHeavyJobLane` (default true) is false for `metron-sync` only; its requests were already Low priority.
+  (2) With "fill blanks from ComicVine" on, every Metron match made a Low-priority ComicVine call, and the fallback ran at Low too; after 150 in an
+  hour the limiter held each one for a free slot (up to an hour) - the 105-comic batch stopped at 100. Interactive runs now use their own
+  priority for both, and an optional other-source lookup gives up after 20 s (`SecondaryLookupPatience`). (3) A resumed job's `Done` added
+  itself on every progress report ("3870 of 111"); fixed. Tests: `SchedulerHeavyLaneTests` + scheduler/lane/scrape classes (43 pass).
+  Not yet seen on screen.
+- **2026-10-29 follow-up, "the scraper speed is extremely slow":** caused by (1) above - out of the lane, the sync now ran *during* scrapes and
+  took up to 14 of Metron's 18 requests a minute (Low's share of the window), leaving a scrape about 4. `ComicVineRateLimitHandler.Options.
+  ForegroundQuietPeriod` (15 s on both shared clients, zero by default): a Low request waits until no High request has been granted for that
+  long, so background work only uses the gaps. The optional other-source lookup now waits 10 s at most, and after one timeout the run skips
+  the rest (or skips at once while ComicVine is paused). Tests: 2 new limiter tests; Data scrape/limiter/Metron, App scraper/scheduler, Daemon (all pass).
+- **2026-10-29, "X-Men never matches; ComicVine's results stop at 2007":** the real cause of the 2026-10-22 report too. Both searches did return the
+  right series (verified in the user's provider cache: Metron 7914 and ComicVine 158814, X-Men 2024), but `MaxSearchResults` (100) was applied before
+  scoring to the joined candidate list in arrival order - Metron's alphabetical first page of 100 ("Astonishing", "Giant-Size", "Immortal"...),
+  ComicVine's oldest-first volumes, and only then the issue-first hits. The cap now keeps the best 100 by score (deviation from CE, which caps one
+  relevance-ordered search). Test: `MaxSearchResults_keeps_the_best_scoring_candidates_not_the_first_to_arrive`. User-verified 2026-10-29 ("it worked immediately").
+- **2026-10-29, reading list from Metron: "Metron API error (429): Request was throttled. Expected available in 19 seconds.":** the reading-list
+  `MetronSource` had its own HttpClient spaced 0.5 s apart, outside the shared Metron limiter, and failed on a 429. It now sends through
+  `MetronHttp.Client` (High priority, quota observed) and waits out a throttle (Retry-After, else the "available in N seconds" text; up to 65 s,
+  two retries) before asking again; a longer wait (the daily cap) is reported. Tests: `MetronSourceThrottleTests` (3). Not seen on screen.
+  `ArcReadingListBuilderTests.RefreshAsync_PreExistingDuplicateItemsForSameIssue_SelfHeals_NoCrash` fails, from the in-flight uncommitted CBL
+  refresh/healing work (`ArcReadingListBuilder.cs`, `ArcReadingListRefreshPlanner.cs`), not from this change.
+
+## 2026-10-26 - Chapter/volume alignment, "You vs Community", Metadata Model Phase 7 (built, uncommitted)
+
+Design: `docs/superpowers/specs/2026-10-26-you-vs-community-and-chapter-alignment-design.md`; plan: `...-plan.md`. Three roadmap items that had been
+deferred, built together because alignment is the use case that finally justified Phase 7.
+
+- **Alignment (onboarding.md section 9).** `MangaDexAggregateClient` (`/manga/{id}/aggregate`, shape verified live 2026-10-26: `volumes -> {vol|"none"} -> chapters`,
+  plus `isUnavailable`), `ChapterAlignmentResolver` (missing / extra / volume conflicts; a library of volume files is compared against volumes),
+  `ChapterAlignmentScanner`. The aggregate is cached 24 h in an `ExternalMetadataSnapshot` (`SchemaVersion "aggregate-1"`), no migration. Library Health gets a
+  "Chapter alignment" section (reads the cache on open, "Check now" fetches, "Not a problem" dismissals); manga Detail gets a "Missing chapters" card with a
+  have/total badge. Report-only: nothing edits an issue. MangaDex volume numbers come from uploaders, so a volume disagreement is only noted and never lists a series by itself.
+- **You vs Community.** `CommunityComparisonResolver` (your 0-5 stars x20 vs the mean of provider `ExternalRating`s and Metron's issue ratings weighted by vote count),
+  Insights Trends > Top Lists card: ScottPlot scatter with the y = x line, biggest disagreements each way, coverage line. "Fetch community ratings" runs
+  `CommunityRatingBackfillService` (rated, linked manga series with no stored score from that provider; Activity Center job, cancellable, stops cleanly on a rate limit).
+  `ExternalRating.VoteCount` is now filled (MangaDex: sum of its rating distribution; AniList and MangaBaka expose none - verified live).
+- **Deviations worth knowing.** (1) `ScrapeField.CommunityRating` now defaults **on** (CE leaves it off); saved profiles keep their choice. (2) Comics are not backfilled by id:
+  an issue doesn't remember its Metron issue id, so a comic's community rating arrives through the normal scrape. (3) ComicVine reports no community score at all, so there is no
+  ComicVine adapter. (4) The Stats v2 spec and the roadmap said no adapter wrote `ExternalRating`; the manga adapters already did (`MangaProviderApply`), which is why the card needed no new adapter work for manga.
+- **Phase 7, shipped minimal.** One entity, `CollectionContent` (an issue's chapter range, `Manual` or `MangaDexVolume`), migration `AddCollectionContent`, `CollectionContentService`,
+  and "Map volumes to chapters" / "Clear mapping" on the Missing chapters card. A mapped volume file owns its chapters, so a volume library stops reading as every chapter missing.
+  The source doc's `Volume`/`Chapter`/`Story`/`Collection` set was **not** built: `PAPERBUNKR_METADATA_MODEL.md` is not in the repo, and nothing here needed more. No manual range editor yet.
+- **Verified:** Data tests (alignment 16, comparison 9, backfill 7, content 8, migration 2, plus the touched manga/scrape classes) and App tests (alignment VM 6, missing chapters 9,
+  Insights card 6, plus the Insights, Library Health, manga Detail and lint classes) pass. The one failing lint test, `FamilyButtonsCarryNoSizeOverrides`, is in the ComicVine review dialogs
+  another change left modified, not in these files. **Not verified:** on screen (Library Health section, Missing chapters card, the scatter and its tooltip, the fetch button), and nothing was run against a real library.
+
+### Books improvement arc, Slice 1: data foundation (2026-10-27)
+
+Spec: `docs/superpowers/specs/2026-10-26-books-slice1-data-foundation-design.md`; plan: `...-plan.md`. Pitch items 1, 2, 11, 12, 13, 21 (status, rating, tags, richer metadata, scraper, provenance), plus write-back.
+
+- **Data.** Migration `AddBookMetadataFoundation`: `Book` gains Subtitle, Publisher, LanguageISO, ISBN, SeriesIndex, Rating (0-5, half steps), CommunityRating(+Count), `BookReadingStatus` (Unread, WantToRead, Reading, Finished, Abandoned), SkipMetadataMatch; new `BookTag` and `BookFieldSource`. `Book.Finished` is `[NotMapped]` over `Status`; the legacy column is deliberately kept (no DropColumn). The enum is `BookReadingStatus` because `ReadingStatus` already means a comic series' reading state.
+- **Files.** EPUB (calibre + EPUB3 collection), FB2, MOBI EXTH and PDF metadata are read at import and by a weekly, on-by-default scheduled task "Refresh book metadata from files" that only fills empty fields. `BookMetadataApplier` is the single place the "never overwrite a user edit" rule lives (Manual provenance wins).
+- **UI.** Book Properties and bulk overlays gained status, rating (new half-star `StarRating` control), publisher, language, ISBN, number in series, genres/tags, a "Suggested series" chip and provenance chips; Rate / Set status / Match metadata in the grid menu; "Your shelf" card on Detail; Match metadata dialog (Open Library + Google Books, per-field diff, skip-forever) and a bulk Match action as an Activity Center job.
+- **Write-back.** `BookFileWriteBackService` patches only OPF metadata nodes in EPUBs, validated sibling copy then `File.Replace` under `FileWriteBackCoordinator`, gated on the existing write-back settings.
+- **Verified (tests).** Data: migration 4, applier 13, suggester 18, providers 11. App: file metadata 53 (with the existing format classes), scan 13, refresh 4, write-back 8, StarRating 4+, editors 17, match service 8, match dialog 5, `MainViewModelTests` 83, Books/Detail/Reader classes. Lint: all but `FamilyButtonsCarryNoSizeOverrides`, which fails only on the ComicVine review dialogs another change left modified.
+- **Not verified / not done.** Nothing was run on screen or against the real library database; the new migration has not been applied to it. `AddBooksBrowseStateMigrationTests` fails migrating far back (`LibraryGroupField`); it looks like an older Down-chain problem, not checked against a clean checkout. Deferred from the plan: Connections tile for the two sources and a Google Books key field (Google works keyless), Re-fetch from a provenance chip (the Match dialog covers per-field choice), a Books-menu "Refresh now" button (the scheduled task has Run now). Slices 2 (shelves/Detail hero), 3 (reader), 4 (Calibre/OPDS/dictionary/TTS) are not started.
+
+### Books improvement arc, Slice 2a: browse and shelves (2026-10-27)
+
+Spec: `docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md`; plan: `...-plan.md`. Builds on Slice 1's data.
+
+- **Browse.** Status tabs with counts (All, Reading, Want to read, Unread, Finished, Abandoned), persisted; new sort axes (Rating, Progress, Publisher, Published, Series order, missing values last) and group axes (Status, Publisher, Language, Genre); the filter/sort/group logic moved out of `BooksScreenViewModel` into the pure `BooksBrowseQuery`; one-badge cards (progress ring while Reading, check when Finished, stars on hover). Migration `AddBooksBrowseViews` (two settings columns).
+- **Shelves ▾.** Built-ins (Favorites = rating 4 or more, Unfinished, Not rated), the user's novel smart lists (novel fields added: rating, status, tag, publisher, language, series number, progress %), and collections that hold books. Session-only choice, composes with tab and search.
+- **Bookshelf view.** Grid/Bookshelf switch reusing the Library's `SpineTile`, `ShelfBoards` and `VirtualizingVariableWrapPanel`; spine width from book length; cover colour through a book-specific key (`book:{id}`) so it never reads a comic cover with the same number.
+- **Series gaps.** "#3 missing" ghost cards only for holes between owned numbers, only when the series is fully numbered, and only in an unfiltered grouped-by-Series view and in Series mode of Book Detail (which now lists by series order). Ghosts are inert.
+- **A-Z rail** on the covers view (flat Title/Author sort, or any grouping except Status).
+- **Library Health › Review › Duplicate books** (ISBN, or title + author): Reveal and a two-step Delete to the Recycle Bin. Report-only.
+- **Home.** Two new, hideable, reorderable sections: "Next in your book series" and "New books"; each leaves Home while empty. The mixed Continue Reading row is unchanged.
+- **Verified (tests).** App: 340 across the Books, shelf, duplicate, Detail, metadata, reader, Home and lint classes; Data: new classes for the migration, gaps, duplicate finder, novel smart-list fields and Home book rows. Fixed `ReworkBookPositionAnchorMigrationTests`, which loaded whole `Book` rows while pinned to an older schema and so broke on Slice 1's new columns.
+- **Not verified / not done.** Nothing on screen. **Pinned group header** not built (only the rail). The rail is not offered in the Bookshelf view (virtualized rows). Three older migration tests (`AddFb2MobiBookFormat`, `AddBooksBrowseState`, `AddBookReaderErgonomicsAndAnnotations`) fail migrating far back with `no such column "LibraryGroupField"`, an older Down-chain problem that does not involve these migrations (not checked against a clean checkout). `FamilyButtonsCarryNoSizeOverrides` still fails only on the ComicVine review dialogs another change left modified. The new migrations have not been applied to the real database.
+
+### Books improvement arc, Slice 2b: Book Detail (2026-10-27)
+
+Spec: `docs/superpowers/specs/2026-10-27-books-slice2b-detail-design.md`; plan: `...-plan.md`.
+
+- **Tabs.** Book mode now has Overview / Chapters / Notes (Chapters hidden for a PDF; Notes shown once there is anything to list, always for a PDF). Opening a different book returns to Overview; reloading the same one keeps the tab.
+- **Read button.** "Start reading" / "Continue — Ch. 4 · 38%" / "Read again" (percent from `BookProgress`).
+- **Reading dashboard** (Overview): sessions, time read, last/first read, pace, and "About 3h 20m" time left from the new `BookReadingStatsResolver`. Only Opened events count; a session needs a minute of active time and some pages to count for pace; the estimate needs two such sessions and a known length, rounds to 5 minutes, and is hidden when finished.
+- **Chapters.** Each row is Read / Current / Unread with a length bar (from the one parse Detail already does) and the current chapter's percent.
+- **Notes.** Highlights, bookmarks and PDF captured regions in book order, with kind and colour filters, open-at-spot, delete and the existing export. The old Bookmarks card is folded into it.
+- **Author.** A "More by {author}" button opens the Books grid on the All tab with an "Author: X" chip, plus "N books · M finished" and a thin progress bar (over all of the author's books, not narrowed by the tab).
+- **Verified (tests).** Data: stats resolver (5). App: `BookDetailTabsTests` (14), the existing Detail class (its Read-label assertion was updated deliberately), the author strip, `MainViewModelTests`, lint (all but `FamilyButtonsCarryNoSizeOverrides`, which fails only on the ComicVine review dialogs another change left modified).
+- **Not verified / not done.** Nothing on screen. Opening a PDF region cannot jump to its page: the PDF reader ignores a start position, so it opens at the saved page. The author link is a button in the "Your shelf" card, not the author text in the hero (that control is shared with comics). The hero Read button was not given the percent separately from the label. Notes are read-and-navigate only; writing notes on highlights is Slice 3. The unused `OpenBookmark`/`DeleteBookmark` commands remain on the view model.
+
+### Books improvement arc, Slice 3: the reader (3a, 3b, 3c) (2026-10-27)
+
+Specs: `docs/superpowers/specs/2026-10-27-books-slice3{a,b,c}-*-design.md`; plan: `2026-10-27-books-slice3-reader-plan.md`. One deviation from the specs, forced by the WebView: it composites above every Avalonia element, so the jump-back chip and the auto-scroll pill are **HTML inside the reading page** (driven from code-behind), not `floatingPanel` controls.
+
+- **3a.** After a TOC, search, bookmark or highlight jump that changes chapter, or moves 10+ blocks (or more than 15 % without block ids) inside one, a "Back to Ch. N" chip shows for 6 s; clicking it or Alt+Left (`BookReader.JumpBack`, declines when no chip) returns without recording another jump. A position report inside 1.5 s of the jump does not dismiss it. Leaving a book after 5+ minutes of active reading shows a "Reading session" toast (minutes, pages, first live goal's progress).
+- **3b.** Justify and hyphenation (global default + per-book override, `lang` taken from the book), "use the book's own styling" and an installed-font box (global; picking a font switches the family to Custom), in a new TEXT card; `BookReaderCss` now builds the injected CSS, pinned to the old output. A line ruler (two-line clear band following the pointer, `R`, Alt+Up/Down) and auto-scroll (`A`, `.`/`,` for speed, in-page pill, stops at chapter end or on any unbound input) with remembered ruler state and speed; auto-scroll starts off each time and its own scrolling does not count as reading activity. Migration `AddBookReaderTypographyAndAids` (6 AppSettings, 2 Book columns).
+- **3c.** Highlights with a note carry a `pb-has-note` dot at their end (absolutely positioned, so no reflow); the highlights drawer already listed notes, now capped at two lines.
+- **Verified (tests).** New: jump tracker/summary, `BookReaderJumpBackTests` (chip per jump, settle window, return, toast), `BookReaderCssTests` (old output pinned), `BookReadingAidMathTests`, `BookReaderAidsViewModelTests` (settings chain, persistence, speed bounds, activity), `BookHighlightPayloadTests`; the Book reader key-set pin in `InputWiringTests` updated for the 7 new actions; the lint trio passes except `FamilyButtonsCarryNoSizeOverrides` (ComicVine dialogs from another change).
+- **Not verified / not done.** **Nothing on screen**: none of the JS (chip, ruler, auto-scroll, note dot, hyphenation, custom font) has run in the WebView, and the migration has not been applied to the real database. "Book's own styling" only covers inline styles, classes and `<style>` blocks inside a chapter; the chapter HTML is the raw document, so a linked stylesheet file is not loaded. Auto-scroll assumes the vertical-scroll mode the reader ships in (`UseColumnPaging = false`). No gamepad bindings for the ruler or auto-scroll. Not built from the original pitch: margin-notes rail, tags on highlights, bionic reading, typography profiles (dropped in the Slice 3 grilling round).
+
+### Books improvement arc, Slice 4: Calibre, dictionary, OPDS, read aloud (2026-10-27)
+
+Specs: `docs/superpowers/specs/2026-10-27-books-slice4{a,b,c,d}-*-design.md`; plan: `2026-10-27-books-slice4-plan.md`. Three migrations (`AddBookCalibreLink`, `AddBookDictionarySettings`, `AddOpdsCatalogs`, `AddBookReaderSpeech` — four in all), none applied to the real database.
+
+- **Found and fixed on the way: chapter HTML never had block ids.** `BlockIdInjector` had no production caller since it was written, so `pb-p<n>` ids did not exist in the reading page; highlights, bookmarks, the saved position, Slice 3's jump chip and read aloud all anchor to them. `BookReaderScreenViewModel` now injects them when it loads a chapter (deterministic). This changes behaviour for existing books the first time they are opened after this build: worth a look on screen (resume, highlights, bookmarks).
+- **4a Calibre.** `Paperbunkr.Data/Calibre` (read-only reader with a copy fallback, mapper, importer) + an "Add books > Import from Calibre…" dialog. One Paperbunkr book per Calibre book (EPUB, FB2, MOBI, PDF order), files referenced in place; match by Calibre id, then file path, then ISBN / title+author (those two go to a review list with Link / Skip); Manual fields are never overwritten, even with "refresh"; optional read-status column; covers set for new books only. Tested against a reconstructed `metadata.db` and, read-only, against the real library (40 books imported into a scratch database, second run adds none).
+- **4b Dictionary.** Look up button + definition card in the highlight popup (`L`), offline WordNet file built on first use from Princeton's `WNdb-3.0.tar.gz` (downloaded by the app, about 12 MB), morphy-style suffix rules, optional dictionaryapi.dev fallback behind a sheet switch (off by default).
+- **4c OPDS.** `Add books > Browse catalogs…`: add catalogs (DPAPI-protected passwords, sent only to the catalog's host), browse navigation and acquisition feeds, search, load more, download the best of EPUB/FB2/MOBI/PDF into a folder asked for once; the file is imported at once and the catalog's series, summary, tags and language are applied as source "OPDS".
+- **4d Read aloud.** `System.Speech` voices, paragraph by paragraph from the top of the page to the chapter end, in-page pill and highlight; `T` start/stop, `Shift+T` pause, `Ctrl+Up/Down` speed. Voice and speed remembered.
+- **Verified (tests).** Data: `CalibreImportTests` (17, including the real-library smoke test). App: Calibre dialog, dictionary (parser, lookup, database, download pipeline on a synthetic tar.gz, online parsing, popup state), OPDS (parser, client auth/redirect/download, store, download service), read aloud (plan, fake-engine view model), key-set pin; the lint trio passes except `FamilyButtonsCarryNoSizeOverrides` (the ComicVine review dialogs from another change).
+- **Not verified / not done.** **Nothing on screen**, no WebView script run, and the Windows speech engine itself, the real WordNet download, and a real OPDS server were not exercised. Deviations from the specs: the catalog browser is an overlay (not a `ScreenInput` screen), add/edit is an inline form, no Activity Center job for Calibre import, the downloaded file is imported directly (the Downloads folder is not added as a Books folder), read-aloud speed keys are `Ctrl+Up/Down` (the web key map cannot express Shift+period), the dictionary online switch lives in the font sheet, per-sentence highlighting is not built. The highlight popup may still sit behind the WebView (old airspace note), which would hide the Look up card.
+
+### Books reader: on-screen fixes, contents, paged/scroll modes and book pages (2026-10-27)
+
+Found by the user on screen after Slice 4, then designed in a grilling round. Spec `docs/superpowers/specs/2026-10-27-books-reader-paged-scroll-modes-design.md`, plan `…-plan.md`. One new migration, `AddBookReaderLayout`, not applied to the real database.
+
+- **Fixed (user-verified on screen).** The highlight popup was drawn under the reading page (a Popup is embedded in the window, so the NativeWebView covers it): it is now an owned `OverlayHostWindow`, closes when another window is activated or on Esc, and `L` works from it. The reader's drawers (Chapters, Bookmarks, Highlights, Search) were empty since the 2026-09-16 move into owned windows: the window never got the reader's DataContext; `OverlayWindowController` now wraps the content in a `UserControl` carrying it. The contents list counted EPUB *files* (Glass Sword: 6 rows for 26 chapters): `EpubBookSource` now hands each file its nav entries (`BookChapter.Sections`) and `BookTocBuilder` flattens them for the drawer and the Detail Chapters tab.
+- **Reading units.** The reader shows one contents entry at a time (`BookUnitSlicer`): a file is cut at its entries' anchors after block ids are assigned over the whole file, so stored positions, bookmarks and highlights keep their meaning. Next/previous move by unit; going back lands on the previous unit's last page.
+- **Paged and scroll layouts.** Font sheet LAYOUT card (`AppSettings.BookReaderLayout`, default Paged). Paged mode does not use CSS columns: the page script measures line boxes and builds whole-line page edges, shows a page with a translate plus a clip, keeps a top margin on every page, and rebuilds (keeping the place) after load, font and size changes. Wheel turns one page per gesture; in scroll mode a wheel past either end opens the neighbouring unit after a 400 ms rest. Auto-scroll is scroll-only; the ruler and read aloud turn pages. Page turn slide uses the Replace motion role (none under Reduced).
+- **Book pages.** Numbered by word count (`BookPageMap`, Preferences > Reader > Books, default 250–300) so "p. 214 of 640" is the same at any font size; every unit starts a page; long paragraphs split at sentence ends. A print page list (EPUB 3 nav page-list or NCX pageList, read from the archive) replaces the numbers when present — six of the user's 35 EPUBs (the Herbert Dune set) have one. Footer: "p. 214 of 640 · Nine · 3 / 12" paged, "… · 37%" scroll. Go to page field at the top of the Chapters drawer. Detail's "Ch. n of m" counts units.
+- **Verified.** Tests: `BookUnitSlicerTests`, `BookPageMapTests`, `EpubPrintPageTests` (nav and NCX), `BookTocBuilderTests`, `BookReaderLayoutTests` (units, last-page landing, finish, contents row, layout persistence, auto-scroll refusal, footer both modes, Go to page, print pages), migration test; reader/Detail/Preferences/lint suites pass except `FamilyButtonsCarryNoSizeOverrides` (ComicVine dialogs from another change). The paging script was run in a real browser against a test page at 1000×640: every line on exactly one page at 17 px and 24 px (101 and 140 lines), no page taller than the window, place kept across a font change, one page per wheel gesture. Also fixed two stale tests: the Detail focus test (chapter rows moved to the Chapters tab in Slice 2b) and the Library Health section counts (17 / 13 Review), and a dictionary test that read the machine's real dictionary.
+- **User-verified on screen (2026-10-27):** the user ran the build (so `AddBookReaderLayout` is applied to their database) and confirmed paged/scroll, chapter units and the footer look good.
+- **Not done.** A unit cut from a file loses the class styling of a wrapper it started inside. A paragraph split across book pages counts from the page where it starts. No two-page spread; no book pages on Detail/Home; `Book.ChapterCount`/`LastChapterIndex` and Home progress still count files. The "redesign" these modes are for (answered 2026-10-27): a full Books section redesign, Books screen through Detail to the reader, to match the other sections and the design language; to be started in a new session.
+
+### Books section redesign, Slice 1: Books screen (2026-10-27)
+
+Spec `docs/superpowers/specs/2026-10-27-books-section-redesign-design.md` ("Reading Room with shelves", four grilling rounds with the visual companion), plan `…-plan.md` (Steps 1–11). One new migration, `AddBookLastExcerpt`, **not applied to the real database**.
+
+- **Built.** `PbBookTitleFontFamily` + `bookTitle` / `bookQuote` text classes (fixed Source Serif, ignores the body-font override). `Book.LastExcerpt`, written by the reader with the position (`QuoteExcerpt`, ~160 chars at a word boundary; the page script now reports 200). `BooksSpreadResolver` (spread book: newest Reading → next in a started series → oldest Want to read → newest added; nightstand; quote fallbacks excerpt → newest highlight → synopsis; "This week" from novel `ReadingEvents`). Shared `Controls/Books/BookCoverCard` (one-badge rule: progress bar while reading, else one status corner; hover stars; select box; serif title + author + status caption; ghost variant; `book-cover:{id}` shared-element key) and `Controls/Books/CoverWash` (radial spine-colour wash, lighter on light themes, `PbCoverWashAccentMix` token). `SpineTile` draws ghosts as dashed outlines (fixes ghosts drawn as real spines). Books screen rebuilt: header (count, search, Add books ▾ with Scan / Manage folders / Calibre / Catalogs), tabs row with ghost Shelves / Group / Sort, Workspace icon, view switch; selection bar replaces it (Set status ▾, Rate ▾, Match, Edit, Delete on `danger`, Clear); spread + nightstand on All only; virtualized cover grid (was a plain WrapPanel); serif group headers with "3 of 4 · 1 missing" in both views; pinned group header (Library's pattern); A–Z rail in both views via `ScrollIntoView`; narrow window sheds toolbar labels (<1100) and the nightstand (<900).
+- **Deviations from the spec.** The tabs row sits *above* the spread, outside the scroll area, instead of below it with a pinned duplicate (a duplicate would duplicate four bound popups). `CoverWash` cannot tell Matrix apart, so instead of "accent on Matrix" there is `PbCoverWashAccentMix` (0 by default) — check Matrix on screen. A–Z rail letters are no longer focusable (keyboard has type-ahead; the rail was the arrow keys' nearest neighbour).
+- **Verified.** New tests: `BookTitleTypographyTests`, `QuoteExcerptTests`, `BookLastExcerptTests`, `AddBookLastExcerptMigrationTests` (Data), `BooksSpreadResolverTests`, `BooksSpreadViewModelTests`, `BookCardStatusTests`, `CoverWashTests`; Books screen VM/focus/tabs/workspace/bookshelf, FocusGaps/FocusStatesPaint (Books), ScreenInput and lint suites pass except `FamilyButtonsCarryNoSizeOverrides` (ComicVine dialogs from another change). `BooksScreenRenderTests` rendered default/Daylight/Matrix at 1310 and 1000 px, grid and bookshelf, checked by eye.
+- **Not done.** On-screen check by the user. Detail (Slice 2) and the reader (Slice 3).
+
+### Books section redesign, Slice 2: Book Detail (2026-10-28)
+
+Same spec and plan (Steps 12–17).
+
+- **Built.** `Controls/Books/ChapterRibbon` (segments weighted by chapter length with a floor, `RibbonMath`; read/current/unread fill; dashed ghosts; each segment a focusable button that opens that chapter, or that book in Series mode) on a `RibbonPanel`. Book mode is a jacket in a `CoverWash`: flat cover with a spine edge (`book-cover:{id}` shared-element key; the Books grid → Detail navigation now flies the cover), overline (format · year), 42 px serif title, author and series links, rating + status, flap copy with Show more, Continue / Edit / ⋯ (Match metadata, Reveal, Mark finished, Delete with an inline confirm; rows defer one tick before closing the popup), chapter ribbon with the series as spines (current book outlined, ghosts dashed). A compact title bar with Continue pins once the jacket scrolls away. Tabs: Overview (About this edition facts, genres and tags, More by with three covers, latest highlight), Contents (part-grouped rows), Notes (only Export), Your reading (stat tiles; new `BookDetailTab.YourReading`, offered only when the reading log has something). Series mode: fanned stack (`FannedStackPanel`), per-book ribbon, Continue at the book in progress, shared `BookCoverCard`s with ghosts. Home's "Next in your book series" / "New books" rows open Detail (`HomeScreenViewModel` optional `goBookDetail`). Hex `#E06060` gone.
+- **Verified.** `BookDetailJacketTests`, `RibbonMathTests`, `BookDetailRenderTests` (default/Daylight/Matrix, book and series, checked by eye), BookDetail* focus/tabs/VM suites (the stats test now expects the dashboard on Your reading).
+- **Not done.** On-screen check.
+
+### Books section redesign, Slice 3: the readers (2026-10-28)
+
+Same spec and plan (Steps 18–24).
+
+- **Built.** The EPUB/FB2/MOBI page fills the window again (the 56 px strips are gone). Page CSS (`BookReaderCss` `Paper`): the page is a 720 px sheet on a darker desk with a shadow, page-edge stacks either side sized 2–24 px by the share of the book before and after (`PageEdgeMath`, paged mode), a faint folio, and margin notes beside noted highlights when the window is ≥1200 px (click opens the highlight); OLED Black and High Contrast keep the full-window page. In-page pills get the app accent and UI font as CSS variables. Highlight colours are tokens (`PbHighlight*`), used by the page CSS, popup swatches and Notes lists. Chrome is three floating clusters (`Views/Reader/ReaderCluster`: navigate top-left, actions top-right, page bottom-centre with part ticks) in the book theme's colours; in the EPUB reader each lives in its own small owned window (`ClusterWindowController`, anchored by `ClusterAnchorMath`, never activated: `WS_EX_NOACTIVATE`), shown with the existing auto-hide (now 3 s; the page script forwards pointer moves, edge ones reveal). Panels are floating cards whose tokens are re-tinted from the book theme (`BookThemePanelResources`), scrim token `PbReaderScrimBrush`; Bookmarks and Highlights merged into one Notes panel with All/Highlights/Bookmarks chips and Export. Aa sheet: active theme ring, `.on` layout switch, "Keep toolbar visible" (inverted `BookReaderAutoHideChrome`). Highlight popup on tokens and the ghost family. Reader button hovers use theme tokens (no more `#22FFFFFF`). PDF reader: the same clusters in-window, book-theme Captures panel, page edges around the page (`PageEdges`). Paper layout checked in a browser engine.
+- **Deviations.** No live scrubbing on the page cluster's progress line (Go to page in Contents jumps); no time-left on the page cluster; no ⋯ menu in the actions cluster (read aloud, auto-scroll and ruler stay in Aa; Export lives in Notes). Clusters appear instantly (no reveal fade). `ReaderChrome` is no longer used by either reader but is kept because `ReaderChromeTests` still covers it. Hex-colour baseline: `AppTokens.axaml` 51 → 56 (five new tokens), the Books/Detail/reader views 17 → 0.
+- **Not done / risks.** The owned cluster windows were not spiked on screen: check they follow window move/resize/minimize, that clicks beside them reach the page, and that keys still work after clicking one. On-screen check of everything.
+
+### Books section redesign: on-screen fixes (2026-10-28)
+
+Fixes from the user's first on-screen pass of the reader and Detail.
+
+- **Reader clusters did not show.** Each cluster window is now measured and placed before `Show` (it opened at the screen's default spot), the chrome shows when a book opens, edge pointer moves and keys reveal it whether or not auto-hide is on, a click on the desk around the page toggles it, and the clusters re-sync on page load and viewport changes. `SyncClusters` and `ClusterWindowController` log to `startup.log`.
+- **Cluster buttons did nothing.** Handing activation back to the reader on `Activated` moved focus off the pressed button between press and release, and an Avalonia `Button` that loses focus drops its press. The windows are now `WS_EX_NOACTIVATE` and never take activation. The auto-hide countdown pauses while the pointer is over a cluster (`SetPointerOverChrome`; the page sees no pointer moves there).
+- **Aa theme swatches did nothing.** Their template found the sheet with `$parent[views:ReaderSettingsSheet]`, which no longer exists once the sheet's content is moved into its own window. The swatch list carries the sheet in `Tag`; the swatches bind through `RelativeSource AncestorType=ItemsControl` (compiled bindings off on that button: a cast inside a `$parent` path does not parse, and a `ReflectionBinding` element cannot resolve `$parent[ItemsControl]` at runtime). Gotcha for any templated row inside `ReaderListDrawer`/`ReaderSettingsSheet` content.
+- **Description showed raw Markdown** (`***`, `###`, `[1]: https://…`). `Services/Books/SynopsisText.Clean` turns Markdown and HTML descriptions into plain text; used by Book Detail's flap copy and the Books spread's quote fallback.
+- **Show more / Show less arrow** overlapped the label: now a fixed-size down chevron that flips up when open.
+- **Verified.** User checked all of the above on screen (2026-10-28). `ReaderSettingsSheetThemeTests` (opens the sheet in its own window, checks the ring and that a swatch runs `SetThemeCommand`), `SynopsisTextTests`; reader, Books, Detail and lint suites pass except the known `FamilyButtonsCarryNoSizeOverrides` (ComicVine dialogs).
+
+### Continuity overview: "An item with the same key has already been added" (2026-10-28)
+
+- **Bug.** Earth 616's Overview failed with `Key: 89541`. `ContinuityOverviewLoader` keyed member series by `GcdSeriesId` with `ToDictionary`, assuming one library series per GCD series. The real database has three GCD ids shared by two series: 89541 (Free Comic Book Day 2015 (Secret Wars) and Secret Wars 2099, both `GcdMatchSource = Metron`), 35540 (Dark Reign: Hawkeye, two rows) and 71608 (Green Lantern Corps and its Annual).
+- **Fix.** The loader groups series by GCD id (as `GcdBondSync` already did) and attaches a GCD placeholder to every series sharing the id; `ContinuityOverviewBuilder.BuildRuns` already handled that. Test: `ContinuityOverviewLoaderTests` (failed with the same exception before the fix).
+- **Not fixed (data).** The FCBD 2015 issue being matched to GCD 89541 looks like a wrong match from Metron's `gcd_id`, and Dark Reign: Hawkeye exists as two series rows. Neither was changed.
+- **Verified.** `ContinuityOverviewLoaderTests`, `OverviewBuilderTests`, `ContinuityPageViewModelTests`, `ContinuitySourcesAppTests` (36) pass; app built into `bin`. Not checked on screen.
+
+### Series relation connector: automatic Related series (2026-10-29) (implemented, tests pass, not seen on screen)
+
+Spec `docs/superpowers/specs/2026-10-29-series-relation-connector-design.md`, plan `...-plan.md` (agreed in a grilling pass, Q1–Q18). CE has no
+series relations (it only groups by AlternateSeries/SeriesGroup), so this is Paperbunkr's own feature on the existing `MediaRelation` graph.
+
+- **What it links.** Saved automatically as `Inferred` evidence: later volumes (`Continuation`), companions (Annual/Special/Rebirth/Giant-Size/…
+  → `SideStory`), slash team-up titles and 2–3-series events with no main series (`Crossover`), and event tie-ins (new `RelationType.TieIn` /
+  `MainEventSeries`, each tie-in linked only to the event's main series via `EventSpineResolver`, the Event Map's spine rule moved into Data).
+  Metron's associated series are fetched weekly and saved as `Metron` "associated" evidence; a series with no Metron id is resolved through
+  Metron's `cv_id`/`gcd_id` filters (`gcd_id` confirmed in Metron's `comicsdb/filters/series.py`), and an association is matched back by Metron
+  id, then ComicVine id, then GCD id. Suggestions (shared lead, same writer, spin-off, similar title) are computed live, max 8.
+- **Where.** `Paperbunkr.Data/Metadata/SeriesConnector/` (snapshot, five rules, sweep, Metron fetch/mapping, suggestions), weekly task
+  `find-related-series` (priority 25), `SeriesConnectorReactions` after `LibraryScanCompleted` and the new `LibraryEvents.ScrapeCompleted`.
+  Related tab: reasons under cards ("Later volume" / "Earlier volume" by side), dimmed suggestion cards with Accept/✕, per-event rows (main series
+  first, tie-ins with issue ranges, 3 then Show all) and an Other events rail, replacing the flat Same Event rail; "Find relations" button.
+  Preferences → Library → "Find related series automatically". Removing any automatic relation now writes a `SeriesRelationDismissal`.
+  Migration `AddSeriesRelationConnector` (5 columns; `Down` leaves the Series/AppSettings ones as orphans per the rollback-chain rule).
+- **Real-library dry run** (on a copy, 2026-10-29): 350 relations (253 tie-ins, 85 crossovers/team-ups, 15 companions) in under a second; hubs are
+  Convergence, King in Black, Flashpoint (not Batman). Zero later volumes: this library keeps volumes inside one series (69 series hold 2+ volumes).
+  The dry run also caught two weak suggestion rules, fixed: one-shots counted as having a "lead" (now 3+ issues), and the spin-off rule called
+  Superman Unlimited a spin-off of Justice League (now: the character's first own title, from where they first appeared). Suggestions cost ~2 s
+  cold, 45–115 ms warm (library reads cached 2 min, cleared by each sweep).
+- **Verified.** Data: 50 `SeriesConnector` tests, migration test, `RelationTypeCatalogTests`. App: `DetailTabsViewModelTests` (incl. new event-row,
+  suggestion and dismissal tests), `SeriesConnectorReactionsTests`, the toggle test, EventMap/Continuity/CollectionProperties classes, lint
+  (only the known `FamilyButtonsCarryNoSizeOverrides` failure in the ComicVine dialogs). Known unrelated failure: `AddReleaseListProviderMigrationTests`
+  breaks in the rollback chain from other uncommitted migrations (fails the same with this migration's `Down` emptied).
+- **Slowness fixes after the first real run (2026-10-29 evening).** The weekly task held the heavy-job lane while it waited ~1 h on Metron's rate
+  limit (510 series asked in the first run), so scrapes and scans queued behind it: now `UsesHeavyJobLane: false`, like Metron sync. The Related
+  tab's event rows decoded every card's cover on the UI thread (dozens for Batman or a Convergence tie-in; two compositor timeouts in the log):
+  now built on the thread pool like More Like This, one decode per series. `DetailTabsViewModelTests` + reactions + catalog (140) pass; built into `bin`.
+- **Not done.** Not seen on screen. The first real Metron run stopped when the app was closed (510 series asked, 48 associations saved);
+  the next run picks up from there, since checked series are stamped. Metron associated series not in the library aren't shown.

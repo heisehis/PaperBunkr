@@ -180,6 +180,13 @@ public class Series
     /// <summary>How <see cref="GcdSeriesId"/> was found: Metron's own <c>gcd_id</c>, or a unique name match. A Metron match is never replaced by a name match.</summary>
     public Gcd.GcdMatchSourceKind? GcdMatchSource { get; set; }
 
+    /// <summary>
+    /// When the series connector last asked Metron about this series (docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §4):
+    /// its associated series, or - for a series with no Metron id yet - a lookup by its ComicVine/GCD id that found nothing. Null = never.
+    /// Rechecked after 30 days.
+    /// </summary>
+    public DateTime? MetronAssociationsCheckedUtc { get; set; }
+
     // --- Manga series-centric metadata (docs/superpowers/specs/2026-10-14-manga-series-metadata-design.md). Only meaningful for manga-family series. ---
 
     /// <summary>Series-level imprint, inherited by chapters without an override.</summary>

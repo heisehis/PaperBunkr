@@ -171,6 +171,26 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void FindRelatedSeriesAutomatically_LoadsOn_AndTurningItOffIsSaved()
+    {
+        // docs/superpowers/specs/2026-10-29-series-relation-connector-design.md §6.4
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        Assert.True(vm.FindRelatedSeriesAutomatically);
+
+        vm.FindRelatedSeriesAutomatically = false;
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            Assert.False(context.GetOrCreateAppSettings().FindRelatedSeriesAutomatically);
+        }
+
+        var next = CreateViewModel();
+        next.EnsureLoaded();
+        Assert.False(next.FindRelatedSeriesAutomatically);
+    }
+
+    [Fact]
     public void LibraryHealthTab_UnknownStoredValue_FallsBackToTheFirstOpenRule()
     {
         using (var context = new PaperbunkrDbContext(_dbOptions))
@@ -247,11 +267,12 @@ public class PreferencesScreenViewModelTests : IDisposable
     {
         var sections = new LibraryHealthSections();
 
-        Assert.Equal(14, sections.All.Count);
+        // 13 Review sections (chapter alignment and book duplicates joined in 2026-10) + 4 Files sections (leftover files).
+        Assert.Equal(17, sections.All.Count);
         Assert.Equal(sections.All.Count, sections.All.Select(s => s.Anchor).Distinct().Count());
         Assert.Equal(sections.All.Count, sections.All.Select(s => s.Key).Distinct().Count());
         Assert.All(new[] { sections.Missing, sections.EmptyRows, sections.RecentlyRemoved }, s => Assert.Equal(Paperbunkr.App.Models.LibraryHealthTab.Files, s.Tab));
-        Assert.Equal(11, sections.All.Count(s => s.Tab == Paperbunkr.App.Models.LibraryHealthTab.Review));
+        Assert.Equal(13, sections.All.Count(s => s.Tab == Paperbunkr.App.Models.LibraryHealthTab.Review));
         Assert.Same(sections.Duplicates, sections.Find("duplicates"));
         Assert.Same(sections.Duplicates, sections.Find("library.healthDuplicates"));
         Assert.Null(sections.Find("library.health"));

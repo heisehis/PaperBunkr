@@ -111,6 +111,17 @@
                 <Border Width="140" Height="210" CornerRadius="{DynamicResource PbRadiusSm}" Background="{DynamicResource PbSurface2Brush}" IsVisible="{Binding ShowCovers}">
                     <Image Stretch="Uniform" vm:RemoteCoverImage.SourceUrl="{Binding ResolvedCoverImageUrl}" />
                 </Border>
+                <Grid ColumnDefinitions="Auto,*,Auto" Width="140" IsVisible="{Binding ShowCoverCarousel}">
+                    <Button Grid.Column="0" Content="‹" Classes="icon ghost" Width="36" Height="36"
+                            AutomationProperties.Name="Previous cover"
+                            Command="{Binding SelectedCandidate.CoverCarousel.PreviousCoverCommand}" />
+                    <TextBlock Grid.Column="1" Text="{Binding SelectedCandidate.CoverCarousel.PositionLabel}"
+                               FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}"
+                               VerticalAlignment="Center" HorizontalAlignment="Center" />
+                    <Button Grid.Column="2" Content="›" Classes="icon ghost" Width="36" Height="36"
+                            AutomationProperties.Name="Next cover"
+                            Command="{Binding SelectedCandidate.CoverCarousel.NextCoverCommand}" />
+                </Grid>
                 <TextBlock Text="{Binding SelectedCandidate.Volume.Name}" FontSize="12" Foreground="{DynamicResource PbTextBrush}"
                            TextAlignment="Center" TextWrapping="Wrap" />
                 <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">

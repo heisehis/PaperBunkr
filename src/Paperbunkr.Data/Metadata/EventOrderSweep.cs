@@ -130,7 +130,8 @@ public static class EventOrderSweep
 
         int matched = 0;
         using var write = contextFactory();
-        var rows = write.EventOrderEvidence.Where(e => e.Provider == EventOrderProvider.Cbro).ToDictionary(e => e.StoryEventId);
+        var rows = write.EventOrderEvidence.Where(e => e.Provider == EventOrderProvider.Cbro)
+            .Include(e => e.CbroOverlapNotes).ToDictionary(e => e.StoryEventId);
         foreach (var e in events)
         {
             var entry = Match(e, byKey);
@@ -145,6 +146,17 @@ public static class EventOrderSweep
             row.SourceName = entry?.Name;
             row.ListKey = entry?.ListKey;
             row.Rank = entry?.Rank;
+            row.SourceYear = entry?.Year;
+            row.CbroOverlapNotes.Clear();
+            foreach (var note in entry?.OverlapNotes ?? Array.Empty<CbroTimelineOverlapNote>())
+            {
+                row.CbroOverlapNotes.Add(new EventOrderOverlapNote
+                {
+                    OriginalText = note.OriginalText,
+                    TargetName = note.TargetName,
+                    TargetYear = note.TargetYear,
+                });
+            }
             if (entry is not null)
             {
                 matched++;

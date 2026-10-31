@@ -6,6 +6,7 @@
              xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:entities="using:Paperbunkr.Data.Entities"
+             xmlns:plugins="using:Paperbunkr.Plugins"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -121,7 +122,7 @@
         <!-- ============ Row 1: two-zone bar ============ -->
         <Border Padding="24,12" Background="{DynamicResource PbSurface1Brush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                     <Button AutomationProperties.Name="Back" Classes="browseBtn" Command="{Binding BrowsePreviousCommand}" IsEnabled="{Binding CanBrowsePrevious}"
                             ToolTip.Tip="Back" AutomationProperties.AutomationId="LibraryBrowsePreviousButton">
@@ -245,7 +246,16 @@
                     <fi:SymbolIcon Symbol="ArrowClockwise" />
                 </Button>
 
-                <Button Grid.Column="9" Classes="addBtn" Command="{Binding OpenAddIssueCommand}" VerticalAlignment="Center"
+                <!-- Plugin API 4.5 (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §E): commands a plugin
+                     declared toolbar="true". Only present when one exists, so most users never see it. -->
+                <Button x:Name="PluginCommandsButton" Grid.Column="9" Classes="browseBtn" Command="{Binding ToggleLibraryPluginMenuCommand}"
+                        IsVisible="{Binding HasToolbarPluginCommands}" VerticalAlignment="Center"
+                        ToolTip.Tip="Plugin commands - run on the selected books"
+                        AutomationProperties.AutomationId="LibraryPluginCommandsButton" AutomationProperties.Name="Plugin commands">
+                    <fi:SymbolIcon Symbol="PuzzlePiece" />
+                </Button>
+
+                <Button Grid.Column="10" Classes="addBtn" Command="{Binding OpenAddIssueCommand}" VerticalAlignment="Center"
                         ToolTip.Tip="Add issue to library" AutomationProperties.AutomationId="LibraryAddIssueButton" AutomationProperties.Name="Add issue">
                     <fi:SymbolIcon Symbol="Add" />
                 </Button>
@@ -381,6 +391,22 @@
         </Border>
 
         <!-- ============ Popups ============ -->
+        <Popup PlacementTarget="{Binding #PluginCommandsButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+               IsOpen="{Binding IsLibraryPluginMenuOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
+            <Border Classes="dropdown" MinWidth="200"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding ToolbarPluginCommands}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="plugins:Command">
+                            <Button Classes="menuRow" Content="{Binding Name}" ToolTip.Tip="{Binding Description}"
+                                    IsEnabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasAnySelection}"
+                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginOnSelectionCommand}"
+                                    CommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer></Border>
+        </Popup>
+
         <Popup PlacementTarget="{Binding #SearchModeButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
                IsOpen="{Binding IsSearchModeOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
             <Border Classes="dropdown" Width="160"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">

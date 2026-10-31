@@ -249,6 +249,30 @@ public class SmartListQueryBuilderTests : IDisposable
         Assert.DoesNotContain(_issueOldAddedId, ids);
     }
 
+    [Fact]
+    public void DateComparisons_UseCalendarDaysAndIncludeBothRangeDays()
+    {
+        DateTime lateToday = DateTime.Today.AddHours(23);
+        var afterToday = Cond(SmartListField.Added, SmartListOperator.IsAfter, DateTime.Today.ToString("O"));
+        var withinToday = Cond(SmartListField.Added, SmartListOperator.DateInRange, DateTime.Today.ToString("O"), DateTime.Today.ToString("O"));
+
+        Assert.False(SmartListLeafEvaluator.EvaluateDate(lateToday, afterToday));
+        Assert.True(SmartListLeafEvaluator.EvaluateDate(lateToday, withinToday));
+    }
+
+    [Fact]
+    public void SeriesLastAddedDate_UsesNewestDateAcrossTheWholeSeriesVolume()
+    {
+        _context.Issues.Single(i => i.Id == _issueRecentlyAddedId).AddedTime = DateTime.Today.AddHours(23);
+        _context.SaveChanges();
+        var list = ListOf(Cond(SmartListField.SeriesLastAddedTime, SmartListOperator.Is, DateTime.Today.ToString("O")));
+        var ids = SmartListQueryBuilder.Build(_context, list).Select(i => i.Id).ToHashSet();
+
+        Assert.Contains(_issueRecentlyAddedId, ids);
+        Assert.Contains(_issueOldAddedId, ids);
+        Assert.Contains(_issueNeverReadId, ids); // CE's statistic applies to every issue in the group, including the unset one.
+    }
+
     // --- Virtual Tag evaluator (Alpha to-do P2 - not in CE, see SmartListField.VirtualTag) ---
 
     [Fact]

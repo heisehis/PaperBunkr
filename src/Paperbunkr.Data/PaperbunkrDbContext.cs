@@ -23,6 +23,7 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<CollectionRelation> CollectionRelations => Set<CollectionRelation>();
 
     public DbSet<TrackingLink> TrackingLinks => Set<TrackingLink>();
+    public DbSet<TrackerPushRetry> TrackerPushRetries => Set<TrackerPushRetry>();
 
     public DbSet<IssueCustomValue> IssueCustomValues => Set<IssueCustomValue>();
 
@@ -59,6 +60,8 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<ReadingListItem> ReadingListItems => Set<ReadingListItem>();
 
     public DbSet<ReadingListItemSource> ReadingListItemSources => Set<ReadingListItemSource>();
+
+    public DbSet<ReadingListReviewBatch> ReadingListReviewBatches => Set<ReadingListReviewBatch>();
 
     public DbSet<ReadingListTag> ReadingListTags => Set<ReadingListTag>();
 
@@ -111,6 +114,8 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<EventRelationDismissal> EventRelationDismissals => Set<EventRelationDismissal>();
 
     public DbSet<EventOrderEvidence> EventOrderEvidence => Set<EventOrderEvidence>();
+
+    public DbSet<EventOrderOverlapNote> EventOrderOverlapNotes => Set<EventOrderOverlapNote>();
 
     public DbSet<SeriesRelationDismissal> SeriesRelationDismissals => Set<SeriesRelationDismissal>();
 
@@ -172,6 +177,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ExternalRating> ExternalRatings => Set<ExternalRating>();
 
+    public DbSet<CollectionContent> CollectionContents => Set<CollectionContent>();
+
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
 
     public DbSet<ProviderCredential> ProviderCredentials => Set<ProviderCredential>();
@@ -204,12 +211,18 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<Book> Books => Set<Book>();
 
     public DbSet<BookBookmark> BookBookmarks => Set<BookBookmark>();
+    public DbSet<BookTag> BookTags => Set<BookTag>();
+    public DbSet<BookFieldSource> BookFieldSources => Set<BookFieldSource>();
 
     public DbSet<BookHighlight> BookHighlights => Set<BookHighlight>();
 
     public DbSet<BookAnnotationImage> BookAnnotationImages => Set<BookAnnotationImage>();
 
     public DbSet<BookFolder> BookFolders => Set<BookFolder>();
+
+    public DbSet<OpdsCatalog> OpdsCatalogs => Set<OpdsCatalog>();
+
+    public DbSet<OpdsDownload> OpdsDownloads => Set<OpdsDownload>();
 
     public DbSet<PluginCommandState> PluginCommandStates => Set<PluginCommandState>();
 
@@ -1064,6 +1077,15 @@ public class PaperbunkrDbContext : DbContext
             builder.HasIndex(t => new { t.SeriesId, t.Service, t.ExternalId }).IsUnique();
         });
 
+        modelBuilder.Entity<TrackerPushRetry>(builder =>
+        {
+            builder.HasKey(x => x.Id);
+            builder.HasIndex(x => x.TrackingLinkId).IsUnique();
+            builder.Property(x => x.TargetExternalId).IsRequired();
+            builder.Property(x => x.State).HasConversion<int>();
+            builder.HasOne(x => x.TrackingLink).WithMany().HasForeignKey(x => x.TrackingLinkId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<IssueCustomValue>(builder =>
         {
             builder.HasKey(cv => cv.Id);
@@ -1517,6 +1539,17 @@ public class PaperbunkrDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.StoryEventId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(e => e.CbroOverlapNotes).WithOne(n => n.EventOrderEvidence)
+                .HasForeignKey(n => n.EventOrderEvidenceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EventOrderOverlapNote>(builder =>
+        {
+            builder.HasKey(n => n.Id);
+            builder.Property(n => n.OriginalText).IsRequired().HasMaxLength(500);
+            builder.Property(n => n.TargetName).IsRequired().HasMaxLength(300);
+            builder.HasIndex(n => n.EventOrderEvidenceId);
         });
 
         modelBuilder.Entity<EventRelationDismissal>(builder =>
@@ -1954,6 +1987,20 @@ public class PaperbunkrDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<CollectionContent>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.FromNumber).IsRequired().HasMaxLength(32);
+            builder.Property(e => e.ToNumber).IsRequired().HasMaxLength(32);
+            builder.Property(e => e.Source).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(e => e.IssueId);
+
+            builder.HasOne(e => e.Issue)
+                .WithMany()
+                .HasForeignKey(e => e.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // Singleton row (Id always 1) - one app-wide config record, not a generic key-value store.
         modelBuilder.Entity<AppSettings>(builder =>
         {
@@ -1972,6 +2019,7 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.AutoNavigateComics).HasDefaultValue(true);
             builder.Property(a => a.BackupsToKeep).HasDefaultValue(5);
             builder.Property(a => a.AutoBackupEnabled).HasDefaultValue(true);
+            builder.Property(a => a.FindRelatedSeriesAutomatically).HasDefaultValue(true);
             builder.Property(a => a.AutoBackupMinIntervalHours).HasDefaultValue(4);
             builder.Property(a => a.ReverseRtlNavigation).HasDefaultValue(true);
             builder.Property(a => a.HighQualityPageDisplay).HasDefaultValue(true);
@@ -2152,6 +2200,12 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.BooksSortDirection).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(SortDirection.Ascending)
                 .HasSentinel(SortDirection.Ascending);
+            builder.Property(a => a.BooksActiveStatusTab).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(BooksStatusTab.All)
+                .HasSentinel(BooksStatusTab.All);
+            builder.Property(a => a.BooksViewMode).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(BooksViewMode.Grid)
+                .HasSentinel(BooksViewMode.Grid);
             builder.Property(a => a.BooksGroupField).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(BooksGroupField.None)
                 .HasSentinel(BooksGroupField.None);
@@ -2191,6 +2245,21 @@ public class PaperbunkrDbContext : DbContext
                 .HasDefaultValue(BookTheme.MatchAppSkin)
                 .HasSentinel(BookTheme.MatchAppSkin);
             builder.Property(a => a.BookReaderAutoHideChrome).HasDefaultValue(true);
+            builder.Property(a => a.BookReaderJustify).HasDefaultValue(false);
+            builder.Property(a => a.BookReaderHyphenate).HasDefaultValue(false);
+            builder.Property(a => a.BookReaderUsePublisherStyles).HasDefaultValue(false);
+            builder.Property(a => a.BookReaderCustomFont).HasMaxLength(200);
+            builder.Property(a => a.BookReaderLookUpOnline).HasDefaultValue(false);
+            builder.Property(a => a.OpdsDownloadFolder).HasMaxLength(1000);
+            builder.Property(a => a.BookReaderSpeechRate).HasDefaultValue(0);
+            builder.Property(a => a.BookReaderSpeechVoice).HasMaxLength(200);
+            builder.Property(a => a.BookReaderRulerEnabled).HasDefaultValue(false);
+            builder.Property(a => a.BookReaderAutoScrollSpeed).HasDefaultValue(3);
+            builder.Property(a => a.BookReaderLayout).HasConversion<string>().HasMaxLength(16)
+                .HasDefaultValue(BookReaderLayout.Paged)
+                .HasSentinel(BookReaderLayout.Paged);
+            builder.Property(a => a.BookPageWordsMin).HasDefaultValue(250);
+            builder.Property(a => a.BookPageWordsMax).HasDefaultValue(300);
             // Book look for spreads (Motion v2 reader §7): on by default, as CE's Realistic pages - existing rows get it too.
             builder.Property(a => a.ReaderBookLook).HasDefaultValue(true);
 
@@ -2323,8 +2392,23 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(b => b.Title).IsRequired();
             builder.Property(b => b.FilePath).IsRequired();
             builder.Property(b => b.Format).HasConversion<string>().HasMaxLength(32);
-            builder.Property(b => b.Finished).HasDefaultValue(false);
+            // Finished is [NotMapped] now (a view over Status) - its legacy column stays in the table, unused.
+            builder.Property(b => b.Status).HasConversion<string>().HasMaxLength(32).HasDefaultValue(BookReadingStatus.Unread);
+            builder.Property(b => b.Subtitle);
+            builder.Property(b => b.Publisher);
+            builder.Property(b => b.LanguageISO).HasMaxLength(16);
+            builder.Property(b => b.ISBN).HasMaxLength(32);
             builder.Property(b => b.ChapterCount).HasDefaultValue(0);
+
+            builder.HasMany(b => b.Tags)
+                .WithOne(t => t.Book)
+                .HasForeignKey(t => t.BookId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(b => b.FieldSources)
+                .WithOne(s => s.Book)
+                .HasForeignKey(s => s.BookId)
+                .OnDelete(DeleteBehavior.Cascade);
             // Nullable, no HasDefaultValue/HasSentinel - null is an unambiguous "not parsed yet",
             // same treatment as the per-book override columns below (docs/superpowers/specs/
             // 2026-09-05-insights-dashboard-design.md §6).
@@ -2356,6 +2440,23 @@ public class PaperbunkrDbContext : DbContext
                 .WithOne(a => a.Book)
                 .HasForeignKey(a => a.BookId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BookTag>(builder =>
+        {
+            builder.HasKey(t => t.Id);
+            builder.Property(t => t.Field).HasConversion<string>().HasMaxLength(16);
+            builder.Property(t => t.Value).IsRequired().UseCollation("NOCASE");
+            builder.HasIndex(t => new { t.BookId, t.Field, t.Value }).IsUnique();
+            builder.HasIndex(t => t.Value);
+        });
+
+        modelBuilder.Entity<BookFieldSource>(builder =>
+        {
+            builder.HasKey(s => s.Id);
+            builder.Property(s => s.Field).IsRequired().HasMaxLength(64);
+            builder.Property(s => s.Source).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(s => new { s.BookId, s.Field }).IsUnique();
         });
 
         modelBuilder.Entity<BookBookmark>(builder =>
@@ -2391,6 +2492,23 @@ public class PaperbunkrDbContext : DbContext
             builder.HasKey(f => f.Id);
             builder.Property(f => f.Path).IsRequired();
             builder.HasIndex(f => f.Path).IsUnique();
+        });
+
+        // OPDS catalogs (docs/superpowers/specs/2026-10-27-books-slice4c-opds-design.md).
+        modelBuilder.Entity<OpdsCatalog>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.Name).IsRequired().HasMaxLength(200);
+            builder.Property(c => c.Url).IsRequired().HasMaxLength(2000);
+            builder.Property(c => c.Username).HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<OpdsDownload>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.Property(d => d.EntryId).IsRequired().HasMaxLength(2000);
+            builder.Property(d => d.Title).IsRequired().HasMaxLength(500);
+            builder.HasIndex(d => new { d.CatalogId, d.EntryId });
         });
 
         // Activity Center history (docs/superpowers/specs/2026-09-03-activity-center-design.md) -

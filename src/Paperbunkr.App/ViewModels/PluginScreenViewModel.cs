@@ -56,7 +56,63 @@ public partial class PluginScreenViewModel : ViewModelBase
     public void AttachHost(PluginHostService host)
     {
         _host = host;
+        _developerMode = host.DeveloperMode;
+        OnPropertyChanged(nameof(DeveloperMode));
+        host.PluginsReloaded += _ => Refresh();
         Refresh();
+    }
+
+    // ---- Developer mode (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §A1-A3) ----
+
+    private bool _developerMode;
+
+    /// <summary>Saved, off by default. On: script plugins reload when their files change, and the log pane and "New plugin…" appear.</summary>
+    public bool DeveloperMode
+    {
+        get => _developerMode;
+        set
+        {
+            if (!SetProperty(ref _developerMode, value))
+            {
+                return;
+            }
+
+            PluginDeveloperSettings.SaveDeveloperMode(value);
+            if (_host is not null)
+            {
+                _host.DeveloperMode = value;
+            }
+
+            // The detail pane gains or loses its log pane; rebuilt after the toggle's own click finishes routing.
+            Avalonia.Threading.Dispatcher.UIThread.Post(Refresh);
+        }
+    }
+
+    [RelayCommand]
+    private async Task NewPlugin()
+    {
+        if (_host is null)
+        {
+            return;
+        }
+
+        string? key = await _host.OpenNewPluginDialogAsync();
+        if (key is null)
+        {
+            return;
+        }
+
+        Refresh();
+        if (Packages.FirstOrDefault(p => p.Package.Key == key) is { } row)
+        {
+            SelectPackage(row);
+        }
+    }
+
+    partial void OnSelectedPackageDetailChanged(PluginPackageDetailViewModel? oldValue, PluginPackageDetailViewModel? newValue)
+    {
+        oldValue?.LogPane?.Stop();
+        newValue?.LogPane?.Start();
     }
 
     public void Refresh()
@@ -188,6 +244,10 @@ public partial class PluginScreenViewModel : ViewModelBase
         PackageManager.Package? incoming = TryPeekPackage(file);
         PackageManager.Package? installed = incoming is not null ? _packageService.GetInstalledPackageByKey(incoming.Key) : null;
 
+        // Plugin API 4.5 (docs/superpowers/specs/2026-10-28-plugin-api-4-5-pitch-completion-design.md §F): every confirm says what kind of
+        // plugin this is and which hosts it declares it talks to.
+        string about = DescribePackage(incoming, file);
+
         if (installed is not null)
         {
             string prompt = DescribeVersionChange(installed.Version, incoming!.Version) switch
@@ -197,7 +257,7 @@ public partial class PluginScreenViewModel : ViewModelBase
                 VersionChange.Same => $"Reinstall \"{installed.Name}\" v{installed.Version}?",
                 _ => $"\"{installed.Name}\" is already installed. Replace it with this build?",
             };
-            bool proceed = await _dialogs.ConfirmAsync(prompt, confirmLabel: "Install", cancelLabel: "Cancel");
+            bool proceed = await _dialogs.ConfirmAsync($"{prompt}\n\n{about}", confirmLabel: "Install", cancelLabel: "Cancel");
             if (!proceed)
             {
                 return;
@@ -208,9 +268,21 @@ public partial class PluginScreenViewModel : ViewModelBase
             // Same display name but a different (or unreadable) key - genuinely ambiguous, keep the
             // original safe/generic wording rather than guessing at an update relationship.
             bool overwrite = await _dialogs.ConfirmAsync(
-                "A plugin package with this name is already installed. Overwrite it?",
+                $"A plugin package with this name is already installed. Overwrite it?\n\n{about}",
                 confirmLabel: "Overwrite", cancelLabel: "Cancel");
             if (!overwrite)
+            {
+                return;
+            }
+        }
+        else
+        {
+            // A fresh install asks too (it never used to), so the user sees the plugin's declared access before it runs.
+            string name = incoming?.Name ?? System.IO.Path.GetFileNameWithoutExtension(file);
+            string version = string.IsNullOrEmpty(incoming?.Version) ? string.Empty : $" v{incoming!.Version}";
+            bool proceed = await _dialogs.ConfirmAsync($"Install \"{name}\"{version}?\n\n{about}", title: "Install plugin",
+                confirmLabel: "Install", cancelLabel: "Cancel");
+            if (!proceed)
             {
                 return;
             }
@@ -259,6 +331,49 @@ public partial class PluginScreenViewModel : ViewModelBase
         catch
         {
             return null;
+        }
+    }
+
+    /// <summary>The confirm's description of a package: its tier and its declared network hosts (Plugin API 4.5 §F).</summary>
+    internal static string DescribePackage(PackageManager.Package? package, string file)
+    {
+        string tier = package?.IsNativeTier == true
+            ? "Native plugin - full read/write access to your library database; takes effect after a restart."
+            : "Script plugin.";
+        return $"{tier}\n{PluginNetworkHosts.Describe(ReadDeclaredHosts(file))}.";
+    }
+
+    /// <summary>The <c>&lt;Network&gt;</c> hosts in a package's <c>plugin.xml</c>, read straight from the zip; empty when there are none or it can't be read.</summary>
+    internal static IReadOnlyList<string> ReadDeclaredHosts(string packageFile)
+    {
+        string temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"pb-peek-{System.Guid.NewGuid():N}.xml");
+        try
+        {
+            using var zip = System.IO.Compression.ZipFile.OpenRead(packageFile);
+            var entry = zip.Entries.FirstOrDefault(e => string.Equals(e.Name, "plugin.xml", System.StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
+            {
+                return System.Array.Empty<string>();
+            }
+
+            System.IO.Compression.ZipFileExtensions.ExtractToFile(entry, temp);
+            return XmlPluginInitializer.ReadManifest(temp) is { } manifest
+                ? PluginNetworkHosts.Parse(manifest, out _) ?? (IReadOnlyList<string>)System.Array.Empty<string>()
+                : System.Array.Empty<string>();
+        }
+        catch (System.Exception)
+        {
+            return System.Array.Empty<string>();
+        }
+        finally
+        {
+            try
+            {
+                System.IO.File.Delete(temp);
+            }
+            catch (System.Exception)
+            {
+            }
         }
     }
 

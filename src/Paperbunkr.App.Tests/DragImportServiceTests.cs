@@ -51,6 +51,18 @@ public class DragImportServiceTests : IDisposable
     private PaperbunkrDbContext Db() => new(_dbOptions);
 
     [Fact]
+    public async Task PreviewMode_PreparesDroppedReadingListsWithoutCommittingThem()
+    {
+        string file = Path.Combine(_root, "preview.csv");
+        File.WriteAllText(file, "Series,Number\nAvengers,1\n");
+        var service = new DragImportService(() => Db(), new LibraryFolderScanner(() => Db()), previewReadingLists: true);
+        var result = await service.ImportAsync(new[] { file });
+        Assert.Equal(0, result.ReadingListsImported);
+        Assert.Single(result.PendingReadingLists!.Lists);
+        using var db = Db(); Assert.Empty(db.ReadingLists); Assert.Empty(db.Issues); Assert.Empty(db.Series);
+    }
+
+    [Fact]
     public async Task ImportAsync_LooseComicFiles_ImportsAndResolvesIssueIds()
     {
         string a = CbzFixture.Create(Path.Combine(_root, "Kilo Station 001 (2020).cbz"), pageCount: 1);

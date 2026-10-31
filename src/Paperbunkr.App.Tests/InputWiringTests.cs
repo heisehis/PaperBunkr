@@ -94,7 +94,10 @@ public class WebKeyMapTests
 
         var keys = WebKeyMap.NormalizedKeysFor(bindings);
 
-        Assert.Equal(["ArrowRight", "PageDown", " ", "ArrowLeft", "PageUp", "ctrl+shift+w"], keys);
+        // The original six, then Slice 3a's jump-back (Alt+Left), Slice 4b's look-up (L), Slice 4d's read aloud (T, Shift+T, Ctrl+Up / Down) and Slice 3b's ruler (R, Alt+Up/Down) and auto-scroll (A, period, comma).
+        Assert.Equal(
+            ["ArrowRight", "PageDown", " ", "ArrowLeft", "PageUp", "ctrl+shift+w", "alt+ArrowLeft", "l", "t", "shift+t", "ctrl+ArrowUp", "ctrl+ArrowDown", "r", "alt+ArrowUp", "alt+ArrowDown", "a", ".", ","],
+            keys);
     }
 
     [Fact]

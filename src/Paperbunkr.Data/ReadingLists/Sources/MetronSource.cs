@@ -18,27 +18,28 @@ public sealed class MetronSource : IReadingListSource
 {
     private const string BaseUrl = "https://metron.cloud/api";
 
-    // Metron doesn't publish a documented rate limit the way ComicVine does; a shorter minimum
-    // spacing is a reasonable default courtesy throttle.
-    private static readonly TimeSpan MinRequestInterval = TimeSpan.FromMilliseconds(500);
-
+    // Every request goes through the app's shared Metron client, so its rate limiter (18 a minute, foreground first) counts these alongside the
+    // scraper's and the account sync's. This source used to keep its own client spaced only 0.5 s apart, which Metron's 20-a-minute limit
+    // answered with "Request was throttled" (reported 2026-10-29, creating a reading list from Metron).
     private readonly HttpClient _http;
     private readonly ComicVine.MetronAuth _auth;
-    private readonly object _throttleLock = new();
-    private DateTime _lastRequestUtc = DateTime.MinValue;
 
     public MetronSource(string username, string password)
         : this(ComicVine.MetronAuth.Basic(username, password))
     {
     }
 
-    public MetronSource(ComicVine.MetronAuth auth)
+    public MetronSource(ComicVine.MetronAuth auth, HttpClient? http = null)
     {
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("Paperbunkr/0.1 (comic library manager)");
-        _http.DefaultRequestHeaders.Authorization = auth.Header();
+        _http = http ?? ComicVine.MetronHttp.Client;
         _auth = auth;
     }
+
+    /// <summary>The longest "try again in N seconds" this source waits out before giving up; Metron's per-minute throttle never asks for more.</summary>
+    internal static TimeSpan MaxThrottleWait { get; set; } = TimeSpan.FromSeconds(65);
+
+    /// <summary>Test seam for the wait itself.</summary>
+    internal static Func<TimeSpan, CancellationToken, Task> Delay { get; set; } = (t, ct) => Task.Delay(t, ct);
 
     public string SourceKey => "Metron";
     public string DisplayName => "Metron";
@@ -167,24 +168,48 @@ public sealed class MetronSource : IReadingListSource
             throw new ReadingListSourceException(DisplayName, ComicVine.MetronLoginGuard.HoldMessage(hold));
         }
 
-        await ThrottleAsync(cancellationToken).ConfigureAwait(false);
-
         HttpResponseMessage response;
         string body;
-        try
+        for (int attempt = 0; ; attempt++)
         {
-            response = await _http.GetAsync(url, cancellationToken).ConfigureAwait(false);
-            body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Options.Set(ComicVine.ComicVineRateLimitHandler.PriorityKey, ComicVine.ComicVineRequestPriority.High);
+                request.Headers.Authorization = _auth.Header();
+                request.Headers.UserAgent.ParseAdd("Paperbunkr (comic library manager)");
+                response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                ComicVine.MetronQuota.Observe(response.Headers);
+                body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new ReadingListSourceException(DisplayName, $"Metron request failed: {ex.Message}");
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // The shared client's own per-request timeout (20 s of sending, not queueing) elapsed.
+                throw new ReadingListSourceException(DisplayName, "Metron did not respond within 20 seconds.");
+            }
+
+            if (response.StatusCode != HttpStatusCode.TooManyRequests || attempt >= 2)
+            {
+                break;
+            }
+
+            // "Request was throttled. Expected available in 19 seconds." is a wait, not a failure: wait it out (the shared limiter has paused
+            // every other Metron caller for the same time) and ask again.
+            var wait = ThrottleWait(response, body);
+            response.Dispose();
+            if (wait > MaxThrottleWait)
+            {
+                throw new ReadingListSourceException(DisplayName, "Metron's daily request limit has been reached; try again later.");
+            }
+
+            await Delay(wait, cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException ex)
-        {
-            throw new ReadingListSourceException(DisplayName, $"Metron request failed: {ex.Message}");
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            // HttpClient.Timeout elapsing throws TaskCanceledException, not HttpRequestException.
-            throw new ReadingListSourceException(DisplayName, "Metron did not respond within 20 seconds.");
-        }
+
+        using var _ = response;
 
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
@@ -211,22 +236,17 @@ public sealed class MetronSource : IReadingListSource
         return root;
     }
 
-    private async Task ThrottleAsync(CancellationToken cancellationToken)
+    /// <summary>How long Metron asked to wait: its Retry-After header, else the seconds in "Expected available in N seconds", else 20 s.</summary>
+    internal static TimeSpan ThrottleWait(HttpResponseMessage response, string body)
     {
-        TimeSpan delay;
-        lock (_throttleLock)
+        if (response.Headers.RetryAfter?.Delta is { } delta)
         {
-            delay = MinRequestInterval - (DateTime.UtcNow - _lastRequestUtc);
+            return delta + TimeSpan.FromSeconds(1);
         }
 
-        if (delay > TimeSpan.Zero)
-        {
-            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-        }
-
-        lock (_throttleLock)
-        {
-            _lastRequestUtc = DateTime.UtcNow;
-        }
+        var match = System.Text.RegularExpressions.Regex.Match(body ?? string.Empty, @"available in (\d+) second");
+        return match.Success && int.TryParse(match.Groups[1].Value, out int seconds)
+            ? TimeSpan.FromSeconds(seconds + 1)
+            : TimeSpan.FromSeconds(20);
     }
 }

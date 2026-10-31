@@ -20,6 +20,9 @@ public sealed class BookHighlightSummary
 
     public string? Note { get; init; }
 
+    /// <summary>True when the highlight carries a non-blank note (the reading pane draws a marker for it).</summary>
+    public bool HasNote => !string.IsNullOrWhiteSpace(Note);
+
     public string ChapterTitle { get; init; } = string.Empty;
 
     public string Excerpt { get; init; } = string.Empty;

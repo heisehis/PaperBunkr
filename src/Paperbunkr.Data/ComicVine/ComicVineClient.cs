@@ -15,7 +15,10 @@ public sealed record ComicVineVolume(int Id, string Name, string? Publisher, int
 }
 
 /// <param name="CoverHash">Metron's perceptual hash of the cover (<see cref="Scraping.MetronCoverHash"/>); ComicVine has none.</param>
-public sealed record ComicVineIssue(int Id, string IssueNumber, string? Name, DateTime? StoreDate, DateTime? CoverDate, string? ImageUrl, int? VolumeId, string? CoverHash = null);
+public sealed record ComicVineIssue(int Id, string IssueNumber, string? Name, DateTime? StoreDate, DateTime? CoverDate, string? ImageUrl, int? VolumeId, string? CoverHash = null)
+{
+    public IReadOnlyList<string> AlternateCoverUrls { get; init; } = Array.Empty<string>();
+}
 
 /// <summary>ComicVine could not be reached, rejected the request, or returned something unparseable.</summary>
 public sealed class ComicVineException(string message, int? apiStatusCode = null, Exception? inner = null) : Exception(message, inner)
@@ -59,7 +62,7 @@ public sealed class ComicVineClient : IComicProvider, IIssueFirstSeriesSearch, I
     private const int MaxPages = 50;
 
     private const string VolumeFields = "id,name,publisher,start_year,count_of_issues,image,description";
-    private const string IssueFields = "id,issue_number,name,store_date,cover_date,image,volume";
+    private const string IssueFields = "id,issue_number,name,store_date,cover_date,image,volume,associated_images";
 
     private readonly string _apiKey;
     private readonly HttpClient _http;
@@ -332,7 +335,7 @@ public sealed class ComicVineClient : IComicProvider, IIssueFirstSeriesSearch, I
         ["letterer"] = new[] { "Letterer" },
     };
 
-    private const string IssueDetailFields = "id,name,issue_number,site_detail_url,cover_date,store_date,description,volume,story_arc_credits,character_credits,team_credits,location_credits,concept_credits,person_credits";
+    private const string IssueDetailFields = "id,name,issue_number,site_detail_url,cover_date,store_date,description,volume,story_arc_credits,character_credits,team_credits,location_credits,concept_credits,person_credits,associated_images";
 
     /// <summary>
     /// The fork's <c>_query_story_arc_order</c> inputs: the arc's issue ids (<c>story_arc/4045-{id}</c>, 4045- being
@@ -451,6 +454,7 @@ public sealed class ComicVineClient : IComicProvider, IIssueFirstSeriesSearch, I
         {
             // The fork's Tags (Concepts): ComicVine's concept_credits, names only.
             Concepts = IdNamesOf(o["concept_credits"]).Select(c => c.Name).ToList(),
+            AlternateCoverUrls = AssociatedImageUrls(o["associated_images"]),
         };
             // Genre/AgeRating/Isbn/Upc/Universes are left at their record defaults for
             // ComicVine (docs/superpowers/specs/2026-09-23-metron-api-utilization-design.md) - none of
@@ -610,7 +614,10 @@ public sealed class ComicVineClient : IComicProvider, IIssueFirstSeriesSearch, I
             ParseDate(o["store_date"]),
             ParseDate(o["cover_date"]),
             ImageUrl(o["image"]),
-            (o["volume"] as JsonObject)?["id"]?.GetValue<int>());
+            (o["volume"] as JsonObject)?["id"]?.GetValue<int>())
+        {
+            AlternateCoverUrls = AssociatedImageUrls(o["associated_images"]),
+        };
     }
 
     /// <summary>ComicVine sends <c>start_year</c> as a string (sometimes "2026", sometimes with junk like "1990?").</summary>
@@ -628,4 +635,17 @@ public sealed class ComicVineClient : IComicProvider, IIssueFirstSeriesSearch, I
 
     private static string? ImageUrl(JsonNode? image) =>
         (image as JsonObject) is { } o ? (o["medium_url"] ?? o["small_url"])?.GetValue<string>() : null;
+
+    private static IReadOnlyList<string> AssociatedImageUrls(JsonNode? node) =>
+        node is JsonArray images
+            ? images.OfType<JsonObject>()
+                .Select(image => image["original_url"]?.GetValue<string>()?.Trim())
+                .Where(IsHttpUrl)
+                .Select(url => url!)
+                .Distinct(StringComparer.Ordinal)
+                .ToList()
+            : Array.Empty<string>();
+
+    private static bool IsHttpUrl(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out Uri? uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 }

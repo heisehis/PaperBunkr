@@ -954,6 +954,11 @@ public partial class NeedsReviewViewModel : ViewModelBase
             return;
         }
 
+        var involvedSeriesIds = new[] { conflict.ExistingSeriesId, conflict.SeriesAId, conflict.SeriesBId }
+            .Where(id => id is not null).Select(id => id!.Value).Distinct().ToList();
+        var identityBefore = ReadingListHealingCoordinator.Capture(context,
+            context.Issues.Where(i => involvedSeriesIds.Contains(i.SeriesId)).Select(i => i.Id).ToList(), includeSeriesIssues: true);
+
         // Against-existing conflict: fold the newly-created SeriesA into the pre-existing series.
         // Intra-import conflict: fold SeriesB into SeriesA (arbitrary but consistent choice).
         Series? target = conflict.ExistingSeries ?? conflict.SeriesA;
@@ -966,6 +971,9 @@ public partial class NeedsReviewViewModel : ViewModelBase
 
         conflict.Status = SeriesConflictStatus.Merged;
         context.SaveChanges();
+        var identityAfter = ReadingListHealingCoordinator.Capture(context, identityBefore.Keys);
+        var changed = ReadingListHealingCoordinator.Changed(identityBefore, identityAfter);
+        ReadingListHealingCoordinator.Report(ReadingListHealingCoordinator.Recheck(PaperbunkrDb.CreateContext, changed));
     }
 
     /// <summary>
@@ -1136,9 +1144,15 @@ public partial class NeedsReviewViewModel : ViewModelBase
             }
         }
 
+        var changedIdentityIssueIds = new HashSet<int>();
         foreach (int id in writeTimeIds)
         {
-            ResolveProposal(id, accept: true);
+            changedIdentityIssueIds.UnionWith(ResolveProposal(id, accept: true, recheck: false));
+        }
+
+        if (changedIdentityIssueIds.Count > 0)
+        {
+            ReadingListHealingCoordinator.Report(ReadingListHealingCoordinator.Recheck(PaperbunkrDb.CreateContext, changedIdentityIssueIds.ToList()));
         }
 
         FinishProposalBulkAction(status, group);
@@ -1192,14 +1206,19 @@ public partial class NeedsReviewViewModel : ViewModelBase
     /// row's own <c>IsResolved</c>/<c>ResolutionLabel</c> (driven by its Accept/Reject command)
     /// gives immediate in-place feedback without re-querying and rebuilding every section.
     /// </summary>
-    private void ResolveProposal(int proposalId, bool accept)
+    private IReadOnlyList<int> ResolveProposal(int proposalId, bool accept, bool recheck = true)
     {
         using var context = PaperbunkrDb.CreateContext();
         var proposal = context.MetadataProposals.Find(proposalId);
         if (proposal is null)
         {
-            return;
+            return Array.Empty<int>();
         }
+
+        var identityBefore = proposal.Field == MetadataProposalField.Series
+            && proposal.IssueId is int proposalIssueId
+            ? ReadingListHealingCoordinator.Capture(context, [proposalIssueId])
+            : new Dictionary<int, ReadingListIssueIdentity>();
 
         // Accepting an already-applied proposal changes nothing but the review mark: it is applied already (and for a Series-field
         // one the issue has already moved), so re-running that would be pointless at best. Marking it reviewed is what makes the
@@ -1208,7 +1227,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
         {
             proposal.ReviewedAt = DateTime.UtcNow;
             context.SaveChanges();
-            return;
+            return Array.Empty<int>();
         }
 
         // Whether the proposal's value is in the Series field right now: only one that was applied has anything to revert, and only
@@ -1248,6 +1267,20 @@ public partial class NeedsReviewViewModel : ViewModelBase
         {
             ApplySeriesField(context, proposal);
         }
+
+        if (identityBefore.Count == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        var identityAfter = ReadingListHealingCoordinator.Capture(context, identityBefore.Keys);
+        var changed = ReadingListHealingCoordinator.Changed(identityBefore, identityAfter);
+        if (recheck && changed.Count > 0)
+        {
+            ReadingListHealingCoordinator.Report(ReadingListHealingCoordinator.Recheck(PaperbunkrDb.CreateContext, changed));
+        }
+
+        return changed;
     }
 
     /// <summary>Writes <see cref="MetadataProposal.ProposedValue"/> into the Series field the proposal is about.</summary>

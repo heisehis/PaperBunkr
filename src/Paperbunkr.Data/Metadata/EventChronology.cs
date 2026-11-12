@@ -286,6 +286,7 @@ public static class EventChronology
                 e.Name,
                 e.StartDate,
                 e.EndDate,
+                Endpoints = e.DateEndpoints,
                 Dates = e.Members.Where(m => m.Issue!.Year != null || m.Issue.GcdIssueId != null)
                     .Select(m => new { m.Issue!.Year, m.Issue.Month, m.Issue.GcdIssueId }).ToList(),
             })
@@ -295,8 +296,8 @@ public static class EventChronology
         return events.ToDictionary(e => e.Id, e =>
         {
             var keys = e.Dates.Select(d => IssueDateKey(d.Year, d.Month, d.GcdIssueId, gcdDates)).OfType<int>().ToList();
-            int? start = DateKey(e.StartDate) ?? (keys.Count > 0 ? keys.Min() : null);
-            int? end = DateKey(e.EndDate) ?? (keys.Count > 0 ? keys.Max() : null);
+            int? start = e.Endpoints.FirstOrDefault(d => !d.IsEnd) is { } first ? first.Year * 100 + (first.Month ?? 0) : DateKey(e.StartDate) ?? (keys.Count > 0 ? keys.Min() : null);
+            int? end = e.Endpoints.FirstOrDefault(d => d.IsEnd) is { } last ? last.Year * 100 + (last.Month ?? 0) : DateKey(e.EndDate) ?? (keys.Count > 0 ? keys.Max() : null);
             return new EventSpan(e.Id, e.Name, start, end);
         });
     }

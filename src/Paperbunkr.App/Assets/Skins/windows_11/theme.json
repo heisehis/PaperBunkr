@@ -1,33 +1,121 @@
 {
+  "schemaVersion": 2,
+  "id": "legacy.windows_11",
   "name": "Windows 11",
-  "mode": "Light",
-  "windowBackdrop": "Mica",
-  "colors": {
-    "bg": "#F3F3F3",
-    "chrome": "#FFFFFF",
-    "border": "#E0E0E0",
-    "text": "#1A1A1A",
-    "textMuted": "#6B6B6B",
-    "textFaint": "#8A8A8A",
-    "accent": "#0078D4",
-    "accentText": "#005FB8",
-    "accentSoft": "#1F0078D4",
-    "badge": "#FFB900",
-    "badgeText": "#1A1A1A",
-    "success": "#107C10",
-    "chartBlue": "#038387",
-    "chartViolet": "#8764B8",
-    "surface0": "#F3F3F3",
-    "surface1": "#FFFFFF",
-    "surface2": "#FAFAFA",
-    "surface3": "#FFFFFF",
-    "glow": "#4D0078D4",
-    "heroGradientStart": "#00F3F3F3",
-    "heroGradientEnd": "#FFF3F3F3"
+  "base": {
+    "semantic": {
+      "surface": {
+        "canvas": "#F3F3F3",
+        "navigation": "#FFFFFF",
+        "recessed": "#F3F3F3",
+        "default": "#FFFFFF",
+        "raised": "#FAFAFA",
+        "overlay": "#FFFFFF"
+      },
+      "border": {
+        "default": "#E0E0E0"
+      },
+      "text": {
+        "primary": "#1A1A1A",
+        "secondary": "#6B6B6B",
+        "muted": "#8A8A8A",
+        "accent": "#005FB8"
+      },
+      "action": {
+        "primary": "#0078D4",
+        "soft": "#1F0078D4"
+      },
+      "badge": {
+        "background": "#FFB900",
+        "text": "#1A1A1A"
+      },
+      "status": {
+        "success": "#107C10"
+      },
+      "chart": {
+        "series": {
+          "1": "#038387",
+          "2": "#8764B8"
+        }
+      },
+      "glow": {
+        "color": "#4D0078D4"
+      },
+      "hero": {
+        "gradient": {
+          "start": "#00F3F3F3",
+          "end": "#FFF3F3F3"
+        }
+      }
+    },
+    "metrics": {
+      "spacingUnit": 4,
+      "radius": 8,
+      "radiusSm": 6,
+      "radiusLg": 16
+    },
+    "settings": {
+      "windowBackdrop": "Mica"
+    }
   },
-  "spacingUnit": 4,
-  "radius": 8,
-  "radiusSm": 6,
-  "radiusLg": 16,
-  "icons": {}
+  "variants": {
+    "light": {
+      "name": "Light",
+      "mode": "Light"
+    },
+    "dark": {
+      "name": "Dark",
+      "mode": "Dark",
+      "semantic": {
+        "surface": {
+          "canvas": "#202020",
+          "navigation": "#2B2B2B",
+          "recessed": "#1C1C1C",
+          "default": "#202020",
+          "raised": "#2B2B2B",
+          "overlay": "#2D2D2D"
+        },
+        "border": {
+          "default": "#3A3A3A"
+        },
+        "text": {
+          "primary": "#FFFFFF",
+          "secondary": "#C5C5C5",
+          "muted": "#9A9A9A",
+          "accent": "#60CDFF"
+        },
+        "action": {
+          "primary": "#60CDFF",
+          "soft": "#2960CDFF"
+        },
+        "badge": {
+          "background": "#FFB900",
+          "text": "#1A1A1A"
+        },
+        "status": {
+          "success": "#6CCB5F"
+        },
+        "chart": {
+          "series": {
+            "1": "#60CDFF",
+            "2": "#9F8CFF"
+          }
+        },
+        "glow": {
+          "color": "#6660CDFF"
+        },
+        "hero": {
+          "gradient": {
+            "start": "#00202020",
+            "end": "#FF202020"
+          }
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#00263A"
+        }
+      }
+    }
+  }
 }

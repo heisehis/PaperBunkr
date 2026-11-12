@@ -3,6 +3,43 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+## [0.8.4-beta] - 2026-11-12
+
+### Added
+
+- **Character, team, creator and location pages.** Every name on a Detail screen opens its own page with a picture
+  and bio fetched from Metron or ComicVine (and from AniList or MangaDex for manga creators), appearances by year,
+  creator runs, story arcs, "More like this" and links into the continuity map. Pages find their provider ids from
+  the issues they appear in when none are stored yet, and say why when there is nothing to fetch.
+- **Entity pictures everywhere.** Character, team, creator and location chips on Detail show their pictures, and a
+  scheduled task fills missing pictures in the background.
+- **Continuity map rework.** New list, atlas and matrix views, a roll call panel, structure links, progress lines,
+  missing-issue detection and event smart fill from provider evidence.
+- **Theme gallery.** A two-pane Theme tab with a larger roster of themes and textures, plus a Personalize tab for
+  accent colour and look presets.
+- **Collection identity.** Collection icons and badges, a slim banner and polished collection dialogs.
+- **Reader queue and recap.** Read a hand-picked queue of issues in order, and a "Previously on" card to pick a
+  series back up.
+
+### Changed
+
+- Rebuilt the character, team, creator and location indexes with a fast set-based sync (a full rebuild of a
+  ~9,000-issue library takes seconds), and names that were never indexed are found on demand.
+- Series ratings now follow their issues' ratings.
+- Large cover-picker grids are virtualized, and focus, scroll-wheel and popup behaviour were audited across screens.
+- Picture downloads prefer ComicVine's medium image over multi-megabyte originals and allow slow servers more time.
+
+### Fixed
+
+- **Library sharing over the local network.** Other computers could fail to connect to a shared library with only
+  "Could not reach <address>". Setup now adds Windows Firewall rules for sharing on Private and Domain networks (and
+  removes any block rules left by the Windows "Allow access?" prompt), discovery advertises only the computer's real
+  network addresses instead of virtual adapters, the Sharing settings show the address to type on the other computer,
+  the host also listens on IPv6, and a failed connection now says why (no answer, refused, secure connection failed, or
+  turned away). Sharing still stays off on networks Windows calls Public.
+
 ## [0.8.2-beta] - 2026-10-31
 
 ### Added

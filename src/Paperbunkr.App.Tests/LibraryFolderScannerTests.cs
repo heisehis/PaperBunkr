@@ -16,6 +16,39 @@ namespace Paperbunkr.App.Tests;
 /// </summary>
 public class LibraryFolderScannerTests : IDisposable
 {
+    [Fact]
+    public async Task ScanAllAsync_EmbeddedCreditsPopulateAllFourEntityIndexes()
+    {
+        var info = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Uncanny", Number = "1",
+            Characters = "Storm", Teams = "X-Men", Locations = "Westchester", Writer = "Claremont" };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Uncanny 001.cbz"), 1, info);
+        AddWatchedFolder(_scanRoot);
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal("Storm", Assert.Single(context.Characters).Name);
+        Assert.Equal("X-Men", Assert.Single(context.Teams).Name);
+        Assert.Equal("Westchester", Assert.Single(context.Locations).Name);
+        Assert.Equal("Claremont", Assert.Single(context.Creators).Name);
+    }
+
+    [Fact]
+    public async Task SyncMetadataAsync_NewlyEmbeddedCreditsPopulateAllFourEntityIndexes()
+    {
+        string path = Path.Combine(_scanRoot, "Uncanny 001.cbz");
+        CbzFixture.Create(path, 1, new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Uncanny", Number = "1" });
+        AddWatchedFolder(_scanRoot);
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+        File.Delete(path);
+        CbzFixture.Create(path, 1, new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Uncanny", Number = "1",
+            Characters = "Storm", Teams = "X-Men", Locations = "Westchester", Writer = "Claremont" });
+        await CreateScanner().SyncMetadataAsync(new Progress<(int, int)>());
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Single(context.CharacterAppearances);
+        Assert.Single(context.TeamAppearances);
+        Assert.Single(context.LocationAppearances);
+        Assert.Single(context.CreatorCredits);
+    }
+
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
     private readonly string _scanRoot;

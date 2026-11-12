@@ -26,6 +26,9 @@ internal sealed class GcdTestExtract : IDisposable
                 CREATE TABLE issue (id INTEGER PRIMARY KEY, series_id INTEGER NOT NULL, number TEXT NOT NULL, key_date TEXT, on_sale_date TEXT);
                 CREATE TABLE series_bond (origin_id INTEGER NOT NULL, target_id INTEGER NOT NULL, origin_issue_id INTEGER, target_issue_id INTEGER, bond_type TEXT NOT NULL);
                 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+                CREATE TABLE arc (id INTEGER PRIMARY KEY,name TEXT,description TEXT,language TEXT,first_year INTEGER,year_uncertain INTEGER);
+                CREATE TABLE arc_issue (arc_id INTEGER,issue_id INTEGER,reprint INTEGER);
+                CREATE TABLE issue_event (issue_id INTEGER PRIMARY KEY,format TEXT,uncertain INTEGER,reprint INTEGER);
                 """);
             Exec(c, $"INSERT INTO meta VALUES ('dump_date', '{dumpDate}'), ('schema_version', '{schemaVersion}')");
         }

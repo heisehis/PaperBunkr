@@ -37,6 +37,16 @@ public sealed partial class ThemeOverrideRowViewModel : ObservableObject
 
     public bool IsColor => Kind == ThemeValueKind.Color;
 
+    /// <summary>
+    /// True for the rows Personalize also edits for all themes (the accent and the corner radius, docs/superpowers/specs/2026-11-06-personalization-design.md).
+    /// They are hidden while the scope is "All themes" - one place for that value - and stay for "This theme" / "This variant", which Personalize cannot set.
+    /// </summary>
+    public bool PersonalizeOwns { get; init; }
+
+    /// <summary>Whether the row shows for the current scope.</summary>
+    [ObservableProperty]
+    private bool _isShown = true;
+
     /// <summary>What the user typed for this scope. Empty = no override here (the box then shows the live value as its watermark).</summary>
     [ObservableProperty]
     private string _valueText = string.Empty;
@@ -120,7 +130,7 @@ public sealed partial class ThemeCustomizationViewModel : ObservableObject
 
         Rows = new ObservableCollection<ThemeOverrideRowViewModel>
         {
-            Row("Accent", "action.primary", ThemeValueKind.Color, "Primary buttons, selection and links."),
+            Owned(Row("Accent", "action.primary", ThemeValueKind.Color, "Primary buttons, selection and links.")),
             Row("Background", "surface.canvas", ThemeValueKind.Color, "The app background."),
             Row("Cards", "surface.raised", ThemeValueKind.Color, "Cards and tiles on a panel."),
             Row("Text", "text.primary", ThemeValueKind.Color, "Body text."),
@@ -128,7 +138,7 @@ public sealed partial class ThemeCustomizationViewModel : ObservableObject
             Row("Borders", "border.default", ThemeValueKind.Color, "Hairlines and control outlines."),
             Row("Success", "status.success", ThemeValueKind.Color, "Connected, done, passing."),
             Row("Danger", "status.danger", ThemeValueKind.Color, "Errors and destructive actions."),
-            Row("Corner radius", "metrics.radius", ThemeValueKind.Number, "How round cards and buttons are, in pixels."),
+            Owned(Row("Corner radius", "metrics.radius", ThemeValueKind.Number, "How round cards and buttons are, in pixels.")),
             Row("Primary button", ThemeTokenPaths.Component("button.primary", "normal", "background"), ThemeValueKind.Color, "The fill of the main action button. Its hover and pressed colours follow."),
             Row("Chip corners", ThemeTokenPaths.Component("chip", "normal", "radius"), ThemeValueKind.Number, "How round chips and tags are, in pixels."),
         };
@@ -220,6 +230,13 @@ public sealed partial class ThemeCustomizationViewModel : ObservableObject
 
     private ThemeOverrideRowViewModel Row(string label, string path, ThemeValueKind kind, string description) => new(label, path, kind, description, Apply);
 
+    private ThemeOverrideRowViewModel Owned(ThemeOverrideRowViewModel row) =>
+        new(row.Label, row.Path, row.Kind, row.Description, Apply) { PersonalizeOwns = true };
+
+    /// <summary>While the scope is "All themes" the accent and corner rows are hidden: Personalize is where those are set (one value, one place).</summary>
+    [ObservableProperty]
+    private bool _showPersonalizeNote = true;
+
     /// <summary>The accent for "All themes" is the long-standing accent setting, so there is one global accent, not two.</summary>
     private bool IsGlobalAccent(ThemeOverrideRowViewModel row) => Scope == ThemeOverrideScope.Global && row.Path == "action.primary";
 
@@ -286,6 +303,12 @@ public sealed partial class ThemeCustomizationViewModel : ObservableObject
                 }
             }
 
+            foreach (var row in Rows)
+            {
+                row.IsShown = !(row.PersonalizeOwns && Scope == ThemeOverrideScope.Global);
+            }
+
+            ShowPersonalizeNote = Scope == ThemeOverrideScope.Global;
             HasOverridesInScope = count > 0;
             ScopeSummary = count switch
             {

@@ -299,7 +299,7 @@ public class LibraryLensTests : IDisposable
 
         SeedThreeSeries();
         var vm = CreateVm();
-        Theming.FoundationStyleTests.WithFoundation("cool_technical", () =>
+        Theming.FoundationStyleTests.WithFoundation("graphite:dark", () =>
         {
             var toolbar = new LibraryToolbar { DataContext = vm };
             int width = int.TryParse(Environment.GetEnvironmentVariable("PB_RENDER_WIDTH"), out int w) ? w : 1070;

@@ -487,6 +487,22 @@ public partial class HomeScreenViewModel : ViewModelBase
 
     public bool HasCollections => Collections.Count > 0;
 
+    /// <summary>The Continue hero card (the first of <see cref="Collections"/> when it is the hero), or null.</summary>
+    public HomeCollectionCard? CollectionHero => Collections.FirstOrDefault(c => c.IsHero);
+
+    /// <summary>The shelf after the hero: every collection except the hero card.</summary>
+    public IReadOnlyList<HomeCollectionCard> ShelfCollections => Collections.Where(c => !c.IsHero).ToList();
+
+    /// <summary>"Continue" on the hero card: opens the next unread issue in the reader.</summary>
+    [RelayCommand]
+    private void ContinueCollection(HomeCollectionCard? card)
+    {
+        if (card?.ContinueIssueId is int issueId)
+        {
+            _goReaderForIssue(issueId);
+        }
+    }
+
     /// <summary>Books slice 2a rows (docs/superpowers/specs/2026-10-27-books-slice2a-browse-shelves-design.md §9). Each section leaves Home while its list is empty.</summary>
     public ObservableCollection<HomeResumeCard> BookUpNext { get; } = new();
 
@@ -749,11 +765,28 @@ public partial class HomeScreenViewModel : ViewModelBase
         var collections = new List<HomeCollectionCard>();
         if (visible.Contains(HomeSectionKey.Collections))
         {
-            foreach (var collection in HomeFeedResolver.GetHomeCollections(context))
+            var homeCollections = HomeFeedResolver.GetHomeCollections(context);
+            // The opt-in corner ring: one aggregated read for the whole shelf, only when the setting is on.
+            var progress = context.GetOrCreateAppSettings().ShowCollectionProgress
+                ? CollectionProgressResolver.GetProgress(context, homeCollections.Select(c => c.Id).ToList())
+                : null;
+            foreach (var collection in homeCollections)
             {
                 var hint = CollectionResolver.GetCoverHint(context, collection.Id);
                 var members = hint.ManualPath is null ? CollectionResolver.GetMembers(context, collection.Id) : null;
-                collections.Add(HomeCollectionCard.FromCollection(collection, hint, members));
+                CollectionProgress? p = progress is not null && progress.TryGetValue(collection.Id, out var found) ? found : null;
+                collections.Add(HomeCollectionCard.FromCollection(collection, hint, members, p));
+            }
+
+            // The hero (docs/superpowers/specs/2026-11-06-collection-surfaces-design.md): the collection read from most recently, first on the shelf.
+            if (CollectionContinueResolver.GetHero(context, homeCollections.Select(c => c.Id).ToList()) is { } hero
+                && collections.FirstOrDefault(c => c.Id == hero.CollectionId) is { } heroCard)
+            {
+                heroCard.IsHero = true;
+                heroCard.ContinueIssueId = hero.ContinueIssueId;
+                heroCard.ContinueLabel = hero.ContinueLabel;
+                collections.Remove(heroCard);
+                collections.Insert(0, heroCard);
             }
         }
 
@@ -903,6 +936,8 @@ public partial class HomeScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasBecauseYouRead));
         OnPropertyChanged(nameof(HasSpotlight));
         OnPropertyChanged(nameof(HasCollections));
+        OnPropertyChanged(nameof(CollectionHero));
+        OnPropertyChanged(nameof(ShelfCollections));
 
         RebuildSections();
         UpdateMasthead();

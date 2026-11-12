@@ -29,7 +29,7 @@ namespace Paperbunkr.App.ViewModels;
 /// unchanged); the overview - runs, stats, events, attention, Continue - is worked out off the UI thread and applied when it arrives.
 /// Writes go through <see cref="ContinuityResolver"/>, the same calls the Related tab uses.
 /// </summary>
-public partial class ContinuityPageViewModel : ViewModelBase
+public partial class ContinuityPageViewModel : ViewModelBase, Paperbunkr.App.ContextMenus.IContextMenuProvider
 {
     /// <summary>Automatic / Custom per continuity, for the session (the design's F2; nothing is stored). Per page, and the app has one.</summary>
     private readonly Dictionary<int, bool> _customOrder = new();
@@ -206,6 +206,35 @@ public partial class ContinuityPageViewModel : ViewModelBase
     public ObservableCollection<ContinuityPosterItem> CustomPosters { get; } = new();
 
     public ObservableCollection<OverviewEventRow> EventsInOrder { get; } = new();
+    public ObservableCollection<OverviewEntity> KeyCharacters { get; } = new();
+    public ObservableCollection<OverviewEntity> KeyTeams { get; } = new();
+    public bool HasKeyCharacters => KeyCharacters.Count > 0;
+    public bool HasKeyTeams => KeyTeams.Count > 0;
+    [RelayCommand] private void OpenEntity(OverviewEntity? entity)
+    {
+        if (entity is not null) _nav.OpenEntity(entity.Kind, entity.Id, ContinuityId);
+    }
+
+    /// <summary>Key characters / teams: open this continuity's map featuring them (M5 §5).</summary>
+    [RelayCommand] private void OpenEntityOnMap(OverviewEntity? entity)
+    {
+        if (entity is not null) _nav.OpenMapFeaturing(entity.Kind, entity.Id);
+    }
+
+    /// <summary>Right-click / Menu key on a Key characters / Key teams tile: Open, Open on the map, Show in Library.</summary>
+    public IReadOnlyList<Paperbunkr.App.ContextMenus.ContextMenuEntry>? BuildContextMenu(object? target)
+    {
+        if (target is not ViewModels.EntityPages.EntityTileItem tile) return null;
+        var entity = KeyCharacters.Concat(KeyTeams).FirstOrDefault(e => e.Kind == tile.Kind && e.Id == tile.Id);
+        if (entity is null) return null;
+        var entries = new List<Paperbunkr.App.ContextMenus.ContextMenuEntry>
+        {
+            Paperbunkr.App.ContextMenus.ContextMenuEntry.Item($"Open {entity.Name}", OpenEntityCommand, entity),
+            Paperbunkr.App.ContextMenus.ContextMenuEntry.Item("Open on the map", OpenEntityOnMapCommand, entity),
+        };
+        if (_nav.ShowInLibrary is { } show) entries.Add(Paperbunkr.App.ContextMenus.ContextMenuEntry.Item("Show in Library", new RelayCommand(() => show(entity.Name))));
+        return entries;
+    }
 
     public ObservableCollection<OverviewConnection> Connections { get; } = new();
 
@@ -346,6 +375,11 @@ public partial class ContinuityPageViewModel : ViewModelBase
         StatsLine = overview?.StatsLine ?? string.Empty;
         ShowGcdChip = overview?.ShowGcdChip ?? false;
         Continue = overview?.Continue;
+        KeyCharacters.Clear();
+        foreach (var entity in overview?.KeyCharacters ?? Array.Empty<OverviewEntity>()) KeyCharacters.Add(entity);
+        KeyTeams.Clear();
+        foreach (var entity in overview?.KeyTeams ?? Array.Empty<OverviewEntity>()) KeyTeams.Add(entity);
+        OnPropertyChanged(nameof(HasKeyCharacters)); OnPropertyChanged(nameof(HasKeyTeams));
 
         CollageKeys.Clear();
         foreach (var key in overview?.CollageKeys ?? Array.Empty<string>())

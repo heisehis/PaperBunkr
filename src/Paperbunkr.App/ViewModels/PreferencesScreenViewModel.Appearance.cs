@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Media;
@@ -22,6 +23,7 @@ public partial class PreferencesScreenViewModel
     public static class AppearanceTabKeys
     {
         public const string Theme = "theme";
+        public const string Personalize = "personalize";
         public const string Covers = "covers";
         public const string Interface = "interface";
     }
@@ -30,14 +32,112 @@ public partial class PreferencesScreenViewModel
     public SettingsTabs AppearanceTabs { get; } = new(new SettingsTabItem[]
     {
         new(AppearanceTabKeys.Theme, "Theme"),
+        // Personalize and Customize have their own tab (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md Q2).
+        new(AppearanceTabKeys.Personalize, "Personalize"),
         new(AppearanceTabKeys.Covers, "Covers & Detail"),
         new(AppearanceTabKeys.Interface, "Home & Interface"),
     });
 
-    private static readonly string[] ThemeGroupOrder = { "Dark", "Light", "Accessibility" };
+    /// <summary>The gallery switch's Installed key; the others are the <see cref="ThemeSummary.Group"/> names.</summary>
+    public const string InstalledGallerySegment = "Installed";
 
-    /// <summary>The gallery: the loaded themes under their Dark / Light / Accessibility captions, empty groups left out.</summary>
-    public ObservableCollection<ThemeGroup> ThemeGroups { get; } = new();
+    private static readonly string[] GallerySegmentOrder = { "Dark", "Light", "Accessibility", InstalledGallerySegment };
+
+    /// <summary>
+    /// The gallery's group switch (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md Q3): Dark / Light / Accessibility / Installed with counts.
+    /// Counts include installed themes; OLED variants are not counted (True black reaches them).
+    /// </summary>
+    public ObservableCollection<ThemeGallerySegment> ThemeGallerySegments { get; } = new(GallerySegmentOrder.Select(k => new ThemeGallerySegment(k, k)));
+
+    /// <summary>The tiles of the selected segment: built-in themes first, then installed ones (the Installed segment shows only those).</summary>
+    public ObservableCollection<ThemeSummary> VisibleThemes { get; } = new();
+
+    /// <summary>The selected segment key. Follows the active theme's group until the user picks a segment, then stays for the session.</summary>
+    public string SelectedGallerySegment { get; private set; } = "Dark";
+
+    private bool _gallerySegmentChosen;
+
+    [RelayCommand]
+    private void SelectGallerySegment(string? key)
+    {
+        if (key is null || !GallerySegmentOrder.Contains(key, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        _gallerySegmentChosen = true;
+        SetGallerySegment(key);
+    }
+
+    private void SetGallerySegment(string key)
+    {
+        SelectedGallerySegment = key;
+        OnPropertyChanged(nameof(SelectedGallerySegment));
+        foreach (var segment in ThemeGallerySegments)
+        {
+            segment.IsSelected = string.Equals(segment.Key, key, StringComparison.Ordinal);
+        }
+
+        SyncVisibleThemes();
+    }
+
+    private static bool InGallerySegment(ThemeSummary theme, string key) => string.Equals(key, InstalledGallerySegment, StringComparison.Ordinal)
+        ? theme.IsInstalled
+        : string.Equals(theme.Group, key, StringComparison.Ordinal);
+
+    private void SyncVisibleThemes()
+    {
+        var shown = Themes.Where(t => !t.IsGalleryHidden).ToList();
+        foreach (var segment in ThemeGallerySegments)
+        {
+            segment.Count = shown.Count(t => InGallerySegment(t, segment.Key));
+        }
+
+        // OrderBy is stable: built-ins keep the catalog order, installed themes follow.
+        SyncCollection(VisibleThemes, shown.Where(t => InGallerySegment(t, SelectedGallerySegment)).OrderBy(t => t.IsInstalled).ToList());
+    }
+
+    /// <summary>
+    /// Makes <paramref name="target"/> hold <paramref name="desired"/> (by reference) with the fewest removes/inserts, so items that stay keep their containers -
+    /// a tile or variant button that was just clicked is never detached while its Click is still routing.
+    /// </summary>
+    internal static void SyncCollection<T>(ObservableCollection<T> target, IReadOnlyList<T> desired) where T : class
+    {
+        for (int i = target.Count - 1; i >= 0; i--)
+        {
+            if (!desired.Any(d => ReferenceEquals(d, target[i])))
+            {
+                target.RemoveAt(i);
+            }
+        }
+
+        for (int i = 0; i < desired.Count; i++)
+        {
+            if (i < target.Count && ReferenceEquals(target[i], desired[i]))
+            {
+                continue;
+            }
+
+            int existing = -1;
+            for (int j = i + 1; j < target.Count; j++)
+            {
+                if (ReferenceEquals(target[j], desired[i]))
+                {
+                    existing = j;
+                    break;
+                }
+            }
+
+            if (existing >= 0)
+            {
+                target.Move(existing, i);
+            }
+            else
+            {
+                target.Insert(i, desired[i]);
+            }
+        }
+    }
 
     /// <summary>The theme the inspector describes (always the active one). Null only before the first load.</summary>
     public ThemeSummary? ActiveThemeSummary { get; private set; }
@@ -72,6 +172,34 @@ public partial class PreferencesScreenViewModel
         _themeService,
         () => string.IsNullOrWhiteSpace(AccentOverrideHexText) ? null : AccentOverrideHexText,
         value => AccentOverrideHexText = value ?? string.Empty);
+
+    private PersonalizeViewModel? _personalize;
+
+    /// <summary>
+    /// Appearance > Personalize (docs/superpowers/specs/2026-11-06-personalization-design.md). Its accent goes through <see cref="AccentOverrideHexText"/>, so it is
+    /// the same value Customize's "All themes" accent shows.
+    /// </summary>
+    public PersonalizeViewModel Personalize => _personalize ??= new PersonalizeViewModel(
+        _themeService,
+        () => string.IsNullOrWhiteSpace(AccentOverrideHexText) ? null : AccentOverrideHexText,
+        value => AccentOverrideHexText = value ?? string.Empty,
+        FontFamilies,
+        links: new PersonalizeLinks(
+            () => SelectedFontFamily,
+            font => SelectedFontFamily = font,
+            () => GlowTierText,
+            tier => GlowTierText = tier,
+            GlowTierOptionsList,
+            GlowTierSamples,
+            // A preset writes the glow tier directly: re-read it without applying, or this screen would write the old tier back.
+            () =>
+            {
+                _suppressThemeOptionsApply = true;
+                GlowTierText = GlowTierToText(_themeService.GetGlowTier());
+                _suppressThemeOptionsApply = false;
+            },
+            ExportThemeCustomizationsCommand,
+            ImportThemeCustomizationsCommand));
 
     /// <summary>What the last install, export or import did ("Exported Daylight."), or why it could not. Empty until one is run.</summary>
     [ObservableProperty]
@@ -123,28 +251,29 @@ public partial class PreferencesScreenViewModel
     [RelayCommand]
     private async Task ExportThemeCustomizations()
     {
-        string? path = await _filePicker.PickSaveFileAsync("Export My Customizations", "paperbunkr-theme-customizations.json", "json", "Theme customizations");
+        string? path = await _filePicker.PickSaveFileAsync("Export My Look", "paperbunkr-look.json", "json", "Paperbunkr look");
         if (path is null)
         {
             return;
         }
 
-        ThemeFileMessage = _themeService.ExportCustomizations(path, out string? error) ? "Exported your customizations." : error ?? "Your customizations could not be exported.";
+        ThemeFileMessage = _themeService.ExportCustomizations(path, out string? error) ? "Exported your look." : error ?? "Your look could not be exported.";
     }
 
     /// <summary>Replaces what is under Customize with a file written by the export above.</summary>
     [RelayCommand]
     private async Task ImportThemeCustomizations()
     {
-        string? path = await _filePicker.PickOpenFileAsync("Import Customizations", "json", "Theme customizations");
+        string? path = await _filePicker.PickOpenFileAsync("Import a Look", "json", "Paperbunkr look");
         if (path is null)
         {
             return;
         }
 
-        if (_themeService.ImportCustomizations(path, out string? error))
+        if (_themeService.ImportCustomizations(path, out string? error, out string? note))
         {
-            ThemeFileMessage = "Imported your customizations.";
+            ThemeFileMessage = note is null ? "Imported your look." : "Imported your look. " + note;
+            ReloadLookMirrors();
             RefreshThemes();
         }
         else
@@ -153,35 +282,58 @@ public partial class PreferencesScreenViewModel
         }
     }
 
-    /// <summary>The other variants of the active theme's family (Light / Dark / OLED ...), empty for a single-variant theme.</summary>
+
+    /// <summary>
+    /// After an import (or anything else that set them in the service), re-read the values this screen mirrors - the accent, the body font and the glow tier - without
+    /// applying them again, then let Customize and Personalize re-read too.
+    /// </summary>
+    private void ReloadLookMirrors()
+    {
+        _suppressThemeOptionsApply = true;
+        AccentOverrideHexText = _themeService.GetAccentOverrideHex() ?? string.Empty;
+        GlowTierText = GlowTierToText(_themeService.GetGlowTier());
+        _suppressThemeOptionsApply = false;
+
+        _suppressFontApply = true;
+        SelectedFontFamily = _themeService.GetSelectedFontFamily() ?? "System Default";
+        _suppressFontApply = false;
+
+        _themeCustomization?.Refresh();
+        _personalize?.Refresh();
+    }
+
+    partial void OnThemeFileMessageChanged(string value)
+    {
+        if (_personalize is not null)
+        {
+            _personalize.LookFileMessage = value;
+        }
+    }
+
+    /// <summary>The variants of the active theme's family (Light / Dark ...), OLED left out; empty for a single-variant theme.</summary>
     public ObservableCollection<ThemeSummary> ActiveFamilyVariants { get; } = new();
 
     public bool HasActiveFamilyVariants => ActiveFamilyVariants.Count > 1;
 
-    /// <summary>Rebuilds the gallery groups and the inspector's subject from <see cref="Themes"/>. Called by <c>RefreshThemes</c>.</summary>
+    /// <summary>Re-syncs the gallery, the inspector's subject and the variant switch from <see cref="Themes"/>. Called by <c>RefreshThemes</c> and after a selection.</summary>
     private void RefreshThemeGallery()
     {
-        ThemeGroups.Clear();
-        foreach (string title in ThemeGroupOrder)
-        {
-            var members = Themes.Where(t => string.Equals(t.Group, title, StringComparison.Ordinal)).ToList();
-            if (members.Count > 0)
-            {
-                ThemeGroups.Add(new ThemeGroup(title, members));
-            }
-        }
-
         ActiveThemeSummary = Themes.FirstOrDefault(t => t.IsActive);
         OnPropertyChanged(nameof(ActiveThemeSummary));
 
-        ActiveFamilyVariants.Clear();
-        if (ActiveThemeSummary is { HasVariants: true } active)
+        if (_gallerySegmentChosen)
         {
-            foreach (var sibling in Themes.Where(t => string.Equals(t.FamilyKey, active.FamilyKey, StringComparison.OrdinalIgnoreCase)))
-            {
-                ActiveFamilyVariants.Add(sibling);
-            }
+            SyncVisibleThemes();
         }
+        else
+        {
+            SetGallerySegment(ActiveThemeSummary?.Group ?? "Dark");
+        }
+
+        var variants = ActiveThemeSummary is { HasVariants: true } active
+            ? Themes.Where(t => string.Equals(t.FamilyKey, active.FamilyKey, StringComparison.OrdinalIgnoreCase) && !t.IsGalleryHidden).ToList()
+            : new List<ThemeSummary>();
+        SyncCollection(ActiveFamilyVariants, variants);
 
         OnPropertyChanged(nameof(HasActiveFamilyVariants));
         _themeCustomization?.Refresh();

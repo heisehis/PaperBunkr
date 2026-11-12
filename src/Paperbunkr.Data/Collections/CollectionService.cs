@@ -92,6 +92,51 @@ public static class CollectionService
         context.SaveChanges();
     }
 
+    /// <summary>Pin or unpin. Does not renumber <see cref="Collection.SortOrder"/>: an unpinned collection keeps its place in its group.</summary>
+    public static void SetPinned(PaperbunkrDbContext context, int collectionId, bool isPinned)
+    {
+        var collection = context.Collections.Find(collectionId);
+        if (collection is null || collection.IsPinned == isPinned)
+        {
+            return;
+        }
+
+        collection.IsPinned = isPinned;
+        context.SaveChanges();
+    }
+
+    /// <summary>
+    /// Glyph, cover style and the chosen cover member (docs/superpowers/specs/2026-11-06-collection-identity-design.md). A cover member id that is not
+    /// one of this collection's own items is stored as null.
+    /// </summary>
+    public static void SetIdentity(
+        PaperbunkrDbContext context,
+        int collectionId,
+        string? iconGlyph,
+        CollectionCoverStyle coverStyle,
+        int? coverMemberItemId,
+        bool? isPinned = null)
+    {
+        var collection = context.Collections.Find(collectionId);
+        if (collection is null)
+        {
+            return;
+        }
+
+        collection.IconGlyph = NullIfBlank(iconGlyph);
+        collection.CoverStyle = coverStyle;
+        collection.CoverMemberItemId = coverMemberItemId is int itemId
+            && context.CollectionItems.Any(ci => ci.Id == itemId && ci.CollectionId == collectionId)
+            ? itemId
+            : null;
+        if (isPinned is bool pinned)
+        {
+            collection.IsPinned = pinned;
+        }
+
+        context.SaveChanges();
+    }
+
     /// <summary>
     /// Adds the given targets to the collection, skipping any already present (idempotent). New
     /// items are appended after the collection's current highest <see cref="CollectionItem.SortOrder"/>.

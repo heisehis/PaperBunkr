@@ -195,7 +195,8 @@
                             <DataTemplate x:DataType="models:ChapterVolumeGroup">
                                 <Border Classes="card" Margin="0,0,0,14">
                                 <StackPanel>
-                                    <TextBlock Classes="volumeHeader" Text="{Binding VolumeLabel}" />
+                                    <TextBlock Classes="volumeHeader" Text="{Binding VolumeLabel}" IsVisible="{Binding !HasStructure}" />
+                                    <views:StructureSectionHeader DataContext="{Binding Structure}" IsVisible="{Binding HasStructure}" />
                                     <ItemsControl ItemsSource="{Binding Chapters}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="models:ChapterRowSample">

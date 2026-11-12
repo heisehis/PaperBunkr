@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels" xmlns:em="using:Paperbunkr.App.Controls.EventMap"
+             x:Class="Paperbunkr.App.Controls.EventMap.EventMapRollCallPanel" x:DataType="vm:EventMapViewModel">
+    <Border Width="260" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
+        <Grid RowDefinitions="Auto,Auto,*">
+            <Grid ColumnDefinitions="*,Auto" Margin="12,8">
+                <TextBlock Classes="pbTextSection" Text="Series" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="ghost sm" Content="Show all" Command="{Binding ShowAllSeriesCommand}" IsVisible="{Binding HasHiddenSeries}" />
+            </Grid>
+            <TextBox Grid.Row="1" Classes="searchBox" Margin="12,0,12,8" PlaceholderText="Search series" Text="{Binding RollCallSearch}" IsVisible="{Binding ShowRollCallSearch}" AutomationProperties.Name="Search series" />
+            <ListBox Grid.Row="2" ItemsSource="{Binding RollCallRows}" AutomationProperties.Name="Series in this map">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:EventMapRollCallRow">
+                        <Grid ColumnDefinitions="3,Auto,*,Auto" Margin="0,2" ColumnSpacing="8">
+                            <Border em:EventMapLaneBrush.ColorIndex="{Binding ColorIndex}" />
+                            <CheckBox Grid.Column="1" IsChecked="{Binding IsShown}" AutomationProperties.Name="{Binding Name}" VerticalAlignment="Center" />
+                            <Button Grid.Column="2" Classes="ghost" HorizontalContentAlignment="Left" Command="{Binding $parent[UserControl].((vm:EventMapViewModel)DataContext).RevealSeriesCommand}" CommandParameter="{Binding}">
+                                <StackPanel>
+                                    <TextBlock Classes="sideItemLabel" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Classes="pbTextCaption" Text="{Binding MissingLabel}" IsVisible="{Binding HasMissing}" Foreground="{DynamicResource PbDangerBrush}" />
+                                </StackPanel>
+                            </Button>
+                            <Border Grid.Column="3" Classes="countPill" VerticalAlignment="Center"><TextBlock Classes="pbTextCaption" Text="{Binding CountLabel}" /></Border>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Grid>
+    </Border>
+</UserControl>

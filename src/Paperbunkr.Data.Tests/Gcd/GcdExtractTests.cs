@@ -58,7 +58,7 @@ public class GcdExtractTests
         using var dump = new FakeGcdDump().Series(1, "Hulk", 1968, "Marvel");
         var manifest = dump.BuildExtract("https://example.invalid/gcd.zip");
 
-        string zip = Path.Combine(dump.OutDir, "gcd-2026-09-15.zip");
+        string zip = Path.Combine(dump.OutDir, "gcd-v2-2026-09-15.zip");
         Assert.True(File.Exists(zip));
         using (var stream = File.OpenRead(zip))
         {
@@ -66,7 +66,7 @@ public class GcdExtractTests
         }
 
         Assert.Equal(new FileInfo(zip).Length, manifest.SizeBytes);
-        var onDisk = JsonSerializer.Deserialize<GcdManifest>(File.ReadAllText(Path.Combine(dump.OutDir, "gcd-data.json")));
+        var onDisk = JsonSerializer.Deserialize<GcdManifest>(File.ReadAllText(Path.Combine(dump.OutDir, "gcd-data-v2.json")));
         Assert.Equal(manifest, onDisk);
         Assert.Equal(GcdExtractor.SchemaVersion, onDisk!.SchemaVersion);
         Assert.Equal("https://example.invalid/gcd.zip", onDisk.Url);

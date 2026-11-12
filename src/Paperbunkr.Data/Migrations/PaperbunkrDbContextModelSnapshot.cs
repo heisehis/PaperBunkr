@@ -506,10 +506,22 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
 
+                    b.Property<int>("CardElevation")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("CheckForUpdatesOnStartup")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("CollectionBannerSlim")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CollectionDotShape")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CollectionRowDensity")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("ConfirmBeforeClose")
                         .HasColumnType("INTEGER");
@@ -603,6 +615,30 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);
 
+                    b.Property<int>("EntityIndexVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("EventMapInspectorDocked")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("EventMapLaneRailWide")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("EventMapProgressLine")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("EventMapRelayPacked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("EventMapShowMissing")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("ExportedListsContainFilenames")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -623,6 +659,12 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);
 
+                    b.Property<int>("FocusRingThickness")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("FontScale")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("GamepadEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -637,6 +679,9 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
+
+                    b.Property<string>("HeadingFontFamily")
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("HeroBackdrop")
                         .ValueGeneratedOnAdd()
@@ -1068,6 +1113,12 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("ShowCollectionBadges")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ShowCollectionProgress")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("ShowScrubberOverlay")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -1090,6 +1141,9 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
+
+                    b.Property<int>("SidebarStyle")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("SkipAdvertisementPages")
                         .ValueGeneratedOnAdd()
@@ -1640,6 +1694,24 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Aliases")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CustomImagePath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ImageCheckedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ImageSource")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1685,10 +1757,22 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("CoverImagePath")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("CoverMemberItemId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CoverStyle")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Description")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("IconGlyph")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("IsAutoCover")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsPinned")
                         .HasColumnType("INTEGER");
 
                     b.Property<int?>("IssueSmartListId")
@@ -2037,6 +2121,24 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Aliases")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CustomImagePath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ImageCheckedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ImageSource")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -2093,6 +2195,81 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("DismissedRecommendations");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventArcSnapshot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ArcId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("FetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsComplete")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("IssuesJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ReportedCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("StoryEventId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StoryEventId", "Provider")
+                        .IsUnique();
+
+                    b.ToTable("EventArcSnapshots");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventDateEndpoint", b =>
+                {
+                    b.Property<int>("StoryEventId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsEnd")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Coverage")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Day")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("Month")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Provisional")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Uncertain")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("StoryEventId", "IsEnd");
+
+                    b.ToTable("EventDateEndpoints");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.EventMembership", b =>
                 {
                     b.Property<int>("Id")
@@ -2139,6 +2316,80 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("StoryEventId");
 
                     b.ToTable("EventMemberships");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventMetadataChange", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AfterValue")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AppliedRevision")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("BeforeProtected")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("BeforeValue")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EvidenceJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Field")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("MergeInvalidated")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("StoryEventId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Undone")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OperationId");
+
+                    b.HasIndex("StoryEventId", "CreatedAt");
+
+                    b.ToTable("EventMetadataChanges");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventMetadataState", b =>
+                {
+                    b.Property<int>("StoryEventId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Field")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EvidenceJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("ProtectedBlank")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Revision")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("StoryEventId", "Field");
+
+                    b.ToTable("EventMetadataStates");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.EventOrderEvidence", b =>
@@ -3116,6 +3367,24 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("Aliases")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CustomImagePath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ImageCheckedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ImageSource")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -4969,6 +5238,9 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<DateTime?>("EndDate")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("GcdArcId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("IdentityCheckedAt")
                         .HasColumnType("TEXT");
 
@@ -5179,6 +5451,24 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("Aliases")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CustomImagePath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ImageCheckedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ImageSource")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -5927,6 +6217,28 @@ namespace Paperbunkr.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventArcSnapshot", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.StoryEvent", "StoryEvent")
+                        .WithMany()
+                        .HasForeignKey("StoryEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StoryEvent");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventDateEndpoint", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.StoryEvent", "StoryEvent")
+                        .WithMany("DateEndpoints")
+                        .HasForeignKey("StoryEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StoryEvent");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.EventMembership", b =>
                 {
                     b.HasOne("Paperbunkr.Data.Entities.Issue", "Issue")
@@ -5942,6 +6254,28 @@ namespace Paperbunkr.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Issue");
+
+                    b.Navigation("StoryEvent");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventMetadataChange", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.StoryEvent", "StoryEvent")
+                        .WithMany("MetadataChanges")
+                        .HasForeignKey("StoryEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StoryEvent");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventMetadataState", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.StoryEvent", "StoryEvent")
+                        .WithMany("MetadataStates")
+                        .HasForeignKey("StoryEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("StoryEvent");
                 });
@@ -6826,7 +7160,13 @@ namespace Paperbunkr.Data.Migrations
                 {
                     b.Navigation("Aliases");
 
+                    b.Navigation("DateEndpoints");
+
                     b.Navigation("Members");
+
+                    b.Navigation("MetadataChanges");
+
+                    b.Navigation("MetadataStates");
 
                     b.Navigation("Tags");
 

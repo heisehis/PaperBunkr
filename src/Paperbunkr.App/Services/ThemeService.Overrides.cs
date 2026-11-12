@@ -198,6 +198,39 @@ public partial class ThemeService
         return _overrideStore.Load().Find(scope, target.FamilyId, target.VariantId)?.Values.Count ?? 0;
     }
 
+
+    /// <summary>
+    /// Sets (or, with a null value, removes) several Global overrides and saves them once, <b>without</b> re-applying the theme - for a caller that
+    /// changes other settings in the same step and refreshes once at the end (a look preset). Invalid values are skipped.
+    /// </summary>
+    internal void SetGlobalOverridesWithoutRefresh(IReadOnlyDictionary<string, string?> values)
+    {
+        if (ActiveOverrideTarget is not { } target)
+        {
+            return;
+        }
+
+        var overrides = _overrideStore.Load();
+        var layer = overrides.GetOrAdd(ThemeOverrideScope.Global, target.FamilyId, target.VariantId);
+        foreach (var (path, value) in values)
+        {
+            string normalized = ThemeTokenPaths.Normalize(path);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                layer.Values.Remove(normalized);
+            }
+            else if (IsValidOverride(normalized, value))
+            {
+                layer.Values[normalized] = value.Trim();
+            }
+        }
+
+        _overrideStore.Save(overrides);
+    }
+
+    /// <summary>Raised by a caller that changed overrides through <see cref="SetGlobalOverridesWithoutRefresh"/> and has now refreshed.</summary>
+    internal void NotifyOverridesChanged() => OverridesChanged?.Invoke();
+
     private void RefreshAfterOverrideChange()
     {
         if (Avalonia.Application.Current is not null)

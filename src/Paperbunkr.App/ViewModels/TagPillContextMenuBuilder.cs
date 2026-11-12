@@ -20,6 +20,9 @@ public sealed class TagPillContextMenuBuilder
 {
     public IReadOnlyList<ContextMenuEntry>? Build(object? target) => target switch
     {
+        // A character / team / location / creator pill (entity pages redesign §8): its click opens the entity page, so the menu offers that and
+        // the Library search the click used to do, then the weights when it can be reweighted.
+        TagPillViewModel { EntityKind: not null } entity => EntityMenu(entity),
         // The original dead menu was IsVisible="{Binding CanReweight}" on the whole ContextMenu, not
         // per-item - a non-reweightable pill (CanReweight false) gets no menu at all, not a disabled one.
         TagPillViewModel { CanReweight: true } pill => new[]
@@ -31,6 +34,19 @@ public sealed class TagPillContextMenuBuilder
         },
         _ => null,
     };
+
+    private static IReadOnlyList<ContextMenuEntry> EntityMenu(TagPillViewModel pill)
+    {
+        var entries = new List<ContextMenuEntry> { ContextMenuEntry.Item($"Open {pill.Value}", pill.SearchCommand) };
+        if (pill.CanSearchLibrary) entries.Add(ContextMenuEntry.Item("Search library", pill.SearchInLibraryCommand));
+        if (pill.CanReweight)
+        {
+            entries.Add(ContextMenuEntry.Separator);
+            entries.AddRange(new[] { Weight(pill, IssueTagWeight.Incidental, "Incidental"), Weight(pill, IssueTagWeight.Recurrent, "Recurrent"),
+                Weight(pill, IssueTagWeight.Defining, "Defining"), Weight(pill, IssueTagWeight.Core, "Core") });
+        }
+        return entries;
+    }
 
     private static ContextMenuEntry Weight(TagPillViewModel pill, IssueTagWeight weight, string header) =>
         ContextMenuEntry.Item(header, pill.SetWeightCommand, weight, isChecked: pill.Weight == weight);

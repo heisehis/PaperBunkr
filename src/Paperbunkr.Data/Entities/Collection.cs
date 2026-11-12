@@ -30,6 +30,24 @@ public class Collection
     /// <summary>When true (default), the cover is derived on read from the first member; see <c>CollectionResolver.ResolveCover</c>.</summary>
     public bool IsAutoCover { get; set; } = true;
 
+    /// <summary>
+    /// A FluentIcons <c>Symbol</c> name from the curated glyph list (docs/superpowers/specs/2026-11-06-collection-identity-design.md); null = the
+    /// accent dot. An unknown name falls back to the dot at display time.
+    /// </summary>
+    public string? IconGlyph { get; set; }
+
+    /// <summary>How the cover is drawn on Home cards and in the dialog preview. A manual cover (<see cref="IsAutoCover"/> false) overrides it.</summary>
+    public CollectionCoverStyle CoverStyle { get; set; } = CollectionCoverStyle.Auto;
+
+    /// <summary>Pinned collections list first (sidebar, Books, Home), then the rest; each group keeps <see cref="SortOrder"/> order.</summary>
+    public bool IsPinned { get; set; }
+
+    /// <summary>
+    /// Pointer to the <see cref="CollectionItem.Id"/> whose cover the automatic cover uses; null (or a stale id) = the first member.
+    /// Deliberately not a foreign key: removing the item just falls back.
+    /// </summary>
+    public int? CoverMemberItemId { get; set; }
+
     public List<CollectionItem> Items { get; set; } = new();
 
     /// <summary>

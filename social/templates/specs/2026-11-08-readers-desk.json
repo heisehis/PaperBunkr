@@ -1,0 +1,13 @@
+{
+  "layout": "trio",
+  "brand": "fan",
+  "kicker": "READER'S DESK",
+  "title": "What I read this week",
+  "items": [
+    { "tag": "Comic", "name": "[comic]", "line": "[one line]" },
+    { "tag": "Manga", "name": "[manga]", "line": "[one line]" },
+    { "tag": "Manhwa", "name": "[manhwa]", "line": "[one line]" }
+  ],
+  "images": {},
+  "out": "social/media/2026-11-08-readers-desk"
+}

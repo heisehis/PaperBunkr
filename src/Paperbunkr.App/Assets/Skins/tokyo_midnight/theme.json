@@ -122,6 +122,101 @@
           "default": "#2A2540"
         }
       }
+    },
+    "daybreak": {
+      "name": "Daybreak",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#FCEFF6",
+        "ink": "#2A1838",
+        "accent": "#C21E6C",
+        "success": "#1E8A64",
+        "badge": "#00788A"
+      },
+      "materials": {
+        "dawn": {
+          "type": "linearGradient",
+          "angle": 180,
+          "fallback": "#FBEFF6",
+          "stops": [
+            {
+              "at": 0,
+              "color": "#FFE9F2"
+            },
+            {
+              "at": 0.6,
+              "color": "#F3E8FF"
+            },
+            {
+              "at": 1,
+              "color": "#E6F7FB"
+            }
+          ]
+        },
+        "dawnNav": {
+          "type": "linearGradient",
+          "angle": 180,
+          "fallback": "#F2DDF2",
+          "stops": [
+            {
+              "at": 0,
+              "color": "#FBDDEB"
+            },
+            {
+              "at": 1,
+              "color": "#E9DDFB"
+            }
+          ]
+        }
+      },
+      "surfaces": {
+        "canvas": "dawn",
+        "navigation": "dawnNav"
+      },
+      "semantic": {
+        "surface": {
+          "raised": "#FFF8FB",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#EBC6DA"
+        },
+        "status": {
+          "danger": "#C0243A",
+          "warning": "#8A5A00",
+          "info": "#00788A"
+        },
+        "chart": {
+          "series": {
+            "1": "#00869A",
+            "2": "#7B4FD6"
+          }
+        },
+        "glow": {
+          "color": "#66C21E6C"
+        },
+        "selection": {
+          "background": "#33C21E6C"
+        }
+      },
+      "typography": {
+        "heading": {
+          "family": "Bahnschrift"
+        },
+        "display": {
+          "family": "Bahnschrift"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#FFFFFF",
+          "states": {
+            "hover": {
+              "background": "#D63A82"
+            }
+          }
+        }
+      }
     }
   }
 }

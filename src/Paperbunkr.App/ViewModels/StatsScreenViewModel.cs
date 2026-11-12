@@ -20,6 +20,7 @@ namespace Paperbunkr.App.ViewModels;
 public partial class StatsScreenViewModel : ViewModelBase
 {
     private readonly Action<string> _goLibraryWithSearch;
+    public Action<string>? GoCreator { get; set; }
     private readonly Func<DateTime> _nowUtc;
     private readonly Dictionary<InsightsRange, StatsSnapshot> _cache = new();
 
@@ -240,6 +241,14 @@ public partial class StatsScreenViewModel : ViewModelBase
         {
             _goLibraryWithSearch(value);
         }
+    }
+
+    [RelayCommand]
+    private void OpenCreator(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name == "Unknown") return;
+        if (GoCreator is { } open) open(name);
+        else _goLibraryWithSearch(name);
     }
 
     private static TrendDisplay? ToDisplay(TileTrend? t)

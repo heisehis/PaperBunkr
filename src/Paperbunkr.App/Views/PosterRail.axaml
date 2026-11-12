@@ -122,6 +122,7 @@
                                     <TextBlock Text="{Binding Name}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
                                                TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{Binding SubLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}"
+                                               TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SubLabel}"
                                                IsVisible="{Binding SubLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                 </StackPanel>
                             </Button>

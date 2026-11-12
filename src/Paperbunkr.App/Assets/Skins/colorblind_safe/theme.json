@@ -1,33 +1,125 @@
 {
+  "schemaVersion": 2,
+  "id": "legacy.colorblind_safe",
   "name": "Color-Blind Safe",
-  "mode": "Dark",
   "category": "accessibility",
-  "colors": {
-    "bg": "#0A0B0D",
-    "chrome": "#131519",
-    "border": "#2A2E37",
-    "text": "#ECE7DB",
-    "textMuted": "#B3ADA0",
-    "textFaint": "#77726A",
-    "accent": "#4FA3D9",
-    "accentText": "#6FB8E0",
-    "accentSoft": "#294FA3D9",
-    "badge": "#E6A93D",
-    "badgeText": "#241505",
-    "success": "#3BC49A",
-    "chartBlue": "#56B4E9",
-    "chartViolet": "#CC79A7",
-    "surface0": "#000000",
-    "surface1": "#0A0B0D",
-    "surface2": "#131519",
-    "surface3": "#1B1E24",
-    "glow": "#666FB8E0",
-    "heroGradientStart": "#00000000",
-    "heroGradientEnd": "#FF000000"
+  "base": {
+    "semantic": {
+      "surface": {
+        "canvas": "#0A0B0D",
+        "navigation": "#131519",
+        "recessed": "#000000",
+        "default": "#0A0B0D",
+        "raised": "#131519",
+        "overlay": "#1B1E24"
+      },
+      "border": {
+        "default": "#2A2E37"
+      },
+      "text": {
+        "primary": "#ECE7DB",
+        "secondary": "#B3ADA0",
+        "muted": "#77726A",
+        "accent": "#6FB8E0"
+      },
+      "action": {
+        "primary": "#4FA3D9",
+        "soft": "#294FA3D9"
+      },
+      "badge": {
+        "background": "#E6A93D",
+        "text": "#241505"
+      },
+      "status": {
+        "success": "#3BC49A"
+      },
+      "chart": {
+        "series": {
+          "1": "#56B4E9",
+          "2": "#CC79A7"
+        }
+      },
+      "glow": {
+        "color": "#666FB8E0"
+      },
+      "hero": {
+        "gradient": {
+          "start": "#00000000",
+          "end": "#FF000000"
+        }
+      }
+    },
+    "metrics": {
+      "spacingUnit": 4,
+      "radius": 7,
+      "radiusSm": 5,
+      "radiusLg": 14
+    },
+    "settings": {
+      "windowBackdrop": "None"
+    }
   },
-  "spacingUnit": 4,
-  "radius": 7,
-  "radiusSm": 5,
-  "radiusLg": 14,
-  "icons": {}
+  "variants": {
+    "dark": {
+      "name": "Dark",
+      "mode": "Dark"
+    },
+    "light": {
+      "name": "Light",
+      "mode": "Light",
+      "semantic": {
+        "surface": {
+          "canvas": "#FFFFFF",
+          "navigation": "#F4F4F4",
+          "recessed": "#EDEDED",
+          "default": "#FFFFFF",
+          "raised": "#FAFAFA",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#CFCFCF"
+        },
+        "text": {
+          "primary": "#1A1A1A",
+          "secondary": "#4D4D4D",
+          "muted": "#6B6B6B",
+          "accent": "#005A8C"
+        },
+        "action": {
+          "primary": "#0072B2",
+          "soft": "#290072B2"
+        },
+        "badge": {
+          "background": "#E69F00",
+          "text": "#1A1A1A"
+        },
+        "status": {
+          "success": "#007A58",
+          "danger": "#B34700",
+          "warning": "#8A5A00",
+          "info": "#0072B2"
+        },
+        "chart": {
+          "series": {
+            "1": "#0072B2",
+            "2": "#CC79A7"
+          }
+        },
+        "glow": {
+          "color": "#660072B2"
+        },
+        "hero": {
+          "gradient": {
+            "start": "#00FFFFFF",
+            "end": "#FFFFFFFF"
+          }
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#FFFFFF"
+        }
+      }
+    }
+  }
 }

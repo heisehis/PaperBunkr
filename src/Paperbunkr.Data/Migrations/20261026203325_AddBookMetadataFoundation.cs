@@ -175,6 +175,20 @@ namespace Paperbunkr.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // Books.Finished is an orphan column from Up on: it is still in the table, but no model snapshot
+            // after this migration lists it. Every later Down that rebuilds Books (any DropColumn on Books) recreates
+            // the table from that snapshot and drops the column. So when a rollback reaches this Down, Finished may
+            // or may not exist. The DropColumns below rebuild Books from the previous snapshot, which does list
+            // Finished. A plain rebuild would then copy "Finished" from the old table and fail with
+            // 'no such column: "Finished"' whenever a later Down dropped it.
+            // So this Down never reads the old column. It drops Finished, then renames Status to Finished. EF's SQLite
+            // generator folds both into the one Books rebuild (a rename onto a dropped name is deferred), so the
+            // rebuild's copy selects "Status" into the new "Finished" and never names the old column. That works whether
+            // or not the orphan survived. Status is the only up-to-date source anyway: the old column stopped being
+            // written at Up. Plain SQL runs before EF's rebuilds, so turn Status into Finished's 1/0 first.
+            migrationBuilder.Sql(
+                "UPDATE \"Books\" SET \"Status\" = CASE WHEN \"Status\" = 'Finished' THEN 1 ELSE 0 END;");
+
             migrationBuilder.DropTable(
                 name: "BookFieldSources");
 
@@ -214,8 +228,13 @@ namespace Paperbunkr.Data.Migrations
                 table: "Books");
 
             migrationBuilder.DropColumn(
-                name: "Status",
+                name: "Finished",
                 table: "Books");
+
+            migrationBuilder.RenameColumn(
+                name: "Status",
+                table: "Books",
+                newName: "Finished");
 
             migrationBuilder.DropColumn(
                 name: "Subtitle",

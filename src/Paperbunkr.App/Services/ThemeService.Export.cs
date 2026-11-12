@@ -83,7 +83,14 @@ public partial class ThemeService
         error = null;
         try
         {
-            File.WriteAllText(destinationPath, ThemeOverrideSerializer.Serialize(_overrideStore.Load()).ToJsonString(ExportJsonOptions));
+            var root = ThemeOverrideSerializer.Serialize(_overrideStore.Load());
+            using (var context = _contextFactory())
+            {
+                // The Personalize values travel with the overrides (docs/superpowers/specs/2026-11-06-looks-and-presets-design.md).
+                root[PersonalizationSnapshot.BlockName] = PersonalizationSnapshot.From(context.GetOrCreateAppSettings()).ToJson();
+            }
+
+            File.WriteAllText(destinationPath, root.ToJsonString(ExportJsonOptions));
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
@@ -97,8 +104,12 @@ public partial class ThemeService
     /// Replaces the user's customizations with the ones in a file written by <see cref="ExportCustomizations"/> and applies them live. The file
     /// is data only; a value in it that is not valid for its token is ignored when the theme is resolved, exactly like one typed by hand.
     /// </summary>
-    public bool ImportCustomizations(string sourcePath, out string? error)
+    public bool ImportCustomizations(string sourcePath, out string? error) => ImportCustomizations(sourcePath, out error, out _);
+
+    /// <summary>As above; <paramref name="note"/> says when the file's Personalize values were skipped (written by a newer version).</summary>
+    public bool ImportCustomizations(string sourcePath, out string? error, out string? note)
     {
+        note = null;
         error = null;
         try
         {
@@ -123,6 +134,17 @@ public partial class ThemeService
 
             _overrideStore.Save(overrides);
             RefreshAfterOverrideChange();
+
+            switch (PersonalizationSnapshot.TryRead(root, out var look))
+            {
+                case PersonalizationSnapshot.ReadResult.Read:
+                    ApplySnapshot(look!);
+                    break;
+                case PersonalizationSnapshot.ReadResult.NewerFormat:
+                    note = "Your Personalize settings in that file were skipped: it was written by a newer version.";
+                    break;
+            }
+
             return true;
         }
         catch (JsonException)
@@ -135,6 +157,23 @@ public partial class ThemeService
             error = "Your customizations could not be imported: " + ex.Message;
             return false;
         }
+    }
+
+    /// <summary>Applies an imported look's Personalize values through their usual setters: the accent, the body font, then the rest (with the glow tier) in one apply.</summary>
+    private void ApplySnapshot(PersonalizationSnapshot look)
+    {
+        SetAccentOverrideHex(look.Accent);
+        ApplyFont(look.BodyFont);
+        _glowTier = NormalizeGlowTier(look.RingStrength);
+        ApplyPersonalization(s =>
+        {
+            s.FontScale = look.FontScale;
+            s.HeadingFontFamily = look.HeadingFont;
+            s.CardElevation = look.CardElevation;
+            s.SidebarStyle = look.SidebarStyle;
+            s.FocusRingThickness = look.FocusRingThickness;
+            s.GlowTier = _glowTier;
+        });
     }
 
     private static void TryDelete(string path)

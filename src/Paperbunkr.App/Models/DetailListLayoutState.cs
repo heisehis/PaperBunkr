@@ -85,6 +85,8 @@ public static class DetailGrouping
     public const string Volume = "volume";
 
     public const string None = "none";
+    public const string CreatorRuns = "creator-runs";
+    public const string Arcs = "arcs";
 
     public const string VirtualTagPrefix = "vtag:";
 
@@ -285,6 +287,9 @@ public static class DetailListLayoutStateJson
     private static string NormalizeGroup(string? value, string fallback) => value switch
     {
         DetailGrouping.None => DetailGrouping.None,
+        DetailGrouping.Arcs => DetailGrouping.Arcs,
+        "StoryArc" => DetailGrouping.Arcs,
+        DetailGrouping.CreatorRuns => DetailGrouping.CreatorRuns,
         DetailGrouping.Run when fallback == DetailGrouping.Run => DetailGrouping.Run,
         DetailGrouping.Volume when fallback == DetailGrouping.Volume => DetailGrouping.Volume,
         _ when DetailGrouping.FieldOf(value) is { } field => DetailGrouping.ForField(field),

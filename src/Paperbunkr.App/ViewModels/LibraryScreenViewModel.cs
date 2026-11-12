@@ -178,6 +178,16 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// </summary>
     private Dictionary<int, int> _collectionMemberCounts = new();
 
+    private Dictionary<int, CollectionProgress> _collectionProgress = new();
+
+    /// <summary>Compact row height for the sidebar's Collections section (Preferences density setting).</summary>
+    [ObservableProperty]
+    private bool _isCompactCollections;
+
+    /// <summary>Squircle instead of circle for a glyph-less collection's marker.</summary>
+    [ObservableProperty]
+    private bool _isSquircleCollectionDots;
+
     private bool _activeCollectionHasNonSeriesMembers;
 
     private readonly LibraryFolderScanner _libraryScanner;
@@ -532,6 +542,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _gridDensity = settings.LibraryGridDensity;
         _showTileTitles = settings.LibraryShowTileTitles;
         _showUnreadBadge = settings.LibraryShowUnreadBadge;
+        _showCollectionBadges = settings.ShowCollectionBadges;
+        _isBannerSlimPinned = settings.CollectionBannerSlim;
         _showPublisherBadge = settings.LibraryShowPublisherBadge;
         _showLanguageBadge = settings.LibraryShowLanguageBadge;
         _useLanguageIcon = settings.LibraryUseLanguageIcon;
@@ -1093,6 +1105,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// is empty before it has been read.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowEmptyState))]
+    [NotifyPropertyChangedFor(nameof(ShowCollectionEmptyState))]
     private bool _isLoadingLibrary;
 
     /// <summary>
@@ -1160,7 +1173,12 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         Dictionary<SearchMode, SuggestionCandidateList> SuggestionIndex,
         List<CollectionMember> ActiveCollectionMembers,
         Dictionary<int, int> CollectionMemberCounts,
-        List<ReadingListOption> ReadingLists);
+        List<ReadingListOption> ReadingLists,
+        Dictionary<int, CollectionProgress> CollectionProgress,
+        bool ShowCollectionProgress,
+        CollectionRowDensity CollectionRowDensity,
+        CollectionDotShape CollectionDotShape,
+        CollectionMemberships? CollectionMemberships);
 
     /// <summary>Every database read for one Library load, safe off the UI thread: no observable state touched.</summary>
     private static LibraryLoad ReadLibrary(int? activeCollectionId)
@@ -1202,11 +1220,17 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             .OrderBy(t => t.SortOrder)
             .ToList();
 
-        var collections = context.Collections.Include(c => c.Items).AsNoTracking().AsSplitQuery().OrderBy(c => c.SortOrder).ToList();
+        var collections = CollectionOrdering.Apply(context.Collections.Include(c => c.Items).AsNoTracking().AsSplitQuery()).ToList();
 
         // Re-read here (not just in LoadLibrarySettings) so toggling the Preferences master and
         // returning to Library reflects it - a load runs on every nav to this screen that follows a write.
-        bool canWrite = context.GetOrCreateAppSettings().WriteMetadataToFiles;
+        var loadSettings = context.GetOrCreateAppSettings();
+        bool canWrite = loadSettings.WriteMetadataToFiles;
+
+        // The opt-in progress ring: one aggregated read, only when the setting is on (docs/superpowers/specs/2026-11-06-collection-identity-design.md).
+        var collectionProgress = loadSettings.ShowCollectionProgress
+            ? CollectionProgressResolver.GetProgress(context, collections.Select(c => c.Id).ToList()).ToDictionary(p => p.Key, p => p.Value)
+            : new Dictionary<int, CollectionProgress>();
 
         var suggestionIndex = BuildSuggestionIndex(context, series);
 
@@ -1228,7 +1252,11 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             .Select(l => new ReadingListOption { Id = l.Id, Name = l.Name })
             .ToList();
 
-        return new LibraryLoad(series, virtualTags, collections, canWrite, suggestionIndex, activeMembers, memberCounts, readingLists);
+        // Membership dots on covers (docs/superpowers/specs/2026-11-06-collection-surfaces-design.md): one pass, only when the setting is on.
+        var memberships = loadSettings.ShowCollectionBadges ? CollectionMembershipResolver.GetMemberships(context) : null;
+
+        return new LibraryLoad(series, virtualTags, collections, canWrite, suggestionIndex, activeMembers, memberCounts, readingLists,
+            collectionProgress, loadSettings.ShowCollectionProgress, loadSettings.CollectionRowDensity, loadSettings.CollectionDotShape, memberships);
     }
 
     /// <summary>Adopts a snapshot and rebuilds everything derived from it. UI thread.</summary>
@@ -1265,6 +1293,17 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _suggestionIndex = load.SuggestionIndex;
         _activeCollectionMembers = load.ActiveCollectionMembers;
         _collectionMemberCounts = load.CollectionMemberCounts;
+        _collectionProgress = load.CollectionProgress;
+        if (load.CollectionMemberships is { } memberships)
+        {
+            CollectionBadgeStore.Set(memberships, _allCollections);
+        }
+        else
+        {
+            CollectionBadgeStore.Clear();
+        }
+        IsCompactCollections = load.CollectionRowDensity == CollectionRowDensity.Compact;
+        IsSquircleCollectionDots = load.CollectionDotShape == CollectionDotShape.Squircle;
 
         // Its own table, so it only refreshes with a real reload, not on every RebuildView.
         ReadingLists.Clear();
@@ -1409,9 +1448,14 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             IsActive = _activeContentType == group.Key,
         }).ToList());
 
+        bool anyPinned = _allCollections.Any(c => c.IsPinned);
+        bool dividerPlaced = false;
         Collections.ReplaceAll(_allCollections.Select(collection =>
         {
             int cid = collection.Id;
+            bool firstUnpinned = anyPinned && !collection.IsPinned && !dividerPlaced;
+            dividerPlaced |= firstUnpinned;
+            double? progress = _collectionProgress.TryGetValue(collection.Id, out var p) && p.Total > 0 ? p.Fraction : null;
             return new CollectionSummary
             {
                 Id = collection.Id,
@@ -1420,9 +1464,20 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 AccentColor = collection.AccentColor,
                 IsActive = _activeCollectionId == collection.Id,
                 IsSmart = collection.IsSmart,
+                IconGlyph = collection.IconGlyph,
+                IsPinned = collection.IsPinned,
+                IsFirstUnpinned = firstUnpinned,
+                ProgressFraction = progress,
+                ProgressText = progress is double f && _collectionProgress.TryGetValue(collection.Id, out var pp)
+                    ? $"{Math.Round(f * 100):0}% read ({pp.Read} of {pp.Total})"
+                    : null,
                 DeleteConfirm = new TwoStepConfirm(() => DeleteCollection(cid), idleLabel: "Delete", armedLabel: "Confirm delete?"),
             };
         }).ToList());
+
+        // Inside a collection the covers carry no membership dots; the banner describes the active collection instead.
+        CollectionBadgeStore.Suppressed = _activeCollectionId is not null;
+        RefreshCollectionBanner();
 
         bool wasCollectionView = IsCollectionView;
         // Reads the already-resolved manual+rule-matched union (_activeCollectionMembers), not raw
@@ -2036,10 +2091,211 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             return;
         }
 
+        // Pinned and unpinned are separate groups: a move never crosses the boundary.
+        if (Collections[index].IsPinned != Collections[newIndex].IsPinned)
+        {
+            return;
+        }
+
         (ids[index], ids[newIndex]) = (ids[newIndex], ids[index]);
 
         using var context = PaperbunkrDb.CreateContext();
         CollectionService.Reorder(context, ids);
+        ReloadAfterChange();
+    }
+
+    /// <summary>
+    /// Drag-and-drop reorder in the sidebar: puts <paramref name="dragged"/> where <paramref name="target"/> is. Only inside one group (pinned or
+    /// unpinned); a drop onto the other group does nothing.
+    /// </summary>
+    public void MoveCollectionTo(CollectionSummary dragged, CollectionSummary target)
+    {
+        if (dragged.Id == target.Id || dragged.IsPinned != target.IsPinned)
+        {
+            return;
+        }
+
+        var ids = Collections.Select(c => c.Id).ToList();
+        int from = ids.IndexOf(dragged.Id);
+        int to = ids.IndexOf(target.Id);
+        if (from < 0 || to < 0)
+        {
+            return;
+        }
+
+        ids.RemoveAt(from);
+        ids.Insert(to, dragged.Id);
+
+        using var context = PaperbunkrDb.CreateContext();
+        CollectionService.Reorder(context, ids);
+        ReloadAfterChange();
+    }
+
+    // --- Collection banner + empty state (docs/superpowers/specs/2026-11-06-collection-surfaces-design.md) ---
+
+    /// <summary>The banner's content for the active collection; null while "All Series" (or anything else) is active.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBannerVisible))]
+    private CollectionBannerState? _activeCollectionBanner;
+
+    public bool IsBannerVisible => ActiveCollectionBanner is not null;
+
+    /// <summary>True when the active collection has no members at all (manual items and rule matches); a filter that hides everything does not count.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowEmptyState))]
+    [NotifyPropertyChangedFor(nameof(ShowCollectionEmptyState))]
+    private bool _isActiveCollectionEmpty;
+
+    /// <summary>The description is capped at two lines until expanded.</summary>
+    [ObservableProperty]
+    private bool _isBannerDescriptionExpanded;
+
+    [RelayCommand]
+    private void ToggleBannerDescription() => IsBannerDescriptionExpanded = !IsBannerDescriptionExpanded;
+
+    /// <summary>Scrolled further than this, the banner turns slim (docs/superpowers/specs/2026-11-06-collection-icons-and-slim-banner-design.md); it is full again only back at the top.</summary>
+    public const double BannerSlimScrollThreshold = 24;
+
+    /// <summary>The user's chevron: keep the banner slim even at the top. Stored in <c>AppSettings.CollectionBannerSlim</c>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBannerSlim))]
+    private bool _isBannerSlimPinned;
+
+    partial void OnIsBannerSlimPinnedChanged(bool value)
+    {
+        try
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            context.GetOrCreateAppSettings().CollectionBannerSlim = value;
+            context.SaveChanges();
+        }
+        catch (Exception ex) when (ex is Microsoft.Data.Sqlite.SqliteException or InvalidOperationException or Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            // The switch still works for this session.
+        }
+    }
+
+    /// <summary>True while the visible list is scrolled away from the top.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBannerSlim))]
+    private bool _isBannerScrolled;
+
+    /// <summary>The banner shows its one-line form: pinned slim, or scrolled.</summary>
+    public bool IsBannerSlim => IsBannerSlimPinned || IsBannerScrolled;
+
+    [RelayCommand]
+    private void ToggleBannerSlim() => IsBannerSlimPinned = !IsBannerSlimPinned;
+
+    /// <summary>The view reports the visible list's vertical offset; slim past <see cref="BannerSlimScrollThreshold"/>, full only at the top, so it does not flicker in between.</summary>
+    public void ReportListScroll(double offsetY)
+    {
+        if (offsetY > BannerSlimScrollThreshold)
+        {
+            IsBannerScrolled = true;
+        }
+        else if (offsetY <= 0.5)
+        {
+            IsBannerScrolled = false;
+        }
+    }
+
+    [RelayCommand]
+    private void EditActiveCollection()
+    {
+        if (_activeCollectionId is int id)
+        {
+            _openCollectionProperties(id);
+        }
+    }
+
+    [RelayCommand]
+    private void TogglePinActiveCollection()
+    {
+        if (ActiveCollectionBanner is not { } banner)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        CollectionService.SetPinned(context, banner.CollectionId, !banner.IsPinned);
+        ReloadAfterChange();
+    }
+
+    /// <summary>Rebuilds the banner and the empty flag from the already-loaded collection and its resolved members (one small read for the cover and the progress).</summary>
+    private void RefreshCollectionBanner()
+    {
+        var collection = _activeCollectionId is int id ? _allCollections.FirstOrDefault(c => c.Id == id) : null;
+        if (collection is null)
+        {
+            ActiveCollectionBanner = null;
+            IsActiveCollectionEmpty = false;
+            return;
+        }
+
+        IsActiveCollectionEmpty = _activeCollectionMembers.Count == 0;
+
+        double? fraction = null;
+        string? readText = null;
+        LibraryTile? coverTile = null;
+        Avalonia.Media.Imaging.Bitmap? manual = null;
+        try
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            if (CollectionProgressResolver.GetProgress(context, new[] { collection.Id }).TryGetValue(collection.Id, out var progress) && progress.Total > 0)
+            {
+                fraction = progress.Fraction;
+                readText = $"{Math.Round(progress.Fraction * 100):0}% read";
+            }
+
+            var hint = CollectionResolver.GetCoverHint(context, collection.Id);
+            if (hint.ManualPath is { } path && System.IO.File.Exists(path))
+            {
+                manual = new Avalonia.Media.Imaging.Bitmap(path);
+            }
+            else if (hint.FirstMember is { } first)
+            {
+                coverTile = LibraryTile.FromMember(first);
+            }
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or NotSupportedException)
+        {
+            // The banner still shows without a cover or a percentage.
+        }
+
+        if (ActiveCollectionBanner?.CollectionId != collection.Id)
+        {
+            IsBannerScrolled = false; // another collection opens at the top, full (unless pinned slim)
+        }
+
+        ActiveCollectionBanner = new CollectionBannerState
+        {
+            CollectionId = collection.Id,
+            Name = collection.Name,
+            IconGlyph = collection.IconGlyph,
+            AccentColor = collection.AccentColor,
+            IsPinned = collection.IsPinned,
+            IsSmart = collection.IsSmart,
+            Description = collection.Description,
+            StatChips = CollectionBannerState.BuildStats(_activeCollectionMembers),
+            ReadText = readText,
+            ReadFraction = fraction,
+            CoverTile = coverTile,
+            ManualCover = manual,
+            CoverBrush = coverTile?.CoverBrush ?? SeriesCardSample.CoverBrushFor(collection.Name),
+        };
+    }
+
+    /// <summary>Pin/unpin from the sidebar's hover action.</summary>
+    [RelayCommand]
+    private void TogglePinCollection(CollectionSummary? summary)
+    {
+        if (summary is null)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        CollectionService.SetPinned(context, summary.Id, !summary.IsPinned);
         ReloadAfterChange();
     }
 
@@ -3274,7 +3530,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [RelayCommand] private void ClearTrackedFilter() => FilterTrackedOnly = false;
     [RelayCommand] private void ClearSearchScope() => SearchMode = SearchMode.All;
 
-    public bool ShowEmptyState => !IsLoadingLibrary && !HasAnyResults;
+    public bool ShowEmptyState => !IsLoadingLibrary && !HasAnyResults && !IsActiveCollectionEmpty;
+
+    /// <summary>The empty-collection card (docs/superpowers/specs/2026-11-06-collection-surfaces-design.md); the generic empty state yields to it.</summary>
+    public bool ShowCollectionEmptyState => !IsLoadingLibrary && IsActiveCollectionEmpty;
 
     public string EmptyStateMessage
     {
@@ -5220,6 +5479,24 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private bool _showUnreadBadge = true;
 
     partial void OnShowUnreadBadgeChanged(bool value) => SaveLibrarySettings();
+
+    /// <summary>
+    /// The collection dots on covers (docs/superpowers/specs/2026-11-06-looks-and-presets-design.md moved this switch here from Preferences, so every cover badge is
+    /// switched in the View menu). Stored in <c>AppSettings.ShowCollectionBadges</c>; a change reloads so the badge store fills or clears.
+    /// </summary>
+    [ObservableProperty]
+    private bool _showCollectionBadges;
+
+    partial void OnShowCollectionBadgesChanged(bool value)
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.GetOrCreateAppSettings().ShowCollectionBadges = value;
+            context.SaveChanges();
+        }
+
+        ReloadAfterChange();
+    }
 
     [ObservableProperty]
     private bool _showPublisherBadge;

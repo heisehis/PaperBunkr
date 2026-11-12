@@ -27,7 +27,7 @@
     <Style Selector="Button.primary">
         <Setter Property="Background" Value="{DynamicResource PbButtonPrimaryBackground}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbButtonPrimaryBorder}" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="{DynamicResource PbButtonPrimaryBorderThickness}" />
         <Setter Property="Foreground" Value="{DynamicResource PbButtonPrimaryForeground}" />
         <Setter Property="CornerRadius" Value="{DynamicResource PbButtonPrimaryRadius}" />
         <Setter Property="Padding" Value="12,0" />
@@ -46,7 +46,7 @@
     <Style Selector="Button.secondary">
         <Setter Property="Background" Value="{DynamicResource PbButtonSecondaryBackground}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbButtonSecondaryBorder}" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="{DynamicResource PbButtonSecondaryBorderThickness}" />
         <Setter Property="Foreground" Value="{DynamicResource PbButtonSecondaryForeground}" />
         <Setter Property="CornerRadius" Value="{DynamicResource PbButtonSecondaryRadius}" />
         <Setter Property="Padding" Value="12,0" />
@@ -65,7 +65,7 @@
     <Style Selector="Button.ghost">
         <Setter Property="Background" Value="{DynamicResource PbButtonGhostBackground}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbButtonGhostBorder}" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="{DynamicResource PbButtonGhostBorderThickness}" />
         <Setter Property="Foreground" Value="{DynamicResource PbButtonGhostForeground}" />
         <Setter Property="CornerRadius" Value="{DynamicResource PbButtonGhostRadius}" />
         <Setter Property="Padding" Value="12,0" />
@@ -81,6 +81,17 @@
         <Setter Property="BorderBrush" Value="{DynamicResource PbButtonGhostBorderHover}" />
     </Style>
 
+
+    <!-- A theme's fixed button shadow (design 2026-11-09 Q14, e.g. Risograph's off-register print). Empty by default; never transitioned. -->
+    <Style Selector="Button.primary /template/ ContentPresenter">
+        <Setter Property="BoxShadow" Value="{DynamicResource PbButtonPrimaryShadow}" />
+    </Style>
+    <Style Selector="Button.secondary /template/ ContentPresenter">
+        <Setter Property="BoxShadow" Value="{DynamicResource PbButtonSecondaryShadow}" />
+    </Style>
+    <Style Selector="Button.ghost /template/ ContentPresenter">
+        <Setter Property="BoxShadow" Value="{DynamicResource PbButtonGhostShadow}" />
+    </Style>
 
     <!-- ============ 1. Buttons: size, danger, toggle state, icon button ============ -->
     <!-- Compact sizes (Q7): 28 tall, 22 with .sm. MinHeight rather than Height so a label that wraps still fits. -->
@@ -286,9 +297,18 @@
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="Button.sideItemButton.active /template/ ContentPresenter, Button.prefNavItem.active /template/ ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="Background" Value="{DynamicResource PbSelectionBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <!-- Sidebar style (docs/superpowers/specs/2026-11-06-personalization-design.md): the sidebar host carries .sidebarPill or .sidebarTint from the user's
+         setting (bound, never by removing a Style). Pill drops the 3 px bar and rounds the row; Tint drops the bar only. The SemiBold label stays the
+         non-colour cue in every style. Only selection state is touched here, never a family's size or padding. -->
+    <Style Selector=".sidebarPill Button.sideItemButton">
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+    </Style>
+    <Style Selector=".sidebarPill Button.sideItemButton.active /template/ ContentPresenter, .sidebarTint Button.sideItemButton.active /template/ ContentPresenter">
+        <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <!-- A row label trims, and keeps 8 px from a trailing count pill: untrimmed, a long name drew under the pill (Smart Lists sidebar). -->
     <Style Selector="TextBlock.sideItemLabel">
@@ -308,7 +328,7 @@
         <Setter Property="Padding" Value="10,0" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbControlBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="{DynamicResource PbChipBorderThickness}" />
         <Setter Property="CornerRadius" Value="{DynamicResource PbChipRadius}" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMeta}" />
@@ -456,7 +476,7 @@
     <Style Selector="Border.dropdown">
         <Setter Property="Background" Value="{DynamicResource PbPanelFloatingBackground}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbPanelFloatingBorder}" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="{DynamicResource PbPanelFloatingBorderThickness}" />
         <Setter Property="CornerRadius" Value="{DynamicResource PbPanelFloatingRadius}" />
         <Setter Property="Padding" Value="4" />
         <Setter Property="BoxShadow" Value="{DynamicResource PbElevationShadow}" />
@@ -485,7 +505,7 @@
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="Button.menuRow.active /template/ ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="Background" Value="{DynamicResource PbSelectionBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
     </Style>
 

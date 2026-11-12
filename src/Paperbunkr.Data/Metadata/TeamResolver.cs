@@ -60,22 +60,23 @@ public static class TeamResolver
     }
 
     /// <summary>Backfills the whole library - idempotent, safe to re-run.</summary>
-    public static void RebuildAll(PaperbunkrDbContext context)
+    public static void RebuildAll(PaperbunkrDbContext context, System.Threading.CancellationToken cancellationToken = default)
     {
         var issueIds = context.Issues
-            .Where(i => i.Teams != null && i.Teams != "")
+            .Where(i => (i.Teams != null && i.Teams != "") || context.TeamAppearances.Any(a => a.IssueId == i.Id))
             .Select(i => i.Id)
             .ToList();
 
         foreach (int id in issueIds)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             SyncFromIssue(context, id);
         }
     }
 
     private static void PruneOrphans(PaperbunkrDbContext context)
     {
-        var orphans = context.Teams.Where(t => !t.Appearances.Any()).ToList();
+        var orphans = context.Teams.Where(t => !t.Appearances.Any() && t.CustomImagePath == null).ToList();
         if (orphans.Count > 0)
         {
             // See CharacterResolver.PruneOrphans: a dead row must not keep owning the provider id.

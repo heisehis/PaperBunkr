@@ -80,6 +80,8 @@ public sealed partial class SharingSettingsViewModel : ObservableObject, IDispos
     private readonly Action<Action> _post;
     private readonly Func<TimeSpan, Task<IReadOnlyList<DiscoveredHost>>> _browse;
     private readonly Func<Task<IReadOnlyList<string>>> _publicNetworks;
+    private readonly Func<IReadOnlyList<System.Net.IPAddress>> _lanAddresses;
+    private string _connectAddressText = string.Empty;
     private bool _loading;
     private ProbeResult? _pendingProbe;
     private string? _pendingPassword;
@@ -88,9 +90,11 @@ public sealed partial class SharingSettingsViewModel : ObservableObject, IDispos
     /// <param name="browse">LAN discovery; defaults to mDNS. Tests pass a fake so they don't depend on multicast.</param>
     public SharingSettingsViewModel(ShareHostService host, RemoteLibraryService remote, Func<PaperbunkrDbContext> contextFactory, Action<Action>? post = null,
         Func<TimeSpan, Task<IReadOnlyList<DiscoveredHost>>>? browse = null,
-        Func<Task<IReadOnlyList<string>>>? publicNetworks = null)
+        Func<Task<IReadOnlyList<string>>>? publicNetworks = null,
+        Func<IReadOnlyList<System.Net.IPAddress>>? lanAddresses = null)
     {
         _publicNetworks = publicNetworks ?? (() => NetworkProfileProbe.GetPublicNetworksAsync());
+        _lanAddresses = lanAddresses ?? LanAddresses.Current;
         _browse = browse ?? (d => ShareDiscovery.BrowseAsync(d));
         _host = host;
         _remote = remote;
@@ -161,6 +165,28 @@ public sealed partial class SharingSettingsViewModel : ObservableObject, IDispos
         : "";
 
     public bool IsHostRunning => _host.IsRunning;
+
+    /// <summary>
+    /// The address another computer types into "Add remote library" - this machine's real LAN address(es) and the port. The settings
+    /// never showed it, so users guessed (or discovery offered a virtual adapter), and the other side only ever saw "could not connect".
+    /// Empty while sharing is off. Refreshed with the other host properties.
+    /// </summary>
+    public string ConnectAddressText => _connectAddressText;
+
+    public bool HasConnectAddress => _connectAddressText.Length > 0;
+
+    private string BuildConnectAddressText()
+    {
+        if (!_host.IsRunning)
+        {
+            return string.Empty;
+        }
+
+        IReadOnlyList<System.Net.IPAddress> addresses = _lanAddresses();
+        return addresses.Count == 0
+            ? "No network address found. Check that this computer is connected to your network."
+            : "Other computers connect to " + string.Join(" or ", addresses.Select(a => $"{a}:{_host.Port}"));
+    }
 
     /// <summary>Set when Windows classes an active network as Public. A warning only - sharing is never blocked by it.</summary>
     [ObservableProperty]
@@ -557,6 +583,9 @@ public sealed partial class SharingSettingsViewModel : ObservableObject, IDispos
 
     private void RaiseHostProperties()
     {
+        _connectAddressText = BuildConnectAddressText();
+        OnPropertyChanged(nameof(ConnectAddressText));
+        OnPropertyChanged(nameof(HasConnectAddress));
         OnPropertyChanged(nameof(HostStatus));
         OnPropertyChanged(nameof(ClientsText));
         OnPropertyChanged(nameof(IsHostRunning));

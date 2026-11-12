@@ -30,6 +30,10 @@ further triage.
 
 ## Headline findings (read this part first)
 
+**2026-11-10 — column-browser parity gap (not scheduled):** CE's `SearchBrowserControl` offers Writers, Characters, Teams,
+Main Characters/Teams and Story Arcs columns. Paperbunkr's entity pages, links and group-by fields do not implement that browser.
+Its multi-value selections are distinct from CE's single-key Writer grouping; see the Series structure/discovery spec §7–8.
+
 1. **Device/portable-reader sync (`Edit > Devices`, `File > Synchronize Devices`,
    wireless discovery in Preferences > Advanced) is already decided: excluded.**
    onboarding.md §15's resolved-open-items list states the CE `Config.xml`'s WiFi-sync settings

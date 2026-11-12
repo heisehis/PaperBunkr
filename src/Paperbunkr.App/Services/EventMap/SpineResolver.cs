@@ -29,6 +29,8 @@ public static class SpineResolver
             return new SpineChoice(saved, SpineSource.User, autoMatch);
         }
 
+        int? relation = EventSpineResolver.FindRelationMatch(source.Rows.Select(r => (r.SeriesId, r.SeriesName)).ToList(), source.UserRelations);
+        if (relation is int related) return new SpineChoice(related, SpineSource.Relation, autoMatch);
         return autoMatch is int auto
             ? new SpineChoice(auto, SpineSource.Auto, autoMatch)
             : new SpineChoice(null, SpineSource.None, null);

@@ -134,7 +134,7 @@ public sealed class ComicVineSource : IReadingListSource
             Title: NullIfBlank(node["name"]?.GetValue<string>()),
             Summary: NullIfBlank(node["deck"]?.GetValue<string>()),
             ComicVineIssueId: NullIfBlank(node["id"]?.ToString()),
-            ComicVineSeriesId: NullIfBlank(node["volume"]?["id"]?.ToString()));
+            ComicVineSeriesId: NullIfBlank(node["volume"]?["id"]?.ToString()), StoreDate: storeDate, CoverDate: coverDate);
     }
 
     private static string? NullIfBlank(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
@@ -142,7 +142,7 @@ public sealed class ComicVineSource : IReadingListSource
     public async Task<ArcOverviewInfo?> GetArcOverviewAsync(string arcId, CancellationToken cancellationToken)
     {
         string url = $"{BaseUrl}/story_arc/4045-{Uri.EscapeDataString(arcId)}/?api_key={Uri.EscapeDataString(_apiKey)}" +
-                      "&format=json&field_list=deck,description,image";
+                      "&format=json&field_list=name,deck,description,image";
         var root = await GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
         var result = root?["results"];
         if (result is null)
@@ -155,7 +155,8 @@ public sealed class ComicVineSource : IReadingListSource
         string? description = result["description"]?.GetValue<string>();
         description = string.IsNullOrEmpty(description) ? result["deck"]?.GetValue<string>() : StripHtml(description);
 
-        return new ArcOverviewInfo(description, result["image"]?["medium_url"]?.GetValue<string>());
+        return new ArcOverviewInfo(description, result["image"]?["medium_url"]?.GetValue<string>(),
+            Name: result["name"]?.GetValue<string>(), Deck: result["deck"]?.GetValue<string>());
     }
 
     private static string StripHtml(string html)

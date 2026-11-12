@@ -24,7 +24,8 @@ public sealed class GcdInstallException(string message) : Exception(message);
 public sealed class GcdDataInstaller
 {
     /// <summary>The manifest in the data repo (<see cref="ProjectLinks.GcdDataRepository"/>), so new data can be published without an app release.</summary>
-    public const string DefaultManifestUrl = "https://raw.githubusercontent.com/heisehis/paperbunkr-gcd-data/main/gcd-data.json";
+    public const string DefaultManifestUrl = "https://raw.githubusercontent.com/heisehis/paperbunkr-gcd-data/main/gcd-data-v2.json";
+    public const string LegacyManifestUrl = "https://raw.githubusercontent.com/heisehis/paperbunkr-gcd-data/main/gcd-data.json";
 
     private static readonly Lazy<HttpClient> SharedHttp = new(() =>
     {
@@ -58,8 +59,15 @@ public sealed class GcdDataInstaller
     }
 
     /// <summary>True when <paramref name="manifest"/> is newer data than <paramref name="installedDumpDate"/> (dates compare as text).</summary>
-    public static bool IsNewer(GcdManifest manifest, string? installedDumpDate) =>
-        installedDumpDate is null || string.CompareOrdinal(manifest.DumpDate, installedDumpDate) > 0;
+    public static bool IsNewer(GcdManifest manifest, string? installedDumpDate, int installedSchema = 1) =>
+        manifest.SchemaVersion >= installedSchema && (installedDumpDate is null || string.CompareOrdinal(manifest.DumpDate, installedDumpDate) > 0
+        || (manifest.DumpDate == installedDumpDate && manifest.SchemaVersion > installedSchema));
+
+    public int InstalledSchema()
+    {
+        using var store = GcdDataStore.TryOpen(ExtractPath);
+        return store?.SchemaVersion ?? 0;
+    }
 
     /// <summary>The manifest built into this version of the app (the repo's <c>gcd-data.json</c> when it was built), if any.</summary>
     public static GcdManifest? BundledManifest()
@@ -83,6 +91,11 @@ public sealed class GcdDataInstaller
             using var response = await _http.GetAsync(_manifestUrl, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
+                if (_manifestUrl == DefaultManifestUrl)
+                {
+                    using var fallback = await _http.GetAsync(LegacyManifestUrl, cancellationToken).ConfigureAwait(false);
+                    return fallback.IsSuccessStatusCode ? Validate(await fallback.Content.ReadFromJsonAsync<GcdManifest>(cancellationToken).ConfigureAwait(false)) : null;
+                }
                 return null;
             }
 
@@ -107,7 +120,7 @@ public sealed class GcdDataInstaller
     }
 
     private static GcdManifest? Validate(GcdManifest? manifest) =>
-        manifest is { SchemaVersion: GcdExtractor.SchemaVersion, SizeBytes: > 0, Sha256.Length: 64, DumpDate.Length: > 0 }
+        manifest is { SchemaVersion: >= 1 and <= GcdExtractor.SchemaVersion, SizeBytes: > 0, Sha256.Length: 64, DumpDate.Length: > 0 }
         && Uri.TryCreate(manifest.Url, UriKind.Absolute, out var url) && url.Scheme == Uri.UriSchemeHttps
             ? manifest
             : null;
@@ -185,7 +198,7 @@ public sealed class GcdDataInstaller
 
             using (var check = GcdDataStore.TryOpen(staged))
             {
-                if (check is null)
+                if (check is null || check.SchemaVersion != manifest.SchemaVersion || check.DumpDate != manifest.DumpDate)
                 {
                     throw new GcdInstallException("The downloaded data is for a different version of Paperbunkr, so it wasn't installed.");
                 }

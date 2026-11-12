@@ -25,6 +25,43 @@ public class DetailBandViewModelTests
     }
 
     [Fact]
+    public void EntityChips_AreHandedToTheImageFill_AfterALoad_AndAgainWhenAnImageChanges()
+    {
+        var fills = new List<IReadOnlyList<TagPillViewModel>>();
+        var vm = new DetailBandViewModel
+        {
+            FillChipImages = chips => { fills.Add(chips); return System.Threading.Tasks.Task.CompletedTask; },
+        };
+        var issue = new Issue { Writer = "Chris Claremont", Penciller = "John Byrne", Characters = "Storm" };
+
+        vm.LoadIssue(issue);
+
+        var filled = Assert.Single(fills);
+        Assert.Equal(new[] { "Chris Claremont", "John Byrne", "Storm" }, filled.Select(c => c.Value).OrderBy(v => v).ToArray());
+        Assert.Equal(ComicMetadataEntityKind.Creator, filled.Single(c => c.Value == "John Byrne").EntityKind);
+        Assert.Equal(ComicMetadataEntityKind.Character, filled.Single(c => c.Value == "Storm").EntityKind);
+
+        Paperbunkr.App.Services.EntityChipImages.RaiseChanged();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(2, fills.Count);
+    }
+
+    [Fact]
+    public void ChipImagePath_IsObservable_SoALateImageShows()
+    {
+        var chip = new TagPillViewModel("Chris Claremont", null, IssueTagWeight.Unset, _ => { }, null) { EntityKind = ComicMetadataEntityKind.Creator };
+        var changed = new List<string?>();
+        chip.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        chip.ImagePath = "C:/cache/claremont.jpg";
+
+        Assert.True(chip.HasImage);
+        Assert.Contains(nameof(TagPillViewModel.ImagePath), changed);
+        Assert.Contains(nameof(TagPillViewModel.HasImage), changed);
+    }
+
+    [Fact]
     public void JunkTagPattern_MatchesOnlyComicVineIds()
     {
         Assert.Matches(DetailBandViewModel.JunkTagPattern, "CVDB1073108");

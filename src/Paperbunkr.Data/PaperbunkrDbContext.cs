@@ -10,7 +10,7 @@ namespace Paperbunkr.Data;
 /// EF Core context for Paperbunkr's SQLite library database (docs/onboarding.md §5). Replaces
 /// CE's single whole-library <c>ComicDb.xml</c> (fully loaded/rewritten on every save).
 /// </summary>
-public class PaperbunkrDbContext : DbContext
+public partial class PaperbunkrDbContext : DbContext
 {
     public DbSet<Series> Series => Set<Series>();
 
@@ -272,10 +272,12 @@ public class PaperbunkrDbContext : DbContext
     /// </summary>
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        PrepareEventMetadataWrites();
         QueueReadingListTagRefresh();
         AnnounceUnmanagedReadingListWrites();
         AnnounceSeriesStatusChanges();
         StageMangaReclassifyRestores();
+        QueueSeriesRatingRecompute();
 
         const int maxAttempts = 3;
         for (int attempt = 1; ; attempt++)
@@ -319,12 +321,58 @@ public class PaperbunkrDbContext : DbContext
         }
     }
 
+    /// <summary>
+    /// Keeps <see cref="Series.Rating"/> the average of its issues' ratings (docs/superpowers/specs/2026-09-18-per-tracker-score-and-finish-date-design.md):
+    /// an issue added or removed with a rating, re-rated, or moved to another series recomputes the series it left and the one it joined, after the save.
+    /// Done here so every writer (Library stars, Quick Rate, the editors, Undo, imports, plugins) is covered without remembering it. A score pulled in
+    /// with a tracker's "Use this score" stays until one of the series' issue ratings next changes.
+    /// </summary>
+    private void QueueSeriesRatingRecompute()
+    {
+        HashSet<int>? seriesIds = null;
+        foreach (var entry in ChangeTracker.Entries<Issue>())
+        {
+            var rating = entry.Property(i => i.Rating);
+            var series = entry.Property(i => i.SeriesId);
+            switch (entry.State)
+            {
+                case EntityState.Added when entry.Entity.Rating is > 0:
+                    (seriesIds ??= new()).Add(entry.Entity.SeriesId);
+                    break;
+                case EntityState.Deleted when rating.OriginalValue is > 0:
+                    (seriesIds ??= new()).Add(series.OriginalValue);
+                    break;
+                case EntityState.Modified when (rating.IsModified && rating.OriginalValue != rating.CurrentValue)
+                                               || (series.IsModified && series.OriginalValue != series.CurrentValue && (rating.CurrentValue is > 0 || rating.OriginalValue is > 0)):
+                    (seriesIds ??= new()).Add(series.CurrentValue);
+                    (seriesIds ??= new()).Add(series.OriginalValue);
+                    break;
+            }
+        }
+
+        if (seriesIds is null)
+        {
+            return;
+        }
+
+        // Added issues and series only have their real ids once the save has run, so read them again then.
+        var addedIssues = ChangeTracker.Entries<Issue>().Where(e => e.State == EntityState.Added && e.Entity.Rating is > 0).Select(e => e.Entity).ToList();
+        RunAfterSave(() =>
+        {
+            seriesIds.UnionWith(addedIssues.Select(i => i.SeriesId));
+            seriesIds.RemoveWhere(id => id <= 0);
+            Metadata.SeriesRatingResolver.Apply(this, seriesIds);
+        });
+    }
+
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        PrepareEventMetadataWrites();
         QueueReadingListTagRefresh();
         AnnounceUnmanagedReadingListWrites();
         AnnounceSeriesStatusChanges();
         StageMangaReclassifyRestores();
+        QueueSeriesRatingRecompute();
         int written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).ConfigureAwait(false);
         RunAfterSaveActions();
         return written;
@@ -655,6 +703,8 @@ public class PaperbunkrDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        ConfigureEventMetadata(modelBuilder);
+        ConfigureEventArcSnapshots(modelBuilder);
 
         // Enum storage choice: store as their string name (via HasConversion<string>()), not the
         // underlying int. Costs a few bytes per row but keeps `sqlite3 paperbunkr.db` / ad-hoc
@@ -2005,6 +2055,9 @@ public class PaperbunkrDbContext : DbContext
         modelBuilder.Entity<AppSettings>(builder =>
         {
             builder.HasKey(a => a.Id);
+            builder.Property(a => a.EventMapRelayPacked).HasDefaultValue(true);
+            builder.Property(a => a.EventMapProgressLine).HasDefaultValue(true);
+            builder.Property(a => a.EventMapShowMissing).HasDefaultValue(false);
             builder.Property(a => a.ActiveThemeKey).IsRequired().HasDefaultValue("default");
             builder.Property(a => a.TrueBlackDark).HasDefaultValue(false);
             // Same enum-as-string HasSentinel treatment as PageTransitionStyle - Off is both the CLR

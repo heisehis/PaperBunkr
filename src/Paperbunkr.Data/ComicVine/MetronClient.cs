@@ -72,7 +72,7 @@ public static class MetronHttp
 /// <c>series/?name=</c> (paged, 100 per page), <c>series/{id}/</c>, <c>series/{id}/issue_list/</c>, <c>issue/{id}/</c>; API token or legacy HTTP Basic login (<see cref="MetronAuth"/>).
 /// A Metron series has no cover image; its issues do.
 /// </summary>
-public sealed class MetronClient : IComicProvider, IIssueFirstSeriesSearch, IPullListSource, Scraping.IStoryArcSource, IComicIssueLookup, IComicSeriesLookup, ISeriesChangeSource, Metadata.IMetronEventLists, Metadata.IMetronUniverses, Metadata.SeriesConnector.IMetronSeriesLinks
+public sealed class MetronClient : IEntityProfileSource, IComicProvider, IIssueFirstSeriesSearch, IPullListSource, Scraping.IStoryArcSource, IComicIssueLookup, IComicSeriesLookup, ISeriesChangeSource, Metadata.IMetronEventLists, Metadata.IMetronUniverses, Metadata.SeriesConnector.IMetronSeriesLinks
 {
     private const string BaseUrl = "https://metron.cloud/api";
     private const int MaxPages = 30;
@@ -355,6 +355,24 @@ public sealed class MetronClient : IComicProvider, IIssueFirstSeriesSearch, IPul
         return results.Values.ToList();
     }
 
+    /// <summary>A character, team or creator record (docs/superpowers/specs/2026-11-10-series-structure-and-discovery-design.md §3.3). Null when Metron has no such record or kind.</summary>
+    public async Task<EntityProfile?> GetEntityProfileAsync(ComicMetadataEntityKind kind, string externalId, CancellationToken cancellationToken)
+    {
+        if (EntityProfileParser.MetronPath(kind) is not { } path || !int.TryParse(externalId, out int id))
+        {
+            return null;
+        }
+
+        try
+        {
+            return EntityProfileParser.FromMetron(await GetAsync($"{BaseUrl}/{path}/{id}/", cancellationToken).ConfigureAwait(false));
+        }
+        catch (ComicVineException ex) when (ex.ApiStatusCode == 101)
+        {
+            return null;
+        }
+    }
+
     public async Task<Metadata.MetronUniverseInfo?> GetUniverseAsync(int universeId, CancellationToken cancellationToken)
     {
         JsonNode root;
@@ -611,6 +629,8 @@ public sealed class MetronClient : IComicProvider, IIssueFirstSeriesSearch, IPul
         var credits = new List<ComicVineCredit>();
         foreach (var credit in (o["credits"] as JsonArray)?.OfType<JsonObject>() ?? Enumerable.Empty<JsonObject>())
         {
+            // Metron's CreditReadSerializer maps this id to creator.id, independently of role[].id.
+            int? creatorId = credit["id"] is { } creatorNode && int.TryParse(creatorNode.ToString(), out int parsedCreatorId) ? parsedCreatorId : null;
             var name = credit["creator"]?.GetValue<string>();
             if (string.IsNullOrWhiteSpace(name))
             {
@@ -625,15 +645,14 @@ public sealed class MetronClient : IComicProvider, IIssueFirstSeriesSearch, IPul
                 if (roleName is not null && RoleMap.TryGetValue(roleName.Trim(), out var mapped))
                 {
                     // One credit can carry several roles (writer and artist); each is its own credit line so every field is filled.
-                    // Metron's credit objects carry no separate creator id, only a role id (confirmed during design) - CreatorExternalId stays null here.
-                    credits.Add(new ComicVineCredit(name, mapped, RoleExternalId: roleId));
+                    credits.Add(new ComicVineCredit(name, mapped, CreatorExternalId: creatorId, RoleExternalId: roleId));
                     field ??= mapped;
                 }
             }
 
             if (field is null)
             {
-                credits.Add(new ComicVineCredit(name, null));
+                credits.Add(new ComicVineCredit(name, null, CreatorExternalId: creatorId));
             }
         }
 

@@ -85,6 +85,22 @@ public partial class ThemeService
         return context.GetOrCreateAppSettings().ActiveThemeKey;
     }
 
+    /// <summary>
+    /// Whether a theme key is the Matrix look that has the falling-glyph rain: the Matrix family's original (dark) variant, saved either as the bare
+    /// <c>matrix</c> or as <c>matrix:dark</c>. Its light half (<c>matrix:printout</c>) has no rain (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md Q16).
+    /// </summary>
+    public static bool IsMatrixRainTheme(string? themeKey)
+    {
+        if (string.IsNullOrEmpty(themeKey))
+        {
+            return false;
+        }
+
+        var (family, variant) = Theming.ThemeDocument.SplitKey(themeKey);
+        return string.Equals(family, "matrix", StringComparison.OrdinalIgnoreCase)
+            && (variant is null || string.Equals(variant, "dark", StringComparison.OrdinalIgnoreCase));
+    }
+
     private IPlatformSettings? _subscribedPlatformSettings;
     private EventHandler<PlatformColorValues>? _followSystemHandler;
     private DispatcherTimer? _scheduledCheckTimer;
@@ -319,13 +335,13 @@ public partial class ThemeService
     }
 
     /// <summary>The inside counterpart of <see cref="BuildGlowRing"/>: same colour and tier, drawn within the control's own edge.</summary>
-    public static BoxShadows BuildGlowRingInset(Color glowColor, int tier) =>
+    public static BoxShadows BuildGlowRingInset(Color glowColor, int tier, double thickness = 1) =>
         NormalizeGlowTier(tier) switch
         {
             GlowTierOff => default,
-            GlowTierSubtle => new BoxShadows(new BoxShadow { Spread = 1.5, IsInset = true, Color = Color.FromArgb(0x66, glowColor.R, glowColor.G, glowColor.B) }),
-            GlowTierVivid => new BoxShadows(new BoxShadow { Spread = 2, IsInset = true, Color = Color.FromArgb(0xE6, glowColor.R, glowColor.G, glowColor.B) }),
-            _ => new BoxShadows(new BoxShadow { Spread = 2, IsInset = true, Color = Color.FromArgb(0x99, glowColor.R, glowColor.G, glowColor.B) }),
+            GlowTierSubtle => new BoxShadows(new BoxShadow { Spread = 1.5 * thickness, IsInset = true, Color = Color.FromArgb(0x66, glowColor.R, glowColor.G, glowColor.B) }),
+            GlowTierVivid => new BoxShadows(new BoxShadow { Spread = 2 * thickness, IsInset = true, Color = Color.FromArgb(0xE6, glowColor.R, glowColor.G, glowColor.B) }),
+            _ => new BoxShadows(new BoxShadow { Spread = 2 * thickness, IsInset = true, Color = Color.FromArgb(0x99, glowColor.R, glowColor.G, glowColor.B) }),
         };
 
     /// <summary>Glow-intensity tiers (docs/superpowers/specs/2026-09-21-cosmetics-pitch-design.md #3).
@@ -342,14 +358,14 @@ public partial class ThemeService
 
     /// <summary>The <c>PbGlowRing</c> value for a tier: Off is empty (no ring), Subtle a thinner fainter ring,
     /// Normal the original 4px ring at 0x99 alpha, Vivid a stronger ring plus a soft halo.</summary>
-    public static BoxShadows BuildGlowRing(Color glowColor, int tier)
+    public static BoxShadows BuildGlowRing(Color glowColor, int tier, double thickness = 1)
     {
-        static BoxShadow Ring(Color c, byte alpha, double spread, double blur = 0) => new()
+        BoxShadow Ring(Color c, byte alpha, double spread, double blur = 0) => new()
         {
             OffsetX = 0,
             OffsetY = 0,
             Blur = blur,
-            Spread = spread,
+            Spread = spread * thickness,
             Color = Color.FromArgb(alpha, c.R, c.G, c.B),
         };
 
@@ -409,8 +425,8 @@ public partial class ThemeService
         _glowTier = NormalizeGlowTier(tier);
         if (_glowColor is { } color && Application.Current is not null)
         {
-            Application.Current.Resources["PbGlowRing"] = BuildGlowRing(color, _glowTier);
-            Application.Current.Resources["PbGlowRingInset"] = BuildGlowRingInset(color, _glowTier);
+            Application.Current.Resources["PbGlowRing"] = BuildGlowRing(color, _glowTier, FocusThicknessFactor);
+            Application.Current.Resources["PbGlowRingInset"] = BuildGlowRingInset(color, _glowTier, FocusThicknessFactor);
         }
 
         using var context = _contextFactory();

@@ -80,18 +80,22 @@ public static class EventRelationSuggestionResolver
     private static bool DateRangesOverlapOrAdjacent(StoryEvent a, StoryEvent b)
     {
         // Needs at least one bounded range on each side to say anything.
-        if ((a.StartDate ?? a.EndDate) is not DateTime aAnchor || (b.StartDate ?? b.EndDate) is not DateTime bAnchor)
+        var af = EventEnrichment.EventPublicationDate.Effective(a, false);
+        var al = EventEnrichment.EventPublicationDate.Effective(a, true);
+        var bf = EventEnrichment.EventPublicationDate.Effective(b, false);
+        var bl = EventEnrichment.EventPublicationDate.Effective(b, true);
+        if ((af?.Lower ?? al?.Lower) is not DateTime aAnchor || (bf?.Lower ?? bl?.Lower) is not DateTime bAnchor)
         {
             return false;
         }
 
-        DateTime aStart = a.StartDate ?? aAnchor;
-        DateTime aEnd = a.EndDate ?? aAnchor;
-        DateTime bStart = b.StartDate ?? bAnchor;
-        DateTime bEnd = b.EndDate ?? bAnchor;
+        DateTime aStart = af?.Lower ?? aAnchor;
+        DateTime aEnd = al?.Upper ?? aAnchor;
+        DateTime bStart = bf?.Lower ?? bAnchor;
+        DateTime bEnd = bl?.Upper ?? bAnchor;
 
         // Overlap, or within ~2 years of each other.
         var gap = TimeSpan.FromDays(365 * 2);
-        return aStart <= bEnd.Add(gap) && bStart <= aEnd.Add(gap);
+        return (aStart - bEnd) <= gap && (bStart - aEnd) <= gap;
     }
 }

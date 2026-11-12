@@ -175,6 +175,56 @@ public class DetailScreenViewModelTests : IDisposable
         Assert.Equal("Edit 2 Issues", vm.EditButtonLabel);
     }
 
+    /// <summary>
+    /// With two tiles selected the hero already shows the whole series, so a third Ctrl+click (or Shift+arrow) must not rebuild it from the
+    /// database - that per-tile rebuild is what made multi-select slow (2026-11-12). Proven by changing the series behind the view model's back:
+    /// a selection-only change leaves the hero as it was and only the edit label moves; a real data refresh still picks the change up.
+    /// </summary>
+    [Fact]
+    public void ExtendingAMultiSelection_DoesNotRebuildTheSeriesHero()
+    {
+        int issue2Id, issue3Id;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Series.First(s => s.Id == _seriesId).Summary = "Before";
+            var issue2 = new Issue { SeriesId = _seriesId, Number = "2" };
+            var issue3 = new Issue { SeriesId = _seriesId, Number = "3" };
+            context.Issues.AddRange(issue2, issue3);
+            context.SaveChanges();
+            issue2Id = issue2.Id;
+            issue3Id = issue3.Id;
+        }
+
+        var vm = new DetailScreenViewModel(goBack: () => { }, goToReader: _ => { }, goToProperties: _ => { }, goToBulkProperties: _ => { });
+        vm.LoadSeries(_seriesId);
+        vm.Tabs.ToggleIssueSelection(vm.Tabs.Issues.First(i => i.Id == _issueId), isShiftHeld: false);
+        vm.Tabs.ToggleIssueSelection(vm.Tabs.Issues.First(i => i.Id == issue2Id), isShiftHeld: false);
+        var header = (IDetailHeaderSource)vm;
+        string? summaryBefore = header.IssueSummaryLine;
+        Assert.Contains("unread", summaryBefore);
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Issues.First(i => i.Id == issue2Id).LastPageRead = 5;   // would change the series' unread count if the hero were rebuilt
+            context.SaveChanges();
+        }
+
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        vm.Tabs.ToggleIssueSelection(vm.Tabs.Issues.First(i => i.Id == issue3Id), isShiftHeld: false);
+
+        Assert.Equal("Edit 3 Issues", vm.EditButtonLabel);
+        Assert.Equal(summaryBefore, header.IssueSummaryLine);
+        Assert.DoesNotContain(nameof(IDetailHeaderSource.IssueSummaryLine), changed);   // the series was not reloaded
+        Assert.DoesNotContain(nameof(IDetailHeaderSource.MetaBadges), changed);
+        Assert.Contains(nameof(DetailScreenViewModel.EditButtonLabel), changed);
+
+        // Back to one tile: the hero does switch to that issue.
+        vm.Tabs.FocusIssue(vm.Tabs.Issues.First(i => i.Id == issue3Id));
+        Assert.Equal("Edit Issue", vm.EditButtonLabel);
+        Assert.Contains("Issue #3", vm.MetaLine);
+    }
+
     [Fact]
     public void HeaderTitle_TracksLoadedSeries_AndRaisesPropertyChanged()
     {

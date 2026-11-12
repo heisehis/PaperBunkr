@@ -287,6 +287,17 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .mo
 #if HasThumbnailHandler
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-thumbnails"; Tasks: explorerthumbnails; Flags: runhidden waituntilterminated; StatusMsg: "Registering File Explorer thumbnails..."
 #endif
+; Windows Firewall rules for library sharing (docs/superpowers/specs/2026-09-19-remote-library-sharing-design.md). Without them
+; sharing depended on the "Allow access?" prompt Windows shows the first time the server listens - and that prompt leaves a
+; BLOCK rule behind for every network type left unticked (Public, by default) or for all of them if it was dismissed. Block
+; beats allow and Windows never asks again, so other computers just timed out ("could not connect"). So: first drop every
+; rule Windows made for this exe (netsh exits 1 when there are none; [Run] ignores exit codes), then allow it inbound on
+; Private and Domain networks only - TCP on any port (the sharing port is user-configurable) and UDP 5353 for LAN discovery.
+; Public networks stay blocked on purpose; the Sharing settings warn when the network is Public. These run on silent
+; auto-updates too (no postinstall flag), so an existing install gets the fix with its next update.
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all program=""{app}\{#MyAppExeName}"""; Flags: runhidden waituntilterminated; StatusMsg: "Configuring Windows Firewall for library sharing..."
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#MyAppName} library sharing"" dir=in action=allow program=""{app}\{#MyAppExeName}"" enable=yes profile=private,domain protocol=TCP"; Flags: runhidden waituntilterminated; StatusMsg: "Configuring Windows Firewall for library sharing..."
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#MyAppName} library discovery"" dir=in action=allow program=""{app}\{#MyAppExeName}"" enable=yes profile=private,domain protocol=UDP localport=5353"; Flags: runhidden waituntilterminated; StatusMsg: "Configuring Windows Firewall for library sharing..."
 ; Finished-page checkboxes (postinstall = rendered as a checkbox on the Finished page;
 ; skipifsilent = hidden for silent/auto-update runs). "Open Paperbunkr now" stays checked by
 ; default; "Browse the wiki" is opt-in (unchecked). The wiki entry is a URL opened via the shell
@@ -307,6 +318,8 @@ Filename: "{#MyAppURL}/wiki"; Description: "Browse the {#MyAppName} wiki"; Flags
 ; where it was (decision 7). Unconditional for the same reason as associations; a no-op if never enabled.
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-thumbnails"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterThumbnails"
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-file-associations"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterFileAssociations"
+; Remove every firewall rule for the exe - the two sharing rules Setup added and any Windows created from its prompt.
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all program=""{app}\{#MyAppExeName}"""; Flags: runhidden waituntilterminated; RunOnceId: "RemoveFirewallRules"
 
 [Code]
 

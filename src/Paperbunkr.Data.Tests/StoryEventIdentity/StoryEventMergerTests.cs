@@ -91,7 +91,7 @@ public class StoryEventMergerTests : IdentityTestDb
     }
 
     [Fact]
-    public void FieldsWiden_DescriptionLonger_DatesCovered()
+    public void SurvivorMetadataIsPreserved_AlternativesRetainedForComparison()
     {
         var hulk = AddSeries("Hulk", "1", "2");
         int survivor = AddEvent("Planet Hulk", StoryEventOrigin.Provider, hulk);
@@ -112,9 +112,10 @@ public class StoryEventMergerTests : IdentityTestDb
 
         using var check = NewContext();
         var merged = check.StoryEvents.Single();
-        Assert.Equal("A much longer description of the arc.", merged.Description);
-        Assert.Equal(new DateTime(2006, 1, 1), merged.StartDate);
-        Assert.Equal(new DateTime(2007, 6, 1), merged.EndDate);
+        Assert.Equal("Short.", merged.Description);
+        Assert.Equal(new DateTime(2006, 4, 1), merged.StartDate);
+        Assert.Equal(new DateTime(2007, 1, 1), merged.EndDate);
+        Assert.Contains(check.EventMetadataChanges, c => c.StoryEventId == merged.Id && c.MergeInvalidated && c.AfterValue == "A much longer description of the arc.");
     }
 
     [Fact]

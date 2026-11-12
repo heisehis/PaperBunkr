@@ -5,6 +5,25 @@ namespace Paperbunkr.Data.Tests.SeriesConnector;
 /// <summary><see cref="EventSpineResolver"/>: the event-main-series rule shared by the Event Map and the series connector.</summary>
 public class EventSpineResolverTests
 {
+    [Fact]
+    public void UserRelationsChooseMainBeforeNameMatchButNotBeforeSavedChoice()
+    {
+        var rows = new[] { (1, "Event"), (2, "Main"), (3, "Tie"), (2, "Main") };
+        var links = new[] { (3, 2, Paperbunkr.Data.Entities.RelationType.TieIn), (2, 1, Paperbunkr.Data.Entities.RelationType.MainEventSeries) };
+        Assert.Equal(2, EventSpineResolver.Resolve("Event", null, rows, links));
+        Assert.Equal(1, EventSpineResolver.Resolve("Event", 1, rows, links));
+        Assert.Null(EventSpineResolver.Resolve("Event", EventSpineResolver.ForceRelay, rows, links));
+        Assert.Equal(1, EventSpineResolver.Resolve("Event", null, rows));
+    }
+
+    [Fact]
+    public void RelationTiesPreferMoreRowsThenFirstAppearance()
+    {
+        var rows = new[] { (1, "A"), (2, "B"), (3, "C"), (2, "B") };
+        var links = new[] { (3, 1, Paperbunkr.Data.Entities.RelationType.TieIn), (3, 2, Paperbunkr.Data.Entities.RelationType.TieIn) };
+        Assert.Equal(2, EventSpineResolver.FindRelationMatch(rows, links));
+        Assert.Equal(1, EventSpineResolver.FindRelationMatch(rows.Take(3).ToArray(), links));
+    }
     private static readonly (int, string)[] Metal =
     {
         (1, "Batman (2016)"), (2, "Dark Nights: Metal (2017)"), (1, "Batman (2016)"), (3, "Nightwing (2016)"), (1, "Batman (2016)"), (2, "Dark Nights: Metal (2017)"),

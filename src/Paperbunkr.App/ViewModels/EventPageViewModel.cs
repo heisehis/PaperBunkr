@@ -29,6 +29,8 @@ namespace Paperbunkr.App.ViewModels;
 public partial class EventPageViewModel : ViewModelBase
 {
     private readonly ContinuityScreenNavigation _nav;
+    [RelayCommand] private void SmartFill() { if (EventId is int id) _nav.OpenEventSmartFill(id, true); }
+    [RelayCommand] private void CompareSources() { if (EventId is int id) _nav.OpenEventSmartFill(id, false); }
     private int _overviewGeneration;
 
     public EventPageViewModel(ContinuityScreenNavigation nav) => _nav = nav;

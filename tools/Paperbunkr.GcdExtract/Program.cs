@@ -4,9 +4,9 @@ using Paperbunkr.Data.Gcd;
 // dotnet run --project tools/Paperbunkr.GcdExtract -c Release -- <dump.db> <outDir> [--url <release asset url>] [--date yyyy-mm-dd]
 //
 // Turns the Grand Comics Database SQLite dump (downloaded by a logged-in GCD user from https://www.comics.org/download/) into
-// gcd.sqlite, gcd-<date>.zip and gcd-data.json (docs/superpowers/specs/2026-09-27-gcd-data-design.md §1). Publish it in the data repo,
-// https://github.com/heisehis/paperbunkr-gcd-data: a release tagged gcd-<date> with the zip, then its gcd-data.json replaced (the app
-// checks for updates there). Copy gcd-data.json to this repo's root too, so the next app build knows it. The data is CC BY-SA 4.0.
+// gcd.sqlite, gcd-v2-<date>.zip and gcd-data-v2.json (docs/superpowers/specs/2026-11-04-event-smart-fill-design.md). Publish it in the data repo,
+// https://github.com/heisehis/paperbunkr-gcd-data: a release tagged gcd-v2-<date> with the zip and a separate gcd-data-v2.json manifest.
+// Keep the schema-1 gcd-data.json unchanged for older apps. The data is CC BY-SA 4.0.
 
 if (args.Length < 2 || args.Contains("--help") || args.Contains("-h"))
 {
@@ -32,10 +32,10 @@ long extractBytes = new FileInfo(Path.Combine(outDir, GcdExtractor.ExtractFileNa
 Console.WriteLine();
 Console.WriteLine($"Dump date     {manifest.DumpDate}");
 Console.WriteLine($"Extract       {extractBytes / 1024.0 / 1024.0:F1} MB");
-Console.WriteLine($"Zip           {manifest.SizeBytes / 1024.0 / 1024.0:F1} MB  gcd-{manifest.DumpDate}.zip");
+Console.WriteLine($"Zip           {manifest.SizeBytes / 1024.0 / 1024.0:F1} MB  gcd-v2-{manifest.DumpDate}.zip");
 Console.WriteLine($"SHA-256       {manifest.Sha256}");
 Console.WriteLine($"Manifest url  {manifest.Url}");
-Console.WriteLine($"Done in {clock.Elapsed:mm\\:ss}. Attach the zip to a gcd-<date> release in heisehis/paperbunkr-gcd-data, then update gcd-data.json there and here.");
+Console.WriteLine($"Done in {clock.Elapsed:mm\\:ss}. Schema-2 publication uses gcd-v2-<date> and gcd-data-v2.json; preserve the schema-1 manifest.");
 return 0;
 
 string? Option(string name)

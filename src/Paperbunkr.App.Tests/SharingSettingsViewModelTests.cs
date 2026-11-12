@@ -489,6 +489,49 @@ public sealed class SharingSettingsViewModelTests : IAsyncLifetime
         vm.Dispose();
     }
 
+    [Fact]
+    public async Task WhileSharing_ShowsTheAddressOtherComputersType_AndHidesItWhenOff()
+    {
+        var vm = new SharingSettingsViewModel(_localHost, _remote, () => new PaperbunkrDbContext(_clientDb), Post,
+            lanAddresses: () => new[] { IPAddress.Parse("192.168.1.23"), IPAddress.Parse("10.0.0.5") });
+        Assert.False(vm.HasConnectAddress);                      // sharing is off
+
+        vm.NewPassword = "long-enough-pass";
+        vm.SetPasswordCommand.Execute(null);
+        vm.ShareEnabled = true;
+        await WaitUntilAsync(() => _localHost.IsRunning);
+        Flush();
+
+        Assert.True(vm.HasConnectAddress);
+        Assert.Equal($"Other computers connect to 192.168.1.23:{_localHost.Port} or 10.0.0.5:{_localHost.Port}", vm.ConnectAddressText);
+
+        vm.ShareEnabled = false;
+        await WaitUntilAsync(() => !_localHost.IsRunning);
+        Flush();
+
+        Assert.False(vm.HasConnectAddress);
+        vm.Dispose();
+    }
+
+    [Fact]
+    public async Task WhileSharing_WithNoNetworkAddress_SaysSo()
+    {
+        var vm = new SharingSettingsViewModel(_localHost, _remote, () => new PaperbunkrDbContext(_clientDb), Post,
+            lanAddresses: () => Array.Empty<IPAddress>());
+        vm.NewPassword = "long-enough-pass";
+        vm.SetPasswordCommand.Execute(null);
+        vm.ShareEnabled = true;
+        await WaitUntilAsync(() => _localHost.IsRunning);
+        Flush();
+
+        Assert.Contains("No network address found", vm.ConnectAddressText);
+        vm.Dispose();
+    }
+
+    [Fact]
+    public void PublicNetworkWarning_SaysTheFirewallBlocksConnections() =>
+        Assert.Contains("Windows Firewall blocks sharing on Public networks", NetworkProfileProbe.WarningFor(new[] { "Cafe Guest" }));
+
     private SharingSettingsViewModel VmWithBrowse(params DiscoveredHost[] found) =>
         new(_localHost, _remote, () => new PaperbunkrDbContext(_clientDb), Post, _ => Task.FromResult<IReadOnlyList<DiscoveredHost>>(found));
 

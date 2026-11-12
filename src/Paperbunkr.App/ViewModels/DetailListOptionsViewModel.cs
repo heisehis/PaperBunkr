@@ -40,7 +40,7 @@ public partial class DetailListOptionsViewModel : ObservableObject
     private readonly Dictionary<string, IssueListSortField> _captionByName = new(StringComparer.OrdinalIgnoreCase);
 
     private DetailListOptionsViewModel(bool isComic, DetailListLayoutState source, IReadOnlyList<VirtualTagDefinition> virtualTags,
-        Action<DetailListLayoutState> apply, Action close)
+        Action<DetailListLayoutState> apply, Action close, bool offerCreatorRuns = false)
     {
         _isComic = isComic;
         _source = DetailListLayoutStateJson.Normalize(source, manga: !isComic);
@@ -71,8 +71,11 @@ public partial class DetailListOptionsViewModel : ObservableObject
 
         _groupByName[isComic ? "Run (volume)" : "Volume"] = isComic ? DetailGrouping.Run : DetailGrouping.Volume;
         _groupByName["No grouping"] = DetailGrouping.None;
+        _groupByName["Story arcs"] = DetailGrouping.Arcs;
+        if (offerCreatorRuns) _groupByName["Creator runs"] = DetailGrouping.CreatorRuns;
         foreach (var descriptor in IssueListFieldCatalog.GroupFields.Values.OrderBy(d => d.DisplayName, StringComparer.CurrentCultureIgnoreCase))
         {
+            if (descriptor.Field == IssueListGroupField.StoryArc) continue;
             _groupByName.TryAdd(descriptor.DisplayName, DetailGrouping.ForField(descriptor.Field));
         }
 
@@ -86,12 +89,12 @@ public partial class DetailListOptionsViewModel : ObservableObject
     }
 
     public static DetailListOptionsViewModel ForComic(DetailListLayoutState state, IReadOnlyList<VirtualTagDefinition> virtualTags,
-        Action<DetailListLayoutState> apply, Action close) =>
-        new(true, state, virtualTags, apply, close) { ActiveTab = state.ViewMode.ToString().ToLowerInvariant() };
+        Action<DetailListLayoutState> apply, Action close, bool offerCreatorRuns = false) =>
+        new(true, state, virtualTags, apply, close, offerCreatorRuns) { ActiveTab = state.ViewMode.ToString().ToLowerInvariant() };
 
     public static DetailListOptionsViewModel ForManga(DetailListLayoutState state, IReadOnlyList<VirtualTagDefinition> virtualTags,
-        Action<DetailListLayoutState> apply, Action close) =>
-        new(false, state, virtualTags, apply, close) { ActiveTab = "chapters" };
+        Action<DetailListLayoutState> apply, Action close, bool offerCreatorRuns = false) =>
+        new(false, state, virtualTags, apply, close, offerCreatorRuns) { ActiveTab = "chapters" };
 
     public bool IsComic => _isComic;
     public bool IsManga => !_isComic;

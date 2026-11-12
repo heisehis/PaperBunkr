@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:models="using:Paperbunkr.App.Models"
+             x:Class="Paperbunkr.App.Views.Preferences.ThemeGalleryTile"
+             x:DataType="models:ThemeSummary">
+
+    <!-- One gallery tile (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md Q4): a small mockup drawn with the theme's OWN brushes
+         (its canvas gradient or texture, navigation surface, corners, primary button and heading font), so the tile shows what Personalize cannot
+         fake. The theme colours are data bound from ThemeSummary, not view hex. The hosting Button (AppearanceSection) owns the click and the ring. -->
+    <StackPanel Spacing="8">
+        <Grid>
+            <Border Height="76" CornerRadius="{Binding TileRadius}" ClipToBounds="True"
+                    Background="{Binding CanvasBrush}" BorderBrush="{Binding BorderBrush}" BorderThickness="1">
+                <Grid RowDefinitions="12,*" ColumnDefinitions="16,*">
+                    <Border Grid.Row="0" Grid.ColumnSpan="2" Background="{Binding NavigationBrush}">
+                        <Ellipse Width="4" Height="4" Fill="{Binding AccentBrush}" HorizontalAlignment="Left" Margin="6,0,0,0" />
+                    </Border>
+                    <Border Grid.Row="1" Grid.Column="0" Background="{Binding NavigationBrush}">
+                        <Border Height="3" Margin="4,8,4,0" VerticalAlignment="Top" CornerRadius="1" Background="{Binding AccentBrush}" />
+                    </Border>
+                    <Grid Grid.Row="1" Grid.Column="1" Margin="8,8,8,8" RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
+                            <Border Height="2" Width="36" HorizontalAlignment="Left" CornerRadius="1" Background="{Binding TextMutedBrush}" />
+                            <Border Height="2" Width="24" HorizontalAlignment="Left" CornerRadius="1" Background="{Binding TextMutedBrush}" />
+                        </StackPanel>
+                        <TextBlock Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Classes="pbTextTitle" Text="Aa" FontFamily="{Binding HeadingFontFamily}"
+                                   Foreground="{Binding TextBrush}" VerticalAlignment="Top" />
+                        <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Bottom">
+                            <Border Width="12" Height="18" CornerRadius="{Binding MiniRadius}" Background="{Binding AccentBrush}" />
+                            <Border Width="12" Height="18" CornerRadius="{Binding MiniRadius}" Background="{Binding ChartBlueBrush}" />
+                            <Border Width="28" Height="8" Margin="4,0,0,0" VerticalAlignment="Bottom" CornerRadius="{Binding MiniButtonRadius}" Background="{Binding AccentBrush}" />
+                            <Border Width="16" Height="8" VerticalAlignment="Bottom" CornerRadius="{Binding MiniRadius}" BorderBrush="{Binding TextMutedBrush}" BorderThickness="1" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Border Width="16" Height="16" CornerRadius="{DynamicResource PbRadius}" Background="{DynamicResource PbSuccessBrush}"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0" IsVisible="{Binding IsActive}">
+                <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="White"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+        </Grid>
+
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+            <TextBlock Grid.Column="0" Classes="pbTextMeta" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                       Foreground="{DynamicResource PbTextBrush}" ToolTip.Tip="{Binding Name}" />
+            <Border Grid.Column="1" Classes="statusBadge accent" IsVisible="{Binding IsInstalled}">
+                <TextBlock Text="Installed" />
+            </Border>
+        </Grid>
+    </StackPanel>
+</UserControl>

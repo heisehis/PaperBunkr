@@ -5,6 +5,7 @@
                     xmlns:home="using:Paperbunkr.App.ViewModels.Home"
                     xmlns:models="using:Paperbunkr.App.Models"
                     xmlns:views="using:Paperbunkr.App.Views"
+                    xmlns:homeviews="using:Paperbunkr.App.Views.Home"
                     xmlns:controls="using:Paperbunkr.App.Controls">
 
     <!-- Collections - a 2x2 collage when the collection has enough covers (docs/superpowers/specs/2026-09-28-home-cosmetics-
@@ -20,7 +21,13 @@
                         Command="{Binding Home.GoToLibraryCommand}" AutomationProperties.AutomationId="HomeViewLibraryFromCollectionsLink" />
             </Grid>
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="-8,-12,-8,0">
-                <ItemsControl ItemsSource="{Binding Home.Collections}" Margin="2,2,2,6" AutomationProperties.AutomationId="HomeCollectionsList"
+                <StackPanel Orientation="Horizontal" Spacing="16" Margin="2,2,2,6">
+                <!-- The Continue hero (docs/superpowers/specs/2026-11-06-collection-surfaces-design.md): first on the shelf, only when there is recent activity. -->
+                <homeviews:CollectionHeroCard DataContext="{Binding Home.CollectionHero}" VerticalAlignment="Top"
+                                          IsVisible="{Binding $parent[StackPanel].((home:CollectionsSectionViewModel)DataContext).Home.CollectionHero, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                          OpenCommand="{Binding $parent[StackPanel].((home:CollectionsSectionViewModel)DataContext).Home.OpenCollectionCommand}"
+                                          ContinueCommand="{Binding $parent[StackPanel].((home:CollectionsSectionViewModel)DataContext).Home.ContinueCollectionCommand}" />
+                <ItemsControl ItemsSource="{Binding Home.ShelfCollections}" AutomationProperties.AutomationId="HomeCollectionsList"
                               controls:EntranceAnimation.Enabled="{Binding Home.PlayEntranceAnimation}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate>
@@ -30,6 +37,9 @@
                             <views:PosterTile
                                 CoverSource="{Binding CoverImage}"
                                 MosaicSources="{Binding MosaicCovers}"
+                                FanSources="{Binding FanCovers}"
+                                RingFraction="{Binding RingFraction}"
+                                RingText="{Binding RingText}"
                                 TitleText="{Binding Name}"
                                 BadgeText="{Binding Count, StringFormat='{}{0}'}"
                                 Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenCollectionCommand}"
@@ -37,6 +47,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </StackPanel>
             </ScrollViewer>
         </StackPanel>
     </DataTemplate>

@@ -1,0 +1,167 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Post card</title>
+<style>
+  /* Brand kit: charcoal, cream, orange, yellow kickers; Bebas Neue display + Source Serif 4 body (paperbunkr-brag). */
+  @font-face { font-family: Bebas; src: url(assets/bebas.woff2) format('woff2'); }
+  @font-face { font-family: Serif; src: url(assets/serif.woff2) format('woff2'); }
+  :root { --ink: #0B0B0B; --panel: #17161A; --line: #2A2830; --cream: #F7F6F2; --muted: #B9B6AE; --orange: #F7931E; --yellow: #F2C94C; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--ink); }
+  #card { position: relative; width: 1200px; height: 675px; overflow: hidden; background: var(--ink); color: var(--cream);
+          font-family: Serif, Georgia, serif; }
+  .bebas { font-family: Bebas, Impact, sans-serif; font-weight: 400; letter-spacing: .01em; line-height: .95; }
+  .kicker { font-family: Bebas, Impact, sans-serif; color: var(--yellow); font-size: 26px; letter-spacing: .12em; }
+  .muted { color: var(--muted); }
+  .slot { position: absolute; background: var(--panel); border-radius: 14px; overflow: hidden; }
+  .slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .slot.contain img { object-fit: contain; }
+  .slot.empty::after { content: attr(data-name); position: absolute; inset: 0; display: grid; place-items: center;
+                       font-family: Bebas, sans-serif; font-size: 28px; color: #4A4752; letter-spacing: .1em; }
+  .brand { position: absolute; display: flex; align-items: center; gap: 18px; }
+  .brand img.logo { height: 34px; }
+  /* Serif, not Bebas: Bebas has no lowercase, and the handle is @Ehis_II, not @EHIS_II. */
+  .handle { display: flex; align-items: center; gap: 8px; font-family: Serif, Georgia, serif; font-weight: 600; font-size: 22px; color: var(--cream); }
+  .handle svg { width: 20px; height: 20px; fill: var(--cream); }
+  .accent { color: var(--orange); }
+  .grain { position: absolute; inset: 0; pointer-events: none;
+           background: radial-gradient(1200px 500px at 85% -10%, rgba(247,147,30,.10), transparent 60%),
+                       radial-gradient(900px 500px at -10% 110%, rgba(242,201,76,.06), transparent 60%); }
+</style>
+</head>
+<body>
+<div id="card"></div>
+<script>
+// A card is described by a spec (see social/templates/README.md). render.js calls window.render(spec).
+const X_ICON = '<svg viewBox="0 0 24 24"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
+
+function slot(name, src, box, opts = {}) {
+  const s = el(`<div class="slot${src ? '' : ' empty'}${opts.contain ? ' contain' : ''}" id="slot-${name}" data-name="${esc(opts.label || name)}"></div>`);
+  Object.assign(s.style, { left: box[0] + 'px', top: box[1] + 'px', width: box[2] + 'px', height: box[3] + 'px' });
+  if (opts.radius != null) s.style.borderRadius = opts.radius + 'px';
+  if (src) s.appendChild(el(`<img src="${esc(src)}">`));
+  return s;
+}
+function brand(spec, pos) {
+  const b = el(`<div class="brand"></div>`);
+  Object.assign(b.style, pos);
+  if (spec.brand === 'paperbunkr') b.appendChild(el(`<img class="logo" src="assets/horizontal.png">`));
+  b.appendChild(el(`<div class="handle">${X_ICON}<span>${esc(spec.handle || '@Ehis_II')}</span></div>`));
+  return b;
+}
+// Shrink a text box's font until it fits its own height and width.
+function fit(node, max, min) {
+  let size = max; node.style.fontSize = size + 'px';
+  while (size > min && (node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1)) {
+    size -= 2; node.style.fontSize = size + 'px';
+  }
+}
+function text(html, box, css = {}) {
+  const t = el(`<div>${html}</div>`);
+  Object.assign(t.style, { position: 'absolute', left: box[0] + 'px', top: box[1] + 'px', width: box[2] + 'px', height: box[3] + 'px', ...css });
+  return t;
+}
+
+const layouts = {
+  // Build Log / Paperbunkr Tip / any clip or screenshot: headline band on top, big media slot below.
+  clip(spec, c) {
+    c.appendChild(text(`<div class="kicker">${esc(spec.kicker || 'BUILD LOG')}</div>`, [32, 22, 700, 30]));
+    const h = text(`<span class="bebas">${esc(spec.title)}</span>`, [32, 50, 760, 52], { fontSize: '48px', whiteSpace: 'nowrap' });
+    c.appendChild(h); fit(h, 48, 28);
+    c.appendChild(brand(spec, { right: '32px', top: '40px' }));
+    c.appendChild(slot('media', spec.images?.media, [32, 112, 1136, 531], { label: 'CLIP / SCREENSHOT' }));
+  },
+
+  // Rate the Cover: portrait cover left, the ask on the right.
+  cover(spec, c) {
+    c.appendChild(slot('cover', spec.images?.cover, [64, 44, 392, 587], { label: 'COVER' }));
+    c.appendChild(text(`<div class="kicker">${esc(spec.kicker || 'RATE THIS COVER')}</div>`, [520, 70, 600, 32]));
+    c.appendChild(text(`<span class="bebas accent">1–10</span>`, [512, 104, 640, 190], { fontSize: '200px' }));
+    const t = text(`<span class="bebas">${esc(spec.title)}</span>`, [520, 318, 620, 130], { fontSize: '68px' });
+    c.appendChild(t); fit(t, 68, 36);
+    const credit = text(esc(spec.credit), [520, 458, 600, 90], { fontSize: '26px', lineHeight: '1.35', color: 'var(--muted)' });
+    c.appendChild(credit); fit(credit, 26, 18);
+    c.appendChild(brand(spec, { left: '520px', bottom: '48px' }));
+  },
+
+  // This or That: two options, optional image for each.
+  versus(spec, c) {
+    c.appendChild(text(`<div class="kicker" style="text-align:center">${esc(spec.kicker || 'PICK ONE, FOREVER')}</div>`, [0, 30, 1200, 32]));
+    const opts = [spec.a || {}, spec.b || {}];
+    opts.forEach((o, i) => {
+      const x = i === 0 ? 48 : 636, letter = i === 0 ? 'A' : 'B';
+      const img = spec.images?.[letter.toLowerCase()];
+      if (img) c.appendChild(slot(letter.toLowerCase(), img, [x, 80, 516, 330]));
+      else c.appendChild(text(`<span class="bebas accent">${letter}</span>`, [x, 80, 516, 330],
+        { fontSize: '300px', textAlign: 'center', lineHeight: '330px', background: 'var(--panel)', borderRadius: '14px' }));
+      const lbl = text(`<span class="bebas">${img ? `<span class="accent">${letter} · </span>` : ''}${esc(o.label)}</span>`,
+        [x, 428, 516, 120], { fontSize: '54px', textAlign: 'center' });
+      c.appendChild(lbl); fit(lbl, 54, 28);
+    });
+    c.appendChild(text(`<span class="bebas">VS</span>`, [560, 210, 80, 80],
+      { fontSize: '46px', textAlign: 'center', lineHeight: '80px', background: 'var(--orange)', color: 'var(--ink)', borderRadius: '18px' }));
+    c.appendChild(brand(spec, { left: '50%', transform: 'translateX(-50%)', bottom: '30px' }));
+  },
+
+  // Hot Take / Format Wars: one statement, optional dimmed background image.
+  take(spec, c) {
+    if (spec.images?.bg) {
+      c.appendChild(slot('bg', spec.images.bg, [0, 0, 1200, 675], { radius: 0 }));
+      c.appendChild(text('', [0, 0, 1200, 675], { background: 'linear-gradient(90deg, rgba(11,11,11,.94) 0%, rgba(11,11,11,.82) 60%, rgba(11,11,11,.6) 100%)' }));
+    }
+    c.appendChild(text(`<div class="kicker" style="color:var(--orange)">${esc(spec.kicker || 'HOT TAKE')}</div>`, [72, 64, 800, 32]));
+    const q = text(`<span class="bebas">${esc(spec.title)}</span>`, [72, 108, 1056, 400], { fontSize: '96px' });
+    c.appendChild(q); fit(q, 96, 40);
+    c.appendChild(text(esc(spec.subtitle || 'Agree or disagree?'), [72, 548, 700, 50], { fontSize: '30px', fontStyle: 'italic', color: 'var(--yellow)' }));
+    c.appendChild(brand(spec, { right: '72px', bottom: '72px' }));
+  },
+
+  // Drop Day: art on the right, the news on the left.
+  drop(spec, c) {
+    c.appendChild(slot('art', spec.images?.art, [664, 44, 492, 587], { label: 'OFFICIAL ART' }));
+    c.appendChild(text(`<div class="kicker">${esc(spec.kicker || 'NEW CHAPTER')}</div>`, [64, 74, 560, 32]));
+    c.appendChild(text(`<span class="bebas accent">OUT NOW</span>`, [60, 106, 600, 150], { fontSize: '150px' }));
+    const t = text(`<span class="bebas">${esc(spec.title)}</span>`, [64, 270, 570, 150], { fontSize: '76px' });
+    c.appendChild(t); fit(t, 76, 36);
+    c.appendChild(text(esc(spec.subtitle), [64, 432, 570, 90], { fontSize: '28px', lineHeight: '1.35', color: 'var(--muted)' }));
+    c.appendChild(brand(spec, { left: '64px', bottom: '48px' }));
+  },
+
+  // Starter Pack / Reader's Desk: three covers with a label, a title and a line each.
+  trio(spec, c) {
+    c.appendChild(text(`<div class="kicker">${esc(spec.kicker || 'STARTER PACK')}</div>`, [48, 26, 700, 30]));
+    const h = text(`<span class="bebas">${esc(spec.title)}</span>`, [48, 54, 760, 54], { fontSize: '50px', whiteSpace: 'nowrap' });
+    c.appendChild(h); fit(h, 50, 28);
+    c.appendChild(brand(spec, { right: '48px', top: '46px' }));
+    // Three columns: cover on top (2:3), then tag, name and one line under it.
+    (spec.items || []).slice(0, 3).forEach((it, i) => {
+      const x = 48 + i * 376, w = 352;
+      c.appendChild(slot('item' + (i + 1), spec.images?.['item' + (i + 1)], [x, 128, 228, 342], { label: (it.tag || '').toUpperCase() || 'COVER', radius: 10 }));
+      c.appendChild(text(`<div class="kicker" style="font-size:20px">${esc(it.tag)}</div>`, [x, 486, w, 24]));
+      const n = text(`<span class="bebas">${esc(it.name)}</span>`, [x, 512, w, 40], { fontSize: '36px', whiteSpace: 'nowrap' });
+      c.appendChild(n); fit(n, 36, 20);
+      const l = text(esc(it.line), [x, 556, w, 88], { fontSize: '21px', lineHeight: '1.35', color: 'var(--muted)' });
+      c.appendChild(l); fit(l, 21, 15);
+    });
+  },
+};
+
+window.render = async (spec) => {
+  const c = document.getElementById('card');
+  c.innerHTML = '<div class="grain"></div>';
+  (layouts[spec.layout] || layouts.clip)(spec, c);
+  await document.fonts.ready;
+  // Fonts change metrics: run the fitting again now that they're loaded.
+  await Promise.all([...c.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
+  if (!spec._refit) { spec._refit = true; return window.render(spec); }
+  const box = id => { const n = document.getElementById(id); if (!n) return null; const r = n.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; };
+  return { media: box('slot-media') };
+};
+window.ready = document.fonts.load('40px Bebas').then(() => document.fonts.load('20px Serif'));
+</script>
+</body>
+</html>

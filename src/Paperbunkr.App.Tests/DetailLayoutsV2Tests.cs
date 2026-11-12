@@ -17,7 +17,7 @@ namespace Paperbunkr.App.Tests;
 /// detail screens, three caption lines, card elements, sort and group, header drags, and the opt-in per-series layout.
 /// </summary>
 [Collection(nameof(AvaloniaTestCollection))]
-public class DetailLayoutsV2Tests : IDisposable
+public partial class DetailLayoutsV2Tests : IDisposable
 {
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;

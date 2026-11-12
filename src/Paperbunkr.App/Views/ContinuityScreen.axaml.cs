@@ -32,6 +32,7 @@ public partial class ContinuityScreen : UserControl
             [InputActionIds.TabNext] = () => TabStrip.Step(this, 1),
             [InputActionIds.TabPrevious] = () => TabStrip.Step(this, -1),
             [InputActionIds.Refresh] = () => DataContext is ContinuityScreenViewModel vm && ScreenInput.Deferred(vm.RefreshSidebar),
+            [InputActionIds.ContinuityToggleMapMaximize] = () => DataContext is ContinuityScreenViewModel vm && vm.ToggleMapMaximize(),
         });
         _focus = new FocusReclaimer(this, () => DataContext is ContinuityScreenViewModel,
             () => FocusReclaimer.FocusFirstButton(this, b => b.Classes.Contains("segToggle") && b.Classes.Contains("on")));

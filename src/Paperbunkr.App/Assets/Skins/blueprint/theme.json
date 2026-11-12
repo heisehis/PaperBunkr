@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.blueprint",
+  "name": "Blueprint",
+  "base": {
+    "metrics": {
+      "radius": 0,
+      "radiusSm": 0,
+      "radiusLg": 2
+    },
+    "typography": {
+      "heading": {
+        "family": "Bahnschrift"
+      },
+      "display": {
+        "family": "Bahnschrift"
+      }
+    }
+  },
+  "variants": {
+    "whiteprint": {
+      "name": "Whiteprint",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#F5F9FD",
+        "ink": "#0B3A6E",
+        "accent": "#1565C0",
+        "success": "#2E7D32",
+        "badge": "#C2410C"
+      },
+      "materials": {
+        "grid": {
+          "type": "texture",
+          "source": "textures/light-grid.png",
+          "fallback": "#F5F9FD"
+        }
+      },
+      "surfaces": {
+        "canvas": "grid"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#EAF2FA",
+          "raised": "#FBFDFF",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#8DB2DA",
+          "strong": "#0B3A6E"
+        },
+        "status": {
+          "danger": "#B3261E",
+          "warning": "#8A5A00",
+          "info": "#1565C0"
+        },
+        "chart": {
+          "series": {
+            "1": "#1565C0",
+            "2": "#C2410C"
+          }
+        },
+        "glow": {
+          "color": "#661565C0"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#FFFFFF"
+        }
+      }
+    },
+    "cyanotype": {
+      "name": "Cyanotype",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#0F3460",
+        "ink": "#E8F1FF",
+        "accent": "#FFFFFF",
+        "success": "#8EE3B0",
+        "badge": "#FFB454"
+      },
+      "materials": {
+        "grid": {
+          "type": "texture",
+          "source": "textures/dark-grid.png",
+          "fallback": "#0F3460"
+        }
+      },
+      "surfaces": {
+        "canvas": "grid"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#123B6B",
+          "raised": "#134070",
+          "overlay": "#174A80"
+        },
+        "border": {
+          "default": "#6F95C7",
+          "strong": "#FFFFFF"
+        },
+        "text": {
+          "accent": "#FFFFFF"
+        },
+        "action": {
+          "soft": "#26FFFFFF"
+        },
+        "badge": {
+          "text": "#0F3460"
+        },
+        "status": {
+          "danger": "#FF8A80",
+          "warning": "#FFB454",
+          "info": "#BFE0FF"
+        },
+        "chart": {
+          "series": {
+            "1": "#FFFFFF",
+            "2": "#FFB454"
+          }
+        },
+        "glow": {
+          "color": "#66FFFFFF"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#0F3460"
+        }
+      }
+    }
+  }
+}

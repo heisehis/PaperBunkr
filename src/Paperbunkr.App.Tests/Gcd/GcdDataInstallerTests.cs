@@ -181,12 +181,12 @@ public class GcdDataInstallerTests : IDisposable
         Assert.False(current.ShowDownload);
         Assert.True(current.CanCheck);
         Assert.True(current.CanRemove);
-        Assert.Equal("Data from 2026-09-15", current.StateText);
+        Assert.Equal("Data from 2026-09-15 · event data included", current.StateText);
 
         var newer = new GcdDataSettingsViewModel(NewContext, activity, Installer(new FakeGcdHttp()), bundled with { DumpDate = "2026-10-15" });
         Assert.True(newer.CanUpdate);
         Assert.StartsWith("Update (", newer.DownloadLabel);
-        Assert.Equal("Data from 2026-09-15 · 2026-10-15 is available", newer.StateText);
+        Assert.Equal("Data from 2026-09-15 · 2026-10-15 is available · event data included", newer.StateText);
     }
 
     [Fact]
@@ -248,13 +248,22 @@ public class GcdDataInstallerTests : IDisposable
     }
 
     [Fact]
-    public void BundledManifest_MatchesTheRepoCopy()
+    public void BundledManifest_IsSupportedWhileSchemaTwoPublicationIsPending()
     {
         var bundled = GcdDataInstaller.BundledManifest();
 
         Assert.NotNull(bundled);
-        Assert.Equal(GcdExtractor.SchemaVersion, bundled!.SchemaVersion);
+        Assert.InRange(bundled!.SchemaVersion, 1, GcdExtractor.SchemaVersion);
         Assert.StartsWith("https://github.com/heisehis/paperbunkr-gcd-data/releases/download/gcd-", bundled.Url);
+    }
+
+    [Fact]
+    public void SameDateSchemaUpgradeIsOfferedWithoutDowngradingCapabilities()
+    {
+        var manifest = new GcdManifest("2026-09-15", "https://example.test/data.zip", new string('a', 64), 10, 2);
+        Assert.True(GcdDataInstaller.IsNewer(manifest, "2026-09-15", 1));
+        Assert.False(GcdDataInstaller.IsNewer(manifest, "2026-09-15", 2));
+        Assert.False(GcdDataInstaller.IsNewer(manifest with { SchemaVersion = 1, DumpDate = "2026-10-15" }, "2026-09-15", 2));
     }
 
     /// <summary>Reports inline (no synchronization context), so the test sees every report before InstallAsync returns.</summary>

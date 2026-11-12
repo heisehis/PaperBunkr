@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.golden_age",
+  "name": "Golden Age",
+  "base": {
+    "metrics": {
+      "radius": 3,
+      "radiusSm": 3,
+      "radiusLg": 6
+    },
+    "typography": {
+      "heading": {
+        "family": "Impact"
+      },
+      "display": {
+        "family": "Impact"
+      }
+    }
+  },
+  "variants": {
+    "day": {
+      "name": "Day",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#F2E6C8",
+        "ink": "#231A10",
+        "accent": "#C21F18",
+        "success": "#2E6B3E",
+        "badge": "#F5C518"
+      },
+      "materials": {
+        "dots": {
+          "type": "texture",
+          "source": "textures/day-canvas.png",
+          "fallback": "#F2E6C8"
+        },
+        "navDots": {
+          "type": "texture",
+          "source": "textures/day-nav.png",
+          "fallback": "#EADBB6"
+        }
+      },
+      "surfaces": {
+        "canvas": "dots",
+        "navigation": "navDots"
+      },
+      "semantic": {
+        "surface": {
+          "raised": "#F7EDD3",
+          "overlay": "#FBF4E2"
+        },
+        "border": {
+          "default": "#8C7A55",
+          "strong": "#231A10"
+        },
+        "badge": {
+          "text": "#231A10"
+        },
+        "status": {
+          "danger": "#B3261E",
+          "warning": "#7A5A0A",
+          "info": "#1D4E9E"
+        },
+        "chart": {
+          "series": {
+            "1": "#1D4E9E",
+            "2": "#C21F18"
+          }
+        },
+        "glow": {
+          "color": "#66C21F18"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "borderThickness": 2,
+          "border": "#231A10",
+          "foreground": "#FFF4D6"
+        },
+        "button.secondary": {
+          "borderThickness": 2,
+          "border": "#231A10"
+        },
+        "button.ghost": {
+          "borderThickness": 2,
+          "border": "#231A10"
+        },
+        "chip": {
+          "borderThickness": 2,
+          "border": "#231A10"
+        },
+        "panel.floating": {
+          "borderThickness": 2,
+          "border": "#231A10"
+        }
+      }
+    },
+    "midnight": {
+      "name": "Midnight",
+      "mode": "Dark",
+      "palette": {
+        "canvas": "#141A30",
+        "ink": "#F2E6C8",
+        "accent": "#F5C518",
+        "success": "#7FC48A",
+        "badge": "#C42A22"
+      },
+      "materials": {
+        "dots": {
+          "type": "texture",
+          "source": "textures/night-canvas.png",
+          "fallback": "#141A30"
+        },
+        "navDots": {
+          "type": "texture",
+          "source": "textures/night-nav.png",
+          "fallback": "#111628"
+        }
+      },
+      "surfaces": {
+        "canvas": "dots",
+        "navigation": "navDots"
+      },
+      "semantic": {
+        "surface": {
+          "raised": "#1B2240",
+          "overlay": "#222A4C"
+        },
+        "border": {
+          "default": "#3A4470",
+          "strong": "#F2E6C8"
+        },
+        "badge": {
+          "text": "#FFFFFF"
+        },
+        "status": {
+          "danger": "#FF6B5E",
+          "warning": "#F5C518",
+          "info": "#7FA7E8"
+        },
+        "chart": {
+          "series": {
+            "1": "#F5C518",
+            "2": "#C42A22"
+          }
+        },
+        "glow": {
+          "color": "#66F5C518"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "borderThickness": 2,
+          "border": "#F2E6C8",
+          "foreground": "#1A1405"
+        },
+        "button.secondary": {
+          "borderThickness": 2,
+          "border": "#F2E6C8"
+        },
+        "button.ghost": {
+          "borderThickness": 2,
+          "border": "#F2E6C8"
+        },
+        "chip": {
+          "borderThickness": 2,
+          "border": "#F2E6C8"
+        },
+        "panel.floating": {
+          "borderThickness": 2,
+          "border": "#F2E6C8"
+        }
+      }
+    }
+  }
+}

@@ -87,7 +87,7 @@ Verification used current published `beta` model/API source, cross-checked again
 
 ### Full local GCD dump inspection (later fact-check for brainstorming)
 
-The user's `C:/Users/DeeDee/Downloads/current.zip` contains the SQLite snapshot `2026-09-15.db` (6,723,248,128 bytes). After confirming 21.16 GB free space, the sole entry was extracted to `C:/Users/DeeDee/AppData/Local/Temp/paperbunkr-gcd-event-research-db123afbc8ef4cf48dca4eaa36edd7b6/2026-09-15.db`. All database connections used SQLite URI `mode=ro`; the archive and app database were not modified. The temporary copy remains available. These fresh queries supersede the earlier inability to inspect local snapshot coverage; they do not establish current production GCD coverage.
+The user's `C:/Users/DeeDee/Downloads/current.zip` contains the SQLite snapshot `2026-09-15.db` (6,723,248,128 bytes). After confirming 21.16 GB free space, the sole entry was extracted to `C:/Users/DeeDee/AppData/Local/Temp/paperbunkr-gcd-event-research-db123afbc8ef4cf48dca4eaa36edd7b6/2026-09-15.db`. All database connections used SQLite URI `mode=ro`; the archive and app database were not modified. The temporary full-size copy was removed after verification to reclaim space; the original archive remains. These fresh queries supersede the earlier inability to inspect local snapshot coverage; they do not establish current production GCD coverage.
 
 - `gcd_story_arc`: **582 rows, all active; 142 nonblank descriptions**, 488 with a first-publication year and 2 uncertain-year flags.
 - `gcd_story_story_arc(id, story_id, storyarc_id)`: 4,629 links covering 478 arcs and 4,586 distinct stories. Consequently 104 arcs have no membership links in this snapshot.
@@ -99,3 +99,11 @@ The user's `C:/Users/DeeDee/Downloads/current.zip` contains the SQLite snapshot 
 The six original issues have six indexed comic-story sequences, all genre `superhero`; three have nonblank synopses (main issue 1, Spider-Man and X-Men) and three are blank. The inspected story/issue keyword rows supply only one tag, `Smithsonian`, attached to the X-Men story. This illustrates why copying every member keyword is not a dependable event-tag strategy. Series publishing formats provide grounded type suggestions, but a member one-shot does not classify the whole event as a one-shot.
 
 The read-only verification used `sqlite_master`, `PRAGMA table_info`, small arc/link aggregates, indexed membership joins and bounded Timestorm series/story/issue queries; it did not scan/count all story content. These observations support design discussion only; no app behavior was changed.
+
+### Later implementation package verification
+
+After design/spec approval, the implementation's extractor built a separate schema-2 artifact from this snapshot. It contains 582 arcs, 142 descriptions and 3,416 deduplicated arc-to-issue rows, with series formats, date uncertainty and directional reprint evidence. The extract is 147.7 MB and its zip is 44.0 MB. ZIP CRC, SQLite `quick_check` and the manifest checksum passed. SHA-256: `ce55198ee234d341d4e10f3f34cbee84e3908f42e77773490f7b4cab46020167`.
+
+Direct queries of the extract retain all six original Timestorm issues, X-Men's missing on-sale date and `2009-08-00` key date, and the distinct collected edition's format/reprint flag. The artifact and `gcd-data-v2.json` are prepared locally, not published; the existing schema-1 manifest was not replaced. This section records later implementation verification; the earlier no-code-change statements describe the research phase.
+
+The verified zip, versioned manifest, verification report and attribution README are also saved outside Temp at `C:/Users/DeeDee/Downloads/Paperbunkr-GCD-v2-2026-09-15/`. The copied zip's SHA-256 matches the value above.

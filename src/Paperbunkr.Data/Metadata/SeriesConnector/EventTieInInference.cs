@@ -31,7 +31,7 @@ public static class EventTieInInference
             }
 
             string sourceId = storyEvent.Id.ToString(CultureInfo.InvariantCulture);
-            int? main = MainSeries(storyEvent);
+            int? main = MainSeries(storyEvent, snapshot.UserRelations);
             if (main is int mainId && snapshot.Series.TryGetValue(mainId, out var mainSeries))
             {
                 foreach (int tieInId in seriesIds.Where(id => id != mainId))
@@ -68,8 +68,8 @@ public static class EventTieInInference
     }
 
     /// <summary>The event's main series, by the rule the Event Map uses.</summary>
-    public static int? MainSeries(ConnectorEvent storyEvent) =>
-        EventSpineResolver.Resolve(storyEvent.Name, storyEvent.SavedSpineSeriesId, storyEvent.Members.Select(m => (m.SeriesId, m.SeriesName)).ToList());
+    public static int? MainSeries(ConnectorEvent storyEvent, IReadOnlyList<(int Source, int Target, RelationType Type)>? userRelations = null) =>
+        EventSpineResolver.Resolve(storyEvent.Name, storyEvent.SavedSpineSeriesId, storyEvent.Members.Select(m => (m.SeriesId, m.SeriesName)).ToList(), userRelations);
 
     /// <summary>"#33–34", "#33, #35", "#1–6, #8"; at most three runs, then "…". Non-numeric numbers ("Alpha") are listed as they are.</summary>
     public static string IssueRange(IReadOnlyList<ConnectorEventMember> members)

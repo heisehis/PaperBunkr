@@ -24,6 +24,7 @@ public partial class ReaderScreenViewModel
 
     /// <summary>Raised with the issue id when "Edit properties" is chosen in the panel; the shell opens Issue Properties.</summary>
     public event Action<int>? EditPropertiesRequested;
+    public event Action<ComicMetadataEntityKind, string>? OpenEntityRequested;
 
     [RelayCommand]
     private void ToggleInfoPanel()
@@ -59,10 +60,15 @@ public partial class ReaderScreenViewModel
     /// <summary>Fills the info panel for the issue that just loaded (called from <c>Load</c>). The panel closes so a new issue never opens with the previous one's panel showing.</summary>
     private void RefreshInfoPanel(PaperbunkrDbContext context, Issue issue, Series series)
     {
-        var context0 = ReadingOrderResolver.ResolveContext(context, issue.Id, _activeReadingListId, _activeStoryEventId);
+        var context0 = ReadingOrderResolver.ResolveContext(context, issue.Id, _activeReadingListId, _activeStoryEventId, _activeQueue);
         var genres = context.IssueTags.Where(t => t.IssueId == issue.Id && t.Field == IssueTagField.Genre).Select(t => t.Value).ToList();
         var tags = context.IssueTags.Where(t => t.IssueId == issue.Id && t.Field == IssueTagField.Tags).Select(t => t.Value).ToList();
         Info.IsOpen = false;
+        Info.OpenEntity = (kind, name) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            Info.Close();
+            OpenEntityRequested?.Invoke(kind, name);
+        });
         Info.Set(ReaderInfoBuilder.Build(issue, series.Name, context0, genres, tags), context.GetOrCreateAppSettings().InfoPanelShowSummary);
     }
 }

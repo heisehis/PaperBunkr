@@ -290,4 +290,16 @@
     <SolidColorBrush x:Key="PbPanelFloatingBackground" Color="{StaticResource PbSurface3Color}" />
     <SolidColorBrush x:Key="PbPanelFloatingBorder" Color="{StaticResource PbBorderColor}" />
     <CornerRadius x:Key="PbPanelFloatingRadius">14</CornerRadius>
+    <!-- Component border widths and button shadows (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md Q14). Defaults = the long-standing look;
+         ThemeSkinProjector writes them on every apply. -->
+    <Thickness x:Key="PbButtonPrimaryBorderThickness">1</Thickness>
+    <Thickness x:Key="PbButtonSecondaryBorderThickness">1</Thickness>
+    <Thickness x:Key="PbButtonGhostBorderThickness">1</Thickness>
+    <Thickness x:Key="PbChipBorderThickness">1</Thickness>
+    <Thickness x:Key="PbPanelFloatingBorderThickness">1</Thickness>
+    <BoxShadows x:Key="PbButtonPrimaryShadow">0 0 0 0 Transparent</BoxShadows>
+    <BoxShadows x:Key="PbButtonSecondaryShadow">0 0 0 0 Transparent</BoxShadows>
+    <BoxShadows x:Key="PbButtonGhostShadow">0 0 0 0 Transparent</BoxShadows>
+    <!-- Selected rows (sidebar, Preferences nav, dropdown rows). Same colour as the accent tint unless a theme sets selection.background or a selection material. -->
+    <SolidColorBrush x:Key="PbSelectionBrush" Color="{StaticResource PbAccentSoftColor}" />
 </ResourceDictionary>

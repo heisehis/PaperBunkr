@@ -519,15 +519,9 @@ public partial class InsightsScreen : UserControl
         {
             DataContext = RecapPosterDisplayModel.From(snap.Year, snap.IsCurrentYear, _subscribed.Recap.Tiles),
         };
-        PosterExportHost.Children.Add(poster);
         try
         {
-            var size = new Size(1080, 1920);
-            poster.Measure(size);
-            poster.Arrange(new Rect(size));
-            var bitmap = new RenderTargetBitmap(new PixelSize(1080, 1920));
-            bitmap.Render(poster);
-            bitmap.Save(path, PngBitmapEncoderOptions.Default);
+            ControlImageExporter.RenderToPng(PosterExportHost, poster, new Size(1080, 1920), path);
         }
         catch (Exception ex)
         {
@@ -538,10 +532,6 @@ public partial class InsightsScreen : UserControl
                 Detail = ex.Message,
                 DedupeKey = "recap-export-failed",
             });
-        }
-        finally
-        {
-            PosterExportHost.Children.Remove(poster);
         }
     }
 

@@ -60,22 +60,23 @@ public static class LocationResolver
     }
 
     /// <summary>Backfills the whole library - idempotent, safe to re-run.</summary>
-    public static void RebuildAll(PaperbunkrDbContext context)
+    public static void RebuildAll(PaperbunkrDbContext context, System.Threading.CancellationToken cancellationToken = default)
     {
         var issueIds = context.Issues
-            .Where(i => i.Locations != null && i.Locations != "")
+            .Where(i => (i.Locations != null && i.Locations != "") || context.LocationAppearances.Any(a => a.IssueId == i.Id))
             .Select(i => i.Id)
             .ToList();
 
         foreach (int id in issueIds)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             SyncFromIssue(context, id);
         }
     }
 
     private static void PruneOrphans(PaperbunkrDbContext context)
     {
-        var orphans = context.Locations.Where(l => !l.Appearances.Any()).ToList();
+        var orphans = context.Locations.Where(l => !l.Appearances.Any() && l.CustomImagePath == null).ToList();
         if (orphans.Count > 0)
         {
             context.Locations.RemoveRange(orphans);

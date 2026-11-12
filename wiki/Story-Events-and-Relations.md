@@ -114,23 +114,78 @@ A log of recent changes and reading activity for the series.
 Switch an event to **Map** (the **Overview | Map | Timeline** toggle) to see it as a swimlane timeline: one lane per
 series, laid out in the event's reading order.
 
-- **Spine.** When one of the event's series has the event's own name (for example *Secret Wars* in the *Secret Wars*
-  event), it becomes the **spine**, a trunk lane across the top. Each other series hangs off it: a dashed line shows
-  which spine issue a tie-in follows, and Prologues and Epilogues sit on the spine too. If no series matches, the map
-  is a **relay**: one card per column, and a single line follows the reading order from lane to lane. Pick a different
+- **Spine.** A saved choice wins; otherwise your own tie-in and main-series relations can identify the main series. If they do not,
+  a series matching the event's name (for example *Secret Wars* in the *Secret Wars* event) becomes the **spine**, a trunk lane across the top. Each other series hangs off it: a dashed line shows
+  which spine issue a tie-in follows, and Prologues and Epilogues sit on the spine too. If neither rule identifies a spine, the map
+  is a **relay**: a single line follows the reading order from lane to lane. Pick a different
   spine, or **None (relay)**, from the **Spine** box. Your choice is saved with the event.
 - **Filters:** **All**, **Spine only**, or **Hide optional** (drops issues marked *Optional*).
-- **Density:** three sizes, from compact badges to full covers. Use the slider, or **Ctrl + mouse wheel**.
-  **Shift + wheel** scrolls sideways.
+- **Layout:** relay maps normally pack consecutive issues from different lanes into the same column. Choose **One per column** to
+  spread them out again. On larger maps, short tie-in lanes fold together; click the folded lane or use **More** to unfold it.
+  **Hide read** removes finished issues and closes their gaps; **Show read** brings them back. A selected issue marked read stays
+  until you move the selection or close its inspector.
+- **Zoom:** use the slider, **Ctrl + mouse wheel**, or a pinch gesture to move smoothly from a whole-map view of dots through
+  badges and cards to full covers. **Fit map** fits the whole map. Drag empty space to pan; the wheel scrolls vertically and
+  **Shift + wheel** scrolls sideways. The overview strip appears when the map does not fit: drag its viewport or click to move.
+- **More room:** the corner button switches between slim and wide lane headers. The inspector floats over the map by default;
+  its pin docks it beside the map. Both choices are remembered. **Maximize map** or **F11** hides the surrounding app chrome until
+  you restore it, switch to Overview or Timeline, or leave the screen.
 - **Selecting a card** dims everything unrelated to it and opens the inspector. The inspector shows the cover and
   summary, **Open reader**, **Mark read / unread**, and links to the issues it follows, leads to and ties into. On a
   spine map it also shows the reading order of that stretch. Click a link to jump to that card.
 - **Keyboard:** ← / → move in reading order, ↑ / ↓ move to the nearest card in the lane above or below, Home / End go
   to the first or last card, Enter opens the inspector, Ctrl + Enter (or a double-click) opens the reader, Esc closes
-  the inspector and then clears the selection.
+  the inspector, then clears the selection, then restores the map from Maximize.
 - **Reading from the map** follows the event's order: Next and Previous issue, the end-of-issue card and the context
   strip all stay inside the event and stop at its last issue. Coming back, the map re-selects the issue you were
   reading.
+- **Progress line.** Lines into issues you've read draw solid in the accent colour; the rest stay thin and faded, so how far you
+  are is the shape of the map. A ring marks **You are here**, the next issue to read (on a spine event, the next spine issue). It
+  pulses slowly, and stays still when motion is reduced. **More → Hide progress line** turns the line off; the choice is
+  remembered.
+- **Selecting a card** traces its connections outward from it, hop by hop, and lights up the related cards in order (instant
+  when motion is reduced).
+- **Save as image** (**More**) saves the whole Map or Matrix as a PNG with the event's name and your progress. A very large map is
+  saved at a smaller card size so the image stays under 16,000 pixels on a side.
+
+### Matrix, List and Atlas
+
+The first switch in the map's toolbar changes how the same event or continuity is shown. Your selection, filters and hidden
+series carry across.
+
+- **Matrix:** one row per series, one column per stretch of the story: the spine's chapters on a spine event, one column per event
+  on a continuity, groups of eight reading positions on a relay. Each cell shows how many issues that series has there and a
+  ring for how many you've read; the **Total** column sums each row. Click a cell to see its issues underneath, double-click to open
+  that issue on the Map. **Covers** shows small cover stacks instead.
+- **List:** the reading order as a list, in sections (the spine's chapters, the continuity's events, or groups of ten). The jump
+  bar on the left shows each section's progress; click one to go there. Sections collapse, the section you're in stays pinned at the
+  top, **Read this section** opens its first unread issue, and the next issue to read is marked **Next up**.
+- **Atlas** (continuities only): each event as a bar across the years, thicker for bigger events and filled as you read it, with
+  lines for prequels and sequels. A faint band along the bottom shows where issues in no event cluster. Click a bar to open that
+  event's map; **Ctrl + mouse wheel** zooms the years and **Fit atlas** shows them all. Events with no dates are listed under
+  **Undated**.
+- **Series** opens a list of every series in the map with how many issues you have and have read. Click a name to jump to it;
+  untick it to hide that series everywhere until you leave the screen (**Show all** brings them back).
+
+### Missing issues
+
+When an event is linked to its Metron or ComicVine arc (Smart fill does this), Paperbunkr keeps that arc's issue list.
+
+- **Show missing** puts the issues you don't have on the map as dashed cards, each after the issue it follows in the list: *Not in your
+  library*, or *In your library* for one you own that isn't in the event yet. They never count as read and never open in the reader.
+- Select one for **Add to Wanted** (it starts tracking the series if needed, after asking once) or **Add to event**. **Add all missing to
+  Wanted** does the lot, and **Undo add to Wanted** takes the last request back.
+- **More → Check for missing issues** fetches the lists again. With no list, **Possible gaps** lists numbers missing between a series'
+  issues in the event that you don't own.
+
+### Characters, creators and arcs on the map
+
+- **Featuring** picks a character or team: everything else dims, or **Hide others** removes it. Character and team pages, and the
+  continuity Overview's Key characters, have **Open on map** buttons that open the map featuring them.
+- Cards show the issue's main character or team as a small face when it has an image.
+- **Colour by** Writer or Artist colours the six creators with the most issues and lists them in a legend (click one to single them out),
+  and draws their runs as brackets under the lanes. **Read state** colours by what you've read. **Show arcs** draws story arcs under the
+  lanes too.
 
 ### Continuity map
 
@@ -139,8 +194,10 @@ series, laid out in the event's reading order.
 A continuity has a map too (**Overview | Map | Timeline**). It shows every issue of every story event that includes one of the
 continuity's series on one swimlane, events in chronological order:
 
-- **Event bands.** The ruler names each event over its stretch of the map; click the name to open that event's own map. Every
-  other event is lightly shaded so the events read as bands.
+- **Event bands.** The ruler names each event over its stretch of the map; click the name to open that event's own map, or double-click
+  a band to fit its columns in the viewport. Every
+  other event is lightly shaded so the events read as bands. A band carries a soft wash of the event's cover when it has one, and a
+  thin bar along its bottom shows how much of that event you've read.
 - **Issues in no event** are placed between the events by date (the on-sale date from the Grand Comics Database data when
   you have it, otherwise the cover date), under "Between events · 2004–2006" bands. **Events only**
   hides them; **Events…** lets you hide whole events.

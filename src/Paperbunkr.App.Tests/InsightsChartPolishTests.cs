@@ -58,7 +58,7 @@ public class InsightsChartPolishTests
     public void EveryBuiltInSkin_KeepsEveryChartColour_AtLeastThreeToOneAgainstItsBackground()
     {
         var service = new ThemeService();
-        foreach (string key in new[] { "default", "windows_11", "cool_technical", "vibrant_pop", "vintage_paperback", "daylight", "overcast", "maximum_contrast", "colorblind_safe", "matrix" })
+        foreach (string key in new[] { "default", "windows_11", "daylight", "maximum_contrast", "colorblind_safe", "matrix", "graphite:dark", "abyss:dark" })
         {
             var theme = service.LoadTheme(key);
             var bg = Color.Parse(theme.Colors.Bg);

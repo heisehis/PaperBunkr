@@ -9,6 +9,17 @@ namespace Paperbunkr.Data.Tests.SeriesConnector;
 /// </summary>
 public class LocalInferenceTests
 {
+    [Fact]
+    public void EventInferenceUsesUserRelationForMainSeries()
+    {
+        var story = new ConnectorEvent(5, "Unmatched event", null, null, new[] { M(1, "A", "1"), M(2, "B", "1"), M(3, "C", "1") });
+        var snapshot = new SeriesConnectorSnapshot(new[] { S(1, "A", 2020), S(2, "B", 2020), S(3, "C", 2020) },
+            new[] { story }, userRelations: new[] { (1, 2, RelationType.TieIn) });
+        var links = EventTieInInference.Infer(snapshot);
+        Assert.All(links, link => Assert.Equal(2, link.TargetSeriesId));
+        Assert.Equal(2, links.Count);
+    }
+
     internal static ConnectorSeries S(int id, string name, int? start, int? end = null, string? publisher = "DC Comics", ContentType type = ContentType.Comic) =>
         new(id, name, SeriesConnectorSnapshot.TitleKey(name), SeriesConnectorSnapshot.PublisherKeyFor(publisher), type, start, end ?? start, 10);
 

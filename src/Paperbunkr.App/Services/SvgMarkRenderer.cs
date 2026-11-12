@@ -86,9 +86,42 @@ public static class SvgMarkRenderer
                 return null;
             }
 
+            using Stream stream = AssetLoader.Open(uri);
+            return RenderStream(stream, targetHeight, tint, fitBox: false);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Rasterises an SVG file from disk (the user's "My icons" folder, docs/superpowers/specs/2026-11-06-collection-icons-and-slim-banner-design.md) so its
+    /// longest side is <paramref name="box"/> px, in its own colours. Not memoised here: the caller caches per file and modified time. Null when it fails.
+    /// </summary>
+    public static Bitmap? RenderFile(string path, int box)
+    {
+        if (string.IsNullOrWhiteSpace(path) || box <= 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            using Stream stream = File.OpenRead(path);
+            return RenderStream(stream, box, tint: null, fitBox: true);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static Bitmap? RenderStream(Stream stream, int targetHeight, Color? tint, bool fitBox)
+    {
+        {
             // The SKPicture is owned by the SKSvg - it must stay alive until we finish drawing,
             // so everything happens inside this using block.
-            using Stream stream = AssetLoader.Open(uri);
             using var svg = SvgSkia.SKSvg.CreateFromStream(stream);
 
             SKPicture? picture = svg.Picture;
@@ -106,7 +139,7 @@ public static class SvgMarkRenderer
             // Fit by height - marks render at Image.Height, so scaling by the SVG's own height
             // gives a bitmap that is exactly display-resolution (times the caller's supersample),
             // whether the art is square (flag), portrait (ESRB box) or a wide wordmark (publisher).
-            float fit = targetHeight / bounds.Height;
+            float fit = fitBox ? targetHeight / MathF.Max(bounds.Width, bounds.Height) : targetHeight / bounds.Height;
             int w = Math.Max(1, (int)MathF.Round(bounds.Width * fit));
             int h = Math.Max(1, (int)MathF.Round(bounds.Height * fit));
             var target = new PixelSize(w, h);
@@ -145,10 +178,6 @@ public static class SvgMarkRenderer
 
             Plates.Add(writeable, ClassifyBgraPremul(pixelBytes));
             return writeable;
-        }
-        catch (Exception)
-        {
-            return null;
         }
     }
 }

@@ -1,6 +1,6 @@
 # Open-Source Notices
 
-**Last updated:** 2026-09-30
+**Last updated:** 2026-11-07
 
 Paperbunkr is built on open-source software written by other people. This file lists the
 third-party software, fonts and artwork that ship with the app, and the licenses they come under.
@@ -34,13 +34,6 @@ end; the other licenses are linked to their official text.
 
 ## Apache License 2.0
 
-- **Manga Panel and Text Detector (YOLO26-nano)** (`Models/panel-detector.onnx`, guided-view panel
-  detection): model by Leandro Narosky ([leoxs22/manga-panel-detector-yolo26n](https://huggingface.co/leoxs22/manga-panel-detector-yolo26n)),
-  built on Ultralytics YOLO, distributed here as the unchanged ONNX export
-  [mednasserallah/manga-panel-detector-yolo26n-onnx](https://huggingface.co/mednasserallah/manga-panel-detector-yolo26n-onnx),
-  Apache 2.0. Paperbunkr does not retrain or modify its weights. It was trained on the Manga109-s dataset,
-  credited under Data below.
-
 - **ImageSharp** 2.1: copyright © Six Labors.
 - **IronPython**: copyright © .NET Foundation and Contributors.
 - **pdfium-binaries**: copyright © Benoît Blanchon. It packages **PDFium**, copyright © The PDFium
@@ -73,6 +66,17 @@ builds of the same libraries.
   which Paperbunkr runs as separate processes. Source for this version:
   [DjVuLibre 3.5.29](https://sourceforge.net/projects/djvu/files/DjVuLibre/3.5.29/), from
   [djvu.sourceforge.net](https://djvu.sourceforge.net).
+
+## GNU Affero General Public License
+
+- **Manga Panel and Text Detector (YOLO26-nano)** (`Models/panel-detector.onnx`, guided-view panel
+  detection): model by Leandro Narosky ([leoxs22/manga-panel-detector-yolo26n](https://huggingface.co/leoxs22/manga-panel-detector-yolo26n)),
+  a fine-tune of Ultralytics YOLO26, [GNU AGPL 3.0](https://www.gnu.org/licenses/agpl-3.0.html), the
+  same license as Paperbunkr. The model was first published under Apache 2.0; its author relicensed it
+  to AGPL 3.0 on 2026-09-24 because it is built on Ultralytics' AGPL weights. Paperbunkr ships the
+  unchanged ONNX export [mednasserallah/manga-panel-detector-yolo26n-onnx](https://huggingface.co/mednasserallah/manga-panel-detector-yolo26n-onnx)
+  and does not retrain or modify its weights. It was trained on the Manga109-s dataset, credited under
+  Data below.
 
 ## Other licenses
 
@@ -135,6 +139,9 @@ fonts in `Assets/Fonts` ship alongside them.
 - The Metron logo comes from the [Metron project](https://github.com/Metron-Project/metron) (GPL 3.0).
 - The publisher icon pack and some reader background textures come from
   [ComicRack Community Edition](https://github.com/maforget/ComicRackCE).
+- The collection hero icons come from [game-icons.net](https://game-icons.net), by Lorc, Delapouite,
+  Skoll, sbed, Lucas and SeregaCthtuf, under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+  They are recoloured with each collection's accent colour.
 
 ## MIT License text
 

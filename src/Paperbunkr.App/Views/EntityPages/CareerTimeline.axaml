@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:ep="using:Paperbunkr.App.ViewModels.EntityPages"
+             x:Class="Paperbunkr.App.Views.EntityPages.CareerTimeline"
+             x:Name="ThisControl">
+    <!-- A creator's runs across their active years (redesign §4.3): one row per run, its bar placed along the years. A bar opens a small flyout
+         with the run's range, how much is read, and Read this run / Save as reading list. Writer runs are solid, artist runs outlined. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/EntityPageChrome.axaml" />
+    </UserControl.Styles>
+    <StackPanel Spacing="8">
+        <Grid ColumnDefinitions="180,*" ColumnSpacing="12">
+            <Grid Grid.Column="1" ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Classes="pbTextCaption" Text="{Binding #ThisControl.AxisStart}" />
+                <TextBlock Grid.Column="2" Classes="pbTextCaption" Text="{Binding #ThisControl.AxisEnd}" />
+            </Grid>
+        </Grid>
+        <ItemsControl x:Name="Rows" ItemsSource="{Binding #ThisControl.Items}" AutomationProperties.Name="Runs">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><StackPanel Spacing="8" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="ep:CareerRunItem">
+                    <Grid ColumnDefinitions="180,*" ColumnSpacing="12">
+                        <StackPanel VerticalAlignment="Center" Spacing="4">
+                            <TextBlock Classes="pbTextBody" Text="{Binding Series}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Series}" />
+                            <TextBlock Classes="pbTextCaption" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <Border Grid.Column="1" Classes="careerTrack" Height="16" VerticalAlignment="Center">
+                            <controls:FractionPanel>
+                                <Button Classes="careerBar" Classes.writer="{Binding IsWriter}" controls:FractionPanel.Start="{Binding Start}" controls:FractionPanel.End="{Binding End}"
+                                        AutomationProperties.Name="{Binding Tip}" ToolTip.Tip="{Binding Tip}">
+                                    <Button.Flyout>
+                                        <Flyout Placement="Bottom">
+                                            <Border Classes="dropdown" MinWidth="220">
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Classes="pbTextMeta" Text="{Binding Tip}" Margin="8,4" TextWrapping="Wrap" />
+                                                    <TextBlock Classes="pbTextCaption" Text="{Binding ReadLabel}" Margin="8,0,8,4" />
+                                                    <Button Classes="menuRow" Content="Read this run" Command="{Binding ReadCommand}" Click="OnFlyoutAction" />
+                                                    <Button Classes="menuRow" Content="Save as reading list" Command="{Binding SaveCommand}" Click="OnFlyoutAction" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </controls:FractionPanel>
+                        </Border>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

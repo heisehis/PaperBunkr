@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 2,
+  "id": "paperbunkr.kraft",
+  "name": "Kraft",
+  "mode": "Light",
+  "base": {
+    "palette": {
+      "canvas": "#CFAE7E",
+      "ink": "#2A1B0E",
+      "accent": "#7E1812",
+      "success": "#2E5E2E",
+      "badge": "#1F3A93"
+    },
+    "materials": {
+      "fibre": {
+        "type": "texture",
+        "source": "textures/canvas.png",
+        "fallback": "#CFAE7E"
+      },
+      "navFibre": {
+        "type": "texture",
+        "source": "textures/nav.png",
+        "fallback": "#C4A170"
+      }
+    },
+    "surfaces": {
+      "canvas": "fibre",
+      "navigation": "navFibre"
+    },
+    "semantic": {
+      "surface": {
+        "raised": "#D9BC90",
+        "overlay": "#E3CBA5"
+      },
+      "border": {
+        "default": "#A9875A",
+        "strong": "#2A1B0E"
+      },
+      "text": {
+        "secondary": "#4A3520",
+        "muted": "#5C452C",
+        "accent": "#6E1510"
+      },
+      "badge": {
+        "text": "#F6E7CC"
+      },
+      "status": {
+        "danger": "#7E1812",
+        "warning": "#6B4A00",
+        "info": "#1F3A93"
+      },
+      "chart": {
+        "series": {
+          "1": "#1F3A93",
+          "2": "#7E1812"
+        }
+      },
+      "glow": {
+        "color": "#669E1F18"
+      }
+    },
+    "metrics": {
+      "radius": 4,
+      "radiusSm": 3,
+      "radiusLg": 8
+    },
+    "typography": {
+      "heading": {
+        "family": "Courier New"
+      },
+      "display": {
+        "family": "Courier New"
+      }
+    },
+    "components": {
+      "button.primary": {
+        "foreground": "#F6E7CC"
+      }
+    }
+  }
+}

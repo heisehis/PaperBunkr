@@ -34,12 +34,14 @@ public sealed class SeriesConnectorSnapshot
         IEnumerable<ConnectorSeries> series,
         IEnumerable<ConnectorEvent>? events = null,
         IEnumerable<(int, int)>? userPairs = null,
-        IEnumerable<(int, int)>? dismissedPairs = null)
+        IEnumerable<(int, int)>? dismissedPairs = null,
+        IEnumerable<(int Source, int Target, RelationType Type)>? userRelations = null)
     {
         Series = series.ToDictionary(s => s.Id);
         Events = events?.ToList() ?? new List<ConnectorEvent>();
         UserPairs = (userPairs ?? Array.Empty<(int, int)>()).Select(p => SeriesConnectorGuards.Pair(p.Item1, p.Item2)).ToHashSet();
         DismissedPairs = (dismissedPairs ?? Array.Empty<(int, int)>()).Select(p => SeriesConnectorGuards.Pair(p.Item1, p.Item2)).ToHashSet();
+        UserRelations = userRelations?.ToList() ?? new();
     }
 
     public IReadOnlyDictionary<int, ConnectorSeries> Series { get; }
@@ -51,6 +53,8 @@ public sealed class SeriesConnectorSnapshot
 
     /// <summary>Pairs in <see cref="SeriesRelationDismissal"/>, in (low, high) order.</summary>
     public IReadOnlySet<(int Low, int High)> DismissedPairs { get; }
+
+    public IReadOnlyList<(int Source, int Target, RelationType Type)> UserRelations { get; }
 
     /// <summary>"Superman (2018)", "Superman Vol. 5", "SUPERMAN" → "superman".</summary>
     public static string TitleKey(string name) =>
@@ -124,10 +128,10 @@ public sealed class SeriesConnectorSnapshot
             .Select(m => new { m.StoryEventId, m.IssueId, m.Position })
             .ToList();
         var events = !includeEvents ? new List<ConnectorEvent>() : context.StoryEvents.AsNoTracking()
-            .Select(e => new { e.Id, e.Name, e.SpineSeriesId, e.StartDate })
+            .Select(e => new { e.Id, e.Name, e.SpineSeriesId, e.StartDate, Endpoints = e.DateEndpoints })
             .AsEnumerable()
             .Select(e => new ConnectorEvent(
-                e.Id, e.Name, e.SpineSeriesId, e.StartDate,
+                e.Id, e.Name, e.SpineSeriesId, e.Endpoints.FirstOrDefault(d => !d.IsEnd) is { } date ? new DateTime(date.Year, date.Month ?? 1, date.Day ?? 1) : e.StartDate,
                 memberships.Where(m => m.StoryEventId == e.Id && issueById.ContainsKey(m.IssueId))
                     .Select(m => (m.Position, Issue: issueById[m.IssueId]))
                     .OrderBy(m => m.Position)
@@ -146,7 +150,12 @@ public sealed class SeriesConnectorSnapshot
             .AsEnumerable()
             .Select(d => (d.LowerSeriesId, d.HigherSeriesId));
 
-        return new SeriesConnectorSnapshot(series, events, userPairs, dismissed);
+        var userRelations = context.MediaRelations.AsNoTracking()
+            .Where(r => r.SourceSeriesId != null && r.TargetSeriesId != null
+                && r.Evidence.Any(e => e.Provider == RelationEvidenceProvider.User))
+            .Select(r => new { r.SourceSeriesId, r.TargetSeriesId, r.RelationType }).ToList()
+            .Select(r => (r.SourceSeriesId!.Value, r.TargetSeriesId!.Value, r.RelationType)).ToList();
+        return new SeriesConnectorSnapshot(series, events, userPairs, dismissed, userRelations);
     }
 
     /// <summary>The numeric sort key of an issue number ("33", "33.1", "½"), or null when it isn't a number.</summary>

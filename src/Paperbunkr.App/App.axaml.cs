@@ -42,6 +42,9 @@ public partial class App : Application
         // live even if it wasn't during Initialize. Idempotent. See FluentAvaloniaWorkarounds.
         FluentAvaloniaWorkarounds.SuppressColorValuesChangedHandler();
 
+        // A wheel turn inside a dropdown, menu or flyout stays there instead of scrolling the page behind it.
+        Controls.PopupWheelContainment.Install();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // Splash-first async startup (docs/superpowers/specs/2026-09-09-startup-onboarding-

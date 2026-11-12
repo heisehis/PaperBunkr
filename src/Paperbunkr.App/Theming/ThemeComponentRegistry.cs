@@ -12,6 +12,9 @@ public enum ThemeComponentValueKind
     CornerRadius,
     Thickness,
     Number,
+
+    /// <summary>A CSS-like box shadow list (<c>2 2 0 0 #0078BF</c>); empty when not styled. Never animated (design language: no BoxShadowsTransition).</summary>
+    Shadow,
 }
 
 /// <summary>
@@ -51,6 +54,9 @@ public static class ThemeComponentRegistry
             new("foreground", ThemeComponentValueKind.Brush, "badge.text", HasStates: true),
             new("border", ThemeComponentValueKind.Brush, "action.primary", HasStates: true),
             new("radius", ThemeComponentValueKind.CornerRadius, "metrics.radiusSm"),
+            // docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md Q14: 0-3 px, and a fixed shadow (Risograph's off-register button).
+            new("borderThickness", ThemeComponentValueKind.Thickness, DefaultLiteral: "1"),
+            new("shadow", ThemeComponentValueKind.Shadow),
         }),
         new ThemeComponentRole("button.secondary", "ButtonSecondary", "A neutral filled button.", new ThemeComponentProperty[]
         {
@@ -59,6 +65,8 @@ public static class ThemeComponentRegistry
             // text.muted (= PbTextFaint), not border.default: outlined controls need a visible edge (2026-10-19 shared controls design Q4).
             new("border", ThemeComponentValueKind.Brush, "text.muted", HasStates: true),
             new("radius", ThemeComponentValueKind.CornerRadius, "metrics.radiusSm"),
+            new("borderThickness", ThemeComponentValueKind.Thickness, DefaultLiteral: "1"),
+            new("shadow", ThemeComponentValueKind.Shadow),
         }),
         new ThemeComponentRole("button.ghost", "ButtonGhost", "An outlined, unfilled button.", new ThemeComponentProperty[]
         {
@@ -66,20 +74,28 @@ public static class ThemeComponentRegistry
             new("foreground", ThemeComponentValueKind.Brush, "text.secondary", HasStates: true),
             new("border", ThemeComponentValueKind.Brush, "text.muted", HoverDefaultToken: "action.primary", HasStates: true),
             new("radius", ThemeComponentValueKind.CornerRadius, "metrics.radiusSm"),
+            new("borderThickness", ThemeComponentValueKind.Thickness, DefaultLiteral: "1"),
+            new("shadow", ThemeComponentValueKind.Shadow),
         }),
         new ThemeComponentRole("chip", "Chip", "Chips and tags. A squircle, never an oval pill.", new ThemeComponentProperty[]
         {
             new("background", ThemeComponentValueKind.Brush, "surface.raised"),
             new("border", ThemeComponentValueKind.Brush, "text.muted", HoverDefaultToken: "badge.background", HasStates: true),
             new("radius", ThemeComponentValueKind.CornerRadius, DefaultLiteral: "9"),
+            // The outlined filter chip; a filled tag (Border.pbChip) keeps no border.
+            new("borderThickness", ThemeComponentValueKind.Thickness, DefaultLiteral: "1"),
         }),
         new ThemeComponentRole("panel.floating", "PanelFloating", "Popovers and floating panels.", new ThemeComponentProperty[]
         {
             new("background", ThemeComponentValueKind.Brush, "surface.overlay"),
             new("border", ThemeComponentValueKind.Brush, "border.default"),
             new("radius", ThemeComponentValueKind.CornerRadius, "metrics.radiusLg"),
+            new("borderThickness", ThemeComponentValueKind.Thickness, DefaultLiteral: "1"),
         }),
     };
+
+    /// <summary>The widest border a theme may give a component, per side: thicker borders would crowd the 22 px small controls.</summary>
+    public const double MaxBorderThickness = 3;
 
     public static ThemeComponentRole? Find(string role) => Roles.FirstOrDefault(r => string.Equals(r.Role, role, StringComparison.OrdinalIgnoreCase));
 

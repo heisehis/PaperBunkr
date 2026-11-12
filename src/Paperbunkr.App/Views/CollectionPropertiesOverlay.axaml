@@ -12,127 +12,341 @@
              x:DataType="vm:CollectionPropertiesScreenViewModel"
              controls:ContextMenuHost.Provider="{Binding}">
 
-    <!-- Same "floatingPanel" + Button.ghost/primary primitives as ReadingListPropertiesOverlay
-         (Styles/Primitives.axaml) - docs/superpowers/specs/2026-08-27-collections-design.md step 8. -->
+    <!-- Edit Collection dialog (docs/superpowers/specs/2026-11-06-collection-dialog-polish-design.md): live preview, swatches + custom colour,
+         description with a counter, member rows with covers + drag + Sort, and collapsible sections (Appearance / Members open; Rules / Related
+         collapsed, remembered for the session). Same floatingPanel primitives as ReadingListPropertiesOverlay. -->
+    <UserControl.Resources>
+        <!-- One icon tile of any kind (docs/superpowers/specs/2026-11-06-collection-icons-and-slim-banner-design.md). -->
+        <DataTemplate x:Key="IconChoiceTemplate" x:DataType="models:GlyphChoice">
+            <Button Classes="iconButton glyphChoice" Classes.selected="{Binding IsSelected}" Margin="0,0,4,4"
+                    AutomationProperties.Name="{Binding AutomationName}" ToolTip.Tip="{Binding Label}"
+                    Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).SetGlyphCommand}"
+                    CommandParameter="{Binding Name}">
+                <controls:CollectionGlyphView Value="{Binding Name}" IconSize="{StaticResource PbIconSizeSm}" />
+            </Button>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <UserControl.Styles>
         <Style Selector="Border.card">
             <Setter Property="ClipToBounds" Value="True" />
         </Style>
         <Style Selector="Border.groupHeader">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="Padding" Value="12,8" />
         </Style>
         <Style Selector="StackPanel.field">
             <Setter Property="Width" Value="250" />
             <Setter Property="Margin" Value="0,0,16,16" />
         </Style>
         <Style Selector="Button.swatch">
-            <Setter Property="Width" Value="22" />
-            <Setter Property="Height" Value="22" />
-            <Setter Property="CornerRadius" Value="11" />
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="CornerRadius" Value="12" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <!-- Selected = a ring in the text colour (a shape cue, not colour alone). -->
+        <Style Selector="Button.swatch.selected">
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+        <!-- Selected glyph: the same ring state as a swatch, plus the accent soft fill. -->
+        <Style Selector="Button.glyphChoice.selected">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+        <Style Selector="Button.swatch.plus">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
         </Style>
         <Style Selector="Border.memberRow">
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="0,0,0,1" />
             <Setter Property="Padding" Value="0,8" />
         </Style>
+        <!-- Drop line while a member is dragged over a row. -->
+        <Style Selector="Border.memberRow.dropTarget">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="0,2,0,1" />
+        </Style>
+        <!-- The section header is the toggle. The theme paints hover/press on the button's template part, so the fill is cleared there. -->
+        <Style Selector="Button.sectionToggle">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.sectionToggle:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.sectionToggle:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="TextBlock.over">
+            <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
+        </Style>
     </UserControl.Styles>
 
     <controls:DialogCard Title="Edit collection" Subtitle="{Binding HeaderLabel}" Size="Medium">
         <StackPanel>
 
-            <WrapPanel>
-                <StackPanel Classes="field">
-                    <TextBlock Classes="fieldLabel" Text="NAME" />
-                    <TextBox Text="{Binding Name}" />
-                </StackPanel>
-                <StackPanel Classes="field" Width="480">
-                    <TextBlock Classes="fieldLabel" Text="DESCRIPTION" />
-                    <TextBox Text="{Binding Description}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" />
-                </StackPanel>
-            </WrapPanel>
+            <StackPanel Classes="field" HorizontalAlignment="Left">
+                <TextBlock Classes="fieldLabel" Text="NAME" />
+                <TextBox Text="{Binding Name}" />
+            </StackPanel>
+            <StackPanel Margin="0,0,0,16">
+                <TextBlock Classes="fieldLabel" Text="DESCRIPTION" />
+                <TextBox Text="{Binding Description}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72"
+                         BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}" Padding="8" />
+                <TextBlock Classes="pbTextCaption" Classes.over="{Binding DescriptionOverLimit}" Text="{Binding DescriptionCounter}"
+                           HorizontalAlignment="Right" Margin="0,4,0,0" />
+            </StackPanel>
 
+            <!-- ============ Appearance ============ -->
             <Border Classes="card" Padding="0" Margin="0,0,0,16">
                 <StackPanel>
                     <Border Classes="groupHeader">
-                        <TextBlock Text="Appearance" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        <Button Classes="sectionToggle" Command="{Binding ToggleAppearanceCommand}"
+                                AutomationProperties.Name="Appearance section">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                <fi:SymbolIcon Symbol="ChevronRight" Classes="chevronToggle" Classes.open="{Binding IsAppearanceOpen}"
+                                               FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Classes="pbTextSection" Text="Appearance" />
+                            </Grid>
+                        </Button>
                     </Border>
-                    <StackPanel Margin="14">
-                        <TextBlock Classes="fieldLabel" Text="ACCENT COLOR" />
-                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,16">
-                            <Ellipse Width="22" Height="22" Fill="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" />
-                            <ItemsControl ItemsSource="{Binding AccentSwatches}">
+                    <Grid ColumnDefinitions="*,Auto" Margin="14" controls:Reveal.IsOpen="{Binding IsAppearanceOpen}">
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Classes="fieldLabel" Text="ACCENT COLOR" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ItemsControl ItemsSource="{Binding SwatchItems}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:AccentSwatchItem">
+                                            <!-- A raw hex bound to a Color property does not coerce under compiled bindings: go through the converter. -->
+                                            <Button Classes="swatch" Classes.selected="{Binding IsSelected}"
+                                                    Background="{Binding Hex, Converter={x:Static views:AccentColorToBrushConverter.Instance}}"
+                                                    AutomationProperties.Name="{Binding AutomationName}"
+                                                    ToolTip.Tip="{Binding Hex}"
+                                                    Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).SetAccentColorCommand}"
+                                                    CommandParameter="{Binding Hex}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <!-- A custom colour shows as a seventh, selected swatch. -->
+                                <Button Classes="swatch selected" IsVisible="{Binding IsCustomAccent}"
+                                        Background="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}"
+                                        AutomationProperties.Name="Custom accent" ToolTip.Tip="{Binding AccentColor}"
+                                        Command="{Binding ToggleColorFlyoutCommand}" />
+                                <Button x:Name="CustomSwatchButton" Classes="swatch plus" AutomationProperties.Name="Custom colour" ToolTip.Tip="Custom colour"
+                                        Command="{Binding ToggleColorFlyoutCommand}">
+                                    <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
+                                </Button>
+                                <Button Classes="ghost" Content="None" Command="{Binding ClearAccentColorCommand}" />
+                                <Popup PlacementTarget="{Binding #CustomSwatchButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+                                       IsOpen="{Binding IsColorFlyoutOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
+                                    <Border Classes="dropdown" Width="232"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                        <StackPanel Spacing="8" Margin="4">
+                                            <controls:HsvColorPicker Color="{Binding PickerColor}" HorizontalAlignment="Center" />
+                                            <TextBlock Classes="fieldLabel" Text="HEX" />
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <TextBox x:Name="CustomHexBox" Text="{Binding CustomAccentHex}" PlaceholderText="RRGGBB"
+                                                         AutomationProperties.Name="Hex colour" />
+                                                <Button Grid.Column="1" Classes="ghost" Content="Apply" Command="{Binding ApplyCustomAccentCommand}" />
+                                            </Grid>
+                                            <TextBlock Classes="pbTextCaption" Foreground="{DynamicResource PbDangerBrush}" TextWrapping="Wrap"
+                                                       Text="{Binding CustomAccentError}"
+                                                       IsVisible="{Binding CustomAccentError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                        </StackPanel>
+                                    </ScrollViewer></Border>
+                                </Popup>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0" IsVisible="{Binding HasAccentContrastWarning}">
+                                <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" VerticalAlignment="Center" />
+                                <TextBlock Classes="pbTextCaption" Text="{Binding AccentContrastWarningText}" VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <!-- Glyph: replaces the accent dot in the sidebar row (docs/superpowers/specs/2026-11-06-collection-identity-design.md). -->
+                            <TextBlock Classes="fieldLabel" Text="ICON" Margin="0,16,0,4" />
+                            <TextBlock Classes="pbTextCaption" Foreground="{DynamicResource PbTextMutedBrush}" Text="Symbols" Margin="0,4,0,4" />
+                            <ItemsControl ItemsSource="{Binding GlyphChoices}" ItemTemplate="{StaticResource IconChoiceTemplate}">
                                 <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
+                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="x:String">
-                                        <!-- Was <SolidColorBrush Color="{Binding}"/> - a raw hex
-                                             string bound directly to a Color-typed property with
-                                             no explicit conversion, which doesn't reliably coerce
-                                             under this app's compiled-binding mode (found while
-                                             fixing the Master-Detail redesign's own accent-color
-                                             work, docs/superpowers/specs/2026-09-14-library-
-                                             visual-redesign-design.md §6 - every other accent-color
-                                             binding in this codebase already goes through an
-                                             explicit converter like this one instead of relying on
-                                             automatic string-to-Color coercion). -->
-                                        <Button Classes="swatch"
-                                                Background="{Binding Converter={x:Static views:AccentColorToBrushConverter.Instance}}"
-                                                Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).SetAccentColorCommand}"
-                                                CommandParameter="{Binding}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <Button Classes="ghost" Content="None" Command="{Binding ClearAccentColorCommand}" />
+                            <TextBlock Classes="pbTextCaption" Foreground="{DynamicResource PbTextMutedBrush}" Text="Heroes" Margin="0,4,0,4" />
+                            <ItemsControl ItemsSource="{Binding HeroChoices}" ItemTemplate="{StaticResource IconChoiceTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                            <TextBlock Classes="pbTextCaption" Foreground="{DynamicResource PbTextMutedBrush}" Text="Publishers" Margin="0,4,0,4" />
+                            <ItemsControl ItemsSource="{Binding PublisherChoices}" ItemTemplate="{StaticResource IconChoiceTemplate}" IsVisible="{Binding HasPublisherChoices}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                            <TextBlock Classes="pbTextCaption" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" IsVisible="{Binding !HasPublisherChoices}"
+                                       Text="No publisher in your library has a logo yet." Margin="0,0,0,4" />
+                            <TextBlock Classes="pbTextCaption" Foreground="{DynamicResource PbTextMutedBrush}" Text="My icons" Margin="0,4,0,4" />
+                            <TextBlock Classes="pbTextCaption" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" IsVisible="{Binding !HasMyIconChoices}"
+                                       Text="Put your own SVG or PNG icons in the icons folder, then press Refresh. Each file's name becomes its label." Margin="0,0,0,4" />
+                            <ItemsControl ItemsSource="{Binding MyIconChoices}" ItemTemplate="{StaticResource IconChoiceTemplate}" IsVisible="{Binding HasMyIconChoices}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                            <TextBlock Classes="pbTextCaption" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" Text="{Binding MyIconsSkippedText}"
+                                       IsVisible="{Binding MyIconsSkippedText, Converter={x:Static ObjectConverters.IsNotNull}}" Margin="0,0,0,4" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                                <Button Classes="secondary sm" Content="Open icons folder" Command="{Binding OpenMyIconsFolderCommand}"
+                                        ToolTip.Tip="Your own collection icons: SVG or PNG, up to 2 MB" />
+                                <Button Classes="ghost sm" Content="Refresh" Command="{Binding RefreshMyIconsCommand}" AutomationProperties.Name="Refresh my icons" />
+                            </StackPanel>
+                            <Button Classes="ghost" Content="No icon (use the dot)" Command="{Binding ClearGlyphCommand}" IsEnabled="{Binding HasIconValue}" HorizontalAlignment="Left" />
+
+                            <TextBlock Classes="fieldLabel" Text="PIN" Margin="0,16,0,4" />
+                            <ToggleSwitch IsChecked="{Binding IsPinned}" OnContent="Pinned to the top" OffContent="Not pinned"
+                                          AutomationProperties.Name="Pin this collection to the top of the sidebar and Home" />
+
+                            <TextBlock Classes="fieldLabel" Text="COVER STYLE" Margin="0,16,0,4" />
+                            <Border Classes="segGroup">
+                                <ItemsControl ItemsSource="{Binding CoverStyleChoices}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:CoverStyleChoice">
+                                            <Button Classes="segItem" Classes.on="{Binding IsSelected}" Content="{Binding Label}" ToolTip.Tip="{Binding Description}"
+                                                    Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).SetCoverStyleCommand}"
+                                                    CommandParameter="{Binding Style}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+
+                            <TextBlock Classes="fieldLabel" Text="COVER" Margin="0,16,0,4" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Classes="ghost" Content="{Binding AutoCoverLabel}" Command="{Binding UseAutoCoverCommand}"
+                                        IsEnabled="{Binding !IsAutoCover}" />
+                                <Button Classes="ghost" Content="Choose file…" Command="{Binding ChangeCoverCommand}" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding CoverImagePath}" Classes="pbTextCaption" Margin="0,6,0,0"
+                                       IsVisible="{Binding !IsAutoCover}" TextTrimming="CharacterEllipsis" MaxWidth="260" />
                         </StackPanel>
 
-                        <TextBlock Classes="fieldLabel" Text="COVER" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Classes="ghost" Content="Auto (first member)" Command="{Binding UseAutoCoverCommand}"
-                                    IsEnabled="{Binding !IsAutoCover}" />
-                            <Button Classes="ghost" Content="Choose file…" Command="{Binding ChangeCoverCommand}" />
-                            <TextBlock Text="{Binding CoverImagePath}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}"
-                                       VerticalAlignment="Center" IsVisible="{Binding !IsAutoCover}" TextTrimming="CharacterEllipsis" MaxWidth="180" />
-                        </StackPanel>
-                    </StackPanel>
+                        <!-- Live preview: the buffered name, accent, cover and count as the Home shelf will show them. Decorative. -->
+                        <Border Grid.Column="1" Margin="16,0,0,0" Width="112" VerticalAlignment="Top"
+                                CornerRadius="{DynamicResource PbRadius}" ClipToBounds="True" Background="{DynamicResource PbSurface2Brush}"
+                                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                IsHitTestVisible="False" Focusable="False" AutomationProperties.AccessibilityView="Raw">
+                            <StackPanel>
+                                <Border Height="148" Background="{Binding PreviewCoverBrush}">
+                                    <Panel>
+                                        <Image views:AsyncCoverImage.SourceId="{Binding PreviewCoverTile.CoverKey}" Stretch="UniformToFill" />
+                                        <Image Source="{Binding PreviewCoverTile.CoverImage}" Stretch="UniformToFill" />
+                                        <Image Source="{Binding PreviewManualCover}" Stretch="UniformToFill" />
+                                    </Panel>
+                                </Border>
+                                <Border Height="3" Background="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" />
+                                <StackPanel Margin="8,6,8,8" Spacing="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <controls:CollectionGlyphView Value="{Binding IconGlyph}" IconSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding HasGlyph}"
+                                                                      Accent="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" VerticalAlignment="Center" />
+                                        <fi:SymbolIcon Symbol="Pin" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsPinned}"
+                                                       Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Classes="pbTextMeta" Foreground="{DynamicResource PbTextBrush}" Text="{Binding PreviewName}" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <TextBlock Classes="pbTextCaption" Text="{Binding PreviewCountText}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
                 </StackPanel>
             </Border>
 
+            <!-- ============ Members ============ -->
             <Border Classes="card" Padding="0">
                 <StackPanel>
-                    <Grid ColumnDefinitions="*,Auto" Classes="groupHeader">
-                        <TextBlock Grid.Column="0" Text="Members" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        <TextBlock Grid.Column="1" Text="{Binding Members.Count}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
-                    </Grid>
-                    <StackPanel Margin="14">
-                        <TextBlock Text="No members yet - add some from a Library or Books tile's right-click menu." FontSize="12"
-                                   Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding !Members.Count}" />
+                    <Border Classes="groupHeader">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <Button Grid.Column="0" Classes="sectionToggle" Command="{Binding ToggleMembersCommand}"
+                                    AutomationProperties.Name="Members section">
+                                <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                                    <fi:SymbolIcon Symbol="ChevronRight" Classes="chevronToggle" Classes.open="{Binding IsMembersOpen}"
+                                                   FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Classes="pbTextSection" Text="Members" />
+                                    <TextBlock Grid.Column="2" Classes="pbTextCaption" Text="{Binding MembersSummary}" VerticalAlignment="Center" />
+                                </Grid>
+                            </Button>
+                            <Button x:Name="SortMembersButton" Grid.Column="1" Classes="iconButton" AutomationProperties.Name="Sort members"
+                                    ToolTip.Tip="Sort members" Command="{Binding ToggleSortMenuCommand}">
+                                <fi:SymbolIcon Symbol="ArrowSort" FontSize="{StaticResource PbIconSizeXs}" />
+                            </Button>
+                            <Popup PlacementTarget="{Binding #SortMembersButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+                                   IsOpen="{Binding IsSortMenuOpen}" IsLightDismissEnabled="True" controls:PopupFit.ToWindow="True">
+                                <Border Classes="dropdown" Width="180"><ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                    <StackPanel Spacing="1">
+                                        <Button Classes="menuRow" Content="Title A–Z" Command="{Binding SortMembersByCommand}" CommandParameter="TitleAscending" />
+                                        <Button Classes="menuRow" Content="Title Z–A" Command="{Binding SortMembersByCommand}" CommandParameter="TitleDescending" />
+                                        <Button Classes="menuRow" Content="Type" Command="{Binding SortMembersByCommand}" CommandParameter="Type" />
+                                    </StackPanel>
+                                </ScrollViewer></Border>
+                            </Popup>
+                        </Grid>
+                    </Border>
+                    <StackPanel Margin="14" controls:Reveal.IsOpen="{Binding IsMembersOpen}">
+                        <TextBlock Text="No members yet - add some from a Library or Books tile's right-click menu." Classes="pbTextMeta"
+                                   IsVisible="{Binding !Members.Count}" />
                         <ItemsControl ItemsSource="{Binding Members}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:CollectionMemberRowViewModel">
-                                    <Border Classes="memberRow">
-                                        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
-                                            <StackPanel Grid.Column="0" VerticalAlignment="Center"
+                                    <Border Classes="memberRow" Classes.dropTarget="{Binding IsDropTarget}"
+                                            views:CollectionMemberRowDrag.Owner="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext)}">
+                                        <Grid ColumnDefinitions="20,Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+                                            <!-- Grip: the only part that starts a drag, so the buttons stay clickable. The arrows are the keyboard path. -->
+                                            <Border Grid.Column="0" Background="Transparent" Cursor="SizeAll" VerticalAlignment="Stretch"
+                                                    views:CollectionMemberRowDrag.Handle="True" IsVisible="{Binding !IsRuleMatched}"
+                                                    ToolTip.Tip="Drag to reorder (or use the arrows)" AutomationProperties.Name="Drag to reorder">
+                                                <fi:SymbolIcon Symbol="ReOrderDotsVertical" FontSize="{StaticResource PbIconSizeXs}"
+                                                               Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                            </Border>
+                                            <Border Grid.Column="1" Width="36" Height="54" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
+                                                    Background="{Binding Tile.CoverBrush}">
+                                                <Panel>
+                                                    <Image views:AsyncCoverImage.SourceId="{Binding Tile.CoverKey}" Stretch="UniformToFill" />
+                                                    <Image Source="{Binding Tile.CoverImage}" Stretch="UniformToFill" />
+                                                </Panel>
+                                            </Border>
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center"
                                                         ToolTip.Tip="{Binding RuleMatchedTooltip}">
-                                                <TextBlock Text="{Binding DisplayTitle}" FontSize="13" Foreground="{DynamicResource PbTextBrush}"
-                                                           TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Text="{Binding KindLabelDisplay}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                <TextBlock Classes="pbTextBody" Text="{Binding DisplayTitle}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Classes="pbTextCaption" Text="{Binding KindLabelDisplay}" />
                                             </StackPanel>
-                                            <Button AutomationProperties.Name="Move up" Grid.Column="1" Classes="iconButton" IsEnabled="{Binding !IsRuleMatched}"
+                                            <Button Grid.Column="3" Classes="iconButton" IsVisible="{Binding CanUseAsCover}" Command="{Binding UseAsCoverCommand}"
+                                                    AutomationProperties.Name="{Binding UseAsCoverLabel}" ToolTip.Tip="{Binding UseAsCoverLabel}">
+                                                <Panel>
+                                                    <fi:SymbolIcon Symbol="Star" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !IsCoverMember}" />
+                                                    <fi:SymbolIcon Symbol="Star" IconVariant="Filled" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IsCoverMember}"
+                                                                   Foreground="{DynamicResource PbAccentBrush}" />
+                                                </Panel>
+                                            </Button>
+                                            <Button AutomationProperties.Name="Move up" Grid.Column="4" Classes="iconButton" IsEnabled="{Binding !IsRuleMatched}"
                                                     Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).MoveMemberUpCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Move up">
                                                 <fi:SymbolIcon Symbol="ChevronUp" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
-                                            <Button AutomationProperties.Name="Move down" Grid.Column="2" Classes="iconButton" IsEnabled="{Binding !IsRuleMatched}"
+                                            <Button AutomationProperties.Name="Move down" Grid.Column="5" Classes="iconButton" IsEnabled="{Binding !IsRuleMatched}"
                                                     Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).MoveMemberDownCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Move down">
                                                 <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
-                                            <Button AutomationProperties.Name="Remove from collection" Grid.Column="4" Classes="iconButton"
+                                            <Button AutomationProperties.Name="Remove from collection" Grid.Column="6" Classes="iconButton"
                                                     Command="{Binding RemoveCommand}" ToolTip.Tip="Remove from collection">
                                                 <fi:SymbolIcon Symbol="SubtractCircle" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
@@ -145,162 +359,167 @@
                 </StackPanel>
             </Border>
 
+            <!-- ============ Rules (the three smart-list slots) ============ -->
             <Border Classes="card" Padding="0" Margin="0,16,0,0">
                 <StackPanel>
                     <Border Classes="groupHeader">
-                        <TextBlock Text="Issues rule" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        <Button Classes="sectionToggle" Command="{Binding ToggleRulesCommand}" AutomationProperties.Name="Rules section">
+                            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                                <fi:SymbolIcon Symbol="ChevronRight" Classes="chevronToggle" Classes.open="{Binding IsRulesOpen}"
+                                               FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Classes="pbTextSection" Text="Rules" />
+                                <TextBlock Grid.Column="2" Classes="pbTextCaption" Text="{Binding RulesSummary}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
                     </Border>
-                    <StackPanel Margin="14" Orientation="Horizontal" Spacing="8">
-                        <controls:SuggestBox IsStrict="True" Suggestions="{Binding IssueSmartListNames}" Text="{Binding SelectedIssueSmartListText}"
-                                  MinWidth="220" FontSize="12" Watermark="No Issue smart lists yet" />
-                        <Button Classes="ghost" Content="Set" Command="{Binding SetIssueRuleCommand}" />
-                        <Button Classes="ghost" Content="Clear" Command="{Binding ClearIssueRuleCommand}" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="card" Padding="0" Margin="0,16,0,0">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Series rule" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Orientation="Horizontal" Spacing="8">
-                        <controls:SuggestBox IsStrict="True" Suggestions="{Binding SeriesSmartListNames}" Text="{Binding SelectedSeriesSmartListText}"
-                                  MinWidth="220" FontSize="12" Watermark="No Series smart lists yet" />
-                        <Button Classes="ghost" Content="Set" Command="{Binding SetSeriesRuleCommand}" />
-                        <Button Classes="ghost" Content="Clear" Command="{Binding ClearSeriesRuleCommand}" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="card" Padding="0" Margin="0,16,0,0">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Novels rule" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Orientation="Horizontal" Spacing="8">
-                        <controls:SuggestBox IsStrict="True" Suggestions="{Binding NovelSmartListNames}" Text="{Binding SelectedNovelSmartListText}"
-                                  MinWidth="220" FontSize="12" Watermark="No Novel smart lists yet" />
-                        <Button Classes="ghost" Content="Set" Command="{Binding SetNovelRuleCommand}" />
-                        <Button Classes="ghost" Content="Clear" Command="{Binding ClearNovelRuleCommand}" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="card" Padding="0" Margin="0,16,0,0">
-                <StackPanel>
-                    <Grid ColumnDefinitions="*,Auto" Classes="groupHeader">
-                        <TextBlock Grid.Column="0" Text="Related Collections" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        <Button Grid.Column="1" Classes="ghost" Content="+ Add" Command="{Binding ToggleAddRelationCommand}" />
-                    </Grid>
-                    <StackPanel Margin="14">
-                        <Border IsVisible="{Binding IsAddingRelation}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                                CornerRadius="{DynamicResource PbRadiusSm}" Padding="12" Margin="0,0,0,12">
-                            <StackPanel Spacing="8">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="Relationship:" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                    <controls:SuggestBox IsStrict="True" Suggestions="{Binding RelationTypeNames}"
-                                                         Text="{Binding SelectedRelationTypeOptionText}" MinWidth="160" FontSize="12" />
-                                </StackPanel>
-                                <TextBox Text="{Binding RelationSearchQuery}" PlaceholderText="Search for a collection…" FontSize="12" />
-                                <ItemsControl ItemsSource="{Binding RelationSearchResults}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="models:CollectionSearchResult">
-                                            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
-                                                    Background="Transparent" BorderThickness="0" FontSize="13"
-                                                    Foreground="{DynamicResource PbTextMutedBrush}"
-                                                    Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).AddRelationCommand}"
-                                                    CommandParameter="{Binding}">
-                                                <TextBlock Text="{Binding Name}" />
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                    <StackPanel Margin="14" Spacing="12" controls:Reveal.IsOpen="{Binding IsRulesOpen}">
+                        <StackPanel>
+                            <TextBlock Classes="fieldLabel" Text="ISSUES RULE" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:SuggestBox IsStrict="True" Suggestions="{Binding IssueSmartListNames}" Text="{Binding SelectedIssueSmartListText}"
+                                          MinWidth="220" Watermark="No Issue smart lists yet" />
+                                <Button Classes="ghost" Content="Set" Command="{Binding SetIssueRuleCommand}" />
+                                <Button Classes="ghost" Content="Clear" Command="{Binding ClearIssueRuleCommand}" />
                             </StackPanel>
-                        </Border>
-
-                        <TextBlock Text="No related collections yet." FontSize="12"
-                                   Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding !RelatedCollections.Count}" />
-                        <ItemsControl ItemsSource="{Binding RelatedCollections}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:RelatedCollectionChip">
-                                    <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}" Padding="10,4" Margin="0,0,6,6">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center">
-                                                <Run Text="{Binding Name}" FontWeight="SemiBold" />
-                                                <Run Text="{Binding RelationTypeLabel, StringFormat=' · {0}', Mode=OneWay}" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                            </TextBlock>
-                                            <Button AutomationProperties.Name="Remove this relation" Classes="iconButton sm"
-                                                    Foreground="{DynamicResource PbTextMutedBrush}"
-                                                    Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).RemoveRelationCommand}"
-                                                    CommandParameter="{Binding}" ToolTip.Tip="Remove this relation"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Classes="fieldLabel" Text="SERIES RULE" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:SuggestBox IsStrict="True" Suggestions="{Binding SeriesSmartListNames}" Text="{Binding SelectedSeriesSmartListText}"
+                                          MinWidth="220" Watermark="No Series smart lists yet" />
+                                <Button Classes="ghost" Content="Set" Command="{Binding SetSeriesRuleCommand}" />
+                                <Button Classes="ghost" Content="Clear" Command="{Binding ClearSeriesRuleCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Classes="fieldLabel" Text="NOVELS RULE" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:SuggestBox IsStrict="True" Suggestions="{Binding NovelSmartListNames}" Text="{Binding SelectedNovelSmartListText}"
+                                          MinWidth="220" Watermark="No Novel smart lists yet" />
+                                <Button Classes="ghost" Content="Set" Command="{Binding SetNovelRuleCommand}" />
+                                <Button Classes="ghost" Content="Clear" Command="{Binding ClearNovelRuleCommand}" />
+                            </StackPanel>
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </Border>
 
+            <!-- ============ Related (collections + series) ============ -->
             <Border Classes="card" Padding="0" Margin="0,16,0,0">
                 <StackPanel>
-                    <Grid ColumnDefinitions="*,Auto" Classes="groupHeader">
-                        <TextBlock Grid.Column="0" Text="Related" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        <Button Grid.Column="1" Classes="ghost" Content="+ Add" Command="{Binding ToggleAddSeriesRelationCommand}" />
-                    </Grid>
-                    <StackPanel Margin="14">
-                        <Border IsVisible="{Binding IsAddingSeriesRelation}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                                CornerRadius="{DynamicResource PbRadiusSm}" Padding="12" Margin="0,0,0,12">
-                            <StackPanel Spacing="8">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="Relationship:" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                    <controls:SuggestBox IsStrict="True" Suggestions="{Binding RelationTypeNames}"
-                                                         Text="{Binding SelectedSeriesRelationTypeOptionText}" MinWidth="160" FontSize="12" />
-                                </StackPanel>
-                                <TextBox Text="{Binding SeriesRelationSearchQuery}" PlaceholderText="Search for a series…" FontSize="12" />
-                                <ItemsControl ItemsSource="{Binding SeriesRelationSearchResults}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="models:SeriesSearchResult">
-                                            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
-                                                    Background="Transparent" BorderThickness="0" FontSize="13"
-                                                    Foreground="{DynamicResource PbTextMutedBrush}"
-                                                    Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).AddSeriesRelationCommand}"
-                                                    CommandParameter="{Binding}">
-                                                <TextBlock Text="{Binding Name}" />
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </Border>
+                    <Border Classes="groupHeader">
+                        <Button Classes="sectionToggle" Command="{Binding ToggleRelatedCommand}" AutomationProperties.Name="Related section">
+                            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                                <fi:SymbolIcon Symbol="ChevronRight" Classes="chevronToggle" Classes.open="{Binding IsRelatedOpen}"
+                                               FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Classes="pbTextSection" Text="Related" />
+                                <TextBlock Grid.Column="2" Classes="pbTextCaption" Text="{Binding RelatedSummary}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
+                    </Border>
+                    <StackPanel Margin="14" Spacing="16" controls:Reveal.IsOpen="{Binding IsRelatedOpen}">
 
-                        <TextBlock Text="No related series yet." FontSize="12"
-                                   Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding !RelatedSeries.Count}" />
-                        <ItemsControl ItemsSource="{Binding RelatedSeries}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:RelatedSeriesChip">
-                                    <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}" Padding="10,4" Margin="0,0,6,6">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center">
-                                                <Run Text="{Binding Name}" FontWeight="SemiBold" />
-                                                <Run Text="{Binding RelationTypeLabel, StringFormat=' · {0}', Mode=OneWay}" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                            </TextBlock>
-                                            <Button AutomationProperties.Name="Remove this relation" Classes="iconButton sm"
-                                                    Foreground="{DynamicResource PbTextMutedBrush}"
-                                                    Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).RemoveSeriesRelationCommand}"
-                                                    CommandParameter="{Binding}" ToolTip.Tip="Remove this relation"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                                <TextBlock Classes="fieldLabel" Text="RELATED COLLECTIONS" VerticalAlignment="Center" Margin="0" />
+                                <Button Grid.Column="1" Classes="ghost" Content="+ Add" Command="{Binding ToggleAddRelationCommand}" />
+                            </Grid>
+                            <Border IsVisible="{Binding IsAddingRelation}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                    CornerRadius="{DynamicResource PbRadiusSm}" Padding="12" Margin="0,0,0,12">
+                                <StackPanel Spacing="8">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="Relationship:" Classes="pbTextMeta" VerticalAlignment="Center" />
+                                        <controls:SuggestBox IsStrict="True" Suggestions="{Binding RelationTypeNames}"
+                                                             Text="{Binding SelectedRelationTypeOptionText}" MinWidth="160" />
+                                    </StackPanel>
+                                    <TextBox Text="{Binding RelationSearchQuery}" PlaceholderText="Search for a collection…" />
+                                    <ItemsControl ItemsSource="{Binding RelationSearchResults}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:CollectionSearchResult">
+                                                <Button Classes="menuRow"
+                                                        Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).AddRelationCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <TextBlock Text="{Binding Name}" />
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="No related collections yet." Classes="pbTextMeta" IsVisible="{Binding !RelatedCollections.Count}" />
+                            <ItemsControl ItemsSource="{Binding RelatedCollections}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:RelatedCollectionChip">
+                                        <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}" Padding="8,4" Margin="0,0,8,8">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Classes="pbTextMeta" VerticalAlignment="Center">
+                                                    <Run Text="{Binding Name}" FontWeight="SemiBold" />
+                                                    <Run Text="{Binding RelationTypeLabel, StringFormat=' · {0}', Mode=OneWay}" />
+                                                </TextBlock>
+                                                <Button AutomationProperties.Name="Remove this relation" Classes="iconButton sm"
+                                                        Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).RemoveRelationCommand}"
+                                                        CommandParameter="{Binding}" ToolTip.Tip="Remove this relation"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                                <TextBlock Classes="fieldLabel" Text="RELATED SERIES" VerticalAlignment="Center" Margin="0" />
+                                <Button Grid.Column="1" Classes="ghost" Content="+ Add" Command="{Binding ToggleAddSeriesRelationCommand}" />
+                            </Grid>
+                            <Border IsVisible="{Binding IsAddingSeriesRelation}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                    CornerRadius="{DynamicResource PbRadiusSm}" Padding="12" Margin="0,0,0,12">
+                                <StackPanel Spacing="8">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="Relationship:" Classes="pbTextMeta" VerticalAlignment="Center" />
+                                        <controls:SuggestBox IsStrict="True" Suggestions="{Binding RelationTypeNames}"
+                                                             Text="{Binding SelectedSeriesRelationTypeOptionText}" MinWidth="160" />
+                                    </StackPanel>
+                                    <TextBox Text="{Binding SeriesRelationSearchQuery}" PlaceholderText="Search for a series…" />
+                                    <ItemsControl ItemsSource="{Binding SeriesRelationSearchResults}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:SeriesSearchResult">
+                                                <Button Classes="menuRow"
+                                                        Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).AddSeriesRelationCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <TextBlock Text="{Binding Name}" />
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="No related series yet." Classes="pbTextMeta" IsVisible="{Binding !RelatedSeries.Count}" />
+                            <ItemsControl ItemsSource="{Binding RelatedSeries}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:RelatedSeriesChip">
+                                        <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}" Padding="8,4" Margin="0,0,8,8">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Classes="pbTextMeta" VerticalAlignment="Center">
+                                                    <Run Text="{Binding Name}" FontWeight="SemiBold" />
+                                                    <Run Text="{Binding RelationTypeLabel, StringFormat=' · {0}', Mode=OneWay}" />
+                                                </TextBlock>
+                                                <Button AutomationProperties.Name="Remove this relation" Classes="iconButton sm"
+                                                        Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).RemoveSeriesRelationCommand}"
+                                                        CommandParameter="{Binding}" ToolTip.Tip="Remove this relation"><fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </Border>

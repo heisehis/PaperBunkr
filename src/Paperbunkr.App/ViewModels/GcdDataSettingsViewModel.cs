@@ -76,7 +76,7 @@ public sealed partial class GcdDataSettingsViewModel : ObservableObject
 
     public bool CanDownload => !IsBusy && !IsInstalled && Available is not null;
 
-    public bool CanUpdate => !IsBusy && IsInstalled && Available is not null && GcdDataInstaller.IsNewer(Available, InstalledDumpDate);
+    public bool CanUpdate => !IsBusy && IsInstalled && Available is not null && GcdDataInstaller.IsNewer(Available, InstalledDumpDate, _installer.InstalledSchema());
 
     public bool CanRemove => !IsBusy && IsInstalled;
 
@@ -104,7 +104,8 @@ public sealed partial class GcdDataSettingsViewModel : ObservableObject
 
             if (IsInstalled)
             {
-                return CanUpdate ? $"Data from {InstalledDumpDate} · {Available!.DumpDate} is available" : $"Data from {InstalledDumpDate}";
+                string capability = _installer.InstalledSchema() >= 2 ? " · event data included" : " · basic data, no arc metadata";
+                return (CanUpdate ? $"Data from {InstalledDumpDate} · {Available!.DumpDate} is available" : $"Data from {InstalledDumpDate}") + capability;
             }
 
             return Available is null ? "Not available in this version yet" : $"Not installed · data from {Available.DumpDate}";
@@ -137,7 +138,7 @@ public sealed partial class GcdDataSettingsViewModel : ObservableObject
                 return;
             }
 
-            if (Available is null || GcdDataInstaller.IsNewer(live, Available.DumpDate))
+            if (Available is null || GcdDataInstaller.IsNewer(live, Available.DumpDate, Available.SchemaVersion))
             {
                 Available = live;
             }
@@ -167,7 +168,7 @@ public sealed partial class GcdDataSettingsViewModel : ObservableObject
 
         // The live manifest wins when it's reachable and newer; the one built into the app still points at a real release asset.
         var live = await _installer.FetchManifestAsync(CancellationToken.None);
-        if (live is not null && (Available is null || GcdDataInstaller.IsNewer(live, Available.DumpDate)))
+        if (live is not null && (Available is null || GcdDataInstaller.IsNewer(live, Available.DumpDate, Available.SchemaVersion)))
         {
             Available = live;
         }

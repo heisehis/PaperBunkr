@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             x:Class="Paperbunkr.App.Views.EventSmartFillOverlay"
+             x:DataType="vm:EventSmartFillViewModel">
+    <controls:OverlayShell x:Name="FillShell" IsOpen="{Binding IsOpen}" CloseCommand="{Binding CloseCommand}">
+        <controls:DialogCard Title="{Binding Title}" Size="XLarge"
+                             Subtitle="Fill supported blanks automatically, or compare and select replacements.">
+            <StackPanel Spacing="16">
+                <TextBlock Classes="pbTextBody" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" AutomationProperties.Name="Fetching event metadata" />
+                <!-- A bounded, virtualized selector keeps large event libraries out of the visual tree. -->
+                <ListBox ItemsSource="{Binding Events}" IsVisible="{Binding IsBatch}" IsEnabled="{Binding !IsBusy}" MaxHeight="280" AutomationProperties.Name="Events to fill">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:EventFillSelection">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,4">
+                                <CheckBox IsChecked="{Binding IsSelected}" AutomationProperties.Name="{Binding Name}"><TextBlock Classes="pbTextBody" Text="{Binding Name}" TextWrapping="Wrap" /></CheckBox>
+                                <Button Grid.Column="1" Classes="ghost" Content="Compare sources" Command="{Binding CompareEventCommand}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock Classes="pbTextMeta" Text="{Binding Sources}" TextWrapping="Wrap" />
+                <ItemsControl ItemsSource="{Binding Candidates}" IsEnabled="{Binding !IsBusy}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:EventEvidenceRow">
+                            <Border Classes="card" Margin="0,0,0,8" Padding="16">
+                                <StackPanel Spacing="8">
+                                    <CheckBox IsChecked="{Binding IsSelected}" AutomationProperties.Name="{Binding Field}" AutomationProperties.HelpText="Select this source value to replace the current field or fill it again"><TextBlock Classes="pbTextBody" Text="{Binding Field}" /></CheckBox>
+                                    <TextBlock Classes="pbTextMeta" Text="{Binding Current}" TextWrapping="Wrap" />
+                                    <TextBlock Classes="pbTextBody" Text="{Binding Value}" TextWrapping="Wrap" />
+                                    <Image Source="{Binding CoverPreview}" MaxHeight="200" MaxWidth="160" HorizontalAlignment="Left" Stretch="Uniform" AutomationProperties.Name="Source cover preview" />
+                                    <TextBlock Classes="pbTextMeta" Text="{Binding Source}" TextWrapping="Wrap" />
+                                    <TextBlock Classes="pbTextCaption" Text="{Binding Protection}" TextWrapping="Wrap" />
+                                    <Button Classes="ghost" Content="View source" Command="{Binding OpenSourceCommand}" IsVisible="{Binding HasSource}" HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Classes="pbTextSection" Text="Change history" IsVisible="{Binding !IsBatch}" />
+                <ItemsControl ItemsSource="{Binding History}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:EventFillHistoryRow">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,4">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Classes="pbTextMeta" Text="{Binding Label}" TextWrapping="Wrap" />
+                                    <TextBlock Classes="pbTextCaption" Text="{Binding Details}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Classes="ghost" Content="Undo" Command="{Binding UndoChangeCommand}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+            <controls:DialogCard.Footer>
+                <WrapPanel Orientation="Horizontal">
+                    <Button Classes="ghost" Content="Close" Command="{Binding CloseCommand}" Margin="0,0,8,0" />
+                    <Button Classes="ghost" Content="Cancel fetching" Command="{Binding CancelWorkCommand}" IsVisible="{Binding IsBusy}" Margin="0,0,8,0" />
+                    <Button Classes="secondary" Content="Select events…" Command="{Binding OpenBatchCommand}" IsVisible="{Binding ShowSelectEvents}" IsEnabled="{Binding !IsBusy}" Margin="0,0,8,0" />
+                    <Button Classes="ghost" Content="Link provider…" Command="{Binding LinkProviderCommand}" IsVisible="{Binding ShowSelectEvents}" IsEnabled="{Binding !IsBusy}" Margin="0,0,8,0" />
+                    <Button Classes="secondary" Content="Fetch sources" Command="{Binding FetchCommand}" IsVisible="{Binding !IsBatch}" IsEnabled="{Binding !IsBusy}" Margin="0,0,8,0" />
+                    <Button Classes="secondary" Content="Undo last fill" Command="{Binding UndoLastCommand}" IsVisible="{Binding !IsDraft}" IsEnabled="{Binding !IsBusy}" Margin="0,0,8,0" />
+                    <Button Classes="primary" Content="Fill selected events" Command="{Binding FillSelectedCommand}" IsVisible="{Binding IsBatch}" IsEnabled="{Binding !IsBusy}" />
+                    <Button Classes="primary" Content="Apply selected values" Command="{Binding ApplySelectedCommand}" IsVisible="{Binding !IsBatch}" IsEnabled="{Binding !IsBusy}" />
+                </WrapPanel>
+            </controls:DialogCard.Footer>
+        </controls:DialogCard>
+    </controls:OverlayShell>
+</UserControl>

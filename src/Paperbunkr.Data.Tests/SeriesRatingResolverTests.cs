@@ -36,6 +36,14 @@ public class SeriesRatingResolverTests
     }
 
     [Fact]
+    public void ZeroRating_IsUnrated()
+    {
+        var series = new Series { Issues = { new Issue { Rating = 0f }, new Issue { Rating = 4f } } };
+
+        Assert.Equal(4f, SeriesRatingResolver.Recompute(series));
+    }
+
+    [Fact]
     public void SingleRatedIssue_ReturnsThatIssuesRating()
     {
         var series = new Series { Issues = { new Issue { Rating = 4.5f } } };

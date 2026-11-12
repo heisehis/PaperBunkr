@@ -317,6 +317,9 @@
 
     <UserControl.Resources>
         <!-- One name in the info panel's characters / teams / locations / genres / tags lists (squircle chip, never an oval pill). -->
+        <DataTemplate x:Key="InfoEntityChipTemplate" x:DataType="vm:TagPillViewModel">
+            <Button Classes="filterChip" Content="{Binding Value}" Command="{Binding SearchCommand}" Margin="0,0,4,4" />
+        </DataTemplate>
         <DataTemplate x:Key="InfoChipTemplate">
             <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{StaticResource PbRadiusChip}" Padding="8,3" Margin="0,0,4,4">
                 <TextBlock Text="{Binding}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
@@ -988,12 +991,15 @@
 
                             <StackPanel Spacing="3" IsVisible="{Binding Info.Model.HasCredits}">
                                 <TextBlock Text="CREDITS" Classes="drawerSectionHeader" />
-                                <ItemsControl ItemsSource="{Binding Info.Model.Credits}">
+                                <ItemsControl ItemsSource="{Binding Info.CreditLinks}">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,2">
-                                                <Run Text="{Binding Role}" FontWeight="SemiBold" /><Run Text=": " /><Run Text="{Binding Names}" />
-                                            </TextBlock>
+                                        <DataTemplate x:DataType="vm:ReaderCreditLinks">
+                                            <StackPanel Spacing="4" Margin="0,0,0,8">
+                                                <TextBlock Classes="pbTextCaption" Text="{Binding Role}" />
+                                                <ItemsControl ItemsSource="{Binding People}" ItemTemplate="{StaticResource InfoEntityChipTemplate}">
+                                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                                </ItemsControl>
+                                            </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
@@ -1001,19 +1007,19 @@
 
                             <StackPanel Spacing="3" IsVisible="{Binding Info.Model.HasCharacters}">
                                 <TextBlock Text="CHARACTERS" Classes="drawerSectionHeader" />
-                                <ItemsControl ItemsSource="{Binding Info.Model.Characters}" ItemTemplate="{StaticResource InfoChipTemplate}">
+                                <ItemsControl ItemsSource="{Binding Info.CharacterLinks}" ItemTemplate="{StaticResource InfoEntityChipTemplate}">
                                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                 </ItemsControl>
                             </StackPanel>
                             <StackPanel Spacing="3" IsVisible="{Binding Info.Model.HasTeams}">
                                 <TextBlock Text="TEAMS" Classes="drawerSectionHeader" />
-                                <ItemsControl ItemsSource="{Binding Info.Model.Teams}" ItemTemplate="{StaticResource InfoChipTemplate}">
+                                <ItemsControl ItemsSource="{Binding Info.TeamLinks}" ItemTemplate="{StaticResource InfoEntityChipTemplate}">
                                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                 </ItemsControl>
                             </StackPanel>
                             <StackPanel Spacing="3" IsVisible="{Binding Info.Model.HasLocations}">
                                 <TextBlock Text="LOCATIONS" Classes="drawerSectionHeader" />
-                                <ItemsControl ItemsSource="{Binding Info.Model.Locations}" ItemTemplate="{StaticResource InfoChipTemplate}">
+                                <ItemsControl ItemsSource="{Binding Info.LocationLinks}" ItemTemplate="{StaticResource InfoEntityChipTemplate}">
                                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                 </ItemsControl>
                             </StackPanel>

@@ -2,7 +2,6 @@
   "schemaVersion": 2,
   "id": "paperbunkr.crimson_ink",
   "name": "Crimson Ink",
-  "mode": "Dark",
   "base": {
     "palette": {
       "canvas": "#121214",
@@ -63,6 +62,98 @@
       },
       "panel.floating": {
         "radius": 3
+      }
+    }
+  },
+  "variants": {
+    "dark": {
+      "name": "Dark",
+      "mode": "Dark",
+      "materials": {
+        "inkGrain": {
+          "type": "texture",
+          "source": "textures/ink-grain.png",
+          "fallback": "#121214"
+        }
+      },
+      "surfaces": {
+        "canvas": "inkGrain"
+      }
+    },
+    "paper": {
+      "name": "Paper",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#FAF8F5",
+        "ink": "#141414",
+        "accent": "#C8102E",
+        "success": "#2E7A46",
+        "badge": "#141414"
+      },
+      "materials": {
+        "paperGrain": {
+          "type": "texture",
+          "source": "textures/paper-grain.png",
+          "fallback": "#FAF8F5"
+        }
+      },
+      "surfaces": {
+        "canvas": "paperGrain"
+      },
+      "semantic": {
+        "surface": {
+          "navigation": "#F1EEEA",
+          "raised": "#FFFFFF",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#CFC9C2",
+          "strong": "#141414"
+        },
+        "badge": {
+          "text": "#FAF8F5"
+        },
+        "status": {
+          "danger": "#B0102A",
+          "warning": "#7A5A0A",
+          "info": "#1F4E79"
+        },
+        "chart": {
+          "series": {
+            "1": "#C8102E",
+            "2": "#5E5A55"
+          }
+        },
+        "glow": {
+          "color": "#40C8102E"
+        }
+      },
+      "typography": {
+        "heading": {
+          "family": "Georgia"
+        },
+        "display": {
+          "family": "Georgia"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#FFFFFF",
+          "states": {
+            "hover": {
+              "background": "#A80D26"
+            }
+          }
+        },
+        "button.secondary": {
+          "border": "#141414"
+        },
+        "button.ghost": {
+          "border": "#141414"
+        },
+        "chip": {
+          "border": "#141414"
+        }
       }
     }
   }

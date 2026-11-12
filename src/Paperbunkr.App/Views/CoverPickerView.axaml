@@ -3,6 +3,7 @@
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:metadata="using:Paperbunkr.Data.Metadata"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -66,7 +67,8 @@
                     <ItemsControl ItemsSource="{Binding SeriesCandidates}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <WrapPanel />
+                                <!-- Virtualized: an entity page offers every appearance as a candidate, thousands for a big character. 64x94 tile + 4 px margin. -->
+                                <controls:VirtualizingWrapPanel ItemWidth="72" ItemHeight="102" />
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
@@ -90,7 +92,8 @@
                     <ItemsControl ItemsSource="{Binding ReadingListCandidates}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <WrapPanel />
+                                <!-- Virtualized: an entity page offers every appearance as a candidate, thousands for a big character. 64x94 tile + 4 px margin. -->
+                                <controls:VirtualizingWrapPanel ItemWidth="72" ItemHeight="102" />
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
@@ -116,7 +119,8 @@
                     <ItemsControl ItemsSource="{Binding ExternalProviderCandidates}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <WrapPanel />
+                                <!-- Virtualized: an entity page offers every appearance as a candidate, thousands for a big character. 64x94 tile + 4 px margin. -->
+                                <controls:VirtualizingWrapPanel ItemWidth="72" ItemHeight="102" />
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>

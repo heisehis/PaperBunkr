@@ -359,6 +359,66 @@ public class ThemeSkinTests : IDisposable
         """;
 
     [Fact]
+    public void BorderThicknessAndShadow_DefaultToTheLongStandingLook()
+    {
+        CreateService().ApplyTheme("default");
+
+        // docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md Q14: an unstyled theme keeps 1 px borders and no button shadow.
+        foreach (string key in new[] { "PbButtonPrimaryBorderThickness", "PbButtonSecondaryBorderThickness", "PbButtonGhostBorderThickness", "PbChipBorderThickness", "PbPanelFloatingBorderThickness" })
+        {
+            Assert.Equal(new Thickness(1), Res(key));
+        }
+
+        Assert.Equal(0, ((BoxShadows)Res("PbButtonPrimaryShadow")!).Count);
+        Assert.Equal(BrushColor("PbAccentSoftBrush"), BrushColor("PbSelectionBrush"));
+    }
+
+    [Fact]
+    public void BorderThickness_IsCappedAtThree_AndAShadowParses_AndBothClearOnSwitchingAway()
+    {
+        InstallTheme("ink", Theme("""
+            "components": {
+              "button.primary": { "borderThickness": 2, "shadow": "2 2 0 0 #0078BF" },
+              "chip": { "borderThickness": 9 },
+              "panel.floating": { "borderThickness": "1,4,1,1" }
+            }
+            """));
+        var service = CreateService();
+
+        service.ApplyTheme("ink");
+
+        Assert.Equal(new Thickness(2), Res("PbButtonPrimaryBorderThickness"));
+        Assert.Equal(new Thickness(3), Res("PbChipBorderThickness"));
+        Assert.Equal(new Thickness(1, 3, 1, 1), Res("PbPanelFloatingBorderThickness"));
+        var shadow = (BoxShadows)Res("PbButtonPrimaryShadow")!;
+        Assert.Equal(1, shadow.Count);
+        Assert.Equal(C("#0078BF"), shadow[0].Color);
+        Assert.Equal(2, shadow[0].OffsetX);
+
+        service.ApplyTheme("default");
+        Assert.Equal(new Thickness(1), Res("PbChipBorderThickness"));
+        Assert.Equal(0, ((BoxShadows)Res("PbButtonPrimaryShadow")!).Count);
+    }
+
+    [Fact]
+    public void ASelectionMaterial_BecomesTheSelectedRowBrush_AndTheColourStaysPlain()
+    {
+        InstallTheme("tone", Theme("""
+            "materials": { "dots": { "type": "texture", "source": "assets/textures/dots.png", "fallback": "#202020" } },
+            "surfaces": { "selection": "dots" }
+            """), ("assets/textures/dots.png", Png(4, 4)));
+        var service = CreateService();
+
+        service.ApplyTheme("tone");
+
+        Assert.IsType<ImageBrush>(Res("PbSelectionBrush"));
+        Assert.IsType<Color>(Res("PbSelectionColor"));
+
+        service.ApplyTheme("default");
+        Assert.IsAssignableFrom<ISolidColorBrush>(Res("PbSelectionBrush"));
+    }
+
+    [Fact]
     public void Materials_BecomeGradientAndImageBrushes_AndTheColourTokenStaysSolid()
     {
         InstallTheme("mat", Theme(MaterialTheme), ("assets/textures/linen.png", Png(8, 8)));

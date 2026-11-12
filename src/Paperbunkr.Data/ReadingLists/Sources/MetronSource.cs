@@ -131,7 +131,7 @@ public sealed class MetronSource : IReadingListSource
             // response, and an id is never made up (docs/superpowers/specs/2026-10-13-cbl-smart-match-core-design.md §5.3).
             ComicVineIssueId: PositiveId(node["cv_id"]),
             MetronIssueId: PositiveId(node["id"]),
-            MetronSeriesId: PositiveId(node["series"]?["id"]));
+            MetronSeriesId: PositiveId(node["series"]?["id"]), StoreDate: storeDate, CoverDate: coverDate);
     }
 
     private static string? PositiveId(JsonNode? node) =>
@@ -148,7 +148,7 @@ public sealed class MetronSource : IReadingListSource
         // cv_id: Metron's ArcSerializer fields are (id, name, desc, image, cv_id, gcd_id, resource_url, modified) - checked against
         // Metron-Project/metron api/v1_0/serializers/arc.py for the Story Event resolver (docs/superpowers/specs/2026-09-27-story-event-resolver-design.md §3).
         string? cvId = detail["cv_id"] is JsonValue cv && long.TryParse(cv.ToString(), out long parsedCv) && parsedCv > 0 ? parsedCv.ToString() : null;
-        return new ArcOverviewInfo(detail["desc"]?.GetValue<string>(), detail["image"]?.GetValue<string>(), cvId);
+        return new ArcOverviewInfo(detail["desc"]?.GetValue<string>(), detail["image"]?.GetValue<string>(), cvId, detail["name"]?.GetValue<string>());
     }
 
     private static int? ParseYearFromDate(string? date)

@@ -125,7 +125,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         {
             ApplyState(state);
             ListLayouts.TrackChange();
-        }, close);
+        }, close, Tabs.HasCreatorRuns);
 
     public void ApplyLayoutJson(string json) => ApplyState(DetailListLayoutStateJson.Deserialize(json, manga: true));
 
@@ -722,6 +722,38 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     {
         ChapterGroups.Clear();
         string groupBy = _detailLayoutState.ChapterGroupBy;
+        if (groupBy is DetailGrouping.Arcs or DetailGrouping.CreatorRuns && _seriesId is int seriesId)
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            var issues = context.Issues.Include(i => i.MetadataProposals).Where(i => i.SeriesId == seriesId).ToList();
+            var byId = Chapters.ToDictionary(c => c.Id);
+            var used = new HashSet<int>();
+            bool first = true;
+            var credits = context.CreatorCredits.AsNoTracking().Include(c => c.Creator).Where(c => c.Issue!.SeriesId == seriesId).ToList();
+            var sections = groupBy == DetailGrouping.CreatorRuns
+                ? CreatorRunDetector.FindAll(issues, credits).Select(r => (Name: r.CreatorName, Subtitle: $"{r.Role} · {r.Range}", Issues: r.Issues))
+                : SeriesArcDetector.Find(issues, ContentType.Manga).Select(a => (Name: a.Name, Subtitle: $"{a.Range} · {a.Source}", Issues: a.Issues));
+            foreach (var arc in sections)
+            {
+                var members = arc.Issues.Where(i => byId.ContainsKey(i.Id)).ToList();
+                if (members.Count == 0) continue;
+                var ids = members.Select(i => i.Id).ToList();
+                used.UnionWith(ids);
+                var structure = new IssueRunGroup { Header = arc.Name, Subtitle = arc.Subtitle, IsFirstSection = first, ReadLabel = groupBy == DetailGrouping.CreatorRuns ? "Read this run" : "Read this arc",
+                    TotalCount = members.Count, ReadCount = members.Count(i => i.HasBeenRead()),
+                    ReadCommand = new RelayCommand(() =>
+                    {
+                        var next = members.FirstOrDefault(i => !i.FileIsMissing && !i.HasBeenRead()) ?? members.FirstOrDefault(i => !i.FileIsMissing);
+                        if (next is not null) { if (Tabs.ReadQueue is { } read) read(next.Id, new Services.Reader.ReadingQueue(ids, arc.Name)); else _goToReader(next.Id); }
+                    }),
+                    SaveCommand = new RelayCommand(() => { using var db = PaperbunkrDb.CreateContext(); int id = OrderedIssueLists.Save(db, arc.Name, ids); Tabs.OpenReadingList?.Invoke(id); }) };
+                ChapterGroups.Add(new ChapterVolumeGroup { VolumeLabel = arc.Name, Structure = structure, Chapters = ids.Select(id => byId[id]).ToList() });
+                first = false;
+            }
+            var other = Chapters.Where(c => !used.Contains(c.Id)).ToList();
+            if (other.Count > 0) ChapterGroups.Add(new ChapterVolumeGroup { VolumeLabel = "Other issues", Chapters = other });
+            return;
+        }
         if (groupBy == DetailGrouping.None)
         {
             if (Chapters.Count > 0)

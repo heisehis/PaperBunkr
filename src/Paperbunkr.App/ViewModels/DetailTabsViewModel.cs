@@ -33,12 +33,37 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, IListLayoutHost
 {
+    public Action<ComicMetadataEntityKind, string>? OpenEntity { get; set; }
+    private Func<IReadOnlyList<TagPillViewModel>, Task>? _fillChipImages;
+
+    /// <summary>Fills the credit chips' images (the app sets <see cref="Services.EntityChipImages.FillAsync"/>; null in tests, so no database is
+    /// read). Setting it also refreshes them whenever an entity image changes elsewhere, since this view model outlives a visit to a writer's page.</summary>
+    public Func<IReadOnlyList<TagPillViewModel>, Task>? FillChipImages
+    {
+        get => _fillChipImages;
+        set
+        {
+            if (_fillChipImages is null && value is not null)
+            {
+                Services.EntityChipImages.Changed += FillCreditChipImages;
+            }
+
+            _fillChipImages = value;
+        }
+    }
+
+    private void FillCreditChipImages() => _ = _fillChipImages?.Invoke(CreditRoles.ToList().SelectMany(g => g.Chips).ToList());
+    public Action<int>? OpenContinuity { get; set; }
+    public Action<int, Services.Reader.ReadingQueue>? ReadQueue { get; set; }
+    public Action<int>? OpenReadingList { get; set; }
+    private void OpenCreator(string name) { if (OpenEntity is { } open) open(ComicMetadataEntityKind.Creator, name); else _goLibraryWithSearch(name); }
+    [RelayCommand] private void OpenContinuityChip(ContinuityChip? chip) { if (chip is not null) OpenContinuity?.Invoke(chip.ContinuityId); }
     /// <summary>Right-click/Menu-key menu for the Issues-tab tiles (docs/superpowers/specs/
     /// 2026-08-31-keyboard-operability-design.md) - a new menu, this screen had none before.
     /// Delegated out, same pattern as <see cref="LibraryScreenViewModel"/>'s own
     /// <see cref="IContextMenuProvider"/> implementation.</summary>
     IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
-        new DetailIssueContextMenuBuilder(this).Build(target);
+        new DetailIssueContextMenuBuilder(this).Build(target) ?? new TagPillContextMenuBuilder().Build(target);
 
     private readonly ITrackerAutoSyncService _trackerAutoSync;
     private readonly Action<int> _goToProperties;
@@ -171,7 +196,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
             IssueViewMode = state.ViewMode;
             RenderIssueLayout();
             ListLayouts.TrackChange();
-        }, close);
+        }, close, offerCreatorRuns: HasCreatorRuns);
 
     public void ApplyLayoutJson(string json)
     {
@@ -256,6 +281,12 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
             var single = new IssueRunGroup();
             foreach (var card in sorted) single.Items.Add(card);
             yield return single;
+            yield break;
+        }
+
+        if (groupBy is DetailGrouping.Arcs or DetailGrouping.CreatorRuns)
+        {
+            foreach (var section in StructureGroups(groupBy, sorted)) yield return section;
             yield break;
         }
 
@@ -467,6 +498,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         // series-detail-specials-tab-design.md) - not duplicated into Issues/IssueGroups, and never
         // grouped (a handful of one-shots/omnibuses doesn't need a separator); they share the layout's sort.
         _issueEntities = series.Issues.ToDictionary(i => i.Id);
+        LoadStructure(series);
         _specialCards = series.Issues.Where(i => i.IsSpecial()).OrderByNumber().Select(i => BuildIssueCard(i, series, coverBrush)).ToList();
         _issueCards = series.Issues.Where(i => !i.IsSpecial()).OrderByRun().Select(i => BuildIssueCard(i, series, coverBrush)).ToList();
 
@@ -500,6 +532,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         {
             RefreshCreditRoles(series.Issues);
         }
+        FillCreditChipImages();
         RefreshAdditionalDetails(series.Issues);
 
         ComicScraperDetailView = ScraperPanelFactory?.Invoke(series) ?? _pluginHost?.GetSeriesDetailExtension(series);
@@ -669,7 +702,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
             }
 
             var chips = new ObservableCollection<TagPillViewModel>(
-                names.Select(v => new TagPillViewModel(v, category: null, IssueTagWeight.Unset, _goLibraryWithSearch, reweight: null)));
+                names.Select(CreatorPill));
             CreditRoles.Add(new CreditRoleGroup(label, chips));
         }
 
@@ -677,6 +710,9 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         OnPropertyChanged(nameof(HasCreditRoles));
         OnPropertyChanged(nameof(ShowCreditRoles));
     }
+
+    private TagPillViewModel CreatorPill(string name) =>
+        new(name, null, IssueTagWeight.Unset, OpenCreator, null) { EntityKind = ComicMetadataEntityKind.Creator, SearchLibrary = _goLibraryWithSearch };
 
     private void AddCreditRole(string label, BulkFieldDescriptor field, IReadOnlyList<Issue> issues)
     {
@@ -687,7 +723,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         }
 
         var chips = new ObservableCollection<TagPillViewModel>(
-            values.Select(v => new TagPillViewModel(v, category: null, IssueTagWeight.Unset, _goLibraryWithSearch, reweight: null)));
+            values.Select(CreatorPill));
         CreditRoles.Add(new CreditRoleGroup(label, chips));
     }
 
@@ -2876,7 +2912,28 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         }
 
         _selection.Toggle(list, issue, isShiftHeld);
-        _onSelectionChanged?.Invoke();
+        NotifySelectionOnly();
+    }
+
+    /// <summary>
+    /// True while the host's selection callback runs for a change that only moved the selection (a tile clicked, Ctrl/Shift-clicked or
+    /// Shift+arrowed), as opposed to one that changed the series' data (a load, a tracker pull marking issues read). The host can then skip
+    /// rebuilding the hero when what it shows has not changed - with two or more tiles selected it shows the whole series either way, and
+    /// rebuilding it per tile (a database round trip and the whole band) is what made Ctrl+click and Shift+arrow slow (2026-11-12).
+    /// </summary>
+    internal bool IsSelectionOnlyChange { get; private set; }
+
+    private void NotifySelectionOnly()
+    {
+        IsSelectionOnlyChange = true;
+        try
+        {
+            _onSelectionChanged?.Invoke();
+        }
+        finally
+        {
+            IsSelectionOnlyChange = false;
+        }
     }
 
     /// <summary>
@@ -2893,7 +2950,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider, 
         }
 
         _selection.ReplaceSelection(list, issue, new[] { (IEnumerable<IssueCardSample>)Issues, Specials });
-        _onSelectionChanged?.Invoke();
+        NotifySelectionOnly();
     }
 
     /// <summary>Double-click / double-tap on a tile - opens that issue in the reader (Issues and

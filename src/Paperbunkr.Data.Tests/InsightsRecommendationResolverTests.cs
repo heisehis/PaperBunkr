@@ -38,6 +38,14 @@ public class InsightsRecommendationResolverTests : IDisposable
 
     private PaperbunkrDbContext NewContext() => new(_dbOptions);
 
+    private static Series SeedOwnedSeries(PaperbunkrDbContext context, string name)
+    {
+        var series = InsightsResolverTests.SeedSeries(context, name);
+        InsightsResolverTests.SeedIssue(context, series.Id);
+        return series;
+    }
+
+
     /// <summary>Marks a series as "recently opened" for <see cref="HomeFeedResolver.GetRecentlyOpenedSeriesIds"/>
     /// purposes by giving one of its issues an <see cref="Issue.OpenedTime"/>.</summary>
     private static void MarkOpened(PaperbunkrDbContext ctx, int seriesId, DateTime when)
@@ -49,8 +57,8 @@ public class InsightsRecommendationResolverTests : IDisposable
     public void FinishedSeriesWithRealRelation_ReturnsSeedAndTarget()
     {
         using var ctx = NewContext();
-        var source = InsightsResolverTests.SeedSeries(ctx, "Source Series");
-        var target = InsightsResolverTests.SeedSeries(ctx, "Target Series");
+        var source = SeedOwnedSeries(ctx, "Source Series");
+        var target = SeedOwnedSeries(ctx, "Target Series");
         var issue = InsightsResolverTests.SeedIssue(ctx, source.Id);
         InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, issue.Id, ReadingEventKind.Finished, Now, seriesId: source.Id);
         MediaRelationResolver.TryCreate(ctx, source.Id, target.Id, RelationType.Prequel);
@@ -69,20 +77,20 @@ public class InsightsRecommendationResolverTests : IDisposable
     public void TargetAlreadyInHomesPicks_IsExcluded_AndFallsThroughToNextSeed()
     {
         using var ctx = NewContext();
-        var homeSeed = InsightsResolverTests.SeedSeries(ctx, "Home Seed");
-        var excludedTarget = InsightsResolverTests.SeedSeries(ctx, "Excluded Target");
+        var homeSeed = SeedOwnedSeries(ctx, "Home Seed");
+        var excludedTarget = SeedOwnedSeries(ctx, "Excluded Target");
         MarkOpened(ctx, homeSeed.Id, Now);
         MediaRelationResolver.TryCreate(ctx, homeSeed.Id, excludedTarget.Id, RelationType.Prequel);
 
         // Most-recently-finished series only relates to the now-excluded target.
-        var recentSeed = InsightsResolverTests.SeedSeries(ctx, "Recent Finish");
+        var recentSeed = SeedOwnedSeries(ctx, "Recent Finish");
         var recentIssue = InsightsResolverTests.SeedIssue(ctx, recentSeed.Id);
         InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, recentIssue.Id, ReadingEventKind.Finished, Now, seriesId: recentSeed.Id);
         MediaRelationResolver.TryCreate(ctx, recentSeed.Id, excludedTarget.Id, RelationType.Prequel);
 
         // Earlier-finished series relates to a different, non-excluded target.
-        var olderSeed = InsightsResolverTests.SeedSeries(ctx, "Older Finish");
-        var olderTarget = InsightsResolverTests.SeedSeries(ctx, "Older Target");
+        var olderSeed = SeedOwnedSeries(ctx, "Older Finish");
+        var olderTarget = SeedOwnedSeries(ctx, "Older Target");
         var olderIssue = InsightsResolverTests.SeedIssue(ctx, olderSeed.Id);
         InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, olderIssue.Id, ReadingEventKind.Finished, Now.AddDays(-5), seriesId: olderSeed.Id);
         MediaRelationResolver.TryCreate(ctx, olderSeed.Id, olderTarget.Id, RelationType.Prequel);
@@ -98,12 +106,12 @@ public class InsightsRecommendationResolverTests : IDisposable
     public void AllCandidatesExcluded_ReturnsNull()
     {
         using var ctx = NewContext();
-        var homeSeed = InsightsResolverTests.SeedSeries(ctx, "Home Seed");
-        var excludedTarget = InsightsResolverTests.SeedSeries(ctx, "Excluded Target");
+        var homeSeed = SeedOwnedSeries(ctx, "Home Seed");
+        var excludedTarget = SeedOwnedSeries(ctx, "Excluded Target");
         MarkOpened(ctx, homeSeed.Id, Now);
         MediaRelationResolver.TryCreate(ctx, homeSeed.Id, excludedTarget.Id, RelationType.Prequel);
 
-        var finishedSeed = InsightsResolverTests.SeedSeries(ctx, "Finished Series");
+        var finishedSeed = SeedOwnedSeries(ctx, "Finished Series");
         var issue = InsightsResolverTests.SeedIssue(ctx, finishedSeed.Id);
         InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, issue.Id, ReadingEventKind.Finished, Now, seriesId: finishedSeed.Id);
         MediaRelationResolver.TryCreate(ctx, finishedSeed.Id, excludedTarget.Id, RelationType.Prequel);
@@ -122,14 +130,14 @@ public class InsightsRecommendationResolverTests : IDisposable
     public void MostRecentlyFinishedSeries_IsPreferred_WhenItHasValidRecommendations()
     {
         using var ctx = NewContext();
-        var recentSeed = InsightsResolverTests.SeedSeries(ctx, "Recent Finish");
-        var recentTarget = InsightsResolverTests.SeedSeries(ctx, "Recent Target");
+        var recentSeed = SeedOwnedSeries(ctx, "Recent Finish");
+        var recentTarget = SeedOwnedSeries(ctx, "Recent Target");
         var recentIssue = InsightsResolverTests.SeedIssue(ctx, recentSeed.Id);
         InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, recentIssue.Id, ReadingEventKind.Finished, Now, seriesId: recentSeed.Id);
         MediaRelationResolver.TryCreate(ctx, recentSeed.Id, recentTarget.Id, RelationType.Prequel);
 
-        var olderSeed = InsightsResolverTests.SeedSeries(ctx, "Older Finish");
-        var olderTarget = InsightsResolverTests.SeedSeries(ctx, "Older Target");
+        var olderSeed = SeedOwnedSeries(ctx, "Older Finish");
+        var olderTarget = SeedOwnedSeries(ctx, "Older Target");
         var olderIssue = InsightsResolverTests.SeedIssue(ctx, olderSeed.Id);
         InsightsResolverTests.SeedEvent(ctx, ReadingItemType.Comic, olderIssue.Id, ReadingEventKind.Finished, Now.AddDays(-5), seriesId: olderSeed.Id);
         MediaRelationResolver.TryCreate(ctx, olderSeed.Id, olderTarget.Id, RelationType.Prequel);

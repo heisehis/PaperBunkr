@@ -29,6 +29,8 @@ public enum ContinuityScreenPage
 /// </summary>
 public partial class ContinuityScreenViewModel : ViewModelBase
 {
+    public Action<Paperbunkr.Data.Entities.ComicMetadataEntityKind, int, int?>? OpenEntity { get; set; }
+    public Action<string>? ShowInLibrary { get; set; }
     private int? _activeEventId;
     private int? _activeContinuityId;
     private readonly Action<int> _goToSeriesDetail;
@@ -53,6 +55,9 @@ public partial class ContinuityScreenViewModel : ViewModelBase
 
         Navigation = new ContinuityScreenNavigation
         {
+            OpenEntity = (kind, id, continuityId) => OpenEntity?.Invoke(kind, id, continuityId),
+            ShowInLibrary = name => ShowInLibrary?.Invoke(name),
+            OpenMapFeaturing = (kind, id) => ShowMapFeaturing(kind, id),
             GoToSeriesDetail = id => _goToSeriesDetail(id),
             GoToReader = id => _goToReader(id),
             GoToReaderInEvent = (issueId, eventId) => _goToReaderInEvent(issueId, eventId),
@@ -60,6 +65,7 @@ public partial class ContinuityScreenViewModel : ViewModelBase
             Notify = notifyAction,
             Activity = _activity,
             OpenEvent = id => LoadEvent(id),
+            OpenEventSmartFill = (id, fill) => SmartFill!.Open(id, fill),
             OpenEventMap = id =>
             {
                 LoadEvent(id);
@@ -83,6 +89,7 @@ public partial class ContinuityScreenViewModel : ViewModelBase
             () => Sidebar.SuggestionsCount = Suggestions!.TotalCount, Sidebar.RefreshEvents);
         ContinuityPage = new ContinuityPageViewModel(Navigation);
         EventPage = new EventPageViewModel(Navigation);
+        SmartFill = new EventSmartFillViewModel(() => { RefreshSidebar(); if (_activeEventId is int id) LoadEvent(id); }, activity: _activity);
         Timeline = new ContinuityTimelineViewModel(id => _goToReader(id));
 
         // Production passes false: MainViewModel.GoEvents() refreshes on navigation, so startup doesn't pay for two list queries.
@@ -94,6 +101,7 @@ public partial class ContinuityScreenViewModel : ViewModelBase
     }
 
     public ContinuityScreenNavigation Navigation { get; }
+    public EventSmartFillViewModel SmartFill { get; }
 
     public ContinuitySidebarViewModel Sidebar { get; }
 
@@ -118,7 +126,7 @@ public partial class ContinuityScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEventSelected), nameof(IsContinuitySelected), nameof(IsSuggestionsOpen), nameof(HasPage),
-        nameof(ShowEmptyPrompt), nameof(ShowEventMap), nameof(ShowDetailScroller), nameof(ActiveMap), nameof(ShowOverview), nameof(ShowTimeline))]
+        nameof(ShowEmptyPrompt), nameof(ShowEventMap), nameof(ShowFullHero), nameof(ShowDetailScroller), nameof(ActiveMap), nameof(ShowOverview), nameof(ShowTimeline))]
     private ContinuityScreenPage _page = ContinuityScreenPage.None;
 
     public bool IsEventSelected => Page == ContinuityScreenPage.Event;
@@ -143,7 +151,7 @@ public partial class ContinuityScreenViewModel : ViewModelBase
     // --- Overview | Map | Timeline ---
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsOverviewView), nameof(IsMapView), nameof(IsTimelineView), nameof(ShowEventMap), nameof(ShowDetailScroller), nameof(ActiveMap), nameof(ShowOverview), nameof(ShowTimeline))]
+    [NotifyPropertyChangedFor(nameof(IsOverviewView), nameof(IsMapView), nameof(IsTimelineView), nameof(ShowEventMap), nameof(ShowFullHero), nameof(ShowDetailScroller), nameof(ActiveMap), nameof(ShowOverview), nameof(ShowTimeline))]
     private EventsDetailView _detailView = EventsDetailView.Primary;
 
     public bool IsOverviewView => DetailView == EventsDetailView.Primary;
@@ -151,6 +159,21 @@ public partial class ContinuityScreenViewModel : ViewModelBase
     public bool IsMapView => DetailView == EventsDetailView.Map;
 
     public bool IsTimelineView => DetailView == EventsDetailView.Timeline;
+
+    [ObservableProperty]
+    private bool _isMapMaximized;
+
+    partial void OnIsMapMaximizedChanged(bool value)
+    {
+        if (_map is not null) _map.IsMapMaximized = value;
+    }
+
+    public bool ToggleMapMaximize()
+    {
+        if (!ShowEventMap) return false;
+        IsMapMaximized = !IsMapMaximized;
+        return true;
+    }
 
     /// <summary>The open page's Overview is what the body shows.</summary>
     public bool ShowOverview => HasPage && IsOverviewView;
@@ -471,9 +494,17 @@ public partial class ContinuityScreenViewModel : ViewModelBase
 
     private EventMapViewModel? _map;
     private bool _mapOpenedReader;
+    private bool? _lastMapScopeContinuity;
+    private double _continuityMapScale = 1;
+    private double _eventMapScale = 1;
 
     /// <summary>The map's own view model, built the first time Map is chosen.</summary>
-    public EventMapViewModel Map => _map ??= new EventMapViewModel(
+    public EventMapViewModel Map => _map ??= CreateMap();
+    internal void LeaveScreen() => _map?.ResetHiddenSeries();
+
+    private EventMapViewModel CreateMap()
+    {
+        var map = new EventMapViewModel(
         openReader: (issueId, eventId) =>
         {
             _mapOpenedReader = true;
@@ -496,6 +527,36 @@ public partial class ContinuityScreenViewModel : ViewModelBase
             DetailView = EventsDetailView.Map;
         },
         showDuplicates: OpenSuggestions);
+        map.ToggleMaximizeRequested += () => ToggleMapMaximize();
+        map.Dialogs = Dialogs;
+        map.IsMapMaximized = IsMapMaximized;
+        map.RestoreMaximize = () =>
+        {
+            if (!IsMapMaximized) return false;
+            IsMapMaximized = false;
+            return true;
+        };
+        return map;
+    }
+
+    /// <summary>
+    /// Opens a continuity's or an event's Map with Featuring set (continuity map M5 §5, from an entity page). The map loads lazily and
+    /// asynchronously, so Featuring is held until its data has arrived.
+    /// </summary>
+    public void OpenMapFeaturing(bool continuity, int id, Paperbunkr.Data.Entities.ComicMetadataEntityKind kind, int entityId)
+    {
+        if (continuity) LoadContinuity(id); else LoadEvent(id);
+        ShowMapFeaturing(kind, entityId);
+    }
+
+    private void ShowMapFeaturing(Paperbunkr.Data.Entities.ComicMetadataEntityKind kind, int entityId)
+    {
+        DetailView = EventsDetailView.Map;
+        Map.SetFeaturing(kind, entityId);
+    }
+
+    /// <summary>Confirmations for map actions (M4's "start tracking these series"). Set by the main window's view model.</summary>
+    public IDialogService? Dialogs { get; set; }
 
     /// <summary>Test seam: how the map runs its load query. Null = a thread-pool task.</summary>
     internal Func<Func<EventMapSource?>, Task<EventMapSource?>>? MapBackgroundRunner { get; set; }
@@ -505,6 +566,8 @@ public partial class ContinuityScreenViewModel : ViewModelBase
 
     /// <summary>The map sits beside, not inside, the page's ScrollViewer - it needs its own two-axis viewport.</summary>
     public bool ShowEventMap => HasPage && IsMapView;
+
+    public bool ShowFullHero => HasPage && !IsMapView;
 
     public bool ShowDetailScroller => !IsMapView || !HasPage;
 
@@ -516,6 +579,14 @@ public partial class ContinuityScreenViewModel : ViewModelBase
 
     private void LoadMapForCurrent(int? reselect)
     {
+        bool continuity = IsContinuitySelected;
+        if (_lastMapScopeContinuity != continuity)
+        {
+            if (_lastMapScopeContinuity is true) _continuityMapScale = Map.Scale;
+            else if (_lastMapScopeContinuity is false) _eventMapScale = Map.Scale;
+            Map.Scale = continuity ? _continuityMapScale : _eventMapScale;
+            _lastMapScopeContinuity = continuity;
+        }
         if (IsContinuitySelected && _activeContinuityId is int continuityId)
         {
             MapLoadTask = Map.LoadContinuityAsync(continuityId, reselect);

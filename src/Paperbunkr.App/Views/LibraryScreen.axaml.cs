@@ -174,6 +174,7 @@ public partial class LibraryScreen : UserControl
     private void OnAnyScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
         UpdatePinnedGroupHeader();
+        ReportBannerScroll(e);
 
         if (DataContext is not LibraryScreenViewModel vm || !vm.ShowAlphabetIndex || e.Source is not ScrollViewer scrollViewer)
         {
@@ -191,6 +192,36 @@ public partial class LibraryScreen : UserControl
         {
             button.Classes.Set("current", letter is not null && Equals(button.Tag, letter));
         }
+    }
+
+    /// <summary>
+    /// Tells the view model how far the visible list is scrolled, so the collection banner can go slim (docs/superpowers/specs/2026-11-06-collection-icons-and-slim-banner-design.md).
+    /// Only a vertical scroller in the list area counts: not the preview panel, and not a horizontal shelf (whose vertical offset is always 0).
+    /// </summary>
+    private void ReportBannerScroll(ScrollChangedEventArgs e)
+    {
+        if (DataContext is not LibraryScreenViewModel vm || e.Source is not ScrollViewer scrollViewer || !IsInListArea(scrollViewer))
+        {
+            return;
+        }
+
+        bool scrollsVertically = scrollViewer.Extent.Height > scrollViewer.Viewport.Height + 1;
+        if (e.OffsetDelta.Y != 0 || (scrollsVertically && e.ViewportDelta.Y != 0))
+        {
+            vm.ReportListScroll(scrollViewer.Offset.Y);
+        }
+    }
+
+    /// <summary>True when the control sits in the root grid's list row (row 2), outside the preview panel's column.</summary>
+    private bool IsInListArea(Visual control)
+    {
+        Visual? child = control;
+        while (child is not null && child.GetVisualParent() is { } parent && !ReferenceEquals(parent, RootGrid))
+        {
+            child = parent;
+        }
+
+        return child is Control top && ReferenceEquals(top.GetVisualParent(), RootGrid) && Grid.GetRow(top) == 2 && Grid.GetColumn(top) != 2;
     }
 
     /// <summary>The rail letter of whatever is at the top of the scrolled view, or null when it can't be told. Grouped views: the first realized group

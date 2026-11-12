@@ -165,11 +165,11 @@ public class ThemeServiceOverrideTests : IDisposable
         Assert.Equal(C("#202428"), Resource("PbBgColor"));
         Assert.Equal(ThemeValueSource.UserGlobal, service.Current!.Token("surface.canvas")!.Source);
 
-        service.ApplyTheme("cool_technical");
+        service.ApplyTheme("daylight");
         Assert.Equal(C("#202428"), Resource("PbBgColor"));                        // "all themes" means all themes
 
         service.SetOverride(ThemeOverrideScope.Global, "surface.canvas", null);
-        Assert.Equal(C("#0B0E14"), Resource("PbBgColor"));                        // cool_technical's own background is back
+        Assert.Equal(C("#F7F3EC"), Resource("PbBgColor"));                        // daylight's own background is back
     }
 
     [Fact]
@@ -307,7 +307,7 @@ public class ThemeServiceOverrideTests : IDisposable
     {
         var ninePm = new DateTimeOffset(2026, 1, 1, 21, 0, 0, TimeSpan.Zero);
         var service = CreateService(now: () => ninePm);
-        service.ApplyTheme("cool_technical");                                     // the remembered dark theme
+        service.ApplyTheme("default");                                            // the remembered dark theme
         service.ApplyTheme("paper:light");                                        // active: a family that has its own dark variant
 
         service.SetThemeAutoMode(Paperbunkr.Data.Entities.ThemeAutoMode.Scheduled);

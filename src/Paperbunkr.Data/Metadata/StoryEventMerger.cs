@@ -44,6 +44,7 @@ public static class StoryEventMerger
         var events = context.StoryEvents
             .Include(e => e.Members).ThenInclude(m => m.Issue).ThenInclude(i => i!.Series)
             .Include(e => e.Aliases)
+            .Include(e => e.Tags).Include(e => e.TypeAssignments)
             .Where(e => e.Id == eventAId || e.Id == eventBId)
             .ToList();
         var a = events.Single(e => e.Id == eventAId);
@@ -60,7 +61,7 @@ public static class StoryEventMerger
             .ToList();
 
         MergeNameAndAliases(context, survivor, loser, memberSeries);
-        MergeFields(survivor, loser);
+        MergeMetadata(context, survivor, loser);
         int issuesAdded = MergeMembers(context, survivor, loser);
         RepointReferences(context, survivor.Id, loser.Id);
 
@@ -121,25 +122,30 @@ public static class StoryEventMerger
         }
     }
 
-    private static void MergeFields(StoryEvent survivor, StoryEvent loser)
+    private static void MergeMetadata(PaperbunkrDbContext context, StoryEvent survivor, StoryEvent loser)
     {
         survivor.ComicVineArcId ??= loser.ComicVineArcId;
         survivor.MetronArcId ??= loser.MetronArcId;
+        survivor.GcdArcId ??= loser.GcdArcId;
         survivor.SpineSeriesId ??= loser.SpineSeriesId;
-
-        if (loser.StartDate is DateTime start && (survivor.StartDate is null || start < survivor.StartDate))
+        // Do not broaden dates or choose a longer description over survivor-owned metadata.
+        foreach (var change in context.EventMetadataChanges.Where(c => c.StoryEventId == survivor.Id || c.StoryEventId == loser.Id).ToList())
         {
-            survivor.StartDate = start;
+            int originalId = change.StoryEventId;
+            change.MergeInvalidated = true; change.StoryEventId = survivor.Id; change.StoryEvent = survivor;
+            change.EvidenceJson = System.Text.Json.JsonSerializer.Serialize(new { OriginalEventId = originalId, Evidence = change.EvidenceJson });
         }
-
-        if (loser.EndDate is DateTime end && (survivor.EndDate is null || end > survivor.EndDate))
+        foreach (var field in Enum.GetValues<EventMetadataField>())
         {
-            survivor.EndDate = end;
-        }
-
-        if ((loser.Description?.Trim().Length ?? 0) > (survivor.Description?.Trim().Length ?? 0))
-        {
-            survivor.Description = loser.Description;
+            var value = EventEnrichment.EventMetadataStore.Value(context, loser, field);
+            if (value is null) continue;
+            if (EventEnrichment.EventMetadataStore.Eligible(context, survivor, field))
+                EventEnrichment.EventMetadataStore.Set(context, survivor, field, value);
+            context.EventMetadataChanges.Add(new()
+            {
+                StoryEvent = survivor, OperationId = Guid.NewGuid(), Field = field, AfterValue = value, MergeInvalidated = true,
+                EvidenceJson = System.Text.Json.JsonSerializer.Serialize(new { OriginalEventId = loser.Id, Reason = "Alternative retained from merged event" }),
+            });
         }
     }
 
@@ -269,6 +275,9 @@ public static class StoryEventMerger
                 context.EventSuggestionDismissals.Remove(d);
             }
         }
+
+        // Saved provider issue lists: keep the newer one per provider (continuity map M4).
+        EventArcSnapshots.Merge(context, survivorId, loserId);
 
         foreach (var list in context.ReadingLists.Where(l => l.StoryEventId == loserId).ToList())
         {

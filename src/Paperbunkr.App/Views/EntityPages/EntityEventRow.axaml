@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             x:Class="Paperbunkr.App.Views.EntityPages.EntityEventRow"
+             x:DataType="vm:EntityPageLink">
+    <!-- An event row (redesign §5.3): the 36x44 thumbnail slot is always there (event cover or monogram), so every name lines up. Open on the
+         map is in the row's context menu (the screen's IContextMenuProvider), not a button on the row. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/EntityPageChrome.axaml" />
+    </UserControl.Styles>
+    <Button Classes="entityCell" Command="{Binding OpenCommand}" AutomationProperties.Name="{Binding Name}" ToolTip.Tip="{Binding Name}" Padding="0,4">
+        <Grid ColumnDefinitions="36,*,Auto" ColumnSpacing="12">
+            <Border Classes="eventThumb">
+                <Panel>
+                    <TextBlock Classes="pbTextCaption entityMonogram" Text="{Binding Initials}" IsVisible="{Binding !HasImage}" />
+                    <Image views:AsyncEntityImage.Path="{Binding ImagePath}" Stretch="UniformToFill" IsVisible="{Binding HasImage}" />
+                </Panel>
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                <TextBlock Classes="pbTextBody" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="pbTextCaption" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Grid>
+    </Button>
+</UserControl>

@@ -2,7 +2,6 @@
   "schemaVersion": 2,
   "id": "paperbunkr.arcade",
   "name": "Arcade",
-  "mode": "Dark",
   "base": {
     "palette": {
       "canvas": "#1A1033",
@@ -211,6 +210,115 @@
               }
             }
           }
+        }
+      }
+    }
+  },
+  "variants": {
+    "dark": {
+      "name": "Dark",
+      "mode": "Dark"
+    },
+    "pastel": {
+      "name": "Pastel",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#F4EEFC",
+        "ink": "#2B1650",
+        "accent": "#BA2283",
+        "success": "#0E8A6A",
+        "badge": "#8A6A00"
+      },
+      "materials": {
+        "pastelGrid": {
+          "type": "image",
+          "source": "textures/pastel.png",
+          "fallback": "#F2EEFC",
+          "stretch": "uniformToFill"
+        },
+        "pastelNav": {
+          "type": "linearGradient",
+          "angle": 180,
+          "fallback": "#E6E6F8",
+          "stops": [
+            {
+              "at": 0,
+              "color": "#EBDDFF"
+            },
+            {
+              "at": 1,
+              "color": "#DDF6F1"
+            }
+          ]
+        },
+        "pastelCabinet": {
+          "type": "linearGradient",
+          "angle": 135,
+          "fallback": "#F6F2FD",
+          "stops": [
+            {
+              "at": 0,
+              "color": "#FBF7FF"
+            },
+            {
+              "at": 1,
+              "color": "#F1ECFB"
+            }
+          ]
+        }
+      },
+      "surfaces": {
+        "canvas": "pastelGrid",
+        "navigation": "pastelNav",
+        "raised": "pastelCabinet"
+      },
+      "semantic": {
+        "surface": {
+          "raised": "#F8F4FE",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#D9B8F5",
+          "focus": "#0088A8"
+        },
+        "status": {
+          "danger": "#C0244E",
+          "warning": "#8A5A00",
+          "info": "#0088A8"
+        },
+        "chart": {
+          "series": {
+            "1": "#0088A8",
+            "2": "#8A3FD6"
+          }
+        },
+        "glow": {
+          "color": "#66C8288A"
+        }
+      },
+      "typography": {
+        "heading": {
+          "family": "Bahnschrift"
+        },
+        "display": {
+          "family": "Bahnschrift"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#FFFFFF",
+          "borderThickness": 2,
+          "states": {
+            "hover": {
+              "background": "#DC3C9E"
+            }
+          }
+        },
+        "button.secondary": {
+          "borderThickness": 2
+        },
+        "button.ghost": {
+          "borderThickness": 2
         }
       }
     }

@@ -189,6 +189,13 @@
     -->
     <Styles.Resources>
         <BoxShadows x:Key="PbElevationShadow">0 16 40 -8 #99000000</BoxShadows>
+        <!-- Cover-card depth (docs/superpowers/specs/2026-11-06-personalization-design.md, card elevation). Fallbacks only: ThemeService.BuildCardShadows overwrites
+             them on every theme apply from the elevation setting and the glow colour. These defaults are the Soft level, the look before the setting existed. -->
+        <BoxShadows x:Key="PbPosterShadow">0 6 18 -4 #80000000</BoxShadows>
+        <BoxShadows x:Key="PbPosterShadowHover">0 6 18 -4 #80000000, 0 0 0 2 #66E0995A</BoxShadows>
+        <BoxShadows x:Key="PbShelfShadow">0 14 34 0 #66000000</BoxShadows>
+        <BoxShadows x:Key="PbShelfShadowHover">0 14 34 0 #66000000, 0 0 0 4 #66E0995A</BoxShadows>
+        <BoxShadows x:Key="PbCoverShadow">0 8 24 -12 #80000000</BoxShadows>
         <!-- Design-time/pre-ThemeService-apply fallback only (matches default skin's PbGlowColor,
              bumped to 0x99 alpha) - at runtime, ThemeService.ApplyGlowRing overwrites this same key
              in Application.Resources on every theme apply (BoxShadows is parsed from a single string
@@ -233,13 +240,13 @@
          keyboard navigation. Removed here too so PosterTile (Home) doesn't carry the same latent
          defect even though it wasn't the one reported. -->
     <Style Selector="Border.posterCover">
-        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000" />
+        <Setter Property="BoxShadow" Value="{DynamicResource PbPosterShadow}" />
     </Style>
     <Style Selector="Border.posterTile:pointerover Border.posterCover">
-        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 2 #66E0995A" />
+        <Setter Property="BoxShadow" Value="{DynamicResource PbPosterShadowHover}" />
     </Style>
     <Style Selector="Border.posterTile:focus-visible Border.posterCover">
-        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 2 #66E0995A" />
+        <Setter Property="BoxShadow" Value="{DynamicResource PbPosterShadowHover}" />
     </Style>
 
     <!-- Kinetic Rail hover treatment (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-
@@ -253,12 +260,12 @@
     <!-- Home pitch (docs/superpowers/specs/2026-09-28-home-cosmetics-design.md, "Card hover and shadow"): Home's cards get the
          landing site's deeper resting shadow. Still static - only the value differs per state, nothing transitions it. -->
     <Style Selector="Border.posterTile.shelfCard Border.posterCover">
-        <Setter Property="BoxShadow" Value="0 14 34 0 #66000000" />
+        <Setter Property="BoxShadow" Value="{DynamicResource PbShelfShadow}" />
     </Style>
     <!-- Hover keeps its faint accent edge; keyboard focus gets the full PbGlowRing on the tileRing overlay (PosterTile.axaml), so a hovered
          tile and the keyboard-focused tile never look the same. -->
     <Style Selector="Border.posterTile.shelfCard:pointerover Border.posterCover">
-        <Setter Property="BoxShadow" Value="0 14 34 0 #66000000, 0 0 0 4 #66E0995A" />
+        <Setter Property="BoxShadow" Value="{DynamicResource PbShelfShadowHover}" />
     </Style>
     <Style Selector="Border.tileRing">
         <Setter Property="IsVisible" Value="False" />
@@ -329,7 +336,7 @@
         <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
         <Setter Property="Padding" Value="14" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000" />
+        <Setter Property="BoxShadow" Value="{DynamicResource PbPosterShadow}" />
     </Style>
     <!-- Hover and focus use the shared ring token (PbGlowRing), which follows the skin's accent and the glow-tier setting; a literal colour here stayed orange on every other accent. -->
     <Style Selector="Border.heroTile:not(.inert):pointerover">
@@ -373,7 +380,7 @@
     <Style Selector="Border.floatingPanel">
         <Setter Property="Background" Value="{DynamicResource PbPanelFloatingBackground}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbPanelFloatingBorder}" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="{DynamicResource PbPanelFloatingBorderThickness}" />
         <Setter Property="CornerRadius" Value="{DynamicResource PbPanelFloatingRadius}" />
         <Setter Property="BoxShadow" Value="{StaticResource PbElevationShadow}" />
         <Setter Property="Transitions">

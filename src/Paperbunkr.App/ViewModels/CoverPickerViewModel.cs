@@ -36,6 +36,17 @@ public partial class CoverPickerViewModel : ViewModelBase
     private readonly int _targetIssueId;
     private readonly int? _targetSeriesId;
     private readonly Action _onApplied;
+    private readonly Func<string, bool>? _applyImagePath;
+
+    /// <summary>The shared picker, targeting an entity image without changing an issue's cover.</summary>
+    public CoverPickerViewModel(System.Collections.Generic.IReadOnlyList<CoverPickerCandidate> candidates, Func<string, bool> applyImagePath, Action onApplied)
+    {
+        _applyImagePath = applyImagePath;
+        _onApplied = onApplied;
+        SeriesCandidates = new ObservableCollection<CoverPickerCandidate>(candidates);
+        ReadingListCandidates = new ObservableCollection<CoverPickerCandidate>();
+        ExternalProviderCandidates = new ObservableCollection<CoverCandidate>();
+    }
 
     /// <summary>
     /// Non-null only when opened from External Metadata for a provider with a browsable
@@ -283,7 +294,7 @@ public partial class CoverPickerViewModel : ViewModelBase
     private void SelectCandidate(CoverPickerCandidate candidate)
     {
         string? path = CoverThumbnailService.GetEffectiveCoverPath(candidate.IssueId);
-        bool applied = path is not null && (_targetSeriesId is int seriesId
+        bool applied = path is not null && (_applyImagePath is not null ? _applyImagePath(path) : _targetSeriesId is int seriesId
             ? new SeriesCoverService().TrySetCustomCover(seriesId, path)
             : new CoverThumbnailService().TrySetCustomCover(_targetIssueId, path));
         if (applied)
@@ -296,7 +307,7 @@ public partial class CoverPickerViewModel : ViewModelBase
     private async Task BrowseFileAsync()
     {
         string? path = await new FilePickerService().PickImageFileAsync("Choose Cover Image");
-        bool applied = path is not null && (_targetSeriesId is int seriesId
+        bool applied = path is not null && (_applyImagePath is not null ? _applyImagePath(path) : _targetSeriesId is int seriesId
             ? new SeriesCoverService().TrySetCustomCover(seriesId, path)
             : new CoverThumbnailService().TrySetCustomCover(_targetIssueId, path));
         if (applied)

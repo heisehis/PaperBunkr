@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Services.Reader;
+using System.Linq;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -10,6 +11,15 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public sealed partial class ReaderInfoPanelViewModel : ObservableObject
 {
+    public System.Action<Paperbunkr.Data.Entities.ComicMetadataEntityKind, string>? OpenEntity { get; set; }
+    public System.Collections.Generic.IReadOnlyList<TagPillViewModel> CharacterLinks => Links(Model?.Characters, Paperbunkr.Data.Entities.ComicMetadataEntityKind.Character);
+    public System.Collections.Generic.IReadOnlyList<TagPillViewModel> TeamLinks => Links(Model?.Teams, Paperbunkr.Data.Entities.ComicMetadataEntityKind.Team);
+    public System.Collections.Generic.IReadOnlyList<TagPillViewModel> LocationLinks => Links(Model?.Locations, Paperbunkr.Data.Entities.ComicMetadataEntityKind.Location);
+    public System.Collections.Generic.IReadOnlyList<ReaderCreditLinks> CreditLinks => (Model?.Credits ?? System.Array.Empty<InfoCredit>())
+        .Select(c => new ReaderCreditLinks(c.Role, Links(ReaderInfoBuilder.Split(c.Names), Paperbunkr.Data.Entities.ComicMetadataEntityKind.Creator))).ToList();
+    private System.Collections.Generic.IReadOnlyList<TagPillViewModel> Links(System.Collections.Generic.IReadOnlyList<string>? names, Paperbunkr.Data.Entities.ComicMetadataEntityKind kind) =>
+        (names ?? System.Array.Empty<string>()).Select(name => new TagPillViewModel(name, null, Paperbunkr.Data.Entities.IssueTagWeight.Unset,
+            value => OpenEntity?.Invoke(kind, value), null)).ToList();
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasModel))]
     private ReaderInfoModel? _model;
@@ -33,6 +43,7 @@ public sealed partial class ReaderInfoPanelViewModel : ObservableObject
         Model = model;
         IsSummaryExpanded = showSummaryByDefault;
         OnPropertyChanged(nameof(IsSummaryCollapsed));
+        OnPropertyChanged(nameof(CharacterLinks)); OnPropertyChanged(nameof(TeamLinks)); OnPropertyChanged(nameof(LocationLinks)); OnPropertyChanged(nameof(CreditLinks));
     }
 
     [RelayCommand]
@@ -44,3 +55,5 @@ public sealed partial class ReaderInfoPanelViewModel : ObservableObject
     [RelayCommand]
     public void Close() => IsOpen = false;
 }
+
+public sealed record ReaderCreditLinks(string Role, System.Collections.Generic.IReadOnlyList<TagPillViewModel> People);

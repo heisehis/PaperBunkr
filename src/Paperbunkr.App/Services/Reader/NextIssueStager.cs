@@ -48,7 +48,7 @@ public sealed class NextIssueStager : IDisposable
     /// <summary>Drop what was staged once at least this many pages remain after the current one (below the last 5 pages). Between the two is a hysteresis band.</summary>
     public const int DiscardWhenRemainingAtLeast = 5;
 
-    private readonly Func<int, int?, int?, int?, StagingTarget?> _resolveNext;
+    private readonly Func<int, int?, int?, int?, ReadingQueue?, StagingTarget?> _resolveNext;
     private readonly Func<string, int?, ReaderImagePipeline?> _open;
     private readonly Func<string, string?> _stampOf;
     private readonly Action<ReaderImagePipeline> _dispose;
@@ -80,6 +80,17 @@ public sealed class NextIssueStager : IDisposable
     /// <param name="resolveNext">(current issue id, series id, reading list id, story event id) → the issue that follows it in reading order, or null.</param>
     public NextIssueStager(
         Func<int, int?, int?, int?, StagingTarget?> resolveNext,
+        Func<string, int?, ReaderImagePipeline?>? open = null,
+        Func<string, string?>? stampOf = null,
+        Action<ReaderImagePipeline>? dispose = null,
+        Func<DateTime>? utcNow = null)
+        : this((issueId, seriesId, listId, eventId, _) => resolveNext(issueId, seriesId, listId, eventId), open, stampOf, dispose, utcNow)
+    {
+    }
+
+    /// <summary>Queue-aware resolver. The queue is captured when staging starts, before the background worker runs.</summary>
+    public NextIssueStager(
+        Func<int, int?, int?, int?, ReadingQueue?, StagingTarget?> resolveNext,
         Func<string, int?, ReaderImagePipeline?>? open = null,
         Func<string, string?>? stampOf = null,
         Action<ReaderImagePipeline>? dispose = null,
@@ -138,7 +149,7 @@ public sealed class NextIssueStager : IDisposable
     /// Starts staging the issue that follows <paramref name="currentIssueId"/>, unless that is already staged or being staged. Staging
     /// for a different current issue replaces what was there. Returns immediately.
     /// </summary>
-    public void EnsureStaged(int currentIssueId, int? seriesId, int? readingListId, int? memoryLimitMb, int viewportWidth, int? storyEventId = null)
+    public void EnsureStaged(int currentIssueId, int? seriesId, int? readingListId, int? memoryLimitMb, int viewportWidth, int? storyEventId = null, ReadingQueue? queue = null)
     {
         int generation;
         lock (_gate)
@@ -158,16 +169,16 @@ public sealed class NextIssueStager : IDisposable
             _stagedForIssueId = currentIssueId;
             generation = ++_generation;
             _lastTouchedUtc = _utcNow();
-            _pendingWork = Task.Run(() => Stage(generation, currentIssueId, seriesId, readingListId, storyEventId, memoryLimitMb, viewportWidth));
+            _pendingWork = Task.Run(() => Stage(generation, currentIssueId, seriesId, readingListId, storyEventId, memoryLimitMb, viewportWidth, queue));
         }
     }
 
-    private void Stage(int generation, int currentIssueId, int? seriesId, int? readingListId, int? storyEventId, int? memoryLimitMb, int viewportWidth)
+    private void Stage(int generation, int currentIssueId, int? seriesId, int? readingListId, int? storyEventId, int? memoryLimitMb, int viewportWidth, ReadingQueue? queue)
     {
         ReaderImagePipeline? pipeline = null;
         try
         {
-            var target = _resolveNext(currentIssueId, seriesId, readingListId, storyEventId);
+            var target = _resolveNext(currentIssueId, seriesId, readingListId, storyEventId, queue);
             if (target is not { IsRemote: false, FileIsMissing: false, FilePath: { Length: > 0 } path })
             {
                 return;

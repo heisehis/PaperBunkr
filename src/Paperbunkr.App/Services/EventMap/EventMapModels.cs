@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Paperbunkr.Data.Entities;
 
@@ -38,7 +39,12 @@ public sealed record EventMapRow(
     bool OutsideContinuity = false,
     int BlockIndex = 0,
     int? SortDate = null,
-    IReadOnlyList<string>? OwnerEventCbroNotes = null);
+    IReadOnlyList<string>? OwnerEventCbroNotes = null,
+    Paperbunkr.Data.Metadata.EventGhost? Ghost = null)
+{
+    /// <summary>An issue from the event's provider list that isn't a member (M4): drawn dashed, never read, never opened.</summary>
+    public bool IsGhost => Ghost is not null;
+}
 
 /// <summary>An event named on a continuity-map card ("Event", "Also in") or in the Events picker.</summary>
 public sealed record EventMapEventRef(int Id, string Name);
@@ -84,7 +90,8 @@ public sealed record CbroOverlapNoteData(string OriginalText, string TargetName,
 public sealed record ContinuityLane(int SeriesId, string Name, bool Outside, string? ContinuesAs = null);
 
 /// <summary>Filters the continuity map is built with (§3/§4).</summary>
-public sealed record ContinuityMapOptions(IReadOnlySet<int> HiddenEventIds, bool HideOptional, bool EventsOnly)
+public sealed record ContinuityMapOptions(IReadOnlySet<int> HiddenEventIds, bool HideOptional, bool EventsOnly, bool HideRead = false, int? KeepReadIssueId = null,
+    IReadOnlySet<int>? HiddenSeriesIds = null)
 {
     public static ContinuityMapOptions Default { get; } = new(new HashSet<int>(), false, false);
 }
@@ -101,10 +108,30 @@ public sealed record ContinuityMapSource(
     IReadOnlyList<EventMapEventRef> Events,
     int EventIssueCount,
     int LooseIssueCount,
-    int PendingDuplicatePairs);
+    int PendingDuplicatePairs,
+    IReadOnlyList<MapSeriesRelation>? SeriesRelations = null);
 
 /// <summary>What <see cref="EventMapLoader.Load"/> returns: the event, its saved spine choice and its rows in <c>(Position, MembershipId)</c> order.</summary>
-public sealed record EventMapSource(int StoryEventId, string EventName, int? SpineSeriesId, IReadOnlyList<EventMapRow> Rows);
+public sealed record EventMapSource(int StoryEventId, string EventName, int? SpineSeriesId, IReadOnlyList<EventMapRow> Rows,
+    IReadOnlyList<(int Source, int Target, RelationType Type)>? UserRelations = null,
+    IReadOnlyList<MapSeriesRelation>? SeriesRelations = null,
+    EventMissingData? Missing = null,
+    EventMapStructure? Structure = null);
+
+/// <summary>
+/// What the map knows about an event's missing issues (docs/superpowers/specs/2026-11-11-continuity-map-completeness-design.md):
+/// the ghosts from its saved provider list (empty when there is none), when that list was fetched, whether the event has a verified
+/// arc id to fetch one with, and, for the gap check, the issue numbers the library owns in each member series.
+/// </summary>
+public sealed record EventMissingData(IReadOnlyList<Paperbunkr.Data.Metadata.EventGhost> Ghosts, DateTime? CheckedAt, bool HasArcIdentity,
+    IReadOnlyDictionary<int, IReadOnlyList<string>> OwnedNumbers)
+{
+    public static EventMissingData None { get; } = new(Array.Empty<Paperbunkr.Data.Metadata.EventGhost>(), null, false, new Dictionary<int, IReadOnlyList<string>>());
+
+    public bool HasSnapshot => CheckedAt is not null;
+}
+
+public sealed record MapSeriesRelation(int Source, int Target, RelationType Type, bool IsUser);
 
 public enum SpineSource
 {
@@ -113,6 +140,9 @@ public enum SpineSource
 
     /// <summary>The user picked the spine (<c>StoryEvent.SpineSeriesId</c>).</summary>
     User,
+
+    /// <summary>The user's own series relations identify the main series.</summary>
+    Relation,
 
     /// <summary>A member series whose name matches the event's.</summary>
     Auto,
@@ -184,10 +214,10 @@ public enum EventMapEdgeKind
 /// <see cref="Segment"/> is 0 for rows before the first trunk row (and for every row in relay mode); segment k ≥ 1 is
 /// anchored by the k-th trunk row.
 /// </summary>
-public sealed record EventMapCell(int Index, EventMapRow Row, int Track, int Column, int Segment, bool IsTrunk);
+public sealed record EventMapCell(int Index, EventMapRow Row, int Track, int Column, int Segment, bool IsTrunk, int? ColorIndexOverride = null);
 
 /// <summary>One horizontal lane. The trunk is track 0 in spine mode and has <see cref="ColorIndex"/> -1 (the accent colour).</summary>
-public sealed record EventMapTrack(int Index, int SeriesId, string SeriesName, bool IsTrunk, int ColorIndex, int Count, bool IsOutside = false);
+public sealed record EventMapTrack(int Index, int SeriesId, string SeriesName, bool IsTrunk, int ColorIndex, int Count, bool IsOutside = false, bool IsFolded = false, string? RelationLabel = null);
 
 /// <summary>An edge between two cells (by <see cref="EventMapCell.Index"/>), with the column span its path covers.</summary>
 public sealed record EventMapEdge(EventMapEdgeKind Kind, int From, int To, int MinColumn, int MaxColumn, int ColorIndex);

@@ -23,7 +23,22 @@ public sealed record ContinuityOverviewInput(
     IReadOnlyList<(int Newer, int Older)> Continuations,
     IReadOnlyList<OverviewPlaceholder> Placeholders,
     IReadOnlyList<OverviewConnection> Connections,
-    bool HasGcdMatch);
+    bool HasGcdMatch,
+    IReadOnlyList<OverviewEntity>? KeyCharacters = null,
+    IReadOnlyList<OverviewEntity>? KeyTeams = null);
+
+public sealed record OverviewEntity(ComicMetadataEntityKind Kind, int Id, string Name, int Count, string? ImagePath, string? CoverKey)
+{
+    public string Initials => EntityImageResolver.Initials(Name);
+    public bool HasImage => ImagePath is not null;
+    public bool HasCover => CoverKey is not null;
+    public bool ShowInitials => !HasImage && !HasCover;
+    public string CountLabel => Paperbunkr.App.ViewModels.EntityPages.EntityPageText.Count(Count, "appearance", "appearances");
+
+    /// <summary>What the shared entity tile shows (docs/superpowers/specs/2026-11-12-entity-pages-redesign-design.md §8): a portrait, or a
+    /// monogram with the first-appearance cover inset.</summary>
+    public Paperbunkr.App.ViewModels.EntityPages.EntityTileItem Tile => new(Kind, Id, Name, CountLabel, ImagePath, CoverKey, Initials);
+}
 
 /// <summary>One poster in a run: a member series, or a dimmed placeholder for a continuation that isn't in the library.</summary>
 public sealed record OverviewRunItem(int? SeriesId, string Name, string Years, bool IsPlaceholder, string? Url, bool ArrowBefore);
@@ -87,7 +102,9 @@ public sealed record ContinuityOverview(
     IReadOnlyList<OutsideSeriesInfo> OutsideSeries,
     IReadOnlyList<OverviewConnection> Connections,
     ContinueTarget? Continue,
-    IReadOnlyList<string> CollageKeys);
+    IReadOnlyList<string> CollageKeys,
+    IReadOnlyList<OverviewEntity>? KeyCharacters = null,
+    IReadOnlyList<OverviewEntity>? KeyTeams = null);
 
 /// <summary>
 /// The continuity page's Overview (docs/superpowers/specs/2026-09-28-continuity-screen-redesign-design.md): runs of continued series with
@@ -179,7 +196,7 @@ public static class ContinuityOverviewBuilder
             .ToList();
 
         return new ContinuityOverview(string.Join(" · ", parts), input.HasGcdMatch, runs, standalone, stats, events, attention, outside,
-            input.Connections, ContinueFor(map), collage);
+            input.Connections, ContinueFor(map), collage, input.KeyCharacters, input.KeyTeams);
     }
 
     /// <summary>First unread (or part-read) issue you have, in the continuity map's own order; null once everything is read.</summary>

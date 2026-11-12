@@ -1,0 +1,152 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        The entity pages' shared chrome (docs/superpowers/specs/2026-11-12-entity-pages-redesign-design.md §5). Included locally by the entity
+        page views, the shared EntityTile and the Continuity overview (StyleInclude in UserControl.Styles), like ContinuityChrome, so these class
+        names can't restyle other screens. Colours are DynamicResource tokens only, so skins and light/dark switch them live.
+    -->
+
+    <!-- A bare pressable cell (tile, poster, event row): no Fluent pointer-over box; hover shows as the art lift, focus as the app's adorner ring. -->
+    <Style Selector="Button.entityCell">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Top" />
+    </Style>
+    <Style Selector="Button.entityCell:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.entityCell:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <!-- Hover lift (Motion v2 hover role): the artwork rises on the damped spring; the hit-tested Button stays put. -->
+    <Style Selector="Button.entityCell Border.entityArt">
+        <Setter Property="RenderTransform" Value="none" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionHoverMove}" Easing="{StaticResource PbMotionSpring}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.entityCell:pointerover Border.entityArt, Button.entityCell:focus-visible Border.entityArt">
+        <Setter Property="RenderTransform" Value="translateY(-3px) scale(1.02)" />
+    </Style>
+
+    <!-- The header image (§3): portrait for characters and teams, a wide establishing shot for locations, a squircle headshot for creators. -->
+    <Style Selector="Border.heroImage">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusLg}" />
+        <Setter Property="ClipToBounds" Value="True" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Width" Value="120" />
+        <Setter Property="Height" Value="160" />
+    </Style>
+    <Style Selector="Border.heroImage.wide">
+        <Setter Property="Width" Value="240" />
+        <Setter Property="Height" Value="136" />
+    </Style>
+    <Style Selector="Border.heroImage.squircle">
+        <Setter Property="Height" Value="120" />
+    </Style>
+
+    <!-- Entity tile art: 3:4 portrait, or a squircle for creators. -->
+    <Style Selector="Border.entityArt">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.entityArt.tile">
+        <Setter Property="Width" Value="76" />
+        <Setter Property="Height" Value="100" />
+    </Style>
+    <Style Selector="Border.entityArt.tile.squircle">
+        <Setter Property="Height" Value="76" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusLg}" />
+    </Style>
+    <Style Selector="Border.entityArt.poster">
+        <Setter Property="Width" Value="96" />
+        <Setter Property="Height" Value="144" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+    </Style>
+    <Style Selector="TextBlock.entityMonogram">
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- The first-appearance cover inset on a monogram tile. -->
+    <Style Selector="Border.entityInset">
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="Margin" Value="0,0,4,4" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="VerticalAlignment" Value="Bottom" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="ClipToBounds" Value="True" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+    </Style>
+
+    <!-- Poster cells (appearances, credits, series). -->
+    <Style Selector="Border.entityPoster">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="BoxShadow" Value="{DynamicResource PbCoverShadow}" />
+    </Style>
+    <Style Selector="Border.entityProgressTrack">
+        <Setter Property="Height" Value="4" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.entityProgressFill">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
+    <!-- Year column chart. -->
+    <Style Selector="Border.yearBar">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="VerticalAlignment" Value="Bottom" />
+        <Setter Property="Margin" Value="1,0" />
+        <!-- A few years shouldn't become wide blocks: a column is at most 24 px, centred in its slot. -->
+        <Setter Property="MaxWidth" Value="24" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+
+    <!-- Creator career timeline. -->
+    <Style Selector="Border.careerTrack">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+    </Style>
+    <Style Selector="Button.careerBar">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <!-- Fluent buttons align left and would shrink to their 2 px of border inside the slot FractionPanel gives them. -->
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.careerBar.writer">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+    <Style Selector="Button.careerBar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+
+    <!-- Event rows: the thumbnail slot is always there, so names line up. -->
+    <Style Selector="Border.eventThumb">
+        <Setter Property="Width" Value="36" />
+        <Setter Property="Height" Value="44" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="ClipToBounds" Value="True" />
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+    </Style>
+</Styles>

@@ -78,6 +78,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>Set only via <see cref="Load"/>'s <c>storyEventId</c> param, and only when no reading list anchors the reader - the Event Map's "Open reader" (docs/superpowers/specs/2026-09-25-event-map-design.md §5): paging then follows the event's own Position order and stops at its boundary.</summary>
     private int? _activeStoryEventId;
+
+    /// <summary>Set only via <see cref="Load"/>'s <c>queue</c> param: an in-memory order (time-budget picks, "Read in order", "Read this run/arc") that beats the reading list and story event anchors until a plain open clears it.</summary>
+    private ReadingQueue? _activeQueue;
     private IPageImageDecoder? _decoder;
     private int _currentPageIndex;
     private int _loadGeneration;
@@ -891,7 +894,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Keeps the ad library in step with page tags (docs/superpowers/specs/2026-09-21-comic-reader-page-intelligence-design.md §5); set by the shell. Null (no seeding) in tests that never tag an ad.</summary>
     public Services.AdDetection.IAdHashSeeder? PageAdSeeder { get; set; }
 
-    public void LoadIssue(int issueId, int? readingListId = null, int? startPage = null, int? storyEventId = null)
+    public void LoadIssue(int issueId, int? readingListId = null, int? startPage = null, int? storyEventId = null, ReadingQueue? queue = null)
     {
         using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         var issue = context.Issues.Include(i => i.Series).Include(i => i.MetadataProposals).FirstOrDefault(i => i.Id == issueId);
@@ -900,7 +903,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        Load(issue, issue.Series, context, forcedStartPage: startPage, readingListId: readingListId, storyEventId: storyEventId);
+        Load(issue, issue.Series, context, forcedStartPage: startPage, readingListId: readingListId, storyEventId: storyEventId, queue: queue);
         LoadedIssue = issue;
         OnPropertyChanged(nameof(SharedElementKey));
         IssueOpened?.Invoke(issue);
@@ -943,7 +946,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// call passes the *current* <see cref="_activeReadingListId"/> back through so the anchor
     /// survives further boundary crossings.
     /// </summary>
-    private void Load(Issue issue, Series series, PaperbunkrDbContext context, int? forcedStartPage = null, int? readingListId = null, int? storyEventId = null)
+    private void Load(Issue issue, Series series, PaperbunkrDbContext context, int? forcedStartPage = null, int? readingListId = null, int? storyEventId = null, ReadingQueue? queue = null)
     {
         System.Diagnostics.Debug.Assert(readingListId is null || storyEventId is null, "Reader opened with both a reading list and a story event anchor; the reading list wins.");
         // Flushes the *previous* issue's throttled continuous-mode position (spec §6) before this
@@ -1007,13 +1010,14 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         _loadedSeriesId = series.Id;
         _activeReadingListId = readingListId;
         _activeStoryEventId = readingListId is null ? storyEventId : null;
+        _activeQueue = queue is not null && queue.IssueIds.Contains(issue.Id) ? queue : null;
         _reviewPromptShown = false;
         DismissEndCard();
         ClearJumpBack();
         ClearSkippedPagesHint();
         CloseReportPicker();
         ClearPageReportChip();
-        RefreshContextStrip(context, issue.Id, readingListId, _activeStoryEventId);
+        RefreshContextStrip(context, issue.Id, readingListId, _activeStoryEventId, _activeQueue);
         RefreshInfoPanel(context, issue, series);
 
         // Real open-tracking (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-
@@ -2845,7 +2849,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         // _activeReadingListId passed straight back through - the anchor survives this jump (spec
         // §3) rather than being cleared like a fresh external LoadIssue call would.
-        Load(toIssue, toIssue.Series!, context, forcedStartPage: forward ? 0 : int.MaxValue, readingListId: _activeReadingListId, storyEventId: _activeStoryEventId);
+        Load(toIssue, toIssue.Series!, context, forcedStartPage: forward ? 0 : int.MaxValue, readingListId: _activeReadingListId, storyEventId: _activeStoryEventId, queue: _activeQueue);
     }
 
     /// <summary>
@@ -2870,7 +2874,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             return false;
         }
 
-        var step = ReadingOrderResolver.ResolveNeighbour(context, currentIssueId, _loadedSeriesId, _activeReadingListId, forward, _activeStoryEventId);
+        var step = ReadingOrderResolver.ResolveNeighbour(context, currentIssueId, _loadedSeriesId, _activeReadingListId, forward, _activeStoryEventId, _activeQueue);
         if (step is null)
         {
             return false;
@@ -2928,13 +2932,17 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     internal Services.Reader.NextIssueStager? NextIssueStager { get; set; }
 
     /// <summary>Turns next-issue pre-open on for this reader (the shell calls it once). Kept opt-in so tests never stage anything as a side effect.</summary>
-    public void EnableNextIssueStaging() => NextIssueStager ??= new Services.Reader.NextIssueStager(ResolveStagingTarget);
+    public void EnableNextIssueStaging() => NextIssueStager ??= new Services.Reader.NextIssueStager(
+        (issueId, seriesId, readingListId, storyEventId, queue) => ResolveStagingTarget(issueId, seriesId, readingListId, storyEventId, queue));
 
-    /// <summary>The issue that follows <paramref name="currentIssueId"/> in reading order (reading list or story event if anchored, else series), as a staging target. Runs on a background thread with its own context.</summary>
-    internal static Services.Reader.StagingTarget? ResolveStagingTarget(int currentIssueId, int? seriesId, int? readingListId, int? storyEventId)
+    /// <summary>The issue that follows <paramref name="currentIssueId"/> in reading order (queue, reading list or story event if anchored, else series), as a staging target. Runs on a background thread with its own context; <paramref name="queue"/> is the immutable queue read when staging starts.</summary>
+    internal static Services.Reader.StagingTarget? ResolveStagingTarget(int currentIssueId, int? seriesId, int? readingListId, int? storyEventId) =>
+        ResolveStagingTarget(currentIssueId, seriesId, readingListId, storyEventId, queue: null);
+
+    internal static Services.Reader.StagingTarget? ResolveStagingTarget(int currentIssueId, int? seriesId, int? readingListId, int? storyEventId, ReadingQueue? queue)
     {
         using var context = PaperbunkrDb.CreateContext(includeRemote: true);
-        var step = ReadingOrderResolver.ResolveNeighbour(context, currentIssueId, seriesId, readingListId, forward: true, storyEventId);
+        var step = ReadingOrderResolver.ResolveNeighbour(context, currentIssueId, seriesId, readingListId, forward: true, storyEventId, queue);
         if (step is null)
         {
             return null;
@@ -2963,7 +2971,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         {
             case Services.Reader.StagingAction.Ensure:
                 int viewportWidth = (_decoder as Services.Reader.ReaderImagePipeline)?.ViewportWidth ?? int.MaxValue;
-                stager.EnsureStaged(issueId, _loadedSeriesId, _activeReadingListId, _readerMemoryLimitMb, viewportWidth, _activeStoryEventId);
+                stager.EnsureStaged(issueId, _loadedSeriesId, _activeReadingListId, _readerMemoryLimitMb, viewportWidth, _activeStoryEventId, _activeQueue);
                 break;
             case Services.Reader.StagingAction.Discard:
                 stager.Discard();
@@ -3300,9 +3308,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     private int? _contextStripNextIssueId;
     private DispatcherTimer? _contextStripFlashTimer;
 
-    private void RefreshContextStrip(PaperbunkrDbContext context, int issueId, int? readingListId, int? storyEventId)
+    private void RefreshContextStrip(PaperbunkrDbContext context, int issueId, int? readingListId, int? storyEventId, ReadingQueue? queue = null)
     {
-        var strip = ReadingOrderResolver.ResolveContext(context, issueId, readingListId, storyEventId);
+        var strip = ReadingOrderResolver.ResolveContext(context, issueId, readingListId, storyEventId, queue);
         _contextStripPreviousIssueId = strip?.PrevIssueId;
         _contextStripNextIssueId = strip?.NextIssueId;
         CanContextStripPrevious = strip?.PrevIssueId is not null;
@@ -3338,7 +3346,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     {
         if (_contextStripPreviousIssueId is int id)
         {
-            LoadIssue(id, _activeReadingListId, storyEventId: _activeStoryEventId);
+            LoadIssue(id, _activeReadingListId, storyEventId: _activeStoryEventId, queue: _activeQueue);
         }
     }
 
@@ -3347,7 +3355,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     {
         if (_contextStripNextIssueId is int id)
         {
-            LoadIssue(id, _activeReadingListId, storyEventId: _activeStoryEventId);
+            LoadIssue(id, _activeReadingListId, storyEventId: _activeStoryEventId, queue: _activeQueue);
         }
     }
 
@@ -3395,7 +3403,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         using var context = PaperbunkrDb.CreateContext(includeRemote: true);
         bool autoNavigate = context.GetOrCreateAppSettings().AutoNavigateComics;
         var current = context.Issues.Find(issueId);
-        var step = ReadingOrderResolver.ResolveNeighbour(context, issueId, _loadedSeriesId, _activeReadingListId, forward: true, _activeStoryEventId);
+        var step = ReadingOrderResolver.ResolveNeighbour(context, issueId, _loadedSeriesId, _activeReadingListId, forward: true, _activeStoryEventId, _activeQueue);
 
         EndCardFinishedLabel = $"Finished \u00b7 #{current?.EffectiveNumber() ?? "?"}";
         EndCardHasNext = step is not null;

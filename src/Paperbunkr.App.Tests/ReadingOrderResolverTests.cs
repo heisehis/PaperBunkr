@@ -297,4 +297,87 @@ public class ReadingOrderResolverTests : IDisposable
         Assert.Equal(3, ctx.Total);
         Assert.Equal(a3.Id, ctx.NextIssueId);
     }
+
+    [Fact]
+    public void Queue_WalksItsOwnOrder_AcrossSeries_BothWays()
+    {
+        var a = AddSeries("A", "1", "2");
+        var b = AddSeries("B", "1");
+        var a1 = a.Issues.Single(i => i.Number == "1");
+        var a2 = a.Issues.Single(i => i.Number == "2");
+        var b1 = b.Issues.Single();
+        var queue = new ReadingQueue(new[] { a2.Id, b1.Id, a1.Id }, "Read in order: Storm");
+
+        var next = ReadingOrderResolver.ResolveNeighbour(_context, a2.Id, a.Id, null, forward: true, queue: queue);
+        var back = ReadingOrderResolver.ResolveNeighbour(_context, a1.Id, a.Id, null, forward: false, queue: queue);
+
+        Assert.Equal(b1.Id, next!.To.Id);
+        Assert.Equal(2, next.ToPosition);
+        Assert.Equal(3, next.Total);
+        Assert.Equal("Read in order: Storm", next.SourceLabel);
+        Assert.Equal(b1.Id, back!.To.Id);
+    }
+
+    [Fact]
+    public void Queue_StopsAtItsEnds_WithNoSeriesFallback()
+    {
+        var a = AddSeries("A", "1", "2", "3");
+        var a1 = a.Issues.Single(i => i.Number == "1");
+        var a2 = a.Issues.Single(i => i.Number == "2");
+        var queue = new ReadingQueue(new[] { a1.Id, a2.Id }, "Queue");
+
+        Assert.Null(ReadingOrderResolver.ResolveNeighbour(_context, a2.Id, a.Id, null, forward: true, queue: queue));
+        Assert.Null(ReadingOrderResolver.ResolveNeighbour(_context, a1.Id, a.Id, null, forward: false, queue: queue));
+    }
+
+    [Fact]
+    public void Queue_SkipsMissingFiles()
+    {
+        var a = AddSeries("A", "1", "2", "3");
+        var a1 = a.Issues.Single(i => i.Number == "1");
+        var a2 = a.Issues.Single(i => i.Number == "2");
+        var a3 = a.Issues.Single(i => i.Number == "3");
+        a2.FileIsMissing = true;
+        _context.SaveChanges();
+        var queue = new ReadingQueue(new[] { a1.Id, a2.Id, a3.Id }, "Queue");
+
+        var next = ReadingOrderResolver.ResolveNeighbour(_context, a1.Id, a.Id, null, forward: true, queue: queue);
+
+        Assert.Equal(a3.Id, next!.To.Id);
+        Assert.Equal(3, next.ToPosition);
+    }
+
+    [Fact]
+    public void Queue_BeatsReadingList()
+    {
+        var a = AddSeries("A", "1", "2", "3");
+        var a1 = a.Issues.Single(i => i.Number == "1");
+        var a2 = a.Issues.Single(i => i.Number == "2");
+        var a3 = a.Issues.Single(i => i.Number == "3");
+        int listId = AddList("List", a1, a2, a3);
+        var queue = new ReadingQueue(new[] { a1.Id, a3.Id }, "Queue");
+
+        var next = ReadingOrderResolver.ResolveNeighbour(_context, a1.Id, a.Id, listId, forward: true, queue: queue);
+        var ctx = ReadingOrderResolver.ResolveContext(_context, a1.Id, listId, queue: queue);
+
+        Assert.Equal(a3.Id, next!.To.Id);
+        Assert.Equal(ReadingContextKind.Queue, ctx!.Kind);
+        Assert.Equal("Queue", ctx.Label);
+        Assert.Equal(1, ctx.Position);
+        Assert.Equal(2, ctx.Total);
+        Assert.Equal(a3.Id, ctx.NextIssueId);
+        Assert.Null(ctx.PrevIssueId);
+    }
+
+    [Fact]
+    public void Queue_IssueNotInQueue_ReturnsNull()
+    {
+        var a = AddSeries("A", "1", "2");
+        var a1 = a.Issues.Single(i => i.Number == "1");
+        var a2 = a.Issues.Single(i => i.Number == "2");
+        var queue = new ReadingQueue(new[] { a1.Id }, "Queue");
+
+        Assert.Null(ReadingOrderResolver.ResolveNeighbour(_context, a2.Id, a.Id, null, forward: true, queue: queue));
+        Assert.Null(ReadingOrderResolver.ResolveContext(_context, a2.Id, null, queue: queue));
+    }
 }

@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia" xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:conv="using:Avalonia.Data.Converters" xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models" x:Class="Paperbunkr.App.Views.MapHeaderStrip"
+             x:DataType="vm:ContinuityScreenViewModel">
+    <UserControl.Styles>
+        <Style Selector="Button.mapContinueIcon"><Setter Property="IsVisible" Value="False" /></Style>
+        <Style Selector="UserControl.compact Button.mapContinueText"><Setter Property="IsVisible" Value="False" /></Style>
+        <Style Selector="UserControl.compact Button.mapContinueIcon"><Setter Property="IsVisible" Value="True" /></Style>
+    </UserControl.Styles>
+    <Border Height="44" Padding="24,0" Background="{DynamicResource PbSurface1Brush}"
+            BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8" IsVisible="{Binding IsContinuitySelected}">
+                <controls:BrandMark Grid.Column="0" Family="Publisher" Value="{Binding ContinuityPage.Publisher}" MarkSize="24" MaxMarkWidth="80" ShowText="False" EnsureContrast="True" VerticalAlignment="Center">
+                    <controls:BrandMark.IsVisible><MultiBinding Converter="{x:Static conv:BoolConverters.Or}"><Binding Path="IsImage" RelativeSource="{RelativeSource Self}" /><Binding Path="IsRaster" RelativeSource="{RelativeSource Self}" /></MultiBinding></controls:BrandMark.IsVisible>
+                </controls:BrandMark>
+                <TextBlock Grid.Column="1" Classes="pbTextTitle" Text="{Binding ContinuityPage.Name}" TextTrimming="CharacterEllipsis" MaxWidth="240" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Classes="pbTextMeta" Text="{Binding ContinuityPage.StatsLine}" TextTrimming="CharacterEllipsis" MaxWidth="180" IsVisible="{Binding !ContinuityPage.HasOverviewError}" />
+                    <TextBlock Classes="pbTextCaption" Text="{Binding ActiveMap.StatusText}" TextTrimming="CharacterEllipsis" MaxWidth="180" IsVisible="{Binding !ContinuityPage.HasOverviewError}" />
+                    <Button Classes="secondary sm" Content="Retry" Command="{Binding ContinuityPage.RetryOverviewCommand}" IsVisible="{Binding ContinuityPage.HasOverviewError}" />
+                </StackPanel>
+            </Grid>
+            <Grid Grid.Column="0" ColumnDefinitions="Auto,*" ColumnSpacing="8" IsVisible="{Binding IsEventSelected}">
+                <TextBlock Classes="pbTextTitle" Text="{Binding EventPage.Name}" TextTrimming="CharacterEllipsis" MaxWidth="240" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Classes="pbTextMeta" Text="{Binding EventPage.StatsLine}" TextTrimming="CharacterEllipsis" MaxWidth="180" IsVisible="{Binding !EventPage.HasOverviewError}" />
+                    <TextBlock Classes="pbTextCaption" Text="{Binding ActiveMap.StatusText}" TextTrimming="CharacterEllipsis" MaxWidth="180" IsVisible="{Binding !EventPage.HasOverviewError}" />
+                    <Button Classes="secondary sm" Content="Retry" Command="{Binding EventPage.RetryOverviewCommand}" IsVisible="{Binding EventPage.HasOverviewError}" />
+                </StackPanel>
+            </Grid>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Panel IsVisible="{Binding IsContinuitySelected}">
+                    <Button Classes="secondary mapContinueText" Content="Continue reading" Command="{Binding ContinuityPage.ContinueReadingCommand}" IsEnabled="{Binding ContinuityPage.HasContinue}" />
+                    <Button Classes="iconButton mapContinueIcon" Command="{Binding ContinuityPage.ContinueReadingCommand}" IsEnabled="{Binding ContinuityPage.HasContinue}" AutomationProperties.Name="Continue reading" ToolTip.Tip="Continue reading"><fi:SymbolIcon Symbol="Play" FontSize="{StaticResource PbIconSizeSm}" /></Button>
+                </Panel>
+                <Panel IsVisible="{Binding IsEventSelected}">
+                    <Button Classes="secondary mapContinueText" Content="Continue reading" Command="{Binding EventPage.ContinueReadingCommand}" IsEnabled="{Binding EventPage.HasContinue}" />
+                    <Button Classes="iconButton mapContinueIcon" Command="{Binding EventPage.ContinueReadingCommand}" IsEnabled="{Binding EventPage.HasContinue}" AutomationProperties.Name="Continue reading" ToolTip.Tip="Continue reading"><fi:SymbolIcon Symbol="Play" FontSize="{StaticResource PbIconSizeSm}" /></Button>
+                </Panel>
+                <Button Classes="secondary" IsVisible="{Binding IsContinuitySelected}">
+                    <StackPanel Orientation="Horizontal" Spacing="4"><TextBlock Text="More" /><fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" /></StackPanel>
+                    <Button.Flyout><MenuFlyout>
+                        <MenuItem Header="Add series" Command="{Binding ContinuityPage.ToggleAddSeriesCommand}" />
+                        <MenuItem Header="Find series on Metron" Command="{Binding ContinuityPage.ToggleMetronSeriesBrowserCommand}" />
+                        <Separator />
+                        <MenuItem Header="Edit details…" Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenEditContinuityDialogCommand}" />
+                        <MenuItem Header="Continue setup…" Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).ResumeContinuitySetupCommand}" />
+                        <MenuItem Header="Compare &amp; merge…" Command="{Binding ContinuityPage.ToggleCompareCommand}" IsEnabled="{Binding !ContinuityPage.HasNoOverlappingContinuities}" />
+                        <MenuItem Header="Create reading list"><MenuItem Header="Story order — as on the map" Command="{Binding ContinuityPage.CreateReadingListCommand}" CommandParameter="story" /><MenuItem Header="Publication order — by release date" Command="{Binding ContinuityPage.CreateReadingListCommand}" CommandParameter="publication" /></MenuItem>
+                        <Separator /><MenuItem Header="{Binding ContinuityPage.DeleteConfirm.Label}" Command="{Binding ContinuityPage.DeleteConfirm.TriggerCommand}" />
+                    </MenuFlyout></Button.Flyout>
+                </Button>
+                <Button Classes="secondary" IsVisible="{Binding IsEventSelected}">
+                    <StackPanel Orientation="Horizontal" Spacing="4"><TextBlock Text="More" /><fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" /></StackPanel>
+                    <Button.Flyout><MenuFlyout>
+                        <MenuItem Header="Add issues" Command="{Binding EventPage.ToggleAddIssuesCommand}" />
+                        <MenuItem Header="Smart fill" Command="{Binding EventPage.SmartFillCommand}" />
+                        <Separator /><MenuItem Header="Compare sources…" Command="{Binding EventPage.CompareSourcesCommand}" />
+                        <MenuItem Header="Edit details…" Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenEditEventDialogCommand}" />
+                        <MenuItem Header="Continue setup…" Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).ResumeEventSetupCommand}" />
+                        <MenuItem Header="Detect roles" Command="{Binding EventPage.DetectRolesCommand}" />
+                        <Separator /><MenuItem Header="{Binding EventPage.DeleteConfirm.Label}" Command="{Binding EventPage.DeleteConfirm.TriggerCommand}" />
+                    </MenuFlyout></Button.Flyout>
+                </Button>
+            </StackPanel>
+            <Border Grid.Column="2" Classes="segGroup" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <Button Classes="segItem segToggle" Classes.on="{Binding IsOverviewView}" Content="Overview" Command="{Binding SetDetailViewCommand}" CommandParameter="{x:Static models:EventsDetailView.Primary}" />
+                    <Button Classes="segItem segToggle" Classes.on="{Binding IsMapView}" Content="Map" Command="{Binding SetDetailViewCommand}" CommandParameter="{x:Static models:EventsDetailView.Map}" />
+                    <Button Classes="segItem segToggle" Classes.on="{Binding IsTimelineView}" Content="Timeline" Command="{Binding SetDetailViewCommand}" CommandParameter="{x:Static models:EventsDetailView.Timeline}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

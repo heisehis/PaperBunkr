@@ -287,8 +287,8 @@
                              until Download / Check for update is clicked; the credit and licence are always visible (CC BY-SA 4.0). -->
                         <StackPanel Tag="connections.gcdData" IsVisible="{Binding ShowGcdBody}">
                             <StackPanel Margin="0" Spacing="6" DataContext="{Binding GcdData}" x:DataType="vm:GcdDataSettingsViewModel">
-                            <pref:SettingsRow Icon="DatabaseLink" Title="Series continuity and on-sale dates"
-                                              Description="Links series that continue each other (renumberings, renames, reboots) and orders story events by when issues went on sale. The data stays on this computer.">
+                            <pref:SettingsRow Icon="DatabaseLink" Title="Series continuity, event metadata and dates"
+                                              Description="Optional local data for series relationships and publication dates. Updated extracts also support event arc descriptions and evidence for Smart fill.">
                                 <pref:SettingsRow.SettingsContent>
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <Button Classes="primary" Command="{Binding DownloadCommand}" IsVisible="{Binding ShowDownload}"

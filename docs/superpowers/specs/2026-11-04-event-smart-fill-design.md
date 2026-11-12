@@ -1,7 +1,7 @@
 # Event Smart fill
 
 **Date:** 2026-11-04
-**Status:** Design approved in conversation; written spec awaiting user review
+**Status:** Approved; implemented and focused checks passed in the working tree. Not released; schema-2 package prepared locally, not published. See the implementation plan for verification and limits.
 **Repository baseline:** `0e43ae0`; unrelated working-tree changes are outside this design.
 
 ## Purpose and approved scope

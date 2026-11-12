@@ -108,6 +108,88 @@
           "default": "#173048"
         }
       }
+    },
+    "shallows": {
+      "name": "Shallows",
+      "mode": "Light",
+      "palette": {
+        "canvas": "#E6F6FB",
+        "ink": "#0B2A3C",
+        "accent": "#086A96",
+        "success": "#1E7A5A",
+        "badge": "#B07A00"
+      },
+      "materials": {
+        "water": {
+          "type": "image",
+          "source": "textures/shallows.png",
+          "fallback": "#E6F6FB",
+          "stretch": "uniformToFill"
+        },
+        "reef": {
+          "type": "linearGradient",
+          "angle": 180,
+          "fallback": "#CDEAF4",
+          "stops": [
+            {
+              "at": 0,
+              "color": "#D3EDF6"
+            },
+            {
+              "at": 1,
+              "color": "#BFE3EF"
+            }
+          ]
+        },
+        "shelfLight": {
+          "type": "linearGradient",
+          "angle": 135,
+          "fallback": "#EEF8FB",
+          "stops": [
+            {
+              "at": 0,
+              "color": "#F4FBFD"
+            },
+            {
+              "at": 1,
+              "color": "#E0F2F8"
+            }
+          ]
+        }
+      },
+      "surfaces": {
+        "canvas": "water",
+        "navigation": "reef",
+        "raised": "shelfLight"
+      },
+      "semantic": {
+        "surface": {
+          "raised": "#F2FAFC",
+          "overlay": "#FFFFFF"
+        },
+        "border": {
+          "default": "#A9D3E3"
+        },
+        "status": {
+          "danger": "#B3263A",
+          "warning": "#8A5A00",
+          "info": "#0A6F9C"
+        },
+        "chart": {
+          "series": {
+            "1": "#086A96",
+            "2": "#6C5BD4"
+          }
+        },
+        "glow": {
+          "color": "#66086A96"
+        }
+      },
+      "components": {
+        "button.primary": {
+          "foreground": "#FFFFFF"
+        }
+      }
     }
   }
 }

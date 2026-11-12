@@ -53,7 +53,7 @@ public partial class LibraryScreenViewModel
             .Distinct()
             .ToHashSet();
 
-        foreach (var collection in context.Collections.OrderBy(c => c.SortOrder).ToList())
+        foreach (var collection in CollectionOrdering.Apply(context.Collections).ToList())
         {
             bool contains = manual.Contains(collection.Id);
             if (!contains && collection.IsSmart)

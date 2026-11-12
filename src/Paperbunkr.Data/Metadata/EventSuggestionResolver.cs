@@ -42,7 +42,9 @@ internal static class EventSuggestionResolver
         // Format is a signal, not a filter on its own - requiring at least one of (year in range)
         // or (event name in the issue's Series Group / Story Arc text) keeps this from surfacing
         // every Annual in the whole library for every event.
-        bool hasRange = storyEvent.StartDate.HasValue || storyEvent.EndDate.HasValue;
+        var effectiveStart = EventEnrichment.EventPublicationDate.Effective(storyEvent, false);
+        var effectiveEnd = EventEnrichment.EventPublicationDate.Effective(storyEvent, true);
+        bool hasRange = effectiveStart is not null || effectiveEnd is not null;
         bool nameSet = !string.IsNullOrWhiteSpace(storyEvent.Name);
 
         var candidates = context.Issues
@@ -61,8 +63,8 @@ internal static class EventSuggestionResolver
             }
 
             bool yearInRange = hasRange && issue.Year is int year
-                && (storyEvent.StartDate is not DateTime start || year >= start.Year)
-                && (storyEvent.EndDate is not DateTime end || year <= end.Year);
+                && (effectiveStart is null || year >= effectiveStart.Year)
+                && (effectiveEnd is null || year <= effectiveEnd.Year);
 
             bool seriesGroupMatch = nameSet && (issue.SeriesGroup ?? string.Empty).Contains(storyEvent.Name, StringComparison.OrdinalIgnoreCase);
             bool storyArcMatch = nameSet && (issue.StoryArc ?? string.Empty).Contains(storyEvent.Name, StringComparison.OrdinalIgnoreCase);

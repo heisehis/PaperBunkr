@@ -38,7 +38,16 @@ public static class EventMapLoader
             .Select(m => ToRow(m, m.Issue!))
             .ToList();
 
-        return new EventMapSource(storyEvent.Id, storyEvent.Name, storyEvent.SpineSeriesId, rows);
+        var seriesIds = rows.Select(r => r.SeriesId).Distinct().ToList();
+        var allRelations = context.MediaRelations.AsNoTracking()
+            .Where(r => r.SourceSeriesId != null && r.TargetSeriesId != null
+                && seriesIds.Contains(r.SourceSeriesId.Value) && seriesIds.Contains(r.TargetSeriesId.Value))
+            .Select(r => new { r.SourceSeriesId, r.TargetSeriesId, r.RelationType, IsUser = r.Evidence.Any(e => e.Provider == RelationEvidenceProvider.User) }).ToList()
+            .Select(r => new MapSeriesRelation(r.SourceSeriesId!.Value, r.TargetSeriesId!.Value, r.RelationType, r.IsUser)).ToList();
+        var relations = allRelations.Where(r => r.IsUser).Select(r => (r.Source, r.Target, r.Type)).ToList();
+        var missing = new EventMissingLoader(context).Load(storyEvent.Id, rows);
+        var structure = EventMapStructureLoader.Load(context, rows.Select(r => r.IssueId).ToList());
+        return new EventMapSource(storyEvent.Id, storyEvent.Name, storyEvent.SpineSeriesId, rows, relations, allRelations, missing, structure);
     }
 
     /// <summary>Unread at 0 %, Read at the CE read threshold (<see cref="IssueMetadataExtensions.HasBeenRead"/>), otherwise in progress.</summary>

@@ -17,7 +17,14 @@ public enum ReadingContextKind
 {
     ReadingList,
     StoryEvent,
+    Queue,
 }
+
+/// <summary>
+/// An ordered, in-memory list of issues the reader walks instead of a saved reading list (the time-budget picks, "Read in order", "Read this
+/// run/arc"; docs/superpowers/specs/2026-11-10-smart-features-2-plan.md correction 1). Nothing is stored: it lives only while the reader holds it.
+/// </summary>
+public sealed record ReadingQueue(IReadOnlyList<int> IssueIds, string Label);
 
 /// <summary>
 /// One place that answers "what comes before/after this issue, and where does it sit" for the comic
@@ -36,11 +43,42 @@ public static class ReadingOrderResolver
     /// this walks that list's <c>SortOrder</c> across series, skipping missing files and stopping at the
     /// list boundary with no fallback to series order. With a <paramref name="storyEventId"/> (and no list) it
     /// does the same over the event's memberships by <c>(Position, Id)</c>. Otherwise it walks the series by
-    /// issue number. The two anchors are mutually exclusive; if both are passed the reading list wins.
+    /// issue number. The two anchors are mutually exclusive; if both are passed the reading list wins. A <paramref name="queue"/> beats
+    /// both: it is walked in its own order with the same rules (missing files skipped, no fallback past its ends).
     /// </summary>
-    public static ReadingOrderStep? ResolveNeighbour(PaperbunkrDbContext context, int issueId, int? seriesId, int? readingListId, bool forward, int? storyEventId = null)
+    public static ReadingOrderStep? ResolveNeighbour(PaperbunkrDbContext context, int issueId, int? seriesId, int? readingListId, bool forward, int? storyEventId = null, ReadingQueue? queue = null)
     {
         int step = forward ? 1 : -1;
+
+        if (queue is not null)
+        {
+            var ids = queue.IssueIds;
+            int queueIndex = IndexOf(ids, issueId);
+            if (queueIndex < 0)
+            {
+                return null;
+            }
+
+            var issues = context.Issues
+                .Where(i => ids.Contains(i.Id))
+                .Include(i => i.Series)
+                .Include(i => i.MetadataProposals)
+                .ToDictionary(i => i.Id);
+            if (!issues.TryGetValue(issueId, out var from))
+            {
+                return null;
+            }
+
+            for (int i = queueIndex + step; i >= 0 && i < ids.Count; i += step)
+            {
+                if (issues.TryGetValue(ids[i], out var candidate) && candidate is { FileIsMissing: false, Series: not null })
+                {
+                    return new ReadingOrderStep(from, candidate, i + 1, ids.Count, queue.Label);
+                }
+            }
+
+            return null;
+        }
 
         if (readingListId is null && storyEventId is int eventId)
         {
@@ -123,8 +161,15 @@ public static class ReadingOrderResolver
     /// Event it was explicitly opened from; otherwise the Story Event the issue belongs to (lowest event id
     /// if several); otherwise none.
     /// </summary>
-    public static ReadingContext? ResolveContext(PaperbunkrDbContext context, int issueId, int? readingListId, int? storyEventId = null)
+    public static ReadingContext? ResolveContext(PaperbunkrDbContext context, int issueId, int? readingListId, int? storyEventId = null, ReadingQueue? queue = null)
     {
+        if (queue is not null)
+        {
+            var ids = queue.IssueIds;
+            var issues = context.Issues.Where(i => ids.Contains(i.Id)).ToDictionary(i => i.Id);
+            return Build(ReadingContextKind.Queue, queue.Label, ids.Select(id => (id, issues.GetValueOrDefault(id))).ToList(), issueId);
+        }
+
         if (readingListId is int listId)
         {
             var items = context.ReadingListItems
@@ -163,6 +208,19 @@ public static class ReadingOrderResolver
         }
 
         return new ReadingContext(kind, label, index + 1, ordered.Count, Adjacent(ordered, index, -1), Adjacent(ordered, index, 1));
+    }
+
+    private static int IndexOf(IReadOnlyList<int> ids, int issueId)
+    {
+        for (int i = 0; i < ids.Count; i++)
+        {
+            if (ids[i] == issueId)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private static int? Adjacent(List<(int IssueId, Issue? Issue)> ordered, int from, int step)

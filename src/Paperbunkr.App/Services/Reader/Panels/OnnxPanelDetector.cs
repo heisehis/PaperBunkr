@@ -14,7 +14,12 @@ namespace Paperbunkr.App.Services.Reader.Panels;
 /// </summary>
 public sealed class OnnxPanelDetector : IDisposable
 {
+    /// <summary>The input size of the bundled model, and the long side pages are decoded to for detection. A model exported at another size
+    /// (docs/superpowers/specs/2026-11-07-panel-model-retraining-design.md, Q14) is fed at its own size, read from the file.</summary>
     public const int InputSize = 1024;
+
+    /// <summary>The square input this model expects, in pixels.</summary>
+    private readonly int _size;
 
     /// <summary>Detections below this score are ignored.</summary>
     public const float MinScore = 0.25f;
@@ -48,7 +53,14 @@ public sealed class OnnxPanelDetector : IDisposable
         };
         _session = new InferenceSession(modelPath, options);
         _inputName = _session.InputMetadata.Keys.First();
+
+        // [1, 3, H, W]; a dynamic dimension reads as -1, in which case the bundled size is used.
+        var dims = _session.InputMetadata[_inputName].Dimensions;
+        _size = dims.Length == 4 && dims[2] > 0 && dims[2] == dims[3] ? dims[2] : InputSize;
     }
+
+    /// <summary>The square input size this model was exported at.</summary>
+    public int ModelInputSize => _size;
 
     /// <summary>Detects panels on a decoded page. Returns <see cref="PagePanels.Whole"/> (unconfident) when nothing usable is found.</summary>
     public PagePanels Detect(SKBitmap page, bool rightToLeft)
@@ -72,11 +84,11 @@ public sealed class OnnxPanelDetector : IDisposable
             return [];
         }
 
-        double scale = InputSize / (double)Math.Max(w, h);
+        double scale = _size / (double)Math.Max(w, h);
         int nw = Math.Max(1, (int)Math.Round(w * scale));
         int nh = Math.Max(1, (int)Math.Round(h * scale));
-        int padX = (InputSize - nw) / 2;
-        int padY = (InputSize - nh) / 2;
+        int padX = (_size - nw) / 2;
+        int padY = (_size - nh) / 2;
 
         using var resized = page.Resize(new SKImageInfo(nw, nh, SKColorType.Rgba8888, SKAlphaType.Unpremul), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
         if (resized is null)
@@ -84,7 +96,7 @@ public sealed class OnnxPanelDetector : IDisposable
             return [];
         }
 
-        int plane = InputSize * InputSize;
+        int plane = _size * _size;
         float[] buffer = System.Threading.Interlocked.Exchange(ref _spareInput, null) ?? new float[3 * plane];
         try
         {
@@ -100,14 +112,14 @@ public sealed class OnnxPanelDetector : IDisposable
     {
         int w = page.Width;
         int h = page.Height;
-        int plane = InputSize * InputSize;
-        var input = new DenseTensor<float>(buffer, [1, 3, InputSize, InputSize]);
+        int plane = _size * _size;
+        var input = new DenseTensor<float>(buffer, [1, 3, _size, _size]);
         var span = buffer.AsSpan();
         span.Fill(PadValue / 255f);
         var pixels = resized.Pixels;
         for (int y = 0; y < nh; y++)
         {
-            int row = ((y + padY) * InputSize) + padX;
+            int row = ((y + padY) * _size) + padX;
             for (int x = 0; x < nw; x++)
             {
                 var c = pixels[(y * nw) + x];

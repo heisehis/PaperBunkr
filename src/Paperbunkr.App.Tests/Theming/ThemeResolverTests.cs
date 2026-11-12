@@ -123,9 +123,29 @@ public class ThemeResolverTests
 
     public static TheoryData<string> BuiltInKeys => new()
     {
-        "default", "windows_11", "cool_technical", "vibrant_pop", "vintage_paperback",
-        "daylight", "overcast", "maximum_contrast", "colorblind_safe", "matrix",
+        // Still in the original format. Windows 11, Matrix and the accessibility pair were rewritten as v2 on 2026-11-09 (see the test below).
+        "default", "daylight",
     };
+
+    /// <summary>
+    /// The four built-ins rewritten from v1 to v2 (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md Q16) keep the family id the legacy bridge gave
+    /// them, so a user's "this theme" customizations still apply; their resources are pinned by ThemeGoldenResourceTests.
+    /// </summary>
+    [Theory]
+    [InlineData("windows_11")]
+    [InlineData("matrix")]
+    [InlineData("maximum_contrast")]
+    [InlineData("colorblind_safe")]
+    public void ConvertedLegacyThemes_AreV2_AndKeepTheirLegacyFamilyId(string key)
+    {
+        string json = File.ReadAllText(Path.Combine(SkinsFolder(), key, "theme.json"));
+
+        var document = Parse(json, out var diagnostics, key);
+
+        Assert.False(document.IsLegacy);
+        Assert.Equal("legacy." + key, document.Id);
+        Assert.DoesNotContain(diagnostics, d => d.Severity == ThemeDiagnosticSeverity.Error);
+    }
 
     [Theory]
     [MemberData(nameof(BuiltInKeys))]
@@ -170,7 +190,7 @@ public class ThemeResolverTests
 
         var legacy = LegacyThemeAdapter.FromResolved(resolved);
 
-        Assert.Equal("Matrix", legacy.Name);
+        Assert.Equal("Matrix · Dark", legacy.Name);                          // a two-half family names the half
         Assert.Equal("Dark", legacy.Mode);
         Assert.Equal("matrix", legacy.Category);
         Assert.Equal(C("#33FF66"), C(legacy.Colors.Accent));

@@ -19,16 +19,18 @@ public sealed class ThemeCatalog
 
     public static readonly IReadOnlyList<string> BuiltInKeys = new[]
     {
-        DefaultThemeKey, "windows_11", "cool_technical", "vibrant_pop", "vintage_paperback",
-        "daylight", "overcast", "maximum_contrast", "colorblind_safe", "matrix",
+        // Cool & Technical, Vibrant & Pop, Vintage Paperback and Overcast were retired 2026-11-09 (Personalize reproduces them); ThemeKeyMigration
+        // moves anyone who used them (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md).
+        DefaultThemeKey, "windows_11", "daylight", "maximum_contrast", "colorblind_safe", "matrix",
 
         // The v2 families (2026-10-13): variants, materials, component skins, and for two of them a Home layout.
         "nordic_frost", "tokyo_midnight", "reading_room", "canopy", "crimson_ink",
         "abyss", "sunset_boulevard", "newsprint", "arcade", "graphite",
+
+        // The 2026-11-09 families (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md): light + dark pairs, and Kraft (light only).
+        "golden_age", "screentone", "risograph", "blueprint", "dune", "kraft",
     };
 
-    /// <summary>The ten version 1 built-ins, one look each. The rest of <see cref="BuiltInKeys"/> are version 2 families.</summary>
-    public const int LegacyBuiltInCount = 10;
 
     // Built-in documents never change while the app runs; installed ones are re-read when their theme.json changes on disk.
     private static readonly ConcurrentDictionary<string, ThemeDocument?> BuiltInCache = new(StringComparer.OrdinalIgnoreCase);
@@ -54,7 +56,14 @@ public sealed class ThemeCatalog
             }
 
             var document = Parse(familyKey, ReadBuiltInText(familyKey, "theme.json"), diagnostics, path => ReadBuiltInText(familyKey, path));
-            BuiltInCache[familyKey] = document;
+
+            // Never cache a failed read: before the asset loader exists (test discovery, early startup) every built-in reads as missing, and
+            // caching that would hide every built-in theme for the rest of the process.
+            if (document is not null)
+            {
+                BuiltInCache[familyKey] = document;
+            }
+
             return document;
         }
 

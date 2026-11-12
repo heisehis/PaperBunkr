@@ -39,27 +39,6 @@
         }
       }
     },
-    "light": {
-      "name": "Light",
-      "mode": "Light",
-      "palette": {
-        "canvas": "#F4F4F5",
-        "ink": "#1E1F21",
-        "accent": "#1A5FC4",
-        "success": "#1E7A3C",
-        "badge": "#8A5F00"
-      },
-      "semantic": {
-        "surface": {
-          "navigation": "#EAEAEC",
-          "raised": "#FCFCFC",
-          "overlay": "#FFFFFF"
-        },
-        "border": {
-          "default": "#D0D1D4"
-        }
-      }
-    },
     "oled": {
       "name": "OLED",
       "mode": "Dark",

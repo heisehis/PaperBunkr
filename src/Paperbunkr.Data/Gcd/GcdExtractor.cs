@@ -17,9 +17,9 @@ namespace Paperbunkr.Data.Gcd;
 /// dates, every series bond, and a <c>meta</c> table carrying the dump date and GCD's licence and credit. Run by the repo tool
 /// <c>tools/Paperbunkr.GcdExtract</c> - never by the app.
 /// </summary>
-public static class GcdExtractor
+public static partial class GcdExtractor
 {
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
 
     public const string ExtractFileName = "gcd.sqlite";
 
@@ -102,6 +102,7 @@ public static class GcdExtractor
                 FROM gcd.gcd_series_bond b JOIN gcd.gcd_series_bond_type t ON t.id = b.bond_type_id
                 """);
 
+            CopyEventData(c);
             Exec(c, "DETACH DATABASE gcd");
             using (var meta = c.CreateCommand())
             {
@@ -135,7 +136,7 @@ public static class GcdExtractor
             Exec(c, "VACUUM");
         }
 
-        string zipPath = Path.Combine(outDir, $"gcd-{dumpDate}.zip");
+        string zipPath = Path.Combine(outDir, $"gcd-v2-{dumpDate}.zip");
         if (File.Exists(zipPath))
         {
             File.Delete(zipPath);
@@ -152,9 +153,9 @@ public static class GcdExtractor
             sha = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
         }
 
-        var manifest = new GcdManifest(dumpDate, url ?? $"https://github.com/heisehis/paperbunkr-gcd-data/releases/download/gcd-{dumpDate}/gcd-{dumpDate}.zip",
+        var manifest = new GcdManifest(dumpDate, url ?? $"https://github.com/heisehis/paperbunkr-gcd-data/releases/download/gcd-v2-{dumpDate}/gcd-v2-{dumpDate}.zip",
             sha, new FileInfo(zipPath).Length, SchemaVersion);
-        File.WriteAllText(Path.Combine(outDir, "gcd-data.json"), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(outDir, "gcd-data-v2.json"), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
         return manifest;
     }
 

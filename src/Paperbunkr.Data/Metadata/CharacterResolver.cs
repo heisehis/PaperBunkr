@@ -67,22 +67,23 @@ public static class CharacterResolver
     }
 
     /// <summary>Backfills the whole library - idempotent, safe to re-run.</summary>
-    public static void RebuildAll(PaperbunkrDbContext context)
+    public static void RebuildAll(PaperbunkrDbContext context, System.Threading.CancellationToken cancellationToken = default)
     {
         var issueIds = context.Issues
-            .Where(i => i.Characters != null && i.Characters != "")
+            .Where(i => (i.Characters != null && i.Characters != "") || context.CharacterAppearances.Any(a => a.IssueId == i.Id))
             .Select(i => i.Id)
             .ToList();
 
         foreach (int id in issueIds)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             SyncFromIssue(context, id);
         }
     }
 
     private static void PruneOrphans(PaperbunkrDbContext context)
     {
-        var orphans = context.Characters.Where(c => !c.Appearances.Any()).ToList();
+        var orphans = context.Characters.Where(c => !c.Appearances.Any() && c.CustomImagePath == null).ToList();
         if (orphans.Count > 0)
         {
             // Provider ids point at a row by number: left behind they would block the same character, re-created later under a new row, from ever

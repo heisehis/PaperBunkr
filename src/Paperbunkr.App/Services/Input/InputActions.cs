@@ -24,6 +24,7 @@ public static class InputActions
     public const string BooksGroup = "Books";
     public const string SmartListsGroup = "Smart lists";
     public const string DetailGroup = "Detail screens";
+    public const string MapGroup = "Map";
 
     /// <summary>Every built-in action, in the order Preferences lists them within a group.</summary>
     public static IReadOnlyList<InputActionInfo> Core { get; } = Build();
@@ -59,6 +60,9 @@ public static class InputActions
 
         return new List<InputActionInfo>
         {
+            App(InputActionIds.ContinuityToggleMapMaximize, MapGroup, "Maximize map", InputScope.Continuity, false, K(Key.F11)),
+            App(InputActionIds.ContinuityMapZoomIn, MapGroup, "Zoom map in", InputScope.Continuity, false, Wheel(WheelDirection.Up, Ctrl)),
+            App(InputActionIds.ContinuityMapZoomOut, MapGroup, "Zoom map out", InputScope.Continuity, false, Wheel(WheelDirection.Down, Ctrl)),
             // ----- Reader: navigation. Spatial turns (arrows) are separate from reading-order ones (PageDown, Space, clickers) because a right-to-left book flips the former. -----
             Reader(InputActionIds.PageTurnLeft, NavigationGroup, "Page back (spatial left)", Unzoomed, K(Key.Left), Pad(GamepadInput.DPadLeft), Pad(GamepadInput.LeftStickLeft)),
             Reader(InputActionIds.PageTurnRight, NavigationGroup, "Page forward (spatial right)", Unzoomed, K(Key.Right), Pad(GamepadInput.DPadRight), Pad(GamepadInput.LeftStickRight)),

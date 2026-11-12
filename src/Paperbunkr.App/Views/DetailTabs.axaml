@@ -320,8 +320,7 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="models:IssueRunGroup">
                         <StackPanel Margin="0,0,0,4">
-                            <TextBlock Text="{Binding Header}" Classes="runHeader"
-                                       IsVisible="{Binding Header, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                            <views:StructureSectionHeader />
                             <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource IssuePosterTileTemplate}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -339,8 +338,7 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="models:IssueRunGroup">
                         <StackPanel Margin="0,0,0,4">
-                            <TextBlock Text="{Binding Header}" Classes="runHeader"
-                                       IsVisible="{Binding Header, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                            <views:StructureSectionHeader />
                             <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource IssueListRowTemplate}" />
                         </StackPanel>
                     </DataTemplate>
@@ -352,8 +350,7 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="models:IssueRunGroup">
                         <StackPanel Margin="0,0,0,4">
-                            <TextBlock Text="{Binding Header}" Classes="runHeader"
-                                       IsVisible="{Binding Header, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                            <views:StructureSectionHeader />
                             <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource IssueCardTileTemplate}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -460,7 +457,7 @@
                             <DataTemplate x:DataType="models:ContinuityChip">
                                 <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}" Padding="10,4" Margin="0,0,6,6">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                        <Button Content="{Binding Name}" Classes="ghost" Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).OpenContinuityChipCommand}" CommandParameter="{Binding}" />
                                         <Button AutomationProperties.Name="Remove from this continuity" Classes="iconButton sm"
                                                 Foreground="{DynamicResource PbTextMutedBrush}"
                                                 Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RemoveContinuityCommand}"
@@ -748,7 +745,9 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:TagPillViewModel">
                                                     <Button Classes="creditName" Command="{Binding SearchCommand}" Background="Transparent" BorderThickness="0" Padding="0,0,10,0" Cursor="Hand">
-                                                        <TextBlock Text="{Binding Value}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                                        <StackPanel Orientation="Horizontal" Spacing="4"><Border Width="20" Height="20" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True" IsVisible="{Binding HasImage}" VerticalAlignment="Center">
+                                                            <Image views:AsyncEntityImage.Path="{Binding ImagePath}" Stretch="UniformToFill" />
+                                                        </Border><TextBlock Text="{Binding Value}" Classes="pbTextBody" VerticalAlignment="Center" /></StackPanel>
                                                     </Button>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>

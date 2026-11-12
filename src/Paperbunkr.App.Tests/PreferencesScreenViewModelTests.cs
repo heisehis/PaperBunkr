@@ -553,16 +553,98 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Appearance_ThemeGroups_SplitDarkLightAndAccessibility()
+    public void Appearance_GallerySegments_SplitDarkLightAccessibilityAndInstalled()
     {
         var vm = CreateRedesignViewModel(out _);
 
-        Assert.Equal(new[] { "Dark", "Light", "Accessibility" }, vm.ThemeGroups.Select(g => g.Title));
-        Assert.Contains(vm.ThemeGroups[0].Themes, t => t.Key == "matrix");
-        Assert.Contains(vm.ThemeGroups[1].Themes, t => t.Key == "daylight");
-        Assert.Contains(vm.ThemeGroups[1].Themes, t => t.Key == "windows_11");
-        Assert.Equal(new[] { "colorblind_safe", "maximum_contrast" }, vm.ThemeGroups[2].Themes.Select(t => t.Key).OrderBy(k => k));
-        Assert.Equal(vm.Themes.Count, vm.ThemeGroups.Sum(g => g.Themes.Count));
+        Assert.Equal(new[] { "Dark", "Light", "Accessibility", "Installed" }, vm.ThemeGallerySegments.Select(g => g.Key));
+
+        // Opens on the active theme's group (default is Dark).
+        Assert.Equal("Dark", vm.SelectedGallerySegment);
+        Assert.True(vm.ThemeGallerySegments[0].IsSelected);
+        Assert.Contains(vm.VisibleThemes, t => t.Key == "matrix:dark");
+
+        vm.SelectGallerySegmentCommand.Execute("Light");
+        Assert.Contains(vm.VisibleThemes, t => t.Key == "daylight");
+        Assert.Contains(vm.VisibleThemes, t => t.Key == "windows_11:light");
+        Assert.All(vm.VisibleThemes, t => Assert.Equal("Light", t.Group));
+
+        vm.SelectGallerySegmentCommand.Execute("Accessibility");
+        Assert.Equal(new[] { "colorblind_safe:dark", "colorblind_safe:light", "maximum_contrast:dark", "maximum_contrast:light" }, vm.VisibleThemes.Select(t => t.Key).OrderBy(k => k));
+
+        vm.SelectGallerySegmentCommand.Execute("Installed");
+        Assert.Empty(vm.VisibleThemes);
+        Assert.Equal(0, vm.ThemeGallerySegments[3].Count);
+
+        // Every non-OLED theme is counted exactly once across the three built-in groups (design Q7: OLED variants are reached through True black).
+        int oled = vm.Themes.Count(t => t.VariantKind == Paperbunkr.App.Theming.ThemeVariantKind.Oled);
+        Assert.Equal(3, oled);
+        Assert.Equal(vm.Themes.Count - oled, vm.ThemeGallerySegments.Take(3).Sum(g => g.Count));
+
+        // The 2026-11-09 roster: an equal 18 light and 18 dark, accessibility outside the count.
+        Assert.Equal(new[] { 18, 18, 4 }, vm.ThemeGallerySegments.Take(3).Select(g => g.Count));
+        Assert.Equal("Dark · " + vm.ThemeGallerySegments[0].Count, vm.ThemeGallerySegments[0].Label);
+    }
+
+    [Fact]
+    public void Appearance_GallerySegment_StaysWhereTheUserPutIt()
+    {
+        var vm = CreateRedesignViewModel(out _);
+
+        vm.SelectGallerySegmentCommand.Execute("Light");
+        vm.SelectThemeCommand.Execute(vm.Themes.Single(t => t.Key == "matrix:dark"));
+
+        Assert.Equal("Light", vm.SelectedGallerySegment);
+    }
+
+    [Fact]
+    public void Appearance_SelectingATheme_FlipsFlagsWithoutReplacingTheTiles()
+    {
+        var vm = CreateRedesignViewModel(out _);
+        var tilesBefore = vm.VisibleThemes.ToList();
+        var matrix = vm.VisibleThemes.Single(t => t.Key == "matrix:dark");
+
+        vm.SelectThemeCommand.Execute(matrix);
+
+        // Same objects in the same order: no tile container was detached while its Click was routing.
+        Assert.Equal(tilesBefore, vm.VisibleThemes);
+        Assert.True(matrix.IsActive);
+        Assert.Single(vm.Themes, t => t.IsActive);
+        Assert.Same(matrix, vm.ActiveThemeSummary);
+    }
+
+    [Fact]
+    public void Appearance_OledVariants_AreHiddenFromTheGalleryAndTheVariantSwitch()
+    {
+        var vm = CreateRedesignViewModel(out _);
+
+        vm.SelectThemeCommand.Execute(vm.Themes.Single(t => t.Key == "abyss:dark"));
+
+        Assert.DoesNotContain(vm.VisibleThemes, t => t.VariantKind == Paperbunkr.App.Theming.ThemeVariantKind.Oled);
+        Assert.DoesNotContain(vm.ActiveFamilyVariants, t => t.VariantKind == Paperbunkr.App.Theming.ThemeVariantKind.Oled);
+        Assert.Equal(new[] { "abyss:dark", "abyss:shallows" }, vm.ActiveFamilyVariants.Select(t => t.Key)); // OLED is True black's, not a switch position
+    }
+
+    [Fact]
+    public void Appearance_AnActiveOledVariant_StaysVisibleUntilMigrated()
+    {
+        var vm = CreateRedesignViewModel(out _);
+
+        vm.SelectThemeCommand.Execute(vm.Themes.Single(t => t.Key == "abyss:oled"));
+
+        Assert.Contains(vm.VisibleThemes, t => t.Key == "abyss:oled");
+        Assert.Contains(vm.ActiveFamilyVariants, t => t.Key == "abyss:oled");
+    }
+
+    [Fact]
+    public void Appearance_SyncCollection_KeepsSharedItemsAndOrder()
+    {
+        string a = "a", b = "b", c = "c", d = "d";
+        var target = new System.Collections.ObjectModel.ObservableCollection<string>(new[] { a, b, c });
+
+        PreferencesScreenViewModel.SyncCollection(target, new[] { c, a, d });
+
+        Assert.Equal(new[] { c, a, d }, target);
     }
 
     [Fact]
@@ -588,7 +670,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.True(def.AccentContrastOk);
         Assert.EndsWith(":1", def.TextContrastText);
 
-        var win11 = vm.Themes.Single(t => t.Key == "windows_11");
+        var win11 = vm.Themes.Single(t => t.Key == "windows_11:light");
         Assert.False(win11.AccentContrastOk);               // #0078D4 on #F3F3F3 is 4.08:1, a known pre-existing miss
         Assert.Contains("below", win11.AccentContrastAutomationName);
     }
@@ -1316,7 +1398,7 @@ public class PreferencesScreenViewModelTests : IDisposable
     {
         var vm = CreateViewModel();
         vm.EnsureLoaded();
-        var windows11 = vm.Themes.Single(t => t.Key == "windows_11");
+        var windows11 = vm.Themes.Single(t => t.Key == "windows_11:light");
         var defaultTheme = vm.Themes.Single(t => t.Key == "default");
 
         vm.SelectThemeCommand.Execute(windows11);

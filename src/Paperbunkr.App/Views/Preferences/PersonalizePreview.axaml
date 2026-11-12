@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:svc="using:Paperbunkr.App.Services"
+             x:Class="Paperbunkr.App.Views.Preferences.PersonalizePreview">
+
+    <!-- Appearance > Personalize live preview (docs/superpowers/specs/2026-11-06-personalization-design.md), pinned in the tab's right pane so it stays in
+         view while scrolling the controls (docs/superpowers/specs/2026-11-09-theme-gallery-and-roster-design.md Q13). Real controls reading the live
+         resources, so every change shows here as it does in the app. Decorative: not hit-testable, hidden from automation. -->
+    <UserControl.Styles>
+        <!-- The sample cover takes the live card shadow, like a Library poster. -->
+        <Style Selector="Border.sampleCover">
+            <Setter Property="BoxShadow" Value="{DynamicResource PbPosterShadow}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Classes="card" VerticalAlignment="Top" IsHitTestVisible="False"
+            AutomationProperties.AccessibilityView="Raw" AutomationProperties.AutomationId="PersonalizeSample">
+        <StackPanel Spacing="12">
+            <TextBlock Classes="pbTextOverline" Text="PREVIEW" />
+            <Border Classes="sampleCover" Width="96" Height="136" HorizontalAlignment="Left"
+                    CornerRadius="{DynamicResource PbRadiusSm}" Background="{DynamicResource PbSurface3Brush}"
+                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" />
+            <TextBlock Classes="pbTextHeading" Text="Heading" />
+            <TextBlock Classes="pbTextBody" Text="Body text reads like this." TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="primary" Content="Button" />
+                <Border Classes="pbChip"><TextBlock Classes="pbTextCaption" Text="Chip" /></Border>
+            </StackPanel>
+            <Border Classes.sidebarPill="{Binding IsSidebarPill, Source={x:Static svc:PersonalizationRuntime.Instance}}"
+                    Classes.sidebarTint="{Binding IsSidebarTint, Source={x:Static svc:PersonalizationRuntime.Instance}}">
+                <Button Classes="sideItemButton active" HorizontalContentAlignment="Stretch">
+                    <TextBlock Classes="sideItemLabel" Text="Selected row" />
+                </Button>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

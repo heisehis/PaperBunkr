@@ -80,6 +80,7 @@ public sealed partial class EventMapViewModel : ViewModelBase
         _openSeriesDetail = openSeriesDetail ?? (_ => { });
         _showAddIssues = showAddIssues ?? (() => { });
         _activity = activity ?? new ActivityService();
+        if (load is null && loadContinuity is null) _ = LoadRoomSettingsAsync();
     }
 
     /// <summary>Raised when the view should scroll a card into view (keyboard moves, link clicks, first view). Arg: cell index.</summary>
@@ -109,6 +110,7 @@ public sealed partial class EventMapViewModel : ViewModelBase
     private int? _selectedIndex;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsInspectorDockedOpen), nameof(FloatingInspectorFootprint))]
     private bool _isInspectorOpen;
 
     [ObservableProperty]
@@ -185,6 +187,7 @@ public sealed partial class EventMapViewModel : ViewModelBase
     {
         int generation = ++_loadGeneration;
         bool sameEvent = !IsContinuityScope && StoryEventId == storyEventId && _source is not null;
+        if (!sameEvent) ResetListState();
         LeaveContinuityScope();
         IsLoading = true;
         HasError = false;
@@ -214,7 +217,7 @@ public sealed partial class EventMapViewModel : ViewModelBase
         source ??= new EventMapSource(storyEventId, EventName, null, Array.Empty<EventMapRow>());
         EventName = source.EventName;
 
-        if (sameEvent && TryRefreshReadStatesInPlace(source))
+        if (sameEvent && !HideRead && TryRefreshReadStatesInPlace(source))
         {
             if (reselectIssueId is int issue && Layout.IndexOfIssue(issue) is int index)
             {
@@ -273,7 +276,10 @@ public sealed partial class EventMapViewModel : ViewModelBase
     /// <summary>Same rows in the same order with the same spine: copy the new read states onto the existing cards and source, nothing else.</summary>
     private bool TryRefreshReadStatesInPlace(EventMapSource fresh)
     {
-        if (_source is null || fresh.SpineSeriesId != _source.SpineSeriesId || fresh.Rows.Count != _source.Rows.Count)
+        if (_source is null || fresh.SpineSeriesId != _source.SpineSeriesId || fresh.Rows.Count != _source.Rows.Count
+            || !(fresh.UserRelations ?? Array.Empty<(int, int, Paperbunkr.Data.Entities.RelationType)>())
+                .SequenceEqual(_source.UserRelations ?? Array.Empty<(int, int, Paperbunkr.Data.Entities.RelationType)>())
+            || !(fresh.SeriesRelations ?? Array.Empty<MapSeriesRelation>()).SequenceEqual(_source.SeriesRelations ?? Array.Empty<MapSeriesRelation>()))
         {
             return false;
         }
@@ -298,6 +304,7 @@ public sealed partial class EventMapViewModel : ViewModelBase
             }
         }
 
+        RefreshMatrixAndRollCall();
         UpdateStatusText();
         return true;
     }
@@ -319,16 +326,23 @@ public sealed partial class EventMapViewModel : ViewModelBase
             return;
         }
 
-        var layout = EventMapLayout.Compute(_source, _spine, EffectiveFilter, Density);
+        var layout = EventMapLayout.Compute(SourceForLayout(_source), _spine, EffectiveFilter, Density, IsRelayPacked, HideRead, _keptReadIssue, !ShortLanesUnfolded, _hiddenSeriesIds);
+        UpdateFoldAvailability(layout.Cells.Select(c => c.Row), _spine.SeriesId);
+        OnPropertyChanged(nameof(IsPackingVisible));
         Cards = layout.Cells.Select(c => new EventMapCardViewModel(c, layout.Tracks[c.Track])).ToList();
         LaneHeaders = layout.Tracks.Select(t => new EventMapLaneHeader(
-            t.IsTrunk ? $"Spine · {t.SeriesName}" : t.SeriesName, t.SeriesName, t.Count, t.ColorIndex, t.IsTrunk, layout.Metrics.TrackHeight)).ToList();
+            t.IsTrunk ? $"Spine · {t.SeriesName}" : t.SeriesName,
+            t.SeriesName + (t.RelationLabel is null ? "" : $" · {t.RelationLabel}"), t.Count, t.ColorIndex, t.IsTrunk, layout.Metrics.TrackHeight,
+            RelationLabel: t.RelationLabel)).ToList();
         Layout = layout;
+        RefreshMatrixAndRollCall();
+        OnPropertyChanged(nameof(IsFilteredEmpty));
+        OnPropertyChanged(nameof(IsEverythingRead));
 
         int? index = keepIssueId is int issue ? layout.IndexOfIssue(issue) : null;
         if (index is null && firstView)
         {
-            index = layout.FirstUnread();
+            index = HideRead && layout.Cells.Count > 0 ? 0 : layout.FirstUnread();
         }
 
         SelectedIndex = null;
@@ -356,7 +370,8 @@ public sealed partial class EventMapViewModel : ViewModelBase
         if (_spine.SeriesId is int spineId)
         {
             string name = _source.Rows.First(r => r.SeriesId == spineId).SeriesName;
-            StatusText = $"{counts} · spine: {name} ({(_spine.Source == SpineSource.User ? "set" : "auto")})";
+            string origin = _spine.Source == SpineSource.User ? "set" : _spine.Source == SpineSource.Relation ? "from your relations" : "auto";
+            StatusText = $"{counts} · spine: {name} ({origin})";
         }
         else
         {
@@ -422,12 +437,16 @@ public sealed partial class EventMapViewModel : ViewModelBase
 
             // Picking the "(auto)" entry goes back to automatic (null), so a later rename keeps working; "None" is the
             // explicit relay sentinel; anything else pins that series.
+            int? relationMatch = Paperbunkr.Data.Metadata.EventSpineResolver.FindRelationMatch(
+                _source.Rows.Select(r => (r.SeriesId, r.SeriesName)).ToList(), _source.UserRelations);
+            int? automatic = relationMatch ?? _spine.AutoMatchSeriesId;
             int? stored = value == RelayOptionLabel
                 ? SpineResolver.ForceRelay
-                : seriesId == _spine.AutoMatchSeriesId ? null : seriesId;
+                : seriesId == automatic ? null : seriesId;
             _saveSpine(eventId, stored);
             _source = _source with { SpineSeriesId = stored };
             _spine = SpineResolver.Resolve(_source);
+            RebuildSpineOptions();
             if (!_spine.HasSpine && Filter == EventMapFilter.SpineOnly)
             {
                 Filter = EventMapFilter.All;    // relays out itself
@@ -447,9 +466,12 @@ public sealed partial class EventMapViewModel : ViewModelBase
         var values = new Dictionary<string, int?>();
         if (_source is not null)
         {
+            int? relationMatch = Paperbunkr.Data.Metadata.EventSpineResolver.FindRelationMatch(
+                _source.Rows.Select(r => (r.SeriesId, r.SeriesName)).ToList(), _source.UserRelations);
             foreach (var group in _source.Rows.GroupBy(r => r.SeriesId))
             {
-                string label = group.First().SeriesName + (group.Key == _spine.AutoMatchSeriesId ? " (auto)" : string.Empty);
+                string label = group.First().SeriesName + (group.Key == relationMatch
+                    ? " (from relations)" : relationMatch is null && group.Key == _spine.AutoMatchSeriesId ? " (auto)" : string.Empty);
                 string unique = label;
                 for (int n = 2; values.ContainsKey(unique); n++)
                 {
@@ -475,6 +497,12 @@ public sealed partial class EventMapViewModel : ViewModelBase
     /// <summary>Selects a card (or clears the selection with null), updates dimming and the inspector, and optionally asks the view to reveal it.</summary>
     public void Select(int? index, bool reveal = true)
     {
+        if (_keptReadIssue is int held && (index is null || index is int target && target >= 0 && target < Cards.Count && Cards[target].IssueId != held))
+        {
+            int? nextIssue = index is int selected && selected >= 0 && selected < Cards.Count ? Cards[selected].IssueId : null;
+            _keptReadIssue = null;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => Relayout(nextIssue, firstView: nextIssue is null));
+        }
         if (index is int i && (i < 0 || i >= Cards.Count))
         {
             index = null;
@@ -575,7 +603,15 @@ public sealed partial class EventMapViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CloseInspector() => IsInspectorOpen = false;
+    private void CloseInspector()
+    {
+        IsInspectorOpen = false;
+        if (_keptReadIssue is not null)
+        {
+            _keptReadIssue = null;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => Relayout(null, firstView: true));
+        }
+    }
 
     [RelayCommand]
     private void OpenInspector() => IsInspectorOpen = SelectedCard is not null;
@@ -583,7 +619,7 @@ public sealed partial class EventMapViewModel : ViewModelBase
     [RelayCommand]
     private void OpenReader()
     {
-        if (SelectedCard is { } card)
+        if (SelectedCard is { IsMember: true } card)
         {
             // Event map: the event itself. Continuity map: the event the card sits in (loose issues open unanchored).
             int? anchor = IsContinuityScope ? card.OwnerEventId : StoryEventId;
@@ -597,7 +633,7 @@ public sealed partial class EventMapViewModel : ViewModelBase
     [RelayCommand]
     private void OpenSeriesDetail()
     {
-        if (SelectedCard is { } card)
+        if (SelectedCard is { } card && card.SeriesId > 0)
         {
             _openSeriesDetail(card.SeriesId);
         }
@@ -607,7 +643,7 @@ public sealed partial class EventMapViewModel : ViewModelBase
     [RelayCommand]
     private void ToggleRead()
     {
-        if (SelectedCard is not { } card || _source is null)
+        if (SelectedCard is not { IsMember: true } card || _source is null)
         {
             return;
         }
@@ -619,6 +655,8 @@ public sealed partial class EventMapViewModel : ViewModelBase
         }
 
         card.ReadState = newState;
+        if (HideRead && newState == EventMapReadState.Read) _keptReadIssue = card.IssueId;
+        else if (newState != EventMapReadState.Read) _keptReadIssue = null;
         PatchContinuityReadState(card.IssueId, newState);
         _source = _source with
         {
@@ -628,12 +666,14 @@ public sealed partial class EventMapViewModel : ViewModelBase
         {
             other.ReadState = newState;
         }
+        RefreshMatrixAndRollCall();
     }
 
     [RelayCommand]
     private void JumpToFirstUnread()
     {
-        if (Layout.FirstUnread() is int index)
+        int? first = HideRead && Layout.Cells.Count > 0 ? 0 : Layout.FirstUnread();
+        if (first is int index)
         {
             Select(index, reveal: true);
         }
@@ -695,6 +735,6 @@ public sealed partial class EventMapViewModel : ViewModelBase
             return true;
         }
 
-        return false;
+        return RestoreMaximize?.Invoke() ?? false;
     }
 }

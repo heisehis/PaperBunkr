@@ -14,6 +14,7 @@ using Paperbunkr.Data.ComicVine;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.Data.Metadata.EventEnrichment;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -79,6 +80,9 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
     public bool HasSelectedUniverse => _selectedUniverse is not null;
     private Paperbunkr.Data.ReadingLists.Sources.ArcSearchResult? _selectedArc;
     private string? _selectedArcId;
+
+    /// <summary>The previewed arc's issue list and the arc it came from, saved for the continuity map once the event exists (M4 §1).</summary>
+    private (string ArcId, Paperbunkr.Data.ReadingLists.Sources.ArcEntryList Entries)? _selectedArcEntries;
     private string? _selectedArcDescription;
     private string? _selectedArcCover;
     private string? _selectedComicVineArcId;
@@ -131,15 +135,17 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
         public bool IsSelected { get => _isSelected; set => SetProperty(ref _isSelected, value); }
     }
 
-    public NewEventOrContinuityViewModel(Action<Kind, int> onSaved, Action onCancel)
+    public NewEventOrContinuityViewModel(Action<Kind, int> onSaved, Action onCancel, IActivityService? activity = null)
     {
         _onSaved = onSaved;
         _onCancel = onCancel;
+        _smartFillActivity = activity;
     }
 
     /// <summary>Puts the dialog into create mode for a brand-new event or continuity.</summary>
     public void Reset(Kind kind)
     {
+        ResetSmartFillDraft();
         IsEdit = false;
         _editId = 0;
         CurrentKind = kind;
@@ -203,6 +209,7 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
     /// <summary>Puts the dialog into edit mode, pre-filled from an existing entity.</summary>
     public void LoadForEdit(Kind kind, int id)
     {
+        ResetSmartFillDraft();
         Stage = SetupStage.Basics;
         _guidedCreate = false;
         using var context = PaperbunkrDb.CreateContext();
@@ -218,10 +225,12 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
             Name = storyEvent.Name;
             Description = storyEvent.Description ?? string.Empty;
             Publisher = string.Empty;
-            StartDate = storyEvent.StartDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
-            EndDate = storyEvent.EndDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
+            StartDate = EventPublicationDate.Effective(storyEvent, false)?.Entry ?? string.Empty;
+            EndDate = EventPublicationDate.Effective(storyEvent, true)?.Entry ?? string.Empty;
+            LoadSmartFillDates(storyEvent);
             EventTags = string.Join(Environment.NewLine, context.StoryEventTags.Where(t => t.StoryEventId == id).Select(t => t.Value));
             EventCoverPath = storyEvent.CoverSource == StoryEventCoverSource.Manual ? StoryEventCoverPaths.GetPath(id) : null;
+            _loadedCoverPath = EventCoverPath;
             foreach (var choice in EventTypeSelections)
                 choice.IsSelected = context.StoryEventTypeAssignments.Any(t => t.StoryEventId == id && t.Type == choice.Type);
         }
@@ -242,6 +251,7 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
         CurrentKind = kind;
         _editId = id;
         IsEdit = true;
+        OnPropertyChanged(nameof(CanFillEvent));
         LoadPublisherSuggestions();
     }
 
@@ -295,6 +305,7 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
     partial void OnStageChanged(SetupStage value)
     {
         OnPropertyChanged(nameof(IsBasics)); OnPropertyChanged(nameof(IsProviderStage)); OnPropertyChanged(nameof(IsReviewStage));
+        OnPropertyChanged(nameof(CanFillEvent));
     }
 
     partial void OnSelectedPresetChanged(string value)
@@ -326,10 +337,14 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
         string? path = await new FilePickerService().PickImageFileAsync("Choose Event Cover");
         if (path is null) return;
         EventCoverPath = path;
+        _customCoverChanged = true;
     }
 
     [RelayCommand]
-    private void ClearEventCover() => EventCoverPath = null;
+    private void ClearEventCover()
+    {
+        EventCoverPath = null; _draftCoverCleared = true;
+    }
 
     public string Title => (IsEdit, CurrentKind) switch
     {
@@ -357,8 +372,8 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
     public string? DateEntryError =>
         (!string.IsNullOrWhiteSpace(StartDate) && ParseDate(StartDate) is null)
             || (!string.IsNullOrWhiteSpace(EndDate) && ParseDate(EndDate) is null)
-            ? "Enter dates as YYYY-MM-DD, or leave them blank."
-            : ParseDate(StartDate) is DateTime start && ParseDate(EndDate) is DateTime end && end < start
+            ? "Enter YYYY, YYYY-MM or YYYY-MM-DD, or leave dates blank."
+            : !EventEnrichmentEvaluator.ValidDates(DateJson(false), DateJson(true))
                 ? "The end date must be on or after the start date."
                 : null;
 
@@ -394,14 +409,18 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
             DateTime? startDate = ParseDate(StartDate);
             DateTime? endDate = ParseDate(EndDate);
             if ((!string.IsNullOrWhiteSpace(StartDate) && startDate is null) || (!string.IsNullOrWhiteSpace(EndDate) && endDate is null)
-                || (startDate is not null && endDate is not null && endDate < startDate)) return;
+                || !EventEnrichmentEvaluator.ValidDates(DateJson(false), DateJson(true))) return;
+            using var metadataTransaction = context.Database.BeginTransaction();
             if (IsEdit)
             {
-                var storyEvent = context.StoryEvents.FirstOrDefault(e => e.Id == _editId);
+                var storyEvent = EventMetadataStore.Query(context).FirstOrDefault(e => e.Id == _editId);
                 if (storyEvent is null)
                 {
                     return;
                 }
+
+                RecheckSmartFillDraft(context, storyEvent);
+                name = Name.Trim(); description = Blank(Description);
 
                 if (!string.Equals(storyEvent.Name, name, StringComparison.Ordinal))
                 {
@@ -412,19 +431,21 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
 
                 storyEvent.Name = name;
                 storyEvent.Description = description;
-                storyEvent.StartDate = startDate;
-                storyEvent.EndDate = endDate;
+                SaveSmartFillDates(context, storyEvent);
                 SaveEventTags(context, storyEvent.Id);
                 SaveEventTypes(context, storyEvent.Id);
                 SaveEventCover(storyEvent);
                 storyEvent.UpdatedAt = now;
                 context.SaveChanges();
+                SaveSmartFillDraftHistory(context, storyEvent);
+                metadataTransaction.Commit();
                 if (_guidedCreate) Stage = SetupStage.Provider;
                 else _onSaved(Kind.Event, storyEvent.Id);
             }
             else
             {
-                var storyEvent = new StoryEvent { Name = name, Description = description, StartDate = startDate, EndDate = endDate, CreatedAt = now, UpdatedAt = now };
+                var storyEvent = new StoryEvent { Name = name, Description = description, CreatedAt = now, UpdatedAt = now };
+                SaveSmartFillDates(context, storyEvent);
                 context.StoryEvents.Add(storyEvent);
                 context.SaveChanges();
                 SaveEventTags(context, storyEvent.Id);
@@ -432,6 +453,8 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
                 SaveEventCover(storyEvent);
                 context.SaveChanges();
                 _editId = storyEvent.Id;
+                metadataTransaction.Commit();
+                OnPropertyChanged(nameof(CanFillEvent));
                 _guidedCreate = true;
                 LoadRelatedEvents(storyEvent.Id);
                 Stage = SetupStage.Provider;
@@ -636,11 +659,14 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
             var listSource = Paperbunkr.Data.ReadingLists.Sources.ReadingListSourceRegistry.Get(context, ProviderSource);
             var overview = listSource is null ? null : await listSource.GetArcOverviewAsync(result.Id, CancellationToken.None);
             _selectedArc = result; _selectedArcId = result.Id;
-            _selectedArcDescription = overview?.Description ?? result.Deck;
+            _selectedArcDescription = EventDescriptionText.Overview(overview?.Deck ?? result.Deck) ?? EventDescriptionText.Overview(overview?.Description);
             _selectedArcCover = overview?.CoverImageUrl;
+            if (_selectedArcCover is not null && !await StoryEventCoverCache.DownloadAndCacheAsync(_editId, _selectedArcCover, CancellationToken.None))
+                _selectedArcCover = null;
             _selectedComicVineArcId = overview?.ComicVineId;
             ProviderIssueMatches.Clear();
             var entries = await listSource!.GetArcEntriesAsync(result.Id, CancellationToken.None);
+            _selectedArcEntries = (result.Id, entries);
             var suppliedIds = entries.Issues.SelectMany(issue => GetProviderIds(issue)).Distinct().ToList();
             var localIds = suppliedIds.Count == 0
                 ? new List<ComicMetadataExternalId>()
@@ -686,7 +712,7 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
         var now = DateTime.UtcNow;
         if (CurrentKind == Kind.Event)
         {
-            var row = context.StoryEvents.FirstOrDefault(e => e.Id == _editId);
+            var row = EventMetadataStore.Query(context).FirstOrDefault(e => e.Id == _editId);
             if (row is not null && _selectedArc is not null && _selectedArcId is not null)
             {
                 bool metron = string.Equals(ProviderSource, "Metron", StringComparison.OrdinalIgnoreCase);
@@ -710,8 +736,8 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
                     row.ComicVineArcId ??= _selectedComicVineArcId;
                 }
                 else row.ComicVineArcId ??= _selectedArcId;
-                row.Description ??= _selectedArcDescription;
-                if (row.CoverSource == StoryEventCoverSource.None && !string.IsNullOrWhiteSpace(_selectedArcCover))
+                if (EventMetadataStore.Eligible(context, row, EventMetadataField.Description)) row.Description = _selectedArcDescription;
+                if (EventMetadataStore.Eligible(context, row, EventMetadataField.Cover) && !string.IsNullOrWhiteSpace(_selectedArcCover))
                 { row.CoverImageUrl = _selectedArcCover; row.CoverSource = metron ? StoryEventCoverSource.Metron : StoryEventCoverSource.ComicVine; }
                 row.UpdatedAt = now;
                 using var transaction = context.Database.BeginTransaction();
@@ -738,6 +764,21 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
                 }
                 context.SaveChanges();
                 transaction.Commit();
+
+                // The arc's issue list, for the map's missing issues (M4 §1): only under the identity the event now has.
+                string? storedId = metron ? row.MetronArcId : row.ComicVineArcId;
+                if (_selectedArcEntries is { } arcList && arcList.ArcId == _selectedArcId && storedId == _selectedArcId)
+                {
+                    try
+                    {
+                        Paperbunkr.Data.Metadata.EventArcSnapshots.Save(context, row.Id,
+                            metron ? Paperbunkr.Data.Metadata.EventArcSnapshots.Metron : Paperbunkr.Data.Metadata.EventArcSnapshots.ComicVine,
+                            _selectedArcId, arcList.Entries);
+                    }
+                    catch (Microsoft.EntityFrameworkCore.DbUpdateException)
+                    {
+                    }
+                }
             }
         }
         else
@@ -790,7 +831,7 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
         if (!string.IsNullOrWhiteSpace(issue.MetronIssueId)) yield return (ComicProvider.Metron, issue.MetronIssueId);
     }
 
-    private static DateTime? ParseDate(string text) => DateTime.TryParseExact(text.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date) ? DateTime.SpecifyKind(date, DateTimeKind.Utc) : null;
+    private static DateTime? ParseDate(string text) => EventPublicationDate.Parse(text)?.Lower;
 
     private void SaveEventTags(PaperbunkrDbContext context, int eventId)
     {
@@ -806,18 +847,27 @@ public partial class NewEventOrContinuityViewModel : ViewModelBase
     {
         if (EventCoverPath is null)
         {
-            if (storyEvent.CoverSource == StoryEventCoverSource.Manual) StoryEventCoverCache.Invalidate(storyEvent.Id);
+            if (_draftCoverCleared) { storyEvent.CoverImageUrl = null; storyEvent.CoverSource = StoryEventCoverSource.None; return; }
+            if (_draftEvidence.TryGetValue(EventMetadataField.Cover, out var cover))
+            {
+                var selected = System.Text.Json.JsonSerializer.Deserialize<EventCoverValue>(cover.Evidence.Value)!;
+                storyEvent.CoverImageUrl = selected.Url; storyEvent.CoverSource = selected.Source; return;
+            }
             if (storyEvent.CoverSource == StoryEventCoverSource.Manual) { storyEvent.CoverImageUrl = null; storyEvent.CoverSource = StoryEventCoverSource.None; }
             return;
         }
+        if (!_customCoverChanged && EventCoverPath == _loadedCoverPath) return;
         if (!StoryEventCoverCache.TrySetCustomCover(storyEvent.Id, EventCoverPath)) return;
         storyEvent.CoverImageUrl = null;
         storyEvent.CoverSource = StoryEventCoverSource.Manual;
+        var coverState = EventMetadataStore.State(storyEvent, EventMetadataField.Cover);
+        coverState.Revision = Guid.NewGuid().ToString("N"); coverState.ProtectedBlank = false; coverState.EvidenceJson = null;
     }
 
     [RelayCommand]
     private void Cancel()
     {
+        ResetSmartFillDraft();
         if (_guidedCreate && _editId > 0)
             _onSaved(CurrentKind, _editId);
         else

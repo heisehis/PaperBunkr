@@ -224,6 +224,7 @@ public static class EventChronologyInference
                 e.Name,
                 e.StartDate,
                 e.EndDate,
+                Endpoints = e.DateEndpoints,
                 AliasKeys = e.Aliases.Select(a => a.Key).ToList(),
                 Members = e.Members.Select(m => new
                 {
@@ -245,8 +246,8 @@ public static class EventChronologyInference
                 m.IssueId, m.SeriesId, m.SeriesName ?? string.Empty, ParseNumber(m.Number), (m.Number ?? string.Empty).Trim(),
                 EventChronology.IssueDateKey(m.Year, m.Month, m.GcdIssueId, gcdDates))).ToList();
             var dates = members.Select(m => m.Date).OfType<int>().ToList();
-            int? start = EventChronology.DateKey(r.StartDate) ?? (dates.Count > 0 ? dates.Min() : null);
-            int? end = EventChronology.DateKey(r.EndDate) ?? (dates.Count > 0 ? dates.Max() : null);
+            int? start = r.Endpoints.FirstOrDefault(d => !d.IsEnd) is { } first ? first.Year * 100 + (first.Month ?? 0) : EventChronology.DateKey(r.StartDate) ?? (dates.Count > 0 ? dates.Min() : null);
+            int? end = r.Endpoints.FirstOrDefault(d => d.IsEnd) is { } last ? last.Year * 100 + (last.Month ?? 0) : EventChronology.DateKey(r.EndDate) ?? (dates.Count > 0 ? dates.Max() : null);
             var series = members.Select(m => m.SeriesName).Where(n => n.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             return new Snapshot(r.Id, r.Name, EventNameKeys.For(r.Name, series, r.AliasKeys), start, end, members);
         }).ToList();

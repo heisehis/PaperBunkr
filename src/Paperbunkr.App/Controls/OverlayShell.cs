@@ -1,10 +1,15 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 namespace Paperbunkr.App.Controls;
 
@@ -32,9 +37,23 @@ namespace Paperbunkr.App.Controls;
 /// <see cref="Reveal"/> lifecycle - the scrim fades and the card settles from 0.98 on the Reveal tokens (styles in
 /// <c>Styles/Overlays.axaml</c>); a close ends interaction at once and collapses after the exit; a reopen mid-exit reverses.
 /// </para>
+///
+/// <para>
+/// <b>Focus</b> (2026-11-12 focus audit): an open shell is modal for the keyboard and the controller. It takes focus on open (the first
+/// control in its content, never the ✕), Tab cycles inside it, an arrow key nothing inside used moves to the nearest control in the card and
+/// otherwise stops there, and a key pressed while focus is outside every open shell (a dialog that swapped its content, a click on the scrim)
+/// is redirected into the topmost one (<see cref="TryRedirectKey"/>). Before this, nothing put focus into a dialog, so the first arrow or Tab
+/// started from the window's first control - the nav rail - and a Left that nothing used went to the rail as well.
+/// </para>
 /// </summary>
 public class OverlayShell : ContentControl
 {
+    /// <summary>Open shells in the order they opened: the last one still open in a window is the one on top.</summary>
+    private static readonly List<OverlayShell> OpenShells = new();
+
+    /// <summary>Whether the most recent key or pointer press was a key. Set by MainWindow's tunnel handlers: a dialog opened from the
+    /// keyboard shows its focus ring at once, one opened with the mouse takes focus quietly.</summary>
+    public static bool LastInputWasKeyboard { get; set; }
     public static readonly StyledProperty<bool> IsOpenProperty =
         AvaloniaProperty.Register<OverlayShell, bool>(nameof(IsOpen));
 
@@ -77,6 +96,8 @@ public class OverlayShell : ContentControl
 
     public OverlayShell()
     {
+        AddHandler(KeyDownEvent, OnShellKeyDown, RoutingStrategies.Bubble);
+
         // IsOpenProperty.Changed only fires on a real transition, so a freshly constructed shell
         // (IsOpen defaults to false) never runs that handler - without this, it would keep
         // Avalonia's own Visual.IsVisible default of true, showing an unopened overlay.
@@ -153,7 +174,149 @@ public class OverlayShell : ContentControl
         IsOpenProperty.Changed.AddClassHandler<OverlayShell>((shell, e) => shell.OnIsOpenChanged((bool)e.NewValue!));
     }
 
-    private void OnIsOpenChanged(bool open) =>
+    private void OnIsOpenChanged(bool open)
+    {
+        ApplyReveal(open);
+        OpenShells.Remove(this);
+        if (!open)
+        {
+            return;
+        }
+
+        OpenShells.Add(this);
+        KeyboardNavigation.SetTabNavigation(this, KeyboardNavigationMode.Cycle);
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (IsOpen && !IsClosing && !ContainsFocus())
+            {
+                FocusInitial(LastInputWasKeyboard ? NavigationMethod.Tab : NavigationMethod.Unspecified);
+            }
+        }, DispatcherPriority.Loaded);
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        if (IsOpen && !OpenShells.Contains(this))
+        {
+            OpenShells.Add(this);
+        }
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        OpenShells.Remove(this);
+    }
+
+    /// <summary>The open shell on top in <paramref name="top"/> (the most recently opened one still open and showing), or null when no dialog is open there.</summary>
+    public static OverlayShell? TopmostOpen(TopLevel? top)
+    {
+        if (top is null)
+        {
+            return null;
+        }
+
+        for (int i = OpenShells.Count - 1; i >= 0; i--)
+        {
+            if (OpenShells[i] is var shell && shell.IsLive(top))
+            {
+                return shell;
+            }
+        }
+
+        return null;
+    }
+
+    private bool IsLive(TopLevel top) => IsOpen && !IsClosing && IsEffectivelyVisible && ReferenceEquals(TopLevel.GetTopLevel(this), top);
+
+    /// <summary>Whether <paramref name="element"/> is inside this shell, counting a dropdown or menu opened from inside it (a popup's content is
+    /// not a visual descendant of its anchor, so the walk steps from a popup host to the <see cref="Popup"/> it belongs to).</summary>
+    public bool Contains(object? element) => IsWithin(this, element);
+
+    /// <summary>Whether this shell holds keyboard focus (see <see cref="Contains"/>).</summary>
+    public bool ContainsFocus() => Contains(TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement());
+
+    /// <summary><paramref name="element"/> is <paramref name="region"/> or inside it, crossing popup hosts to their anchors.</summary>
+    public static bool IsWithin(Visual region, object? element)
+    {
+        var current = element as Visual;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, region))
+            {
+                return true;
+            }
+
+            current = current is OverlayPopupHost or PopupRoot
+                ? ((StyledElement)current).Parent as Visual ?? current.GetVisualParent()
+                : current.GetVisualParent();
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether <paramref name="element"/> is inside any open shell of <paramref name="top"/>.</summary>
+    public static bool IsInsideAnyOpen(TopLevel top, object? element) => OpenShells.Any(s => s.IsLive(top) && s.Contains(element));
+
+    /// <summary>
+    /// The window calls this first for every key (tunnel). While a dialog is open and focus sits outside every open one - the dialog swapped its
+    /// content and the focused control went with it, or focus stayed behind on the page - a navigation key puts focus into the topmost dialog
+    /// instead of acting on the page or starting from the nav rail. Returns whether the key was used that way.
+    /// </summary>
+    public static bool TryRedirectKey(TopLevel top, Key key, KeyModifiers modifiers)
+    {
+        if ((modifiers & (KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Meta)) != 0
+            || key is not (Key.Tab or Key.Left or Key.Right or Key.Up or Key.Down or Key.Home or Key.End or Key.PageUp or Key.PageDown or Key.Enter or Key.Space)
+            || TopmostOpen(top) is not { } shell
+            || IsInsideAnyOpen(top, top.FocusManager?.GetFocusedElement()))
+        {
+            return false;
+        }
+
+        return shell.FocusInitial(NavigationMethod.Tab);
+    }
+
+    /// <summary>Puts focus on the first focusable control in the shell's content, in visual order (the shell's and the dialog card's own ✕ only
+    /// when there is nothing else). Returns whether anything took focus.</summary>
+    public bool FocusInitial(NavigationMethod method)
+    {
+        var candidates = this.GetVisualDescendants().OfType<Control>()
+            .Where(c => c.Focusable && c.IsTabStop && c.IsEffectivelyEnabled && c.IsEffectivelyVisible && c.Bounds.Width > 0)
+            .ToList();
+        var target = candidates.FirstOrDefault(c => !IsChromeCloseButton(c)) ?? candidates.FirstOrDefault();
+        if (target is null)
+        {
+            return false;
+        }
+
+        target.Focus(method);
+        target.BringIntoView();
+        return true;
+    }
+
+    private static bool IsChromeCloseButton(Control control) => control is Button && control.TemplatedParent is OverlayShell or DialogCard;
+
+    /// <summary>
+    /// An arrow key nothing inside the dialog used: move to the nearest control that way within the shell, and either way keep the key here, so it
+    /// never reaches the page behind or the window's "Left goes to the nav rail" fallback.
+    /// </summary>
+    private void OnShellKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || !IsOpen || IsClosing || e.KeyModifiers != KeyModifiers.None || e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down))
+        {
+            return;
+        }
+
+        if (e.Source is Visual source && this.IsVisualAncestorOf(source))
+        {
+            Paperbunkr.App.Views.FocusReclaimer.TryMoveDirectionally(this, e);
+        }
+
+        e.Handled = true;
+    }
+
+    private void ApplyReveal(bool open) =>
         Reveal.Apply(this, open, beforeOpenClass: () =>
         {
             // First open of a DeferContent shell: hand the ContentPresenter a non-null Content so

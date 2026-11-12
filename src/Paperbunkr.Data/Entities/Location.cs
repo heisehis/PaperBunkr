@@ -7,11 +7,24 @@ namespace Paperbunkr.Data.Entities;
 /// the editable source of truth. Metron has no location data at all (confirmed - no such REST
 /// resource), so this table is only ever populated via ComicVine's <c>location_credits</c>.
 /// </summary>
-public class Location
+public class Location : IHasEntityProfile
 {
     public int Id { get; set; }
 
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>See <see cref="Character.ImageUrl"/>. Locations get their profile from ComicVine only (Metron has no locations).</summary>
+    public string? ImageUrl { get; set; }
+
+    public EntityImageSource ImageSource { get; set; }
+
+    public DateTime? ImageCheckedAt { get; set; }
+
+    public string? CustomImagePath { get; set; }
+
+    public string? Description { get; set; }
+
+    public string? Aliases { get; set; }
 
     public List<LocationAppearance> Appearances { get; set; } = new();
 }

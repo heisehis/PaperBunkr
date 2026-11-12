@@ -138,6 +138,11 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
+        <Style Selector="em|EventMapOverviewStrip">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Transitions"><Transitions><DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionRevealFade}" Easing="{StaticResource PbMotionEase}" /></Transitions></Setter>
+        </Style>
+        <Style Selector="em|EventMapOverviewStrip.open"><Setter Property="Opacity" Value="1" /></Style>
         <Style Selector="Button.mapLink">
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -157,8 +162,22 @@
 
     <Grid RowDefinitions="Auto,*">
 
+        <!-- Save as image renders off screen through this host (it's in the live tree, so styles and the theme apply); never shown. -->
+        <Panel Name="ExportHost" Grid.RowSpan="2" Opacity="0" IsHitTestVisible="False" ClipToBounds="True" />
+
         <!-- ===== Toolbar ===== -->
         <WrapPanel Grid.Row="0" Margin="24,0,24,10" Orientation="Horizontal" ItemSpacing="14" LineSpacing="8">
+            <Border Classes="segGroup" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <Button Classes="segItem" Classes.active="{Binding IsMapMode}" Content="Map" Command="{Binding ShowMapModeCommand}" />
+                    <Button Classes="segItem" Classes.active="{Binding IsMatrixMode}" Content="Matrix" Command="{Binding ShowMatrixModeCommand}" />
+                    <Button Classes="segItem" Classes.active="{Binding IsListMode}" Content="List" Command="{Binding ShowListModeCommand}" />
+                    <Button Classes="segItem" Classes.active="{Binding IsAtlasMode}" Content="Atlas" Command="{Binding ShowAtlasModeCommand}"
+                            IsVisible="{Binding IsAtlasAvailable}" ToolTip.Tip="This continuity's events across the years" />
+                </StackPanel>
+            </Border>
+            <Button Name="SeriesButton" Classes="secondary" Content="Series" Command="{Binding ToggleRollCallCommand}" />
+            <TextBlock Classes="pbTextCaption" Text="{Binding ProgressText}" VerticalAlignment="Center" />
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding IsSpinePickerVisible}">
                 <TextBlock Text="Spine" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                 <controls:SuggestBox MinWidth="220" FontSize="12" IsStrict="True" AutomationProperties.Name="Spine series"
@@ -179,6 +198,88 @@
                             Command="{Binding SetFilterCommand}" CommandParameter="{x:Static eventMap:EventMapFilter.EventsOnly}" />
                 </StackPanel>
             </Border>
+
+            <Border Classes="segGroup" IsVisible="{Binding IsPackingVisible}" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <Button Classes="segItem" Classes.active="{Binding IsRelayPacked}" Content="Packed" Command="{Binding UsePackedRelayCommand}" />
+                    <Button Classes="segItem" Classes.active="{Binding IsOnePerColumn}" Content="One per column" Command="{Binding UseOnePerColumnCommand}" />
+                </StackPanel>
+            </Border>
+
+            <Button Classes="secondary" Content="{Binding HideReadLabel}" Command="{Binding ToggleHideReadCommand}" />
+            <!-- M5: Featuring, Colour by and Arcs (docs/superpowers/specs/2026-11-11-continuity-map-structure-links-design.md) -->
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding HasFeaturingChoices}">
+                <TextBlock Text="Featuring" Classes="pbTextMeta" VerticalAlignment="Center" />
+                <controls:SuggestBox MinWidth="200" IsStrict="True" AutomationProperties.Name="Featuring character or team"
+                                     Suggestions="{Binding FeaturingOptions}" Text="{Binding FeaturingText}" />
+                <Button Classes="iconButton sm" Command="{Binding ClearFeaturingCommand}" IsVisible="{Binding IsFeaturing}"
+                        AutomationProperties.Name="Clear featuring" ToolTip.Tip="Clear featuring">
+                    <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                </Button>
+                <Button Classes="secondary" Content="{Binding HideOthersLabel}" Command="{Binding ToggleFeaturingHideOthersCommand}" IsVisible="{Binding IsFeaturing}" />
+                <TextBlock Classes="pbTextCaption" Text="{Binding FeaturingStatus}" VerticalAlignment="Center" IsVisible="{Binding IsFeaturing}" />
+            </StackPanel>
+            <TextBlock Classes="pbTextCaption" Text="Character index still building" VerticalAlignment="Center" IsVisible="{Binding IsIndexBuilding}" />
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding IsMapMode}">
+                <TextBlock Text="Colour by" Classes="pbTextMeta" VerticalAlignment="Center" />
+                <controls:SuggestBox Width="140" IsStrict="True" AutomationProperties.Name="Colour cards by"
+                                     Suggestions="{Binding ColourByOptions}" Text="{Binding ColourByText}" />
+                <Button Classes="secondary" Content="{Binding ArcsLabel}" Command="{Binding ToggleArcsCommand}" ToolTip.Tip="Story arcs drawn under each lane" />
+            </StackPanel>
+            <Button Classes="secondary" Command="{Binding ToggleShowMissingCommand}" IsVisible="{Binding HasMissingSnapshot}"
+                    ToolTip.Tip="Issues this event's Metron or ComicVine list has that your library doesn't">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <fi:SymbolIcon Symbol="BookQuestionMark" FontSize="{StaticResource PbIconSizeXs}" />
+                    <TextBlock Text="{Binding ShowMissingLabel}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+            <Button Classes="ghost" IsVisible="{Binding HasGaps}" AutomationProperties.Name="Possible gaps">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" />
+                    <TextBlock Text="{Binding GapsLabel}" VerticalAlignment="Center" />
+                </StackPanel>
+                <Button.Flyout>
+                    <Flyout Placement="BottomEdgeAlignedLeft">
+                        <Border Classes="dropdown">
+                            <StackPanel MinWidth="240" MaxWidth="360">
+                                <TextBlock Classes="pbTextCaption" Text="These may not be part of this event." Margin="8,4,8,6" TextWrapping="Wrap" />
+                                <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl ItemsSource="{Binding Gaps}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:EventGapItem">
+                                                <Button Classes="menuRow" Content="{Binding Label}" ToolTip.Tip="Open the series"
+                                                        Command="{Binding $parent[UserControl].((vm:EventMapViewModel)DataContext).OpenGapSeriesCommand}" CommandParameter="{Binding}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </StackPanel>
+                        </Border>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+            <Button Classes="ghost" Content="Undo add to Wanted" Command="{Binding UndoWantedCommand}" IsVisible="{Binding HasUndoWanted}" />
+            <TextBlock Classes="pbTextCaption" Text="{Binding MissingStaleText}" VerticalAlignment="Center" IsVisible="{Binding MissingStaleText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <Button Classes="ghost" Content="More" AutomationProperties.Name="More map options">
+                <Button.Flyout>
+                    <Flyout Placement="BottomEdgeAlignedLeft">
+                        <StackPanel MinWidth="200">
+                            <Button Classes="menuRow" Content="{Binding FoldShortLanesLabel}" Command="{Binding ToggleShortLanesCommand}" IsVisible="{Binding CanFoldShortLanes}" />
+                            <Button Classes="menuRow" Content="{Binding ProgressLineLabel}" Command="{Binding ToggleProgressLineCommand}" />
+                            <Button Classes="menuRow" Content="Save as image…" Command="{Binding SaveAsImageCommand}" IsVisible="{Binding CanSaveImage}" />
+                            <Button Classes="menuRow" Content="Check for missing issues" Command="{Binding CheckForMissingIssuesCommand}" IsEnabled="{Binding !IsCheckingMissing}" />
+                            <Button Classes="menuRow" Content="Add all missing to Wanted" Command="{Binding AddAllMissingToWantedCommand}">
+                                <Button.IsVisible>
+                                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                        <Binding Path="ShowMissing" />
+                                        <Binding Path="HasMissingIssues" />
+                                    </MultiBinding>
+                                </Button.IsVisible>
+                            </Button>
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
 
             <!-- Continuity map: hide whole events (docs/superpowers/specs/2026-09-27-continuity-map-design.md §4) -->
             <Button Classes="secondary" VerticalAlignment="Center" IsVisible="{Binding HasEventChoices}"
@@ -202,19 +303,51 @@
                 </Button.Flyout>
             </Button>
 
-            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" ToolTip.Tip="Density (Ctrl + mouse wheel)">
-                <TextBlock Text="Density" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                <Slider Width="110" Minimum="0" Maximum="2" TickFrequency="1" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
-                        AutomationProperties.Name="Map density: compact, standard or covers" Value="{Binding DensityIndex}" VerticalAlignment="Center" />
+            <Button Classes="secondary" Content="Covers" Command="{Binding ToggleMatrixCoversCommand}" IsVisible="{Binding IsMatrixMode}" />
+            <Button Classes="iconButton" Command="{Binding FitAtlasCommand}" IsVisible="{Binding IsAtlasMode}" AutomationProperties.Name="Fit atlas" ToolTip.Tip="Fit atlas (Ctrl + mouse wheel zooms)">
+                <fi:SymbolIcon Symbol="ArrowFit" FontSize="{StaticResource PbIconSizeSm}" />
+            </Button>
+            <Button Classes="ghost" AutomationProperties.Name="Undated events">
+                <Button.IsVisible>
+                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding Path="IsAtlasMode" />
+                        <Binding Path="HasUndatedEvents" />
+                    </MultiBinding>
+                </Button.IsVisible>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="{Binding UndatedLabel}" VerticalAlignment="Center" />
+                    <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" />
+                </StackPanel>
+                <Button.Flyout>
+                    <Flyout Placement="BottomEdgeAlignedLeft">
+                        <Border Classes="dropdown">
+                            <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl ItemsSource="{Binding UndatedEvents}" MinWidth="220">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AtlasUndatedEvent">
+                                            <Button Classes="menuRow" Content="{Binding Name}"
+                                                    Command="{Binding $parent[UserControl].((vm:EventMapViewModel)DataContext).OpenUndatedEventCommand}" CommandParameter="{Binding EventId}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" ToolTip.Tip="Map zoom" IsVisible="{Binding IsMapMode}">
+                <TextBlock Text="Zoom" Classes="pbTextMeta" VerticalAlignment="Center" />
+                <Slider Width="110" Minimum="0" Maximum="1" AutomationProperties.Name="Map zoom" Value="{Binding SliderValue, Mode=TwoWay}" />
+                <Button Classes="iconButton" Command="{Binding FitAllCommand}" AutomationProperties.Name="Fit map" ToolTip.Tip="Fit map"><fi:SymbolIcon Symbol="ArrowFit" FontSize="{StaticResource PbIconSizeSm}" /></Button>
+                <Button Classes="iconButton" Command="{Binding ToggleMapMaximizeCommand}" AutomationProperties.Name="{Binding MapMaximizeLabel}" ToolTip.Tip="{Binding MapMaximizeLabel}">
+                    <Panel><fi:SymbolIcon Symbol="FullScreenMaximize" FontSize="{StaticResource PbIconSizeSm}" IsVisible="{Binding !IsMapMaximized}" /><fi:SymbolIcon Symbol="FullScreenMinimize" FontSize="{StaticResource PbIconSizeSm}" IsVisible="{Binding IsMapMaximized}" /></Panel>
+                </Button>
             </StackPanel>
 
             <Button Classes="iconButton" VerticalAlignment="Center" Command="{Binding JumpToFirstUnreadCommand}"
                     AutomationProperties.Name="Jump to first unread" ToolTip.Tip="Jump to first unread">
                 <fi:SymbolIcon Symbol="ArrowNext" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
-
-            <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
-                       TextTrimming="CharacterEllipsis" MaxWidth="520" />
 
             <Button Classes="ghost" VerticalAlignment="Center" IsVisible="{Binding HasPendingDuplicates}"
                     Command="{Binding ShowDuplicatesCommand}" ToolTip.Tip="These pairs wait under Possible duplicates in the sidebar">
@@ -223,55 +356,55 @@
                     <TextBlock Text="{Binding PendingDuplicatesText}" FontSize="11" VerticalAlignment="Center" />
                 </StackPanel>
             </Button>
+            <!-- Colour by legend (M5 §3): click a creator to dim everyone else -->
+            <ItemsControl ItemsSource="{Binding Legend}" VerticalAlignment="Center" IsVisible="{Binding HasLegend}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel ItemSpacing="8" LineSpacing="4" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:MapLegendItem">
+                        <Button Classes="filterChip" Classes.active="{Binding IsActive}" IsEnabled="{Binding !IsOthers}"
+                                Command="{Binding $parent[UserControl].((vm:EventMapViewModel)DataContext).HighlightCreatorCommand}" CommandParameter="{Binding}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Border Width="10" Height="10" CornerRadius="{DynamicResource PbRadiusSm}" em:EventMapLaneBrush.ColorIndex="{Binding ColorIndex}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </WrapPanel>
 
         <!-- ===== Map + inspector ===== -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
-            <Border Grid.Column="0" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0">
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto">
+            <em:EventMapRollCallPanel Grid.Column="0" controls:Reveal.IsOpen="{Binding IsRollCallOpen}" controls:Reveal.ReturnFocusTo="{Binding #SeriesButton}" />
+            <Border Grid.Column="1" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0">
                 <Panel>
                     <!-- The map -->
-                    <Grid RowDefinitions="Auto,*" ColumnDefinitions="180,*" IsVisible="{Binding HasMap}">
-                        <Border Grid.Row="0" Grid.Column="0" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                                BorderThickness="0,0,1,1" Padding="12,0" Height="{Binding RulerHeight}">
-                            <TextBlock Text="{Binding CornerLabel}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}"
-                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                        </Border>
-                        <Border Grid.Row="0" Grid.Column="1" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                                BorderThickness="0,0,0,1" Height="{Binding RulerHeight}">
-                            <em:EventMapRuler Name="Ruler" Layout="{Binding Layout}" Cards="{Binding Cards}" Connectors="{Binding Connectors}" />
-                        </Border>
-                        <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                                BorderThickness="0,0,1,0" ClipToBounds="True">
-                            <!-- The headers are shifted up by the map's scroll offset (code-behind). A Canvas lets the list keep its full height:
-                                 as a direct child of the Border it was arranged at the visible height, so every lane below the first screen was
-                                 clipped away once the map scrolled. The Border still clips to the visible area. -->
-                            <Canvas Name="LaneHeaderHost">
-                            <ItemsControl Name="LaneHeaders" ItemsSource="{Binding LaneHeaders}"
-                                          Width="{Binding #LaneHeaderHost.Bounds.Width}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:EventMapLaneHeader">
-                                        <Grid Height="{Binding Height}" ColumnDefinitions="4,*" ToolTip.Tip="{Binding FullName}">
-                                            <Border Grid.Column="0" Margin="0,8" CornerRadius="2" em:EventMapLaneBrush.ColorIndex="{Binding ColorIndex}" />
-                                            <StackPanel Grid.Column="1" Margin="10,0,8,0" VerticalAlignment="Center" Spacing="1">
-                                                <TextBlock Text="{Binding Label}" FontSize="12" Foreground="{DynamicResource PbTextBrush}"
-                                                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Text="{Binding CountLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            </Canvas>
-                        </Border>
-                        <ScrollViewer Name="Scroller" Grid.Row="1" Grid.Column="1"
-                                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                            <em:EventMapSurface Name="Surface" Layout="{Binding Layout}" Cards="{Binding Cards}" RelatedSet="{Binding RelatedSet}"
-                                                AutomationProperties.Name="{Binding SurfaceAutomationName}"
-                                                HorizontalAlignment="Left" VerticalAlignment="Top" />
-                        </ScrollViewer>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="Nothing to show - change the filters" FontSize="13" Margin="24,40"
-                                   Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" VerticalAlignment="Top"
-                                   IsVisible="{Binding IsFilteredEmpty}" />
+                    <Grid RowDefinitions="Auto,*" IsVisible="{Binding HasMap}">
+                        <em:EventMatrixCanvas Grid.RowSpan="2" Name="MatrixCanvas" Matrix="{Binding Matrix}" Cards="{Binding Cards}" Covers="{Binding MatrixCovers}" SelectedIndex="{Binding SelectedIndex}" IsVisible="{Binding IsMatrixMode}" AutomationProperties.Name="Event matrix" />
+                        <views:EventListView Grid.RowSpan="2" Name="ListView" IsVisible="{Binding IsListMode}" controls:Replace.On="{Binding IsListMode}" />
+                        <em:ContinuityAtlasCanvas Grid.RowSpan="2" Name="AtlasCanvas" Atlas="{Binding Atlas}" IsVisible="{Binding IsAtlasMode}" controls:Replace.On="{Binding IsAtlasMode}"
+                                                  AutomationProperties.Name="{Binding EventName, StringFormat='Atlas of {0}'}" />
+                        <Grid Grid.RowSpan="2" RowDefinitions="Auto,*" IsVisible="{Binding IsMapMode}">
+                        <em:EventMapOverviewStrip Grid.Row="0" Canvas="{Binding #MapCanvas}" AutomationProperties.Name="Map overview" AutomationProperties.ControlTypeOverride="Image" />
+                        <em:EventMapCanvas Grid.Row="1" Name="MapCanvas" Layout="{Binding Layout}" Cards="{Binding Cards}" LaneHeaders="{Binding LaneHeaders}" Connectors="{Binding Connectors}" RelatedSet="{Binding RelatedSet}" SelectedIndex="{Binding SelectedIndex}" Scale="{Binding Scale, Mode=TwoWay}" IsLaneRailWide="{Binding IsLaneRailWide}" RulerHeight="{Binding RulerHeight}" ShowProgressLine="{Binding ShowProgressLine}" FeatureSet="{Binding FeatureSet}" BarColors="{Binding BarColors}" Brackets="{Binding Brackets}" ObscuredRight="{Binding FloatingInspectorFootprint}" AutomationProperties.Name="{Binding SurfaceAutomationName}" />
+                        <Popup Grid.Row="1" PlacementTarget="{Binding #MapCanvas}" Placement="Pointer" HorizontalOffset="12" VerticalOffset="12" IsOpen="{Binding IsPeekOpen, Mode=OneWay}" IsHitTestVisible="False">
+                            <Border Classes="dropdown" Padding="8" IsHitTestVisible="False">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Border Width="72" Height="108" Background="{DynamicResource PbSurface2Brush}" ClipToBounds="True"><Image views:AsyncCoverImage.SourceId="{Binding PeekCard.CoverKey}" Stretch="UniformToFill" /></Border>
+                                    <StackPanel MaxWidth="220" Spacing="4"><TextBlock Classes="pbTextMeta" Text="{Binding PeekCard.Title}" TextWrapping="Wrap" /><TextBlock Classes="pbTextCaption" Text="{Binding PeekCard.CoverDate}" /><TextBlock Classes="pbTextCaption" Text="{Binding PeekCard.ReadStateLabel}" /></StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                        <Button Grid.Row="1" Classes="iconButton sm" HorizontalAlignment="Left" VerticalAlignment="Top" Command="{Binding ToggleLaneRailCommand}" AutomationProperties.Name="Toggle lane rail width" ToolTip.Tip="Toggle lane rail width"><fi:SymbolIcon Symbol="Navigation" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                        <TextBlock Grid.Row="1" Margin="28,6,0,0" MaxWidth="145" HorizontalAlignment="Left" VerticalAlignment="Top" Classes="pbTextCaption" Text="{Binding ProgressText}" TextTrimming="CharacterEllipsis" IsVisible="{Binding IsLaneRailWide}" IsHitTestVisible="False" />
+                        </Grid>
+                        <StackPanel Grid.Row="1" Margin="24,40" HorizontalAlignment="Center" VerticalAlignment="Top" IsVisible="{Binding IsFilteredEmpty}">
+                            <TextBlock Text="Nothing to show - change the filters" Classes="pbTextBody" IsVisible="{Binding !IsEverythingRead}" />
+                            <TextBlock Text="Everything here is read" Classes="pbTextBody" IsVisible="{Binding IsEverythingRead}" />
+                            <Button Classes="ghost" Content="Show read" Command="{Binding ToggleHideReadCommand}" IsVisible="{Binding IsEverythingRead}" />
+                        </StackPanel>
                     </Grid>
 
                     <!-- No members -->
@@ -295,13 +428,14 @@
                 </Panel>
             </Border>
 
+            <Border Grid.Column="2" Width="340" IsVisible="{Binding IsInspectorDockedOpen}" />
             <!-- ===== Inspector drawer ===== -->
-            <Border Grid.Column="1" Width="340" IsVisible="{Binding IsInspectorOpen}" Background="{DynamicResource PbChromeBrush}"
-                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1,1,0,0">
+            <Border Grid.Column="1" Grid.ColumnSpan="2" Width="340" Margin="12" HorizontalAlignment="Right" Classes="floatingPanel" controls:Reveal.IsOpen="{Binding IsInspectorOpen}" controls:Reveal.ReturnFocusTo="{Binding #MapCanvas}">
                 <Grid RowDefinitions="Auto,*">
-                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,10,8,0">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="16,10,8,0">
                         <TextBlock Text="Issue" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                        <Button Grid.Column="1" Classes="iconButton" Command="{Binding CloseInspectorCommand}"
+                        <Button Grid.Column="1" Classes="iconButton sm" Command="{Binding ToggleInspectorDockCommand}" AutomationProperties.Name="{Binding InspectorDockLabel}" ToolTip.Tip="{Binding InspectorDockLabel}"><fi:SymbolIcon Symbol="Pin" FontSize="{StaticResource PbIconSizeXs}" /></Button>
+                        <Button Grid.Column="2" Classes="iconButton" Command="{Binding CloseInspectorCommand}"
                                 AutomationProperties.Name="Close inspector" ToolTip.Tip="Close (Esc)">
                             <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                         </Button>
@@ -309,7 +443,7 @@
                     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="16,6,16,20" Spacing="10">
                             <Border Width="120" Height="180" HorizontalAlignment="Left" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
-                                    Background="{DynamicResource PbSurface2Brush}">
+                                    Background="{DynamicResource PbSurface2Brush}" IsVisible="{Binding SelectedCard.IsMember}">
                                 <Image views:AsyncCoverImage.SourceId="{Binding SelectedCard.CoverKey}" Stretch="UniformToFill" />
                             </Border>
                             <StackPanel Spacing="3">
@@ -317,7 +451,31 @@
                                 <TextBlock Text="{Binding SelectedCard.CoverDate}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}"
                                            IsVisible="{Binding SelectedCard.HasCoverDate}" />
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="10">
+                            <!-- A missing issue (M4): where it came from and what you can do with it -->
+                            <StackPanel Spacing="8" IsVisible="{Binding SelectedCard.IsGhost}">
+                                <Border Classes="pbChip" HorizontalAlignment="Left">
+                                    <TextBlock Classes="pbTextCaption" Text="{Binding SelectedCard.GhostLabel}" />
+                                </Border>
+                                <TextBlock Classes="pbTextCaption" Text="{Binding SelectedCard.GhostSourceLabel}" />
+                                <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                    <Button Classes="primary" Content="Add to Wanted" Command="{Binding AddSelectedToWantedCommand}">
+                                        <Button.IsVisible>
+                                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                                <Binding Path="SelectedCard.IsMissingGhost" />
+                                                <Binding Path="!SelectedCard.IsWanted" />
+                                            </MultiBinding>
+                                        </Button.IsVisible>
+                                    </Button>
+                                    <Border Classes="statusBadge" IsVisible="{Binding SelectedCard.IsWanted}" VerticalAlignment="Center">
+                                        <TextBlock Classes="pbTextCaption" Text="Wanted" />
+                                    </Border>
+                                    <Button Classes="primary" Content="Add to event" Command="{Binding AddSelectedToEventCommand}" IsVisible="{Binding SelectedCard.IsOwnedGhost}" />
+                                    <Button Classes="ghost" Content="{Binding SelectedCard.GhostProviderLabel}" Command="{Binding OpenGhostOnProviderCommand}" />
+                                </WrapPanel>
+                                <Button Classes="ghost sm" Content="Add all missing to Wanted" Command="{Binding AddAllMissingToWantedCommand}" HorizontalAlignment="Left"
+                                        IsVisible="{Binding SelectedCard.IsMissingGhost}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding SelectedCard.IsMember}">
                                 <Border Classes="pbChip" Padding="8,4">
                                     <TextBlock Text="{Binding SelectedCard.RoleLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
                                 </Border>
@@ -349,7 +507,7 @@
                             <TextBlock Text="{Binding SelectedCard.Summary}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
                                        MaxLines="6" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SelectedCard.Summary}"
                                        IsVisible="{Binding SelectedCard.HasSummary}" />
-                            <WrapPanel ItemSpacing="8" LineSpacing="8">
+                            <WrapPanel ItemSpacing="8" LineSpacing="8" IsVisible="{Binding SelectedCard.IsMember}">
                                 <Button Classes="primary" Command="{Binding OpenReaderCommand}" ToolTip.Tip="Read in event order (Ctrl+Enter)">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeXs}" />
